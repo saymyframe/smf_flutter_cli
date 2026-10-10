@@ -30,7 +30,8 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     observers: _observers(),{{/main_navigation}}{{#main_navigation}}.routingConfig(
     routingConfig: _routes,
     initialLocation: {{{initial_location}}},
-    observers: _observers(),
+    observers: _observers(),{{#guards}}
+    own: _own,{{/guards}}
   )..routerDelegate.addListener(_pagesChanged);
 
   /// The routes of the app, which go_router follows when they change, so
@@ -42,7 +43,8 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
         _redirect(state.topRoute?.name, '${state.uri}'),{{/guards}}
     routes: [
 {{{routes}}}
-    ],
+    ],{{^main_navigation}}{{#guards}}
+    own: _own,{{/guards}}{{/main_navigation}}
   ){{^main_navigation}}..routerDelegate.addListener(_pagesChanged);{{/main_navigation}}{{#main_navigation}},
   );
 
@@ -200,7 +202,16 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// that the app starts on, and the router shows the target over it once
   /// the parse is over: go_router tells nobody of pages that it has
   /// already, as when the user is on that screen. The listeners of the
-  /// screen hear only of the target.
+  /// screen hear only of the target. When the page on top is the target
+  /// already, as for a second link to a page of the flow, the router puts
+  /// that page back over `/` rather than push a new one: no frame shows the
+  /// change, so the page stays as the user left it, and the listeners hear
+  /// nothing.
+  ///
+  /// The push of the target is a call of the router's own, so the
+  /// `redirect` is not asked about it. If it ever is, the guards answer by
+  /// opening the target again, without end: the router throws rather than
+  /// hang the app.
   String? _redirect(String? route, String location) {
     if (_asking > 0) return null;
     switch (_guards.asked(route, location, onTopOf: const [])) {
@@ -210,11 +221,23 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
         return shown;
       case ShowOver(location: final target, :final flow):
         _muted = true;
+        final onTop = config.routerDelegate.currentConfiguration.lastOrNull;
+        final kept =
+            onTop is ImperativeRouteMatch && '${onTop.matches.uri}' == target
+            ? onTop
+            : null;
         void open() {
           if (_opening != open) return;
           _opening = null;
           _muted = false;
-          _open(target, flow, again: () => config.go(location));
+          _open(target, flow, again: () => config.go(location), kept: kept);
+          if (_opening == null) return;
+          _opening = null;
+          throw StateError(
+            'The redirect of go_router asked the guards about $target, '
+            'which the router pushes itself, and would open it without '
+            'end: it must ask nothing within a call of the router.',
+          );
         }
         _opening = open;
         scheduleMicrotask(open);
@@ -259,15 +282,21 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// Shows [target], the target of a guard, over the page on top, and keeps
   /// the request of [again] and [drop] waiting while a page of [flow] is
   /// among the pages: [_close] makes it again, and [_pagesChanged] drops
-  /// it. A request that waited before is dropped.
+  /// it. A request that waited before is dropped. With [kept], the page of
+  /// [target] that go_router had on top, the router puts that page over
+  /// the page on top rather than push a new one.
   void _open(
     String target,
     Set<String> flow, {
     required void Function() again,
     void Function()? drop,
+    ImperativeRouteMatch? kept,
   }) {
     _drop();
-    _own(() => unawaited(config.push<Object?>(target)));
+    _own(() {
+      if (kept == null) return unawaited(config.push<Object?>(target));
+      config.restore(config.routerDelegate.currentConfiguration.push(kept));
+    });
     _waiting = (flow: flow, again: again, drop: drop);
   }
 
@@ -414,8 +443,12 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// route requires, would get the page of its route in place of the error
   /// screen: the router puts back the pages that go_router had.{{#guards}} The
   /// `redirect` of go_router runs as it matches and as the router puts the
-  /// pages back, for locations that are shown already: the router counts
-  /// both among its own calls, so the guards are not asked about them.{{/guards}}
+  /// pages back, for the location that just took the place of the main
+  /// navigation. The router does not count that among its own calls. The
+  /// main navigation leaves within a call of the router's own, where the
+  /// `redirect` asks nothing; or for a location that go_router parsed on
+  /// its own, which the `redirect` has just answered with no pages, so the
+  /// guards answer the same again.{{/guards}}
   void _renewMainNavigation() {
     final shown = config.routerDelegate.currentConfiguration;
     if (shown.matches.any(
@@ -429,8 +462,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     final left = _mainNavigationRoute;
     final routes = _routes.value;
     _mainNavigationRoute = _mainNavigation();
-    _renewing = true;{{#guards}}
-    _asking++;{{/guards}}
+    _renewing = true;
     try {
       _routes.value = RoutingConfig(
         routes: [
@@ -445,8 +477,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
         config.restore(shown);
       }
     } finally {
-      {{#guards}}_asking--;
-      {{/guards}}_renewing = false;
+      _renewing = false;
     }
   }{{/main_navigation}}
 
@@ -589,7 +620,8 @@ final class _GoRouter extends GoRouter {
 {{^main_navigation}}  /// Creates the router of [routes], as [GoRouter.new] does.
   _GoRouter({
     required List<RouteBase> routes,{{#guards}}
-    required GoRouterRedirect redirect,{{/guards}}
+    required GoRouterRedirect redirect,
+    required this.own,{{/guards}}
     super.initialLocation,
     super.observers,
   }) : super.routingConfig(
@@ -600,8 +632,23 @@ final class _GoRouter extends GoRouter {
   _GoRouter.routingConfig({
     required super.routingConfig,
     super.initialLocation,
-    super.observers,
-  }) : super.routingConfig();{{/main_navigation}}
+    super.observers,{{#guards}}
+    required this.own,{{/guards}}
+  }) : super.routingConfig();{{/main_navigation}}{{#guards}}
+
+  /// Runs a call of go_router as one of the router of the app, within which
+  /// the `redirect` of go_router does not ask the guards of the routes.
+  final R Function<R>(R Function() navigate) own;
+
+  /// Shows the pages of go_router anew, as [GoRouter.refresh] does, as a
+  /// call of the router of the app. go_router parses the location below
+  /// its pushed pages again then, and its `redirect` runs for it, with no
+  /// pages, as for a link. Asked so, the guards would open a page of the
+  /// flow of a guard that stands for a condition over `/`, though the code
+  /// of the app went to it, and the pages that were pushed over it would
+  /// be gone.
+  @override
+  void refresh() => own(super.refresh);{{/guards}}
 
   @override
   BackButtonDispatcher get backButtonDispatcher => _backButton;
