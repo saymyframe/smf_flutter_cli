@@ -27,9 +27,13 @@
 //
 // The sign-in that the entry opens for a user without an account is a page
 // over the settings screen, and once the user has signed in there, the
-// screen of the account is. A screen of the sign-in that closed itself
-// after the sign-in would close that screen instead, so this is where the
-// test shows that the screens of the sign-in close nothing themselves.
+// screen of the account is. A screen of the sign-in that closed a page a
+// frame after the sign-in would close that screen instead, so this is
+// where the test shows that the screens of the sign-in close nothing once
+// the router has shown what the user asked for. A screen that closed a
+// page in the turn of the sign-in would close only the sign-in, which the
+// router closes then anyway, as the router role says: no test tells that
+// from a screen that closes nothing.
 //
 // The matrix writes of_app.dart next to this file, with the settings
 // screen of the app and the entry of the module, from the settings screen
