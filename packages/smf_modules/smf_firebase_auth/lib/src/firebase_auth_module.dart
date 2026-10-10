@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/bundles/firebase_auth_bundle.dart';
 import 'package:smf_firebase_auth/src/agents.dart';
+import 'package:smf_firebase_auth/src/enable_sign_in.dart';
 import 'package:smf_firebase_auth/src/readme.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 
@@ -27,8 +28,9 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// - it gives each code of Firebase the reason of the role, and the reason
 ///   `unknown`, with the code and the message on one line, to a code that
 ///   it does not know. A way to sign in that is not enabled in the Firebase
-///   project is `notConfigured`, with a hint that has the link to the page
-///   of the project where it is enabled. Firebase tells of a project in
+///   project is `notConfigured`, with a hint that names the script of the
+///   app which enables it, and has the link to the page of the project
+///   where it is enabled. Firebase tells of a project in
 ///   which Authentication was never set up only in the message of an
 ///   error, an unknown one on Android and an internal one on iOS, where the
 ///   message is the description of the error over many lines: the hint
@@ -55,9 +57,23 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// The module uses the localization role: in an app with it, Firebase sends
 /// the message of a password reset in the language that the app is in.
 ///
-/// The README of the app tells where the ways to sign in are enabled in
-/// the Firebase project, and its guide for coding agents which file is on
-/// Firebase Authentication and where a code of Firebase gets its reason.
+/// The ways to sign in are enabled in the Firebase project, not in the
+/// code. The module generates `tool/enable_firebase_sign_in.dart`, a script
+/// of the app that enables those that the mode of the app needs with the
+/// Firebase CLI, and writes nothing into the app. After generation, once
+/// `flutterfire configure` of [FirebaseCoreModule] configured the app, the
+/// module runs the script: its step continues
+/// [FirebaseCoreModule.configureStep]. The Firebase CLI adds a web app to a
+/// project that has none, so a run in a terminal asks first, and tells of
+/// the Firebase console as the other way. Any other run prints the command
+/// to run later, and so does a run on a machine whose Firebase CLI is older
+/// than the command, which the module checks before generation.
+///
+/// The README of the app tells how to enable the ways to sign in, with the
+/// script and in the Firebase console, and what the script does to the
+/// project. Its guide for coding agents tells which file is on Firebase
+/// Authentication, where a code of Firebase gets its reason, and that the
+/// script is run only when asked.
 final class FirebaseAuthModule extends SmfModule {
   /// Creates the module.
   const FirebaseAuthModule();
@@ -104,12 +120,20 @@ final class FirebaseAuthModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(
           firebaseAuthBundle,
-          vars: const {
-            'email_language': RoleVar(
+          vars: {
+            'email_language': const RoleVar(
               localizationRole,
               present: _emailLanguage,
               absent: '',
             ),
+            // For the script that enables the ways to sign in: the file
+            // that it reads the mode of the app from, how the auth role
+            // says to read it, the mode with anonymous users, and the
+            // Firebase CLI that it asks for.
+            'session_file': AuthRole.sessionFile,
+            'mode_declaration': modeDeclarationCode,
+            'anonymous_mode': AuthMode.anonymous.name,
+            'minimum_firebase_cli': firstFirebaseCliWithSignIn,
           },
         ),
         const PubspecContribution.hosted('firebase_auth', '^6.7.0'),
@@ -119,6 +143,8 @@ final class FirebaseAuthModule extends SmfModule {
             create: FactoryRef('createFirebaseAuthService', import: _file),
           ),
         ),
+        const Preflight([firebaseCliWithSignIn]),
+        enableSignIn,
         AppEntryRole.readmeSections.entry(readmeHeading, readmeSection),
         AppEntryRole.agentSections.entry(
           authRole.description,

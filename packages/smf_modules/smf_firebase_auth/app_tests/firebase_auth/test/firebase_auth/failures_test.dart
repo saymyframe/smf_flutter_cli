@@ -211,7 +211,8 @@ void main() {
 
   test(
       'a way to sign in that is not enabled in the Firebase project is '
-      'notConfigured, with a hint that has the link to the project', () async {
+      'notConfigured, with a hint that has the command of the script which '
+      'enables it and the link to the project', () async {
     await service.signOut();
     final project = Firebase.app().options.projectId;
     final link = 'https://console.firebase.google.com/project/$project/'
@@ -250,9 +251,11 @@ void main() {
 
     String hint(String answered) =>
         'notConfigured (Sign-in is not enabled in the Firebase project '
-        '$project (Firebase answered $answered). To fix it, enable '
-        'Email/Password, and Anonymous for an app that signs in anonymous '
-        'users, under Authentication > Sign-in method: $link)';
+        '$project (Firebase answered $answered). To fix it, run `dart '
+        'tool/enable_firebase_sign_in.dart` in the directory of the app, or '
+        'enable Email/Password, and Anonymous for an app that signs in '
+        'anonymous users, in the Firebase console under Authentication > '
+        'Sign-in method: $link)';
     expect(
       found,
       {
@@ -270,7 +273,8 @@ void main() {
           'message of an unknown error on Android and of an internal error '
           'on iOS, the call fails with notConfigured. Its hint for the '
           'developer names the project, the code of Firebase and what the '
-          'service found in the message, and has the link to the sign-in '
+          'service found in the message, and has the command of the script '
+          'of the app that enables the methods and the link to the sign-in '
           'methods of the project. It has none of the message of iOS, the '
           'description of an error over many lines.',
     );
@@ -309,7 +313,10 @@ void main() {
         '(internal-error: $_internal), which is also what it answers on iOS '
         'and macOS when sign-in is not enabled in the Firebase project ',
       ),
-      contains('If that is the cause, enable Email/Password'),
+      contains(
+        'If that is the cause, run `dart tool/enable_firebase_sign_in.dart` '
+        'in the directory of the app, or enable Email/Password',
+      ),
       endsWith('/authentication/providers)'),
     );
     expect(
