@@ -92,7 +92,8 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
       title: {{{text_reset_title}}},
       intro: {{{text_reset_intro}}},
       children: [
-        // While the message is on its way, the form takes no input.
+        // While the message is on its way, the form takes no input: no tap,
+        // and no typing into the field while it has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: Form(
@@ -102,6 +103,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                 : AutovalidateMode.disabled,
             child: EmailField(
               controller: _email,
+              readOnly: widget.busy,
               autofillHints: const [
                 AutofillHints.username,
                 AutofillHints.email,

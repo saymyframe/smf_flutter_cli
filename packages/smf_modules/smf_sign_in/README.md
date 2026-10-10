@@ -12,7 +12,7 @@ Create account leads to the sign-up at `/sign_in/sign_up`, with the same two fie
 
 Forgot password? leads to the password reset at `/sign_in/reset_password`, which asks for the email address of an account. Once the message with the link is sent, the screen shows the address that it went to. It says the same whether the address has an account or not, so nobody learns from the app which addresses have one.
 
-Each screen shows the cell of the app, with the symbol that SMF makes from its name, `Ma` for `my_app`, next to the cells of a table that light up one after another. Below it are a title, a line of text and the form. A field has its label above it, and the password field has a button that shows the password. The button that submits is as wide as the form. While its call is on its way, it spins and the form takes no input. A failure shows above the button, in a text of its own for each reason, such as a wrong password or no connection.
+Each screen shows the cell of the app, with the symbol that SMF makes from its name, `Ma` for `my_app`, next to the cells of a table that light up one after another. Below it are a title, a line of text and the form. A field has its label above it, and the password field has a button that shows the password. The button that submits is as wide as the form. While its call is on its way, it spins and the form takes no input: a field takes no typing, though one that has the focus keeps it, and the actions of the screen take neither a tap nor a key. A failure shows above the button, in a text of its own for each reason, such as a wrong password or no connection.
 
 The fields, the buttons and the cards of the screens are those of the theme of the app, in its light and in its dark mode. The screens give a field no colour, border or padding of their own, so for another look of the fields, change the theme of the app. The cells of the picture, which a screen draws itself, take their colours from the theme too.
 
@@ -37,14 +37,16 @@ What keeps the state of a screen depends on the module that manages state in the
 
 The screens are `SignInScreen`, `SignUpScreen` and `ResetPasswordScreen`, in `sign_in_screen.dart`, `sign_up_screen.dart` and `reset_password_screen.dart` in both variants. A screen only gives its view the state. The module adds the package of the state manager to the app, in the version that the module of that state manager asks for, and no other package.
 
-While a call is on its way, the state of a screen is busy and takes no second call. A failure ends that, and the state has the failure. A sign-in or a sign-up that succeeded leaves the state busy: the user is signed in then, and the router takes the screen away.
+While a call is on its way, the state of a screen is busy and takes no second call. A failure ends that, and the state has the failure. A sign-in or a sign-up that succeeded leaves the state busy for as long as the session has the account: the user is signed in then, and the router takes the screen away. When the session has no account again before that, as when code of the app signs the user out at once, the form is back.
+
+With `bloc`, each page of a screen has a cubit of its own. With `riverpod`, a provider is one for the app, so two pages of one screen that are open at once show the same state.
 
 ## What shows the sign-in
 
 The screens neither close themselves nor navigate once the user is signed in. The module declares two guards of the routes, and the router shows the sign-in and leaves it by what they say:
 
 - `sign_in.gate` reads `appSession.allowsApp`. In an app that nobody may use without an account, the router shows the sign-in in place of every other screen until the user is signed in.
-- `sign_in.account` reads `appSession.hasAccount`. In an app that everyone may use, a request for a route that needs an account opens the sign-in over the page that the user is on, and the rest of the app stays open. Back returns to that page. Once the user is signed in, the router closes the sign-in and shows the route that was asked for.
+- `sign_in.hasAccount` reads `appSession.hasAccount`. In an app that everyone may use, a request for a route that needs an account opens the sign-in over the page that the user is on, and the rest of the app stays open. Back returns to that page. Once the user is signed in, the router closes the sign-in and shows the route that was asked for.
 
 Which of the two keeps a user out is up to the sign-in mode of the app, which `smf create` asks for. The code of the module is the same in every mode.
 

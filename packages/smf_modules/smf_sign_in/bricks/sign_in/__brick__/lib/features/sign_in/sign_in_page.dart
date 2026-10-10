@@ -269,9 +269,9 @@ class _Cell extends StatelessWidget {
             ? Icon(icon, size: 44, color: colors.onPrimary)
             : Stack(
                 children: [
-                  Positioned(
+                  PositionedDirectional(
                     top: 6,
-                    right: 8,
+                    end: 8,
                     child: Text(
                       '$_appNumber',
                       style: _monospace.copyWith(

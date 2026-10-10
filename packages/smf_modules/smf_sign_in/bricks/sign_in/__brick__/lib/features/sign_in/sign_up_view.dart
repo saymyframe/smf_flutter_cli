@@ -66,7 +66,8 @@ class _SignUpViewState extends State<SignUpView> {
       title: {{{text_sign_up_title}}},
       intro: {{{text_sign_up_intro}}},
       children: [
-        // While the sign-up is on its way, the form takes no input.
+        // While the sign-up is on its way, the form takes no input: no tap,
+        // and no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -80,6 +81,7 @@ class _SignUpViewState extends State<SignUpView> {
                 children: [
                   EmailField(
                     controller: _email,
+                    readOnly: widget.busy,
                     autofillHints: const [
                       AutofillHints.email,
                       AutofillHints.newUsername,
@@ -89,6 +91,7 @@ class _SignUpViewState extends State<SignUpView> {
                   // The device offers a new password, and to keep it.
                   PasswordField(
                     controller: _password,
+                    readOnly: widget.busy,
                     autofillHints: const [AutofillHints.newPassword],
                     onSubmitted: _submit,
                   ),

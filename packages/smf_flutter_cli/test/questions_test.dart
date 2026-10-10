@@ -1591,7 +1591,7 @@ void main() {
       allOf(
         contains("'sign_in.gate',"),
         contains('allows: guard0.signInAllowsApp(),'),
-        contains("'sign_in.account',"),
+        contains("'sign_in.hasAccount',"),
         contains('allows: guard0.signInHasAccount(),'),
         contains('redirectTo: const SignInSignInLocation(),'),
       ),
@@ -1638,12 +1638,12 @@ void main() {
       'onboarding,sign_in,bloc': [
         'onboarding.firstRun',
         'sign_in.gate',
-        'sign_in.account',
+        'sign_in.hasAccount',
       ],
       'sign_in,bloc,onboarding': [
         'onboarding.firstRun',
         'sign_in.gate',
-        'sign_in.account',
+        'sign_in.hasAccount',
       ],
     });
   });

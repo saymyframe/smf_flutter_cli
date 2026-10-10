@@ -24,7 +24,9 @@ import 'package:smf_sign_in/src/agents.dart';
 /// title, a line of text and the form: a field for the email address, a
 /// field for the password with a button that shows it, and a button of the
 /// whole width that submits. While its call is on its way, the button spins
-/// and the form takes no input. A failure shows above the button, in a text
+/// and the form takes no input: its fields take no typing, though one that
+/// has the focus keeps it, and its actions take neither a tap nor a key. A
+/// failure shows above the button, in a text
 /// of the module for each reason of the auth role. Once the message that
 /// resets a password is sent, the screen shows the address that it went to,
 /// in a widget of its own, since a text has no parameters.
@@ -70,8 +72,11 @@ import 'package:smf_sign_in/src/agents.dart';
 /// gets is up to the session. While a call is on its way, the state is
 /// busy and takes no second call. A failure ends that, with the failure as
 /// part of the state. A sign-in or a sign-up that succeeded leaves the
-/// state busy: the user is signed in then, and the router leaves the
-/// screen. The module registers nothing in a DI container and needs none.
+/// state busy for as long as the session has the account: the user is
+/// signed in then, and the router leaves the screen. When the session has
+/// no account again before the router did, as when code of the app signs
+/// the user out at once, the state is idle and the form is back. The module
+/// registers nothing in a DI container and needs none.
 ///
 /// ## The guards
 ///
@@ -136,8 +141,9 @@ final class SignInModule extends SmfModule {
 
   /// The name of the guard of the module that stands for
   /// [AuthRole.account], which shows the sign-in in place of a route that
-  /// needs an account; its full name is `sign_in.account`.
-  static const accountGuard = 'account';
+  /// needs an account; its full name is `sign_in.hasAccount`, after what it
+  /// reads.
+  static const accountGuard = 'hasAccount';
 
   /// The texts of the screens: those of the sign-in, of the sign-up and of
   /// the password reset, what a form says of a field that is not filled
@@ -202,7 +208,7 @@ final class SignInModule extends SmfModule {
     LocalizedText(
       'resetTitle',
       en: 'Reset password',
-      translations: {'uk': 'Новий пароль'},
+      translations: {'uk': 'Відновлення пароля'},
     ),
     LocalizedText(
       'resetIntro',
@@ -228,8 +234,8 @@ final class SignInModule extends SmfModule {
       en: 'If this address has an account, a link to set a new password is '
           'on its way to:',
       translations: {
-        'uk': 'Якщо ця адреса має акаунт, посилання для нового пароля вже '
-            'надіслано на:',
+        'uk': 'Якщо для цієї адреси є акаунт, посилання для нового пароля '
+            'вже надіслано на:',
       },
     ),
     LocalizedText(
@@ -264,13 +270,13 @@ final class SignInModule extends SmfModule {
     ),
     LocalizedText(
       'failureWeakPassword',
-      en: 'This password is too weak. Choose a longer one.',
-      translations: {'uk': 'Цей пароль надто слабкий. Виберіть довший.'},
+      en: 'This password is too weak. Choose a stronger one.',
+      translations: {'uk': 'Цей пароль надто слабкий. Виберіть надійніший.'},
     ),
     LocalizedText(
       'failureDisabled',
       en: 'This account is disabled.',
-      translations: {'uk': 'Цей акаунт вимкнено.'},
+      translations: {'uk': 'Цей акаунт заблоковано.'},
     ),
     LocalizedText(
       'failureTooManyAttempts',

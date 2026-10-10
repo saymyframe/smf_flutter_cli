@@ -98,11 +98,11 @@ With `go_router`:
 
 ## Sign-in
 
-- The sign-in is three screens in `lib/features/sign_in/`: `SignInScreen`, the route `sign_in.signIn` at `/sign_in`, and over it `SignUpScreen` at `/sign_in/sign_up` and `ResetPasswordScreen` at `/sign_in/reset_password`. Two guards of `routeGuards` show them, with the functions of `lib/features/sign_in/sign_in_guards.dart`. `sign_in.gate` reads `appSession.allowsApp` and shows the sign-in in place of every other screen. `sign_in.account` reads `appSession.hasAccount` and shows it in place of a route that needs an account.
+- The sign-in is three screens in `lib/features/sign_in/`: `SignInScreen`, the route `sign_in.signIn` at `/sign_in`, and over it `SignUpScreen` at `/sign_in/sign_up` and `ResetPasswordScreen` at `/sign_in/reset_password`. Two guards of `routeGuards` show them, with the functions of `lib/features/sign_in/sign_in_guards.dart`. `sign_in.gate` reads `appSession.allowsApp` and shows the sign-in in place of every other screen. `sign_in.hasAccount` reads `appSession.hasAccount` and shows it in place of a route that needs an account.
 - A screen of the sign-in neither closes itself nor navigates once the user is signed in. It signs in or up through its state. The session changes then, and the router leaves the sign-in. While `authMode` is `AuthMode.required`, no code navigates to the sign-in either: the gate shows it. In the other modes, a screen that offers to sign in opens it with `context.nav.signIn.signIn().push<void>()`, so that back leads back.
 - The look of a screen and its state are in different files. The look is `SignInView`, `SignUpView` and `ResetPasswordView`, each in a file of its name, such as `lib/features/sign_in/sign_in_view.dart`. They share `AuthPage` of `lib/features/sign_in/sign_in_page.dart`, which is the frame of a screen, and the fields and buttons of `lib/features/sign_in/sign_in_widgets.dart`. All of them are plain Flutter widgets: a view gets the state of its call and callbacks, and imports nothing that manages state. The file of a screen, such as `lib/features/sign_in/sign_in_screen.dart`, only gives its view the state.
 - The fields, the buttons and the cards of the screens are those of the theme of the app. These files give a field no colour, border or padding, so for another look of a field, change the theme of the app. `OtherScreenAction`, the way from the sign-in to the sign-up and back, is a text button of the theme with one colour of its own, `colorScheme.secondary`.
-- That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, since the router leaves the screen then.
+- That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, for as long as the session has the account, since the router leaves the screen then. When the session has no account again before that, the form is back.
 - A failure gets its text in `authFailureText()` of `lib/features/sign_in/sign_in_widgets.dart`, which has a text for every `AuthFailureReason`. `FailureMessage` shows that text, and the `developerHint` of the failure in debug mode only.
 - While a call is on its way, `SubmitButton` spins. A widget test that waits with `pumpAndSettle()` returns only once the call has ended, so until then it shows frames with `pump()`.
 
@@ -2182,7 +2182,7 @@ final List<RouteGuard> routeGuards = [
     resumes: false,
   ),
   RouteGuard(
-    'sign_in.account',
+    'sign_in.hasAccount',
     allows: guard0.signInHasAccount(),
     redirectTo: const SignInSignInLocation(),
     flow: const {'sign_in.signIn', 'sign_in.signUp', 'sign_in.resetPassword'},
@@ -3340,7 +3340,8 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
       title: context.l10n.signInResetTitle,
       intro: context.l10n.signInResetIntro,
       children: [
-        // While the message is on its way, the form takes no input.
+        // While the message is on its way, the form takes no input: no tap,
+        // and no typing into the field while it has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: Form(
@@ -3350,6 +3351,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                 : AutovalidateMode.disabled,
             child: EmailField(
               controller: _email,
+              readOnly: widget.busy,
               autofillHints: const [
                 AutofillHints.username,
                 AutofillHints.email,
@@ -3404,23 +3406,47 @@ import 'sign_in_state.dart';
 /// one failed.
 class SignInCubit extends Cubit<AuthActionState> {
   /// Creates the cubit that signs in through [_session].
-  SignInCubit(this._session) : super(const AuthActionState());
+  SignInCubit(this._session) : super(const AuthActionState()) {
+    _session.hasAccount.addListener(_follow);
+  }
 
   final AppSessionController _session;
+
+  /// Whether a call of this cubit is on its way.
+  var _calling = false;
 
   /// Signs in to the account of [email] with [password].
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
-  /// stays busy until then.
+  /// stays busy for as long as the session has the account.
   Future<void> signIn({required String email, required String password}) async {
     if (state.busy) return;
+    _calling = true;
     emit(const AuthActionState(busy: true));
     try {
       await _session.signIn(email: email, password: password);
     } on AuthFailure catch (failure) {
+      _calling = false;
       // The user may have left the screen while the call was on its way.
       if (!isClosed) emit(AuthActionState(failure: failure));
+      return;
     }
+    _calling = false;
+    _follow();
+  }
+
+  /// Ends the busy state that a call left once the session has no account:
+  /// the user was signed out again before the router took the screen away,
+  /// as by code of the app that turns a user away, and the form is back.
+  void _follow() {
+    if (_calling || isClosed || !state.busy) return;
+    if (!_session.hasAccount.value) emit(const AuthActionState());
+  }
+
+  @override
+  Future<void> close() {
+    _session.hasAccount.removeListener(_follow);
+    return super.close();
   }
 }
 === lib/features/sign_in/sign_in_guards.dart (sign_in) ===
@@ -3710,9 +3736,9 @@ class _Cell extends StatelessWidget {
             ? Icon(icon, size: 44, color: colors.onPrimary)
             : Stack(
                 children: [
-                  Positioned(
+                  PositionedDirectional(
                     top: 6,
-                    right: 8,
+                    end: 8,
                     child: Text(
                       '$_appNumber',
                       style: _monospace.copyWith(
@@ -3855,9 +3881,12 @@ final class AuthActionState {
 
   /// Whether the call is on its way.
   ///
-  /// It stays so once the call succeeded. The user is signed in then, and
-  /// what comes next is up to the router, which leaves the screen: the
-  /// screen neither navigates nor shows its form again. A failure ends it.
+  /// It stays so once the call succeeded, for as long as the session has
+  /// the account. The user is signed in then, and what comes next is up to
+  /// the router, which leaves the screen: the screen neither navigates nor
+  /// shows its form again. A failure ends it, and so does a session that
+  /// has no account any more, as when code of the app signs the user out
+  /// before the router took the screen away.
   final bool busy;
 
   /// Why the last call failed, or `null` if none did.
@@ -3973,7 +4002,8 @@ class _SignInViewState extends State<SignInView> {
       title: context.l10n.signInTitle,
       intro: context.l10n.signInIntro,
       children: [
-        // While the sign-in is on its way, the form takes no input.
+        // While the sign-in is on its way, the form takes no input: no tap,
+        // and no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -3987,6 +4017,7 @@ class _SignInViewState extends State<SignInView> {
                 children: [
                   EmailField(
                     controller: _email,
+                    readOnly: widget.busy,
                     autofillHints: const [
                       AutofillHints.username,
                       AutofillHints.email,
@@ -3995,6 +4026,7 @@ class _SignInViewState extends State<SignInView> {
                   const SizedBox(height: 16),
                   PasswordField(
                     controller: _password,
+                    readOnly: widget.busy,
                     autofillHints: const [AutofillHints.password],
                     onSubmitted: _submit,
                   ),
@@ -4002,7 +4034,8 @@ class _SignInViewState extends State<SignInView> {
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
                     child: TextButton(
-                      onPressed: widget.onForgotPassword,
+                      // Nor a key: the action takes none while busy.
+                      onPressed: widget.busy ? null : widget.onForgotPassword,
                       child: Text(
                         context.l10n.signInForgotPassword,
                         textAlign: TextAlign.end,
@@ -4090,6 +4123,7 @@ class EmailField extends StatelessWidget {
   const EmailField({
     required this.controller,
     required this.autofillHints,
+    this.readOnly = false,
     this.textInputAction = TextInputAction.next,
     this.onSubmitted,
     super.key,
@@ -4097,6 +4131,11 @@ class EmailField extends StatelessWidget {
 
   /// The controller of the address.
   final TextEditingController controller;
+
+  /// Whether the field takes no typing, as while the call of its form is on
+  /// its way. It keeps the focus then, so the user goes on typing once the
+  /// call has failed.
+  final bool readOnly;
 
   /// What the field is for the autofill of the device: the address of an
   /// account that exists, or of a new one.
@@ -4116,6 +4155,7 @@ class EmailField extends StatelessWidget {
       label: context.l10n.signInEmail,
       child: TextFormField(
         controller: controller,
+        readOnly: readOnly,
         decoration: const InputDecoration(errorMaxLines: _mistakeLines),
         keyboardType: TextInputType.emailAddress,
         textInputAction: textInputAction,
@@ -4142,11 +4182,17 @@ class PasswordField extends StatefulWidget {
     required this.controller,
     required this.autofillHints,
     required this.onSubmitted,
+    this.readOnly = false,
     super.key,
   });
 
   /// The controller of the password.
   final TextEditingController controller;
+
+  /// Whether the field takes no typing, as while the call of its form is on
+  /// its way. It keeps the focus then, so the user goes on typing once the
+  /// call has failed.
+  final bool readOnly;
 
   /// What the field is for the autofill of the device: the password of an
   /// account, or a new one.
@@ -4170,6 +4216,7 @@ class _PasswordFieldState extends State<PasswordField> {
       label: context.l10n.signInPassword,
       child: TextFormField(
         controller: widget.controller,
+        readOnly: widget.readOnly,
         decoration: InputDecoration(
           errorMaxLines: _mistakeLines,
           suffixIcon: IconButton(
@@ -4460,23 +4507,47 @@ import 'sign_in_state.dart';
 /// why the last one failed.
 class SignUpCubit extends Cubit<AuthActionState> {
   /// Creates the cubit that signs up through [_session].
-  SignUpCubit(this._session) : super(const AuthActionState());
+  SignUpCubit(this._session) : super(const AuthActionState()) {
+    _session.hasAccount.addListener(_follow);
+  }
 
   final AppSessionController _session;
+
+  /// Whether a call of this cubit is on its way.
+  var _calling = false;
 
   /// Creates an account for [email] with [password] and signs in to it.
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
-  /// stays busy until then.
+  /// stays busy for as long as the session has the account.
   Future<void> signUp({required String email, required String password}) async {
     if (state.busy) return;
+    _calling = true;
     emit(const AuthActionState(busy: true));
     try {
       await _session.signUp(email: email, password: password);
     } on AuthFailure catch (failure) {
+      _calling = false;
       // The user may have left the screen while the call was on its way.
       if (!isClosed) emit(AuthActionState(failure: failure));
+      return;
     }
+    _calling = false;
+    _follow();
+  }
+
+  /// Ends the busy state that a call left once the session has no account:
+  /// the user was signed out again before the router took the screen away,
+  /// as by code of the app that turns a user away, and the form is back.
+  void _follow() {
+    if (_calling || isClosed || !state.busy) return;
+    if (!_session.hasAccount.value) emit(const AuthActionState());
+  }
+
+  @override
+  Future<void> close() {
+    _session.hasAccount.removeListener(_follow);
+    return super.close();
   }
 }
 === lib/features/sign_in/sign_up_screen.dart (sign_in (bloc)) ===
@@ -4586,7 +4657,8 @@ class _SignUpViewState extends State<SignUpView> {
       title: context.l10n.signInSignUpTitle,
       intro: context.l10n.signInSignUpIntro,
       children: [
-        // While the sign-up is on its way, the form takes no input.
+        // While the sign-up is on its way, the form takes no input: no tap,
+        // and no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -4600,6 +4672,7 @@ class _SignUpViewState extends State<SignUpView> {
                 children: [
                   EmailField(
                     controller: _email,
+                    readOnly: widget.busy,
                     autofillHints: const [
                       AutofillHints.email,
                       AutofillHints.newUsername,
@@ -4609,6 +4682,7 @@ class _SignUpViewState extends State<SignUpView> {
                   // The device offers a new password, and to keep it.
                   PasswordField(
                     controller: _password,
+                    readOnly: widget.busy,
                     autofillHints: const [AutofillHints.newPassword],
                     onSubmitted: _submit,
                   ),
@@ -4723,7 +4797,7 @@ class DefaultFirebaseOptions {
   "signInPasswordRequired": "Enter a password.",
   "signInFailureCredentials": "The email or the password is wrong.",
   "signInFailureEmailInUse": "This email already has an account. Sign in instead.",
-  "signInFailureWeakPassword": "This password is too weak. Choose a longer one.",
+  "signInFailureWeakPassword": "This password is too weak. Choose a stronger one.",
   "signInFailureDisabled": "This account is disabled.",
   "signInFailureTooManyAttempts": "Too many attempts. Try again later.",
   "signInFailureNoNetwork": "No connection. Check the internet and try again.",
@@ -4749,19 +4823,19 @@ class DefaultFirebaseOptions {
   "signInSignUpIntro": "Потрібні лише пошта й пароль.",
   "signInSignUpSubmit": "Створити акаунт",
   "signInHaveAccount": "У мене вже є акаунт",
-  "signInResetTitle": "Новий пароль",
+  "signInResetTitle": "Відновлення пароля",
   "signInResetIntro": "Введіть пошту свого акаунта, і ми надішлемо посилання, щоб задати новий пароль.",
   "signInSendLink": "Надіслати посилання",
   "signInResetSentTitle": "Перевірте пошту",
-  "signInResetSent": "Якщо ця адреса має акаунт, посилання для нового пароля вже надіслано на:",
+  "signInResetSent": "Якщо для цієї адреси є акаунт, посилання для нового пароля вже надіслано на:",
   "signInBackToSignIn": "Назад до входу",
   "signInEmailRequired": "Введіть пошту.",
   "signInEmailInvalid": "Введіть правильну адресу пошти.",
   "signInPasswordRequired": "Введіть пароль.",
   "signInFailureCredentials": "Неправильна пошта або пароль.",
   "signInFailureEmailInUse": "Для цієї пошти вже є акаунт. Увійдіть у нього.",
-  "signInFailureWeakPassword": "Цей пароль надто слабкий. Виберіть довший.",
-  "signInFailureDisabled": "Цей акаунт вимкнено.",
+  "signInFailureWeakPassword": "Цей пароль надто слабкий. Виберіть надійніший.",
+  "signInFailureDisabled": "Цей акаунт заблоковано.",
   "signInFailureTooManyAttempts": "Забагато спроб. Спробуйте пізніше.",
   "signInFailureNoNetwork": "Немає зв’язку. Перевірте інтернет і спробуйте ще раз.",
   "signInFailureRecentSignIn": "Вийдіть і увійдіть знову, а тоді спробуйте ще раз.",

@@ -70,7 +70,8 @@ class _SignInViewState extends State<SignInView> {
       title: {{{text_title}}},
       intro: {{{text_intro}}},
       children: [
-        // While the sign-in is on its way, the form takes no input.
+        // While the sign-in is on its way, the form takes no input: no tap,
+        // and no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -84,6 +85,7 @@ class _SignInViewState extends State<SignInView> {
                 children: [
                   EmailField(
                     controller: _email,
+                    readOnly: widget.busy,
                     autofillHints: const [
                       AutofillHints.username,
                       AutofillHints.email,
@@ -92,6 +94,7 @@ class _SignInViewState extends State<SignInView> {
                   const SizedBox(height: 16),
                   PasswordField(
                     controller: _password,
+                    readOnly: widget.busy,
                     autofillHints: const [AutofillHints.password],
                     onSubmitted: _submit,
                   ),
@@ -99,7 +102,8 @@ class _SignInViewState extends State<SignInView> {
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
                     child: TextButton(
-                      onPressed: widget.onForgotPassword,
+                      // Nor a key: the action takes none while busy.
+                      onPressed: widget.busy ? null : widget.onForgotPassword,
                       child: Text(
                         {{{text_forgot_password}}},
                         textAlign: TextAlign.end,

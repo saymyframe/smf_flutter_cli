@@ -72,15 +72,16 @@ With `go_router`:
 
 ## Sign-in
 
-- The sign-in is three screens in `lib/features/sign_in/`: `SignInScreen`, the route `sign_in.signIn` at `/sign_in`, and over it `SignUpScreen` at `/sign_in/sign_up` and `ResetPasswordScreen` at `/sign_in/reset_password`. Two guards of `routeGuards` show them, with the functions of `lib/features/sign_in/sign_in_guards.dart`. `sign_in.gate` reads `appSession.allowsApp` and shows the sign-in in place of every other screen. `sign_in.account` reads `appSession.hasAccount` and shows it in place of a route that needs an account.
+- The sign-in is three screens in `lib/features/sign_in/`: `SignInScreen`, the route `sign_in.signIn` at `/sign_in`, and over it `SignUpScreen` at `/sign_in/sign_up` and `ResetPasswordScreen` at `/sign_in/reset_password`. Two guards of `routeGuards` show them, with the functions of `lib/features/sign_in/sign_in_guards.dart`. `sign_in.gate` reads `appSession.allowsApp` and shows the sign-in in place of every other screen. `sign_in.hasAccount` reads `appSession.hasAccount` and shows it in place of a route that needs an account.
 - A screen of the sign-in neither closes itself nor navigates once the user is signed in. It signs in or up through its state. The session changes then, and the router leaves the sign-in. While `authMode` is `AuthMode.required`, no code navigates to the sign-in either: the gate shows it. In the other modes, a screen that offers to sign in opens it with `context.nav.signIn.signIn().push<void>()`, so that back leads back.
 - The look of a screen and its state are in different files. The look is `SignInView`, `SignUpView` and `ResetPasswordView`, each in a file of its name, such as `lib/features/sign_in/sign_in_view.dart`. They share `AuthPage` of `lib/features/sign_in/sign_in_page.dart`, which is the frame of a screen, and the fields and buttons of `lib/features/sign_in/sign_in_widgets.dart`. All of them are plain Flutter widgets: a view gets the state of its call and callbacks, and imports nothing that manages state. The file of a screen, such as `lib/features/sign_in/sign_in_screen.dart`, only gives its view the state.
 - The fields, the buttons and the cards of the screens are those of the theme of the app. These files give a field no colour, border or padding, so for another look of a field, change the theme of the app. `OtherScreenAction`, the way from the sign-in to the sign-up and back, is a text button of the theme with one colour of its own, `colorScheme.secondary`.
-- That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, since the router leaves the screen then.
+- That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, for as long as the session has the account, since the router leaves the screen then. When the session has no account again before that, the form is back.
 - A failure gets its text in `authFailureText()` of `lib/features/sign_in/sign_in_widgets.dart`, which has a text for every `AuthFailureReason`. `FailureMessage` shows that text, and the `developerHint` of the failure in debug mode only.
 - While a call is on its way, `SubmitButton` spins. A widget test that waits with `pumpAndSettle()` returns only once the call has ended, so until then it shows frames with `pump()`.
 
 - The state of each screen is a provider in a file next to it, with its `Notifier`: `signInProvider`, `signUpProvider` and `resetPasswordProvider`. Each lasts as long as its screen. They sign in through `appSessionProvider` of `lib/features/sign_in/session_provider.dart`, which a test overrides with an `AppSessionController` of its own. Apart from the file of the guards, that file is the only one of the feature that names `appSession`.
+- A provider is one for the app, so two pages of one screen that are open at once show the same state.
 
 ## State management
 
@@ -1754,7 +1755,7 @@ final List<RouteGuard> routeGuards = [
     resumes: false,
   ),
   RouteGuard(
-    'sign_in.account',
+    'sign_in.hasAccount',
     allows: guard0.signInHasAccount(),
     redirectTo: const SignInSignInLocation(),
     flow: const {'sign_in.signIn', 'sign_in.signUp', 'sign_in.resetPassword'},
@@ -2912,7 +2913,8 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
       intro:
           'Enter the email of your account, and we will send you a link to set a new password.',
       children: [
-        // While the message is on its way, the form takes no input.
+        // While the message is on its way, the form takes no input: no tap,
+        // and no typing into the field while it has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: Form(
@@ -2922,6 +2924,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                 : AutovalidateMode.disabled,
             child: EmailField(
               controller: _email,
+              readOnly: widget.busy,
               autofillHints: const [
                 AutofillHints.username,
                 AutofillHints.email,
@@ -2980,6 +2983,10 @@ import 'sign_in_state.dart';
 
 /// The state of the screen of the sign-in, which lasts as long as the
 /// screen does.
+///
+/// A provider is one for the app, where a cubit would be one for each page:
+/// two pages of this screen that are open at once, as a leaving one and a
+/// new one during a transition, show the same state.
 final signInProvider =
     NotifierProvider.autoDispose<SignInNotifier, AuthActionState>(
       SignInNotifier.new,
@@ -2988,22 +2995,47 @@ final signInProvider =
 /// Signs in through the session of the app, and tells whether the sign-in
 /// is on its way and why the last one failed.
 class SignInNotifier extends Notifier<AuthActionState> {
+  /// Whether a call of this notifier is on its way.
+  var _calling = false;
+
   @override
-  AuthActionState build() => const AuthActionState();
+  AuthActionState build() {
+    final session = ref.watch(appSessionProvider);
+    // Ends the busy state that a call left once the session has no
+    // account: the user was signed out again before the router took the
+    // screen away, as by code of the app that turns a user away, and the
+    // form is back.
+    void follow() {
+      if (_calling || !state.busy) return;
+      if (!session.hasAccount.value) state = const AuthActionState();
+    }
+
+    session.hasAccount.addListener(follow);
+    ref.onDispose(() => session.hasAccount.removeListener(follow));
+    return const AuthActionState();
+  }
 
   /// Signs in to the account of [email] with [password].
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
-  /// stays busy until then.
+  /// stays busy for as long as the session has the account.
   Future<void> signIn({required String email, required String password}) async {
     if (state.busy) return;
     final session = ref.read(appSessionProvider);
+    _calling = true;
     state = const AuthActionState(busy: true);
     try {
       await session.signIn(email: email, password: password);
     } on AuthFailure catch (failure) {
+      _calling = false;
       // The user may have left the screen while the call was on its way.
       if (ref.mounted) state = AuthActionState(failure: failure);
+      return;
+    }
+    _calling = false;
+    // The user may be signed out again already.
+    if (ref.mounted && !session.hasAccount.value) {
+      state = const AuthActionState();
     }
   }
 }
@@ -3279,9 +3311,9 @@ class _Cell extends StatelessWidget {
             ? Icon(icon, size: 44, color: colors.onPrimary)
             : Stack(
                 children: [
-                  Positioned(
+                  PositionedDirectional(
                     top: 6,
-                    right: 8,
+                    end: 8,
                     child: Text(
                       '$_appNumber',
                       style: _monospace.copyWith(
@@ -3419,9 +3451,12 @@ final class AuthActionState {
 
   /// Whether the call is on its way.
   ///
-  /// It stays so once the call succeeded. The user is signed in then, and
-  /// what comes next is up to the router, which leaves the screen: the
-  /// screen neither navigates nor shows its form again. A failure ends it.
+  /// It stays so once the call succeeded, for as long as the session has
+  /// the account. The user is signed in then, and what comes next is up to
+  /// the router, which leaves the screen: the screen neither navigates nor
+  /// shows its form again. A failure ends it, and so does a session that
+  /// has no account any more, as when code of the app signs the user out
+  /// before the router took the screen away.
   final bool busy;
 
   /// Why the last call failed, or `null` if none did.
@@ -3536,7 +3571,8 @@ class _SignInViewState extends State<SignInView> {
       title: 'Sign in',
       intro: 'Enter the email and the password of your account.',
       children: [
-        // While the sign-in is on its way, the form takes no input.
+        // While the sign-in is on its way, the form takes no input: no tap,
+        // and no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -3550,6 +3586,7 @@ class _SignInViewState extends State<SignInView> {
                 children: [
                   EmailField(
                     controller: _email,
+                    readOnly: widget.busy,
                     autofillHints: const [
                       AutofillHints.username,
                       AutofillHints.email,
@@ -3558,6 +3595,7 @@ class _SignInViewState extends State<SignInView> {
                   const SizedBox(height: 16),
                   PasswordField(
                     controller: _password,
+                    readOnly: widget.busy,
                     autofillHints: const [AutofillHints.password],
                     onSubmitted: _submit,
                   ),
@@ -3565,7 +3603,8 @@ class _SignInViewState extends State<SignInView> {
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
                     child: TextButton(
-                      onPressed: widget.onForgotPassword,
+                      // Nor a key: the action takes none while busy.
+                      onPressed: widget.busy ? null : widget.onForgotPassword,
                       child: Text('Forgot password?', textAlign: TextAlign.end),
                     ),
                   ),
@@ -3649,6 +3688,7 @@ class EmailField extends StatelessWidget {
   const EmailField({
     required this.controller,
     required this.autofillHints,
+    this.readOnly = false,
     this.textInputAction = TextInputAction.next,
     this.onSubmitted,
     super.key,
@@ -3656,6 +3696,11 @@ class EmailField extends StatelessWidget {
 
   /// The controller of the address.
   final TextEditingController controller;
+
+  /// Whether the field takes no typing, as while the call of its form is on
+  /// its way. It keeps the focus then, so the user goes on typing once the
+  /// call has failed.
+  final bool readOnly;
 
   /// What the field is for the autofill of the device: the address of an
   /// account that exists, or of a new one.
@@ -3675,6 +3720,7 @@ class EmailField extends StatelessWidget {
       label: 'Email',
       child: TextFormField(
         controller: controller,
+        readOnly: readOnly,
         decoration: const InputDecoration(errorMaxLines: _mistakeLines),
         keyboardType: TextInputType.emailAddress,
         textInputAction: textInputAction,
@@ -3701,11 +3747,17 @@ class PasswordField extends StatefulWidget {
     required this.controller,
     required this.autofillHints,
     required this.onSubmitted,
+    this.readOnly = false,
     super.key,
   });
 
   /// The controller of the password.
   final TextEditingController controller;
+
+  /// Whether the field takes no typing, as while the call of its form is on
+  /// its way. It keeps the focus then, so the user goes on typing once the
+  /// call has failed.
+  final bool readOnly;
 
   /// What the field is for the autofill of the device: the password of an
   /// account, or a new one.
@@ -3729,6 +3781,7 @@ class _PasswordFieldState extends State<PasswordField> {
       label: 'Password',
       child: TextFormField(
         controller: widget.controller,
+        readOnly: widget.readOnly,
         decoration: InputDecoration(
           errorMaxLines: _mistakeLines,
           suffixIcon: IconButton(
@@ -3976,7 +4029,7 @@ String authFailureText(
   AuthFailureReason.emailInUse =>
     'This email already has an account. Sign in instead.',
   AuthFailureReason.weakPassword =>
-    'This password is too weak. Choose a longer one.',
+    'This password is too weak. Choose a stronger one.',
   AuthFailureReason.invalidEmail => 'Enter a valid email address.',
   AuthFailureReason.userDisabled => 'This account is disabled.',
   AuthFailureReason.tooManyAttempts => 'Too many attempts. Try again later.',
@@ -4018,6 +4071,10 @@ import 'sign_in_state.dart';
 
 /// The state of the screen that creates an account, which lasts as long as
 /// the screen does.
+///
+/// A provider is one for the app, where a cubit would be one for each page:
+/// two pages of this screen that are open at once, as a leaving one and a
+/// new one during a transition, show the same state.
 final signUpProvider =
     NotifierProvider.autoDispose<SignUpNotifier, AuthActionState>(
       SignUpNotifier.new,
@@ -4026,22 +4083,47 @@ final signUpProvider =
 /// Signs up through the session of the app, and tells whether the sign-up
 /// is on its way and why the last one failed.
 class SignUpNotifier extends Notifier<AuthActionState> {
+  /// Whether a call of this notifier is on its way.
+  var _calling = false;
+
   @override
-  AuthActionState build() => const AuthActionState();
+  AuthActionState build() {
+    final session = ref.watch(appSessionProvider);
+    // Ends the busy state that a call left once the session has no
+    // account: the user was signed out again before the router took the
+    // screen away, as by code of the app that turns a user away, and the
+    // form is back.
+    void follow() {
+      if (_calling || !state.busy) return;
+      if (!session.hasAccount.value) state = const AuthActionState();
+    }
+
+    session.hasAccount.addListener(follow);
+    ref.onDispose(() => session.hasAccount.removeListener(follow));
+    return const AuthActionState();
+  }
 
   /// Creates an account for [email] with [password] and signs in to it.
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
-  /// stays busy until then.
+  /// stays busy for as long as the session has the account.
   Future<void> signUp({required String email, required String password}) async {
     if (state.busy) return;
     final session = ref.read(appSessionProvider);
+    _calling = true;
     state = const AuthActionState(busy: true);
     try {
       await session.signUp(email: email, password: password);
     } on AuthFailure catch (failure) {
+      _calling = false;
       // The user may have left the screen while the call was on its way.
       if (ref.mounted) state = AuthActionState(failure: failure);
+      return;
+    }
+    _calling = false;
+    // The user may be signed out again already.
+    if (ref.mounted && !session.hasAccount.value) {
+      state = const AuthActionState();
     }
   }
 }
@@ -4146,7 +4228,8 @@ class _SignUpViewState extends State<SignUpView> {
       title: 'Create account',
       intro: 'All it takes is an email and a password.',
       children: [
-        // While the sign-up is on its way, the form takes no input.
+        // While the sign-up is on its way, the form takes no input: no tap,
+        // and no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -4160,6 +4243,7 @@ class _SignUpViewState extends State<SignUpView> {
                 children: [
                   EmailField(
                     controller: _email,
+                    readOnly: widget.busy,
                     autofillHints: const [
                       AutofillHints.email,
                       AutofillHints.newUsername,
@@ -4169,6 +4253,7 @@ class _SignUpViewState extends State<SignUpView> {
                   // The device offers a new password, and to keep it.
                   PasswordField(
                     controller: _password,
+                    readOnly: widget.busy,
                     autofillHints: const [AutofillHints.newPassword],
                     onSubmitted: _submit,
                   ),

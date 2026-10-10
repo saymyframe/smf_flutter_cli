@@ -35,18 +35,23 @@ class SignInScreen extends StatelessWidget {
 }
 ```
 
-`SignInCubit` signs in through `appSession`, the session of the app. Its state tells the view whether the call is on its way and why the last one failed:
+`SignInCubit` signs in through `appSession`, the session of the app. Its state tells the view whether the call is on its way and why the last one failed. After a sign-in that succeeded it stays busy for as long as the session has the account, since the router takes the screen away then:
 
 ```dart
   Future<void> signIn({required String email, required String password}) async {
     if (state.busy) return;
+    _calling = true;
     emit(const AuthActionState(busy: true));
     try {
       await _session.signIn(email: email, password: password);
     } on AuthFailure catch (failure) {
+      _calling = false;
       // The user may have left the screen while the call was on its way.
       if (!isClosed) emit(AuthActionState(failure: failure));
+      return;
     }
+    _calling = false;
+    _follow();
   }
 ```
 

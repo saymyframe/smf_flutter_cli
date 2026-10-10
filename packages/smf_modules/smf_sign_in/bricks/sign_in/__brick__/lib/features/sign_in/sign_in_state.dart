@@ -12,9 +12,12 @@ final class AuthActionState {
 
   /// Whether the call is on its way.
   ///
-  /// It stays so once the call succeeded. The user is signed in then, and
-  /// what comes next is up to the router, which leaves the screen: the
-  /// screen neither navigates nor shows its form again. A failure ends it.
+  /// It stays so once the call succeeded, for as long as the session has
+  /// the account. The user is signed in then, and what comes next is up to
+  /// the router, which leaves the screen: the screen neither navigates nor
+  /// shows its form again. A failure ends it, and so does a session that
+  /// has no account any more, as when code of the app signs the user out
+  /// before the router took the screen away.
   final bool busy;
 
   /// Why the last call failed, or `null` if none did.

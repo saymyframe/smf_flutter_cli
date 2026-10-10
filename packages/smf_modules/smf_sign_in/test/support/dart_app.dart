@@ -54,6 +54,8 @@ mixin class ChangeNotifier implements Listenable {
   @override
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
 
+  bool get hasListeners => _listeners.isNotEmpty;
+
   void notifyListeners() {
     for (final listener in [..._listeners]) {
       listener();

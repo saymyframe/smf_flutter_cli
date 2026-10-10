@@ -565,7 +565,7 @@ Screen resetScreen(AppSessionController session) => _screenOf(
 
 /// What the script of every variant does: the scenarios of each screen,
 /// and the sign-up of an anonymous user.
-const _scenarios = '''
+const _scenarios = r'''
   result['sign-in'] = await scenariosOf(signInScreen);
   result['sign-up'] = await scenariosOf(signUpScreen);
   result['reset'] = await scenariosOf(resetScreen);
@@ -581,6 +581,48 @@ const _scenarios = '''
     result['anonymous: calls'] = [...service.calls];
     result['anonymous: session'] = show(session.value);
     session.dispose();
+  }
+
+  // The account is gone again after a call that succeeded: a moment later,
+  // and in the turn in which the session got it, as when code of the app
+  // turns a user away. The screen has not left, and its state is as before
+  // the call. Once the user has left the screen, its state listens to the
+  // session no more.
+  for (final (name, open) in [
+    ('sign-in', signInScreen),
+    ('sign-up', signUpScreen),
+  ]) {
+    for (final atOnce in [false, true]) {
+      final service = Scripted();
+      final session = await sessionOf(service);
+      void turnAway() {
+        if (session.hasAccount.value) unawaited(session.signOut());
+      }
+
+      if (atOnce) session.addListener(turnAway);
+      final screen = open(session);
+      await screen.submit();
+      await turn();
+      if (!atOnce) await session.signOut();
+      await turn();
+      final when = atOnce ? 'at once' : 'later';
+      result['$name, signed out $when: state'] = screen.state();
+      result['$name, signed out $when: session'] = show(session.value);
+      // The next call is made.
+      service.failure = const AuthFailure(AuthFailureReason.network);
+      session.removeListener(turnAway);
+      final calls = service.calls.length;
+      await screen.submit();
+      await turn();
+      result['$name, signed out $when: next call'] =
+          service.calls.length - calls;
+      result['$name, signed out $when: state then'] = screen.state();
+      await screen.leave();
+      await turn();
+      result['$name, signed out $when: listeners after'] =
+          session.hasListeners;
+      session.dispose();
+    }
   }
 ''';
 
@@ -712,7 +754,7 @@ void main() {
       expect(gate.condition, isNull);
       expect(gate.allows.name, 'signInAllowsApp');
       expect(account.name, SignInModule.accountGuard);
-      expect(account.name, 'account');
+      expect(account.name, 'hasAccount');
       expect(account.condition, AuthRole.account);
       expect(account.allows.name, 'signInHasAccount');
       for (final guard in [gate, account]) {
@@ -1390,11 +1432,37 @@ void main() {
         expect(_callsOf(view, 'OutlinedButton'), isEmpty);
       }
       // What belongs to the password is a text button as the theme has
-      // it, at the end of its field, inside the form: it takes no input
-      // while the form submits, as the form.
+      // it, at the end of its field, inside the form: it takes neither a
+      // tap nor a key while the form submits.
       final forgot = _callsOf(signIn, 'TextButton').single;
       expect(forgot.keys, ['onPressed', 'child']);
-      expect(forgot['onPressed'], 'widget.onForgotPassword');
+      expect(
+        forgot['onPressed'],
+        'widget.busy ? null : widget.onForgotPassword',
+      );
+      // Nor does a field take typing then, while it keeps the focus.
+      final views = {
+        'sign-in': signIn,
+        'sign-up': signUp,
+        'reset': _parsed(app, '$_folder/reset_password_view.dart'),
+      };
+      for (final MapEntry(key: name, value: view) in views.entries) {
+        for (final field in [
+          ..._callsOf(view, 'EmailField'),
+          ..._callsOf(view, 'PasswordField'),
+        ]) {
+          expect(field['readOnly'], 'widget.busy', reason: name);
+        }
+        expect(
+          _callsOf(view, 'AbsorbPointer').single['absorbing'],
+          'widget.busy',
+          reason: name,
+        );
+      }
+      final widgets = _parsed(app, _widgets);
+      for (final field in _callsOf(widgets, 'TextFormField')) {
+        expect(field['readOnly'], endsWith('readOnly'));
+      }
       expect(forgot['child'], contains('TextAlign.end'));
       expect(_callsOf(signUp, 'TextButton'), isEmpty);
       // The way to the other screen is the same action on both screens.
@@ -1871,6 +1939,33 @@ void main() {
         ]);
       });
 
+      test(
+          'is busy after a sign-in or a sign-up that succeeded only while '
+          'the session has the account: once the user is signed out again, '
+          'a moment later or in the turn of the sign-in, the form is back '
+          'and takes the next call, and a screen that the user left '
+          'listens to the session no more', () {
+        for (final screen in ['sign-in', 'sign-up']) {
+          for (final when in ['later', 'at once']) {
+            final name = '$screen, signed out $when';
+
+            expect(result['$name: session'], 'nobody', reason: name);
+            expect(
+              result['$name: state'],
+              'busy: false, failure: null',
+              reason: name,
+            );
+            expect(result['$name: next call'], 1, reason: name);
+            expect(
+              result['$name: state then'],
+              'busy: false, failure: network',
+              reason: name,
+            );
+            expect(result['$name: listeners after'], isFalse, reason: name);
+          }
+        }
+      });
+
       test('does nothing with a second submit while a call is on its way', () {
         for (final screen in ['sign-in', 'sign-up', 'reset']) {
           final states = of(screen);
@@ -1961,7 +2056,7 @@ void main() {
 
       expect(gate.fullName, 'sign_in.gate');
       expect(gate.isGate, isTrue);
-      expect(account.fullName, 'sign_in.account');
+      expect(account.fullName, 'sign_in.hasAccount');
       expect(account.isGate, isFalse);
       expect(facade.guardFor(AuthRole.account), same(account));
       for (final guard in [gate, account]) {

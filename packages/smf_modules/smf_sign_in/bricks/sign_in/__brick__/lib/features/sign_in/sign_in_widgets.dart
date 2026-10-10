@@ -48,6 +48,7 @@ class EmailField extends StatelessWidget {
   const EmailField({
     required this.controller,
     required this.autofillHints,
+    this.readOnly = false,
     this.textInputAction = TextInputAction.next,
     this.onSubmitted,
     super.key,
@@ -55,6 +56,11 @@ class EmailField extends StatelessWidget {
 
   /// The controller of the address.
   final TextEditingController controller;
+
+  /// Whether the field takes no typing, as while the call of its form is on
+  /// its way. It keeps the focus then, so the user goes on typing once the
+  /// call has failed.
+  final bool readOnly;
 
   /// What the field is for the autofill of the device: the address of an
   /// account that exists, or of a new one.
@@ -74,6 +80,7 @@ class EmailField extends StatelessWidget {
       label: {{{text_email}}},
       child: TextFormField(
         controller: controller,
+        readOnly: readOnly,
         decoration: const InputDecoration(errorMaxLines: _mistakeLines),
         keyboardType: TextInputType.emailAddress,
         textInputAction: textInputAction,
@@ -100,11 +107,17 @@ class PasswordField extends StatefulWidget {
     required this.controller,
     required this.autofillHints,
     required this.onSubmitted,
+    this.readOnly = false,
     super.key,
   });
 
   /// The controller of the password.
   final TextEditingController controller;
+
+  /// Whether the field takes no typing, as while the call of its form is on
+  /// its way. It keeps the focus then, so the user goes on typing once the
+  /// call has failed.
+  final bool readOnly;
 
   /// What the field is for the autofill of the device: the password of an
   /// account, or a new one.
@@ -128,6 +141,7 @@ class _PasswordFieldState extends State<PasswordField> {
       label: {{{text_password}}},
       child: TextFormField(
         controller: widget.controller,
+        readOnly: widget.readOnly,
         decoration: InputDecoration(
           errorMaxLines: _mistakeLines,
           suffixIcon: IconButton(
