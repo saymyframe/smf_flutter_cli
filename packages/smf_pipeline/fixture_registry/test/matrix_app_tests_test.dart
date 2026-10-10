@@ -880,6 +880,89 @@ void main() {
     expect(appsOf(named('layout_screens')), containsAll(tabs));
   });
 
+  test(
+      'the tests of the screens get the locations that a router shows from '
+      'any page: of the routes that need no values, that no guard keeps the '
+      'user from, and that are outside the main navigation of an app with '
+      'one', () {
+    final screens = named('router_screens');
+
+    /// The classes of the locations in the file that the matrix writes for
+    /// [app], whose package is `my_app`.
+    List<String> locationsOf(MatrixApp app) {
+      final files = screens.generatedFiles!(app, 'my_app');
+      expect(files.keys, [locationsFromAnyPageFile]);
+      final unit = parseString(content: files[locationsFromAnyPageFile]!).unit;
+      expect(
+        [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ],
+        ['package:my_app/core/router/navigation.dart'],
+      );
+      final list = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .single
+          .variables;
+      expect(list.isConst, isTrue);
+      expect(list.type!.toSource(), 'List<AppLocation>');
+      final variable = list.variables.single;
+      expect(variable.name.lexeme, 'locationsFromAnyPage');
+      return [
+        for (final location in (variable.initializer! as ListLiteral).elements)
+          (location as MethodInvocation).toSource(),
+      ];
+    }
+
+    final withTests = [
+      for (final app in apps)
+        if (screens.appliesTo(app)) app,
+    ];
+    expect(withTests, isNotEmpty);
+    for (final app in withTests) {
+      final hook = app.hook!;
+      final facade = routerRole.facadeOf(routerRole.hookInput(hook));
+      final layout = hook.presentRoles.contains(layoutRole);
+      // Every app that the tests apply to has such a location, which they
+      // ask its router for from its error screen. Without a main
+      // navigation, the start route of the fixture feature is one, and the
+      // route below it needs a value. With one, both are in it, and so is
+      // the destination of the second fixture feature, whose route outside
+      // the main navigation is left. The routes of the flows of the guards,
+      // and those that ask for a condition, are none either.
+      expect(
+        locationsOf(app),
+        [
+          if (layout)
+            'FakeSecondOutsideLocation()'
+          else
+            'FakeFeatureHomeLocation()',
+        ],
+        reason: app.name,
+      );
+      expect(
+        {for (final route in facade.destinations) route.fullName},
+        layout
+            ? containsAll(['fake_feature.home', 'fake_second.second'])
+            : anything,
+        reason: app.name,
+      );
+    }
+    // An app with a router whose only routes are in its main navigation, or
+    // that has none, has no such location.
+    final withoutRoutes = [
+      for (final app in apps)
+        if (app.hook case final hook?
+            when hook.presentRoles.contains(routerRole) &&
+                routerRole.facadeOf(routerRole.hookInput(hook)).routes.isEmpty)
+          app,
+    ];
+    expect(withoutRoutes, isNotEmpty);
+    for (final app in withoutRoutes) {
+      expect(locationsOf(app), isEmpty, reason: app.name);
+    }
+  });
+
   group(
       'the labels of the destinations that the matrix writes for the tests '
       'of the layout', () {

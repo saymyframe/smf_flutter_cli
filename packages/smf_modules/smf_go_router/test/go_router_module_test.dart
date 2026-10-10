@@ -295,16 +295,10 @@ class _GoAppRouter {
     required void Function() again,
     void Function()? drop,
   }) {
-    final pages = _pages;
-    if (pages.isEmpty) {
-      config.go(location.path);
-      drop?.call();
-      return true;
-    }
     final answer = _guards.asked(
       location.routeName,
       location.path,
-      onTopOf: [for (final page in pages) page.route],
+      onTopOf: [for (final page in _pages) page.route],
     );
     switch (answer) {
       case null:
@@ -315,12 +309,7 @@ class _GoAppRouter {
       case ShowNothing():
         drop?.call();
       case ShowOver(location: final target, :final flow):
-        if (config.routerDelegate.currentConfiguration.isError) {
-          config.go(location.path);
-          drop?.call();
-        } else {
-          _open(target, flow, again: again, drop: drop);
-        }
+        _open(target, flow, again: again, drop: drop);
     }
     return true;
   }
@@ -492,6 +481,18 @@ $constructor
 /// their changes from the file of the router role.
 bool _asksGuards(CompilationUnit unit) =>
     _shownOfTheRole(unit).contains(RouterRole.guardChanges);
+
+/// How `push()` and `replace()` of the router start, as the analyzer prints
+/// it: while go_router has no page of a route, before its first location
+/// and on its error screen in place of the stack, they give go_router
+/// their location as `go()` does, and the push completes with `null`.
+const String _pushWithoutPage =
+    'if (_withoutPage) {go(location); return Future.value();}';
+const String _replaceWithoutPage = 'if (_withoutPage) return go(location);';
+
+/// The body of `_withoutPage` of the router, as the analyzer prints it.
+const String _expectedWithoutPage =
+    '=> config.routerDelegate.currentConfiguration.matches.isEmpty;';
 
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
@@ -1459,15 +1460,19 @@ void main() {
       expect(config.fields.isFinal, isTrue);
       expect(_bodyOf(router, 'navigatorOf'), '=> this;');
       expect(_bodyOf(router, 'go'), '=> config.go(location.path);');
-      // Without a main navigation, nothing to check first.
+      // While go_router has no page of a route, it has none to push over
+      // or to replace: push() and replace() give it their location as go()
+      // does. Without a main navigation, nothing else to check first.
       expect(
         _bodyOf(router, 'push'),
-        '{return config.push<T>(location.path);}',
+        '{$_pushWithoutPage return config.push<T>(location.path);}',
       );
       expect(
         _bodyOf(router, 'replace'),
-        '{config.pushReplacement<Object?>(location.path);}',
+        '{$_replaceWithoutPage '
+        'config.pushReplacement<Object?>(location.path);}',
       );
+      expect(_bodyOf(router, '_withoutPage'), _expectedWithoutPage);
       expect(app.files[_factory]!.text, isNot(contains('GoRouter.of(')));
       expect(
         app.files[_factory]!.text,
@@ -1574,18 +1579,20 @@ void main() {
 
       expect(
         _bodyOf(router, 'go'),
-        '{if (_redirected(location, again: () => go(location))) return; '
-        'config.go(location.path);}',
+        '{if (!_withoutPage && _redirected(location, again: () => '
+        'go(location))) {return;} config.go(location.path);}',
       );
       expect(
         _bodyOf(router, 'push'),
-        '{final waiting = Completer<T?>(); if (_redirected(location, again: '
+        '{$_pushWithoutPage final waiting = Completer<T?>(); if '
+        '(_redirected(location, again: '
         '() => waiting.complete(push<T>(location)), drop: waiting.complete)) '
         '{return waiting.future;} return config.push<T>(location.path);}',
       );
       expect(
         _bodyOf(router, 'replace'),
-        '{if (_redirected(location, again: () => replace(location))) '
+        '{$_replaceWithoutPage if (_redirected(location, again: () => '
+        'replace(location))) '
         'return; config.pushReplacement<Object?>(location.path);}',
       );
     });
@@ -1699,14 +1706,16 @@ void main() {
       // navigation is not shown.
       expect(
         _bodyOf(router, 'push'),
-        '{final waiting = Completer<T?>(); if (_redirected(location, again: '
+        '{$_pushWithoutPage final waiting = Completer<T?>(); if '
+        '(_redirected(location, again: '
         '() => waiting.complete(push<T>(location)), drop: waiting.complete)) '
         "{return waiting.future;} _checkMainNavigation(location, 'push'); "
         'return config.push<T>(location.path);}',
       );
       expect(
         _bodyOf(router, 'replace'),
-        '{if (_redirected(location, again: () => replace(location))) '
+        '{$_replaceWithoutPage if (_redirected(location, again: () => '
+        'replace(location))) '
         "return; _checkMainNavigation(location, 'replace'); "
         'config.pushReplacement<Object?>(location.path);}',
       );
@@ -2101,12 +2110,12 @@ void main() {
 
       expect(
         _bodyOf(router, 'push'),
-        "{_checkMainNavigation(location, 'push'); return "
+        "{$_pushWithoutPage _checkMainNavigation(location, 'push'); return "
         'config.push<T>(location.path);}',
       );
       expect(
         _bodyOf(router, 'replace'),
-        "{_checkMainNavigation(location, 'replace'); "
+        "{$_replaceWithoutPage _checkMainNavigation(location, 'replace'); "
         'config.pushReplacement<Object?>(location.path);}',
       );
       expect(
