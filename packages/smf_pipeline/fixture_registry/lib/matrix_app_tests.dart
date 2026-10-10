@@ -96,6 +96,20 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(const ModuleId('fake_second')),
         roles: {routerRole},
       ),
+      // A request for a route that asks for a condition, which opens the
+      // target of the guard of the condition once, and the router throws
+      // nothing, whichever module provides the router: in the apps with the
+      // two fixture features and the fixture gates. It needs fewer modules
+      // than the tests of router_conditions, so the app of a router with a
+      // known bug that fails it has few other tests.
+      MatrixAppTest(
+        '$appTests/router_flow_opens',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            app.modules.contains(const ModuleId('fake_gate')) &&
+            app.modules.contains(const ModuleId('fake_second')),
+        roles: {routerRole},
+      ),
       // The guards over the fallback screen of the app entry, the location
       // `/`, which is no route of a module, whichever module provides the
       // router: in the apps with the fixture gates in which no route starts

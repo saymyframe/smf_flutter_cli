@@ -28,6 +28,7 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_settings/smf_settings.dart';
 
 /// The app entry that builds its root once: flutter_core, the app entry of
@@ -63,6 +64,21 @@ const _appEntryBuildingRootOnce = BrokenModule(
       'Widget build(BuildContext context) =>',
       'Widget build(BuildContext context) => _root ??=',
     ),
+  ],
+);
+
+/// The router of go_router whose redirect asks the guards of the routes
+/// within the calls of the router too: it reads the counter of those calls
+/// the wrong way round. The router of a fixture has no redirect that runs
+/// for its own navigation, so this broken router changes the module of the
+/// CLI, and is made here as the broken app entry is.
+const _goRouterAskingWithinItsCalls = BrokenModule(
+  GoRouterModule(),
+  id: ModuleId('broken_go_router_asks_within_its_calls'),
+  description: 'go_router whose redirect asks about its own calls (fixture)',
+  file: RouterRole.appRouterFactoryFile,
+  changes: [
+    ('    if (_asking > 0) return null;', '    if (_asking < 0) return null;'),
   ],
 );
 
@@ -855,6 +871,42 @@ List<BrokenProvider> brokenProviders() => const [
             'each screen the user sees is heard of once',
             'The back button of the system throws nothing on the page that '
                 'the router stayed on.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _goRouterAskingWithinItsCalls,
+        role: routerRole,
+        bug: 'Its redirect asks the guards of the routes about the locations '
+            'that the router hands go_router itself too, with no pages, as '
+            'for a link. So when the router pushes the target of a guard '
+            'that stands for a condition, the guards answer to open that '
+            'target over the screen that the app starts on, and again for '
+            'that push, without end, which the router refuses with a '
+            'StateError.',
+        // The two fixture features and the fixture gates with their badge,
+        // for a route that asks for a condition and its guard, without the
+        // late gate, so that the other tests of the guards and of the
+        // conditions, each of which this router fails too, are not among
+        // the tests of the app.
+        app: [
+          FakeFeatureModule.id,
+          FakeSecondModule.id,
+          FakeGateModule.id,
+          FakeClockBadgeModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_flow_opens_test.dart',
+            'a request for a route that asks for a condition opens the '
+                'target of its guard once, without an error',
+            'A router throws nothing when it opens the target of a guard '
+                'for a request.',
           ),
         ],
       ),
