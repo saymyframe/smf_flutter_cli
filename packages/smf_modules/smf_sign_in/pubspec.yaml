@@ -19,6 +19,12 @@ dependencies:
 
 dev_dependencies:
   analyzer: ^14.4.0
+  # The package that flutter_bloc builds on, with which the tests run the
+  # cubits of the screens without Flutter.
+  bloc: ^9.0.0
+  # The package that flutter_riverpod builds on, with which the tests run
+  # the providers of the screens without Flutter.
+  riverpod: ^3.4.3
   # A module that manages state, for the variant of the screens with it in
   # the apps that the tests render.
   smf_bloc: ^0.3.1
