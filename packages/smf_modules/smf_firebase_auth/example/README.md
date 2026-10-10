@@ -46,6 +46,12 @@ Future<String?> signIn(String email, String password) async {
 
 `smf create` asks who may use the app without an account, or takes the answer from `--auth-mode`: `required`, the default, `guest` or `anonymous`. In the mode `anonymous`, the app signs in an anonymous user when it starts, and signing up gives that user the account.
 
-The ways to sign in are enabled in the Firebase project: Email/Password, and Anonymous for the mode `anonymous`. The README of the app tells where. Until they are enabled, a call fails with the reason `notConfigured`, and its `developerHint` has the link to the project.
+The ways to sign in are enabled in the Firebase project: Email/Password, and Anonymous for the mode `anonymous`. In a terminal, `smf create` offers to enable them right after `flutterfire configure` configured the app. To enable them later, run in the directory of the app:
+
+```bash
+dart tool/enable_firebase_sign_in.dart
+```
+
+The script enables them with the Firebase CLI, which adds a web app named "Default Web App" to a project that has no web app. The Firebase console enables them without it, and the README of the app tells where. Until they are enabled, a call fails with the reason `notConfigured`, and its `developerHint` tells how to enable them.
 
 The documentation has more on [the firebase_auth module](https://doc.saymyframe.com/modules/firebase-auth) and on [Firebase](https://doc.saymyframe.com/guides/firebase).

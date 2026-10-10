@@ -124,13 +124,13 @@ The ways to sign in are enabled in the Firebase project, not in the code: Email/
 dart tool/enable_firebase_sign_in.dart
 ```
 
-The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.6.0 or later. It never disables a method, and it changes no file of the app. Its arguments go to the Firebase CLI, so `--project <id>` names another project. The Firebase CLI runs as its default account there, also when `firebase login:use` chose another account for the directory of the app. To run it as another account:
+The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.6.0 or later. It never disables a method, and it changes no file of the app. Its arguments go to the Firebase CLI, so `--project <id>` names another project. The script runs the Firebase CLI in a temporary directory, so the Firebase CLI uses its default account, even when `firebase login:use` chose another account for the directory of the app. To use another account:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart --account <email>
 ```
 
-The Firebase CLI adds a web app named "Default Web App" to a project that has no web app, because it enables the methods through one (see [issue 11250 of firebase-tools](https://github.com/firebase/firebase-tools/issues/11250)). To do without it, enable the methods in the Firebase console instead: [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) of the project that the app is configured for.
+The Firebase CLI adds a web app named "Default Web App" to a project that has no web app, because it enables the methods through one (see [issue 11250 of firebase-tools](https://github.com/firebase/firebase-tools/issues/11250)). If you do not want that web app, enable the methods in the Firebase console instead: [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) of the project that the app is configured for.
 
 Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
 
