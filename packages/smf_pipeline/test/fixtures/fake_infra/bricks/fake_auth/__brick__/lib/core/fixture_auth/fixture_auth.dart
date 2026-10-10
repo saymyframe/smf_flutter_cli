@@ -17,6 +17,12 @@ int _users = 0;
 /// The id of a new user.
 String _newUid() => 'fixture-user-${++_users}';
 
+/// Waits for the answer of the server or of the storage of the device,
+/// which takes a moment, as with a provider that has them: a turn of the
+/// event loop. So a test makes the calls of sign-in in real time, as it
+/// runs the start-up of the app.
+Future<void> _answer() => Future<void>.delayed(Duration.zero);
+
 /// Opens the sign-in of the fixture, as a start of the app does: it reads
 /// from the storage of the device who is signed in, which takes a moment,
 /// and returns the service with that user.
@@ -34,7 +40,8 @@ Future<AuthService> openFixtureAuth() async {
 }
 
 /// Sign-in with accounts in memory. It takes any text for an email address
-/// and any password, and sends no message to reset one.
+/// and any password, and sends no message to reset one. Each of its calls
+/// takes a moment, as one that asks a server does.
 final class FixtureAuth implements AuthService {
   FixtureAuth._();
 
@@ -49,7 +56,7 @@ final class FixtureAuth implements AuthService {
   /// Takes the user who is signed in on the device, once its storage
   /// answered.
   Future<void> _restore() async {
-    await Future<void>.delayed(Duration.zero);
+    await _answer();
     _user = _onDevice;
     _changes.add(_user);
   }
@@ -88,6 +95,7 @@ final class FixtureAuth implements AuthService {
 
   @override
   Future<void> signIn({required String email, required String password}) async {
+    await _answer();
     final account = _accounts[email];
     if (account == null || account.password != password) {
       throw const AuthFailure(AuthFailureReason.invalidCredentials);
@@ -97,6 +105,7 @@ final class FixtureAuth implements AuthService {
 
   @override
   Future<void> signUp({required String email, required String password}) async {
+    await _answer();
     _checkFree(email);
     final uid = _newUid();
     _accounts[email] = (uid: uid, password: password);
@@ -108,6 +117,7 @@ final class FixtureAuth implements AuthService {
     required String email,
     required String password,
   }) async {
+    await _answer();
     final user = _signedIn();
     if (!user.isAnonymous) {
       throw const AuthFailure(
@@ -123,14 +133,19 @@ final class FixtureAuth implements AuthService {
   }
 
   @override
-  Future<void> signInAnonymously() async =>
-      _set(AuthUser(uid: _newUid(), isAnonymous: true));
+  Future<void> signInAnonymously() async {
+    await _answer();
+    _set(AuthUser(uid: _newUid(), isAnonymous: true));
+  }
 
   @override
-  Future<void> sendPasswordReset(String email) async {}
+  Future<void> sendPasswordReset(String email) => _answer();
 
   @override
-  Future<void> signOut() async => _set(null);
+  Future<void> signOut() async {
+    await _answer();
+    _set(null);
+  }
 
   /// An anonymous user has nothing to sign in with again, so the service
   /// deletes one whenever it is asked to. It deletes the user of an account
@@ -138,6 +153,7 @@ final class FixtureAuth implements AuthService {
   /// started.
   @override
   Future<void> deleteAccount() async {
+    await _answer();
     final user = _signedIn();
     if (!user.isAnonymous && !_signedInHere) {
       throw const AuthFailure(AuthFailureReason.recentSignInRequired);
