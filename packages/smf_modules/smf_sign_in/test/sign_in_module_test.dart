@@ -304,7 +304,8 @@ final class _TextReads extends RecursiveAstVisitor<void> {
   }
 }
 
-/// The identifiers of [unit] outside its directives, as written.
+/// The identifiers of [unit] outside its directives, as written, and the
+/// names of the variables, the functions and the classes that it declares.
 Set<String> _identifiersIn(CompilationUnit unit) {
   final visitor = _Identifiers();
   for (final declaration in unit.declarations) {
@@ -318,6 +319,25 @@ final class _Identifiers extends RecursiveAstVisitor<void> {
 
   @override
   void visitSimpleIdentifier(SimpleIdentifier node) => names.add(node.name);
+
+  // What a file declares has its name as a token, not as an identifier.
+  @override
+  void visitVariableDeclaration(VariableDeclaration node) {
+    names.add(node.name.lexeme);
+    super.visitVariableDeclaration(node);
+  }
+
+  @override
+  void visitFunctionDeclaration(FunctionDeclaration node) {
+    names.add(node.name.lexeme);
+    super.visitFunctionDeclaration(node);
+  }
+
+  @override
+  void visitClassDeclaration(ClassDeclaration node) {
+    names.add(node.namePart.typeName.lexeme);
+    super.visitClassDeclaration(node);
+  }
 
   @override
   void visitNamedType(NamedType node) {
@@ -1771,9 +1791,13 @@ void main() {
           final states = of(screen);
 
           expect(states['busy: state'], startsWith('busy: true'));
-          expect(states['busy: calls'], 1, reason: screen);
           expect(states['busy: states'], hasLength(1), reason: screen);
-          expect(states['busy: calls in the end'], 1, reason: screen);
+          // The service got the first call and no other.
+          expect(
+            states['busy: calls in the end'],
+            hasLength(1),
+            reason: screen,
+          );
         }
       });
 

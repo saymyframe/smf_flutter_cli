@@ -184,7 +184,9 @@ Future<Map<String, Object?>> scenariosOf(
     result['again: calls'] = service.calls.length;
   }
 
-  // A second submit while the call is on its way.
+  // A second submit while the call is on its way. The session makes its
+  // calls one after another, so a second call would reach the service only
+  // once the first is over.
   {
     final service = Scripted()..hold = Completer<void>();
     final session = await sessionOf(service);
@@ -192,14 +194,14 @@ Future<Map<String, Object?>> scenariosOf(
     final first = screen.submit();
     await turn();
     result['busy: state'] = screen.state();
-    await screen.submit();
+    final second = screen.submit();
     await turn();
-    result['busy: calls'] = service.calls.length;
     result['busy: states'] = [...screen.states];
     service.hold!.complete();
     await first;
+    await second;
     await turn();
-    result['busy: calls in the end'] = service.calls.length;
+    result['busy: calls in the end'] = [...service.calls];
   }
 
   // The user leaves the screen while the call is on its way, and the call
