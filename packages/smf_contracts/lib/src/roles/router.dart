@@ -232,11 +232,15 @@ final class RouterRole extends Role<RoutesData> {
   /// answer of `asked`: in place of its whole stack, and the target of a
   /// guard in place of the stacks of every branch too, so no page that a
   /// guard kept the user from shows again in a branch that was not
-  /// selected. When it is `null`, the provider leaves everything as it is:
-  /// the stack stays, the listeners of [screenListeners] hear nothing, and
-  /// each `push()` still completes with the value of its page. Whether the
-  /// `push()` of a page that an answer takes out of the stack completes is
-  /// up to the provider, as it is when `go()` replaces the stack.
+  /// selected. That holds whenever the guard allows again, also in the turn
+  /// in which it stopped allowing, and while the transition to its target
+  /// is on its way. Whether the listeners of [screenListeners] hear of a
+  /// target that no frame showed is up to the provider. When the answer is
+  /// `null`, the provider leaves everything as it is: the stack stays, the
+  /// listeners of [screenListeners] hear nothing, and each `push()` still
+  /// completes with the value of its page. Whether the `push()` of a page
+  /// that an answer takes out of the stack completes is up to the provider,
+  /// as it is when `go()` replaces the stack.
   ///
   /// What the class answers, and what it remembers:
   /// - `asked` answers as [redirectOf] does for a location that a guard
