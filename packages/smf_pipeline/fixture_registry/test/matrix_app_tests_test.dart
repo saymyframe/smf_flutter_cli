@@ -67,9 +67,9 @@ void main() {
   test(
       'the app tests check the contract of the router role, of the layout '
       'role, of the DI role, of the events role, of the preferences role, '
-      'of the localization role, of the theme role and of the app entry role '
-      'with every provider of each, which they tell apart by the roles of '
-      'the app only', () {
+      'of the localization role, of the theme role, of the app entry role '
+      'and of the auth role with every provider of each, which they tell '
+      'apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -81,8 +81,10 @@ void main() {
         localizationRole,
         themeRole,
         appEntryRole,
+        authRole,
       ]),
     );
+    expect(named('auth_role').roles, {authRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -218,9 +220,10 @@ void main() {
       for (final app in everyModule) app.name,
     ]);
     // One for each combination of the providers of the roles that take one,
-    // and each once more for the other value of the mode option of the
-    // fixture clock.
-    expect(everyModule, hasLength(16));
+    // and each once more for every other combination of the values of the
+    // two mode options of the fixtures: the three modes of the auth role
+    // and the two of the fixture clock.
+    expect(everyModule, hasLength(48));
     expect(everyModule.where((app) => app.modes.isEmpty), hasLength(8));
     for (final app in everyModule) {
       expect(
@@ -242,7 +245,7 @@ void main() {
       'every module, which have the clock and the module that uses it, and '
       'gets the hours that the clock role chose for each: 24 in an app that '
       'got no value of the option of the role, and 12 in the app of the '
-      'other value', () {
+      'other value, in each mode of the auth role', () {
     final clockHours = named('clock_hours');
     final everyModule = [
       for (final app in apps)
@@ -261,12 +264,15 @@ void main() {
           },
       },
     );
+    // Each app with every module has a clock of 12 hours once in each of
+    // the three modes of the auth role, whose option comes before that of
+    // the clock in the name of an app.
     expect(
       [
         for (final app in everyModule)
           if (clockHours.values!(app)['clock_hours'] == '12') app.name,
       ],
-      hasLength(8),
+      hasLength(24),
     );
     // The hours come from the choice of the role, which an app has without
     // the option too.
@@ -294,6 +300,75 @@ void main() {
         reason: name,
       );
     }
+  });
+
+  test(
+      'the test of the auth role applies to every app with the role, the '
+      'apps of the fixture sign-in alone, with a router and without one, '
+      'and the apps with every module, in each mode of the role, and gets '
+      'the mode that the role chose for each: required in an app that got '
+      'no value of the option of the role', () {
+    final authTest = named('auth_role');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(authRole)) app,
+    ];
+
+    expect(appsOf(authTest), [for (final app in withRole) app.name]);
+    expect(
+      appsOf(authTest),
+      containsAll([
+        // The role uses the router role, so its provider has an app with
+        // each router and one without, and the app of each other mode has
+        // the first router.
+        'fake_auth (fake_router) with router',
+        'fake_auth (go_router) with router',
+        'fake_auth',
+        'auth by fake_auth (fake_router) with router --auth-mode=guest',
+        'auth by fake_auth (fake_router) with router --auth-mode=anonymous',
+        for (final app in apps)
+          if (app.everyModuleWith != null) app.name,
+      ]),
+    );
+    // The apps without the role get no test of it.
+    expect(authTest.appliesTo(apps.first), isFalse);
+    expect(apps.first.hook!.presentRoles, isNot(contains(authRole)));
+    final modeInName = RegExp(r' --auth-mode=(\w+)');
+    expect(
+      {for (final app in withRole) app.name: authTest.values!(app)},
+      {
+        for (final app in withRole)
+          app.name: {
+            'auth_mode': modeInName.firstMatch(app.name)?[1] ?? 'required',
+          },
+      },
+    );
+    // The apps of each mode: those of the fixture alone, three in the
+    // default mode and one in each other mode, and each app with every
+    // module with a clock of 24 hours and with one of 12.
+    expect(
+      {
+        for (final mode in AuthMode.values)
+          mode.name: withRole
+              .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
+              .length,
+      },
+      {'required': 19, 'guest': 17, 'anonymous': 17},
+    );
+    // The mode comes from the choice of the role, which an app has without
+    // the option too.
+    final byDefault = withRole.first;
+    expect(
+      authTest.values!(
+        MatrixApp(byDefault.name, byDefault.modules, hook: byDefault.hook),
+      ),
+      {'auth_mode': 'required'},
+    );
+    // The matrix writes no file for it, and it has neither mocks nor a
+    // probe for the start check: nobody can sign in on a device.
+    expect(authTest.generatedFiles, isNull);
+    expect(authTest.mocks, isNull);
+    expect(authTest.startProbe, isNull);
   });
 
   /// The modules of the fixtures that provide the router role.

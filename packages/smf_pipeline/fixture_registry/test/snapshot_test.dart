@@ -70,6 +70,17 @@ final _apps = <String, (List<SmfModule>, ContractCase)>{
       roleOptions: {'clock-hours': '12'},
     ),
   ),
+  // Another value of the mode option of the auth role, with the fixture
+  // sign-in alone: what the template of the role renders for an app in the
+  // mode anonymous, its constant and the section of the README.
+  'auth_anonymous': (
+    fixtureModules(),
+    const ContractCase(
+      'the fixture sign-in in the mode anonymous',
+      requested: [ModuleId('fake_auth')],
+      roleOptions: {'auth-mode': 'anonymous'},
+    ),
+  ),
   // Providers of a role created synchronously and asynchronously, in one
   // app.
   'several_providers': (

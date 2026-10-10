@@ -553,6 +553,41 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture sign-in whose function returns its service before it has
+  /// read who is signed in on the device, as a provider does that takes its
+  /// user from a stream of its SDK rather than from what the SDK has
+  /// already: the service has nobody at first, and tells of the user of the
+  /// device a moment later. So a start of the app is over without that
+  /// user, and the first frame of the app has nobody signed in.
+  static const authRestoringUserLate = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_restores_user_late'),
+    'Sign-in that finds its user after the start (fixture)',
+    _fixtureAuthFile,
+    [('  await service._restore();\n', '  unawaited(service._restore());\n')],
+  );
+
+  /// The fixture sign-in whose `linkPassword()` creates a new user for the
+  /// account, rather than giving the account to the anonymous user who is
+  /// signed in: the user of the account has another id than the anonymous
+  /// user had, so what the app keeps under that id is left behind.
+  static const authLinkingAsNewUser = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_links_as_new_user'),
+    'Sign-in that gives an anonymous user a new id with an account (fixture)',
+    _fixtureAuthFile,
+    [
+      (
+        '    // The anonymous user keeps the id.\n'
+            '    final uid = user.uid;\n',
+        '    final uid = _newUid();\n',
+      ),
+    ],
+  );
+
+  /// The file of the fixture sign-in.
+  static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
+
   /// The module with the bug.
   final SmfModule of;
 
