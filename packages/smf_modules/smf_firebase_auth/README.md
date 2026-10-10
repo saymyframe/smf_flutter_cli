@@ -2,11 +2,11 @@
 
 The SMF module of [Firebase Authentication](https://firebase.google.com/docs/auth) with [firebase_auth](https://pub.dev/packages/firebase_auth). It provides the auth role of SMF: the users of the app sign in with an email address and a password, and the app can sign in anonymous users.
 
-The auth role generates `appSession`, which tells who uses the app and through which the code of the app signs in, up and out, and the `AuthService` interface. This module adds `firebase_auth` to the app and implements the interface on `FirebaseAuth`. Firebase keeps the user on the device, so the app knows who is signed in before its first frame. The service gives each error code of Firebase a reason that the app shows a text for. When sign-in is not enabled in the Firebase project, the failure has a hint for the developer with the link to the page of the project where it is enabled.
+The auth role generates `appSession`, which tells who uses the app and through which the code of the app signs in, up and out, and the `AuthService` interface. This module adds `firebase_auth` to the app and implements the interface on `FirebaseAuth`. Firebase keeps the user on the device, so the app knows who is signed in before its first frame. The service gives each error code of Firebase a reason that the app shows a text for. When sign-in is not enabled in the Firebase project, the failure has a hint for the developer that tells how to enable it.
 
 Firebase Authentication works on the Firebase app, so the module depends on [smf_firebase_core](https://pub.dev/packages/smf_firebase_core), which comes with it and sets up Firebase.
 
-The ways to sign in are enabled in the Firebase project, not in the code: Email/Password, and Anonymous for an app that signs in anonymous users. The README of the app tells where.
+The ways to sign in are enabled in the Firebase project, not in the code: Email/Password, and Anonymous for an app that signs in anonymous users. The module generates `tool/enable_firebase_sign_in.dart`, a script of the app that enables them with the [Firebase CLI](https://firebase.google.com/docs/cli) 15.6.0 or later. In a terminal, `smf create` offers to run it right after `flutterfire configure` configured the app. It asks first, because the Firebase CLI adds a web app to a project that has none, which the Firebase console does not. The README of the app describes both ways.
 
 ## Use with the SMF CLI
 

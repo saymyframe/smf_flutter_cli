@@ -342,8 +342,8 @@ class FirebaseAuth {
 }
 ''';
 
-/// The Dart files in `lib/` of a rendered app, written to a temporary
-/// directory with stand-ins for the libraries of Flutter and of
+/// The Dart files in `lib/` and `tool/` of a rendered app, written to a
+/// temporary directory with stand-ins for the libraries of Flutter and of
 /// firebase_auth that the code of the module uses, so that it can be
 /// analyzed and run with the Dart SDK alone: the tests of the package run
 /// without the Flutter SDK, which firebase_auth needs.
@@ -355,12 +355,14 @@ class FirebaseAuth {
 final class DartApp {
   DartApp._(this._root, this._files);
 
-  /// Writes the Dart files in `lib/` of [app].
+  /// Writes the Dart files in `lib/` and `tool/` of [app].
   factory DartApp.write(RenderedApp app) {
     final root = Directory.systemTemp.createTempSync('smf_firebase_auth_');
     final files = [
       for (final file in app.files.values)
-        if (file.path.startsWith('lib/') && file.path.endsWith('.dart')) file,
+        if ((file.path.startsWith('lib/') || file.path.startsWith('tool/')) &&
+            file.path.endsWith('.dart'))
+          file,
     ];
     void write(String path, String text) => File('${root.path}/$path')
       ..createSync(recursive: true)
@@ -399,6 +401,10 @@ final class DartApp {
 
   final Directory _root;
   final List<RenderedFile> _files;
+
+  /// The directory of the app, with links resolved, as a process that runs
+  /// in it sees it.
+  String get path => _appPath;
 
   String get _appPath =>
       Directory('${_root.path}/app').resolveSymbolicLinksSync();

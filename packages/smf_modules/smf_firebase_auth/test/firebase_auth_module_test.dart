@@ -9,6 +9,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/bundles/firebase_auth_bundle.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_auth/src/agents.dart';
+import 'package:smf_firebase_auth/src/enable_sign_in.dart';
 import 'package:smf_firebase_auth/src/readme.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -151,9 +152,13 @@ List<String> _passwordResetOf(RenderedApp app) {
 const _widgetsImport = "import 'package:flutter/widgets.dart' "
     'show WidgetsBinding, basicLocaleListResolution;';
 
-/// The inline code of [markdown]: what stands between two backticks.
+/// The inline code of [markdown]: what stands between two backticks,
+/// outside its blocks of code.
 Set<String> _codeOf(String markdown) => {
-      for (final match in RegExp('`([^`]+)`').allMatches(markdown)) match[1]!,
+      for (final match in RegExp('`([^`]+)`').allMatches(
+        markdown.replaceAll(RegExp(r'```[\s\S]*?```'), ''),
+      ))
+        match[1]!,
     };
 
 /// The codes of Firebase Authentication that the service gives a reason,
@@ -448,17 +453,18 @@ void main() {
 
     test(
         'contributes its brick, firebase_auth, its implementation of the '
-        'service, created without waiting, its section of the README and '
-        'its note for coding agents, and nothing else', () {
+        'service, created without waiting, the check and the step that '
+        'enable the ways to sign in, its section of the README and its note '
+        'for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(5));
+      expect(contributions, hasLength(7));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseAuthBundle));
       expect(brick.bundle.name, 'firebase_auth');
       expect(
         [for (final file in brick.bundle.files) file.path],
-        [_implementation],
+        [_implementation, enableSignInScript],
       );
       expect(brick.when, isEmpty);
       final dependency = contributions[1] as PubspecDependency;
@@ -479,12 +485,16 @@ void main() {
       expect(implementation.create!.import, implementation.type.import);
       expect('lib/${implementation.type.import!.uri}', serviceFile);
       expect(serviceFile, _implementation);
-      final readme = contributions[3] as SocketContribution;
+      final preflight = contributions[3] as Preflight;
+      expect(preflight.checks, [same(firebaseCliWithSignIn)]);
+      expect(preflight.when, isEmpty);
+      expect(contributions[4], same(enableSignIn));
+      final readme = contributions[5] as SocketContribution;
       expect(readme.socket, AppEntryRole.readmeSections);
       expect(readme.entryKey, readmeHeading);
       expect(readme.entryValue, readmeSection);
       expect(readme.when, isEmpty);
-      final note = contributions[4] as SocketContribution;
+      final note = contributions[6] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, authRole.description);
       expect(note.entryValue, AgentNote(agentNote));
@@ -498,7 +508,13 @@ void main() {
       final brick = module.contribute(ContractHarness.defaultContext).first
           as BrickContribution;
 
-      expect(brick.vars.keys, ['email_language']);
+      expect(brick.vars.keys, [
+        'email_language',
+        'session_file',
+        'mode_declaration',
+        'anonymous_mode',
+        'minimum_firebase_cli',
+      ]);
       final language = brick.vars['email_language']! as RoleVar;
       expect(language.role, localizationRole);
       expect(language.absent, '');
@@ -525,6 +541,120 @@ void main() {
         'lib/${present.imports.last.uri}',
         LocalizationRole.appLocaleFile,
       );
+    });
+
+    test(
+        'gives its brick, for the script that enables the ways to sign in, '
+        'what the auth role says of the mode of the app, its file, how a '
+        'tool reads the mode there and the mode with anonymous users, and '
+        'the first Firebase CLI with the command', () {
+      final brick = module.contribute(ContractHarness.defaultContext).first
+          as BrickContribution;
+
+      expect(brick.vars['session_file'], AuthRole.sessionFile);
+      expect(brick.vars['mode_declaration'], modeDeclarationCode);
+      expect(modeDeclarationCode, rawStringsOf(AuthRole.modeDeclaration));
+      expect(brick.vars['anonymous_mode'], 'anonymous');
+      expect(AuthMode.anonymous.name, 'anonymous');
+      expect(brick.vars['minimum_firebase_cli'], '15.6.0');
+      expect(firstFirebaseCliWithSignIn, '15.6.0');
+    });
+
+    test(
+        'writes a regular expression as raw strings of Dart, each on a line '
+        'that fits, which end before an alternative where they can and '
+        'never with a backslash', () {
+      /// The pattern that the strings of [code] make together, and the
+      /// widths of its lines.
+      (String, List<int>) read(String code) => (
+            [
+              for (final string in RegExp("r'([^']*)'").allMatches(code))
+                string[1],
+            ].join(),
+            [for (final line in code.split('\n')) line.length],
+          );
+
+      // One that fits is one string.
+      expect(rawStringsOf(r'^a\s+b$'), r"r'^a\s+b$'");
+      // The expression of the auth role ends its strings before
+      // alternatives.
+      final ofRole = rawStringsOf(AuthRole.modeDeclaration);
+      expect(read(ofRole).$1, AuthRole.modeDeclaration);
+      expect(ofRole.split('\n'), hasLength(3));
+      expect(
+        ofRole.split('\n').skip(1),
+        everyElement(startsWith("  r'|")),
+      );
+      expect(read(ofRole).$2, everyElement(lessThanOrEqualTo(78)));
+      // One without an alternative is cut where a line is full, but not
+      // after a backslash.
+      final digits = '${'a' * 71}${r'\d' * 40}';
+      final cut = rawStringsOf(digits);
+      expect(read(cut).$1, digits);
+      expect(cut.split('\n').first, "r'${'a' * 71}'");
+      expect(read(cut).$2, everyElement(lessThanOrEqualTo(78)));
+      expect(cut, isNot(contains(r"\'")));
+    });
+
+    test(
+        'checks the machine for a Firebase CLI with the command that '
+        'enables the ways to sign in, with the check of firebase_core', () {
+      expect(firebaseCliWithSignIn, isA<FirebaseCliVersionCheck>());
+      expect(firebaseCliWithSignIn.minimum, '15.6.0');
+      expect(firebaseCliWithSignIn.description, 'Firebase CLI 15.6.0 or later');
+    });
+
+    test(
+        'continues the step of firebase_core that runs flutterfire '
+        'configure with the script of the app that enables the ways to sign '
+        'in, which a run asks about first', () {
+      final step = module
+          .contribute(ContractHarness.defaultContext)
+          .whereType<PostGenStep>()
+          .single;
+
+      expect(step.followUpOf, FirebaseCoreModule.configureStep);
+      // The Dart of the Flutter SDK of the run, which needs none of the
+      // packages of the app for the script.
+      expect(step.tool.executable, 'dart');
+      expect(step.tool.prefixArgs, isEmpty);
+      expect(step.tool.environment, isEmpty);
+      expect(step.arguments, ['tool/enable_firebase_sign_in.dart']);
+      expect(enableSignInScript, step.arguments.single);
+      expect(enableSignInCommand, 'dart ${step.arguments.single}');
+      expect(
+        step.description,
+        'Enabling the sign-in methods of the app in its Firebase project',
+      );
+      // It changes the Firebase project, and the Firebase CLI adds a web
+      // app to a project without one: the user agrees first, and may
+      // decline, since the Firebase console enables the methods too.
+      expect(
+        step.notice,
+        'The Firebase CLI adds a web app named "Default Web App" to a '
+        'project that has no web app, because it enables the methods '
+        'through one (firebase/firebase-tools#11250). The page '
+        'https://console.firebase.google.com/project/_/authentication/'
+        'providers of the Firebase console enables them without it.',
+      );
+      expect(step.notice, isNot(contains('\n')));
+      // A terminal that makes a link of the address takes no punctuation
+      // into it: a space follows the address.
+      const page = 'https://console.firebase.google.com/project/_/'
+          'authentication/providers';
+      expect(
+        RegExp(r'https://\S+').allMatches(step.notice!).map((m) => m[0]),
+        [page],
+      );
+      expect(step.skippable, isTrue);
+      expect(step.external, isTrue);
+      // The script passes --non-interactive to the Firebase CLI, so the
+      // step needs no terminal.
+      expect(step.interactive, isFalse);
+      expect(step.needs, [firebaseCliWithSignIn.id]);
+      expect(step.hosts, isEmpty);
+      expect(step.when, isEmpty);
+      expect(step.id, isNull);
     });
   });
 
@@ -568,14 +698,24 @@ void main() {
 
     test(
         'renders code of the service that type-checks with firebase_auth, '
-        'in the apps with the localization role and in the apps without it',
-        () async {
+        'and a script that type-checks with the Dart SDK alone, in the apps '
+        'with the localization role and in the apps without it', () async {
       final withService = [
         for (final result in results)
           if (result.app!.files.containsKey(_implementation)) result,
       ];
       expect(withService, hasLength(6));
       for (final result in withService) {
+        // The files of the module that the analyzer checks.
+        expect(
+          [
+            for (final file in result.app!.files.values)
+              if (file.owner == const ModuleOrigin(FirebaseAuthModule.id))
+                file.path,
+          ],
+          [_implementation, enableSignInScript],
+          reason: '${result.contractCase}',
+        );
         final app = DartApp.write(result.app!);
         try {
           expect(
@@ -592,8 +732,8 @@ void main() {
     });
 
     test(
-        'renders the same service in every mode of the auth role, in an app '
-        'with a router and in one without', () {
+        'renders the same service and the same script in every mode of the '
+        'auth role, in an app with a router and in one without', () {
       final services = [
         for (final result in results)
           if (result.app!.files[_implementation] case final file?
@@ -602,11 +742,12 @@ void main() {
               mode: authRole.modeIn(authRole.hookInput(result.hook!)),
               router: result.hook!.presentRoles.contains(routerRole),
               service: file.text,
+              script: result.app!.files[enableSignInScript]!.text,
             ),
       ];
 
       expect(
-        [for (final (:mode, :router, service: _) in services) (mode, router)],
+        [for (final app in services) (app.mode, app.router)],
         [
           (AuthMode.required, true),
           (AuthMode.required, false),
@@ -615,6 +756,42 @@ void main() {
         ],
       );
       expect({for (final app in services) app.service}, hasLength(1));
+      // The script reads the mode from the file of the auth role when it
+      // runs, so it follows a mode that the developer of the app changed.
+      expect({for (final app in services) app.script}, hasLength(1));
+    });
+
+    test(
+        'enables the ways to sign in right after flutterfire configure of '
+        'firebase_core, which the step continues, and checks the machine '
+        'for the Firebase CLI of the step after the checks of '
+        'firebase_core', () {
+      final apps = [
+        for (final result in results)
+          if (result.resolution!.modules
+              .any((module) => module.id == FirebaseAuthModule.id))
+            result,
+      ];
+
+      expect(apps, hasLength(6));
+      for (final result in apps) {
+        final steps = [
+          for (final collected in result.validation!.postGenOrder.contributions)
+            (
+              '${collected.origin}',
+              collected.contribution as PostGenStep,
+            ),
+        ];
+        expect(
+          [for (final (origin, step) in steps) (origin, step.id)],
+          [
+            ('firebase_core', FirebaseCoreModule.configureStep),
+            ('firebase_auth', null),
+          ],
+          reason: '${result.contractCase}',
+        );
+        expect(steps.last.$2, same(enableSignIn));
+      }
     });
   });
 
@@ -633,19 +810,24 @@ void main() {
 
     test(
         'is the app of Firebase but for the files of the auth role, the '
-        'service, firebase_auth, the start of the session, and the sections '
-        'of sign-in in the README and in the guide for coding agents', () {
+        'service, the script that enables the ways to sign in, '
+        'firebase_auth, the start of the session, and the sections of '
+        'sign-in in the README and in the guide for coding agents', () {
       expect(app.files.keys.toSet(), {
         ...without.files.keys,
         AuthRole.serviceFile,
         AuthRole.sessionFile,
         AuthRole.guestDataFile,
         _implementation,
+        enableSignInScript,
       });
-      expect(
-        app.files[_implementation]!.owner,
-        const ModuleOrigin(FirebaseAuthModule.id),
-      );
+      for (final path in [_implementation, enableSignInScript]) {
+        expect(
+          app.files[path]!.owner,
+          const ModuleOrigin(FirebaseAuthModule.id),
+          reason: path,
+        );
+      }
       // Its native files, the manifest of Android, the Gradle files, the
       // Info.plist and the Xcode project among them, are those of the app
       // of Firebase: the module sets up nothing of the platforms.
@@ -964,13 +1146,14 @@ void main() {
 
       test(
           'takes a way to sign in that is not enabled in the Firebase '
-          'project for notConfigured, with a hint that has the link to the '
-          'project', () {
+          'project for notConfigured, with a hint that has the command of '
+          'the script that enables it and the link to the project', () {
         const link = 'https://console.firebase.google.com/project/'
             'stand-in-project/authentication/providers';
-        const enable = 'enable Email/Password, and Anonymous for an app that '
-            'signs in anonymous users, under Authentication > Sign-in '
-            'method: $link';
+        const enable = 'run `$enableSignInCommand` in the directory of the '
+            'app, or enable Email/Password, and Anonymous for an app that '
+            'signs in anonymous users, in the Firebase console under '
+            'Authentication > Sign-in method: $link';
         String notEnabled(String answered) =>
             'notConfigured: Sign-in is not enabled in the Firebase project '
             'stand-in-project (Firebase answered $answered). To fix it, '
@@ -1056,22 +1239,96 @@ void main() {
       });
 
       test(
-          'tells where the ways to sign in are enabled, which of them the '
-          'mode anonymous needs, and what the app does until they are', () {
+          'tells which ways to sign in the modes of the app need, and what '
+          'the app does until they are enabled', () {
         expect(
           readmeSection,
           allOf(
-            contains('Authentication > Sign-in method'),
-            contains('- Email/Password, in every mode of the app;'),
-            contains('- Anonymous, when the mode of the app is `anonymous`'),
+            contains(
+              'Email/Password in every mode of the app, and Anonymous when '
+              'the mode of the app is `anonymous`',
+            ),
             contains('fail with the reason `notConfigured`'),
           ),
         );
         expect(_codeOf(readmeSection), contains(_implementation));
-        // As the service names them in its hint.
+      });
+
+      test(
+          'gives the command of the script that enables them, also for '
+          'another account, and tells what the script reads, what it needs '
+          'and what it leaves as it is', () {
+        expect(
+          readmeSection,
+          allOf(
+            contains('```bash\n$enableSignInCommand\n```\n'),
+            contains('```bash\n$enableSignInCommand --account <email>\n```\n'),
+            contains(
+              '[Firebase CLI](https://firebase.google.com/docs/cli) '
+              '$firstFirebaseCliWithSignIn or later',
+            ),
+            contains('It never disables a method, and it changes no file of '
+                'the app.'),
+          ),
+        );
+        // What the script reads, each a file of the app or a name in it.
+        final code = _codeOf(readmeSection);
+        expect(
+          code,
+          containsAll([
+            'firebase.json',
+            'authMode',
+            AuthRole.sessionFile,
+            '--project <id>',
+            'firebase deploy --only auth',
+          ]),
+        );
+        expect(
+          app.files[AuthRole.sessionFile]!.text,
+          contains('const AuthMode authMode = '),
+        );
+        expect(
+          app.files[enableSignInScript]!.text,
+          allOf(
+            contains("const _sessionFile = '${AuthRole.sessionFile}';"),
+            contains(r"File('${app.path}/firebase.json')"),
+            contains("'deploy',\n      '--only',\n      'auth',"),
+          ),
+        );
+      });
+
+      test(
+          'tells of the web app that the Firebase CLI adds to a project '
+          'without one, and of the Firebase console as the other way', () {
+        const page = 'https://console.firebase.google.com/project/_/'
+            'authentication/providers';
+        const console = '[Authentication > Sign-in method]($page)';
+        expect(
+          readmeSection,
+          allOf(
+            contains(
+              'adds a web app named "Default Web App" to a project that has '
+              'no web app',
+            ),
+            contains('https://github.com/firebase/firebase-tools/issues/11250'),
+            contains('enable the methods in the Firebase console instead: '
+                '$console'),
+          ),
+        );
+        // As the notice of the step tells of both, and as the service
+        // names the script and the page of the console in its hint.
+        expect(
+          enableSignInNotice,
+          allOf(
+            contains('a web app named "Default Web App"'),
+            contains('firebase/firebase-tools#11250'),
+            contains(page),
+          ),
+        );
         expect(
           app.files[_implementation]!.text,
           allOf(
+            contains('run `$enableSignInCommand` in the '),
             contains('enable Email/Password, and Anonymous'),
             contains('Authentication > Sign-in method'),
           ),
@@ -1118,7 +1375,8 @@ void main() {
 
       test(
           'names the file of the module, the only one of the app that '
-          'imports the package, and what that file and the role declare', () {
+          'imports the package, what that file and the role declare, and '
+          'the script that enables the ways to sign in', () {
         final code = _codeOf(agentNote);
         final service = DartFileIndexer.index(
           _implementation,
@@ -1143,7 +1401,16 @@ void main() {
             'notConfigured',
             'developerHint',
             AppEntryRole.readmeFile,
+            enableSignInScript,
           ]),
+        );
+        expect(app.files.keys, contains(enableSignInScript));
+        expect(
+          agentNote,
+          contains(
+            'It changes the Firebase project and needs a Firebase account: '
+            'run it only when asked.',
+          ),
         );
         expect(
           [
