@@ -5,6 +5,7 @@ library;
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
+import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
@@ -27,6 +28,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final firebaseCore = await appTestsDirectoryOf('smf_firebase_core');
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
+  final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
   final home = await appTestsDirectoryOf('smf_home_flutter');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final settings = await appTestsDirectoryOf('smf_settings');
@@ -99,6 +101,35 @@ Future<MatrixAppTests> smfAppTests() async {
             app.hook!.presentRoles.contains(routerRole),
         values: (app) => {'start_screen': _startScreenOf(app)},
         roles: {routerRole},
+      ),
+      // The sign-in service of the module on Firebase Authentication: what
+      // each of its calls sends to Firebase; the reason that it gives each
+      // code of Firebase, in the form in which Android and iOS send it;
+      // the user whom it finds on the device when it is created; a call
+      // for a user whose session has ended on the server, which signs that
+      // user out; and the language in which it asks Firebase for the
+      // message of a password reset, the one that the app is in (see
+      // _messageLanguagesOf). The tests use the service of the module, and
+      // leave what every provider of the auth role does to the test of the
+      // role. The mocks are a backend in memory with no account and nobody
+      // signed in, and the matrix sets them up for the tests of every
+      // module of the app, since the start-up of the app starts the
+      // session of the app on Firebase Authentication. Its probe compares,
+      // on a device, the user of the session with the one that the Firebase
+      // SDK has there.
+      MatrixAppTest(
+        '$firebaseAuth/firebase_auth',
+        appliesTo: _has(FirebaseAuthModule.id),
+        devDependencies: const ['firebase_auth_platform_interface'],
+        generatedFiles: _messageLanguagesOf,
+        mocks: const MatrixMocks(
+          'test/firebase_auth_mocks.dart',
+          'mockFirebaseAuth',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/firebase_auth/probe.dart',
+          'probeFirebaseAuth',
+        ),
       ),
       // The onboarding of the module: on its first launch, the app shows
       // it in place of the screen that it starts on (see
@@ -201,6 +232,11 @@ Future<MatrixAppTests> smfAppTests() async {
       // The preferences of the apps with the preferences role, whichever
       // module provides it.
       await preferencesRoleAppTest(),
+      // The sign-in of the apps with the auth role, whichever module
+      // provides it, in the mode that the role chose for each: the service
+      // of the provider keeps its contract, and the session of the app
+      // does what the mode says.
+      await authRoleAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -253,15 +289,16 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the settings screen role, of the theme role and of the
-    // localization role gets the tests of its role. Each provider of the
-    // app entry role gets the test of the theme role, which checks that
-    // its root rebuilds.
+    // role, of the auth role, of the settings screen role, of the theme
+    // role and of the localization role gets the tests of its role. Each
+    // provider of the app entry role gets the test of the theme role, which
+    // checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
       eventsRole,
       preferencesRole,
+      authRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,
@@ -1382,6 +1419,74 @@ Map<String, String> _onboardingTextsFileOf(MatrixApp app) {
 /// role has the English texts alone.
 const Map<String, Map<String, String>> onboardingTexts = {
 $texts};
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the test of the
+/// language of the messages of Firebase Authentication that the
+/// firebase_auth module keeps in its `app_tests/firebase_auth`:
+/// `messageLanguages`, the codes of the languages in which the app asks
+/// Firebase for its messages, those of the app
+/// ([LocalizationRole.localesIn]), and `chooseLanguage()`, which chooses
+/// one of them for the app as its user does, or lets the app follow the
+/// device again.
+const messageLanguagesFile = 'test/firebase_auth/languages.dart';
+
+/// The file at [messageLanguagesFile] of [app], an app of the matrix whose
+/// package is [packageName].
+///
+/// In an app with the localization role, the languages are those of the
+/// role, and choosing one goes through `appLocale` of the file of the role.
+/// An app without the role asks Firebase for no language, so the file has
+/// none, and nothing to choose.
+Map<String, String> _messageLanguagesOf(MatrixApp app, String packageName) {
+  const about = '''
+// The languages in which the app asks Firebase Authentication for its
+// messages, which the matrix of SMF writes from the localization role of
+// the app for the test of the calls of the firebase_auth module,
+// calls_test.dart.''';
+  final hook = app.hook!;
+  if (!hook.presentRoles.contains(localizationRole)) {
+    return {
+      messageLanguagesFile: '''
+$about
+
+/// The codes of the languages in which the app asks for the messages: the
+/// app has no languages of its own, so it asks for none, and Firebase sends
+/// each message in the language of its template.
+const List<String> messageLanguages = [];
+
+/// The app has no language to choose.
+Future<void> chooseLanguage(String? language) async {}
+''',
+    };
+  }
+  final languages = [
+    for (final language
+        in localizationRole.localesIn(localizationRole.hookInput(hook)))
+      SmfNames.dartString(language),
+  ];
+  final appLocale = ImportRef.app(
+    LocalizationRole.appLocaleFile.substring('lib/'.length),
+  ).resolveUri(packageName);
+  return {
+    messageLanguagesFile: '''
+$about
+import 'dart:ui';
+
+import '$appLocale';
+
+/// The codes of the languages in which the app asks for the messages:
+/// those of the app, the first of which the app is in when the device asks
+/// for none of them.
+const List<String> messageLanguages = [${languages.join(', ')}];
+
+/// Chooses [language], one of [messageLanguages], as the language of the
+/// app, as its user does, or with `null` lets the app follow the languages
+/// of the device again.
+Future<void> chooseLanguage(String? language) =>
+    appLocale.choose(language == null ? null : Locale(language));
 ''',
   };
 }

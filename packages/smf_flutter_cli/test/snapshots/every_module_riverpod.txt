@@ -37,6 +37,20 @@ With `firebase_analytics`:
 
 - Screen views need no code: the router calls `logFirebaseScreenView()` with each screen that the user sees, and it logs the screen under the name of its route.
 
+## Authentication
+
+- `appSession` in `lib/core/auth/app_session.dart` tells who uses the app, and knows it before the first frame. Its `value` is a `SignedOutSession`, an `AnonymousSession` or an `AccountSession`, and `appSession.value.uid` is the id of the user. Sign in, sign up, sign out and delete the account only through `appSession`. The app has one, so create no other `AppSessionController`.
+- A call of `appSession` fails only with an `AuthFailure`. Catch it and show a text of the app for its `reason`. Show its `developerHint` in debug mode only. After `recentSignInRequired`, tell the user to sign out and sign in again.
+- `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes. One that reads `appSession.allowsApp` stands before the whole app, and one that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. In an app without such a guard every screen is open, whatever the mode, and that includes a screen that needs an account. A screen does not redirect itself.
+- When an anonymous user signs in to an account that exists already, `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user. Call no method of `appSession` in it, since the sign-in that calls it would wait for that call.
+- A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure` and `AuthFailureReason`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
+
+With `firebase_auth`:
+
+- `FirebaseAuthService` in `lib/core/auth/firebase_auth_service.dart` implements `AuthService` on `FirebaseAuth.instance`. In `lib/`, only that file imports the package: other code signs in through `appSession`.
+- That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
+- The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` where, and so does the section Firebase Authentication of `README.md`.
+
 ## Crash reporting
 
 - `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
@@ -205,6 +219,21 @@ The command gives flutterfire the ids of the Android and iOS apps that SMF gener
 
 Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above.
 
+## Firebase Authentication
+
+The app signs in with [Firebase Authentication](https://firebase.google.com/docs/auth) through `firebase_auth`: `lib/core/auth/firebase_auth_service.dart` implements the sign-in service of the app on it.
+
+The ways to sign in are enabled in the Firebase project, not in the code. Open the project that the app is configured for in the [Firebase console](https://console.firebase.google.com/), then Authentication > Sign-in method, and enable:
+
+- Email/Password, in every mode of the app;
+- Anonymous, when the mode of the app is `anonymous` (see Sign-in).
+
+Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure has the link to that page of the project. In the mode `anonymous`, the app also starts without a user.
+
+Firebase sends the message with which a user sets a new password from a template of the project: Authentication > Templates.
+
+When an anonymous user signs in to an account that exists already, the anonymous user stays in the project, with nobody to sign in as that user again. A project that is upgraded to Firebase Authentication with Identity Platform can delete anonymous users that are older than 30 days: Authentication > Settings > User actions.
+
 ## Crashlytics
 
 The app reports its errors to [Firebase Crashlytics](https://firebase.google.com/docs/crashlytics) through `firebase_crashlytics` once Firebase is configured. On macOS, `flutterfire configure` adds a build phase to the Xcode project that uploads the debug symbols of the app with the upload script of Crashlytics. The phase that flutterfire_cli 1.4.0 adds does not find the script where Flutter puts the Swift packages of the app, so with Swift Package Manager `flutter run` and `flutter build ios` fail in that phase. Configuring the app again on macOS with flutterfire_cli 1.4.1 or a later 1.x replaces the phase.
@@ -227,6 +256,20 @@ The texts of a new language, such as German, go into a file of their own:
 2. Run `flutter gen-l10n`.
 
 The section "Languages" tells where else the new language goes.
+
+## Sign-in
+
+The sign-in mode of the app says who may use it without an account. This app was generated in the mode `required`: `authMode` in `lib/core/auth/app_session.dart` is `AuthMode.required`.
+
+- In `required`, nobody may. `appSession.allowsApp` is true only for a user who signed in to an account.
+- In `guest`, everyone may. The app has no user until someone signs in, and `appSession.allowsApp` is always true.
+- In `anonymous`, everyone may, as an anonymous user that the app signs in itself when it starts. Code then has the id of a user, `appSession.value.uid`, before anyone has an account, and signing up gives that same user the account. The app waits up to 3 seconds for that sign-in. When it fails or takes longer, the app starts without a user and tries again each time the user comes back to it. `appSession.allowsApp` is always true.
+
+The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `required` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
+
+To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
+
+When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
 ## Languages
 
@@ -592,6 +635,7 @@ class App extends StatelessWidget {
 }
 === lib/bootstrap.dart (flutter_core) ===
 import 'package:firebase_core/firebase_core.dart';
+import 'package:my_app/core/auth/app_session.dart';
 import 'package:my_app/core/crash_reporting/crash_reporter.dart';
 import 'package:my_app/core/di/dependencies.dart';
 import 'package:my_app/core/preferences/app_preferences.dart';
@@ -602,6 +646,7 @@ import 'package:my_app/firebase_options.dart';
 /// services of the app, then what needs them.
 Future<void> bootstrap() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initAuth();
   installCrashReporting();
   await initPreferences();
   await registerDependencies();
@@ -1072,6 +1117,955 @@ class FallbackStartView extends StatelessWidget {
     );
   }
 }
+=== lib/core/auth/app_session.dart (role:auth) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/auth/firebase_auth_service.dart' as impl0;
+
+import 'auth_service.dart';
+import 'guest_data.dart';
+
+export 'auth_service.dart' show AuthFailure, AuthFailureReason;
+
+/// Who may use the app without an account.
+enum AuthMode {
+  /// Nobody: the user signs in first.
+  required,
+
+  /// Everyone. The app has no user until someone signs in, and asks for an
+  /// account only where a screen needs one.
+  guest,
+
+  /// Everyone, as an anonymous user that the app signs in itself when it
+  /// starts, so that code has the id of a user from the first frame. An
+  /// account is asked for only where a screen needs one, and signing up
+  /// gives it to that same user.
+  anonymous,
+}
+
+/// The mode of this app, which was chosen when the app was generated.
+///
+/// The mode gates nothing on its own. It decides what [appSession] does when
+/// it starts and what [AppSessionController.allowsApp] says, which a guard
+/// of the routes reads.
+const AuthMode authMode = AuthMode.required;
+
+/// Who uses the app: nobody that the app knows, an anonymous user, or the
+/// user of an account.
+@immutable
+sealed class AppSession {
+  const AppSession();
+
+  /// The id of the user, or `null` when nobody is signed in.
+  String? get uid;
+}
+
+/// Nobody is signed in.
+final class SignedOutSession extends AppSession {
+  /// Creates the session of an app without a user.
+  const SignedOutSession();
+
+  @override
+  String? get uid => null;
+
+  @override
+  bool operator ==(Object other) => other is SignedOutSession;
+
+  @override
+  int get hashCode => (SignedOutSession).hashCode;
+}
+
+/// An anonymous user is signed in: one without an account, whom the app
+/// signed in itself.
+final class AnonymousSession extends AppSession {
+  /// Creates the session of the anonymous user [uid].
+  const AnonymousSession(this.uid);
+
+  @override
+  final String uid;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AnonymousSession && other.uid == uid;
+
+  @override
+  int get hashCode => uid.hashCode;
+}
+
+/// The user of an account is signed in.
+final class AccountSession extends AppSession {
+  /// Creates the session of the account [uid].
+  const AccountSession(this.uid, {this.email});
+
+  @override
+  final String uid;
+
+  /// The email address of the account, or `null` if it has none.
+  final String? email;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountSession && other.uid == uid && other.email == email;
+
+  @override
+  int get hashCode => Object.hash(uid, email);
+}
+
+/// The session of the app: who uses it, known before the first frame, and
+/// the way to sign in, up and out.
+///
+/// Its `value` is the [AppSession], and it tells its listeners when that
+/// changes. A widget follows it with a `ValueListenableBuilder`.
+final appSession = AppSessionController(
+  mode: authMode,
+  takeGuestData: takeGuestData,
+);
+
+/// Keeps the session of the app up to date with the service of the provider
+/// of sign-in, and signs in, up and out through that service. The app has
+/// one, [appSession].
+///
+/// Every call here fails only with an [AuthFailure], whose reason the app
+/// shows in a text of its own. An error of another kind becomes a failure
+/// with the reason [AuthFailureReason.unknown] and the error as its
+/// [AuthFailure.developerHint].
+///
+/// The calls run one after another, in the order they were made, and none
+/// runs next to an anonymous sign-in that is on its way. So the user of the
+/// app is the result of the call that was made last. In the mode
+/// [AuthMode.anonymous], a call that leaves nobody signed in is followed by
+/// an anonymous sign-in.
+final class AppSessionController extends ChangeNotifier
+    implements ValueListenable<AppSession> {
+  /// Creates a controller for an app in [mode]. The app creates
+  /// [appSession] and no other. A test creates one to see another mode, or
+  /// a shorter [anonymousWait], and disposes of it.
+  AppSessionController({
+    required this.mode,
+    required this.takeGuestData,
+    this.anonymousWait = const Duration(seconds: 3),
+  });
+
+  /// Who may use the app without an account.
+  final AuthMode mode;
+
+  /// Takes what an anonymous user has before that user signs in to an
+  /// account: `takeGuestData` of `guest_data.dart`.
+  final Future<GiveGuestData?> Function(String guestUid) takeGuestData;
+
+  /// How long the app waits for its anonymous user when it starts, and
+  /// after a sign-out or the deletion of an account, in the mode
+  /// [AuthMode.anonymous].
+  final Duration anonymousWait;
+
+  AuthService? _service;
+  StreamSubscription<AuthUser?>? _userChanges;
+  AppSession _session = const SignedOutSession();
+  bool _disposed = false;
+
+  /// Completes when the app has started for the first time.
+  final Completer<void> _started = Completer<void>();
+
+  /// The call that was made last, while a call is on its way: the next one
+  /// waits for it. It is `null` when none is, and a call then awaits
+  /// nothing. A future that completed in another zone would hold the call
+  /// back in a widget test, where the app starts in real time and the test
+  /// goes on in fake time.
+  Future<void>? _lastCall;
+
+  /// The anonymous sign-ins that are on their way, each by its service, so
+  /// that the app starts no second one next to it.
+  final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
+
+  /// Tells when the user comes back to the app, in the mode
+  /// [AuthMode.anonymous].
+  _ResumeObserver? _observer;
+
+  /// Who uses the app.
+  @override
+  AppSession get value => _session;
+
+  /// Whether the user may see the app: always in the modes [AuthMode.guest]
+  /// and [AuthMode.anonymous], and with an account in the mode
+  /// [AuthMode.required].
+  ///
+  /// It is computed from the session each time it is read, and its
+  /// listeners are those of the session. So when the session changes, a
+  /// listener finds this value and [hasAccount] both up to date, whichever
+  /// of the two it listens to. A listener is also called for a change of
+  /// the session that leaves this value as it was.
+  late final ValueListenable<bool> allowsApp = _SessionFlag(
+    this,
+    (session) => mode != AuthMode.required || session is AccountSession,
+  );
+
+  /// Whether the user of an account is signed in, which an anonymous user
+  /// is not. It follows the session as [allowsApp] does.
+  late final ValueListenable<bool> hasAccount = _SessionFlag(
+    this,
+    (session) => session is AccountSession,
+  );
+
+  /// Starts the session with [service]: takes the user who is signed in on
+  /// this device, and follows the changes that the service tells of.
+  ///
+  /// `initAuth()` calls it in `bootstrap()`, so the session is known before
+  /// the first frame. In the mode [AuthMode.anonymous], an app without a
+  /// user signs in anonymously here and waits for that for at most
+  /// [anonymousWait]. When the sign-in fails or takes longer, the app
+  /// starts without a user. A sign-in that takes longer still becomes the
+  /// session when it comes, and the app tries again each time the user
+  /// comes back to it.
+  ///
+  /// A call made before the first start waits for it: [signIn], [signUp],
+  /// [sendPasswordReset], [signOut] and [deleteAccount]. Such calls run in
+  /// their order once the start has the user, and the future of this start
+  /// completes after them, but waits for no call that is made while it
+  /// runs. The mocks of the tests of an app use this: a call of [signUp]
+  /// made before `bootstrap()`, which nothing awaits, gives the app an
+  /// account before its first frame. A test makes such a call outside the
+  /// body of a test, as in a `setUpAll`: made in the body of a widget
+  /// test, it waits in the fake time of that body, and a start that runs in
+  /// real time never completes.
+  ///
+  /// It may be called again, with the service that the session has from
+  /// then on: `initAuth()` does so in a test of the next launch of the app,
+  /// and a test gives it a service of its own. Such a start takes its turn
+  /// after the calls that are on their way.
+  Future<void> start(AuthService service) async {
+    // The calls that were made before this start. The first start lets
+    // them run once it has the user, and a later one waits for them.
+    final earlier = _lastCall;
+    final first = !_started.isCompleted;
+    if (!first) await earlier;
+    unawaited(_userChanges?.cancel());
+    _service = service;
+    _userChanges = service.userChanges.listen(
+      (_) => _sync(),
+      onError: (Object error, StackTrace stackTrace) => _report(
+        error,
+        stackTrace,
+        'while following the user of the provider of sign-in',
+      ),
+    );
+    _sync();
+    if (mode == AuthMode.anonymous) {
+      if (_observer == null) {
+        final observer = _observer = _ResumeObserver(_retry);
+        WidgetsBinding.instance.addObserver(observer);
+      }
+      await _signInAnonymously();
+    }
+    if (!_started.isCompleted) _started.complete();
+    if (first) await earlier;
+  }
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// An anonymous user becomes the user of that account, and what the
+  /// anonymous user had moves to the account as `takeGuestData` says.
+  Future<void> signIn({required String email, required String password}) =>
+      _call(
+        (service) =>
+            _toAccount(() => service.signIn(email: email, password: password)),
+      );
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// An anonymous user gets the account and keeps the id, so everything
+  /// that the user had stays.
+  Future<void> signUp({required String email, required String password}) =>
+      _call(
+        (service) => _session is AnonymousSession
+            ? service.linkPassword(email: email, password: password)
+            : service.signUp(email: email, password: password),
+      );
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password. It completes whether [email] has an account or not.
+  Future<void> sendPasswordReset(String email) =>
+      _call((service) => service.sendPasswordReset(email));
+
+  /// Signs the user out. In the mode [AuthMode.anonymous], the app then
+  /// signs in anonymously again, as when it starts.
+  Future<void> signOut() =>
+      _call((service) => service.signOut(), waitsForAnonymousUser: true);
+
+  /// Deletes the user who is signed in. The app is then without a user, as
+  /// after [signOut], and in the mode [AuthMode.anonymous] it signs in
+  /// anonymously again.
+  ///
+  /// It may fail with [AuthFailureReason.recentSignInRequired]: the user
+  /// then signs out, signs in again and repeats it.
+  Future<void> deleteAccount() =>
+      _call((service) => service.deleteAccount(), waitsForAnonymousUser: true);
+
+  /// Stops following the service and the lifecycle of the app. A call that
+  /// is on its way still ends as it would have, but tells no listener, and
+  /// no anonymous sign-in follows it.
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_userChanges?.cancel());
+    if (_observer case final observer?) {
+      WidgetsBinding.instance.removeObserver(observer);
+    }
+    super.dispose();
+  }
+
+  /// The user came back to the app. In the mode [AuthMode.anonymous], an
+  /// app without a user then signs in anonymously again: as what follows
+  /// every call, so this takes a turn among the calls with nothing else to
+  /// do, and starts no anonymous sign-in next to a sign-in.
+  void _retry() => unawaited(_call((service) async {}));
+
+  /// Runs [call] with the service once the calls made before it are over,
+  /// and not before the app has started for the first time.
+  ///
+  /// In the mode [AuthMode.anonymous], a call that leaves nobody signed in
+  /// is followed by an anonymous sign-in. A call that
+  /// [waitsForAnonymousUser], as a sign-out, completes once that sign-in is
+  /// over or took too long, as the start does.
+  Future<void> _call(
+    Future<void> Function(AuthService service) call, {
+    bool waitsForAnonymousUser = false,
+  }) async {
+    final earlier =
+        _lastCall ?? (_started.isCompleted ? null : _started.future);
+    final done = Completer<void>();
+    final own = _lastCall = done.future;
+    if (earlier != null) await earlier;
+    try {
+      await _guarded(call);
+      final signIn = _signInAnonymously();
+      if (waitsForAnonymousUser) await signIn;
+    } finally {
+      if (identical(_lastCall, own)) _lastCall = null;
+      done.complete();
+    }
+  }
+
+  /// Runs [call] with the service, once an anonymous sign-in that is on its
+  /// way is over: of a call and a sign-in that run at the same time, the
+  /// one that ended last would decide who the user is.
+  ///
+  /// Whatever [call] throws that is no [AuthFailure] becomes one, and the
+  /// session has the user of the service when it is over, also when it
+  /// failed. A call that failed does not wait for the anonymous sign-in
+  /// that follows it, so that its failure is not late.
+  Future<void> _guarded(Future<void> Function(AuthService service) call) async {
+    final service = _service!;
+    try {
+      await _anonymousSignIns[service];
+      await call(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      unawaited(_signInAnonymously());
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+    _sync();
+  }
+
+  /// Signs in to an account with [signIn], in whichever way, and moves what
+  /// an anonymous user had to that account.
+  ///
+  /// It takes the data before the sign-in, while the anonymous user is
+  /// still signed in, and gives it once the user of another id has an
+  /// account. If taking fails, the call fails and nothing has changed. If
+  /// giving fails, the user is signed in already, so the call completes and
+  /// the error is reported as an error of the app.
+  Future<void> _toAccount(Future<void> Function() signIn) async {
+    final guest = _session;
+    final give = guest is AnonymousSession
+        ? await takeGuestData(guest.uid)
+        : null;
+    await signIn();
+    _sync();
+    final account = _session;
+    if (give == null ||
+        account is! AccountSession ||
+        account.uid == guest.uid) {
+      return;
+    }
+    try {
+      await give(account.uid);
+    } on Object catch (error, stackTrace) {
+      _report(
+        error,
+        stackTrace,
+        'while giving the data of a guest to the account',
+      );
+    }
+  }
+
+  /// Reports [error], which no call can fail with, as an error of the app.
+  void _report(Object error, StackTrace stackTrace, String during) =>
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'app session',
+          context: ErrorDescription(during),
+        ),
+      );
+
+  /// In the mode [AuthMode.anonymous], signs in anonymously when nobody is
+  /// signed in, and waits for that for at most [anonymousWait].
+  ///
+  /// It never fails. A sign-in that takes longer goes on and becomes the
+  /// session when it comes. One that fails leaves the app without a user
+  /// until the next try, and in debug mode its error is printed.
+  Future<void> _signInAnonymously() async {
+    final service = _service!;
+    if (_disposed ||
+        mode != AuthMode.anonymous ||
+        service.currentUser != null) {
+      return;
+    }
+    final signIn = _anonymousSignIns[service] ??= _tryAnonymously(service)
+        .whenComplete(() {
+          _anonymousSignIns.remove(service);
+          _sync();
+        });
+    await signIn.timeout(anonymousWait, onTimeout: () {});
+  }
+
+  Future<void> _tryAnonymously(AuthService service) async {
+    try {
+      await service.signInAnonymously();
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          'The anonymous sign-in failed, so the app has no user: $error',
+        );
+      }
+    }
+  }
+
+  /// Takes the user of the service as the session, and tells the listeners
+  /// when that changes it, unless the session was disposed of.
+  void _sync() {
+    if (_disposed) return;
+    final session = switch (_service!.currentUser) {
+      null => const SignedOutSession(),
+      AuthUser(isAnonymous: true, :final uid) => AnonymousSession(uid),
+      AuthUser(:final uid, :final email) => AccountSession(uid, email: email),
+    };
+    if (session == _session) return;
+    _session = session;
+    notifyListeners();
+  }
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// A flag of the session of a controller: its value is computed from the
+/// session each time it is read, and its listeners are those of the
+/// session.
+final class _SessionFlag implements ValueListenable<bool> {
+  const _SessionFlag(this._controller, this._of);
+
+  final AppSessionController _controller;
+  final bool Function(AppSession session) _of;
+
+  @override
+  bool get value => _of(_controller.value);
+
+  @override
+  void addListener(VoidCallback listener) => _controller.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _controller.removeListener(listener);
+}
+
+/// Returns the service of the provider of sign-in, which [initAuth] created:
+/// `bootstrap()` awaits it before the first frame, and there is none to
+/// return before that.
+///
+/// The code of the app does not call it: it signs in through [appSession].
+AuthService createAuthService() => _authService;
+
+late AuthService _authService;
+
+/// Creates the service of the provider of sign-in and starts the session of
+/// the app with it; `bootstrap()` awaits it before the first frame, and
+/// nothing else in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with the user who is signed in, and
+/// starts the session with it.
+Future<void> initAuth() async {
+  _authService = impl0.createFirebaseAuthService();
+  await appSession.start(_authService);
+}
+=== lib/core/auth/auth_service.dart (role:auth) ===
+/// A user as the provider of sign-in knows them.
+final class AuthUser {
+  /// Creates the user [uid].
+  const AuthUser({required this.uid, required this.isAnonymous, this.email});
+
+  /// The id of the user. It stays the same for as long as the user exists,
+  /// also when an anonymous user gets an account.
+  final String uid;
+
+  /// Whether the user is anonymous: a user that the app signed in itself,
+  /// who has no account and nothing to sign in with again.
+  final bool isAnonymous;
+
+  /// The email address of the user, or `null` for a user without one, such
+  /// as an anonymous user.
+  final String? email;
+}
+
+/// Why a call of sign-in failed.
+enum AuthFailureReason {
+  /// The email address and the password match no account. A wrong password
+  /// and an address without an account are this one reason, so that nobody
+  /// learns from the app which addresses have an account.
+  invalidCredentials,
+
+  /// The email address has an account already.
+  emailInUse,
+
+  /// The provider takes no password as weak as this one.
+  weakPassword,
+
+  /// The text is no email address.
+  invalidEmail,
+
+  /// The account is disabled.
+  userDisabled,
+
+  /// Too many attempts: the provider takes no more for a while.
+  tooManyAttempts,
+
+  /// The device did not reach the provider.
+  network,
+
+  /// The call needs a user who signed in a short while ago, as the deletion
+  /// of an account does: the user signs in again and repeats it.
+  ///
+  /// It is also the reason of a call for a user whose session has ended on
+  /// the server. The service signs that user out on the device before it
+  /// fails.
+  recentSignInRequired,
+
+  /// Sign-in is not set up at the provider, such as a way to sign in that
+  /// is not enabled there. This is a mistake in the setup of the app, which
+  /// [AuthFailure.developerHint] explains.
+  notConfigured,
+
+  /// Anything else. [AuthFailure.developerHint] has the error.
+  unknown,
+}
+
+/// The failure of a call of sign-in: the only thing that such a call throws.
+final class AuthFailure implements Exception {
+  /// Creates the failure for [reason].
+  const AuthFailure(this.reason, {this.developerHint});
+
+  /// Why the call failed. The app shows a text of its own for each reason.
+  final AuthFailureReason reason;
+
+  /// What went wrong in the words of the provider, for the developer of the
+  /// app, or `null`. It is no text for the user: show it in debug mode
+  /// only.
+  final String? developerHint;
+
+  @override
+  String toString() => developerHint == null
+      ? 'AuthFailure: ${reason.name}'
+      : 'AuthFailure: ${reason.name} ($developerHint)';
+}
+
+/// The accounts of the users of the app and the user of this device, as the
+/// provider of sign-in keeps them.
+///
+/// The provider implements it. The code of the app does not call it: it
+/// signs in through `appSession` of `app_session.dart`, which calls this
+/// service and does what is the same with every provider.
+///
+/// Every implementation keeps to this, in every mode of the app, whatever
+/// the provider generates for the mode:
+/// - The service has [currentUser] from the moment it is created: the user
+///   who was signed in on this device when the app last ran, without a
+///   request to the server. The function that creates the service may be
+///   called again, and the service that it returns then has the user who is
+///   signed in now.
+/// - When the future of a call completes, [currentUser] is the result of
+///   the call. [userChanges] tells of every change of [currentUser], also
+///   of one that no call here made, and when it tells of a user,
+///   [currentUser] is that user.
+/// - A call fails only with an [AuthFailure], and every call ends: when the
+///   server does not answer, its future completes with
+///   [AuthFailureReason.network].
+/// - A call that fails leaves the user who is signed in as that user was:
+///   an anonymous user stays signed in when [linkPassword] fails, and so
+///   does whoever is signed in when [signIn] or [signUp] fails. The one
+///   exception is a call for a user whose session has ended on the server.
+/// - [linkPassword] and [deleteAccount] are calls for the user who is
+///   signed in. Made when nobody is signed in, or when the session of that
+///   user has ended on the server, such a call fails with
+///   [AuthFailureReason.recentSignInRequired], and in the second case it
+///   signs the user out on the device first.
+abstract interface class AuthService {
+  /// The user who is signed in on this device, or `null`.
+  AuthUser? get currentUser;
+
+  /// Tells of each change of [currentUser], once [currentUser] has changed:
+  /// a broadcast stream. When it tells of a user, [currentUser] is that
+  /// user. It may also tell of a user who has not changed.
+  ///
+  /// An error that it sends changes nothing: the session reports it as an
+  /// error of the app and goes on listening.
+  Stream<AuthUser?> get userChanges;
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// A wrong password and an address without an account both fail with
+  /// [AuthFailureReason.invalidCredentials].
+  ///
+  /// It is also called while a user is signed in, an anonymous one or the
+  /// user of another account: the user of this account then replaces that
+  /// user on the device. When it fails, that user stays signed in.
+  Future<void> signIn({required String email, required String password});
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: that account keeps
+  /// its password, and whoever is signed in stays signed in.
+  ///
+  /// It is also called while the user of another account is signed in, and
+  /// the user of the new account then replaces that user on the device.
+  /// For an anonymous user, the session calls [linkPassword] instead.
+  Future<void> signUp({required String email, required String password});
+
+  /// Gives the anonymous user who is signed in an account for [email] with
+  /// [password]. The user keeps the [AuthUser.uid] and is no longer
+  /// anonymous.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: the anonymous user
+  /// stays signed in, with the same id.
+  Future<void> linkPassword({required String email, required String password});
+
+  /// Creates an anonymous user, with an id of its own, and signs in as that
+  /// user.
+  Future<void> signInAnonymously();
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password.
+  ///
+  /// It completes whether [email] has an account or not, so that nobody
+  /// learns from the app which addresses have one.
+  Future<void> sendPasswordReset(String email);
+
+  /// Signs the user out on this device. It completes when nobody is signed
+  /// in too.
+  Future<void> signOut();
+
+  /// Deletes the user who is signed in, an anonymous one too, and signs
+  /// out.
+  ///
+  /// It succeeds for a user who has just signed in, in whichever way, and
+  /// for an anonymous user who was just created. For a user who signed in
+  /// longer ago, such as one whom the service found on the device when it
+  /// was created, it may fail with
+  /// [AuthFailureReason.recentSignInRequired]. It then succeeds once the
+  /// user has signed in again, in whichever way the account allows.
+  Future<void> deleteAccount();
+}
+=== lib/core/auth/firebase_auth_service.dart (firebase_auth) ===
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart'
+    show WidgetsBinding, basicLocaleListResolution;
+import 'package:my_app/core/l10n/app_locale.dart';
+
+import 'auth_service.dart';
+
+/// Returns the sign-in service of the app on Firebase Authentication, with
+/// the user who is signed in on this device.
+///
+/// Firebase is initialized first, as `bootstrap()` does. Firebase keeps the
+/// user on the device and hands that user over when it is initialized, so
+/// the service has the user at once, without a request to the server.
+AuthService createFirebaseAuthService() =>
+    FirebaseAuthService(FirebaseAuth.instance);
+
+/// The codes with which Firebase answers a call for the user who is signed
+/// in when the session of that user has ended on the server, as when the
+/// account was deleted, or its password changed, on another device.
+const _endedSession = {
+  'user-token-expired',
+  'invalid-user-token',
+  'user-not-found',
+  'no-current-user',
+};
+
+/// Sign-in with [Firebase Authentication](https://firebase.google.com/docs/auth),
+/// with an email address and a password, and as an anonymous user.
+///
+/// The code of the app does not use it: it signs in through `appSession` of
+/// `app_session.dart`.
+///
+/// The ways to sign in are enabled in the Firebase project, not here:
+/// Email/Password, and Anonymous for an app that signs in anonymous users.
+/// Until they are, a call fails with [AuthFailureReason.notConfigured], and
+/// its [AuthFailure.developerHint] tells where to enable them.
+final class FirebaseAuthService implements AuthService {
+  /// Creates the service on [_auth].
+  FirebaseAuthService(this._auth);
+
+  final FirebaseAuth _auth;
+
+  /// Tells that the user may have changed: after each call here, and when
+  /// Firebase tells of a change that no call here made, such as the end of
+  /// the session of the user on the server. It follows Firebase only while
+  /// it has a listener.
+  late final StreamController<void> _changes = StreamController.broadcast(
+    onListen: () => _fromFirebase = _auth.userChanges().listen(
+      (_) => _changes.add(null),
+      onError: _changes.addError,
+    ),
+    onCancel: () => _fromFirebase?.cancel(),
+  );
+
+  StreamSubscription<User?>? _fromFirebase;
+
+  @override
+  AuthUser? get currentUser => switch (_auth.currentUser) {
+    null => null,
+    final user => AuthUser(
+      uid: user.uid,
+      isAnonymous: user.isAnonymous,
+      email: user.email,
+    ),
+  };
+
+  /// Each event has the user of the moment in which a listener gets it, so
+  /// a listener never hears of a user who is not [currentUser] any more.
+  @override
+  Stream<AuthUser?> get userChanges => _changes.stream.map((_) => currentUser);
+
+  @override
+  Future<void> signIn({required String email, required String password}) =>
+      _run(
+        () =>
+            _auth.signInWithEmailAndPassword(email: email, password: password),
+      );
+
+  @override
+  Future<void> signUp({required String email, required String password}) =>
+      _run(
+        () => _auth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        ),
+      );
+
+  @override
+  Future<void> linkPassword({
+    required String email,
+    required String password,
+  }) => _runForUser(
+    (user) => user.linkWithCredential(
+      EmailAuthProvider.credential(email: email, password: password),
+    ),
+  );
+
+  /// While an anonymous user is signed in, Firebase answers with that user
+  /// and creates no other.
+  @override
+  Future<void> signInAnonymously() => _run(_auth.signInAnonymously);
+
+  /// Firebase sends the message from the template of the project
+  /// (Authentication > Templates in the Firebase console).
+  @override
+  Future<void> sendPasswordReset(String email) => _run(() async {
+    // The message is in the language that the app is in.
+    await _auth.setLanguageCode(
+      (appLocale.value ??
+              basicLocaleListResolution(
+                WidgetsBinding.instance.platformDispatcher.locales,
+                appLocales,
+              ))
+          .languageCode,
+    );
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (error) {
+      // A project without the protection against the enumeration of
+      // email addresses tells that an address has no account.
+      if (error.code != 'user-not-found') rethrow;
+    }
+  });
+
+  @override
+  Future<void> signOut() => _run(_auth.signOut);
+
+  @override
+  Future<void> deleteAccount() => _runForUser((user) async {
+    await user.delete();
+    // Firebase signs a deleted user out, but the plugin keeps that user
+    // as the current one until the platform tells it of the sign-out,
+    // which may come after this call is over.
+    await _auth.signOut();
+  });
+
+  /// Runs [call] for the user who is signed in.
+  ///
+  /// It fails with [AuthFailureReason.recentSignInRequired] when nobody is
+  /// signed in, and when Firebase answers that the session of the user has
+  /// ended: the user is then signed out on this device first.
+  Future<void> _runForUser(Future<void> Function(User user) call) =>
+      _run(() async {
+        final user = _auth.currentUser;
+        if (user == null) {
+          throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+        }
+        try {
+          await call(user);
+        } on FirebaseAuthException catch (error) {
+          if (!_endedSession.contains(error.code)) rethrow;
+          await _auth.signOut();
+          throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+        }
+      });
+
+  /// Runs [call], which then fails only with an [AuthFailure], and tells
+  /// of the user that it leaves, also when it failed.
+  Future<void> _run(Future<void> Function() call) async {
+    try {
+      await call();
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(_failureOf(error), stackTrace);
+    } finally {
+      _changes.add(null);
+    }
+  }
+
+  /// The failure of a call that failed with [error]: the reason for the
+  /// code of Firebase. A code that has no reason yet gets one here.
+  AuthFailure _failureOf(Object error) {
+    if (error is AuthFailure) return error;
+    if (error is! FirebaseAuthException) {
+      return AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+    }
+    final reason = switch (error.code) {
+      // Firebase answers a wrong password and an address without an account
+      // alike, unless the project is without the protection against the
+      // enumeration of email addresses.
+      'invalid-credential' ||
+      'invalid-login-credentials' ||
+      'wrong-password' ||
+      'user-not-found' => AuthFailureReason.invalidCredentials,
+      'email-already-in-use' ||
+      'credential-already-in-use' => AuthFailureReason.emailInUse,
+      'weak-password' ||
+      'password-does-not-meet-requirements' => AuthFailureReason.weakPassword,
+      'invalid-email' || 'missing-email' => AuthFailureReason.invalidEmail,
+      'user-disabled' => AuthFailureReason.userDisabled,
+      'too-many-requests' => AuthFailureReason.tooManyAttempts,
+      'network-request-failed' => AuthFailureReason.network,
+      'requires-recent-login' => AuthFailureReason.recentSignInRequired,
+      _ => null,
+    };
+    if (reason != null) return AuthFailure(reason);
+    final answer = '${error.code}: ${error.message}';
+    final project = _auth.app.options.projectId;
+    final enable =
+        'enable Email/Password, and Anonymous for an app that '
+        'signs in anonymous users, under Authentication > Sign-in method: '
+        'https://console.firebase.google.com/project/$project/'
+        'authentication/providers';
+    // A way to sign in that is not enabled, and, on Android, a project in
+    // which Authentication was never set up.
+    if (error.code == 'operation-not-allowed' ||
+        error.code == 'admin-restricted-operation' ||
+        answer.contains('CONFIGURATION_NOT_FOUND')) {
+      return AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint:
+            'Sign-in is not enabled in the Firebase project '
+            '$project ($answer). To fix it, $enable',
+      );
+    }
+    // On iOS and macOS, Firebase answers for a project in which
+    // Authentication was never set up with an internal error, which
+    // nothing tells from another one.
+    if (error.code == 'internal-error' &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS)) {
+      return AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint:
+            'Firebase reported an internal error ($answer), which '
+            'is also what it answers on iOS and macOS when sign-in is not '
+            'enabled in the Firebase project $project. If that is the '
+            'cause, $enable',
+      );
+    }
+    return AuthFailure(AuthFailureReason.unknown, developerHint: answer);
+  }
+}
+=== lib/core/auth/guest_data.dart (role:auth) ===
+/// Gives the account [accountUid] what a guest had: the function that
+/// [takeGuestData] returns.
+typedef GiveGuestData = Future<void> Function(String accountUid);
+
+/// Takes what the guest [guestUid] has in the app, and returns the function
+/// that gives it to an account, or `null` when there is nothing to move.
+///
+/// A guest is an anonymous user. When a guest signs in to an account that
+/// exists already, the user of the app changes from the guest to that
+/// account, and what was kept under the id of the guest, such as a cart on
+/// a server, would be left behind. So the session of the app calls this
+/// function before the sign-in, while the guest is still signed in and may
+/// read that data, and calls the function that it returns once the user of
+/// the account is signed in:
+///
+/// ```dart
+/// Future<GiveGuestData?> takeGuestData(String guestUid) async {
+///   final cart = await carts.read(guestUid);
+///   if (cart.isEmpty) return null;
+///   return (accountUid) => carts.add(accountUid, cart);
+/// }
+/// ```
+///
+/// Only read here: the sign-in may still fail, and then the guest stays. An
+/// error thrown here fails the sign-in before it starts. An error of the
+/// function that this one returns is reported as an error of the app, and
+/// the user stays signed in.
+///
+/// Call no method of `appSession` here, nor in the function that this one
+/// returns. The sign-in is one of its calls, which run one after another,
+/// so such a call would wait for the sign-in, and the sign-in for it.
+///
+/// It is not called when a guest signs up, since the guest then keeps the
+/// id and everything under it, nor in an app without anonymous users.
+Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 
@@ -5196,6 +6190,7 @@ dependencies:
     sdk: flutter
   event_bus: "^2.0.1"
   firebase_analytics: "^12.6.0"
+  firebase_auth: "^6.7.0"
   firebase_core: "^4.15.0"
   firebase_crashlytics: "^5.4.0"
   flutter_riverpod: "^3.4.3"

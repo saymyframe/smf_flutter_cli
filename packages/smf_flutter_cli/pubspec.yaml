@@ -33,6 +33,7 @@ dependencies:
   smf_contracts: ^0.4.0
   smf_event_bus: ^0.3.1
   smf_firebase_analytics: ^0.4.0
+  smf_firebase_auth: ^0.4.0
   smf_firebase_core: ^0.4.0
   smf_firebase_crashlytics: ^0.4.0
   smf_flutter_core: ^0.4.0

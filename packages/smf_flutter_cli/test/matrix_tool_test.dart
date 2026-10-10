@@ -154,21 +154,38 @@ void main() {
         read(app, 'integration_test/start_check.dart'),
         contains("import 'package:start_app/main.dart' as app;"),
       );
-      // The probes of the tests of the app, those of the preferences and
-      // of the onboarding among them: the apps without external steps have
-      // their modules too.
+      // The probes of the tests of the app, in the order of the tests, those
+      // of the preferences and of the onboarding among them: the apps
+      // without external steps have their modules too. They lack Firebase,
+      // whose configuration needs an account, and so Firebase
+      // Authentication, which depends on it, with its probe.
       final list = read(app, startProbesFile);
-      expect(list, contains("('onboarding', probe0.probeOnboarding),"));
       expect(
-        list,
-        contains("('shared_preferences', probe1.probeSharedPreferences),"),
+        [
+          for (final probe
+              in RegExp(r"\('(\w+)', probe(\d+)\.(\w+)\),").allMatches(list))
+            (probe[1], int.parse(probe[2]!), probe[3]),
+        ],
+        [
+          for (final (index, (name, function)) in [
+            if (!withoutExternalSteps) ('firebase_auth', 'probeFirebaseAuth'),
+            ('onboarding', 'probeOnboarding'),
+            ('shared_preferences', 'probeSharedPreferences'),
+            ('di_role', 'probeServices'),
+            ('preferences_role', 'probePreferences'),
+            ('router_walk', 'probeRoutes'),
+            ('localization_role', 'probeLanguages'),
+          ].indexed)
+            (name, index, function),
+        ],
+        reason: reason,
       );
-      expect(list, contains("('di_role', probe2.probeServices),"));
-      expect(
-        list,
-        contains("('preferences_role', probe3.probePreferences),"),
-      );
-      expect(list, contains("('router_walk', probe4.probeRoutes),"));
+      if (!withoutExternalSteps) {
+        expect(
+          read(app, 'integration_test/firebase_auth/probe.dart'),
+          contains("import 'package:start_app/core/auth/app_session.dart';"),
+        );
+      }
       const status = 'features/onboarding/onboarding_status.dart';
       expect(
         read(app, 'integration_test/onboarding/probe.dart'),
@@ -185,10 +202,14 @@ void main() {
         read(app, 'integration_test/shared_preferences/probe.dart'),
         contains("import 'package:start_app/$implementation';"),
       );
-      // The test of shared_preferences, which comes with its probe, needs a
-      // dev dependency, which the tool adds with flutter in the app.
-      const pubAdd =
-          'flutter pub add dev:shared_preferences_platform_interface in ';
+      // The tests of shared_preferences and of Firebase Authentication,
+      // which come with their probes, each need a dev dependency, which the
+      // tool adds with flutter in the app.
+      final pubAdd = [
+        'flutter pub add',
+        if (!withoutExternalSteps) 'dev:firebase_auth_platform_interface',
+        'dev:shared_preferences_platform_interface in ',
+      ].join(' ');
       final call = calls().single;
       expect(call, startsWith(pubAdd), reason: reason);
       expect(_resolved(call.substring(pubAdd.length).trim()), _resolved(app));
@@ -196,8 +217,10 @@ void main() {
         for (final test in [
           named('di_role'),
           named('router_walk'),
-          // The test of the onboarding comes with its probe.
+          // The test of the onboarding comes with its probe, and so does
+          // that of Firebase Authentication.
           named('onboarding'),
+          if (!withoutExternalSteps) named('firebase_auth'),
         ])
           ...test.generatedFiles!(matrixApp, 'start_app'),
       };

@@ -229,8 +229,11 @@ void main() {
       'the app of Firebase, the app of Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
-      'which get Firebase, and one of every module for each state manager',
-      () async {
+      'which get Firebase, the apps of Firebase Authentication with and '
+      'without the localization and the router, which get Firebase, and '
+      'one with the router for each other mode of the auth role, and one of '
+      'every module for each state manager, each once more for each other '
+      'mode', () async {
     final (:apps, :failed) = await matrixOf(smfModules);
     // The modules whose labels and titles are texts of the app, each with
     // the provider of the texts. The app of settings with it is the app of
@@ -241,7 +244,18 @@ void main() {
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, onboarding, firebase_core, '
-        'firebase_crashlytics, firebase_analytics)';
+        'firebase_crashlytics, firebase_analytics, firebase_auth)';
+    // The app of Firebase Authentication with the router in another mode of
+    // the auth role.
+    String inMode(String mode) => 'auth by firebase_auth with router '
+        '--auth-mode=$mode (firebase_auth, go_router, firebase_core, '
+        'flutter_core)';
+    // An app with every module in another mode of the auth role.
+    String everyModuleIn(String stateManager, String mode) =>
+        everyModule(stateManager).replaceFirst(
+          'every module ($stateManager)',
+          'every module ($stateManager) --auth-mode=$mode',
+        );
 
     expect(failed, isEmpty);
     expect(apps.map((app) => '$app'), [
@@ -310,17 +324,65 @@ void main() {
       equals(
         'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
       ),
+      equals(
+        'firebase_auth with localization, router (firebase_auth, gen_l10n, '
+        'go_router, firebase_core, flutter_core, shared_preferences)',
+      ),
+      equals(
+        'firebase_auth with localization (firebase_auth, gen_l10n, '
+        'firebase_core, flutter_core, shared_preferences)',
+      ),
+      equals(
+        'firebase_auth with router (firebase_auth, go_router, firebase_core, '
+        'flutter_core)',
+      ),
+      'firebase_auth (firebase_auth, firebase_core, flutter_core)',
+      inMode('guest'),
+      inMode('anonymous'),
       everyModule('bloc'),
       everyModule('riverpod'),
+      // The apps with every module in the other modes of the auth role
+      // come last.
+      everyModuleIn('bloc', 'guest'),
+      everyModuleIn('bloc', 'anonymous'),
+      everyModuleIn('riverpod', 'guest'),
+      everyModuleIn('riverpod', 'anonymous'),
     ]);
     // The apps with every module tell apart by the providers other than
-    // the first of their roles, bloc of the state managers.
+    // the first of their roles, bloc of the state managers, and those of
+    // another mode have the providers of the app with their modules.
     expect(
       [for (final app in apps) app.everyModuleWith],
       [
-        for (final _ in apps.skip(2)) isNull,
+        for (final _ in apps.skip(6)) isNull,
         isEmpty,
         [RiverpodModule.id],
+        isEmpty,
+        isEmpty,
+        [RiverpodModule.id],
+        [RiverpodModule.id],
+      ],
+    );
+    // An app of another mode has the mode as its option, and any other app
+    // has no option: its role chooses the first mode.
+    expect(
+      [
+        for (final app in apps)
+          if (app.modes.isNotEmpty || app.roleOptions.isNotEmpty)
+            [app.name, app.modes, app.roleOptions],
+      ],
+      [
+        for (final name in const [
+          'auth by firebase_auth with router',
+          'every module (bloc)',
+          'every module (riverpod)',
+        ])
+          for (final mode in const ['guest', 'anonymous'])
+            [
+              '$name --auth-mode=$mode',
+              {'auth-mode': mode},
+              {'auth-mode': mode},
+            ],
       ],
     );
   });
@@ -491,7 +553,13 @@ void main() {
     expect(failed, isEmpty);
     expect(apps, isNotEmpty);
     for (final app in apps) {
-      expect(app.roleOptions, {'flavor': 'dev'}, reason: '$app');
+      // An app of another mode of a role has that mode among its options
+      // too.
+      expect(
+        app.roleOptions,
+        {'flavor': 'dev', ...app.modes},
+        reason: '$app',
+      );
       expect(
         app.createArguments('app_1', '/apps'),
         contains('--flavor=dev'),
@@ -648,7 +716,9 @@ void main() {
     test(
         'are none for modules without such an option, and for an option that '
         'the options of every app give a value', () async {
-      final without = await modeAppsOf(smfModules);
+      final without = await modeAppsOf(
+        const [FlutterCoreModule(), BlocModule(), RiverpodModule()],
+      );
       expect(without.failed, isEmpty);
       expect(without.apps, isEmpty);
 
