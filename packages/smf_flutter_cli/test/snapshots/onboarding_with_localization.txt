@@ -74,7 +74,8 @@ With `shared_preferences`:
 - `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`, in the order the router asks them. A guard without `routes` is a gate over the whole app. The gates come first, and the first one whose `allows` is `false` decides: the router asks no guard after it. A guard with `routes` keeps the user only from the routes that it names there, each as `<feature>.<route>`, and comes after the gates.
 - To keep the user from the rest of the app, add a gate to that list, never a redirect to the files of the router. Put it at the place among the gates where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation. To keep the user from some routes only, add their names to the `routes` of the guard that stands for what they need, or add such a guard after the gates. Add the name of each route below such a route too: a route does not ask because the route above it does. The `routes` are outside the main navigation and outside every `flow`, and the screen that the app starts on is none of them.
 - A feature changes the value of `allows` of its guard, and the router navigates when it does. While the `allows` of a gate is `false`, the router shows its `redirectTo` in place of the whole stack, whichever location was asked for. Once the gates allow, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A gate with `resumes: false` does not bring the user back. When the `allows` of a guard with `resumes: false` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the gates allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
-- While the `allows` of a guard with `routes` is `false`, `go()`, `push()` or `replace()` of one of those routes opens its `redirectTo` over the page that the user is on, and the request waits. Back returns to that page, and a `push()` that waited completes with `null`. Once the value is `true`, the router closes the pages of the `flow` and does what was asked: `push()` shows the route over the page that the user was on and completes with the value of its page, `go()` shows it in place of the stack, and `replace()` in place of that page. When the value turns `false`, the router closes the pages of the `routes` with the pages over them, so the user is on the page below them.
+- While the `allows` of a guard with `routes` is `false`, `go()`, `push()` or `replace()` of one of those routes opens its `redirectTo` over the page that the user is on, and the request waits. Back returns to that page, and a `push()` that waited completes with `null`. Once the value is `true`, the router closes the pages of the `flow` and does what was asked: `push()` shows the route over the page that the user was on and completes with the value of its page, `go()` shows it in place of the stack, and `replace()` in place of that page. When the value turns `false`, the router closes the pages of the `routes` with the pages over them. The user is then on the page below them, or on the screen that the app starts on when no page is below, as after `go()` to one of the `routes`.
+- A screen neither closes itself nor navigates after it changed the value of `allows` of a guard: the router has done both by then. This goes for a screen of a `flow` that turned the value `true`, as after a sign-in, and for a screen of the `routes` that turned it `false`, as a screen with a sign-out button. A `pop()` after the change closes the page that is on top by then: the page that the user asked for, or the page below the one that the router closed, which may be the main navigation of the app.
 - The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of a gate whose `allows` is `false`. So no code navigates into the `flow` of a gate, and no screen of a `flow` navigates out of it once its guard allows: the router does. The first does not hold for a guard with `routes`. While it does not allow and every gate does, its `redirectTo` shows like any route, so a screen may open it with `push()`. Inside a `flow`, navigate with `push()` or `replace()`. `go()` takes the place of the pages below the `flow`, and the request that waits is lost with them.
 
 With `go_router`:
@@ -1183,9 +1184,10 @@ final class ShowInstead<L> implements WhenAsked<L>, WhenChanged<L> {
 /// a route of [flow] is among its pages.
 ///
 /// The router makes the request again once [GuardedNavigation.changed] closes
-/// the last of those pages, and drops it when the last of them leaves in
-/// another way, as when the user goes back. It keeps one request: a
-/// request that waited before is dropped.
+/// the last of those pages, unless that answer drops the request. And it
+/// drops the request when the last of them leaves in another way, as when
+/// the user goes back. It keeps one request: a request that waited before
+/// is dropped.
 final class ShowOver<L> implements WhenAsked<L> {
   /// Creates the answer.
   const ShowOver(this.location, {required this.flow});
@@ -1207,16 +1209,24 @@ final class ShowNothing<L> implements WhenAsked<L> {
 }
 
 /// The router closes the [pages] pages on top, at once and whatever its
-/// navigator shows over them, such as a dialog, and each `push()` that
-/// showed one of them completes with `null`. It then makes the request
-/// that waits again, if no page of the flow of that request is left.
+/// navigator shows over them, such as a dialog. Each `push()` that showed
+/// one of them completes with `null`, at once or when the frame is over.
+///
+/// Then, if a request waits: with [dropsRequest] the router drops it. And
+/// else it makes the request again, if no page of the flow of that request
+/// is left.
 final class ClosePages<L> implements WhenChanged<L> {
   /// Creates the answer.
-  const ClosePages(this.pages);
+  const ClosePages(this.pages, {required this.dropsRequest});
 
   /// How many pages to close, from the one on top down. The router said of
   /// each that it can close it on its own, and a page stays below them.
   final int pages;
+
+  /// Whether the page that the last flow was opened over is among those
+  /// that close: the request that waits for that flow was made on that
+  /// page, so it is not made again on the page below.
+  final bool dropsRequest;
 }
 
 /// The guards of the routes as the router of the app asks them, with what
@@ -1261,6 +1271,10 @@ final class GuardedNavigation<L> {
       if (!guard.resumes && guard.allows.value) guard,
   };
 
+  /// How many pages the flow that [asked] opened last was opened over: the
+  /// request that waits for that flow was made on the one on top of them.
+  int _below = 0;
+
   /// What the router does in place of showing [location], whose route has
   /// the full name [route], or `null` to show it.
   ///
@@ -1287,10 +1301,11 @@ final class GuardedNavigation<L> {
   ///   already; and else [ShowOver] of the target of the guard, with its
   ///   flow.
   ///
-  /// Nothing is remembered for a guard with routes, so the answer depends
-  /// on what the router did about the request before: asked twice about
-  /// one request, the class answers [ShowNothing] for a flow that the first
-  /// answer opened.
+  /// For a guard with routes the class remembers no location, only over
+  /// how many pages its flow was opened, for [changed]. So the answer
+  /// depends on what the router did about the request before: asked twice
+  /// about one request, the class answers [ShowNothing] for a flow that the
+  /// first answer opened.
   ///
   /// What a gate made the class remember is forgotten when no gate keeps
   /// the user from the location and it is outside every flow, or in one
@@ -1314,6 +1329,7 @@ final class GuardedNavigation<L> {
     if (over) return ShowInstead(start);
     if (guard == null) return null;
     if (onTopOf.any(guard.flow.contains)) return const ShowNothing();
+    _below = onTopOf.length;
     return ShowOver(locationOf(guard.redirectTo), flow: guard.flow);
   }
 
@@ -1352,7 +1368,11 @@ final class GuardedNavigation<L> {
   ///   over (see [flowIsOver]) or which a guard with [RouteGuard.routes] keeps
   ///   the user from: [ClosePages] of that page and the pages over it, if the
   ///   router can close each of them and a page stays below; and else
-  ///   [ShowInstead] of [start].
+  ///   [ShowInstead] of [start]. The request that waits is dropped when the
+  ///   pages that close reach below the flow that [asked] opened last: the
+  ///   page that the request was made on closes then, as when it asks for
+  ///   a condition that stopped holding while the flow of another one was
+  ///   open over it.
   ///
   /// So the pages of a flow close once its guards allow, also below a page
   /// that was pushed from them, and a page that asks for a condition
@@ -1396,9 +1416,9 @@ final class GuardedNavigation<L> {
       (page) => flowIsOver(page.route) || _guardKeepingFrom(page.route) != null,
     );
     if (lowest < 0) return null;
-    final leaving = all.take(lowest + 1);
-    return leaving.every((page) => page.pushed) && lowest + 1 < all.length
-        ? ClosePages(lowest + 1)
+    final closed = lowest + 1;
+    return all.take(closed).every((page) => page.pushed) && closed < all.length
+        ? ClosePages(closed, dropsRequest: all.length - closed < _below)
         : ShowInstead(start);
   }
 
@@ -1493,21 +1513,17 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// that the user comes back to once the gates allow it. The router knows
   /// a location by its URI, and `/` is the screen that the app starts on.
   ///
-  /// The router asks them once about each location, before go_router shows
-  /// it: [go], [push] and [replace] ask in [_redirected], with the pages
-  /// that the location is asked for on top of, and the `redirect` of
-  /// go_router asks in [_redirect] about the locations that go_router
-  /// parses on its own, which take the place of the stack.
+  /// The router asks them about each location before go_router shows it:
+  /// [go], [push] and [replace] ask in [_redirected], with the pages that
+  /// the location is asked for on top of, and the `redirect` of go_router
+  /// asks in [_redirect] about the locations that go_router parses on its
+  /// own, which take the place of the stack. The `redirect` runs for the
+  /// calls of the router too, with a location that the guards let the user
+  /// see or that they answered: they then answer nothing a second time.
   final GuardedNavigation<String> _guards = GuardedNavigation(
     start: '/',
     locationOf: (location) => location.path,
   );
-
-  /// How many calls of go_router the router is in that are its own: with a
-  /// location that it asked the guards about itself, or that they
-  /// answered, or with pages that are shown already. The `redirect` of
-  /// go_router runs within each of them, and does not ask the guards then.
-  int _asking = 0;
 
   /// The request that waits for a flow that the guards opened over the page
   /// on top, if there is one: the routes of the flow, how to make the
@@ -1528,7 +1544,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   @override
   void go(AppLocation location) {
     if (_redirected(location, again: () => go(location))) return;
-    _own(() => config.go(location.path));
+    config.go(location.path);
   }
 
   @override
@@ -1543,37 +1559,27 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     )) {
       return waiting.future;
     }
-    return _own(() => config.push<T>(location.path));
+    return config.push<T>(location.path);
   }
 
   @override
   void replace(AppLocation location) {
     if (_redirected(location, again: () => replace(location))) return;
-    _own(() => config.pushReplacement<Object?>(location.path));
-  }
-
-  /// Runs [navigate], a call of go_router that is the router's own: with a
-  /// location that it asked the guards about itself, or that they
-  /// answered, or with pages that are shown already.
-  R _own<R>(R Function() navigate) {
-    _asking++;
-    try {
-      return navigate();
-    } finally {
-      _asking--;
-    }
+    config.pushReplacement<Object?>(location.path);
   }
 
   /// Runs [navigate], of which the listeners of the screen hear only the
-  /// page that it ends on.
+  /// page that it ends on. That page is not there yet while the `redirect`
+  /// of go_router has a target to open over `/`: they then hear of the
+  /// target when [_redirect] opens it, and nothing of `/`.
   void _quietly(void Function() navigate) {
     final muted = _muted;
     _muted = true;
     try {
       navigate();
     } finally {
-      _muted = muted;
-      if (!muted) _showScreen();
+      _muted = muted || _opening != null;
+      if (!_muted) _showScreen();
     }
   }
 
@@ -1589,7 +1595,6 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// already, as when the user is on that screen. The listeners of the
   /// screen hear only of the target.
   String? _redirect(String? route, String location) {
-    if (_asking > 0) return null;
     switch (_guards.asked(route, location, onTopOf: const [])) {
       case null || ShowNothing():
         return null;
@@ -1640,7 +1645,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       case null:
         return false;
       case ShowInstead(location: final shown):
-        _own(() => config.go(shown));
+        config.go(shown);
         drop?.call();
       case ShowNothing():
         drop?.call();
@@ -1666,7 +1671,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     void Function()? drop,
   }) {
     _drop();
-    _own(() => unawaited(config.push<Object?>(target)));
+    unawaited(config.push<Object?>(target));
     _waiting = (flow: flow, again: again, drop: drop);
   }
 
@@ -1677,17 +1682,24 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     waiting?.drop?.call();
   }
 
-  /// Closes the [count] pages on top, each of which a push showed, and then
-  /// makes the request that waits again, if no page of its flow is left.
-  /// The listeners of the screen hear of the page that the user ends on.
+  /// Closes the [count] pages on top, each of which a push showed. Then it
+  /// drops the request that waits, with [dropsRequest], or else makes it
+  /// again, if no page of its flow is left. The listeners of the screen
+  /// hear of the page that the user ends on.
   ///
   /// The pages go out of the pages of go_router at once, with one
-  /// `restore()` of its pages without them, and go_router does not complete
-  /// the push of a page that leaves that way, so the router does. `pop()`
-  /// would close what the navigator shows on top, such as a dialog over the
-  /// page, and it cannot close a page that a push of the same turn showed,
-  /// which the navigator has not built yet.
-  void _close(int count) {
+  /// `restore()` of its pages without them. `pop()` would close what the
+  /// navigator shows on top, such as a dialog over the page, and it cannot
+  /// close a page that a push of the same turn showed, which the navigator
+  /// has not built yet.
+  ///
+  /// go_router does not complete the push of a page that leaves that way,
+  /// so the router does, once the frame is over. Until its next build the
+  /// navigator still has the routes of those pages. When one of them is
+  /// popped in that time, by the code of its screen or by the back button
+  /// of the system, go_router completes its push itself, and would throw
+  /// on a push that is completed already.
+  void _close(int count, {required bool dropsRequest}) {
     final waiting = _waiting;
     _waiting = null;
     _quietly(() {
@@ -1695,12 +1707,16 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       final closing = _pushedPages(
         shown.matches,
       ).toList().reversed.take(count).toList();
-      _own(() => config.restore(shown.remove(closing.last)));
-      for (final page in closing) {
-        if (!page.completer.isCompleted) page.completer.complete();
-      }
+      config.restore(shown.remove(closing.last));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final page in closing) {
+          if (!page.completer.isCompleted) page.completer.complete();
+        }
+      });
       if (waiting == null) return;
-      if (_shows(waiting.flow)) {
+      if (dropsRequest) {
+        waiting.drop?.call();
+      } else if (_shows(waiting.flow)) {
         _waiting = waiting;
       } else {
         waiting.again();
@@ -1753,9 +1769,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       case null:
         break;
       case ShowInstead(:final location):
-        _own(() => config.go(location));
-      case ClosePages(pages: final count):
-        _close(count);
+        config.go(location);
+      case ClosePages(pages: final count, :final dropsRequest):
+        _close(count, dropsRequest: dropsRequest);
     }
   }
 
