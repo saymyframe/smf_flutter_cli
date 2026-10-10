@@ -358,6 +358,11 @@ List<BrokenProvider> brokenProviders() => const [
           // A route that asks for a condition that does not hold is a
           // location that a guard keeps the user from too.
           MatrixExpectedFailure(
+            'test/router_flow_opens_test.dart',
+            _flowOpensTest,
+            _flowOpensOnce,
+          ),
+          MatrixExpectedFailure(
             'test/router_conditions_test.dart',
             _conditionsTest,
             _pushOpensFlow,
@@ -640,6 +645,11 @@ List<BrokenProvider> brokenProviders() => const [
         app: [BottomTabsModule.id, ..._appWithGates],
         failures: [
           MatrixExpectedFailure(
+            'test/router_flow_opens_test.dart',
+            _flowOpensTest,
+            _flowOpensOverPage,
+          ),
+          MatrixExpectedFailure(
             'test/router_conditions_test.dart',
             _conditionsTest,
             'The target opens over the page that the user is on, and the '
@@ -903,10 +913,8 @@ List<BrokenProvider> brokenProviders() => const [
         failures: [
           MatrixExpectedFailure(
             'test/router_flow_opens_test.dart',
-            'a request for a route that asks for a condition opens the '
-                'target of its guard once, without an error',
-            'A router throws nothing when it opens the target of a guard '
-                'for a request.',
+            _flowOpensTest,
+            _routerThrowsNothing,
           ),
         ],
       ),
@@ -1518,6 +1526,25 @@ const _conditionTwoTest =
     'for a route that asks for two conditions, the flow of the first guard '
     'that does not allow opens, and that of the next once the first allows; '
     'the router keeps one request waiting';
+
+/// The name of the test of one request for a route that asks for a
+/// condition, which needs the fixture gates without the late gate, and the
+/// reasons of its expectations: that the router throws nothing, that the
+/// target of the guard opens, and that it opens over the page that the user
+/// is on.
+const _flowOpensTest =
+    'a request for a route that asks for a condition opens the target of '
+    'its guard once, without an error';
+const _routerThrowsNothing =
+    'A router throws nothing when it opens the target of a guard for a '
+    'request.';
+const _flowOpensOnce =
+    'push() of a route that asks for a condition that does not hold opens '
+    'the target of the guard of the condition, of which the listeners of the '
+    'screen hear once.';
+const _flowOpensOverPage =
+    'The target of a guard of a condition opens once, over the page that the '
+    'user is on, which stays below it.';
 
 /// The name of the test of a push() before the router has a page, and the
 /// reasons of two of its expectations: that the flow of the first guard
