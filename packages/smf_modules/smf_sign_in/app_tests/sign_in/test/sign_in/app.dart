@@ -2,15 +2,17 @@
 // the start of the app with main() of lib/main.dart, which the app entry
 // role puts into every app, the screens of the sign-in and what they show,
 // in the language that the device asks for, the way to the sign-in through
-// the navigation of the router role, and a service of sign-in of the test,
-// which a test gives the session of the app to script what a call does.
+// the navigation of the router role, the screen of the account with its
+// entry on the settings screen, and a service of sign-in of the test, which
+// a test gives the session of the app to script what a call does.
 //
 // They know the module, and of the rest of the app only its roles: the
 // session of the auth role, whichever module provides the sign-in, in the
 // mode that the app has as a constant, and the router, which shows the
 // screens and leaves them. The matrix writes of_app.dart next to this
-// file: the screen that the app starts on and the texts of the module in
-// each language of the app. It sets up the mocks of the platform side of
+// file: the screen that the app starts on, the settings screen of the app
+// with the entry of the module, from the settings screen role, and the
+// texts of the module in each language of the app. It sets up the mocks of the platform side of
 // every module of the app before the tests of each test file
 // (flutter_test_config.dart), so the start-up runs whatever other modules
 // the app has, and a guard of the routes of another module is open.
@@ -23,6 +25,7 @@ import 'package:{{app_name}}/core/auth/app_session.dart';
 import 'package:{{app_name}}/core/auth/auth_service.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
+import 'package:{{app_name}}/features/sign_in/account_screen.dart';
 import 'package:{{app_name}}/features/sign_in/reset_password_screen.dart';
 import 'package:{{app_name}}/features/sign_in/sign_in_screen.dart';
 import 'package:{{app_name}}/features/sign_in/sign_in_widgets.dart';
@@ -55,6 +58,34 @@ final Finder builtSignInScreen = find.byType(
   SignInScreen,
   skipOffstage: false,
 );
+
+/// The screen of the account that the user sees, and every one that the
+/// app has built, also below another screen.
+final Finder accountScreen = find.byType(AccountScreen);
+final Finder builtAccountScreen = find.byType(
+  AccountScreen,
+  skipOffstage: false,
+);
+
+/// The settings screen of the app that the user sees, and every one that
+/// the app has built, also below another screen.
+final Finder shownSettingsScreen = find.byType(settingsScreen);
+final Finder builtSettingsScreen = find.byType(
+  settingsScreen,
+  skipOffstage: false,
+);
+
+/// The entry of the account on the settings screen.
+final Finder accountRow = find.byType(accountEntry);
+
+/// The action of the screen of the account that deletes the account.
+final Finder deleteAction = find.byType(DestructiveAction);
+
+/// The sheet that asks before the account is deleted, and what it shows of
+/// [matching].
+final Finder deleteSheet = find.byType(BottomSheet);
+Finder inDeleteSheet(Finder matching) =>
+    find.descendant(of: deleteSheet, matching: matching);
 
 /// The texts of the module in the language that the device asks for (see
 /// [useLanguage]), each by its name in the module.
@@ -235,6 +266,13 @@ Future<void> expectRouterTakesNoLinks(WidgetTester tester, String when) async {
   }
 }
 
+/// Goes to the settings screen of the app, in place of the stack, and waits
+/// for it.
+Future<void> goToSettings(WidgetTester tester) async {
+  navigatorOf(tester).go(settingsLocation);
+  await tester.pumpAndSettle();
+}
+
 /// Whether the navigator at the root of the app has a page to go back to.
 bool rootCanPop(WidgetTester tester) =>
     tester.state<NavigatorState>(find.byType(Navigator).first).canPop();
@@ -317,6 +355,14 @@ final class ScriptedAuthService implements AuthService {
 
   @override
   Stream<AuthUser?> get userChanges => _changes.stream;
+
+  /// Signs the user out without a call of the app, and tells of it: as when
+  /// the session of the user ends on the server, or the account is deleted
+  /// on another device.
+  void endSession() {
+    _user = null;
+    _changes.add(null);
+  }
 
   /// Notes [call], and answers it as the test says: once [hold] completes,
   /// with [failure], or with the user that [user] returns signed in.

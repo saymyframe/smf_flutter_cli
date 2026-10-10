@@ -1498,23 +1498,30 @@ Future<void> chooseLanguage(String? language) =>
 /// starts on, which the app shows once its user may see it; `otherPages`,
 /// a location of the app that is neither the one that the app starts on nor
 /// in the flow of a guard, with the type of its screen, or nothing in an
-/// app without such a route; and `signInTexts`, the texts of the module
+/// app without such a route; `settingsLocation` and `settingsScreen`, the
+/// location of the route that the provider of the settings screen role
+/// names as the settings screen and the type of that screen, and
+/// `accountEntry`, the type of the widget of the entry that the module
+/// gives that screen; and `signInTexts`, the texts of the module
 /// ([SignInModule.texts]), each by its name, in each language of the app,
-/// by the code of the language. The
-/// languages are those of the localization role of the app
+/// by the code of the language. The languages are those of the
+/// localization role of the app
 /// ([LocalizationRole.localesIn]), in its order, and English alone in an
 /// app without the role, whose screens have the English texts.
 const signInOfAppFile = 'test/sign_in/of_app.dart';
 
 /// The file at [signInOfAppFile] of [app], an app of the matrix with the
-/// router role, whose package is [packageName].
+/// router role and the settings screen role, whose package is
+/// [packageName].
 ///
-/// The screen is that of the route that the router role chose to start the
-/// app on, or the fallback start screen of the app entry role when no route
-/// of its modules can start it; the file imports its file with the prefix
-/// `screen`. A text of the module without a translation into a language of
-/// the app is the English one there, as the localization role says of the
-/// texts of an app.
+/// The screen that the app starts on is that of the route that the router
+/// role chose, or the fallback start screen of the app entry role when no
+/// route of its modules can start it; the file imports its file with the
+/// prefix `screen`. The settings screen and the entry come from the data of
+/// the settings screen role, whichever module provides it: the entry is
+/// the one that the module gave the role. A text of the module without a
+/// translation into a language of the app is the English one there, as the
+/// localization role says of the texts of an app.
 Map<String, String> _signInOfAppOf(MatrixApp app, String packageName) {
   final (import, screen) = _startScreenClassOf(app);
   final texts = _textsByLanguageOf(app, SignInModule.texts);
@@ -1545,13 +1552,32 @@ Map<String, String> _signInOfAppOf(MatrixApp app, String packageName) {
       ? ''
       : "import '${otherScreen.import.resolveUri(packageName)}' "
           'as other;\n';
+  final settingsInput = settingsScreenRole.hookInput(app.hook!);
+  final settings = _settingsRouteOf(app, settingsInput);
+  final entries = [
+    for (final RoleData(:value, :origin) in settingsInput.data)
+      if (value is SettingsEntry &&
+          origin == const ModuleOrigin(SignInModule.id))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The module ${SignInModule.id} gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry of the '
+      'account alone.',
+    );
+  }
+  final entry = entries.single.widget;
+  final settingsScreen = settings.route.screen;
   return {
     signInOfAppFile: '''
 // What the tests of the sign-in module, in test/sign_in, need to know of
 // the app, which the matrix of SMF writes from the data of the router role
-// of the app, from the texts of the module and from the languages of the
-// localization role of the app.
+// of the app and of the settings screen role of the app, from the texts of
+// the module and from the languages of the localization role of the app.
 import '${_navigationOf(packageName)}';
+import '${entry.import!.resolveUri(packageName)}' as entry;
+import '${settingsScreen.import.resolveUri(packageName)}' as settings;
 ${otherImport}import '${import.resolveUri(packageName)}' as screen;
 
 /// The type of the screen that the app starts on: that of the route that
@@ -1564,6 +1590,16 @@ const Type startScreen = screen.$screen;
 /// is somewhere else in the app; empty in an app without such a route.
 const List<({AppLocation location, Type screen})> otherPages = [
 $otherPage];
+
+/// The location of the route that shows the settings screen.
+const AppLocation settingsLocation = ${settings.locationClass}();
+
+/// The type of the settings screen.
+const Type settingsScreen = settings.${settingsScreen.className};
+
+/// The type of the widget of the entry of the account on the settings
+/// screen.
+const Type accountEntry = ${entry.codeWith('entry')};
 
 /// The texts of the screens of sign-in by the code of each language of the
 /// app, the first of which the app uses when the device asks for none of

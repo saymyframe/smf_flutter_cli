@@ -1,0 +1,476 @@
+// A test that continuous integration runs in the apps with the sign-in
+// module, in each mode of the auth role: the screen of the account, its
+// entry on the settings screen, and the ways between them. The session of
+// the app gets a service of the test, which says what each call does
+// (ScriptedAuthService).
+//
+// The entry shows the email address of the account, or that nobody is
+// signed in, and follows a change of the session that no screen made. A
+// tap on it shows the screen of the account over the settings screen. For
+// a user without an account, in an app that everyone may use, the router
+// shows the sign-in over the settings screen first: back from there drops
+// the request, and once the user has an account the router closes the
+// sign-in and shows the screen of the account.
+//
+// The screen signs out and deletes the account through the session, and
+// closes nothing itself. In an app that everyone may use, the router then
+// closes its page, and the user is on the settings screen; in an app that
+// signs an anonymous user in, a new one is signed in. In an app that asks
+// for an account, the sign-in takes the place of every screen. The
+// deletion asks first, in a sheet that is closed before the call. While a
+// call is on its way, its action shows it and neither action takes a tap.
+// A deletion that failed leaves the screen with the text of the failure.
+// And when the session ends while the sheet is open, as on the server, the
+// sheet goes with the page under it.
+//
+// The matrix writes of_app.dart next to this file, with the settings
+// screen of the app and the entry of the module, from the settings screen
+// role, whichever module provides it. The test starts the app once, since
+// the start-up of an app may not run twice, and each expectation gives its
+// reason.
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/auth/app_session.dart';
+import 'package:{{app_name}}/features/sign_in/sign_in_widgets.dart';
+
+import 'app.dart';
+import 'of_app.dart';
+
+const _email = 'account@sign-in-tests.example.com';
+const _password = 'Account-2468';
+
+/// Whether everyone may use the app, which then asks for an account only
+/// where a screen needs one.
+bool get _open => authMode != AuthMode.required;
+
+/// What the session says of a user without an account in the mode of the
+/// app.
+String get _withoutAccount =>
+    authMode == AuthMode.anonymous ? 'an anonymous user' : 'nobody';
+
+/// Signs in to the account of the test through the session, as a screen of
+/// the sign-in does, and waits for the screen.
+Future<void> _signIn(WidgetTester tester) async {
+  await appSession.signIn(email: _email, password: _password);
+  await tester.pumpAndSettle();
+}
+
+/// Opens the screen of the account from its entry on the settings screen.
+Future<void> _openAccount(WidgetTester tester) async {
+  await goToSettings(tester);
+  await tester.tap(accountRow);
+  await tester.pumpAndSettle();
+}
+
+/// Taps [target] and shows the frames of the next half a second, without
+/// waiting for a call that is on its way.
+Future<void> _tap(WidgetTester tester, Finder target) async {
+  await tester.tap(target);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+/// Checks what the entry of the account on the settings screen, which the
+/// user sees, shows below its title: [value].
+void _expectRow(String value, String when) {
+  expect(
+    shownSettingsScreen,
+    findsOneWidget,
+    reason: '$when, the user is on the settings screen.',
+  );
+  expect(
+    [
+      for (final shown in [text('accountTitle'), find.text(value)])
+        find.descendant(of: accountRow, matching: shown).evaluate().length,
+    ],
+    [1, 1],
+    reason: '$when, the entry of the account on the settings screen shows '
+        'its title and "$value".',
+  );
+}
+
+/// Whether the button of [action], an action of the screen of the account,
+/// takes a tap.
+bool _takesTap<T extends ButtonStyleButton>(
+  WidgetTester tester,
+  Finder action,
+) =>
+    tester
+        .widget<T>(find.descendant(of: action, matching: find.byType(T)))
+        .onPressed !=
+    null;
+
+/// Whether [action], an action of the screen of the account, shows that its
+/// call is on its way.
+bool _spins(Finder action) => find
+    .descendant(of: action, matching: find.byType(CircularProgressIndicator))
+    .evaluate()
+    .isNotEmpty;
+
+/// Checks that the user has no account and is where the mode of the app
+/// says, once [what] took the account: on the settings screen in an app
+/// that everyone may use, and on the sign-in, in place of every screen, in
+/// an app that asks for an account. No page of the account is left, and
+/// no sheet.
+void _expectWithoutAccount(WidgetTester tester, String what) {
+  expect(
+    sessionNow(),
+    _withoutAccount,
+    reason: 'Once $what, the session has $_withoutAccount, as the mode '
+        '${authMode.name} says.',
+  );
+  expect(
+    (builtAccountScreen.evaluate().length, deleteSheet.evaluate().length),
+    (0, 0),
+    reason: 'Once $what, the router has closed the page of the account, '
+        'with what was open over it: the screen closes nothing itself.',
+  );
+  if (_open) {
+    _expectRow(texts['notSignedIn']!, 'Once $what');
+    expect(
+      anySignInScreen,
+      findsNothing,
+      reason: 'Once $what, an app that everyone may use shows no sign-in.',
+    );
+  } else {
+    expect(
+      (signInScreen.evaluate().length, builtSettingsScreen.evaluate().length),
+      (1, 0),
+      reason: 'Once $what, an app that asks for an account shows the '
+          'sign-in in place of every screen.',
+    );
+  }
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  // A tap that reaches no widget fails the test where it misses.
+  WidgetController.hitTestWarningShouldBeFatal = true;
+
+  // A widget test fails after ten minutes by default; a test that hangs
+  // fails sooner.
+  testWidgets(
+    'the entry of the settings screen leads to the screen of the account, '
+    'through the sign-in for a user without one; a sign-out and a deletion, '
+    'which asks first, go through the session, and the router closes the '
+    'screen, also under an open sheet when the session ends elsewhere',
+    (tester) async {
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      useTallPhone(tester);
+      final languages = signInTexts.keys.toList();
+      await useLanguage(tester, languages.first);
+      await startApp(tester);
+      final service = ScriptedAuthService();
+      await appSession.start(service);
+      await tester.pumpAndSettle();
+      await _signIn(tester);
+      final uid = appSession.value.uid;
+
+      // The entry and the screen, in each language of the app.
+      await goToSettings(tester);
+      final couldPop = rootCanPop(tester);
+      for (final language in languages) {
+        await useLanguage(tester, language);
+        _expectRow(_email, 'With an account, in $language');
+      }
+      await tester.tap(accountRow);
+      await tester.pumpAndSettle();
+      expect(
+        (
+          accountScreen.evaluate().length,
+          builtSettingsScreen.evaluate().length
+        ),
+        (1, 1),
+        reason: 'A tap on the entry shows the screen of the account over '
+            'the settings screen.',
+      );
+      for (final language in languages) {
+        await useLanguage(tester, language);
+        expect(
+          [
+            text('signedInAs').evaluate().length,
+            find.widgetWithText(EmailAddress, _email).evaluate().length,
+            find
+                .widgetWithText(SubmitButton, texts['signOut']!)
+                .evaluate()
+                .length,
+            find
+                .widgetWithText(DestructiveAction, texts['deleteAccount']!)
+                .evaluate()
+                .length,
+          ],
+          [1, 1, 1, 1],
+          reason: 'The screen of the account shows the address of the '
+              'account, the button that signs out and the action that '
+              'deletes the account, in $language.',
+        );
+      }
+      await useLanguage(tester, languages.first);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      _expectRow(_email, 'Back from the screen of the account');
+      expect(
+        (builtAccountScreen.evaluate().length, rootCanPop(tester)),
+        (0, couldPop),
+        reason: 'The button of the app bar of the screen of the account '
+            'leads back to the settings screen, with the pages that were '
+            'below it.',
+      );
+
+      // A sign-out: the button shows the call, and neither action takes a
+      // tap while it is on its way.
+      await tester.tap(accountRow);
+      await tester.pumpAndSettle();
+      var hold = service.hold = Completer<void>();
+      var calls = service.calls.length;
+      await _tap(tester, submitButton);
+      expect(
+        (
+          service.calls.sublist(calls).join(', '),
+          _spins(submitButton),
+          _takesTap<TextButton>(tester, deleteAction),
+        ),
+        ('signOut', true, false),
+        reason: 'While the sign-out is on its way, its button spins and '
+            'the action that deletes the account takes no tap.',
+      );
+      await _tap(tester, submitButton);
+      expect(
+        service.calls.length - calls,
+        1,
+        reason: 'A tap on the button while the sign-out is on its way '
+            'makes no second call.',
+      );
+      hold.complete();
+      service.hold = null;
+      await tester.pumpAndSettle();
+      expect(
+        service.calls.length - calls,
+        authMode == AuthMode.anonymous ? 2 : 1,
+        reason: 'The screen signs out through the session, once; in an '
+            'app that signs an anonymous user in, the session then does.',
+      );
+      _expectWithoutAccount(tester, 'the user has signed out');
+
+      // Back to an account.
+      if (_open) {
+        // The entry asks for the route of the account: the router shows
+        // the sign-in over the settings screen first.
+        final guest = appSession.value.uid;
+        await tester.tap(accountRow);
+        await tester.pumpAndSettle();
+        expect(
+          (
+            signInScreen.evaluate().length,
+            builtSettingsScreen.evaluate().length
+          ),
+          (1, 1),
+          reason: 'For a user without an account, a tap on the entry shows '
+              'the sign-in over the settings screen.',
+        );
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        _expectRow(texts['notSignedIn']!, 'Back from that sign-in');
+        expect(
+          (
+            anySignInScreen.evaluate().length,
+            builtAccountScreen.evaluate().length,
+            rootCanPop(tester),
+          ),
+          (0, 0, couldPop),
+          reason: 'Back from the sign-in returns to the settings screen, '
+              'and the screen of the account does not show.',
+        );
+        await tester.tap(accountRow);
+        await tester.pumpAndSettle();
+        if (authMode == AuthMode.anonymous) {
+          // The anonymous user gets the account, on the screen that creates
+          // one.
+          await tester.tap(otherScreenAction);
+          await tester.pumpAndSettle();
+        }
+        await fill(tester, email: _email, password: _password);
+        await _tap(tester, submitButton);
+        await tester.pumpAndSettle();
+        expect(
+          sessionNow(),
+          'the account of $_email',
+          reason: 'The screens of the sign-in give the user the account.',
+        );
+        if (authMode == AuthMode.anonymous) {
+          expect(
+            appSession.value.uid,
+            guest,
+            reason: 'An anonymous user who signs up from the settings '
+                'screen keeps the id.',
+          );
+        }
+        expect(
+          [
+            accountScreen.evaluate().length,
+            builtSettingsScreen.evaluate().length,
+            anySignInScreen.evaluate().length,
+          ],
+          [1, 1, 0],
+          reason: 'Once the user has an account, the router closes the '
+              'sign-in and shows the screen of the account, which the '
+              'entry asked for, over the settings screen.',
+        );
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        _expectRow(_email, 'Back from the screen of the account');
+        expect(
+          rootCanPop(tester),
+          couldPop,
+          reason: 'No page of the sign-in is left below the settings '
+              'screen.',
+        );
+        await tester.tap(accountRow);
+        await tester.pumpAndSettle();
+      } else {
+        await fill(tester, email: _email, password: _password);
+        await _tap(tester, submitButton);
+        await tester.pumpAndSettle();
+        await _openAccount(tester);
+      }
+      expect(
+        accountScreen,
+        findsOneWidget,
+        reason: 'With an account again, the entry shows the screen of the '
+            'account.',
+      );
+
+      // The deletion asks first, in each language, and the way out of the
+      // sheet deletes nothing.
+      calls = service.calls.length;
+      await tester.tap(deleteAction);
+      await tester.pumpAndSettle();
+      for (final language in languages) {
+        await useLanguage(tester, language);
+        expect(
+          [
+            inDeleteSheet(text('deleteTitle')).evaluate().length,
+            inDeleteSheet(text('deleteText')).evaluate().length,
+            inDeleteSheet(find.widgetWithText(FilledButton, texts['delete']!))
+                .evaluate()
+                .length,
+            inDeleteSheet(find.widgetWithText(TextButton, texts['cancel']!))
+                .evaluate()
+                .length,
+          ],
+          [1, 1, 1, 1],
+          reason: 'The sheet asks whether to delete the account, with the '
+              'button that deletes and the way out, in $language.',
+        );
+      }
+      await useLanguage(tester, languages.first);
+      await tester.tap(inDeleteSheet(find.byType(TextButton)));
+      await tester.pumpAndSettle();
+      expect(
+        [
+          deleteSheet.evaluate().length,
+          accountScreen.evaluate().length,
+          service.calls.length - calls,
+        ],
+        [0, 1, 0],
+        reason: 'The way out of the sheet closes it and deletes nothing.',
+      );
+
+      // A deletion that fails leaves the screen, with the text of the
+      // failure.
+      service.failure = const AuthFailure(
+        AuthFailureReason.recentSignInRequired,
+      );
+      await tester.tap(deleteAction);
+      await tester.pumpAndSettle();
+      await tester.tap(inDeleteSheet(find.byType(FilledButton)));
+      await tester.pumpAndSettle();
+      expect(
+        (
+          service.calls.last,
+          failureMessage(AuthFailureReason.recentSignInRequired)
+              .evaluate()
+              .length,
+          deleteSheet.evaluate().length,
+          accountScreen.evaluate().length,
+          sessionNow(),
+        ),
+        ('deleteAccount', 1, 0, 1, 'the account of $_email'),
+        reason: 'A deletion that needs a recent sign-in leaves the user on '
+            'the screen of the account, which tells to sign out and sign '
+            'in again.',
+      );
+      service.failure = null;
+
+      // A deletion: the sheet is closed before the call, and the action
+      // shows the call.
+      hold = service.hold = Completer<void>();
+      calls = service.calls.length;
+      await tester.tap(deleteAction);
+      await tester.pumpAndSettle();
+      await _tap(tester, inDeleteSheet(find.byType(FilledButton)));
+      expect(
+        (
+          service.calls.sublist(calls).join(', '),
+          deleteSheet.evaluate().length,
+          _spins(deleteAction),
+          _takesTap<FilledButton>(tester, submitButton),
+        ),
+        ('deleteAccount', 0, true, false),
+        reason: 'The sheet is closed before the account is deleted. While '
+            'the deletion is on its way, its action spins and the button '
+            'that signs out takes no tap.',
+      );
+      hold.complete();
+      service.hold = null;
+      await tester.pumpAndSettle();
+      _expectWithoutAccount(tester, 'the account is deleted');
+      if (authMode == AuthMode.anonymous) {
+        expect(
+          appSession.value.uid,
+          isNot(uid),
+          reason: 'After the deletion, an app that signs an anonymous user '
+              'in has a new one.',
+        );
+      }
+      expect(
+        _open ? rootCanPop(tester) : couldPop,
+        couldPop,
+        reason: 'After the deletion, no page is left over the settings '
+            'screen.',
+      );
+
+      // The session ends elsewhere while the sheet is open: the sheet goes
+      // with the page under it.
+      if (!_open) {
+        await fill(tester, email: _email, password: _password);
+        await _tap(tester, submitButton);
+        await tester.pumpAndSettle();
+      } else {
+        await _signIn(tester);
+      }
+      await _openAccount(tester);
+      await tester.tap(deleteAction);
+      await tester.pumpAndSettle();
+      expect(
+        deleteSheet,
+        findsOneWidget,
+        reason: 'The sheet is open over the screen of the account.',
+      );
+      service.endSession();
+      await tester.pumpAndSettle();
+      _expectWithoutAccount(
+        tester,
+        'the session has ended elsewhere while the sheet was open',
+      );
+      expect(
+        _open ? rootCanPop(tester) : couldPop,
+        couldPop,
+        reason: 'No page and no sheet is left over the settings screen.',
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+}
