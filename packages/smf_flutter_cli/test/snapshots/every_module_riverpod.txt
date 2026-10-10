@@ -140,9 +140,9 @@ With `shared_preferences`:
 - `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
 
 - `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`, in the order the router asks them. A guard without `routes` is a gate over the whole app. The gates come first, and the first one whose `allows` is `false` decides: the router asks no guard after it. A guard with `routes` keeps the user only from the routes that it names there, each as `<feature>.<route>`, and comes after the gates.
-- To keep the user from the rest of the app, add a gate to that list, never a redirect to the files of the router. Put it at the place among the gates where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation. To keep the user from some routes only, add their names to the `routes` of the guard that stands for what they need, or add such a guard after the gates. Its `routes` are outside the main navigation and outside every `flow`, and the screen that the app starts on is none of them.
-- A feature changes the value of `allows` of its guard, and the router navigates when it does. While the value is `false`, the router shows the `redirectTo` in place of each location that the guard keeps the user from. The `redirectTo` takes the whole stack, for a guard with `routes` too, so the user cannot go back from it to the screen that they were on. Once the value is `true`, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A guard with `resumes: false` does not bring the user back. When its `allows` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the guards allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
-- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into the `flow` of a gate.
+- To keep the user from the rest of the app, add a gate to that list, never a redirect to the files of the router. Put it at the place among the gates where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation. To keep the user from some routes only, add their names to the `routes` of the guard that stands for what they need, or add such a guard after the gates. Add the name of each route below such a route too: a route does not ask because the route above it does. The `routes` are outside the main navigation and outside every `flow`, and the screen that the app starts on is none of them.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. While the value is `false`, the router shows the `redirectTo` in place of each location that the guard keeps the user from. The `redirectTo` takes the whole stack, for a guard with `routes` too, so the user cannot go back from it to the screen that they were on. Once the value is `true`, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A user who has gone on from the `redirectTo` of a guard with `routes` to another screen stays there. A guard with `resumes: false` does not bring the user back. When its `allows` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the guards allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into a `flow`. The exception is a guard with `routes`: while it does not allow and every gate does, its `redirectTo` shows like any route.
 
 With `go_router`:
 
@@ -2227,15 +2227,18 @@ abstract interface class AppNavigator {
 /// user from show the target too, in place of the whole stack, and `push()`
 /// completes with `null`. Once the guard allows, the router shows the
 /// location that the user last asked for, or the one that the guard took
-/// the user from if it [resumes], or else the screen that the app starts
-/// on.
+/// the user from if it [resumes]. With neither, it shows the screen that
+/// the app starts on in place of a page of the flow, and leaves a page
+/// outside the flow as it is: the user may be on one when a guard with
+/// [routes] starts allowing.
 ///
 /// The routes of its flow show only while it does not allow, or while
 /// another guard with the same flow does not. At any other time the router
 /// shows the screen that the app starts on in place of a location of the
 /// flow (see [flowIsOver]), or the target of another guard while that one
-/// does not allow. So the code of the app changes what [allows] reads and
-/// never navigates into the flow of a gate.
+/// does not allow. So the code of the app changes what [allows] reads. It
+/// navigates into a flow only while a guard with [routes] and that flow
+/// does not allow and every gate does, as to a sign-in that a guest opens.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -2281,7 +2284,8 @@ final class RouteGuard {
   /// A guard with routes stands for something that only those routes need,
   /// such as an account: every other route shows whatever the guard says.
   /// None of its routes is in the [flow] of a guard. To ask for it on one
-  /// more route, add the full name of the route here.
+  /// more route, add the full name of the route here, and that of each
+  /// route below it: a route does not ask because the route above it does.
   final Set<String>? routes;
 }
 
@@ -2402,17 +2406,25 @@ final class GuardedNavigation<L> {
   /// That holds for a gate and for a guard with [RouteGuard.routes] alike.
   /// A gate keeps the user in its flow, so the location is still what the
   /// user waits for when the gate allows. A guard with routes keeps the
-  /// user from its routes only, so the user may be on another screen when
-  /// it allows: the remembered location is shown all the same.
+  /// user from its routes only, so the user may leave its target for
+  /// another screen. So what was remembered is forgotten when the answer
+  /// is `null` for a location outside every flow, or [start] for a flow
+  /// that is over: the user has moved on. Every gate allows then, so only
+  /// a guard with routes could still keep the user from what was
+  /// remembered.
   ///
   /// Before that, what was remembered is forgotten if a guard that does
   /// not bring the user back stopped allowing, as [changed] says.
   ({L location})? asked(String? route, L location) {
     _forgetAfterStop();
     final target = redirectOf(route);
-    if (target == null) return flowIsOver(route) ? (location: start) : null;
-    if (!_inAFlow(route)) _remembered = (route: route, location: location);
-    return (location: locationOf(target));
+    if (target != null) {
+      if (!_inAFlow(route)) _remembered = (route: route, location: location);
+      return (location: locationOf(target));
+    }
+    final over = flowIsOver(route);
+    if (over || !_inAFlow(route)) _remembered = null;
+    return over ? (location: start) : null;
   }
 
   /// What the router shows in place of its stack now that a guard started
@@ -2444,7 +2456,14 @@ final class GuardedNavigation<L> {
   /// - [start], when the page on top is in a flow that is over (see
   ///   [flowIsOver]): its guard started allowing while the flow was shown, and
   ///   nothing is remembered, or a guard with [RouteGuard.routes] still
-  ///   keeps the user from what is.
+  ///   keeps the user from what is. That location is forgotten then, since
+  ///   the user moves on to [start].
+  ///
+  /// A known limit: the class looks for a flow that is over at the page on
+  /// top only, since its answer takes the place of the whole stack. So a
+  /// page of a flow that is over stays below another page, such as the
+  /// target of a guard with routes below a page that was pushed from it,
+  /// and the user sees it again when they go back to it.
   ({L location})? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
@@ -2469,8 +2488,10 @@ final class GuardedNavigation<L> {
     // A guard may still keep the user from the remembered location. For a
     // gate, the pages are those of its flow, which is not over. A guard
     // with routes leaves the user where they are, and that may be a flow
-    // that is over.
-    return flowIsOver(pages.firstOrNull?.route) ? (location: start) : null;
+    // that is over: the user moves on from it.
+    if (!flowIsOver(pages.firstOrNull?.route)) return null;
+    _remembered = null;
+    return (location: start);
   }
 
   /// Forgets the remembered location if a guard that does not bring the
