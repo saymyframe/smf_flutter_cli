@@ -212,7 +212,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
-      'sign_in — Sign-in with an email: sign-up, password reset, account screen',
+      'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -370,7 +370,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
-      'sign_in — Sign-in with an email: sign-up, password reset, account screen',
+      'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(
       run.lines,
