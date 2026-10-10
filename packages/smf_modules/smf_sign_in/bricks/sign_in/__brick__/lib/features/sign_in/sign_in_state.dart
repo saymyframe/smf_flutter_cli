@@ -79,9 +79,11 @@ final class AccountState {
   /// The action whose call is on its way, or `null` when none is. While it
   /// is, the screen takes no other action.
   ///
-  /// It stays so once the call succeeded. The user has no account then, and
-  /// what comes next is up to the router, which leaves the screen: the
-  /// screen neither closes itself nor navigates. A failure ends it.
+  /// It stays so once the call succeeded, for as long as the session has
+  /// no account. What comes next is up to the router, which leaves the
+  /// screen: the screen neither closes itself nor navigates. A failure
+  /// ends it, and so does a session that has an account again before the
+  /// router took the screen away.
   final AccountAction? busy;
 
   /// Why the last action failed, or `null` if none did.

@@ -753,6 +753,47 @@ const _scenarios = r'''
     result['$name: calls in the end'] = [...service.calls];
   }
 
+  // The session has an account again after a sign-out or a deletion that
+  // succeeded: a moment later, and in the turn in which the session lost
+  // it, as when code of the app signs a user in. The screen has not left,
+  // and its state is as before the call. Once the user has left the
+  // screen, its state listens to the session no more.
+  for (final deletes in [false, true]) {
+    for (final atOnce in [false, true]) {
+      final service = Scripted();
+      final session = await sessionOf(service);
+      await session.signIn(email: email, password: password);
+      void signInAgain() {
+        if (!session.hasAccount.value) {
+          unawaited(session.signIn(email: email, password: password));
+        }
+      }
+
+      if (atOnce) session.addListener(signInAgain);
+      final screen = accountScreen(session, deletes: deletes);
+      await screen.submit();
+      await turn();
+      if (!atOnce) await session.signIn(email: email, password: password);
+      await turn();
+      final name = '${deletes ? 'delete' : 'sign-out'}, '
+          'signed in ${atOnce ? 'at once' : 'later'}';
+      result['$name: state'] = screen.state();
+      result['$name: session'] = show(session.value);
+      // The next call is made.
+      service.failure = const AuthFailure(AuthFailureReason.network);
+      session.removeListener(signInAgain);
+      final calls = service.calls.length;
+      await screen.submit();
+      await turn();
+      result['$name: next call'] = service.calls.length - calls;
+      result['$name: state then'] = screen.state();
+      await screen.leave();
+      await turn();
+      result['$name: listeners after'] = session.hasListeners;
+      session.dispose();
+    }
+  }
+
   // What gives the widgets of the app the session follows a change that no
   // screen made, such as a session that ended on the server, and listens no
   // more once the app is torn down.
@@ -2445,9 +2486,40 @@ void main() {
       });
 
       test(
+          'is busy after a sign-out or a deletion that succeeded only while '
+          'the session has no account: once the user has one again, a '
+          'moment later or in the turn of the call, the screen is back and '
+          'takes the next call, and a screen that the user left listens to '
+          'the session no more', () {
+        for (final action in ['sign-out', 'delete']) {
+          for (final when in ['later', 'at once']) {
+            final name = '$action, signed in $when';
+
+            expect(
+              result['$name: session'],
+              'account account ann@example.com',
+              reason: name,
+            );
+            expect(
+              result['$name: state'],
+              'busy: null, failure: null',
+              reason: name,
+            );
+            expect(result['$name: next call'], 1, reason: name);
+            expect(
+              result['$name: state then'],
+              'busy: null, failure: network',
+              reason: name,
+            );
+            expect(result['$name: listeners after'], isFalse, reason: name);
+          }
+        }
+      });
+
+      test(
           'signs out and deletes the account through the session, and '
-          'stays busy with that action once it succeeded: the router '
-          'leaves the screen then', () {
+          'stays busy with that action once it succeeded, while the '
+          'session has no account: the router leaves the screen then', () {
         for (final (screen, action, call) in [
           ('sign-out', 'signOut', 'signOut'),
           ('delete', 'delete', 'deleteAccount'),
