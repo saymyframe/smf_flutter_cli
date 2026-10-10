@@ -1399,7 +1399,9 @@ void main() {
       // The way to the other screen is the same kind of action on both
       // screens, in the middle below the button.
       expect(
-          create['onPressed'], 'widget.busy ? null : widget.onCreateAccount');
+        create['onPressed'],
+        'widget.busy ? null : widget.onCreateAccount',
+      );
       expect(have['onPressed'], 'widget.busy ? null : widget.onSignIn');
       for (final action in [create, have]) {
         expect(action.keys, ['onPressed', 'child']);
