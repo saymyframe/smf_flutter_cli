@@ -14,7 +14,8 @@
 /// the localization role: in the language of the app with the role, and in
 /// English without it. It also has a route outside the main navigation,
 /// with a route below it, that asks for a condition of the fixture badge
-/// role, which it uses. The third has two guards
+/// role, which it uses, and a route that asks for the same below a route
+/// that asks for nothing. The third has two guards
 /// over gates that a test opens and closes, each with a route to show while
 /// its gate is closed, the first with a route below it, and a third guard
 /// that stands for that condition and shows the route of the first. It
@@ -132,11 +133,14 @@ final class FakeFeatureModule extends SmfModule {
 /// And it uses the fixture badge role: its route `/fake_second/members`,
 /// outside the main navigation, asks for the condition that the role
 /// publishes ([BadgeRole.holder]), and so does the route below it, by being
-/// there. The module declares no guard and knows no module that has one.
-/// In an app with a guard that stands for the condition, the router shows
-/// the target of that guard in place of the two routes while the condition
-/// does not hold. In an app without one, as in an app without the role,
-/// they show like any other route.
+/// there. A third route asks for it by itself, `/fake_second/outside/vault`,
+/// below the route outside the main navigation, which asks for nothing: a
+/// router that asked the guards about the route above a route would show
+/// it to everyone. The module declares no guard and knows no module that
+/// has one. In an app with a guard that stands for the condition, the
+/// router shows the target of that guard in place of the three routes
+/// while the condition does not hold. In an app without one, as in an app
+/// without the role, they show like any other route.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
@@ -216,6 +220,7 @@ final class FakeSecondModule extends SmfModule {
               ),
               startCandidate: true,
             ),
+            // The route below it asks for the condition, and it does not.
             Route(
               '/outside',
               name: 'outside',
@@ -223,6 +228,14 @@ final class FakeSecondModule extends SmfModule {
                 'FixtureOutsideScreen',
                 import: ImportRef.app('$_folder/fixture_outside_screen.dart'),
               ),
+              children: [
+                Route(
+                  'vault',
+                  name: 'vault',
+                  screen: ScreenRef('FixtureVaultScreen', import: _members),
+                  conditions: [BadgeRole.holder],
+                ),
+              ],
             ),
             // The route below it asks for the condition too.
             Route(

@@ -75,12 +75,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
       ),
       // A guard that stands for a condition, which keeps the user only from
       // the routes that ask for it, whichever module provides the router:
-      // two routes of the second fixture feature ask for the condition of
-      // the fixture badge role, and the third guard of the fixture gates
-      // stands for it, with the flow of the first, a gate. The tests take
-      // the badge away and give it back, next to the gates. The apps it
-      // applies to have the tests of router_screens and of router_guards,
-      // whose helpers it uses.
+      // three routes of the second fixture feature ask for the condition
+      // of the fixture badge role, one of them below a route that asks for
+      // nothing, and the third guard of the fixture gates stands for it,
+      // with the flow of the first, a gate. The tests take the badge away
+      // and give it back, next to the gates, also while a page that asks
+      // for the condition is on the stack. The apps it applies to have the
+      // tests of router_screens and of router_guards, whose helpers it
+      // uses.
       MatrixAppTest(
         '$appTests/router_conditions',
         appliesTo: (app) =>

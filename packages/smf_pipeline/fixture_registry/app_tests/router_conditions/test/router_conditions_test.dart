@@ -3,10 +3,12 @@
 // and the second fixture feature: a guard that stands for a condition
 // (RouteGuard.condition) keeps the user only from the routes that ask for
 // that condition (Route.conditions), as RouterRole.guardedNavigation says.
-// Two routes of the second fixture feature ask for the condition of the
-// fixture badge role, one by being below the other, and the third guard of
-// the fixture gates stands for it. The feature knows nothing of that
-// guard: both know only the role.
+// Three routes of the second fixture feature ask for the condition of the
+// fixture badge role, and the third guard of the fixture gates stands for
+// it. One of them asks by being below another, and one asks by itself,
+// below a route that asks for nothing: a router that asked the guards
+// about the route above a route would show it to everyone. The feature
+// knows nothing of that guard: both know only the role.
 //
 // While the condition does not hold, the router shows the target of the
 // guard in place of a route that asks for it, whichever of go(), push(),
@@ -16,11 +18,11 @@
 // is over only once the condition holds too. Once it holds, the router
 // shows the location that was asked for, and the flow is over.
 //
-// The test looks at the page on top and at the screens of the routes that
-// ask for the condition, and not at the pages below the target of the
-// guard, which are up to what the role answers for such a guard. Each
-// expectation gives its reason, which a provider of the role with a known
-// bug fails the test with (brokenProviders of the fixture registry).
+// The target takes the place of the whole stack, as the target of a gate
+// does, whichever page the route was asked from, and such a push()
+// completes with null. Each expectation gives its reason, which a provider
+// of the role with a known bug fails the test with (brokenProviders of the
+// fixture registry).
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
@@ -68,12 +70,16 @@ void main() {
       }
 
       /// Checks that the target of the guard of the condition is on top,
-      /// which the listeners heard of once, and that the router built no
-      /// screen of a route that asks for the condition. A failure gives
-      /// [reason].
+      /// which the listeners heard of once, that it is the only page, and
+      /// that the router built no screen of a route that asks for the
+      /// condition. A failure gives [reason].
       void expectTargetOnTop(String reason) {
         expect(heard(), [gateScreen], reason: reason);
-        expect(builtScreens(tester).last, FixtureGateScreen, reason: reason);
+        expect(
+          builtScreens(tester),
+          [FixtureGateScreen],
+          reason: '$reason The target takes the place of the whole stack.',
+        );
         expect(
           builtForHolders(tester),
           isEmpty,
@@ -82,11 +88,11 @@ void main() {
         );
       }
 
-      /// How many pages of the two routes that ask for the condition came
-      /// on the navigators of the router so far.
+      /// How many pages of the routes that ask for the condition came on
+      /// the navigators of the router so far.
       int pagesForHolders() => pagesShown()
           .where(
-            (name) => name == membersScreen.$1 || name == memberCardScreen.$1,
+            {membersScreen.$1, memberCardScreen.$1, vaultScreen.$1}.contains,
           )
           .length;
 
@@ -176,37 +182,81 @@ void main() {
             'app starts on.',
       );
 
-      // push() of the route below the route that asks for it.
+      // go() to the route that asks for it by itself, below a route that
+      // asks for nothing: the router asks about the route of the location,
+      // not about the route above it.
       fixtureHolder.value = false;
       await tester.pumpAndSettle();
       expect(heard(), isEmpty, reason: _stays);
-      pushed(shown(tester, FixtureHomeScreen).nav.fakeSecond.memberCard());
+      (await toDetails(2)).nav.fakeSecond.vault().go();
       await tester.pumpAndSettle();
       expectTargetOnTop(
-        'push() of a route below a route that asks for a condition that '
-        'does not hold shows the target of the guard of the condition.',
+        'go() to a route that asks for a condition that does not hold, '
+        'below a route that asks for none, shows the target of the guard of '
+        'the condition.',
       );
       fixtureHolder.value = true;
       await tester.pumpAndSettle();
       expect(
         heard(),
-        [memberCardScreen],
+        [vaultScreen],
+        reason: 'Once the condition holds, the router shows the location '
+            'that was asked for, below a route that asks for no condition.',
+      );
+      expect(
+        builtForHolders(tester),
+        [FixtureVaultScreen],
+        reason: 'Once the condition holds, the router shows the location '
+            'that was asked for, below a route that asks for no condition.',
+      );
+
+      // push() of that route.
+      shown(tester, FixtureVaultScreen).nav.fakeFeature.home().go();
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [startScreen],
+        reason: 'A route that asks for no condition shows as it is.',
+      );
+      fixtureHolder.value = false;
+      await tester.pumpAndSettle();
+      expect(heard(), isEmpty, reason: _stays);
+      final vault = pushed(
+        shown(tester, FixtureHomeScreen).nav.fakeSecond.vault(),
+      );
+      await tester.pumpAndSettle();
+      expectTargetOnTop(
+        'push() of a route that asks for a condition that does not hold, '
+        'below a route that asks for none, shows the target of the guard of '
+        'the condition.',
+      );
+      expect(
+        vault(),
+        isNull,
+        reason: 'push() of a route that asks for a condition that does not '
+            'hold completes with null.',
+      );
+      fixtureHolder.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [vaultScreen],
         reason: 'Once the condition holds, the router shows the location '
             'that push() asked for.',
       );
       expect(
         builtForHolders(tester).last,
-        FixtureMemberCardScreen,
+        FixtureVaultScreen,
         reason: 'Once the condition holds, the router shows the location '
             'that push() asked for.',
       );
 
-      // replace() with a route that asks for it.
+      // replace() with that route.
       final replaced = await toDetails(3);
       fixtureHolder.value = false;
       await tester.pumpAndSettle();
       expect(heard(), isEmpty, reason: _stays);
-      replaced.nav.fakeSecond.members().replace();
+      replaced.nav.fakeSecond.vault().replace();
       await tester.pumpAndSettle();
       expectTargetOnTop(
         'replace() with a route that asks for a condition that does not '
@@ -216,7 +266,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         heard(),
-        [membersScreen],
+        [vaultScreen],
         reason: 'Once the condition holds, the router shows the location '
             'that replace() asked for.',
       );

@@ -16,7 +16,11 @@
 // condition too, and once that gate allows while the condition still does
 // not hold, the user leaves its flow for the screen that the app starts
 // on. And when the guard of the condition stops allowing, the router
-// forgets the location that another guard took the user from.
+// forgets the location that another guard took the user from. Last, the
+// user asks for a route whose condition does not hold and moves on from
+// the target of the guard to another screen: the router forgets what was
+// asked for, so a gate that brings the user back brings them to that
+// screen, and nothing happens once the condition holds.
 //
 // Each expectation gives its reason, which a provider of the role with a
 // known bug fails the test with (brokenProviders of the fixture registry).
@@ -289,6 +293,63 @@ void main() {
         isEmpty,
         reason: 'The router builds no screen of a route whose condition '
             'does not hold.',
+      );
+
+      // The user asks for a route whose condition does not hold, and moves
+      // on from the target of its guard to another screen: the router
+      // forgets what was asked for. So a gate that brings the user back
+      // takes them from that screen and brings them back to it, and
+      // nothing happens once the condition holds.
+      shown(tester, FixtureHomeScreen).nav.fakeSecond.members().go();
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [gateScreen],
+        reason: 'go() to a route that asks for a condition that does not '
+            'hold shows the target of the guard of the condition.',
+      );
+      shown(tester, FixtureGateScreen).nav.fakeFeature.details(id: 7).go();
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [('fake_feature.details', '/fake_feature/details/7')],
+        reason: 'While a condition does not hold, go() from the target of '
+            'its guard to a route that asks for no condition shows the '
+            'route.',
+      );
+      fixtureSecondGate.value = false;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [secondGateScreen],
+        reason: 'When a gate stops allowing, the router shows its target.',
+      );
+      fixtureSecondGate.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [('fake_feature.details', '/fake_feature/details/7')],
+        reason: 'Once a gate that brings the user back allows, the router '
+            'shows the screen that the user moved on to from the target of '
+            'a guard of a condition: what was asked for behind that guard '
+            'is forgotten, and does not stand in the way.',
+      );
+      final movedOn = details(tester, 7);
+      fixtureHolder.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        isEmpty,
+        reason: 'When a condition comes to hold after the user moved on '
+            'from the target of its guard, the router leaves the user where '
+            'they are.',
+      );
+      expect(
+        movedOn.mounted,
+        isTrue,
+        reason: 'When a condition comes to hold after the user moved on '
+            'from the target of its guard, the router leaves the user where '
+            'they are.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

@@ -2451,6 +2451,7 @@ Widget _screen(AppLocation location) => switch (location) {
     screen1.FixtureDetailsScreen(id: id, tab: tab),
   FakeSecondSecondLocation() => const screen2.FixtureSecondScreen(),
   FakeSecondOutsideLocation() => const screen3.FixtureOutsideScreen(),
+  FakeSecondVaultLocation() => const screen4.FixtureVaultScreen(),
   FakeSecondMembersLocation() => const screen4.FixtureMembersScreen(),
   FakeSecondMemberCardLocation() => const screen4.FixtureMemberCardScreen(),
 };
@@ -2585,6 +2586,21 @@ final class FakeSecondOutsideLocation extends AppLocation {
   String get path => '/fake_second/outside';
 }
 
+/// The location of `fake_second.vault`: `/fake_second/outside/vault`.
+final class FakeSecondVaultLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondVaultLocation();
+
+  @override
+  String get routeName => 'fake_second.vault';
+
+  @override
+  String get path => '/fake_second/outside/vault';
+
+  @override
+  AppLocation get parent => const FakeSecondOutsideLocation();
+}
+
 /// The location of `fake_second.members`: `/fake_second/members`.
 final class FakeSecondMembersLocation extends AppLocation {
   /// Creates the location.
@@ -2661,6 +2677,9 @@ final class FakeSecondRoutes {
 
   /// The route `fake_second.outside`: `/fake_second/outside`.
   NavLink outside() => NavLink(_context, const FakeSecondOutsideLocation());
+
+  /// The route `fake_second.vault`: `/fake_second/outside/vault`.
+  NavLink vault() => NavLink(_context, const FakeSecondVaultLocation());
 
   /// The route `fake_second.members`: `/fake_second/members`.
   NavLink members() => NavLink(_context, const FakeSecondMembersLocation());
@@ -2909,6 +2928,18 @@ class FixtureMembersScreen extends StatelessWidget {
 class FixtureMemberCardScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureMemberCardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen for the holders of a badge below the screen outside the main
+/// navigation, which is for everyone: its route asks for the condition by
+/// itself.
+@FixtureScreen('fake_second.vault')
+class FixtureVaultScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureVaultScreen({super.key});
 
   @override
   Widget build(BuildContext context) => const Scaffold();

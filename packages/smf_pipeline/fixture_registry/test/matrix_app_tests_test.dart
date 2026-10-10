@@ -377,7 +377,7 @@ void main() {
           for (final route in facade.routesAsking(BadgeRole.holder))
             route.fullName,
         ],
-        ['fake_second.members', 'fake_second.memberCard'],
+        ['fake_second.vault', 'fake_second.members', 'fake_second.memberCard'],
         reason: app.name,
       );
     }
@@ -489,12 +489,27 @@ void main() {
         reason: app.name,
       );
       expect(guard!.guard.resumes, isFalse, reason: app.name);
-      // A route asks for the condition by being below one that does, and
-      // both are outside the main navigation.
+      // One route asks for the condition by itself below a route that asks
+      // for nothing, so that a router has to ask about the route of a
+      // location and not about the route above it. Another asks by being
+      // below one that does. All are outside the main navigation.
       final routes = facade.routesAsking(BadgeRole.holder);
+      String asks(FacadeRoute route) {
+        final own = '${route.route.name} ${route.route.conditions.length}';
+        final parent = route.parent;
+        return parent == null
+            ? own
+            : '$own below ${parent.route.name}, which asks for '
+                '${parent.conditions.length}';
+      }
+
       expect(
-        [for (final route in routes) route.route.conditions.length],
-        [1, 0],
+        routes.map(asks),
+        [
+          'vault 1 below outside, which asks for 0',
+          'members 1',
+          'memberCard 0 below members, which asks for 1',
+        ],
         reason: app.name,
       );
       for (final route in routes) {
@@ -618,6 +633,7 @@ void main() {
           'fake_feature.home',
           'fake_second.second',
           'fake_second.outside',
+          'fake_second.vault',
           'fake_second.members',
           'fake_second.memberCard',
           'fake_late_gate.gate',

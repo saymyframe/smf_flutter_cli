@@ -314,9 +314,7 @@ List<BrokenProvider> brokenProviders() => const [
           ),
           MatrixExpectedFailure(
             'test/router_walk_guards_test.dart',
-            'the walk of the routes holds while a guard keeps the user out, '
-                'once the flows of the guards are over, and while a condition '
-                'does not hold',
+            _walkGuardsTest,
             'While a guard does not allow, each location outside its flow '
                 'shows the target of the guard, and each location of its flow '
                 'its own screen.',
@@ -415,6 +413,13 @@ List<BrokenProvider> brokenProviders() => const [
             'Once the gate and the condition allow, the router shows the '
                 'latest location that was asked for.',
           ),
+          // Nor the target of the guard of a condition that stops holding
+          // on a page that asks for it.
+          MatrixExpectedFailure(
+            'test/router_condition_stops_test.dart',
+            _conditionStopsTest,
+            _pushedPageLeaves,
+          ),
         ],
       ),
       BrokenProvider(
@@ -449,6 +454,53 @@ List<BrokenProvider> brokenProviders() => const [
             _conditionsTest,
             'replace() with a route that asks for a condition that does not '
                 'hold shows the target of the guard of the condition.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerNamingPushedPagesAfterPageBelow,
+        role: routerRole,
+        bug: 'It tells the guards of the routes of a page that a push showed '
+            'under the route of the location below the pushed pages, not '
+            'under its own. A gate keeps the user from both, so only a guard '
+            'that stands for a condition tells: when the condition stops '
+            'holding, a pushed page that asks for it stays over a page that '
+            'asks for nothing.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_condition_stops_test.dart',
+            _conditionStopsTest,
+            _pushedPageLeaves,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerAskingAboutTopLevelRoute,
+        role: routerRole,
+        bug: 'It asks the guards of the routes about a location that go(), '
+            'push() or replace() is asked to show by the name of the '
+            'top-level route of the location, not by that of its own route. '
+            'A gate answers the same for both, so only a guard that stands '
+            'for a condition tells: a route that asks for the condition '
+            'below a route that asks for nothing shows to everyone.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_conditions_test.dart',
+            _conditionsTest,
+            'go() to a route that asks for a condition that does not hold, '
+                'below a route that asks for none, shows the target of the '
+                'guard of the condition.',
+          ),
+          // The walk goes to that route while the condition does not hold.
+          MatrixExpectedFailure(
+            'test/router_walk_guards_test.dart',
+            _walkGuardsTest,
+            'While a condition does not hold, each location that asks for it '
+                'shows the target of its guard, each location of the flow of '
+                'that guard its own screen, and each other location what it '
+                'shows with guards that allow.',
           ),
         ],
       ),
@@ -934,7 +986,7 @@ List<BrokenProvider> brokenProviders() => const [
 /// tests close and open, with the provider of the fixture badge role, whose
 /// condition one of those guards stands for; the fixture feature, whose
 /// screens the guards keep the user from, and on whose screen the app
-/// starts; the second fixture feature, two routes of which ask for that
+/// starts; the second fixture feature, three routes of which ask for that
 /// condition; and what the fixture feature and the tests of the listeners
 /// of the screen need.
 const List<ModuleId> _appWithGates = [
@@ -982,6 +1034,24 @@ const _returnTest =
     'a guard that does not bring the user back shows the screen that the app '
     'starts on once it allows again, or a location that was asked for while '
     'it did not allow';
+
+/// The name of the test of the walk of the routes while a guard keeps the
+/// user out.
+const _walkGuardsTest =
+    'the walk of the routes holds while a guard keeps the user out, once the '
+    'flows of the guards are over, and while a condition does not hold';
+
+/// The name of the test of a condition that stops holding on a page that
+/// asks for it, and the reason of its first expectation of the target of
+/// the guard.
+const _conditionStopsTest =
+    'a condition that stops holding shows the target of its guard in place '
+    'of a page that asks for it, a pushed one and one below a route that '
+    'asks for nothing';
+const _pushedPageLeaves =
+    'When a condition stops holding, the router shows the target of its '
+    'guard in place of a pushed page that asks for the condition, over a '
+    'page that asks for none.';
 
 /// The names of the two tests of a guard that stands for a condition: of
 /// the routes that ask for it, and of the guard next to the gates.

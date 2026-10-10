@@ -836,8 +836,10 @@ void main() {
       // two gates, with the stage of both: the app asks it after every
       // gate, that of the late gate too. Its routes are those of the second
       // fixture feature that ask for the condition of the fixture badge
-      // role, one of them by being below the other.
-      const routes = "{'fake_second.members', 'fake_second.memberCard'}";
+      // role: one below a route that asks for nothing, and two more, one
+      // of them by being below the other.
+      const routes = "{'fake_second.vault', 'fake_second.members', "
+          "'fake_second.memberCard'}";
       const expected = [
         'fake_gate.first',
         'fake_gate.second',
@@ -905,7 +907,8 @@ void main() {
         );
       }
 
-      const routes = 'fake_second.members, fake_second.memberCard';
+      const routes =
+          'fake_second.vault, fake_second.members, fake_second.memberCard';
       // The fixture gates depend on one of the two fixture state managers.
       expect(
         await conditionIn(everyFixture()),

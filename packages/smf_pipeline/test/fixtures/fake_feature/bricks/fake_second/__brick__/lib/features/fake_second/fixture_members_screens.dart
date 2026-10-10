@@ -22,3 +22,15 @@ class FixtureMemberCardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const Scaffold();
 }
+
+/// A screen for the holders of a badge below the screen outside the main
+/// navigation, which is for everyone: its route asks for the condition by
+/// itself.
+{{{smf_router__screen_annotations__fake_second__fixture_vault_screen}}}
+class FixtureVaultScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureVaultScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
