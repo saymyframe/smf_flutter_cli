@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+import 'sign_in_page.dart';
 import 'sign_in_widgets.dart';
 
 /// What the screen of the sign-in shows: the form with the email address
