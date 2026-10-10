@@ -96,8 +96,9 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 
 - `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`, in the order the router asks them. A guard without `routes` is a gate over the whole app. The gates come first, and the first one whose `allows` is `false` decides: the router asks no guard after it. A guard with `routes` keeps the user only from the routes that it names there, each as `<feature>.<route>`, and comes after the gates.
 - To keep the user from the rest of the app, add a gate to that list, never a redirect to the files of the router. Put it at the place among the gates where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation. To keep the user from some routes only, add their names to the `routes` of the guard that stands for what they need, or add such a guard after the gates. Add the name of each route below such a route too: a route does not ask because the route above it does. The `routes` are outside the main navigation and outside every `flow`, and the screen that the app starts on is none of them.
-- A feature changes the value of `allows` of its guard, and the router navigates when it does. While the value is `false`, the router shows the `redirectTo` in place of each location that the guard keeps the user from. The `redirectTo` takes the whole stack, for a guard with `routes` too, so the user cannot go back from it to the screen that they were on. Once the value is `true`, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A user who has gone on from the `redirectTo` of a guard with `routes` to another screen stays there. A guard with `resumes: false` does not bring the user back. When its `allows` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the guards allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
-- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of another guard whose `allows` is `false`. So no code navigates into a `flow`. The exception is a guard with `routes`: while it does not allow and every gate does, its `redirectTo` shows like any route.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. While the `allows` of a gate is `false`, the router shows its `redirectTo` in place of the whole stack, whichever location was asked for. Once the gates allow, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A gate with `resumes: false` does not bring the user back. When the `allows` of a guard with `resumes: false` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the gates allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
+- While the `allows` of a guard with `routes` is `false`, `go()`, `push()` or `replace()` of one of those routes opens its `redirectTo` over the page that the user is on, and the request waits. Back returns to that page, and a `push()` that waited completes with `null`. Once the value is `true`, the router closes the pages of the `flow` and does what was asked: `push()` shows the route over the page that the user was on and completes with the value of its page, `go()` shows it in place of the stack, and `replace()` in place of that page. When the value turns `false`, the router closes the pages of the `routes` with the pages over them, so the user is on the page below them.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of a gate whose `allows` is `false`. So no code navigates into the `flow` of a gate, and no screen of a `flow` navigates out of it once its guard allows: the router does. The first does not hold for a guard with `routes`. While it does not allow and every gate does, its `redirectTo` shows like any route, so a screen may open it with `push()`. Inside a `flow`, navigate with `push()` or `replace()`. `go()` takes the place of the pages below the `flow`, and the request that waits is lost with them.
 
 ## Theme
 
@@ -3010,20 +3011,30 @@ abstract interface class AppNavigator {
 /// location outside its flow. With [routes] it keeps the user only from
 /// those routes, and the router shows every other route as it is.
 ///
-/// `go()`, `push()` and `replace()` of a location that the guard keeps the
-/// user from show the target too, in place of the whole stack, and `push()`
-/// completes with `null`. Once the guard allows, the router shows the
-/// location that the user last asked for, or the one that the guard took
-/// the user from if it [resumes]. With neither, it shows the screen that
-/// the app starts on in place of a page of the flow, and leaves a page
-/// outside the flow as it is: the user may be on one when a guard with
-/// [routes] starts allowing.
+/// While a gate does not allow, `go()`, `push()` and `replace()` of a
+/// location that it keeps the user from show its target in place of the
+/// whole stack, and `push()` completes with `null`. Once it allows, the
+/// router shows the location that the user last asked for, or the one that
+/// the gate took the user from if it [resumes], or else the screen that
+/// the app starts on.
+///
+/// While a guard with [routes] does not allow, a request for one of them
+/// opens its target over the page that the user is on, and the request
+/// waits. Back returns to that page and drops the request. Once the guard
+/// allows, the router closes the pages of the flow and does what was asked:
+/// `push()` shows the location over the page that the user was on, and
+/// completes with the value of its page, `go()` shows it in place of the
+/// stack, and `replace()` in place of that page. A further request for one
+/// of the [routes] does nothing while the flow is open. A location from
+/// the platform opens the target over the screen that the app starts on.
+/// When the guard stops allowing, the router closes each page of its
+/// [routes] and the pages over it.
 ///
 /// The routes of its flow show only while it does not allow, or while
 /// another guard with the same flow does not. At any other time the router
 /// shows the screen that the app starts on in place of a location of the
-/// flow (see [flowIsOver]), or the target of another guard while that one
-/// does not allow. So the code of the app changes what [allows] reads. It
+/// flow (see [flowIsOver]), or the target of a gate while that one does
+/// not allow. So the code of the app changes what [allows] reads. It
 /// navigates into a flow only while a guard with [routes] and that flow
 /// does not allow and every gate does, as to a sign-in that a guest opens.
 final class RouteGuard {
@@ -3057,11 +3068,16 @@ final class RouteGuard {
   /// guard takes them from when it stops allowing, once it allows again.
   ///
   /// With `false`, the router forgets what it remembers when the guard
-  /// stops allowing: where the user was, whichever guard took them from
-  /// it, and a location that was asked for before. So once the guards
+  /// stops allowing: where the user was, whichever gate took them from
+  /// it, and a location that was asked for before. So once the gates
   /// allow, the user comes to the screen that the app starts on, as the
   /// next user does after a sign-out, unless a location was asked for
   /// since the guard stopped, such as a link.
+  ///
+  /// The router remembers a location only for a gate. A guard with
+  /// [routes] closes its pages when it stops allowing, so the user is on
+  /// the page below them, whatever this says. With `false`, such a guard
+  /// still makes the router forget what a gate made it remember.
   final bool resumes;
 
   /// The full names of the routes that the guard keeps the user from while
@@ -3108,19 +3124,29 @@ final List<RouteGuard> routeGuards = [
       'fake_second.vault',
       'fake_second.members',
       'fake_second.memberCard',
+      'fake_second.loungeSeat',
     },
+  ),
+  RouteGuard(
+    'fake_gate.senior',
+    allows: guard0.fixtureIsSenior(),
+    redirectTo: const FakeGateSecondLocation(),
+    flow: const {'fake_gate.second'},
+    routes: const {'fake_second.lounge', 'fake_second.loungeSeat'},
   ),
 ];
 
-/// The location that the router shows in place of the route [routeName],
-/// or `null` if the guards let the user see it.
+/// The location that the router shows when it is asked for the route
+/// [routeName] and a guard keeps the user from it, or `null` if the guards
+/// let the user see the route.
 ///
 /// [routeName] is the full name of a route, or `null` for a screen that is
 /// no route of a module, such as the error screen of the router. The first
 /// gate that does not allow decides, and no guard after it is asked: it
 /// shows its target in place of every route outside its flow. When every
 /// gate allows, the first guard that has the route among its
-/// [RouteGuard.routes] and does not allow shows its target in its place.
+/// [RouteGuard.routes] and does not allow shows its target: over the page
+/// that the user is on, not in place of it.
 ///
 /// A route that the guards let the user see may still be in a flow that is
 /// over, in place of which the router shows the screen that the app starts
@@ -3162,18 +3188,81 @@ final Listenable guardChanges = Listenable.merge([
   for (final guard in routeGuards) guard.allows,
 ]);
 
+/// What [GuardedNavigation.asked] answers a router that is not to show the
+/// location that it asked about: [ShowInstead], [ShowOver] or [ShowNothing].
+sealed class WhenAsked<L> {}
+
+/// What [GuardedNavigation.changed] answers a router that is to change its
+/// pages: [ShowInstead] or [ClosePages].
+sealed class WhenChanged<L> {}
+
+/// The router shows [location] in place of its whole stack, as `go()` to
+/// it does. A `push()` that it asked about completes with `null`.
+final class ShowInstead<L> implements WhenAsked<L>, WhenChanged<L> {
+  /// Creates the answer.
+  const ShowInstead(this.location);
+
+  /// The location to show: the target of a gate, the location that the
+  /// user comes back to, or the screen that the app starts on.
+  final L location;
+}
+
+/// The router shows [location] over the page on top, as `push()` of it
+/// does, and keeps the request that it asked about waiting while a page of
+/// a route of [flow] is among its pages.
+///
+/// The router makes the request again once [GuardedNavigation.changed] closes
+/// the last of those pages, and drops it when the last of them leaves in
+/// another way, as when the user goes back. It keeps one request: a
+/// request that waited before is dropped.
+final class ShowOver<L> implements WhenAsked<L> {
+  /// Creates the answer.
+  const ShowOver(this.location, {required this.flow});
+
+  /// The location to show on top: the target of a guard with
+  /// [RouteGuard.routes].
+  final L location;
+
+  /// The full names of the routes of the flow of that guard.
+  final Set<String> flow;
+}
+
+/// The router shows nothing and leaves its pages as they are: the flow of
+/// the guard is open already. A `push()` that it asked about completes
+/// with `null`.
+final class ShowNothing<L> implements WhenAsked<L> {
+  /// Creates the answer.
+  const ShowNothing();
+}
+
+/// The router closes the [pages] pages on top, at once and whatever its
+/// navigator shows over them, such as a dialog, and each `push()` that
+/// showed one of them completes with `null`. It then makes the request
+/// that waits again, if no page of the flow of that request is left.
+final class ClosePages<L> implements WhenChanged<L> {
+  /// Creates the answer.
+  const ClosePages(this.pages);
+
+  /// How many pages to close, from the one on top down. The router said of
+  /// each that it can close it on its own, and a page stays below them.
+  final int pages;
+}
+
 /// The guards of the routes as the router of the app asks them, with what
-/// they make it remember: the location that the user comes back to once
-/// the guards allow it.
+/// the gates make it remember: the location that the user comes back to
+/// once the gates allow it.
 ///
 /// [L] is how the router knows a location that it can show as `go()`
-/// does, such as its URI. The router asks [asked] before it shows a
-/// location, and [changed] when [guardChanges] notifies. It shows the
-/// location that either answers in place of its whole stack, as `go()` to
-/// it does, for a guard with [RouteGuard.routes] as for a gate: the user
-/// cannot go back from the target of such a guard to the screen that they
-/// were on. An answer is a record with the location, so that `null` is no
-/// answer also for a router whose [L] is nullable.
+/// does, such as its URI. The router asks [asked] once for each request to
+/// show a location, before it shows it, and tells [changed] of its pages
+/// each time [guardChanges] notifies. It does what either answers, and shows
+/// the location, or leaves its pages as they are, when the answer is
+/// `null`.
+///
+/// A gate answers with a location that takes the place of the whole stack.
+/// A guard with [RouteGuard.routes] opens its target over the page that
+/// the user is on and closes it again, so the user can go back from it,
+/// and the request that opened it waits with the router, not here.
 final class GuardedNavigation<L> {
   /// Creates the guards for a router whose location `/`, the screen that
   /// the app starts on, is [start], and which knows a location of the
@@ -3186,7 +3275,7 @@ final class GuardedNavigation<L> {
   /// The location of the router for a location of the navigation.
   final L Function(AppLocation location) locationOf;
 
-  /// The location that the user comes back to once the guards allow it,
+  /// The location that the user comes back to once the gates allow it,
   /// with the full name of its route, or `null` if there is none.
   ({String? route, L location})? _remembered;
 
@@ -3201,109 +3290,145 @@ final class GuardedNavigation<L> {
       if (!guard.resumes && guard.allows.value) guard,
   };
 
-  /// What the router shows in place of [location], whose route has the
-  /// full name [route], or `null` to show it: the target of the guard that
-  /// keeps the user from it (see [redirectOf]), or [start] for a location in a
-  /// flow that is over (see [flowIsOver]).
+  /// What the router does in place of showing [location], whose route has
+  /// the full name [route], or `null` to show it.
   ///
-  /// The router asks before it shows a location: the one the app starts
-  /// on, each one that `go()`, `push()` or `replace()` is asked to show,
-  /// and each one from the platform. A location that a guard keeps the
-  /// user from is remembered in place of the one before it, so the user
-  /// comes back to the latest one that they or the platform asked for,
-  /// whether or not that guard brings the user back (see
-  /// [RouteGuard.resumes]). A location in the flow of a guard is never
-  /// remembered: once that guard allows, its flow is over.
+  /// The router asks once for each request, before it shows the location:
+  /// the one the app starts on, each one that `go()`, `push()` or
+  /// `replace()` is asked to show, and each one from the platform.
+  /// [onTopOf] are the full names of the routes of the pages that the user
+  /// can get back to then, as the router tells [changed] of them. The
+  /// router gives none when it has no page yet, and none for a location
+  /// from the platform, which takes the place of the stack.
   ///
-  /// That holds for a gate and for a guard with [RouteGuard.routes] alike.
-  /// A gate keeps the user in its flow, so the location is still what the
-  /// user waits for when the gate allows. A guard with routes keeps the
-  /// user from its routes only, so the user may leave its target for
-  /// another screen. So what was remembered is forgotten when the answer
-  /// is `null` for a location outside every flow, or [start] for a flow
-  /// that is over: the user has moved on. Every gate allows then, so only
-  /// a guard with routes could still keep the user from what was
-  /// remembered.
+  /// The answer is the first of these:
+  /// - [ShowInstead] of the target of the gate that keeps the user from the
+  ///   location (see [redirectOf]). The location is then remembered in place of
+  ///   the one before it, so the user comes back to the latest one that
+  ///   they or the platform asked for, whether or not that gate brings the
+  ///   user back (see [RouteGuard.resumes]). A location in the flow of a
+  ///   guard is never remembered: once that guard allows, its flow is over.
+  /// - [ShowInstead] of [start] for a location in a flow that is over (see
+  ///   [flowIsOver]).
+  /// - for a location that a guard with [RouteGuard.routes] keeps the user
+  ///   from: [ShowNothing] while a page of the flow of that guard is among
+  ///   [onTopOf], on top or below another page, since the flow is open
+  ///   already; and else [ShowOver] of the target of the guard, with its
+  ///   flow.
   ///
-  /// Before that, what was remembered is forgotten if a guard that does
-  /// not bring the user back stopped allowing, as [changed] says.
-  ({L location})? asked(String? route, L location) {
+  /// Nothing is remembered for a guard with routes, so the answer depends
+  /// on what the router did about the request before: asked twice about
+  /// one request, the class answers [ShowNothing] for a flow that the first
+  /// answer opened.
+  ///
+  /// What a gate made the class remember is forgotten when no gate keeps
+  /// the user from the location and it is outside every flow, or in one
+  /// that is over: the user has moved on, as when the code of the app
+  /// navigates right when a gate starts allowing. Before that, it is
+  /// forgotten if a guard that does not bring the user back stopped
+  /// allowing, as [changed] says.
+  WhenAsked<L>? asked(
+    String? route,
+    L location, {
+    required Iterable<String?> onTopOf,
+  }) {
     _forgetAfterStop();
-    final target = redirectOf(route);
-    if (target != null) {
+    final guard = _guardKeepingFrom(route);
+    if (guard != null && guard.routes == null) {
       if (!_inAFlow(route)) _remembered = (route: route, location: location);
-      return (location: locationOf(target));
+      return ShowInstead(locationOf(guard.redirectTo));
     }
     final over = flowIsOver(route);
     if (over || !_inAFlow(route)) _remembered = null;
-    return over ? (location: start) : null;
+    if (over) return ShowInstead(start);
+    if (guard == null) return null;
+    if (onTopOf.any(guard.flow.contains)) return const ShowNothing();
+    return ShowOver(locationOf(guard.redirectTo), flow: guard.flow);
   }
 
-  /// What the router shows in place of its stack now that a guard started
-  /// or stopped allowing, or `null` to leave the stack as it is.
+  /// What the router does now that a guard started or stopped allowing, or
+  /// `null` to leave its pages as they are.
   ///
   /// [pages] are the pages that the user can get back to, the one on top
   /// first: those of the root navigator and of the selected branch of the
   /// main navigation, each with the full name of its route, its location,
-  /// and whether `push()` showed it; none for a router that has no page
-  /// yet.
+  /// and whether the router can close it on its own and leave the pages
+  /// below it as they are. That holds for a page that `push()` showed, and
+  /// for one that `replace()` showed in place of such a page. There are
+  /// none for a router that has no page yet.
   ///
   /// First, the remembered location is forgotten if a guard that does not
   /// bring the user back (see [RouteGuard.resumes]) stopped allowing: it
   /// allowed when the class was last asked or told, and does not now. That
   /// holds whichever guard decides and whatever the pages are, and for
-  /// whichever guard the location was remembered, so that the next user
+  /// whichever gate the location was remembered, so that the next user
   /// does not come to a location of the last one. A guard that stops and
   /// allows again without the class being asked or told in between is not
   /// seen to stop.
   ///
   /// The answer is then the first of these:
-  /// - the target of the guard that keeps the user from one of the pages.
-  ///   If that guard brings the user back, the location below the pages
-  ///   that pushes showed is then remembered, or [start] if pushes showed
-  ///   them all, unless one is remembered already or it is in the flow of
-  ///   a guard;
-  /// - the remembered location, once the guards allow it, which is then
-  ///   forgotten;
-  /// - [start], when the page on top is in a flow that is over (see
-  ///   [flowIsOver]): its guard started allowing while the flow was shown, and
-  ///   nothing is remembered, or a guard with [RouteGuard.routes] still
-  ///   keeps the user from what is. That location is forgotten then, since
-  ///   the user moves on to [start].
+  /// - [ShowInstead] of the target of the gate that keeps the user from one
+  ///   of the pages. If that gate brings the user back, the location below
+  ///   the pages that the router can close is then remembered, or [start]
+  ///   if it can close them all, unless one is remembered already or it is
+  ///   in the flow of a guard.
+  /// - with a location remembered: `null` while a gate keeps the user from
+  ///   it. Otherwise the location is forgotten, and the answer is
+  ///   [ShowInstead] of it, or of [start] if a guard with
+  ///   [RouteGuard.routes] keeps the user from it: the class cannot keep a
+  ///   request waiting, so the user moves on to [start].
+  /// - for the lowest page that has to leave, which is in a flow that is
+  ///   over (see [flowIsOver]) or which a guard with [RouteGuard.routes] keeps
+  ///   the user from: [ClosePages] of that page and the pages over it, if the
+  ///   router can close each of them and a page stays below; and else
+  ///   [ShowInstead] of [start].
   ///
-  /// A known limit: the class looks for a flow that is over at the page on
-  /// top only, since its answer takes the place of the whole stack. So a
-  /// page of a flow that is over stays below another page, such as the
-  /// target of a guard with routes below a page that was pushed from it,
-  /// and the user sees it again when they go back to it.
-  ({L location})? changed(
+  /// So the pages of a flow close once its guards allow, also below a page
+  /// that was pushed from them, and a page that asks for a condition
+  /// closes when the condition stops holding. A page that took the place
+  /// of the stack, as after `go()` to it, has nothing below it: the user
+  /// then comes to [start].
+  ///
+  /// A known limit of the second answer: a location that a guard with
+  /// [RouteGuard.routes] keeps the user from, and that was asked for
+  /// behind a gate, is lost once the gate allows. A link to such a route
+  /// that opens the app on a first launch, behind an onboarding, leaves
+  /// the user on [start], though [asked] opens the flow of the guard over
+  /// [start] for the same link when no gate is in its way.
+  WhenChanged<L>? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
     _forgetAfterStop();
-    for (final page in pages) {
-      final guard = _guardKeepingFrom(page.route);
-      if (guard == null) continue;
-      final below = pages.where((other) => !other.pushed).firstOrNull;
-      if (guard.resumes && _remembered == null && !_inAFlow(below?.route)) {
+    final all = pages.toList();
+    for (final page in all) {
+      final gate = _guardKeepingFrom(page.route);
+      if (gate == null || gate.routes != null) continue;
+      final below = all.where((other) => !other.pushed).firstOrNull;
+      if (gate.resumes && _remembered == null && !_inAFlow(below?.route)) {
         _remembered = (
           route: below?.route,
           location: below == null ? start : below.location,
         );
       }
-      return (location: locationOf(guard.redirectTo));
+      return ShowInstead(locationOf(gate.redirectTo));
     }
-    if (_remembered case final remembered?
-        when redirectOf(remembered.route) == null) {
+    if (_remembered case final remembered?) {
+      final guard = _guardKeepingFrom(remembered.route);
+      // The pages are those of the flow of the gate, which is not over.
+      if (guard != null && guard.routes == null) return null;
       _remembered = null;
-      return (location: remembered.location);
+      return ShowInstead(guard == null ? remembered.location : start);
     }
-    // A guard may still keep the user from the remembered location. For a
-    // gate, the pages are those of its flow, which is not over. A guard
-    // with routes leaves the user where they are, and that may be a flow
-    // that is over: the user moves on from it.
-    if (!flowIsOver(pages.firstOrNull?.route)) return null;
-    _remembered = null;
-    return (location: start);
+    // No gate keeps the user from a page, so a guard that does is one with
+    // routes.
+    final lowest = all.lastIndexWhere(
+      (page) => flowIsOver(page.route) || _guardKeepingFrom(page.route) != null,
+    );
+    if (lowest < 0) return null;
+    final leaving = all.take(lowest + 1);
+    return leaving.every((page) => page.pushed) && lowest + 1 < all.length
+        ? ClosePages(lowest + 1)
+        : ShowInstead(start);
   }
 
   /// Forgets the remembered location if a guard that does not bring the
@@ -3391,9 +3516,11 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     }
     // The guards are asked about the screen that the app starts on before
     // the router builds it, and told of its pages when one of them changes.
+    // That screen asks for no condition, so they let the user see it or
+    // answer the location to show in its place.
     final start = _guards.start;
-    final guarded = _guards.asked(start?.routeName, start);
-    if (guarded != null) _go(guarded.location);
+    final guarded = _guards.asked(start?.routeName, start, onTopOf: const []);
+    if (guarded case ShowInstead(:final location)) _go(location);
     guardChanges.addListener(_guardsChanged);
   }
 
@@ -3439,12 +3566,18 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     locationOf: (location) => location,
   );
 
+  /// The request that waits for a flow that the guards opened over the page
+  /// on top, if there is one: the routes of the flow, how to make the
+  /// request again, and how to end it without showing its location.
+  ({Set<String> flow, void Function() again, void Function()? drop})? _waiting;
+
   /// The pages that the user can get back to, the one on top first: those
   /// of the root navigator and, in place of the main navigation, those of
-  /// its selected branch, or the fallback screen alone. A page is one that
-  /// a push showed while its push waits for the value that it closes with.
+  /// its selected branch, and the fallback screen where it is at the bottom.
+  /// A page is one that a push showed while its push waits for the value
+  /// that it closes with: the router can close it on its own. A page that
+  /// [replace] shows in place of such a page is one too.
   List<({String? route, AppLocation? location, bool pushed})> get _pages => [
-    if (_stack.isEmpty) (route: null, location: null, pushed: false),
     for (final entry in _stack.reversed)
       for (final location
           in entry is AppLocation ? [entry] : _branches[_selected].reversed)
@@ -3453,6 +3586,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
           location: location,
           pushed: _results.containsKey(location),
         ),
+    if (_overFallback) (route: null, location: null, pushed: false),
   ];
 
   /// Shows [location] in place of the whole stack and of the stacks of
@@ -3469,20 +3603,88 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     notifyListeners();
   }
 
-  /// Shows what the guards show in place of [location], as [go] to it
-  /// does; `false` if the guards let the user see [location].
-  bool _redirected(AppLocation location) {
-    final guarded = _guards.asked(location.routeName, location);
-    if (guarded == null) return false;
-    _go(guarded.location);
+  /// What the guards answer for [location], which [go], [push] or [replace]
+  /// is asked to show on top of the pages of the router.
+  WhenAsked<AppLocation?>? _asked(AppLocation location) => _guards.asked(
+    location.routeName,
+    location,
+    onTopOf: [for (final page in _pages) page.route],
+  );
+
+  /// Does what the guards answer for [location], which [go], [push] or
+  /// [replace] is asked to show; `false` if they let the user see it.
+  ///
+  /// [again] makes the request again, and [drop] ends it without showing
+  /// its location, as a push does that completes with `null`. For the flow
+  /// of a guard that the guards open over the page on top, the request
+  /// waits while a page of the flow is among the pages: [_close] makes it
+  /// again, and [notifyListeners] drops it. The target of such a guard is
+  /// outside the main navigation, so its page goes on the root navigator,
+  /// as a page that a push showed.
+  bool _redirected(
+    AppLocation location, {
+    required void Function() again,
+    void Function()? drop,
+  }) {
+    switch (_asked(location)) {
+      case null:
+        return false;
+      case ShowInstead(location: final shown):
+        _go(shown);
+        drop?.call();
+      case ShowNothing():
+        drop?.call();
+      case ShowOver(location: final target, :final flow):
+        _drop();
+        _stack.add(target!);
+        _results[target] = Completer<Object?>();
+        _waiting = (flow: flow, again: again, drop: drop);
+        notifyListeners();
+    }
     return true;
   }
 
+  /// Drops the request that waits, if there is one.
+  void _drop() {
+    final waiting = _waiting;
+    _waiting = null;
+    waiting?.drop?.call();
+  }
+
   /// Tells the guards of the pages of the router, as when one of them
-  /// starts or stops allowing, and shows the location that they answer.
+  /// starts or stops allowing, and does what they answer: shows a location
+  /// in place of the stack, or closes the pages on top.
   void _guardsChanged() {
-    final shown = _guards.changed(_pages);
-    if (shown != null) _go(shown.location);
+    switch (_guards.changed(_pages)) {
+      case null:
+        break;
+      case ShowInstead(:final location):
+        _go(location);
+      case ClosePages(:final pages):
+        _close(pages);
+    }
+  }
+
+  /// Closes the [count] pages on top, each of which a push showed, whatever
+  /// the navigator shows over them, and completes their pushes with `null`.
+  /// Then it makes the request that waits again, if no page of its flow is
+  /// left. The listeners of the screen hear of the page that the user ends
+  /// on when the router next builds its pages.
+  void _close(int count) {
+    final waiting = _waiting;
+    _waiting = null;
+    for (var closed = 0; closed < count; closed++) {
+      final stack = _onMainNavigation ? _branches[_selected] : _stack;
+      _results.remove(stack.removeLast())?.complete(null);
+    }
+    if (waiting != null) {
+      if (_pages.any((page) => waiting.flow.contains(page.route))) {
+        _waiting = waiting;
+      } else {
+        waiting.again();
+      }
+    }
+    notifyListeners();
   }
 
   /// The page on top: the branch it is in, or -1 for the root navigator,
@@ -3498,6 +3700,11 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   bool get _onMainNavigation =>
       _stack.isNotEmpty && identical(_stack.last, _mainNavigation);
 
+  /// Whether the fallback screen is at the bottom of the root navigator:
+  /// when the stack is empty, and below the pages that pushes showed over
+  /// the fallback screen.
+  bool get _overFallback => _stack.every(_results.containsKey);
+
   /// Tells the router of a change of the stacks, as each navigation does.
   ///
   /// When the main navigation has left the stack, the branches get new
@@ -3506,8 +3713,16 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// transition to the page that took its place is over, with the
   /// navigators that it had: a main navigation that comes back sooner
   /// would have their keys in the tree twice.
+  ///
+  /// Before that, the request that waits for a flow is dropped once no
+  /// page of the flow is among the pages, as when the user went back from
+  /// it or another location took the place of the stack.
   @override
   void notifyListeners() {
+    if (_waiting case final waiting?
+        when !_pages.any((page) => waiting.flow.contains(page.route))) {
+      _drop();
+    }
     if (!_stack.contains(_mainNavigation)) {
       _branchNavigators.clear();
       _branchObservers.clear();
@@ -3522,7 +3737,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       key: _navigatorKey,
       observers: _observers,
       pages: [
-        if (_stack.isEmpty)
+        if (_overFallback)
           const MaterialPage<Object?>(child: FallbackStartScreen()),
         for (final entry in _stack)
           if (entry case final AppLocation location)
@@ -3676,14 +3891,23 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void go(AppLocation location) {
-    if (_redirected(location)) return;
+    if (_redirected(location, again: () => go(location))) return;
     _show(location);
     notifyListeners();
   }
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
-    if (_redirected(location)) return Future.value();
+    // A push that waits for a flow completes with what the request
+    // completes with when the router makes it again, or with `null`.
+    final waiting = Completer<T?>();
+    if (_redirected(
+      location,
+      again: () => waiting.complete(push<T>(location)),
+      drop: waiting.complete,
+    )) {
+      return waiting.future;
+    }
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'push');
     if (branch == null) {
@@ -3701,9 +3925,12 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void replace(AppLocation location) {
-    if (_redirected(location)) return;
+    if (_redirected(location, again: () => replace(location))) return;
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'replace');
+    // A page that takes the place of one that a push showed closes without
+    // the pages below it too, so it is one that a push showed.
+    final (_, replaced) = _top;
     if (branch != null && _onMainNavigation) {
       _branches[_selected]
         ..removeLast()
@@ -3715,6 +3942,9 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       } else {
         _showMainNavigation(branch, location);
       }
+    }
+    if (_results.containsKey(replaced)) {
+      _results[location] = Completer<Object?>();
     }
     notifyListeners();
   }
@@ -3761,6 +3991,8 @@ Widget _screen(AppLocation location) => switch (location) {
   FakeSecondVaultLocation() => const screen4.FixtureVaultScreen(),
   FakeSecondMembersLocation() => const screen4.FixtureMembersScreen(),
   FakeSecondMemberCardLocation() => const screen4.FixtureMemberCardScreen(),
+  FakeSecondLoungeLocation() => const screen4.FixtureLoungeScreen(),
+  FakeSecondLoungeSeatLocation() => const screen4.FixtureLoungeSeatScreen(),
   FakeLateGateGateLocation() => const screen5.FixtureLateGateScreen(),
   FakeGateGateLocation() => const screen6.FixtureGateScreen(),
   FakeGateStepLocation() => const screen6.FixtureGateStepScreen(),
@@ -3939,6 +4171,33 @@ final class FakeSecondMemberCardLocation extends AppLocation {
   AppLocation get parent => const FakeSecondMembersLocation();
 }
 
+/// The location of `fake_second.lounge`: `/fake_second/lounge`.
+final class FakeSecondLoungeLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondLoungeLocation();
+
+  @override
+  String get routeName => 'fake_second.lounge';
+
+  @override
+  String get path => '/fake_second/lounge';
+}
+
+/// The location of `fake_second.loungeSeat`: `/fake_second/lounge/seat`.
+final class FakeSecondLoungeSeatLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondLoungeSeatLocation();
+
+  @override
+  String get routeName => 'fake_second.loungeSeat';
+
+  @override
+  String get path => '/fake_second/lounge/seat';
+
+  @override
+  AppLocation get parent => const FakeSecondLoungeLocation();
+}
+
 /// The location of `fake_late_gate.gate`: `/fake_late_gate`.
 final class FakeLateGateGateLocation extends AppLocation {
   /// Creates the location.
@@ -4055,6 +4314,13 @@ final class FakeSecondRoutes {
   /// The route `fake_second.memberCard`: `/fake_second/members/card`.
   NavLink memberCard() =>
       NavLink(_context, const FakeSecondMemberCardLocation());
+
+  /// The route `fake_second.lounge`: `/fake_second/lounge`.
+  NavLink lounge() => NavLink(_context, const FakeSecondLoungeLocation());
+
+  /// The route `fake_second.loungeSeat`: `/fake_second/lounge/seat`.
+  NavLink loungeSeat() =>
+      NavLink(_context, const FakeSecondLoungeSeatLocation());
 }
 
 /// The routes of the module `fake_late_gate`.
@@ -4365,18 +4631,81 @@ final FixtureGate fixtureSecondGate = FixtureGate();
 /// open, which it is until a test closes it, also in an app whose gates
 /// start closed. The third guard of the fixture reads it. That guard keeps
 /// the user only from the routes of the app that ask for a holder of a
-/// badge, and shows the gate screen of the first guard in their place.
+/// badge, and opens the gate screen of the first guard over the page that
+/// the user is on.
 final FixtureGate fixtureHolder = FixtureGate()..value = true;
 
-/// Whether the first guard of the fixture allows: while its gate is open.
-ValueListenable<bool> fixtureGateOpen() => fixtureGate;
+/// Whether the user holds the senior badge of the fixture: while this gate
+/// is open, which it is until a test closes it, also in an app whose gates
+/// start closed. The fourth guard of the fixture reads it. That guard
+/// keeps the user only from the routes of the app that ask for a holder of
+/// a senior badge, and opens the second gate screen over the page that the
+/// user is on.
+final FixtureGate fixtureSenior = FixtureGate()..value = true;
+
+/// One notifier for what the first guard and the third guard of the
+/// fixture read besides their gates, as the session of a sign-in has
+/// whether it lets the user into the app and whether the user has an
+/// account: the two guards have one flow, and a test changes both values
+/// with one assignment, in one turn. Both are `true` until a test says
+/// otherwise.
+final ValueNotifier<({bool app, bool holder})> fixtureSession = ValueNotifier((
+  app: true,
+  holder: true,
+));
+
+/// A value that is computed from [_sources] when it is read, and whose
+/// listeners are theirs: two such values over one notifier never show one
+/// changed and the other not.
+final class _Computed implements ValueListenable<bool> {
+  _Computed(this._sources, this._compute);
+
+  final List<Listenable> _sources;
+
+  final bool Function() _compute;
+
+  @override
+  bool get value => _compute();
+
+  @override
+  void addListener(VoidCallback listener) {
+    for (final source in _sources) {
+      source.addListener(listener);
+    }
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    for (final source in _sources) {
+      source.removeListener(listener);
+    }
+  }
+}
+
+final ValueListenable<bool> _gateOpen = _Computed([
+  fixtureGate,
+  fixtureSession,
+], () => fixtureGate.value && fixtureSession.value.app);
+
+final ValueListenable<bool> _holds = _Computed([
+  fixtureHolder,
+  fixtureSession,
+], () => fixtureHolder.value && fixtureSession.value.holder);
+
+/// Whether the first guard of the fixture allows: while its gate is open
+/// and the session of the fixture lets the user into the app.
+ValueListenable<bool> fixtureGateOpen() => _gateOpen;
 
 /// Whether the second guard of the fixture allows: while its gate is open.
 ValueListenable<bool> fixtureSecondGateOpen() => fixtureSecondGate;
 
 /// Whether the third guard of the fixture allows: while the user holds the
-/// badge of the fixture.
-ValueListenable<bool> fixtureHolds() => fixtureHolder;
+/// badge of the fixture, by its gate and by the session of the fixture.
+ValueListenable<bool> fixtureHolds() => _holds;
+
+/// Whether the fourth guard of the fixture allows: while the user holds
+/// the senior badge of the fixture.
+ValueListenable<bool> fixtureIsSenior() => fixtureSenior;
 === lib/features/fake_late_gate/fixture_late_gate.dart (fake_late_gate) ===
 import 'package:flutter/foundation.dart';
 
@@ -4435,6 +4764,29 @@ class FixtureMemberCardScreen extends StatelessWidget {
 class FixtureVaultScreen extends StatelessWidget {
   /// Creates the screen.
   const FixtureVaultScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen for the holders of a senior badge: its route asks for the
+/// second condition of the fixture badge role.
+@FixtureScreen('fake_second.lounge')
+class FixtureLoungeScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureLoungeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen below the screen for the holders of a senior badge, for those
+/// who hold both badges: its route asks for the first condition itself,
+/// and for the second by being below that route.
+@FixtureScreen('fake_second.loungeSeat')
+class FixtureLoungeSeatScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureLoungeSeatScreen({super.key});
 
   @override
   Widget build(BuildContext context) => const Scaffold();
