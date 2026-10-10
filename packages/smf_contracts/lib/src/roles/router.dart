@@ -247,7 +247,10 @@ final class RouterRole extends Role<RoutesData> {
   /// page to replace. It may then take each request as `go()` to its
   /// location, which takes the place of the stack as a location from the
   /// platform does: it asks about it once, with no pages, and such a
-  /// `push()` completes with `null` at once.
+  /// `push()` completes with `null` at once. A provider that can open no
+  /// page over its error screen may take a request there the same way when
+  /// the answer is `ShowOver`. The target then opens over the location `/`
+  /// in place of the error screen.
   ///
   /// When the answer is `null`, the provider shows the location. Otherwise
   /// it never builds the screen of that location, and the listeners of
