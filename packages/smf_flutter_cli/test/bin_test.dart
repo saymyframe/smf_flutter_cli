@@ -747,6 +747,78 @@ void main() {
       );
 
       test(
+        '--explain shows the module chosen for the sign-in, with Firebase, '
+        'which it depends on, the Firebase CLI that its step needs, and the '
+        'step, which runs after flutterfire configure once the user agreed',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'firebase_crashlytics,firebase_auth',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          expect(
+            result.stdout,
+            allOf([
+              contains('  firebase_auth: requested\n'),
+              contains('  Authentication: firebase_auth\n'),
+              matches(
+                RegExp(
+                  r'^  firebase_auth \S+ \(firebase_auth\)$',
+                  multiLine: true,
+                ),
+              ),
+              // The check of the Firebase CLI itself, of firebase_core, and
+              // the check of the version that has the command of the step.
+              contains(
+                '  ✗ Firebase CLI (for firebase_core): missing\n',
+              ),
+              contains(
+                '  ✗ Firebase CLI 15.6.0 or later (for firebase_auth): '
+                'missing\n',
+              ),
+              // The step continues flutterfire configure, and has what the
+              // user has to know before it runs. The step of the other
+              // module that continues flutterfire configure comes after
+              // it, by the names of the two modules, and runs whatever
+              // becomes of this one.
+              contains(
+                '--android-package-name=com.example.my_app (firebase_core)\n'
+                '    then dart tool/enable_firebase_sign_in.dart '
+                '(firebase_auth)\n'
+                '      The Firebase CLI adds a web app named "Default Web '
+                'App" to a project that has no web app, because it enables '
+                'the methods through one (firebase/firebase-tools#11250). '
+                'The Firebase console enables them without it: '
+                'https://console.firebase.google.com/project/_/'
+                'authentication/providers.\n'
+                '      A run asks before it runs this step, and leaves it '
+                'for later when it cannot ask.\n'
+                "    then ruby -e 'f = ARGV[0]; ",
+              ),
+              contains(
+                "' ios/Runner.xcodeproj/project.pbxproj "
+                '(firebase_crashlytics, on macOS)\n',
+              ),
+            ]),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
         'the start of the app is a route of the app',
         () async {
           final result = await _smf(
