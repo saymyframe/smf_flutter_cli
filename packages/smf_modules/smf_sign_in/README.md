@@ -18,7 +18,7 @@ The fields, the buttons and the cards of the screens are those of the theme of t
 
 One button has a colour of its own. The action that leads to the other screen is Create account on the sign-in and I already have an account on the sign-up. It is a text button of the theme in the accent of the colour scheme, `colorScheme.secondary`, because a theme keeps its text buttons quiet and this one is the second way on from its screen. Forgot password? stays as the theme has it.
 
-The parts of a screen rise in one after another, once. On a device that asks for less motion, they are there at once, and a busy button is disabled and keeps its label. A screen scrolls when it is too small for what it shows, as with the keyboard open or with a large text size on a small phone, and the labels and the buttons grow with their texts. The letters in the cell keep their size, since they are part of a picture. A screen reader announces the title as a header, each field by its label, and a failure when it appears.
+The parts of a screen rise in one after another, once. On a device that asks for less motion, they are there at once, and a busy button is disabled and keeps its label. A screen scrolls when it is too small for what it shows, as with the keyboard open or with a large text size on a small phone, and the labels and the buttons grow with their texts. A title grows only by half, and less where its longest word would not fit the page: it breaks between its words and never inside one. The letters in the cell keep their size, since they are part of a picture. A screen reader announces the title as a header, each field by its label, and a failure when it appears.
 
 ## Look and state
 

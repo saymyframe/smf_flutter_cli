@@ -150,12 +150,33 @@ void _expectTitle(WidgetTester tester, String title, String language) {
     reason: 'A screen reader announces the title of a page of the sign-in '
         'as a header: "$title", in $language.',
   );
+  final paragraph = _paragraphOf(tester, shown);
+  final base = Theme.of(tester.element(shown)).textTheme.headlineLarge!;
   expect(
-    _paragraphOf(tester, shown).textScaler.scale(10),
-    15,
+    paragraph.textScaler.scale(paragraph.text.style!.fontSize!) <=
+        base.fontSize! * 1.5,
+    isTrue,
     reason: 'The title of a page of the sign-in is large already, so it '
-        'grows only by half with the text size of the device.',
+        'grows at most by half with the text size of the device.',
   );
+  // Each word of the title on one line: its boxes have one top.
+  var start = 0;
+  for (final word in title.split(' ')) {
+    final lines = {
+      for (final box in paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: start + word.length),
+      ))
+        box.top,
+    };
+    expect(
+      lines,
+      hasLength(1),
+      reason: 'On the small phone, the title "$title" breaks between its '
+          'words and not inside "$word", in $language: where a word would '
+          'not fit the page, the title is as large as the word allows.',
+    );
+    start += word.length + 1;
+  }
 }
 
 void main() {
