@@ -502,16 +502,19 @@ List<BrokenProvider> brokenProviders() => const [
       BrokenProvider(
         BrokenModule.routerKeepingNavigatorsOfBranches,
         role: routerRole,
-        bug: 'When the location that the guards of the routes answer takes '
-            'the main navigation out of its stack, the branches keep their '
+        bug: 'When the main navigation leaves its stack, as when the '
+            'location that the guards of the routes answer takes its place '
+            'or go() shows a page outside it, the branches keep their '
             'navigators. The page of the main navigation that left stays in '
-            'the tree until the transition to the target of the guard is '
-            'over. So when the guard allows again before that, the main '
-            'navigation that comes back has the keys of those navigators '
-            'in the tree a second time, and Flutter throws.',
+            'the tree until the transition to the page that took its place '
+            'is over. So a main navigation that comes back before that has '
+            'the keys of those navigators in the tree a second time, and '
+            'Flutter throws.',
         // The app of the guards with a layout and the second fixture
-        // feature, so that the main navigation has two branches. The
-        // fixture feature comes first, so the app starts on its screen.
+        // feature, so that the main navigation has two branches, and with
+        // the fixture screen log, which the tests of the main navigation
+        // need. The fixture feature comes first, so the app starts on its
+        // screen.
         app: [
           BottomTabsModule.id,
           FakeFeatureModule.id,
@@ -521,6 +524,7 @@ List<BrokenProvider> brokenProviders() => const [
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
+          FakeScreenLogModule.id,
           FakeCrashModule.id,
           FakeServiceLogModule.id,
         ],
@@ -533,6 +537,15 @@ List<BrokenProvider> brokenProviders() => const [
             'A guard that allows again while the transition to its target '
                 'is on its way leaves the router with one main navigation, '
                 'which it shows without an error.',
+          ),
+          MatrixExpectedFailure(
+            'test/main_navigation_return_test.dart',
+            'go() out of the main navigation and back shows the destination '
+                'without an error, in one turn and while the transition is '
+                'on its way',
+            'go() back into the main navigation while the transition to the '
+                'page that took its place is on its way leaves the router '
+                'with one main navigation, which it shows without an error.',
           ),
         ],
       ),

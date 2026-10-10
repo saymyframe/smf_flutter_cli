@@ -297,13 +297,13 @@ final class BrokenModule extends SmfModule {
   );
 
   /// The fake router that keeps the navigators of the branches of the main
-  /// navigation when the location that the guards of the routes answer
-  /// takes the main navigation out of its stack. The page of the main
-  /// navigation that left stays in the tree, with those navigators, until
-  /// the transition to the page that took its place is over. So when the
-  /// guard allows again before that, the main navigation that comes back
-  /// has the keys of the navigators in the tree a second time, which
-  /// Flutter throws for.
+  /// navigation when the main navigation leaves its stack, as when the
+  /// location that the guards of the routes answer takes its place, or
+  /// `go()` shows a page outside it. The page of the main navigation that
+  /// left stays in the tree, with those navigators, until the transition
+  /// to the page that took its place is over. So a main navigation that
+  /// comes back before that, as when the guard allows again, has the keys
+  /// of the navigators in the tree a second time, which Flutter throws for.
   static const routerKeepingNavigatorsOfBranches = BrokenModule._(
     FakeRouterModule(),
     ModuleId('broken_router_keeps_navigators_of_branches'),
@@ -314,8 +314,9 @@ final class BrokenModule extends SmfModule {
         '    if (!_stack.contains(_mainNavigation)) {\n'
             '      _branchNavigators.clear();\n'
             '      _branchObservers.clear();\n'
-            '    }\n',
-        '',
+            '    }\n'
+            '    super.notifyListeners();\n',
+        '    super.notifyListeners();\n',
       ),
     ],
   );

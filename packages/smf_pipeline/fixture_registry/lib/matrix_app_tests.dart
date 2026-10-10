@@ -125,7 +125,9 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // screen log, and each navigator of a branch has observers of its
       // own. And the router refuses to push a location in the main
       // navigation from the page outside it of the second fixture feature,
-      // shown over it, or to replace that page with one. And the labels of
+      // shown over it, or to replace that page with one. And go() to that
+      // page and back to a destination throws nothing, in one turn and
+      // while the transition to the page is on its way. And the labels of
       // the destinations follow the language of the app: the matrix writes
       // them for the test in each language of the app, from the data of the
       // layout role and of the localization role, or in English alone for
@@ -160,11 +162,13 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // the module gives it a new route each time the main navigation leaves
       // its pages. After a go() out of the main navigation and back, in one
       // turn and while the transition is on its way too, each branch is on
-      // its destination, and Flutter finds no key twice. It checks no role,
-      // so it names its module, as `tools/app_tests_test.dart` lets it. The
-      // apps it applies to have a layout and both fixture features, whose
-      // destinations and page outside the main navigation it goes between,
-      // and the tests of router_screens, whose helpers it uses.
+      // its destination. And the error screen of a location that the
+      // redirect of a route refused stays when go_router gets its new
+      // routes. It checks no role, so it names its module, as
+      // `tools/app_tests_test.dart` lets it. The apps it applies to have a
+      // layout and both fixture features, whose destinations and page
+      // outside the main navigation it goes between, and the tests of
+      // router_screens, whose helpers it uses.
       MatrixAppTest(
         '$appTests/go_router_branches',
         appliesTo: (app) =>
