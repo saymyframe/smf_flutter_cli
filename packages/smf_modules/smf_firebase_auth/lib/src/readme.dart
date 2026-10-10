@@ -12,17 +12,20 @@ const serviceFile = 'lib/core/auth/firebase_auth_service.dart';
 /// what the app does until they are, where the message of a password reset
 /// comes from, and what becomes of an anonymous user who signs in to an
 /// account.
+///
+/// It names the pages of the Firebase console as the documentation of
+/// Firebase does, with the links that the documentation has for them.
 final String readmeSection = '''
 The app signs in with [Firebase Authentication](https://firebase.google.com/docs/auth) through `firebase_auth`: `$serviceFile` implements the sign-in service of the app on it.
 
-The ways to sign in are enabled in the Firebase project, not in the code. Open the project that the app is configured for in the [Firebase console](https://console.firebase.google.com/), then Authentication > Sign-in method, and enable:
+The ways to sign in are enabled in the Firebase project, not in the code. In the Firebase console, open [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) of the project that the app is configured for, and enable:
 
 - Email/Password, in every mode of the app;
 - Anonymous, when the mode of the app is `${AuthMode.anonymous.name}` (see the section ${AuthRole.readmeHeading}).
 
 Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure has the link to that page of the project. In the mode `${AuthMode.anonymous.name}`, the app also starts without a user.
 
-Firebase sends the message with which a user sets a new password from a template of the project: Authentication > Templates.
+Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
 
-When an anonymous user signs in to an account that exists already, the anonymous user stays in the project, and nobody can sign in as that user again. A project that is upgraded to Firebase Authentication with Identity Platform can delete anonymous users that are older than 30 days: Authentication > Settings > User actions.
+When an anonymous user signs in to an account that exists already, the anonymous user stays in the project, and nobody can sign in as that user again. A project that is upgraded to Firebase Authentication with Identity Platform can delete anonymous users that are older than 30 days automatically. See [Automatic clean-up](https://firebase.google.com/docs/auth/android/anonymous-auth#auto-cleanup) in the documentation of Firebase.
 ''';
