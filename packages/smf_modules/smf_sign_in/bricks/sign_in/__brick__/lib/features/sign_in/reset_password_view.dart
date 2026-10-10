@@ -79,7 +79,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
             padding: const EdgeInsets.only(top: 28),
             child: FilledButton(
               onPressed: widget.onSignIn,
-              child: Text(
+              child: WholeWords(
                 {{{text_back_to_sign_in}}},
                 textAlign: TextAlign.center,
               ),

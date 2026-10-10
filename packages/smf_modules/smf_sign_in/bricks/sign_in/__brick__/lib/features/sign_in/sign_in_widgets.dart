@@ -3,6 +3,94 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
 
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class WholeWords extends StatelessWidget {
+  /// Creates the text.
+  const WholeWords(
+    this.text, {
+    this.style,
+    this.textAlign,
+    this.maxScaleFactor = double.infinity,
+    super.key,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none,
+  /// the text is as the text around it, as the label of a button is in the
+  /// style that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// How the lines of the text are aligned.
+  final TextAlign? textAlign;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: over that of the text around it,
+    // and bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in text.split(' ')) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textAlign: textAlign,
+          textScaler: scaler,
+        );
+      },
+    );
+  }
+}
+
 /// A field of a form with its [label] above it. The label takes as many
 /// lines as it needs, and a screen reader announces it with the field.
 ///
@@ -184,7 +272,8 @@ class SubmitButton extends StatelessWidget {
     super.key,
   });
 
-  /// The text of the button, which takes as many lines as it needs.
+  /// The text of the button, which takes as many lines as it needs and
+  /// keeps its words whole.
   final String label;
 
   /// Whether the call of the form is on its way.
@@ -211,7 +300,7 @@ class SubmitButton extends StatelessWidget {
           // The label keeps its place, so that the button keeps its size.
           Visibility.maintain(
             visible: !spins,
-            child: Text(label, textAlign: TextAlign.center),
+            child: WholeWords(label, textAlign: TextAlign.center),
           ),
           if (spins)
             // In the colour that the theme of the app gives the label.
@@ -249,7 +338,8 @@ class OtherScreenAction extends StatelessWidget {
     super.key,
   });
 
-  /// The text of the action, which takes as many lines as it needs.
+  /// The text of the action, which takes as many lines as it needs and
+  /// keeps its words whole.
   final String label;
 
   /// Shows the other screen, or `null` while the action takes no tap.
@@ -265,7 +355,7 @@ class OtherScreenAction extends StatelessWidget {
       }),
     ),
     onPressed: onPressed,
-    child: Text(label, textAlign: TextAlign.center),
+    child: WholeWords(label, textAlign: TextAlign.center),
   );
 }
 

@@ -11,7 +11,11 @@
 // what the provider says to the developer of the app, a long line with an
 // address, so it pushes no button off the screen, and that text
 // and the title of a page grow only by half, while the symbol in the cell
-// of a page keeps its size, since the cell is a picture. A screen reader
+// of a page keeps its size, since the cell is a picture. The title of a
+// page and the label of each button and action keep their words whole: one
+// whose longest word would not fit is as large as that word allows, and
+// any other label is as large as the text size of the device asks. A
+// screen reader
 // announces the title of a page as a header, each field with its label,
 // and the message of a failure when it appears. The parts of a page come
 // in one after another and then nothing moves. In an app that asks for
@@ -41,6 +45,9 @@ import 'of_app.dart';
 /// such as a notch and the bar of the home gesture.
 const Size _phone = Size(320, 480);
 const double _inset = 40;
+
+/// The text size of the device in the test: three times the usual one.
+const double _textScale = 3;
 
 const _email = 'small-phone@sign-in-tests.example.com';
 const _password = 'Small-phone-2468';
@@ -138,9 +145,54 @@ List<RenderParagraph> _cellTexts(WidgetTester tester) {
   ];
 }
 
+/// Checks that [shown], the text [text] that [what] names, keeps its words
+/// whole on the small phone: each word is on one line. The text is as
+/// large as the text size of the device asks, [largest], or, when its
+/// longest word would not fit the width that it has at that size, as large
+/// as that word allows.
+void _expectWholeWords(
+  WidgetTester tester,
+  Finder shown,
+  String text, {
+  required String what,
+  required String language,
+  required double largest,
+}) {
+  final paragraph = _paragraphOf(tester, shown);
+  final size = paragraph.textScaler.scale(paragraph.text.style!.fontSize!);
+  // Each word on one line: its boxes have one top.
+  var start = 0;
+  var widest = 0.0;
+  for (final word in text.split(' ')) {
+    final boxes = paragraph.getBoxesForSelection(
+      TextSelection(baseOffset: start, extentOffset: start + word.length),
+    );
+    expect(
+      {for (final box in boxes) box.top},
+      hasLength(1),
+      reason: 'On the small phone, $what "$text" breaks between its words '
+          'and not inside "$word", in $language: where a word would not '
+          'fit, the text is as large as the word allows.',
+    );
+    final width = boxes.last.right - boxes.first.left;
+    if (width > widest) widest = width;
+    start += word.length + 1;
+  }
+  final room = paragraph.constraints.maxWidth;
+  expect(
+    size <= largest + 0.01 &&
+        (size >= largest - 0.01 || (widest <= room && widest >= room * 0.9)),
+    isTrue,
+    reason: 'On the small phone, $what "$text" is as large as the text size '
+        'of the device asks, $largest, or as large as its longest word '
+        'allows, in $language: it is $size, and its longest word takes '
+        '$widest of $room.',
+  );
+}
+
 /// Checks the title of the page that the user sees, the text [title]: a
-/// screen reader announces it as a header, and it grows only by half with
-/// the text size of the device.
+/// screen reader announces it as a header, it grows only by half with the
+/// text size of the device, and it keeps its words whole.
 void _expectTitle(WidgetTester tester, String title, String language) {
   // The title comes first on its page, before a button with the same text.
   final shown = find.text(title).first;
@@ -150,33 +202,38 @@ void _expectTitle(WidgetTester tester, String title, String language) {
     reason: 'A screen reader announces the title of a page of the sign-in '
         'as a header: "$title", in $language.',
   );
-  final paragraph = _paragraphOf(tester, shown);
   final base = Theme.of(tester.element(shown)).textTheme.headlineLarge!;
-  expect(
-    paragraph.textScaler.scale(paragraph.text.style!.fontSize!) <=
-        base.fontSize! * 1.5,
-    isTrue,
-    reason: 'The title of a page of the sign-in is large already, so it '
-        'grows at most by half with the text size of the device.',
+  _expectWholeWords(
+    tester,
+    shown,
+    title,
+    what: 'the title',
+    language: language,
+    // The title is large already, so it grows at most by half.
+    largest: base.fontSize! * 1.5,
   );
-  // Each word of the title on one line: its boxes have one top.
-  var start = 0;
-  for (final word in title.split(' ')) {
-    final lines = {
-      for (final box in paragraph.getBoxesForSelection(
-        TextSelection(baseOffset: start, extentOffset: start + word.length),
-      ))
-        box.top,
-    };
-    expect(
-      lines,
-      hasLength(1),
-      reason: 'On the small phone, the title "$title" breaks between its '
-          'words and not inside "$word", in $language: where a word would '
-          'not fit the page, the title is as large as the word allows.',
-    );
-    start += word.length + 1;
-  }
+}
+
+/// Checks the label [label] of [button], a button or an action of the page
+/// that the user sees: it grows with the text size of the device, and it
+/// keeps its words whole.
+void _expectLabel(
+  WidgetTester tester,
+  Finder button,
+  String label,
+  String language,
+) {
+  final shown = find.descendant(of: button, matching: find.text(label));
+  // In the style that the theme of the app gives the button.
+  final base = DefaultTextStyle.of(tester.element(shown)).style;
+  _expectWholeWords(
+    tester,
+    shown,
+    label,
+    what: 'the label',
+    language: language,
+    largest: _textScale * base.fontSize!,
+  );
 }
 
 void main() {
@@ -232,7 +289,7 @@ void main() {
         ..devicePixelRatio = 1
         ..padding = insets
         ..viewPadding = insets;
-      tester.platformDispatcher.textScaleFactorTestValue = 3;
+      tester.platformDispatcher.textScaleFactorTestValue = _textScale;
       await tester.pumpAndSettle();
       service.failure = const AuthFailure(
         AuthFailureReason.notConfigured,
@@ -305,6 +362,13 @@ void main() {
           otherScreenAction,
           'the action "${texts['createAccount']}"',
         );
+        for (final (button, label) in [
+          (_forgotPassword(), texts['forgotPassword']!),
+          (submitButton, texts['submit']!),
+          (otherScreenAction, texts['createAccount']!),
+        ]) {
+          _expectLabel(tester, button, label, language);
+        }
         final message = failureMessage(AuthFailureReason.notConfigured);
         final hint = find.descendant(
           of: find.byType(FailureMessage),
@@ -377,6 +441,12 @@ void main() {
           otherScreenAction,
           'the action "${texts['haveAccount']}"',
         );
+        for (final (button, label) in [
+          (submitButton, texts['signUpSubmit']!),
+          (otherScreenAction, texts['haveAccount']!),
+        ]) {
+          _expectLabel(tester, button, label, language);
+        }
         await _tap(tester, otherScreenAction);
 
         // The screen that resets a password, and what it says once the
@@ -395,6 +465,7 @@ void main() {
           submitButton,
           'the button "${texts['sendLink']}"',
         );
+        _expectLabel(tester, submitButton, texts['sendLink']!, language);
         service.failure = null;
         await fill(tester, email: _email);
         await _tap(tester, submitButton);
@@ -410,6 +481,7 @@ void main() {
           back,
           'the button "${texts['backToSignIn']}"',
         );
+        _expectLabel(tester, back, texts['backToSignIn']!, language);
         await _tap(tester, back);
         expect(
           signInScreen,

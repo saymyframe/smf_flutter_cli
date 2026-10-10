@@ -1373,6 +1373,65 @@ void main() {
     });
 
     test(
+        'gives the title of a page and the label of every button the one '
+        'text that keeps its words whole, the title with half more of its '
+        'size at most and a label with the text size of the device', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+
+      // The title, in the style that the theme has for one.
+      final page = _parsed(app, _page);
+      final title = _callsOf(page, 'Semantics').single['child']!;
+      expect(
+        _callsOf(page, 'WholeWords').single,
+        {
+          '0': 'widget.title',
+          'style': 'theme.textTheme.headlineLarge',
+          'maxScaleFactor': '1.5',
+        },
+      );
+      expect(title, startsWith('WholeWords('));
+      // The label of each button and action: with no style of its own, so
+      // it is as the theme has the label of its button, and it grows as
+      // the text size of the device asks.
+      final labels = <String, List<Map<String, String>>>{};
+      for (final path in _look) {
+        final unit = _parsed(app, path);
+        final buttons = [
+          for (final button in ['FilledButton', 'TextButton', 'OutlinedButton'])
+            ..._callsOf(unit, button),
+        ];
+        for (final button in buttons) {
+          expect(button['child'], contains('WholeWords('), reason: path);
+        }
+        if (path == _page) continue;
+        final texts = _callsOf(unit, 'WholeWords');
+        if (texts.isNotEmpty) labels[path] = texts;
+        expect(texts, hasLength(buttons.length), reason: path);
+      }
+      expect(labels.keys, {_views[0], _views[2], _widgets});
+      for (final label in labels.values.expand((texts) => texts)) {
+        expect(label.keys, ['0', 'textAlign']);
+      }
+      // One piece measures the words, for the titles and the labels.
+      expect(
+        [
+          for (final path in _look)
+            for (final measure in ['LayoutBuilder', 'TextPainter'])
+              if (_callsOf(_parsed(app, path), measure).isNotEmpty)
+                (path, measure),
+        ],
+        [(_widgets, 'LayoutBuilder'), (_widgets, 'TextPainter')],
+      );
+      final words = _classOf(_parsed(app, _widgets), 'WholeWords');
+      expect(_callsOf(words, 'Text').single.keys, [
+        '0',
+        'style',
+        'textAlign',
+        'textScaler',
+      ]);
+    });
+
+    test(
         'has the keyboard and the autofill of the device fit each field: '
         'an address and the password of an account in the sign-in, new '
         'ones in the sign-up', () {
@@ -2271,6 +2330,7 @@ void main() {
         'FailureMessage': _widgets,
         'SubmitButton': _widgets,
         'OtherScreenAction': _widgets,
+        'WholeWords': _widgets,
       };
 
       expect(
@@ -2510,7 +2570,7 @@ void main() {
             .map((name) => name.replaceFirst('()', ''))
             .where(
               (name) => RegExp(
-                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message|Action)|'
+                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message|Action|Words)|'
                 r'authFailureText|signIn\w+)$',
               ).hasMatch(name),
             )

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'sign_in_widgets.dart';
+
 /// The symbol of the app in its cell, as an element of the periodic table
 /// has one: the first letters of the first two words of its name, or the
 /// first two letters of a name of one word.
@@ -122,7 +124,16 @@ class _AuthPageState extends State<AuthPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Semantics(header: true, child: _Title(widget.title)),
+                        Semantics(
+                          header: true,
+                          // The title is large already, so it grows only by
+                          // half with the text size of the device.
+                          child: WholeWords(
+                            widget.title,
+                            style: theme.textTheme.headlineLarge,
+                            maxScaleFactor: 1.5,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           widget.intro,
@@ -142,57 +153,6 @@ class _AuthPageState extends State<AuthPage>
           ),
         ),
       ),
-    );
-  }
-}
-
-/// The title of a page, which takes the lines that it needs.
-///
-/// It is large already, so it grows only by half with the text size of the
-/// device. Where its longest word would still not fit the page, as on a
-/// narrow phone with a large text size, it is as large as that word allows:
-/// a title breaks between its words and never inside one.
-class _Title extends StatelessWidget {
-  const _Title(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.headlineLarge;
-    final scaler = MediaQuery.textScalerOf(
-      context,
-    ).clamp(maxScaleFactor: 1.5);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // How wide the longest word is at that size.
-        final painter = TextPainter(
-          textDirection: Directionality.of(context),
-          textScaler: scaler,
-          maxLines: 1,
-        );
-        var widest = 0.0;
-        for (final word in title.split(' ')) {
-          painter
-            ..text = TextSpan(text: word, style: style)
-            ..layout();
-          if (painter.width > widest) widest = painter.width;
-        }
-        painter.dispose();
-        if (widest <= constraints.maxWidth) {
-          return Text(title, style: style, textScaler: scaler);
-        }
-        // A little smaller than the width allows, so that the rounding of
-        // the layout breaks no word.
-        final size = scaler.scale(style?.fontSize ?? 32);
-        return Text(
-          title,
-          style: style?.copyWith(
-            fontSize: size * constraints.maxWidth / widest * 0.98,
-          ),
-          textScaler: TextScaler.noScaling,
-        );
-      },
     );
   }
 }

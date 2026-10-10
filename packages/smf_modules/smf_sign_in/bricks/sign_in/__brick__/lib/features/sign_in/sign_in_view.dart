@@ -104,7 +104,7 @@ class _SignInViewState extends State<SignInView> {
                     child: TextButton(
                       // Nor a key: the action takes none while busy.
                       onPressed: widget.busy ? null : widget.onForgotPassword,
-                      child: Text(
+                      child: WholeWords(
                         {{{text_forgot_password}}},
                         textAlign: TextAlign.end,
                       ),

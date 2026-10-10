@@ -8,7 +8,8 @@ const agentHeading = 'Sign-in';
 /// the module: where its screens are and what shows them, which of its
 /// files are the look of a screen and which are its state, that its fields
 /// and buttons are those of the theme, but for the one colour of the
-/// action that leads to the other screen, where a failure gets its text,
+/// action that leads to the other screen, which widget keeps the words of
+/// a title and of a label whole, where a failure gets its text,
 /// and what a widget test minds while a call is on its way.
 ///
 /// What a router does with a guard of the routes is for the router role to
@@ -19,6 +20,7 @@ const agentNote = '''
 - A screen of the sign-in neither closes itself nor navigates once the user is signed in. It signs in or up through its state. The session changes then, and the router leaves the sign-in. While `authMode` is `AuthMode.required`, no code navigates to the sign-in either: the gate shows it. In the other modes, a screen that offers to sign in opens it with `context.nav.signIn.signIn().push<void>()`, so that back leads back.
 - The look of a screen and its state are in different files. The look is `SignInView`, `SignUpView` and `ResetPasswordView`, each in a file of its name, such as `lib/features/sign_in/sign_in_view.dart`. They share `AuthPage` of `lib/features/sign_in/sign_in_page.dart`, which is the frame of a screen, and the fields and buttons of `lib/features/sign_in/sign_in_widgets.dart`. All of them are plain Flutter widgets: a view gets the state of its call and callbacks, and imports nothing that manages state. The file of a screen, such as `lib/features/sign_in/sign_in_screen.dart`, only gives its view the state.
 - The fields, the buttons and the cards of the screens are those of the theme of the app. These files give a field no colour, border or padding, so for another look of a field, change the theme of the app. `OtherScreenAction`, the way from the sign-in to the sign-up and back, is a text button of the theme with one colour of its own, `colorScheme.secondary`.
+- The title of a page and the label of each button are each a `WholeWords` of `lib/features/sign_in/sign_in_widgets.dart`, not a `Text`. It breaks a text between its words and never inside one. Where the longest word would not fit, as on a narrow phone with a large text size, the text is only as large as that word allows. Use it for the label of a new button of the feature too.
 - That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, for as long as the session has the account, since the router leaves the screen then. When the session has no account again before that, the form is back.
 - A failure gets its text in `authFailureText()` of `lib/features/sign_in/sign_in_widgets.dart`, which has a text for every `AuthFailureReason`. `FailureMessage` shows that text, and the `developerHint` of the failure in debug mode only.
 - While a call is on its way, `SubmitButton` spins. A widget test that waits with `pumpAndSettle()` returns only once the call has ended, so until then it shows frames with `pump()`.

@@ -76,6 +76,7 @@ With `go_router`:
 - A screen of the sign-in neither closes itself nor navigates once the user is signed in. It signs in or up through its state. The session changes then, and the router leaves the sign-in. While `authMode` is `AuthMode.required`, no code navigates to the sign-in either: the gate shows it. In the other modes, a screen that offers to sign in opens it with `context.nav.signIn.signIn().push<void>()`, so that back leads back.
 - The look of a screen and its state are in different files. The look is `SignInView`, `SignUpView` and `ResetPasswordView`, each in a file of its name, such as `lib/features/sign_in/sign_in_view.dart`. They share `AuthPage` of `lib/features/sign_in/sign_in_page.dart`, which is the frame of a screen, and the fields and buttons of `lib/features/sign_in/sign_in_widgets.dart`. All of them are plain Flutter widgets: a view gets the state of its call and callbacks, and imports nothing that manages state. The file of a screen, such as `lib/features/sign_in/sign_in_screen.dart`, only gives its view the state.
 - The fields, the buttons and the cards of the screens are those of the theme of the app. These files give a field no colour, border or padding, so for another look of a field, change the theme of the app. `OtherScreenAction`, the way from the sign-in to the sign-up and back, is a text button of the theme with one colour of its own, `colorScheme.secondary`.
+- The title of a page and the label of each button are each a `WholeWords` of `lib/features/sign_in/sign_in_widgets.dart`, not a `Text`. It breaks a text between its words and never inside one. Where the longest word would not fit, as on a narrow phone with a large text size, the text is only as large as that word allows. Use it for the label of a new button of the feature too.
 - That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, for as long as the session has the account, since the router leaves the screen then. When the session has no account again before that, the form is back.
 - A failure gets its text in `authFailureText()` of `lib/features/sign_in/sign_in_widgets.dart`, which has a text for every `AuthFailureReason`. `FailureMessage` shows that text, and the `developerHint` of the failure in debug mode only.
 - While a call is on its way, `SubmitButton` spins. A widget test that waits with `pumpAndSettle()` returns only once the call has ended, so until then it shows frames with `pump()`.
@@ -2921,7 +2922,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
             padding: const EdgeInsets.only(top: 28),
             child: FilledButton(
               onPressed: widget.onSignIn,
-              child: Text('Back to sign in', textAlign: TextAlign.center),
+              child: WholeWords('Back to sign in', textAlign: TextAlign.center),
             ),
           ),
         ],
@@ -3062,6 +3063,8 @@ class SignInNotifier extends Notifier<AuthActionState> {
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'sign_in_widgets.dart';
+
 /// The symbol of the app in its cell, as an element of the periodic table
 /// has one: the first letters of the first two words of its name, or the
 /// first two letters of a name of one word.
@@ -3183,7 +3186,16 @@ class _AuthPageState extends State<AuthPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Semantics(header: true, child: _Title(widget.title)),
+                        Semantics(
+                          header: true,
+                          // The title is large already, so it grows only by
+                          // half with the text size of the device.
+                          child: WholeWords(
+                            widget.title,
+                            style: theme.textTheme.headlineLarge,
+                            maxScaleFactor: 1.5,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           widget.intro,
@@ -3203,55 +3215,6 @@ class _AuthPageState extends State<AuthPage>
           ),
         ),
       ),
-    );
-  }
-}
-
-/// The title of a page, which takes the lines that it needs.
-///
-/// It is large already, so it grows only by half with the text size of the
-/// device. Where its longest word would still not fit the page, as on a
-/// narrow phone with a large text size, it is as large as that word allows:
-/// a title breaks between its words and never inside one.
-class _Title extends StatelessWidget {
-  const _Title(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.headlineLarge;
-    final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.5);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // How wide the longest word is at that size.
-        final painter = TextPainter(
-          textDirection: Directionality.of(context),
-          textScaler: scaler,
-          maxLines: 1,
-        );
-        var widest = 0.0;
-        for (final word in title.split(' ')) {
-          painter
-            ..text = TextSpan(text: word, style: style)
-            ..layout();
-          if (painter.width > widest) widest = painter.width;
-        }
-        painter.dispose();
-        if (widest <= constraints.maxWidth) {
-          return Text(title, style: style, textScaler: scaler);
-        }
-        // A little smaller than the width allows, so that the rounding of
-        // the layout breaks no word.
-        final size = scaler.scale(style?.fontSize ?? 32);
-        return Text(
-          title,
-          style: style?.copyWith(
-            fontSize: size * constraints.maxWidth / widest * 0.98,
-          ),
-          textScaler: TextScaler.noScaling,
-        );
-      },
     );
   }
 }
@@ -3661,7 +3624,10 @@ class _SignInViewState extends State<SignInView> {
                     child: TextButton(
                       // Nor a key: the action takes none while busy.
                       onPressed: widget.busy ? null : widget.onForgotPassword,
-                      child: Text('Forgot password?', textAlign: TextAlign.end),
+                      child: WholeWords(
+                        'Forgot password?',
+                        textAlign: TextAlign.end,
+                      ),
                     ),
                   ),
                 ],
@@ -3698,6 +3664,94 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class WholeWords extends StatelessWidget {
+  /// Creates the text.
+  const WholeWords(
+    this.text, {
+    this.style,
+    this.textAlign,
+    this.maxScaleFactor = double.infinity,
+    super.key,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none,
+  /// the text is as the text around it, as the label of a button is in the
+  /// style that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// How the lines of the text are aligned.
+  final TextAlign? textAlign;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: over that of the text around it,
+    // and bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in text.split(' ')) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textAlign: textAlign,
+          textScaler: scaler,
+        );
+      },
+    );
+  }
+}
 
 /// A field of a form with its [label] above it. The label takes as many
 /// lines as it needs, and a screen reader announces it with the field.
@@ -3878,7 +3932,8 @@ class SubmitButton extends StatelessWidget {
     super.key,
   });
 
-  /// The text of the button, which takes as many lines as it needs.
+  /// The text of the button, which takes as many lines as it needs and
+  /// keeps its words whole.
   final String label;
 
   /// Whether the call of the form is on its way.
@@ -3905,7 +3960,7 @@ class SubmitButton extends StatelessWidget {
           // The label keeps its place, so that the button keeps its size.
           Visibility.maintain(
             visible: !spins,
-            child: Text(label, textAlign: TextAlign.center),
+            child: WholeWords(label, textAlign: TextAlign.center),
           ),
           if (spins)
             // In the colour that the theme of the app gives the label.
@@ -3943,7 +3998,8 @@ class OtherScreenAction extends StatelessWidget {
     super.key,
   });
 
-  /// The text of the action, which takes as many lines as it needs.
+  /// The text of the action, which takes as many lines as it needs and
+  /// keeps its words whole.
   final String label;
 
   /// Shows the other screen, or `null` while the action takes no tap.
@@ -3959,7 +4015,7 @@ class OtherScreenAction extends StatelessWidget {
       }),
     ),
     onPressed: onPressed,
-    child: Text(label, textAlign: TextAlign.center),
+    child: WholeWords(label, textAlign: TextAlign.center),
   );
 }
 
