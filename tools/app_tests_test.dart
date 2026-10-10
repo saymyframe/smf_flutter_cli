@@ -382,6 +382,12 @@ const _ofOneProvider = {
   'packages/smf_pipeline/fixture_registry/app_tests/go_router_screens': {
     'go_router',
   },
+  // The new route that the router of go_router gives it for the main
+  // navigation each time the main navigation leaves its pages, since
+  // go_router keeps the pages of the branches with the route.
+  'packages/smf_pipeline/fixture_registry/app_tests/go_router_branches': {
+    'go_router',
+  },
   // A tap on a tab of the bar of bottom_tabs, which selects its
   // destination.
   'packages/smf_pipeline/fixture_registry/app_tests/bottom_tabs_screens': {

@@ -17,6 +17,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
+import 'package:{{app_name}}/features/fake_feature/fixture_details_screen.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
 
 import 'screens.dart';
@@ -226,6 +227,33 @@ void main() {
       ],
       reason: 'The back button of the system closes the child, and its parent '
           'is heard of once.',
+    );
+
+    // A location from the platform without a value that its route
+    // requires, the id of the child, which is no number: the router cannot
+    // show it either. It shows its error screen at that location, or takes
+    // no locations from the platform and stays where it is. In an app with
+    // a main navigation, the user is in it then, on the destination of the
+    // start screen.
+    await tester.binding.handlePushRoute('/fake_feature/details/abc');
+    await tester.pumpAndSettle();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'The router builds no screen for a location without a value '
+          'that its route requires.',
+    );
+    expect(
+      heard(),
+      anyOf(isEmpty, [(null, '/fake_feature/details/abc')]),
+      reason: 'The error screen is heard of once, with no route, at the '
+          'location without a value that its route requires.',
+    );
+    expect(
+      find.byType(FixtureDetailsScreen, skipOffstage: false),
+      findsNothing,
+      reason: 'The router shows no page of a route for a location without a '
+          'value that the route requires.',
     );
 
     // A location from the platform that no route matches: the router shows

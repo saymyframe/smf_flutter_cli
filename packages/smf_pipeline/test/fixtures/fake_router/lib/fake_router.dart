@@ -17,6 +17,10 @@
 /// router comes back to: about the screen it starts on and about each
 /// location that it is asked to show, and it tells them of the pages of its
 /// stack when one of them changes, and shows the location that they answer.
+/// When the main navigation leaves the stack, by an answer of the guards or
+/// by a navigation, the branches get new navigators, so that a main
+/// navigation that comes back before the transition to the page that took
+/// its place is over shares no key with the one that left.
 library;
 
 import 'package:fake_router/bundles/fake_router_bundle.dart';

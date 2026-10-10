@@ -25,15 +25,37 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// rather than through the router above a context, so that any context
   /// can navigate, even one above the router.
   @override
-  late final GoRouter config = GoRouter(
+  late final GoRouter config = GoRouter{{^main_navigation}}(
     initialLocation: {{{initial_location}}},
-    observers: _observers(),{{#guards}}
+    observers: _observers(),{{/main_navigation}}{{#main_navigation}}.routingConfig(
+    routingConfig: _routes,
+    initialLocation: {{{initial_location}}},
+    observers: _observers(),
+  )..routerDelegate.addListener(_pagesChanged);
+
+  /// The routes of the app, which go_router follows when they change, so
+  /// that the router can give it a new main navigation; see
+  /// [_renewMainNavigation].
+  late final ValueNotifier<RoutingConfig> _routes = ValueNotifier(
+    RoutingConfig({{/main_navigation}}{{#guards}}
     redirect: (context, state) =>
         _guards.asked(state.topRoute?.name, '${state.uri}')?.location,{{/guards}}
     routes: [
 {{{routes}}}
     ],
-  )..routerDelegate.addListener(_pagesChanged);
+  ){{^main_navigation}}..routerDelegate.addListener(_pagesChanged);{{/main_navigation}}{{#main_navigation}},
+  );
+
+  /// The route of the main navigation that [_routes] has now.
+  late StatefulShellRoute _mainNavigationRoute = _mainNavigation();
+
+  /// Whether the main navigation of [_mainNavigationRoute] is, or was,
+  /// among the pages of the router.
+  bool _mainNavigationShown = false;
+
+  /// Whether the router is giving go_router its new routes, which changes
+  /// the pages of go_router for a moment that the router does not follow.
+  bool _renewing = false;{{/main_navigation}}
 
   /// The key of the page on top and its location, as the listeners of the
   /// screen last heard of them.
@@ -121,11 +143,72 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   /// Follows the pages of go_router, whose delegate notifies its listeners
   /// of each change of them: keeps each push completing with the value of
-  /// its page, and tells the listeners of the screen about the page on top.
+  /// its page, and tells the listeners of the screen about the page on top.{{#main_navigation}}
+  /// Before that, it gives go_router a new main navigation if the main
+  /// navigation has left the pages. Nothing here needs that order today:
+  /// it is for code that navigates when the pages change, which then finds
+  /// the new routes.{{/main_navigation}}
   void _pagesChanged() {
-    _keepPushes();
+    {{#main_navigation}}if (_renewing) return;
+    _renewMainNavigation();
+    {{/main_navigation}}_keepPushes();
     _showScreen();
-  }
+  }{{#main_navigation}}
+
+  /// Gives go_router a new route for the main navigation once the main
+  /// navigation has left the pages of the router, as when the target of a
+  /// guard takes the place of the whole stack.
+  ///
+  /// go_router keeps the pages of each branch, and the navigator that shows
+  /// them, under keys of the route of the main navigation, for as long as a
+  /// page of that route is in the widget tree: until the transition to the
+  /// page that took its place is over. A main navigation that comes back
+  /// sooner, such as in the same turn, would have the pages of its branches
+  /// again, though a guard may keep the user from them since. And while
+  /// the page that left is still in the tree, Flutter finds those keys
+  /// there twice and throws
+  /// (https://github.com/flutter/flutter/issues/148768). A new route has
+  /// keys of its own, so the main navigation comes back with each branch on
+  /// its destination, at any time. Once go_router gives the main navigation
+  /// that comes back a state of its own, this can go.
+  ///
+  /// The other routes stay the same objects, and the new configuration has
+  /// what the one before it had. When its routes change, go_router matches
+  /// its location again, without the redirects of the routes. So a
+  /// location that a redirect refused, such as one without a value that its
+  /// route requires, would get the page of its route in place of the error
+  /// screen: the router puts back the pages that go_router had.
+  void _renewMainNavigation() {
+    final shown = config.routerDelegate.currentConfiguration;
+    if (shown.matches.any(
+      (page) => identical(page.route, _mainNavigationRoute),
+    )) {
+      _mainNavigationShown = true;
+      return;
+    }
+    if (!_mainNavigationShown) return;
+    _mainNavigationShown = false;
+    final left = _mainNavigationRoute;
+    final routes = _routes.value;
+    _mainNavigationRoute = _mainNavigation();
+    _renewing = true;
+    try {
+      _routes.value = RoutingConfig(
+        routes: [
+          for (final route in routes.routes)
+            identical(route, left) ? _mainNavigationRoute : route,
+        ],
+        onEnter: routes.onEnter,
+        redirect: routes.redirect,
+        redirectLimit: routes.redirectLimit,
+      );
+      if (config.routerDelegate.currentConfiguration != shown) {
+        config.restore(shown);
+      }
+    } finally {
+      _renewing = false;
+    }
+  }{{/main_navigation}}
 
   /// Lets each push complete with the value that its page returns when it
   /// closes, whatever completer go_router gives the page.
@@ -223,7 +306,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     );
   }{{/main_navigation}}
 }
-
+{{{main_navigation_route}}}
 /// Creates the observers of a navigator. An observer can watch only one
 /// navigator, so each navigator gets instances of its own.
 List<NavigatorObserver> _observers() => [
