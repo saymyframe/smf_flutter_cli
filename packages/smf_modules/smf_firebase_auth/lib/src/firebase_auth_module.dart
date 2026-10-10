@@ -25,14 +25,23 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///
 /// The service keeps what the role promises and the package does not:
 /// - it gives each code of Firebase the reason of the role, and the reason
-///   `unknown`, with the code, to a code that it does not know. A way to
-///   sign in that is not enabled in the Firebase project is
-///   `notConfigured`, with a hint that has the link to the page of the
-///   project where it is enabled. On Android, Firebase tells of a project
-///   in which Authentication was never set up in the message of an unknown
-///   error. On iOS and macOS it answers with an internal error that nothing
-///   tells from another one, which the service takes for `notConfigured`
-///   there, with a hint that says so;
+///   `unknown`, with the code and the message on one line, to a code that
+///   it does not know. A way to sign in that is not enabled in the Firebase
+///   project is `notConfigured`, with a hint that has the link to the page
+///   of the project where it is enabled. Firebase tells of a project in
+///   which Authentication was never set up only in the message of an
+///   error, an unknown one on Android and an internal one on iOS, where the
+///   message is the description of the error over many lines: the hint
+///   names the code and what the service found there, not that
+///   description. An internal error of iOS and macOS whose message says no
+///   more is `notConfigured` there too, with a hint that says that it may
+///   be another error;
+/// - an empty address or password fails before Firebase is asked, with the
+///   same reason on every platform: Android refuses an empty text with a
+///   code that has no reason, and iOS answers an empty password as a wrong
+///   one;
+/// - the user has no address when Firebase has an empty one, as Android
+///   has for an anonymous user whom it kept on the device;
 /// - it tells of the user after each of its calls, and when Firebase tells
 ///   of a change that no call made, with the user of the moment in which a
 ///   listener hears of it;

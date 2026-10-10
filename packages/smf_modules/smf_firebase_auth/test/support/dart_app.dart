@@ -144,14 +144,17 @@ Locale basicLocaleListResolution(
 /// - `User.delete()` leaves the user as the current one, which the plugin
 ///   clears only when the platform tells it of the sign-out;
 /// - `userChanges()` returns a new stream each time, which first has the
-///   current user and then what the platform tells of.
+///   current user and then what the platform tells of;
+/// - an anonymous user whom Android kept on the device has an empty text
+///   for its address, not none.
 ///
 /// A test scripts and reads it through the top-level names: `failNext`,
 /// the error that the next call of a method fails with; `firebaseCalls`,
 /// each call that reached it, with its arguments; `userChangesListeners`,
-/// how many of its streams of the user have a listener; and
+/// how many of its streams of the user have a listener;
 /// `platformSignsOut()` and `platformFails()`, what the platform tells of
-/// without a call.
+/// without a call; and `restoreAnonymousUserOfAndroid()`, the user that a
+/// start of the app on Android finds.
 const _firebaseAuth = r'''
 import 'dart:async';
 
@@ -174,6 +177,11 @@ void platformSignsOut() {
 
 /// The stream of the platform sends [error].
 void platformFails(Object error) => _platform.addError(error);
+
+/// Puts the anonymous user [uid] on the device as Android hands such a user
+/// over when the app starts: with an empty text for the address.
+void restoreAnonymousUserOfAndroid(String uid) =>
+    FirebaseAuth.instance._current = User._(uid, email: '', isAnonymous: true);
 
 void _called(String method, [List<Object?> arguments = const []]) {
   firebaseCalls.add('$method(${arguments.join(', ')})');
@@ -229,12 +237,12 @@ class UserCredential {
 }
 
 class User {
-  User._(this.uid, {this.email});
+  User._(this.uid, {this.email, bool? isAnonymous})
+      : isAnonymous = isAnonymous ?? email == null;
 
   final String uid;
   final String? email;
-
-  bool get isAnonymous => email == null;
+  final bool isAnonymous;
 
   Future<UserCredential> linkWithCredential(AuthCredential credential) async {
     await null;

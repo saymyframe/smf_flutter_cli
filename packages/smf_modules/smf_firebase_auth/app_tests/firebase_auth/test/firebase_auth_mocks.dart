@@ -23,15 +23,28 @@
 // test too. It keeps to what Firebase does where the app relies on it:
 // signing in and signing up replace the user who is signed in, an
 // anonymous sign-in while an anonymous user is signed in answers with that
-// user, an anonymous user keeps the id with an account, a wrong password
-// and an address without an account are answered alike, and the account of
-// a user whom the app found on the device is deleted only once that user
-// has signed in again. It differs in one thing: the platform tells the
-// plugin of each change of the user through a stream, a moment after it
-// answered the call that made the change, and here it tells only of a
-// change that a test makes with MockFirebaseAuth.signOutOnPlatform(). So
-// the plugin has a user who was deleted as its current one until the app
-// signs out, which on a device lasts only that moment.
+// user, an anonymous user keeps the id with an account, and a wrong
+// password and an address without an account are answered alike.
+//
+// It differs from Firebase in this:
+// - The platform tells the plugin of each change of the user through a
+//   stream, a moment after it answered the call that made the change. Here
+//   it tells only of a change that a test makes with
+//   MockFirebaseAuth.signOutOnPlatform(). So the plugin has a user who was
+//   deleted as its current one until the app signs out, which on a device
+//   lasts only that moment.
+// - It takes any text for an email address and any password, an empty one
+//   too. Firebase refuses a text that is no address and a password of
+//   fewer than six characters, and Android and iOS each refuse an empty
+//   text in a way of their own.
+// - It tells two addresses apart by the case of their letters, where
+//   Firebase keeps an address in lower case.
+// - It deletes whoever is signed in. Firebase deletes an account only for
+//   a user who signed in a short while ago.
+// - It sends no message, takes any number of attempts, and has no network
+//   that could fail.
+// - A user whom a test puts on the device (restoreUser) is as Android has
+//   one: an anonymous user has empty texts where iOS has none.
 import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart'
     show InternalUserDetails, InternalUserInfo;
 // The codec of the messages and the class of an answer with a user.
@@ -85,10 +98,21 @@ final class _User {
         ],
       );
 
-  /// The user as the platform sends it outside the answer to a call: in
-  /// the constants of the plugin and in the events of its streams.
-  List<Object?> get encoded =>
-      [details.userInfo.encode(), details.providerData];
+  /// The user as Android has it for the plugin when the app starts, in the
+  /// constants of the plugin: for an anonymous user whom it kept on the
+  /// device, the address, the name and the phone number are empty texts,
+  /// not none as on iOS, until the user is reloaded.
+  List<Object?> get restored => [
+        InternalUserInfo(
+          uid: uid,
+          email: email ?? '',
+          displayName: email == null ? '' : null,
+          phoneNumber: email == null ? '' : null,
+          isAnonymous: email == null,
+          isEmailVerified: false,
+        ).encode(),
+        details.providerData,
+      ];
 }
 
 /// An error as the platform answers a call with it.
@@ -109,10 +133,6 @@ final class MockFirebaseAuth {
   _User? _current;
   int _created = 0;
 
-  /// Whether the user signed in since the app started, which Firebase asks
-  /// for before it deletes a user.
-  bool _signedInRecently = false;
-
   /// The calls that reached the platform side, each as its method followed
   /// by its arguments, without the Firebase app that each has first.
   final List<List<Object?>> calls = [];
@@ -129,18 +149,14 @@ final class MockFirebaseAuth {
       _failures[method] = _Failure(code, message);
 
   /// Puts the user [uid] on the device, with the account of [email] or as
-  /// an anonymous user, as a start of the app finds a user who signed in
-  /// when the app last ran: the plugin gets that user when Firebase is
-  /// initialized, so call it before that. The user did not sign in since
-  /// the app started.
-  void restoreUser(String uid, {String? email, String? password}) {
-    final user = _User(uid)
-      ..email = email
-      ..password = password;
+  /// an anonymous user, as a start of the app on Android finds a user who
+  /// signed in when the app last ran: the plugin gets that user when
+  /// Firebase is initialized, so call it before that.
+  void restoreUser(String uid, {String? email}) {
+    final user = _User(uid)..email = email;
     if (email != null) _accounts[email] = user;
     _current = user;
-    _signedInRecently = false;
-    firebasePluginConstants[_plugin] = {'APP_CURRENT_USER': user.encoded};
+    firebasePluginConstants[_plugin] = {'APP_CURRENT_USER': user.restored};
   }
 
   /// Signs the user out on the platform side and tells the plugin, as the
@@ -246,13 +262,6 @@ final class MockFirebaseAuth {
     });
     answer('FirebaseAuthUserHostApi', 'delete', (_) {
       final user = _signedIn();
-      if (user.email != null && !_signedInRecently) {
-        throw const _Failure(
-          'ERROR_REQUIRES_RECENT_LOGIN',
-          'This operation is sensitive and requires recent authentication. '
-              'Log in again before retrying this request.',
-        );
-      }
       _accounts.remove(user.email);
       // It tells the plugin nothing: see the top of the file.
       _current = null;
@@ -274,10 +283,7 @@ final class MockFirebaseAuth {
     return _accounts[email] = user;
   }
 
-  void _signIn(_User user) {
-    _current = user;
-    _signedInRecently = true;
-  }
+  void _signIn(_User user) => _current = user;
 
   /// The user who is signed in, for a call that is for that user.
   _User _signedIn() =>

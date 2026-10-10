@@ -1834,6 +1834,12 @@ const _endedSession = {
 /// Email/Password, and Anonymous for an app that signs in anonymous users.
 /// Until they are, a call fails with [AuthFailureReason.notConfigured], and
 /// its [AuthFailure.developerHint] tells where to enable them.
+///
+/// An empty address or password fails here, before Firebase is asked, since
+/// Android and iOS answer it with different codes: an empty address with
+/// [AuthFailureReason.invalidEmail], and an empty password with
+/// [AuthFailureReason.invalidCredentials] in [signIn] and with
+/// [AuthFailureReason.weakPassword] in [signUp] and [linkPassword].
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
@@ -1855,14 +1861,18 @@ final class FirebaseAuthService implements AuthService {
   StreamSubscription<User?>? _fromFirebase;
 
   @override
-  AuthUser? get currentUser => switch (_auth.currentUser) {
-    null => null,
-    final user => AuthUser(
+  AuthUser? get currentUser {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    final email = user.email;
+    return AuthUser(
       uid: user.uid,
       isAnonymous: user.isAnonymous,
-      email: user.email,
-    ),
-  };
+      // Android has an empty address, not none, for an anonymous user whom
+      // it kept on the device.
+      email: email == null || email.isEmpty ? null : email,
+    );
+  }
 
   /// Each event has the user of the moment in which a listener gets it, so
   /// a listener never hears of a user who is not [currentUser] any more.
@@ -1871,29 +1881,34 @@ final class FirebaseAuthService implements AuthService {
 
   @override
   Future<void> signIn({required String email, required String password}) =>
-      _run(
-        () =>
-            _auth.signInWithEmailAndPassword(email: email, password: password),
-      );
+      _run(() {
+        _checkGiven(email, password, AuthFailureReason.invalidCredentials);
+        return _auth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      });
 
   @override
   Future<void> signUp({required String email, required String password}) =>
-      _run(
-        () => _auth.createUserWithEmailAndPassword(
+      _run(() {
+        _checkGiven(email, password, AuthFailureReason.weakPassword);
+        return _auth.createUserWithEmailAndPassword(
           email: email,
           password: password,
-        ),
-      );
+        );
+      });
 
   @override
   Future<void> linkPassword({
     required String email,
     required String password,
-  }) => _runForUser(
-    (user) => user.linkWithCredential(
+  }) => _runForUser((user) {
+    _checkGiven(email, password, AuthFailureReason.weakPassword);
+    return user.linkWithCredential(
       EmailAuthProvider.credential(email: email, password: password),
-    ),
-  );
+    );
+  });
 
   /// While an anonymous user is signed in, Firebase answers with that user
   /// and creates no other.
@@ -1904,6 +1919,7 @@ final class FirebaseAuthService implements AuthService {
   /// (Authentication > Templates in the Firebase console).
   @override
   Future<void> sendPasswordReset(String email) => _run(() async {
+    _checkGiven(email);
     // The message is in the language that the app is in.
     await _auth.setLanguageCode(
       (appLocale.value ??
@@ -1954,6 +1970,24 @@ final class FirebaseAuthService implements AuthService {
         }
       });
 
+  /// Fails for an [email] that is empty with
+  /// [AuthFailureReason.invalidEmail], and for a [password] that is empty
+  /// with [withoutPassword], before Firebase is asked. Android refuses an
+  /// empty text with a code that has no reason, and iOS answers an empty
+  /// password as a wrong one, so the service decides for both.
+  void _checkGiven(
+    String email, [
+    String? password,
+    AuthFailureReason withoutPassword = AuthFailureReason.weakPassword,
+  ]) {
+    if (email.isEmpty) {
+      throw const AuthFailure(AuthFailureReason.invalidEmail);
+    }
+    if (password != null && password.isEmpty) {
+      throw AuthFailure(withoutPassword);
+    }
+  }
+
   /// Runs [call], which then fails only with an [AuthFailure], and tells
   /// of the user that it leaves, also when it failed.
   Future<void> _run(Future<void> Function() call) async {
@@ -1993,28 +2027,39 @@ final class FirebaseAuthService implements AuthService {
       _ => null,
     };
     if (reason != null) return AuthFailure(reason);
-    final answer = '${error.code}: ${error.message}';
+    // The message on one line: that of iOS may be the description of an
+    // error over many lines.
+    final message = (error.message ?? '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final answer = message.isEmpty ? error.code : '${error.code}: $message';
     final project = _auth.app.options.projectId;
     final enable =
         'enable Email/Password, and Anonymous for an app that '
         'signs in anonymous users, under Authentication > Sign-in method: '
         'https://console.firebase.google.com/project/$project/'
         'authentication/providers';
-    // A way to sign in that is not enabled, and, on Android, a project in
-    // which Authentication was never set up.
-    if (error.code == 'operation-not-allowed' ||
-        error.code == 'admin-restricted-operation' ||
-        answer.contains('CONFIGURATION_NOT_FOUND')) {
+    // A way to sign in that is not enabled, which Firebase tells by its
+    // code, and a project in which Authentication was never set up, which
+    // it tells only in its message.
+    const noConfiguration = 'CONFIGURATION_NOT_FOUND';
+    final notEnabled = switch (error.code) {
+      'operation-not-allowed' || 'admin-restricted-operation' => error.code,
+      _ when message.contains(noConfiguration) =>
+        '${error.code}, $noConfiguration',
+      _ => null,
+    };
+    if (notEnabled != null) {
       return AuthFailure(
         AuthFailureReason.notConfigured,
         developerHint:
             'Sign-in is not enabled in the Firebase project '
-            '$project ($answer). To fix it, $enable',
+            '$project (Firebase answered $notEnabled). To fix it, $enable',
       );
     }
-    // On iOS and macOS, Firebase answers for a project in which
-    // Authentication was never set up with an internal error, which
-    // nothing tells from another one.
+    // On iOS and macOS, Firebase may answer for such a project with an
+    // internal error whose message says no more, which nothing tells from
+    // another internal error.
     if (error.code == 'internal-error' &&
         (defaultTargetPlatform == TargetPlatform.iOS ||
             defaultTargetPlatform == TargetPlatform.macOS)) {

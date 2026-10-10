@@ -8,11 +8,15 @@
 // and the plugin makes one code of both. A way to sign in that is not
 // enabled in the Firebase project is notConfigured, with a hint that has
 // the link to the project, also where Firebase tells of it only in a
-// message or, on iOS and macOS, in an internal error. A code that the
-// service does not know is unknown, with the code. A password reset
-// completes for an address without an account also when Firebase tells
-// so. A call that failed leaves the user. And a call for a user whose
-// session has ended on the server signs that user out.
+// message or, on iOS and macOS, in an internal error. The hint names what
+// Firebase answered in a line, also where the message of iOS is the
+// description of an error over many lines. A code that the service does
+// not know is unknown, with the code and the message on one line. A
+// password reset completes for an address without an account also when
+// Firebase tells so. An empty address or password fails before Firebase is
+// asked, with the same reason on every platform. A call that failed leaves
+// the user. And a call for a user whose session has ended on the server
+// signs that user out.
 //
 // It uses the service of the module and runs none of the start-up of the
 // app but the start of Firebase (service.dart). The matrix sets up the
@@ -36,6 +40,34 @@ const _notFound = 'An internal error has occurred. [ CONFIGURATION_NOT_FOUND ]';
 /// of what the server answered.
 const _internal = 'An internal error has occurred, print and inspect the '
     'error details for more information.';
+
+/// The message with which iOS answers a sign-in, a sign-up and an anonymous
+/// sign-in for a project in which Authentication was never set up, under
+/// the code of an internal error: the description of the error, over
+/// several lines, with addresses in memory and the answer of the server.
+/// Its first line is as an iPhone simulator had it, and the others are
+/// the answer of the server as such a description prints it.
+const _notFoundOnIos = 'Error Domain=FIRAuthErrorDomain Code=17999 '
+    '"$_internal" UserInfo={NSLocalizedDescription=$_internal, '
+    'FIRAuthErrorUserInfoNameKey=ERROR_INTERNAL_ERROR, '
+    'NSUnderlyingError=0x600000c5e910 {Error '
+    'Domain=FIRAuthInternalErrorDomain Code=3 "(null)" '
+    'UserInfo={NSUnderlyingError=0x600000c2ff90 {Error '
+    'Domain=com.google.HTTPStatus Code=400 "(null)" '
+    'UserInfo={data={length = 220, bytes = 0x7b0a2020 22657272 6f72223a '
+    '207b0a20 ... 5d0a2020 7d0a7d0a }, '
+    'data_content_type=application/json; charset=UTF-8}}, '
+    'FIRAuthErrorUserInfoDeserializedResponseKey={\n'
+    '    code = 400;\n'
+    '    errors =     (\n'
+    '                {\n'
+    '            domain = global;\n'
+    '            message = "CONFIGURATION_NOT_FOUND";\n'
+    '            reason = invalid;\n'
+    '        }\n'
+    '    );\n'
+    '    message = "CONFIGURATION_NOT_FOUND";\n'
+    '}}}}';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -210,43 +242,38 @@ void main() {
         'UNKNOWN',
         _notFound,
       ),
+      'no Authentication in the project, on iOS': await outcome(
+        'signInWithEmailAndPassword',
+        'internal-error',
+        _notFoundOnIos,
+      ),
     };
 
+    String hint(String answered) =>
+        'notConfigured (Sign-in is not enabled in the Firebase project '
+        '$project (Firebase answered $answered). To fix it, enable '
+        'Email/Password, and Anonymous for an app that signs in anonymous '
+        'users, under Authentication > Sign-in method: $link)';
     expect(
-      found.values,
-      everyElement(
-        allOf(
-          startsWith(
-            'notConfigured (Sign-in is not enabled in the Firebase project '
-            '$project (',
-          ),
-          endsWith(
-            'enable Email/Password, and Anonymous for an app that signs in '
-            'anonymous users, under Authentication > Sign-in method: $link)',
-          ),
-        ),
-      ),
+      found,
+      {
+        'Email/Password, on Android': hint('operation-not-allowed'),
+        'Email/Password, on iOS': hint('operation-not-allowed'),
+        'Anonymous, on Android': hint('admin-restricted-operation'),
+        'Anonymous, on iOS': hint('admin-restricted-operation'),
+        'no Authentication in the project, on Android':
+            hint('unknown, CONFIGURATION_NOT_FOUND'),
+        'no Authentication in the project, on iOS':
+            hint('internal-error, CONFIGURATION_NOT_FOUND'),
+      },
       reason: 'When Firebase answers that a way to sign in is not allowed, '
-          'or, on Android, that it found no configuration, the call fails '
-          'with notConfigured, and its hint for the developer names the '
-          'project and has the link to its sign-in methods: $found',
-    );
-    expect(
-      [
-        found['Email/Password, on Android'],
-        found['Anonymous, on iOS'],
-        found['no Authentication in the project, on Android'],
-      ],
-      [
-        contains(
-          '(operation-not-allowed: The given sign-in provider is disabled '
-          'for this Firebase project.)',
-        ),
-        contains('(admin-restricted-operation: null)'),
-        contains('CONFIGURATION_NOT_FOUND'),
-      ],
-      reason: 'The hint has what Firebase answered: its code and its '
-          'message.',
+          'or that it found no configuration, which it tells only in the '
+          'message of an unknown error on Android and of an internal error '
+          'on iOS, the call fails with notConfigured. Its hint for the '
+          'developer names the project, the code of Firebase and what the '
+          'service found in the message, and has the link to the sign-in '
+          'methods of the project. It has none of the message of iOS, the '
+          'description of an error over many lines.',
     );
   });
 
@@ -304,22 +331,100 @@ void main() {
 
   test(
       'a code that the service does not know is unknown, with the code and '
-      'the message of Firebase', () async {
+      'the whole message of Firebase on one line', () async {
     await service.signOut();
 
-    final found = await outcome(
-      'signInWithEmailAndPassword',
-      'ERROR_APP_NOT_AUTHORIZED',
-      'This app is not authorized to use Firebase Authentication.',
-    );
+    final found = [
+      await outcome(
+        'signInWithEmailAndPassword',
+        'ERROR_APP_NOT_AUTHORIZED',
+        'This app is not authorized to use Firebase Authentication.',
+      ),
+      // A message over several lines, as iOS has some.
+      await outcome(
+        'signInWithEmailAndPassword',
+        'keychain-error',
+        'Error Domain=FIRAuthErrorDomain Code=17995 UserInfo={\n'
+            '    NSLocalizedFailureReason = "SecItemAdd (-34018)";\n'
+            '}',
+      ),
+      await outcome('signInWithEmailAndPassword', 'ERROR_QUOTA_EXCEEDED'),
+    ];
 
     expect(
       found,
-      'unknown (app-not-authorized: This app is not authorized to use '
-      'Firebase Authentication.)',
+      [
+        'unknown (app-not-authorized: This app is not authorized to use '
+            'Firebase Authentication.)',
+        'unknown (keychain-error: Error Domain=FIRAuthErrorDomain Code=17995 '
+            'UserInfo={ NSLocalizedFailureReason = "SecItemAdd (-34018)"; })',
+        'unknown (quota-exceeded)',
+      ],
       reason: 'A call that Firebase answers with a code that has no reason '
-          'of the auth role fails with unknown, and its hint for the '
-          'developer has the code and the message.',
+          'of the auth role fails with unknown. Its hint for the developer '
+          'has the code and the whole message, on one line, and the code '
+          'alone when Firebase gives no message.',
+    );
+  });
+
+  test(
+      'an empty address or password fails before Firebase is asked, with '
+      'the same reason on every platform', () async {
+    await service.signOut();
+    await service.signInAnonymously();
+    final before = userOf(service.currentUser);
+    final email = addressOf('empty');
+    firebase.calls.clear();
+
+    final found = {
+      'signIn without an address': outcomeOf(
+        await errorOf(() => service.signIn(email: '', password: password)),
+      ),
+      'signIn without a password': outcomeOf(
+        await errorOf(() => service.signIn(email: email, password: '')),
+      ),
+      'signUp without an address': outcomeOf(
+        await errorOf(() => service.signUp(email: '', password: password)),
+      ),
+      'signUp without a password': outcomeOf(
+        await errorOf(() => service.signUp(email: email, password: '')),
+      ),
+      'linkPassword without an address': outcomeOf(
+        await errorOf(
+          () => service.linkPassword(email: '', password: password),
+        ),
+      ),
+      'linkPassword without a password': outcomeOf(
+        await errorOf(() => service.linkPassword(email: email, password: '')),
+      ),
+      'sendPasswordReset without an address': outcomeOf(
+        await errorOf(() => service.sendPasswordReset('')),
+      ),
+    };
+
+    expect(
+      found,
+      {
+        'signIn without an address': AuthFailureReason.invalidEmail.name,
+        'signIn without a password': AuthFailureReason.invalidCredentials.name,
+        'signUp without an address': AuthFailureReason.invalidEmail.name,
+        'signUp without a password': AuthFailureReason.weakPassword.name,
+        'linkPassword without an address': AuthFailureReason.invalidEmail.name,
+        'linkPassword without a password': AuthFailureReason.weakPassword.name,
+        'sendPasswordReset without an address':
+            AuthFailureReason.invalidEmail.name,
+      },
+      reason: 'Android refuses an empty text with a code that has no '
+          'reason, and iOS answers an empty password as a wrong one. So '
+          'the service decides itself: an empty address is invalidEmail, '
+          'and an empty password is invalidCredentials for a sign-in and '
+          'weakPassword where it would become the password of an account.',
+    );
+    expect(
+      [firebase.calls, userOf(service.currentUser)],
+      [isEmpty, before],
+      reason: 'The service asks Firebase for nothing, not for the language '
+          'of a message either, and whoever is signed in stays.',
     );
   });
 

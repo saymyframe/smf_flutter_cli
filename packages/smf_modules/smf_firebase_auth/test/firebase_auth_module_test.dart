@@ -223,8 +223,20 @@ Future<void> settle() => Future<void>.delayed(Duration.zero);
 Future<void> main(List<String> arguments, SendPort port) async {
   final codes = arguments;
   final result = <String, Object?>{};
+  // The anonymous user that a start of the app on Android finds.
+  restoreAnonymousUserOfAndroid('kept');
+  final kept = createFirebaseAuthService().currentUser;
+  result['an anonymous user of Android'] = [
+    FirebaseAuth.instance.currentUser?.email,
+    userOf(kept),
+    kept?.email,
+  ];
+  await FirebaseAuth.instance.signOut();
+  firebaseCalls.clear();
+
   final service = createFirebaseAuthService();
   result['implementation'] = '${service.runtimeType}';
+  result['user at first'] = userOf(service.currentUser);
   result['streams of Firebase'] = [userChangesListeners];
 
   final heard = <String>[];
@@ -290,8 +302,35 @@ Future<void> main(List<String> arguments, SendPort port) async {
       await step(() => service.sendPasswordReset('nobody@x.dev'));
   failNext['sendPasswordResetEmail'] =
       FirebaseAuthException(code: 'invalid-email');
-  result['reset for no address'] =
+  result['reset for a text that is no address'] =
       await outcomeOf(() => service.sendPasswordReset('nobody'));
+
+  // An empty address or password, which the service refuses itself.
+  await service.signOut();
+  await service.signInAnonymously();
+  await settle();
+  firebaseCalls.clear();
+  result['empty'] = {
+    'signIn without an address':
+        await outcomeOf(() => service.signIn(email: '', password: password)),
+    'signIn without a password':
+        await outcomeOf(() => service.signIn(email: 'a@x.dev', password: '')),
+    'signUp without an address':
+        await outcomeOf(() => service.signUp(email: '', password: password)),
+    'signUp without a password':
+        await outcomeOf(() => service.signUp(email: 'c@x.dev', password: '')),
+    'linkPassword without an address': await outcomeOf(
+      () => service.linkPassword(email: '', password: password),
+    ),
+    'linkPassword without a password': await outcomeOf(
+      () => service.linkPassword(email: 'c@x.dev', password: ''),
+    ),
+    'sendPasswordReset without an address':
+        await outcomeOf(() => service.sendPasswordReset('')),
+  };
+  result['calls of Firebase for what is empty'] = [...firebaseCalls];
+  result['user after what is empty'] = userOf(service.currentUser);
+  await signIn();
 
   final ended = <String, Object?>{};
   for (final code in const [
@@ -329,6 +368,15 @@ Future<void> main(List<String> arguments, SendPort port) async {
       'unknown',
       'An internal error has occurred. [ CONFIGURATION_NOT_FOUND',
     ),
+    // As iOS tells of it: in the description of an internal error, over
+    // several lines.
+    await failing(
+      'internal-error',
+      'Error Domain=FIRAuthErrorDomain Code=17999 UserInfo={\n'
+          '    NSUnderlyingError=0x600000c5e910;\n'
+          '    message = "CONFIGURATION_NOT_FOUND";\n'
+          '}',
+    ),
   ];
   final internal = <String, Object?>{};
   for (final platform in TargetPlatform.values) {
@@ -340,6 +388,8 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['unknown'] = [
     await failing('app-not-authorized', 'Not authorized.'),
     await failing('unknown', 'Something else.'),
+    await failing('keychain-error', 'Error Domain=X {\n    reason = 1;\n}'),
+    await failing('quota-exceeded'),
   ];
   failNext['signInWithEmailAndPassword'] = StateError('broken');
   result['no error of Firebase'] = await outcomeOf(signIn);
@@ -739,7 +789,10 @@ void main() {
       });
 
       test('asks Firebase for no language before a password reset', () {
-        expect(_passwordResetOf(app), [startsWith('try {')]);
+        expect(
+          _passwordResetOf(app),
+          ['_checkGiven(email);', startsWith('try {')],
+        );
       });
     });
 
@@ -758,6 +811,16 @@ void main() {
 
       test('is created with nobody on a device without a user', () {
         expect(sent['implementation'], 'FirebaseAuthService');
+        expect(sent['user at first'], 'nobody');
+      });
+
+      test(
+          'has no address for an anonymous user whom Android kept on the '
+          'device, though Firebase has an empty one', () {
+        expect(
+          sent['an anonymous user of Android'],
+          ['', 'kept <null>, anonymous', null],
+        );
       });
 
       test(
@@ -858,7 +921,24 @@ void main() {
           ['sendPasswordResetEmail(nobody@x.dev)'],
           ['uid of a@x.dev <a@x.dev>'],
         ]);
-        expect(sent['reset for no address'], 'invalidEmail');
+        expect(sent['reset for a text that is no address'], 'invalidEmail');
+      });
+
+      test(
+          'fails for an empty address or password before it asks Firebase, '
+          'with a reason of its own for each call', () {
+        // What Android and iOS answer differs, so the service decides.
+        expect(sent['empty'], {
+          'signIn without an address': 'invalidEmail',
+          'signIn without a password': 'invalidCredentials',
+          'signUp without an address': 'invalidEmail',
+          'signUp without a password': 'weakPassword',
+          'linkPassword without an address': 'invalidEmail',
+          'linkPassword without a password': 'weakPassword',
+          'sendPasswordReset without an address': 'invalidEmail',
+        });
+        expect(sent['calls of Firebase for what is empty'], isEmpty);
+        expect(sent['user after what is empty'], 'guest 2 <null>, anonymous');
       });
 
       test(
@@ -891,18 +971,19 @@ void main() {
         const enable = 'enable Email/Password, and Anonymous for an app that '
             'signs in anonymous users, under Authentication > Sign-in '
             'method: $link';
-        String notEnabled(String answer) =>
+        String notEnabled(String answered) =>
             'notConfigured: Sign-in is not enabled in the Firebase project '
-            'stand-in-project ($answer). To fix it, $enable';
+            'stand-in-project (Firebase answered $answered). To fix it, '
+            '$enable';
         expect(sent['not configured'], [
-          notEnabled('operation-not-allowed: The provider is disabled.'),
-          notEnabled('admin-restricted-operation: null'),
+          notEnabled('operation-not-allowed'),
+          notEnabled('admin-restricted-operation'),
           // As Android tells of a project in which Authentication was
-          // never set up.
-          notEnabled(
-            'unknown: An internal error has occurred. '
-            '[ CONFIGURATION_NOT_FOUND',
-          ),
+          // never set up, and as iOS does: the hint names the code and
+          // what the service found in the message, not the message, which
+          // on iOS is the description of an error over many lines.
+          notEnabled('unknown, CONFIGURATION_NOT_FOUND'),
+          notEnabled('internal-error, CONFIGURATION_NOT_FOUND'),
         ]);
         // An internal error is what Firebase answers for such a project on
         // iOS and macOS, where the hint says that it may be another error.
@@ -925,6 +1006,9 @@ void main() {
         expect(sent['unknown'], [
           'unknown: app-not-authorized: Not authorized.',
           'unknown: unknown: Something else.',
+          // The whole message, on one line, and the code alone without one.
+          'unknown: keychain-error: Error Domain=X { reason = 1; }',
+          'unknown: quota-exceeded',
         ]);
         expect(sent['no error of Firebase'], 'unknown: Bad state: broken');
       });
@@ -1134,11 +1218,14 @@ void main() {
         'that the app is in, before it asks for the message', () {
       final statements = _passwordResetOf(app);
 
-      expect(statements, hasLength(2));
+      // An empty address fails before the service asks Firebase for
+      // anything.
+      expect(statements, hasLength(3));
+      expect(statements.first, '_checkGiven(email);');
       // The language that the user chose, or the one that the device
       // prefers among those of the app.
       expect(
-        statements.first.replaceAll(RegExp(r'\s+'), ''),
+        statements[1].replaceAll(RegExp(r'\s+'), ''),
         'await_auth.setLanguageCode((appLocale.value??'
         'basicLocaleListResolution('
         'WidgetsBinding.instance.platformDispatcher.locales,appLocales))'
