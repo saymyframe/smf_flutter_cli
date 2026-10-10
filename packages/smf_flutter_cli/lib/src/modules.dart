@@ -3,6 +3,7 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_event_bus/smf_event_bus.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
+import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -48,4 +49,5 @@ const List<SmfModule> smfModules = [
   FirebaseCoreModule(),
   FirebaseCrashlyticsModule(),
   FirebaseAnalyticsModule(),
+  FirebaseAuthModule(),
 ];

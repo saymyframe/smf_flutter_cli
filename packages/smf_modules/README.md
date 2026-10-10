@@ -19,6 +19,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_firebase_core` | `firebase_core`, Firebase |
 | `smf_firebase_crashlytics` | `firebase_crashlytics`, crash reporting |
 | `smf_firebase_analytics` | `firebase_analytics`, analytics |
+| `smf_firebase_auth` | `firebase_auth`, sign-in |
 
 `smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.
 

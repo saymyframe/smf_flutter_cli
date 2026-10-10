@@ -23,6 +23,9 @@ dependencies:
   # The providers of the roles that an app can have several providers of,
   # in the registry of several providers.
   smf_firebase_analytics: ^0.4.0
+  # The provider of the auth role in the registry of several providers, for
+  # the app test that it keeps and the test of the role that the CLI keeps.
+  smf_firebase_auth: ^0.4.0
   smf_firebase_core: ^0.4.0
   smf_firebase_crashlytics: ^0.4.0
   # The matrix of CI, for the tests of the apps of the fixtures.

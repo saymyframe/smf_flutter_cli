@@ -108,6 +108,18 @@ final class SignInOfTest implements AuthService {
       ];
 }
 
+/// The apps with every module of the matrix of the CLI: one for each state
+/// manager, and each once more for each other mode of the auth role, which
+/// Firebase Authentication provides there.
+const _everyModule = [
+  'every module (bloc)',
+  'every module (riverpod)',
+  'every module (bloc) --auth-mode=guest',
+  'every module (bloc) --auth-mode=anonymous',
+  'every module (riverpod) --auth-mode=guest',
+  'every module (riverpod) --auth-mode=anonymous',
+];
+
 /// The codes of the languages of the file of the texts of a module that
 /// the matrix writes for an app, [file], in the order of the file.
 List<String> _languagesOf(String file) => [
@@ -153,10 +165,10 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the DI role, '
-      'of the events role, of the preferences role, of the settings screen '
-      'role, of the theme role, of the localization role and of the app '
-      'entry role with every provider of each, which they tell apart by the '
-      'roles of the app only', () {
+      'of the events role, of the preferences role, of the auth role, of '
+      'the settings screen role, of the theme role, of the localization '
+      'role and of the app entry role with every provider of each, which '
+      'they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -164,6 +176,7 @@ void main() {
         diRole,
         eventsRole,
         preferencesRole,
+        authRole,
         settingsScreenRole,
         themeRole,
         appEntryRole,
@@ -175,6 +188,9 @@ void main() {
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('preferences_role').roles, {preferencesRole});
+    expect(named('auth_role').roles, {authRole});
+    // The test of the provider of the role checks what only it does.
+    expect(named('firebase_auth').roles, isEmpty);
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
     // The test of the theme role checks that the root of the app, which the
@@ -225,7 +241,7 @@ void main() {
         for (final app in apps)
           if (everyModule.appliesTo(app)) app.name,
       ],
-      ['every module (bloc)', 'every module (riverpod)'],
+      _everyModule,
     );
 
     // The locations of an app with home, whose route starts the app.
@@ -803,8 +819,7 @@ void main() {
       [
         'event_bus with di',
         'event_bus',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
 
@@ -817,7 +832,7 @@ void main() {
         for (final app in apps)
           if (everyModule.appliesTo(app)) app.name,
       ],
-      ['every module (bloc)', 'every module (riverpod)'],
+      _everyModule,
     );
   });
 
@@ -860,8 +875,11 @@ void main() {
         // The onboarding requires the preferences.
         'onboarding with localization',
         'onboarding',
-        'every module (bloc)',
-        'every module (riverpod)',
+        // Firebase Authentication with the localization, which requires
+        // the preferences.
+        'firebase_auth with localization, router',
+        'firebase_auth with localization',
+        ..._everyModule,
       ],
     );
 
@@ -874,7 +892,7 @@ void main() {
         for (final app in apps)
           if (everyModule.appliesTo(app)) app.name,
       ],
-      ['every module (bloc)', 'every module (riverpod)'],
+      _everyModule,
     );
   });
 
@@ -967,8 +985,11 @@ void main() {
         'material_theme with settings_screen, localization',
         'material_theme with localization',
         'onboarding with localization',
-        'every module (bloc)',
-        'every module (riverpod)',
+        // Firebase Authentication, which asks for its messages in the
+        // language of the app.
+        'firebase_auth with localization, router',
+        'firebase_auth with localization',
+        ..._everyModule,
       ],
     );
     // What the test has to check there. Every app has the two texts of the
@@ -995,8 +1016,9 @@ void main() {
         'material_theme with settings_screen, localization': ['en', 'uk'],
         'material_theme with localization': ['en', 'uk'],
         'onboarding with localization': ['en', 'uk'],
-        'every module (bloc)': ['en', 'uk'],
-        'every module (riverpod)': ['en', 'uk'],
+        'firebase_auth with localization, router': ['en', 'uk'],
+        'firebase_auth with localization': ['en', 'uk'],
+        for (final app in _everyModule) app: ['en', 'uk'],
       },
     );
     for (final app in apps) {
@@ -1325,8 +1347,7 @@ void main() {
       [
         'settings with localization',
         'material_theme with settings_screen, localization',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
 
@@ -1439,8 +1460,7 @@ void main() {
         'firebase_crashlytics with di',
         'firebase_analytics with di, router',
         'firebase_analytics with di',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
     // The app of the container alone, whose modules register nothing.
@@ -1609,9 +1629,10 @@ void main() {
       'the start check runs the probes of the tests that go into an app '
       'with it, the walk of the routes, the services of the DI role, the '
       'preferences of the role, those of shared_preferences once they are '
-      'opened again, the onboarding of a first launch and the languages '
-      'of the localization role, each a function of a file of its tests '
-      'that takes the one that waits until the screen settles', () async {
+      'opened again, the user of Firebase Authentication, the onboarding '
+      'of a first launch and the languages of the localization role, each '
+      'a function of a file of its tests that takes the one that waits '
+      'until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -1620,6 +1641,8 @@ void main() {
             p.basename(test.directory): '${probe.path} ${probe.function}',
       },
       {
+        'firebase_auth':
+            'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
@@ -1655,13 +1678,15 @@ void main() {
     // all of them, which the list of the probes names. That of the
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
-    // the routes of the app past it.
+    // the routes of the app past it. That of Firebase Authentication only
+    // reads, so it holds wherever it comes.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
       [for (final test in tests) p.basename(test.directory)],
       [
         'start',
+        'firebase_auth',
         'onboarding',
         'shared_preferences',
         'di_role',
@@ -1699,23 +1724,25 @@ void main() {
     expect(
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
-        'probe0: onboarding/probe.dart',
-        'probe1: shared_preferences/probe.dart',
-        'probe2: di_role/probe.dart',
-        'probe3: preferences_role/probe.dart',
-        'probe4: router_walk/walk.dart',
-        'probe5: localization_role/probe.dart',
+        'probe0: firebase_auth/probe.dart',
+        'probe1: onboarding/probe.dart',
+        'probe2: shared_preferences/probe.dart',
+        'probe3: di_role/probe.dart',
+        'probe4: preferences_role/probe.dart',
+        'probe5: router_walk/walk.dart',
+        'probe6: localization_role/probe.dart',
       ],
     );
-    expect(list, contains("('onboarding', probe0.probeOnboarding),"));
+    expect(list, contains("('firebase_auth', probe0.probeFirebaseAuth),"));
+    expect(list, contains("('onboarding', probe1.probeOnboarding),"));
     expect(
       list,
-      contains("('shared_preferences', probe1.probeSharedPreferences),"),
+      contains("('shared_preferences', probe2.probeSharedPreferences),"),
     );
-    expect(list, contains("('di_role', probe2.probeServices),"));
-    expect(list, contains("('preferences_role', probe3.probePreferences),"));
-    expect(list, contains("('router_walk', probe4.probeRoutes),"));
-    expect(list, contains("('localization_role', probe5.probeLanguages),"));
+    expect(list, contains("('di_role', probe3.probeServices),"));
+    expect(list, contains("('preferences_role', probe4.probePreferences),"));
+    expect(list, contains("('router_walk', probe5.probeRoutes),"));
+    expect(list, contains("('localization_role', probe6.probeLanguages),"));
   });
 
   test(
@@ -1782,7 +1809,7 @@ void main() {
         name: 'package:my_app/core/app/fallback_start_screen.dart: '
             'screen.FallbackStartScreen',
       // The start screen of home.
-      for (final name in ['every module (bloc)', 'every module (riverpod)'])
+      for (final name in _everyModule)
         name: 'package:my_app/features/home/home_screen.dart: '
             'screen.HomeScreen',
     });
@@ -1791,8 +1818,7 @@ void main() {
     expect(languages, {
       'onboarding with localization': ['en', 'uk'],
       'onboarding': ['en'],
-      'every module (bloc)': ['en', 'uk'],
-      'every module (riverpod)': ['en', 'uk'],
+      for (final app in _everyModule) app: ['en', 'uk'],
     });
     for (final app in apps.where(test.appliesTo)) {
       expect(
@@ -1912,8 +1938,7 @@ void main() {
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
     // They run in a test of the app only, so they have no probe for a
@@ -1941,8 +1966,8 @@ void main() {
           'LanguageSetting',
         ],
         'material_theme with settings_screen': ['ThemeModeSetting'],
-        'every module (bloc)': ['ThemeModeSetting', 'LanguageSetting'],
-        'every module (riverpod)': ['ThemeModeSetting', 'LanguageSetting'],
+        for (final app in _everyModule)
+          app: ['ThemeModeSetting', 'LanguageSetting'],
       },
     );
 
@@ -2132,8 +2157,7 @@ void main() {
         'material_theme with settings_screen',
         'material_theme with localization',
         'material_theme',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
     for (final app in apps.where(theme.appliesTo)) {
@@ -2157,7 +2181,7 @@ void main() {
         for (final app in apps)
           if (everyModule.appliesTo(app)) app.name,
       ],
-      ['every module (bloc)', 'every module (riverpod)'],
+      _everyModule,
     );
   });
 
@@ -2188,8 +2212,7 @@ void main() {
       [
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
     // It opens the settings screen with the location that the matrix writes
@@ -2389,8 +2412,7 @@ void main() {
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
   });
@@ -2461,8 +2483,7 @@ void main() {
         [
           'settings with localization',
           'material_theme with settings_screen, localization',
-          'every module (bloc)',
-          'every module (riverpod)',
+          ..._everyModule,
         ],
         reason: languages,
       );
@@ -2541,8 +2562,7 @@ void main() {
     expect(languages, {
       'home with localization': ['en', 'uk'],
       'home': ['en'],
-      'every module (bloc)': ['en', 'uk'],
-      'every module (riverpod)': ['en', 'uk'],
+      for (final app in _everyModule) app: ['en', 'uk'],
     });
     for (final app in apps.where(test.appliesTo)) {
       expect(
@@ -2601,8 +2621,7 @@ void main() {
         'settings': (0, false),
         'material_theme with settings_screen, localization': (2, false),
         'material_theme with settings_screen': (1, false),
-        'every module (bloc)': (2, true),
-        'every module (riverpod)': (2, true),
+        for (final app in _everyModule) app: (2, true),
       },
     );
     for (final app in apps.where(settings.appliesTo)) {
@@ -2742,8 +2761,7 @@ void main() {
         'firebase_analytics with di, router': '/',
         'firebase_analytics with router': '/',
         // The start screen of home.
-        'every module (bloc)': 'home.home',
-        'every module (riverpod)': 'home.home',
+        for (final app in _everyModule) app: 'home.home',
       },
     );
   });
@@ -2808,7 +2826,153 @@ void main() {
     final tests = MatrixAppTests([authTest], testedRoles: {authRole});
     expect(tests.roleProblems(modules, ofRole), isEmpty);
     expect(tests.modeProblems(ofRole), isEmpty);
-    // No app of the modules of the CLI has the role yet.
-    expect(apps.where(authTest.appliesTo), isEmpty);
+    // In the matrix of the CLI, Firebase Authentication provides the role:
+    // the test applies to each of its apps, in the mode of the app.
+    expect(
+      {
+        for (final app in apps)
+          if (authTest.appliesTo(app))
+            app.name: authTest.values!(app)['auth_mode'],
+      },
+      {
+        for (final name in const [
+          'firebase_auth with localization, router',
+          'firebase_auth with localization',
+          'firebase_auth with router',
+          'firebase_auth',
+        ])
+          name: 'required',
+        'auth by firebase_auth with router --auth-mode=guest': 'guest',
+        'auth by firebase_auth with router --auth-mode=anonymous': 'anonymous',
+        for (final name in _everyModule)
+          name: switch (name.split('--auth-mode=')) {
+            [_, final mode] => mode,
+            _ => 'required',
+          },
+      },
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (authTest.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(authRole)) app.name,
+      ],
+    );
+  });
+
+  test(
+      'the test of Firebase Authentication applies to the apps with the '
+      'module, whatever else they have, in every mode of the auth role, '
+      'declares the mocks of its platform side for the tests of every '
+      'module of those apps, has a probe for the start check, and gets the '
+      'languages in which the app asks Firebase for its messages from the '
+      'localization role of the app', () async {
+    final test = named('firebase_auth');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        'firebase_auth with localization, router',
+        'firebase_auth with localization',
+        'firebase_auth with router',
+        'firebase_auth',
+        'auth by firebase_auth with router --auth-mode=guest',
+        'auth by firebase_auth with router --auth-mode=anonymous',
+        ..._everyModule,
+      ],
+    );
+    // It tests what only this provider of the auth role does, so it names
+    // no role: the test of the role checks what every provider keeps to.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    // The mocks answer the messages of the plugin in the codec of its
+    // platform interface, which the app has only through the plugin.
+    expect(test.devDependencies, ['firebase_auth_platform_interface']);
+    expect(test.mocks!.path, 'test/firebase_auth_mocks.dart');
+    expect(test.mocks!.function, 'mockFirebaseAuth');
+    expect(test.startProbe!.path, 'integration_test/firebase_auth/probe.dart');
+    expect(test.startProbe!.function, 'probeFirebaseAuth');
+    for (final path in [test.mocks!.path, test.startProbe!.path]) {
+      expect(
+        File(p.joinAll([test.directory, ...path.split('/')])).existsSync(),
+        isTrue,
+        reason: path,
+      );
+    }
+
+    // The apps as they are, and with the one language that they are given.
+    final (apps: english, :failed) = await matrixOf(
+      smfModules,
+      roleOptions: const {'locales': 'en'},
+    );
+    expect(failed, isEmpty);
+    for (final (matrix, languages) in [
+      (apps, "['en', 'uk']"),
+      (english, "['en']"),
+    ]) {
+      for (final app in matrix.where(test.appliesTo)) {
+        final reason = '${app.name} in $languages';
+        final files = test.generatedFiles!(app, 'my_app');
+        expect(files.keys, [messageLanguagesFile], reason: reason);
+        final text = files[messageLanguagesFile]!;
+        final (:index, :errors) =
+            DartFileIndexer.parse(messageLanguagesFile, text);
+        expect(errors, isEmpty, reason: reason);
+        expect(
+          index.declarations.map((declaration) => declaration.name),
+          ['messageLanguages', 'chooseLanguage'],
+          reason: reason,
+        );
+        if (app.hook!.presentRoles.contains(localizationRole)) {
+          // The languages of the role, and a choice through the language
+          // that the role keeps for the app, also back to the languages of
+          // the device.
+          expect(
+            [for (final import in index.imports) import.uri],
+            ['dart:ui', 'package:my_app/core/l10n/app_locale.dart'],
+            reason: reason,
+          );
+          expect(
+            text,
+            allOf(
+              contains('const List<String> messageLanguages = $languages;'),
+              contains(
+                'Future<void> chooseLanguage(String? language) =>\n'
+                '    appLocale.choose(language == null ? null : '
+                'Locale(language));',
+              ),
+            ),
+            reason: reason,
+          );
+        } else {
+          // An app without the role asks Firebase for no language.
+          expect(index.imports, isEmpty, reason: reason);
+          expect(
+            text,
+            allOf(
+              contains('const List<String> messageLanguages = [];'),
+              contains(
+                'Future<void> chooseLanguage(String? language) async {}',
+              ),
+            ),
+            reason: reason,
+          );
+        }
+      }
+    }
+    // Both kinds of apps are among those of the module.
+    expect(
+      {
+        for (final app in apps.where(test.appliesTo))
+          app.hook!.presentRoles.contains(localizationRole),
+      },
+      {true, false},
+    );
   });
 }

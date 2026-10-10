@@ -55,6 +55,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | `--on-conflict` | What to do when the app's directory exists and is not empty: `prompt`, `replace`, `copy` or `cancel`. |
 | `--start` | The full path of the screen the app starts on, such as `/home`. |
 | `--locales` | The languages of the app among those that the texts of its modules are in, such as `en,uk`. All of them by default. |
+| `--auth-mode` | Who may use the app without an account: nobody (`required`, the default), everyone (`guest`), or everyone as an anonymous user (`anonymous`). |
 
 `smf create` exits with 0 on success, 1 when generation failed, 64 for a wrong command line, 70 for an unexpected error and 130 when you cancel it. The [reference of `smf create`](https://doc.saymyframe.com/guides/smf-create) has the details.
 
@@ -78,6 +79,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`firebase_core`](https://doc.saymyframe.com/modules/firebase-core) | Firebase, set up with `flutterfire configure` after generation. |
 | [`firebase_crashlytics`](https://doc.saymyframe.com/modules/firebase-crashlytics) | Crash reporting with Firebase Crashlytics. |
 | [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |
+| [`firebase_auth`](https://doc.saymyframe.com/modules/firebase-auth) | Sign-in with Firebase Authentication: an email address and a password, or an anonymous user. |
 
 A module knows only the modules it depends on. A screen needs *a* router, not go_router, and analytics follows the screens of whichever router the app has. SMF calls these shared parts roles: a module that needs a role works with every module that provides it, and CI generates apps from many combinations of modules and checks each with `flutter analyze`. You can also write modules of your own; see [Extending SMF](https://doc.saymyframe.com/extending).
 

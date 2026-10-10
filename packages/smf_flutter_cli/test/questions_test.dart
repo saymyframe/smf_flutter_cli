@@ -190,6 +190,7 @@ void main() {
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -206,6 +207,7 @@ void main() {
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Authentication: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
@@ -277,6 +279,7 @@ void main() {
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -293,6 +296,7 @@ void main() {
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Authentication: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -344,6 +348,7 @@ void main() {
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -432,6 +437,7 @@ void main() {
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -474,6 +480,7 @@ void main() {
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -490,6 +497,7 @@ void main() {
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Authentication: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -531,6 +539,7 @@ void main() {
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -548,6 +557,7 @@ void main() {
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Authentication: which module provides it?',
     ]);
     expect(run.asked[4].shown, [
       'go_router — Routes and navigation with go_router',
@@ -580,6 +590,7 @@ void main() {
       'Events': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -710,6 +721,7 @@ void main() {
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -775,6 +787,7 @@ void main() {
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -840,6 +853,7 @@ void main() {
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -922,6 +936,7 @@ void main() {
       'Events': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1006,6 +1021,7 @@ void main() {
       'Events': ['None'],
       'Crash reporting': [],
       'Analytics': [],
+      'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1086,6 +1102,7 @@ void main() {
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
+        'Authentication': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1151,6 +1168,7 @@ void main() {
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
+        'Authentication': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1240,9 +1258,9 @@ void main() {
   });
 
   test(
-      'a run in a terminal asks last which modules provide the analytics, and '
-      'offers Firebase Analytics, which brings Firebase and listens to the '
-      'screen the user sees', () async {
+      'a run in a terminal asks which modules provide the analytics after '
+      'the crash reporting, and offers Firebase Analytics, which brings '
+      'Firebase and listens to the screen the user sees', () async {
     final run = await _create(
       {
         'Features': ['home'],
@@ -1257,16 +1275,25 @@ void main() {
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
+        'Authentication': ['None'],
       },
       options: ['--skip-external-setup'],
     );
 
     expect(run.code, 0, reason: run.lines.join('\n'));
     // The roles come in the order of the list of modules, and
-    // firebase_analytics is last. An app can record to more than one
-    // service, so the question takes any number of answers, none included.
-    expect(run.asked.last.message, 'Analytics: which module provides it?');
-    expect(run.asked.last.shown, [
+    // firebase_analytics comes after firebase_crashlytics. An app can
+    // record to more than one service, so the question takes any number of
+    // answers, none included.
+    final messages = [for (final question in run.asked) question.message];
+    final analytics = messages.indexOf('Analytics: which module provides it?');
+    expect(
+      analytics,
+      greaterThan(
+        messages.indexOf('Crash reporting: which module provides it?'),
+      ),
+    );
+    expect(run.asked[analytics].shown, [
       'firebase_analytics — Firebase Analytics with firebase_analytics',
     ]);
     // Firebase was not chosen among the infrastructure, but Analytics
@@ -1357,6 +1384,7 @@ void main() {
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
+        'Authentication': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1387,6 +1415,99 @@ void main() {
     expect(
       app.childFile('lib/core/di/dependencies.dart').readAsStringSync(),
       contains('.createAnalyticsService()'),
+    );
+  });
+
+  test(
+      'a run in a terminal asks last which module provides the '
+      'authentication, offers Firebase Authentication, which brings '
+      'Firebase, and then asks who may use the app without an account',
+      () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': [],
+        'Layout': ['None'],
+        'Settings screen': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Theme': ['None'],
+        'Localization': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+        'Preferences': ['None'],
+        'Crash reporting': [],
+        'Analytics': [],
+        'Authentication': ['firebase_auth'],
+        'Who may use the app': ['Everyone, as an anonymous user'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // The roles come in the order of the list of modules, and firebase_auth
+    // is last. An app has one provider of sign-in, or none. The mode of the
+    // auth role is a choice of the role, which it asks for once the modules
+    // of the app are known, with the default first.
+    final [..., provider, mode] = run.asked;
+    expect(provider.message, 'Authentication: which module provides it?');
+    expect(provider.shown, [
+      'firebase_auth — Firebase Authentication with firebase_auth',
+      'None',
+    ]);
+    expect(mode.message, 'Who may use the app without an account?');
+    expect(mode.shown, [
+      'Nobody: the user signs in first',
+      'Everyone: an account only where a screen needs one',
+      'Everyone, as an anonymous user with an id from the start',
+    ]);
+    // Firebase was not chosen among the infrastructure, but Firebase
+    // Authentication depends on it.
+    expect(
+      run.lines,
+      contains('Adding firebase_core: a dependency of firebase_auth.'),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app.childFile('lib/core/auth/app_session.dart').readAsStringSync(),
+      allOf(
+        contains('const AuthMode authMode = AuthMode.anonymous;'),
+        contains('_authService = impl0.createFirebaseAuthService();'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/core/auth/firebase_auth_service.dart')
+          .readAsStringSync(),
+      contains('FirebaseAuthService(FirebaseAuth.instance)'),
+    );
+    // Firebase starts first, then the session of the app on it.
+    const bootstrap = 'lib/bootstrap.dart';
+    final calls = DartFileIndexer.index(
+      bootstrap,
+      app.childFile(bootstrap).readAsStringSync(),
+    ).invocations;
+    expect(
+      [
+        for (final call in calls)
+          if (call.enclosingDeclaration == 'bootstrap') call.name,
+      ],
+      ['initializeApp', 'initAuth'],
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(contains('  firebase_auth: '), contains('  firebase_core: ')),
+    );
+    // The README tells the mode of the app, and where the ways to sign in
+    // of that mode are enabled in the Firebase project.
+    expect(
+      app.childFile('README.md').readAsStringSync(),
+      allOf(
+        contains('\n## Firebase\n'),
+        contains('\n## Firebase Authentication\n'),
+        contains('\n## Sign-in\n'),
+        contains('This app was generated in the mode `anonymous`'),
+      ),
     );
   });
 }

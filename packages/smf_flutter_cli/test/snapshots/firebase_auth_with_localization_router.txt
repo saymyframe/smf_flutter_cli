@@ -1,0 +1,2569 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Authentication
+
+- `appSession` in `lib/core/auth/app_session.dart` tells who uses the app, and knows it before the first frame. Its `value` is a `SignedOutSession`, an `AnonymousSession` or an `AccountSession`, and `appSession.value.uid` is the id of the user. Sign in, sign up, sign out and delete the account only through `appSession`. The app has one, so create no other `AppSessionController`.
+- A call of `appSession` fails only with an `AuthFailure`. Catch it and show a text of the app for its `reason`. Show its `developerHint` in debug mode only. After `recentSignInRequired`, tell the user to sign out and sign in again.
+- `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes. One that reads `appSession.allowsApp` stands before the whole app, and one that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. In an app without such a guard every screen is open, whatever the mode, and that includes a screen that needs an account. A screen does not redirect itself.
+- When an anonymous user signs in to an account that exists already, `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user. Call no method of `appSession` in it, since the sign-in that calls it would wait for that call.
+- A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure` and `AuthFailureReason`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
+
+With `firebase_auth`:
+
+- `FirebaseAuthService` in `lib/core/auth/firebase_auth_service.dart` implements `AuthService` on `FirebaseAuth.instance`. In `lib/`, only that file imports the package: other code signs in through `appSession`.
+- That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
+- The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` where, and so does the section Firebase Authentication of `README.md`.
+
+## Firebase
+
+- `bootstrap()` initializes Firebase with `DefaultFirebaseOptions` of `lib/firebase_options.dart`. That file is a placeholder until `flutterfire configure` writes it, and the app stops at start-up with an `UnsupportedError` until then. Do not write it by hand.
+- `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
+- A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
+
+## Localization
+
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+
+With `gen-l10n` of Flutter:
+
+- The texts of the app are in the ARB files of `lib/l10n`. `lib/l10n/app_en.arb` has every text in English, and `lib/l10n/app_<code>.arb` the translations into another language. A text that such a file lacks reads in English there.
+- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files.
+- After every change of the ARB files, a new file included, run `flutter gen-l10n`, which generates `context.l10n.<name>`. Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says.
+- Write an apostrophe in a text once: `l10n.yaml` turns the escapes of `gen-l10n` off (`use-escaping: false`).
+
+## Preferences
+
+- `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- In the code of the app, do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences. A test may call both: `initPreferences()` opens the preferences again, as the next launch of the app does, and `createAppPreferences()` returns them.
+
+With `shared_preferences`:
+
+- In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
+- A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
+- In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
+
+## Router
+
+- Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
+- A route is in three places, which agree on its name, `<feature>.<route>`, and on its path, which starts with `/<feature>`:
+  1. its screen, a widget in `lib/features/<feature>/` whose `const` constructor takes each value of the route as a named parameter;
+  2. `lib/core/router/navigation.dart`: its location class, which extends the sealed `AppLocation` with its `routeName`, its `path` and, below another route, its `parent`, and a method that returns its `NavLink` in the class of the routes of its feature. `AppNav` returns that class from a getter with the name of the feature, and both classes pass on the `BuildContext` that `NavLink` takes;
+  3. the route itself, where the provider of the router declares its routes.
+- A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
+- `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
+
+With `go_router`:
+
+- `lib/core/router/app_router_factory.dart` has the one `GoRouter` of the app. A route is a `GoRoute` in its `routes`, or in the `routes` of its parent: `path` is the full path of a top-level route and the path from its parent otherwise, and `name` is `<feature>.<route>`. The values of a route come from `state.pathParameters` and `state.uri.queryParameters`. Parse one that is not a `String` with `tryParse`, and throw a `GoException` in the `redirect` of the route when a required value is missing or does not parse, so that the router shows its error screen.
+- The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
+- To follow the screen that the user sees, add a function to `_screenListeners`.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+
+## Firebase
+
+The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with the options of `DefaultFirebaseOptions` in `lib/firebase_options.dart`. `flutterfire configure` of the FlutterFire CLI writes these options when it registers the app in a Firebase project, together with `android/app/google-services.json`, `firebase.json` and, on macOS, `ios/Runner/GoogleService-Info.plist`. Until then, the options are a placeholder, and the app stops at start-up with an `UnsupportedError`.
+
+To configure the app, or to configure it again, such as for another Firebase project or on another machine, run in its directory:
+
+```bash
+dart pub global activate flutterfire_cli 1.4.1
+firebase login
+flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=com.example.my-app --android-package-name=com.example.my_app
+```
+
+The command gives flutterfire the ids of the Android and iOS apps that SMF generated; if you change them, change them in the command too. `flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli), and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated too.
+
+Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above.
+
+## Firebase Authentication
+
+The app signs in with [Firebase Authentication](https://firebase.google.com/docs/auth) through `firebase_auth`: `lib/core/auth/firebase_auth_service.dart` implements the sign-in service of the app on it.
+
+The ways to sign in are enabled in the Firebase project, not in the code. In the Firebase console, open [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) of the project that the app is configured for, and enable:
+
+- Email/Password, in every mode of the app;
+- Anonymous, when the mode of the app is `anonymous` (see the section Sign-in).
+
+Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure has the link to that page of the project. In the mode `anonymous`, the app also starts without a user.
+
+Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
+
+When an anonymous user signs in to an account that exists already, the anonymous user stays in the project, and nobody can sign in as that user again. A project that is upgraded to Firebase Authentication with Identity Platform can delete anonymous users that are older than 30 days automatically. See [Automatic clean-up](https://firebase.google.com/docs/auth/android/anonymous-auth#auto-cleanup) in the documentation of Firebase.
+
+## Texts
+
+The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
+
+To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. Then run `flutter gen-l10n`. A text without a translation into a language reads in English there.
+
+The texts of a new language, such as German, go into a file of their own:
+
+1. Add `lib/l10n/app_de.arb` with `"@@locale": "de"` and the translations.
+2. Run `flutter gen-l10n`.
+
+The section "Languages" tells where else the new language goes.
+
+## Sign-in
+
+The sign-in mode of the app says who may use it without an account. This app was generated in the mode `required`: `authMode` in `lib/core/auth/app_session.dart` is `AuthMode.required`.
+
+- In `required`, nobody may. `appSession.allowsApp` is true only for a user who signed in to an account.
+- In `guest`, everyone may. The app has no user until someone signs in, and `appSession.allowsApp` is always true.
+- In `anonymous`, everyone may, as an anonymous user that the app signs in itself when it starts. Code then has the id of a user, `appSession.value.uid`, before anyone has an account, and signing up gives that same user the account. The app waits up to 3 seconds for that sign-in. When it fails or takes longer, the app starts without a user and tries again each time the user comes back to it. `appSession.allowsApp` is always true.
+
+The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `required` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
+
+To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
+
+When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
+
+## Languages
+
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`, one locale for each language, since the app tells its languages apart by their codes.
+2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="My App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>My App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>uk</string>
+	</array>
+</dict>
+</plist>
+=== l10n.yaml (gen_l10n) ===
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+nullable-getter: false
+use-escaping: false
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/l10n/app_localizations.dart';
+
+import 'core/router/app_router.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(
+    title: 'My App',
+    locale: AppLocaleScope.of(context),
+    localizationsDelegates: [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: [...appLocales],
+    routerConfig: appRouter.config,
+    builder: (context, child) => Builder(
+      builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarBrightness: Theme.of(context).brightness,
+          statusBarIconBrightness:
+              Theme.of(context).brightness == Brightness.dark
+              ? Brightness.light
+              : Brightness.dark,
+        ),
+        child: child!,
+      ),
+    ),
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:firebase_core/firebase_core.dart';
+import 'package:my_app/core/auth/app_session.dart';
+import 'package:my_app/core/preferences/app_preferences.dart';
+import 'package:my_app/firebase_options.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initAuth();
+  await initPreferences();
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => FallbackStartView(
+    hint: context.l10n.flutterCoreFallbackHint,
+    copied: context.l10n.flutterCoreFallbackCopied,
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '5',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Ma',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'My App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/auth/app_session.dart (role:auth) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/auth/firebase_auth_service.dart' as impl0;
+
+import 'auth_service.dart';
+import 'guest_data.dart';
+
+export 'auth_service.dart' show AuthFailure, AuthFailureReason;
+
+/// Who may use the app without an account.
+enum AuthMode {
+  /// Nobody: the user signs in first.
+  required,
+
+  /// Everyone. The app has no user until someone signs in, and asks for an
+  /// account only where a screen needs one.
+  guest,
+
+  /// Everyone, as an anonymous user that the app signs in itself when it
+  /// starts, so that code has the id of a user from the first frame. An
+  /// account is asked for only where a screen needs one, and signing up
+  /// gives it to that same user.
+  anonymous,
+}
+
+/// The mode of this app, which was chosen when the app was generated.
+///
+/// The mode gates nothing on its own. It decides what [appSession] does when
+/// it starts and what [AppSessionController.allowsApp] says, which a guard
+/// of the routes reads.
+const AuthMode authMode = AuthMode.required;
+
+/// Who uses the app: nobody that the app knows, an anonymous user, or the
+/// user of an account.
+@immutable
+sealed class AppSession {
+  const AppSession();
+
+  /// The id of the user, or `null` when nobody is signed in.
+  String? get uid;
+}
+
+/// Nobody is signed in.
+final class SignedOutSession extends AppSession {
+  /// Creates the session of an app without a user.
+  const SignedOutSession();
+
+  @override
+  String? get uid => null;
+
+  @override
+  bool operator ==(Object other) => other is SignedOutSession;
+
+  @override
+  int get hashCode => (SignedOutSession).hashCode;
+}
+
+/// An anonymous user is signed in: one without an account, whom the app
+/// signed in itself.
+final class AnonymousSession extends AppSession {
+  /// Creates the session of the anonymous user [uid].
+  const AnonymousSession(this.uid);
+
+  @override
+  final String uid;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AnonymousSession && other.uid == uid;
+
+  @override
+  int get hashCode => uid.hashCode;
+}
+
+/// The user of an account is signed in.
+final class AccountSession extends AppSession {
+  /// Creates the session of the account [uid].
+  const AccountSession(this.uid, {this.email});
+
+  @override
+  final String uid;
+
+  /// The email address of the account, or `null` if it has none.
+  final String? email;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountSession && other.uid == uid && other.email == email;
+
+  @override
+  int get hashCode => Object.hash(uid, email);
+}
+
+/// The session of the app: who uses it, known before the first frame, and
+/// the way to sign in, up and out.
+///
+/// Its `value` is the [AppSession], and it tells its listeners when that
+/// changes. A widget follows it with a `ValueListenableBuilder`.
+final appSession = AppSessionController(
+  mode: authMode,
+  takeGuestData: takeGuestData,
+);
+
+/// Keeps the session of the app up to date with the service of the provider
+/// of sign-in, and signs in, up and out through that service. The app has
+/// one, [appSession].
+///
+/// Every call here fails only with an [AuthFailure], whose reason the app
+/// shows in a text of its own. An error of another kind becomes a failure
+/// with the reason [AuthFailureReason.unknown] and the error as its
+/// [AuthFailure.developerHint].
+///
+/// The calls run one after another, in the order they were made, and none
+/// runs next to an anonymous sign-in that is on its way. So the user of the
+/// app is the result of the call that was made last. In the mode
+/// [AuthMode.anonymous], a call that leaves nobody signed in is followed by
+/// an anonymous sign-in.
+final class AppSessionController extends ChangeNotifier
+    implements ValueListenable<AppSession> {
+  /// Creates a controller for an app in [mode]. The app creates
+  /// [appSession] and no other. A test creates one to see another mode, or
+  /// a shorter [anonymousWait], and disposes of it.
+  AppSessionController({
+    required this.mode,
+    required this.takeGuestData,
+    this.anonymousWait = const Duration(seconds: 3),
+  });
+
+  /// Who may use the app without an account.
+  final AuthMode mode;
+
+  /// Takes what an anonymous user has before that user signs in to an
+  /// account: `takeGuestData` of `guest_data.dart`.
+  final Future<GiveGuestData?> Function(String guestUid) takeGuestData;
+
+  /// How long the app waits for its anonymous user when it starts, and
+  /// after a sign-out or the deletion of an account, in the mode
+  /// [AuthMode.anonymous].
+  final Duration anonymousWait;
+
+  AuthService? _service;
+  StreamSubscription<AuthUser?>? _userChanges;
+  AppSession _session = const SignedOutSession();
+  bool _disposed = false;
+
+  /// Completes when the app has started for the first time.
+  final Completer<void> _started = Completer<void>();
+
+  /// The call that was made last, while a call is on its way: the next one
+  /// waits for it. It is `null` when none is, and a call then awaits
+  /// nothing. A future that completed in another zone would hold the call
+  /// back in a widget test, where the app starts in real time and the test
+  /// goes on in fake time.
+  Future<void>? _lastCall;
+
+  /// The anonymous sign-ins that are on their way, each by its service, so
+  /// that the app starts no second one next to it.
+  final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
+
+  /// Tells when the user comes back to the app, in the mode
+  /// [AuthMode.anonymous].
+  _ResumeObserver? _observer;
+
+  /// Who uses the app.
+  @override
+  AppSession get value => _session;
+
+  /// Whether the user may see the app: always in the modes [AuthMode.guest]
+  /// and [AuthMode.anonymous], and with an account in the mode
+  /// [AuthMode.required].
+  ///
+  /// It is computed from the session each time it is read, and its
+  /// listeners are those of the session. So when the session changes, a
+  /// listener finds this value and [hasAccount] both up to date, whichever
+  /// of the two it listens to. A listener is also called for a change of
+  /// the session that leaves this value as it was.
+  late final ValueListenable<bool> allowsApp = _SessionFlag(
+    this,
+    (session) => mode != AuthMode.required || session is AccountSession,
+  );
+
+  /// Whether the user of an account is signed in, which an anonymous user
+  /// is not. It follows the session as [allowsApp] does.
+  late final ValueListenable<bool> hasAccount = _SessionFlag(
+    this,
+    (session) => session is AccountSession,
+  );
+
+  /// Starts the session with [service]: takes the user who is signed in on
+  /// this device, and follows the changes that the service tells of.
+  ///
+  /// `initAuth()` calls it in `bootstrap()`, so the session is known before
+  /// the first frame. In the mode [AuthMode.anonymous], an app without a
+  /// user signs in anonymously here and waits for that for at most
+  /// [anonymousWait]. When the sign-in fails or takes longer, the app
+  /// starts without a user. A sign-in that takes longer still becomes the
+  /// session when it comes, and the app tries again each time the user
+  /// comes back to it.
+  ///
+  /// A call made before the first start waits for it: [signIn], [signUp],
+  /// [sendPasswordReset], [signOut] and [deleteAccount]. Such calls run in
+  /// their order once the start has the user, and the future of this start
+  /// completes after them, but waits for no call that is made while it
+  /// runs. The mocks of the tests of an app use this: a call of [signUp]
+  /// made before `bootstrap()`, which nothing awaits, gives the app an
+  /// account before its first frame. A test makes such a call outside the
+  /// body of a test, as in a `setUpAll`: made in the body of a widget
+  /// test, it waits in the fake time of that body, and a start that runs in
+  /// real time never completes.
+  ///
+  /// It may be called again, with the service that the session has from
+  /// then on: `initAuth()` does so in a test of the next launch of the app,
+  /// and a test gives it a service of its own. Such a start takes its turn
+  /// after the calls that are on their way.
+  Future<void> start(AuthService service) async {
+    // The calls that were made before this start. The first start lets
+    // them run once it has the user, and a later one waits for them.
+    final earlier = _lastCall;
+    final first = !_started.isCompleted;
+    if (!first) await earlier;
+    unawaited(_userChanges?.cancel());
+    _service = service;
+    _userChanges = service.userChanges.listen(
+      (_) => _sync(),
+      onError: (Object error, StackTrace stackTrace) => _report(
+        error,
+        stackTrace,
+        'while following the user of the provider of sign-in',
+      ),
+    );
+    _sync();
+    if (mode == AuthMode.anonymous) {
+      if (_observer == null) {
+        final observer = _observer = _ResumeObserver(_retry);
+        WidgetsBinding.instance.addObserver(observer);
+      }
+      await _signInAnonymously();
+    }
+    if (!_started.isCompleted) _started.complete();
+    if (first) await earlier;
+  }
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// An anonymous user becomes the user of that account, and what the
+  /// anonymous user had moves to the account as `takeGuestData` says.
+  Future<void> signIn({required String email, required String password}) =>
+      _call(
+        (service) =>
+            _toAccount(() => service.signIn(email: email, password: password)),
+      );
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// An anonymous user gets the account and keeps the id, so everything
+  /// that the user had stays.
+  Future<void> signUp({required String email, required String password}) =>
+      _call(
+        (service) => _session is AnonymousSession
+            ? service.linkPassword(email: email, password: password)
+            : service.signUp(email: email, password: password),
+      );
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password. It completes whether [email] has an account or not.
+  Future<void> sendPasswordReset(String email) =>
+      _call((service) => service.sendPasswordReset(email));
+
+  /// Signs the user out. In the mode [AuthMode.anonymous], the app then
+  /// signs in anonymously again, as when it starts.
+  Future<void> signOut() =>
+      _call((service) => service.signOut(), waitsForAnonymousUser: true);
+
+  /// Deletes the user who is signed in. The app is then without a user, as
+  /// after [signOut], and in the mode [AuthMode.anonymous] it signs in
+  /// anonymously again.
+  ///
+  /// It may fail with [AuthFailureReason.recentSignInRequired]: the user
+  /// then signs out, signs in again and repeats it.
+  Future<void> deleteAccount() =>
+      _call((service) => service.deleteAccount(), waitsForAnonymousUser: true);
+
+  /// Stops following the service and the lifecycle of the app. A call that
+  /// is on its way still ends as it would have, but tells no listener, and
+  /// no anonymous sign-in follows it.
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_userChanges?.cancel());
+    if (_observer case final observer?) {
+      WidgetsBinding.instance.removeObserver(observer);
+    }
+    super.dispose();
+  }
+
+  /// The user came back to the app. In the mode [AuthMode.anonymous], an
+  /// app without a user then signs in anonymously again: as what follows
+  /// every call, so this takes a turn among the calls with nothing else to
+  /// do, and starts no anonymous sign-in next to a sign-in.
+  void _retry() => unawaited(_call((service) async {}));
+
+  /// Runs [call] with the service once the calls made before it are over,
+  /// and not before the app has started for the first time.
+  ///
+  /// In the mode [AuthMode.anonymous], a call that leaves nobody signed in
+  /// is followed by an anonymous sign-in. A call that
+  /// [waitsForAnonymousUser], as a sign-out, completes once that sign-in is
+  /// over or took too long, as the start does.
+  Future<void> _call(
+    Future<void> Function(AuthService service) call, {
+    bool waitsForAnonymousUser = false,
+  }) async {
+    final earlier =
+        _lastCall ?? (_started.isCompleted ? null : _started.future);
+    final done = Completer<void>();
+    final own = _lastCall = done.future;
+    if (earlier != null) await earlier;
+    try {
+      await _guarded(call);
+      final signIn = _signInAnonymously();
+      if (waitsForAnonymousUser) await signIn;
+    } finally {
+      if (identical(_lastCall, own)) _lastCall = null;
+      done.complete();
+    }
+  }
+
+  /// Runs [call] with the service, once an anonymous sign-in that is on its
+  /// way is over: of a call and a sign-in that run at the same time, the
+  /// one that ended last would decide who the user is.
+  ///
+  /// Whatever [call] throws that is no [AuthFailure] becomes one, and the
+  /// session has the user of the service when it is over, also when it
+  /// failed. A call that failed does not wait for the anonymous sign-in
+  /// that follows it, so that its failure is not late.
+  Future<void> _guarded(Future<void> Function(AuthService service) call) async {
+    final service = _service!;
+    try {
+      await _anonymousSignIns[service];
+      await call(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      unawaited(_signInAnonymously());
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+    _sync();
+  }
+
+  /// Signs in to an account with [signIn], in whichever way, and moves what
+  /// an anonymous user had to that account.
+  ///
+  /// It takes the data before the sign-in, while the anonymous user is
+  /// still signed in, and gives it once the user of another id has an
+  /// account. If taking fails, the call fails and nothing has changed. If
+  /// giving fails, the user is signed in already, so the call completes and
+  /// the error is reported as an error of the app.
+  Future<void> _toAccount(Future<void> Function() signIn) async {
+    final guest = _session;
+    final give = guest is AnonymousSession
+        ? await takeGuestData(guest.uid)
+        : null;
+    await signIn();
+    _sync();
+    final account = _session;
+    if (give == null ||
+        account is! AccountSession ||
+        account.uid == guest.uid) {
+      return;
+    }
+    try {
+      await give(account.uid);
+    } on Object catch (error, stackTrace) {
+      _report(
+        error,
+        stackTrace,
+        'while giving the data of a guest to the account',
+      );
+    }
+  }
+
+  /// Reports [error], which no call can fail with, as an error of the app.
+  void _report(Object error, StackTrace stackTrace, String during) =>
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'app session',
+          context: ErrorDescription(during),
+        ),
+      );
+
+  /// In the mode [AuthMode.anonymous], signs in anonymously when nobody is
+  /// signed in, and waits for that for at most [anonymousWait].
+  ///
+  /// It never fails. A sign-in that takes longer goes on and becomes the
+  /// session when it comes. One that fails leaves the app without a user
+  /// until the next try, and in debug mode its error is printed.
+  Future<void> _signInAnonymously() async {
+    final service = _service!;
+    if (_disposed ||
+        mode != AuthMode.anonymous ||
+        service.currentUser != null) {
+      return;
+    }
+    final signIn = _anonymousSignIns[service] ??= _tryAnonymously(service)
+        .whenComplete(() {
+          _anonymousSignIns.remove(service);
+          _sync();
+        });
+    await signIn.timeout(anonymousWait, onTimeout: () {});
+  }
+
+  Future<void> _tryAnonymously(AuthService service) async {
+    try {
+      await service.signInAnonymously();
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          'The anonymous sign-in failed, so the app has no user: $error',
+        );
+      }
+    }
+  }
+
+  /// Takes the user of the service as the session, and tells the listeners
+  /// when that changes it, unless the session was disposed of.
+  void _sync() {
+    if (_disposed) return;
+    final session = switch (_service!.currentUser) {
+      null => const SignedOutSession(),
+      AuthUser(isAnonymous: true, :final uid) => AnonymousSession(uid),
+      AuthUser(:final uid, :final email) => AccountSession(uid, email: email),
+    };
+    if (session == _session) return;
+    _session = session;
+    notifyListeners();
+  }
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// A flag of the session of a controller: its value is computed from the
+/// session each time it is read, and its listeners are those of the
+/// session.
+final class _SessionFlag implements ValueListenable<bool> {
+  const _SessionFlag(this._controller, this._of);
+
+  final AppSessionController _controller;
+  final bool Function(AppSession session) _of;
+
+  @override
+  bool get value => _of(_controller.value);
+
+  @override
+  void addListener(VoidCallback listener) => _controller.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _controller.removeListener(listener);
+}
+
+/// Returns the service of the provider of sign-in, which [initAuth] created:
+/// `bootstrap()` awaits it before the first frame, and there is none to
+/// return before that.
+///
+/// The code of the app does not call it: it signs in through [appSession].
+AuthService createAuthService() => _authService;
+
+late AuthService _authService;
+
+/// Creates the service of the provider of sign-in and starts the session of
+/// the app with it; `bootstrap()` awaits it before the first frame, and
+/// nothing else in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with the user who is signed in, and
+/// starts the session with it.
+Future<void> initAuth() async {
+  _authService = impl0.createFirebaseAuthService();
+  await appSession.start(_authService);
+}
+=== lib/core/auth/auth_service.dart (role:auth) ===
+/// A user as the provider of sign-in knows them.
+final class AuthUser {
+  /// Creates the user [uid].
+  const AuthUser({required this.uid, required this.isAnonymous, this.email});
+
+  /// The id of the user. It stays the same for as long as the user exists,
+  /// also when an anonymous user gets an account.
+  final String uid;
+
+  /// Whether the user is anonymous: a user that the app signed in itself,
+  /// who has no account and nothing to sign in with again.
+  final bool isAnonymous;
+
+  /// The email address of the user, or `null` for a user without one, such
+  /// as an anonymous user.
+  final String? email;
+}
+
+/// Why a call of sign-in failed.
+enum AuthFailureReason {
+  /// The email address and the password match no account. A wrong password
+  /// and an address without an account are this one reason, so that nobody
+  /// learns from the app which addresses have an account.
+  invalidCredentials,
+
+  /// The email address has an account already.
+  emailInUse,
+
+  /// The provider takes no password as weak as this one.
+  weakPassword,
+
+  /// The text is no email address.
+  invalidEmail,
+
+  /// The account is disabled.
+  userDisabled,
+
+  /// Too many attempts: the provider takes no more for a while.
+  tooManyAttempts,
+
+  /// The device did not reach the provider.
+  network,
+
+  /// The call needs a user who signed in a short while ago, as the deletion
+  /// of an account does: the user signs in again and repeats it.
+  ///
+  /// It is also the reason of a call for a user whose session has ended on
+  /// the server. The service signs that user out on the device before it
+  /// fails.
+  recentSignInRequired,
+
+  /// Sign-in is not set up at the provider, such as a way to sign in that
+  /// is not enabled there. This is a mistake in the setup of the app, which
+  /// [AuthFailure.developerHint] explains.
+  notConfigured,
+
+  /// Anything else. [AuthFailure.developerHint] has the error.
+  unknown,
+}
+
+/// The failure of a call of sign-in: the only thing that such a call throws.
+final class AuthFailure implements Exception {
+  /// Creates the failure for [reason].
+  const AuthFailure(this.reason, {this.developerHint});
+
+  /// Why the call failed. The app shows a text of its own for each reason.
+  final AuthFailureReason reason;
+
+  /// What went wrong in the words of the provider, for the developer of the
+  /// app, or `null`. It is no text for the user: show it in debug mode
+  /// only.
+  final String? developerHint;
+
+  @override
+  String toString() => developerHint == null
+      ? 'AuthFailure: ${reason.name}'
+      : 'AuthFailure: ${reason.name} ($developerHint)';
+}
+
+/// The accounts of the users of the app and the user of this device, as the
+/// provider of sign-in keeps them.
+///
+/// The provider implements it. The code of the app does not call it: it
+/// signs in through `appSession` of `app_session.dart`, which calls this
+/// service and does what is the same with every provider.
+///
+/// Every implementation keeps to this, in every mode of the app, whatever
+/// the provider generates for the mode:
+/// - The service has [currentUser] from the moment it is created: the user
+///   who was signed in on this device when the app last ran, without a
+///   request to the server. The function that creates the service may be
+///   called again, and the service that it returns then has the user who is
+///   signed in now.
+/// - When the future of a call completes, [currentUser] is the result of
+///   the call. [userChanges] tells of every change of [currentUser], also
+///   of one that no call here made, and when it tells of a user,
+///   [currentUser] is that user.
+/// - A call fails only with an [AuthFailure], and every call ends: when the
+///   server does not answer, its future completes with
+///   [AuthFailureReason.network].
+/// - A call that fails leaves the user who is signed in as that user was:
+///   an anonymous user stays signed in when [linkPassword] fails, and so
+///   does whoever is signed in when [signIn] or [signUp] fails. The one
+///   exception is a call for a user whose session has ended on the server.
+/// - [linkPassword] and [deleteAccount] are calls for the user who is
+///   signed in. Made when nobody is signed in, or when the session of that
+///   user has ended on the server, such a call fails with
+///   [AuthFailureReason.recentSignInRequired], and in the second case it
+///   signs the user out on the device first.
+abstract interface class AuthService {
+  /// The user who is signed in on this device, or `null`.
+  AuthUser? get currentUser;
+
+  /// Tells of each change of [currentUser], once [currentUser] has changed:
+  /// a broadcast stream. When it tells of a user, [currentUser] is that
+  /// user. It may also tell of a user who has not changed.
+  ///
+  /// An error that it sends changes nothing: the session reports it as an
+  /// error of the app and goes on listening.
+  Stream<AuthUser?> get userChanges;
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// A wrong password and an address without an account both fail with
+  /// [AuthFailureReason.invalidCredentials].
+  ///
+  /// It is also called while a user is signed in, an anonymous one or the
+  /// user of another account: the user of this account then replaces that
+  /// user on the device. When it fails, that user stays signed in.
+  Future<void> signIn({required String email, required String password});
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: that account keeps
+  /// its password, and whoever is signed in stays signed in.
+  ///
+  /// It is also called while the user of another account is signed in, and
+  /// the user of the new account then replaces that user on the device.
+  /// For an anonymous user, the session calls [linkPassword] instead.
+  Future<void> signUp({required String email, required String password});
+
+  /// Gives the anonymous user who is signed in an account for [email] with
+  /// [password]. The user keeps the [AuthUser.uid] and is no longer
+  /// anonymous.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: the anonymous user
+  /// stays signed in, with the same id.
+  Future<void> linkPassword({required String email, required String password});
+
+  /// Creates an anonymous user, with an id of its own, and signs in as that
+  /// user.
+  Future<void> signInAnonymously();
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password.
+  ///
+  /// It completes whether [email] has an account or not, so that nobody
+  /// learns from the app which addresses have one.
+  Future<void> sendPasswordReset(String email);
+
+  /// Signs the user out on this device. It completes when nobody is signed
+  /// in too.
+  Future<void> signOut();
+
+  /// Deletes the user who is signed in, an anonymous one too, and signs
+  /// out.
+  ///
+  /// It succeeds for a user who has just signed in, in whichever way, and
+  /// for an anonymous user who was just created. For a user who signed in
+  /// longer ago, such as one whom the service found on the device when it
+  /// was created, it may fail with
+  /// [AuthFailureReason.recentSignInRequired]. It then succeeds once the
+  /// user has signed in again, in whichever way the account allows.
+  Future<void> deleteAccount();
+}
+=== lib/core/auth/firebase_auth_service.dart (firebase_auth) ===
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart'
+    show WidgetsBinding, basicLocaleListResolution;
+import 'package:my_app/core/l10n/app_locale.dart';
+
+import 'auth_service.dart';
+
+/// Returns the sign-in service of the app on Firebase Authentication, with
+/// the user who is signed in on this device.
+///
+/// Firebase is initialized first, as `bootstrap()` does. Firebase keeps the
+/// user on the device and hands that user over when it is initialized, so
+/// the service has the user at once, without a request to the server.
+AuthService createFirebaseAuthService() =>
+    FirebaseAuthService(FirebaseAuth.instance);
+
+/// The codes with which Firebase answers a call for the user who is signed
+/// in when the session of that user has ended on the server, as when the
+/// account was deleted, or its password changed, on another device.
+const _endedSession = {
+  'user-token-expired',
+  'invalid-user-token',
+  'user-not-found',
+  'no-current-user',
+};
+
+/// Sign-in with
+/// [Firebase Authentication](https://firebase.google.com/docs/auth), with
+/// an email address and a password, and as an anonymous user.
+///
+/// The code of the app does not use it: it signs in through `appSession` of
+/// `app_session.dart`.
+///
+/// The ways to sign in are enabled in the Firebase project, not here:
+/// Email/Password, and Anonymous for an app that signs in anonymous users.
+/// Until they are, a call fails with [AuthFailureReason.notConfigured], and
+/// its [AuthFailure.developerHint] tells where to enable them.
+///
+/// An empty address or password fails here, before Firebase is asked, since
+/// Android and iOS answer it with different codes: an empty address with
+/// [AuthFailureReason.invalidEmail], and an empty password with
+/// [AuthFailureReason.invalidCredentials] in [signIn] and with
+/// [AuthFailureReason.weakPassword] in [signUp] and [linkPassword].
+final class FirebaseAuthService implements AuthService {
+  /// Creates the service on [_auth].
+  FirebaseAuthService(this._auth);
+
+  final FirebaseAuth _auth;
+
+  /// Tells that the user may have changed: after each call here, and when
+  /// Firebase tells of a change that no call here made, such as the end of
+  /// the session of the user on the server. It follows Firebase only while
+  /// it has a listener.
+  late final StreamController<void> _changes = StreamController.broadcast(
+    onListen: () => _fromFirebase = _auth.userChanges().listen(
+      (_) => _changes.add(null),
+      onError: _changes.addError,
+    ),
+    onCancel: () => _fromFirebase?.cancel(),
+  );
+
+  StreamSubscription<User?>? _fromFirebase;
+
+  @override
+  AuthUser? get currentUser {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    final email = user.email;
+    return AuthUser(
+      uid: user.uid,
+      isAnonymous: user.isAnonymous,
+      // Android has an empty address, not none, for an anonymous user whom
+      // it kept on the device.
+      email: email == null || email.isEmpty ? null : email,
+    );
+  }
+
+  /// Each event has the user of the moment in which a listener gets it, so
+  /// a listener never hears of a user who is not [currentUser] any more.
+  @override
+  Stream<AuthUser?> get userChanges => _changes.stream.map((_) => currentUser);
+
+  @override
+  Future<void> signIn({required String email, required String password}) =>
+      _run(() {
+        _checkGiven(email, password, AuthFailureReason.invalidCredentials);
+        return _auth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      });
+
+  @override
+  Future<void> signUp({required String email, required String password}) =>
+      _run(() {
+        _checkGiven(email, password, AuthFailureReason.weakPassword);
+        return _auth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      });
+
+  @override
+  Future<void> linkPassword({
+    required String email,
+    required String password,
+  }) => _runForUser((user) {
+    _checkGiven(email, password, AuthFailureReason.weakPassword);
+    return user.linkWithCredential(
+      EmailAuthProvider.credential(email: email, password: password),
+    );
+  });
+
+  /// While an anonymous user is signed in, Firebase answers with that user
+  /// and creates no other.
+  @override
+  Future<void> signInAnonymously() => _run(_auth.signInAnonymously);
+
+  /// Firebase sends the message from the template of the project
+  /// (Authentication > Templates in the Firebase console).
+  @override
+  Future<void> sendPasswordReset(String email) => _run(() async {
+    _checkGiven(email);
+    // The message is in the language that the app is in.
+    await _auth.setLanguageCode(
+      (appLocale.value ??
+              basicLocaleListResolution(
+                WidgetsBinding.instance.platformDispatcher.locales,
+                appLocales,
+              ))
+          .languageCode,
+    );
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (error) {
+      // A project without the protection against the enumeration of
+      // email addresses tells that an address has no account.
+      if (error.code != 'user-not-found') rethrow;
+    }
+  });
+
+  @override
+  Future<void> signOut() => _run(_auth.signOut);
+
+  @override
+  Future<void> deleteAccount() => _runForUser((user) async {
+    await user.delete();
+    // Firebase signs a deleted user out, but the plugin keeps that user
+    // as the current one until the platform tells it of the sign-out,
+    // which may come after this call is over.
+    await _auth.signOut();
+  });
+
+  /// Runs [call] for the user who is signed in.
+  ///
+  /// It fails with [AuthFailureReason.recentSignInRequired] when nobody is
+  /// signed in, and when Firebase answers that the session of the user has
+  /// ended: the user is then signed out on this device first.
+  Future<void> _runForUser(Future<void> Function(User user) call) =>
+      _run(() async {
+        final user = _auth.currentUser;
+        if (user == null) {
+          throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+        }
+        try {
+          await call(user);
+        } on FirebaseAuthException catch (error) {
+          if (!_endedSession.contains(error.code)) rethrow;
+          await _auth.signOut();
+          throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+        }
+      });
+
+  /// Fails for an [email] that is empty with
+  /// [AuthFailureReason.invalidEmail], and for a [password] that is empty
+  /// with [withoutPassword], before Firebase is asked. Android refuses an
+  /// empty text with a code that has no reason, and iOS answers an empty
+  /// password as a wrong one, so the service decides for both.
+  void _checkGiven(
+    String email, [
+    String? password,
+    AuthFailureReason withoutPassword = AuthFailureReason.weakPassword,
+  ]) {
+    if (email.isEmpty) {
+      throw const AuthFailure(AuthFailureReason.invalidEmail);
+    }
+    if (password != null && password.isEmpty) {
+      throw AuthFailure(withoutPassword);
+    }
+  }
+
+  /// Runs [call], which then fails only with an [AuthFailure], and tells
+  /// of the user that it leaves, also when it failed.
+  Future<void> _run(Future<void> Function() call) async {
+    try {
+      await call();
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(_failureOf(error), stackTrace);
+    } finally {
+      _changes.add(null);
+    }
+  }
+
+  /// The failure of a call that failed with [error]: the reason for the
+  /// code of Firebase. A code that has no reason yet gets one here.
+  AuthFailure _failureOf(Object error) {
+    if (error is AuthFailure) return error;
+    if (error is! FirebaseAuthException) {
+      return AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+    }
+    final reason = switch (error.code) {
+      // Firebase answers a wrong password and an address without an account
+      // alike, unless the project is without the protection against the
+      // enumeration of email addresses.
+      'invalid-credential' ||
+      'invalid-login-credentials' ||
+      'wrong-password' ||
+      'user-not-found' => AuthFailureReason.invalidCredentials,
+      'email-already-in-use' ||
+      'credential-already-in-use' => AuthFailureReason.emailInUse,
+      'weak-password' ||
+      'password-does-not-meet-requirements' => AuthFailureReason.weakPassword,
+      'invalid-email' || 'missing-email' => AuthFailureReason.invalidEmail,
+      'user-disabled' => AuthFailureReason.userDisabled,
+      'too-many-requests' => AuthFailureReason.tooManyAttempts,
+      'network-request-failed' => AuthFailureReason.network,
+      'requires-recent-login' => AuthFailureReason.recentSignInRequired,
+      _ => null,
+    };
+    if (reason != null) return AuthFailure(reason);
+    // The message on one line: that of iOS may be the description of an
+    // error over many lines.
+    final message = (error.message ?? '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final answer = message.isEmpty ? error.code : '${error.code}: $message';
+    final project = _auth.app.options.projectId;
+    final enable =
+        'enable Email/Password, and Anonymous for an app that '
+        'signs in anonymous users, under Authentication > Sign-in method: '
+        'https://console.firebase.google.com/project/$project/'
+        'authentication/providers';
+    // A way to sign in that is not enabled, which Firebase tells by its
+    // code, and a project in which Authentication was never set up, which
+    // it tells only in its message.
+    const noConfiguration = 'CONFIGURATION_NOT_FOUND';
+    final notEnabled = switch (error.code) {
+      'operation-not-allowed' || 'admin-restricted-operation' => error.code,
+      _ when message.contains(noConfiguration) =>
+        '${error.code}, $noConfiguration',
+      _ => null,
+    };
+    if (notEnabled != null) {
+      return AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint:
+            'Sign-in is not enabled in the Firebase project '
+            '$project (Firebase answered $notEnabled). To fix it, $enable',
+      );
+    }
+    // On iOS and macOS, Firebase may answer for such a project with an
+    // internal error whose message says no more, which nothing tells from
+    // another internal error.
+    if (error.code == 'internal-error' &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS)) {
+      return AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint:
+            'Firebase reported an internal error ($answer), which '
+            'is also what it answers on iOS and macOS when sign-in is not '
+            'enabled in the Firebase project $project. If that is the '
+            'cause, $enable',
+      );
+    }
+    return AuthFailure(AuthFailureReason.unknown, developerHint: answer);
+  }
+}
+=== lib/core/auth/guest_data.dart (role:auth) ===
+/// Gives the account [accountUid] what a guest had: the function that
+/// [takeGuestData] returns.
+typedef GiveGuestData = Future<void> Function(String accountUid);
+
+/// Takes what the guest [guestUid] has in the app, and returns the function
+/// that gives it to an account, or `null` when there is nothing to move.
+///
+/// A guest is an anonymous user. When a guest signs in to an account that
+/// exists already, the user of the app changes from the guest to that
+/// account, and what was kept under the id of the guest, such as a cart on
+/// a server, would be left behind. So the session of the app calls this
+/// function before the sign-in, while the guest is still signed in and may
+/// read that data, and calls the function that it returns once the user of
+/// the account is signed in:
+///
+/// ```dart
+/// Future<GiveGuestData?> takeGuestData(String guestUid) async {
+///   final cart = await carts.read(guestUid);
+///   if (cart.isEmpty) return null;
+///   return (accountUid) => carts.add(accountUid, cart);
+/// }
+/// ```
+///
+/// Only read here: the sign-in may still fail, and then the guest stays. An
+/// error thrown here fails the sign-in before it starts. An error of the
+/// function that this one returns is reported as an error of the app, and
+/// the user stays signed in.
+///
+/// Call no method of `appSession` here, nor in the function that this one
+/// returns. The sign-in is one of its calls, which run one after another,
+/// so such a call would wait for the sign-in, and the sign-in for it.
+///
+/// It is not called when a guest signs up, since the guest then keeps the
+/// id and everything under it, nor in an app without anonymous users.
+Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
+=== lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/widgets.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The languages of the app. The app shows its texts in the language that
+/// the device prefers among them, and in the first of the list when the
+/// device asks for none of them.
+///
+/// A language has one locale here. The app tells its languages apart by
+/// their codes alone, so of two locales of one language, such as
+/// `Locale('pt', 'BR')` and `Locale('pt', 'PT')`, `appLocale.choose()`
+/// takes the first, whichever of them it is given.
+const appLocales = <Locale>[Locale('en'), Locale('uk')];
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the code of the language, such as `uk`.
+/// Nothing is saved under it while the app follows the languages of the
+/// device.
+const _key = 'localization.locale';
+
+/// The language that the user chose for the app, which the app remembers
+/// between its launches.
+///
+/// The root of the app reads it through [AppLocaleScope], and rebuilds in
+/// the new language when the choice changes.
+final appLocale = AppLocaleController._();
+
+/// Keeps the language that the user chose for the app, and saves each
+/// choice in the preferences of the app.
+final class AppLocaleController extends ChangeNotifier {
+  AppLocaleController._();
+
+  Locale? _locale;
+
+  /// The preferences of the app, once it opened them.
+  AppPreferences? _preferences;
+
+  /// The language that the user chose, one of [appLocales], or `null` while
+  /// the app follows the languages of the device.
+  Locale? get value => _locale;
+
+  /// Chooses the language of [locale] as the language of the app, or with
+  /// `null` lets the app follow the languages of the device again.
+  ///
+  /// The choice is the one of [appLocales] with the language of [locale],
+  /// so `Locale('uk', 'UA')` chooses `Locale('uk')`. A locale of a language
+  /// that the app is not in is refused: the future completes with an
+  /// [ArgumentError], and nothing changes.
+  ///
+  /// The language of the app changes at once, and the choice is then saved
+  /// in the preferences once the app opened them: before that, it changes
+  /// only memory. When saving fails, the future completes with the error of
+  /// the preferences. The app stays in the new language while it runs, and
+  /// its next launch starts with what was saved before; choosing the
+  /// language again saves it again.
+  Future<void> choose(Locale? locale) async {
+    final chosen = locale == null ? null : _ofApp(locale.languageCode);
+    if (locale != null && chosen == null) {
+      throw ArgumentError.value(
+        '$locale',
+        'locale',
+        'The app is not in the language of this locale',
+      );
+    }
+    _set(chosen);
+    final preferences = _preferences;
+    if (preferences == null) return;
+    if (chosen == null) {
+      await preferences.remove(_key);
+    } else {
+      await preferences.setString(_key, chosen.languageCode);
+    }
+  }
+
+  void _set(Locale? locale) {
+    if (locale == _locale) return;
+    _locale = locale;
+    notifyListeners();
+  }
+}
+
+/// The one of [appLocales] with the language of the code [code], or `null`.
+Locale? _ofApp(String? code) {
+  for (final locale in appLocales) {
+    if (locale.languageCode == code) return locale;
+  }
+  return null;
+}
+
+/// Restores the language that the user chose from [preferences], which the
+/// app opened, and keeps them for the choices to come: a restorer of the
+/// preferences, which the app calls before its first frame.
+///
+/// When nothing is saved, or what is saved is not the code of one of
+/// [appLocales], the choice stays as it is.
+void restoreAppLocale(AppPreferences preferences) {
+  appLocale._preferences = preferences;
+  final saved = _ofApp(preferences.getString(_key));
+  if (saved != null) appLocale._set(saved);
+}
+
+/// Gives the root of the app the language that the user chose, and rebuilds
+/// the root when the choice changes.
+class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppLocaleScope({
+    required AppLocaleController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The language that the user chose, or `null` to follow the device; the
+  /// widget of [context] rebuilds when the choice changes.
+  static Locale? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppLocaleScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/l10n/l10n.dart (gen_l10n) ===
+import 'package:flutter/widgets.dart';
+
+import '../../l10n/app_localizations.dart';
+
+/// The texts of the app in the language of a context: `context.l10n`.
+extension AppTexts on BuildContext {
+  /// The texts of the app in the language of this context, which is below
+  /// the root of the app.
+  ///
+  /// gen-l10n of Flutter generates [AppLocalizations] from the ARB files in
+  /// `lib/l10n`: run `flutter gen-l10n` after every change of those files.
+  AppLocalizations get l10n => AppLocalizations.of(this);
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/preferences/shared_app_preferences.dart' as impl0;
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting. A key has one
+/// value: a write replaces what the key had, a value of another type too.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame, and nothing else
+/// in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = await impl0.openSharedAppPreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It is synchronous and awaits nothing: nothing waits for an
+/// asynchronous one, and what such a one throws is not caught. It may run
+/// again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [
+  restoreAppLocale,
+];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws, an error or an exception, keeps no other from restoring and does
+/// not stop the start-up of the app, which goes on with the defaults of
+/// that part. In debug mode it is printed, so that a restorer that fails
+/// shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
+}
+=== lib/core/preferences/shared_app_preferences.dart (shared_preferences) ===
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
+
+/// Opens the preferences of the app with the shared_preferences package: it
+/// reads what is saved into memory, which the reads then answer from.
+///
+/// The app has one object of its preferences, which
+/// `createAppPreferences()` returns once `initPreferences()` opened them.
+Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
+  await SharedPreferencesWithCache.create(
+    cacheOptions: const SharedPreferencesWithCacheOptions(),
+  ),
+);
+
+/// The settings of the app that are no secret, with the shared_preferences
+/// package, which keeps them in DataStore on Android and in `UserDefaults`
+/// on iOS.
+///
+/// Neither is encrypted, and a backup of the device carries them: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A number is read only as the type that it was saved as: `getDouble`
+/// returns `null` for a key with an `int`, and `getInt` for a key with a
+/// `double`, a whole number too.
+///
+/// A write puts its value into memory before it saves it. If the platform
+/// refuses the save, as Android does for a text that starts with the prefix
+/// that shared_preferences marks a list with, the write fails, and the
+/// reads of this run return the value all the same. The next launch reads
+/// what was saved before the write, or nothing if the key had no value.
+final class SharedAppPreferences implements AppPreferences {
+  /// Creates the preferences on [SharedPreferencesWithCache], which has
+  /// read what is saved.
+  SharedAppPreferences(this._preferences);
+
+  final SharedPreferencesWithCache _preferences;
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_preferences.get(key)) {
+    final List<Object?> list => _textsOf(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) =>
+      _preferences.setBool(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _preferences.setInt(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) =>
+      _preferences.setDouble(key, value);
+
+  /// shared_preferences keeps the list that it is given, so it gets a copy.
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _preferences.setStringList(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) => _preferences.remove(key);
+
+  /// The value of [key] if it is a [T], or `null`. The reads of
+  /// shared_preferences cast the value instead, and throw on a value of
+  /// another type.
+  T? _read<T>(String key) => switch (_preferences.get(key)) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// A copy of [list] as a list of texts, or `null` if an item of it is no
+  /// text.
+  ///
+  /// When the preferences are opened, the platform returns a list in a form
+  /// of its own: a list of objects on iOS, and on Android a list that casts
+  /// each item to a text as it is read, and so throws on an item that is
+  /// none. Cast to objects, either gives its items as they are.
+  static List<String>? _textsOf(List<Object?> list) {
+    final items = list.cast<Object?>();
+    return items.every((item) => item is String)
+        ? List<String>.from(items)
+        : null;
+  }
+}
+=== lib/core/router/app_router.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router_factory.dart';
+import 'navigation.dart';
+
+/// The router of the app, created on first use.
+final AppRouter appRouter = createAppRouter();
+
+/// The router of the app: its configuration for `MaterialApp.router` and the
+/// navigation that screens use through `context.nav`.
+abstract interface class AppRouter {
+  /// The configuration that `MaterialApp.router` takes as `routerConfig`.
+  RouterConfig<Object> get config;
+
+  /// The navigator that [context] navigates with.
+  AppNavigator navigatorOf(BuildContext context);
+}
+
+/// Moves between the locations of the app.
+abstract interface class AppNavigator {
+  /// Shows [location] with the chain of its parents below it as the stack.
+  ///
+  /// In the main navigation, it selects the branch of [location] and makes
+  /// the chain its stack; for a location outside the main navigation, the
+  /// chain replaces the whole stack, main navigation included.
+  void go(AppLocation location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  ///
+  /// In the main navigation, the current stack is that of the selected
+  /// branch, whichever branch [location] belongs to, and the selected
+  /// destination stays; a location outside the main navigation is shown
+  /// over it. A location in the main navigation goes only on top of the
+  /// main navigation itself: from a page shown over it, this throws a
+  /// [StateError] and leaves the stack as it is, so [go] to the location
+  /// instead. From a page with no main navigation below it, the main
+  /// navigation comes on top with the location.
+  Future<T?> push<T extends Object?>(AppLocation location);
+
+  /// Replaces the top of the current stack with [location].
+  ///
+  /// As with [push], a location in the main navigation cannot replace a
+  /// page shown over the main navigation: this throws a [StateError] and
+  /// leaves the stack as it is, so [go] to the location instead.
+  void replace(AppLocation location);
+}
+=== lib/core/router/app_router_factory.dart (go_router) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:go_router/go_router.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+import 'app_router.dart' show AppNavigator, AppRouter;
+import 'navigation.dart' show AppLocation;
+
+/// Creates the router of the app: a [GoRouter] with the routes of the
+/// modules of the app.
+AppRouter createAppRouter() => _GoAppRouter();
+
+/// The router of the app with go_router, which navigates between the
+/// locations of the app too, and tells the listeners of the screen the user
+/// sees when it changes.
+final class _GoAppRouter implements AppRouter, AppNavigator {
+  /// The router, created once, on first use. Navigation goes through it
+  /// rather than through the router above a context, so that any context
+  /// can navigate, even one above the router.
+  @override
+  late final GoRouter config = _GoRouter(
+    initialLocation: '/',
+    observers: _observers(),
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const FallbackStartScreen(),
+      ),
+    ],
+  )..routerDelegate.addListener(_pagesChanged);
+
+  /// The key of the page on top and its location, as the listeners of the
+  /// screen last heard of them.
+  (LocalKey?, String)? _screen;
+
+  /// The pages that pushes showed, by their keys, as the router last saw
+  /// them among the pages of go_router.
+  Map<LocalKey, ImperativeRouteMatch> _pushed = {};
+
+  /// For each completer that go_router gave a pushed page anew, the
+  /// completer of the push that showed the page.
+  final Expando<Completer<Object?>> _pushes = Expando();
+
+  @override
+  AppNavigator navigatorOf(BuildContext context) => this;
+
+  @override
+  void go(AppLocation location) => config.go(location.path);
+
+  @override
+  Future<T?> push<T extends Object?>(AppLocation location) {
+    return config.push<T>(location.path);
+  }
+
+  @override
+  void replace(AppLocation location) {
+    config.pushReplacement<Object?>(location.path);
+  }
+
+  /// Follows the pages of go_router, whose delegate notifies its listeners
+  /// of each change of them: keeps each push completing with the value of
+  /// its page, and tells the listeners of the screen about the page on top.
+  void _pagesChanged() {
+    _keepPushes();
+    _showScreen();
+  }
+
+  /// Lets each push complete with the value that its page returns when it
+  /// closes, whatever completer go_router gives the page.
+  ///
+  /// go_router completes a push with the completer that it gives the page
+  /// it pushed, which the page completes when it closes. When go_router
+  /// shows its pages anew from their encoded form, as on [GoRouter.refresh],
+  /// such as when its `refreshListenable` notifies, it gives each pushed
+  /// page a new completer, though the page keeps its key and its location,
+  /// so the push would never complete
+  /// (https://github.com/flutter/flutter/issues/128122). So when a page
+  /// comes back at its location with another completer, the router passes
+  /// on the value of that completer to that of the push. A branch of the
+  /// main navigation that is not selected keeps its pages as they were, so
+  /// a page that comes back with its branch passes on its value as before.
+  /// Once go_router keeps the completers of its pages, this does nothing
+  /// and can go.
+  void _keepPushes() {
+    final pushed = {
+      for (final page in _pushedPages(
+        config.routerDelegate.currentConfiguration.matches,
+      ))
+        page.pageKey: page,
+    };
+    for (final page in pushed.values) {
+      final before = _pushed[page.pageKey];
+      if (before == null ||
+          before.completer == page.completer ||
+          before.matches.uri != page.matches.uri) {
+        continue;
+      }
+      final push = _pushes[before.completer] ?? before.completer;
+      _pushes[page.completer] = push;
+      unawaited(
+        page.completer.future.then((value) {
+          if (!push.isCompleted) push.complete(value);
+        }),
+      );
+    }
+    _pushed = pushed;
+  }
+
+  /// The pages that pushes showed among [matches], in the stacks of the
+  /// main navigation too.
+  static Iterable<ImperativeRouteMatch> _pushedPages(
+    List<RouteMatchBase> matches,
+  ) sync* {
+    for (final match in matches) {
+      if (match is ImperativeRouteMatch) yield match;
+      if (match is ShellRouteMatch) yield* _pushedPages(match.matches);
+    }
+  }
+
+  /// Tells the listeners of the screen about the page on top when another
+  /// page comes on top, or the page on top shows another location.
+  ///
+  /// The delegate of go_router notifies its listeners once for each change
+  /// of its configuration, a switch of branches included, and may do so
+  /// again without a change of the page on top, which the listeners of the
+  /// screen do not hear of twice. The location of a pushed page is its own,
+  /// as that of the configuration leaves pushed pages out. The error screen
+  /// of go_router has no route match, or, for a location pushed in error, a
+  /// route without a name.
+  void _showScreen() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    final top = configuration.lastOrNull;
+    final location = switch (top) {
+      ImperativeRouteMatch(:final matches) => matches.uri.toString(),
+      _ => configuration.uri.toString(),
+    };
+    final screen = (top?.pageKey, location);
+    if (screen == _screen) return;
+    _screen = screen;
+    for (final listener in _screenListeners) {
+      _callAlone(listener, top?.route.name, location);
+    }
+  }
+}
+
+/// Creates the observers of a navigator. An observer can watch only one
+/// navigator, so each navigator gets instances of its own.
+List<NavigatorObserver> _observers() => [
+  for (final create in <NavigatorObserver Function()>[]) create(),
+];
+
+/// The listeners of the screen the user sees, which get the full name of
+/// the route of the screen, or `null` for a screen that is not a route of a
+/// module, and its location.
+final List<void Function(String? route, String location)> _screenListeners = [];
+
+/// Calls [listener] of the screen with [route] and [location] on its own:
+/// what it throws keeps no other listener from hearing the screen, and
+/// reaches neither the router nor the handlers of the errors of the app. In
+/// debug mode it is printed, so that a listener that fails shows in the
+/// console.
+void _callAlone(
+  void Function(String? route, String location) listener,
+  String? route,
+  String location,
+) {
+  try {
+    listener(route, location);
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('A listener of the screen failed: $error');
+    }
+  }
+}
+
+/// The [GoRouter] of the app, which hears of the back button of the system
+/// through [_BackButton]: go_router takes no dispatcher of the button, so
+/// the router has one of its own in place of that of [GoRouter].
+final class _GoRouter extends GoRouter {
+  /// Creates the router of [routes], as [GoRouter.new] does.
+  _GoRouter({
+    required List<RouteBase> routes,
+    super.initialLocation,
+    super.observers,
+  }) : super.routingConfig(
+         routingConfig: ValueNotifier(RoutingConfig(routes: routes)),
+       );
+
+  @override
+  BackButtonDispatcher get backButtonDispatcher => _backButton;
+
+  late final _BackButton _backButton = _BackButton(this);
+}
+
+/// The dispatcher of the back button of the system for go_router, which
+/// asks go_router to close the route on top only while go_router has a page
+/// of a route.
+///
+/// go_router shows its error screen in place of the whole stack, for a
+/// location that no route matches or that the redirect of a route refuses:
+/// it then has no page of a route. Asked to close the route on top, its
+/// delegate looks for the last of those pages and throws a [StateError]
+/// (https://github.com/flutter/flutter/issues/187616). So on that screen
+/// the dispatcher asks the root navigator, the only one there, itself: a
+/// route that is shown over the error screen, such as a dialog, closes, and
+/// with no route to close the button is left to the system, as on the
+/// first page of the app. An error screen that a push showed over a page is
+/// a page of go_router, which closes it. Once the delegate of go_router
+/// answers without a page, this can go.
+final class _BackButton extends RootBackButtonDispatcher {
+  /// Creates the dispatcher of the back button of [_router].
+  _BackButton(this._router);
+
+  final GoRouter _router;
+
+  /// For each callback that the dispatcher was given, the one that it
+  /// calls in its place.
+  final Map<ValueGetter<Future<bool>>, ValueGetter<Future<bool>>> _asked = {};
+
+  /// Takes [callback], with which the `Router` of Flutter asks the delegate
+  /// of go_router to close the route on top, and calls it only while
+  /// go_router has a page. A `BackButtonListener` below the router still
+  /// hears of the button first, on the error screen too.
+  @override
+  void addCallback(ValueGetter<Future<bool>> callback) => super.addCallback(
+    _asked[callback] = () {
+      final delegate = _router.routerDelegate;
+      if (delegate.currentConfiguration.matches.isNotEmpty) return callback();
+      return delegate.navigatorKey.currentState?.maybePop() ??
+          Future.value(false);
+    },
+  );
+
+  @override
+  void removeCallback(ValueGetter<Future<bool>> callback) =>
+      super.removeCallback(_asked.remove(callback) ?? callback);
+}
+=== lib/core/router/navigation.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router.dart';
+
+/// A place in the app: a route with the values of its parameters.
+///
+/// Every route of the app has a location class, such as
+/// `HomeDetailsLocation` for the route `home.details`.
+sealed class AppLocation {
+  /// Allows the location classes to have constant constructors.
+  const AppLocation();
+
+  /// The full name of the route, such as `home.details`.
+  String get routeName;
+
+  /// The location as a path with its query, such as `/home/details/5`.
+  String get path;
+
+  /// The location of the parent route, or `null` for a top-level route.
+  AppLocation? get parent => null;
+
+  /// The locations from the top-level route down to this one: the stack
+  /// that [NavLink.go] shows.
+  List<AppLocation> get chain => [...?parent?.chain, this];
+}
+
+/// A location and the context that navigates to it, as the routes of
+/// `context.nav` return them.
+final class NavLink {
+  /// Creates the link to [location] from [context].
+  const NavLink(this._context, this.location);
+
+  final BuildContext _context;
+
+  /// The location to navigate to.
+  final AppLocation location;
+
+  /// Shows [location] with the chain of its parents below it as the stack.
+  void go() => appRouter.navigatorOf(_context).go(location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  Future<T?> push<T extends Object?>() =>
+      appRouter.navigatorOf(_context).push<T>(location);
+
+  /// Replaces the top of the current stack with [location].
+  void replace() => appRouter.navigatorOf(_context).replace(location);
+}
+
+/// Typed navigation to the routes of the app.
+extension AppNavigation on BuildContext {
+  /// The routes of the app by module.
+  AppNav get nav => const AppNav._();
+}
+
+/// The routes of the app by module; it has none.
+final class AppNav {
+  const AppNav._();
+}
+=== lib/firebase_options.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// Default [FirebaseOptions] for use with your Firebase apps.
+///
+/// Example:
+/// ```dart
+/// import 'firebase_options.dart';
+/// // ...
+/// await Firebase.initializeApp(
+///   options: DefaultFirebaseOptions.currentPlatform,
+/// );
+/// ```
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'DefaultFirebaseOptions have not been configured for web - '
+        'you can reconfigure this by running the FlutterFire CLI again.',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for android - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for ios - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for linux - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/l10n/app_en.arb (gen_l10n) ===
+{
+  "@@locale": "en",
+  "flutterCoreFallbackHint": "No start screen yet. Add a feature with a route, or replace this screen.",
+  "flutterCoreFallbackCopied": "Copied"
+}
+=== lib/l10n/app_uk.arb (gen_l10n) ===
+{
+  "@@locale": "uk",
+  "flutterCoreFallbackHint": "Стартового екрана ще немає. Додайте фічу з маршрутом або замініть цей екран.",
+  "flutterCoreFallbackCopied": "Скопійовано"
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(AppLocaleScope(notifier: appLocale, child: const App()));
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  firebase_auth: "^6.7.0"
+  firebase_core: "^4.15.0"
+  go_router: "^17.5.0"
+  intl: "any"
+  shared_preferences: "^2.5.5"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  uses-material-design: true
+  generate: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
+void main() {
+  testWidgets('names the app, and tells where its first screen goes', (
+    tester,
+  ) async {
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
+
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('5'), findsNothing);
+    final name = find.bySemanticsLabel('My App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Ma').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
+  });
+}

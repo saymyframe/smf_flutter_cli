@@ -928,7 +928,10 @@ void main() {
       final (apps: all, :failed) = await matrixOf(severalProvidersModules());
       expect(failed, isEmpty);
       matrix = all;
-      everyModule = matrix.singleWhere((app) => app.everyModuleWith != null);
+      // The app that the tool of several providers checks: the one that a
+      // run of the apps with every module takes.
+      everyModule =
+          const MatrixSelection(everyModule: true).of(matrix).single.$2;
     });
 
     /// The app test of the app of several providers whose files are in the
@@ -937,11 +940,38 @@ void main() {
         severalProviders.tests.singleWhere((test) => nameOf(test) == name);
 
     test(
+        'is the app with every module in the first mode of the auth role, '
+        'which Firebase Authentication provides there: the matrix of the '
+        'registry has it once more for each other mode, which a run of the '
+        'apps with every module leaves out', () {
+      expect(
+        [
+          for (final app in matrix)
+            if (app.everyModuleWith != null) app.name,
+        ],
+        [
+          'every module',
+          'every module --auth-mode=guest',
+          'every module --auth-mode=anonymous',
+        ],
+      );
+      expect(everyModule.name, 'every module');
+      expect(everyModule.modes, isEmpty);
+      // It gets no value of the option, so the role chooses the first mode,
+      // as for a user who does not give the option.
+      expect(everyModule.roleOptions.keys, isNot(contains('auth-mode')));
+      expect(
+        authRole.modeIn(authRole.hookInput(everyModule.hook!)),
+        AuthMode.required,
+      );
+    });
+
+    test(
         'gets the app tests of the modules of the CLI, the tests of the DI '
-        'role, of the events role, of the preferences role, of the settings '
-        'screen role and of the theme role, the mocks of the fixture '
-        'providers and the tests of the roles of several providers, which '
-        'all apply to it', () {
+        'role, of the events role, of the preferences role, of the auth '
+        'role, of the settings screen role and of the theme role, the mocks '
+        'of the fixture providers and the tests of the roles of several '
+        'providers, which all apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -949,6 +979,8 @@ void main() {
           'firebase_crashlytics',
           'firebase_analytics',
           'screen_views',
+          'firebase_auth',
+          'auth_role',
           'onboarding',
           'settings',
           'shared_preferences',
@@ -1040,15 +1072,21 @@ void main() {
         final test = ofSeveral(name);
         expect(test.roles, {role}, reason: name);
         // The tests look at the service log of the fixtures, which only the
-        // app with every module of the registry is sure to have.
+        // apps with every module of the registry are sure to have: the one
+        // that the tool checks, and the same app in the other modes of the
+        // auth role.
         expect(
           [
             for (final app in matrix)
               if (test.appliesTo(app)) app,
           ],
-          [everyModule],
+          [
+            for (final app in matrix)
+              if (app.everyModuleWith != null) app,
+          ],
           reason: name,
         );
+        expect(test.appliesTo(everyModule), isTrue, reason: name);
       }
 
       expect(
