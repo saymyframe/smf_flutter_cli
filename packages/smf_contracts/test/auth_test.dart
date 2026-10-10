@@ -1,6 +1,8 @@
 @TestOn('vm')
 library;
 
+import 'dart:io';
+
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -1715,6 +1717,238 @@ void main() {
       for (final mode in AuthMode.values) {
         expect(authRole.modeIn(inputOf(authRole, choice: mode)), mode);
       }
+    });
+  });
+
+  group('the declaration of the mode, which a tool of the app reads,', () {
+    /// The line of the mode in an app that was generated in the mode
+    /// `required`.
+    const generated = 'const AuthMode authMode = AuthMode.required;';
+
+    /// The file of the session of an app in the mode `required`, as `dart
+    /// format` leaves it.
+    late String session;
+
+    /// [source], a Dart file, as `dart format` of the SDK of the tests
+    /// leaves it.
+    String formatted(String source) {
+      final directory = Directory.systemTemp.createTempSync('smf_auth_mode_');
+      try {
+        final file = File('${directory.path}/app_session.dart')
+          ..writeAsStringSync(source);
+        final result = Process.runSync(
+          Platform.resolvedExecutable,
+          ['format', file.path],
+        );
+        expect(result.exitCode, 0, reason: '${result.stderr}');
+        return file.readAsStringSync();
+      } finally {
+        directory.deleteSync(recursive: true);
+      }
+    }
+
+    /// [session] with [declaration] in place of the line of the mode.
+    String withLine(String declaration) {
+      expect(session, contains('\n$generated\n'));
+      return session.replaceFirst(generated, declaration);
+    }
+
+    setUpAll(() async {
+      session = formatted(
+        (await _rendered()).files[AuthRole.sessionFile]!,
+      );
+    });
+
+    test(
+        'is read from the file of the session of an app of each mode, as '
+        'the template writes it and as dart format leaves it', () async {
+      for (final mode in AuthMode.values) {
+        final rendered =
+            (await _rendered(mode: mode)).files[AuthRole.sessionFile]!;
+        final ofApp = formatted(rendered);
+
+        expect(authRole.modeWrittenIn(rendered), mode, reason: mode.name);
+        expect(authRole.modeWrittenIn(ofApp), mode, reason: mode.name);
+        // The line that the doc of the constant asks the developer to keep.
+        expect(
+          ofApp,
+          contains('\nconst AuthMode authMode = AuthMode.${mode.name};\n'),
+        );
+        expect(
+          ofApp,
+          contains(
+            '/// To change the mode, change its value and keep the '
+            'declaration as it is,\n'
+            '/// on a line that it starts: a tool of the app that cannot '
+            'import this\n'
+            '/// file, which imports Flutter, reads the mode from this '
+            'line.\n'
+            'const AuthMode authMode = ',
+          ),
+        );
+      }
+    });
+
+    test(
+        'is read as a developer of the app may leave it: without the type, '
+        'with final, with the value on the next line, with a comment after '
+        'it, and in a file with other line ends', () {
+      final read = {
+        for (final declaration in [
+          'const authMode = AuthMode.guest;',
+          'final AuthMode authMode = AuthMode.guest;',
+          'final authMode = AuthMode.anonymous;',
+          'const AuthMode authMode =\n    AuthMode.anonymous;',
+          'const AuthMode authMode = AuthMode.guest; // until the release',
+          'const AuthMode authMode = AuthMode.guest; /* for now */',
+          'const AuthMode  authMode  =  AuthMode.anonymous ;',
+        ])
+          declaration: authRole.modeWrittenIn(withLine(declaration)),
+      };
+
+      expect(read, {
+        'const authMode = AuthMode.guest;': AuthMode.guest,
+        'final AuthMode authMode = AuthMode.guest;': AuthMode.guest,
+        'final authMode = AuthMode.anonymous;': AuthMode.anonymous,
+        'const AuthMode authMode =\n    AuthMode.anonymous;':
+            AuthMode.anonymous,
+        'const AuthMode authMode = AuthMode.guest; // until the release':
+            AuthMode.guest,
+        'const AuthMode authMode = AuthMode.guest; /* for now */':
+            AuthMode.guest,
+        'const AuthMode  authMode  =  AuthMode.anonymous ;': AuthMode.anonymous,
+      });
+      // As an editor of Windows saves the file.
+      expect(
+        authRole.modeWrittenIn(
+          withLine('const AuthMode authMode = AuthMode.guest;')
+              .replaceAll('\n', '\r\n'),
+        ),
+        AuthMode.guest,
+      );
+    });
+
+    test(
+        'is not a declaration within a comment, nor that of a local '
+        'variable: the file tells the mode by the one that is code', () {
+      const real = 'const AuthMode authMode = AuthMode.guest;';
+      const old = 'const AuthMode authMode = AuthMode.anonymous;';
+      final read = {
+        for (final (name, text) in [
+          ('a comment of a line above', '// $old\n$real'),
+          ('a doc comment above', '/// As generated: `$old`\n$real'),
+          ('a block comment above', '/*\n$old\n*/\n$real'),
+          ('a block comment on its line', '/* $old */\n$real'),
+          (
+            'a block comment within a block comment',
+            '/* before /* within */\n$old\n*/\n$real',
+          ),
+          ('a block comment with a line comment', '/*\n// */\n$real'),
+          (
+            'a line comment that starts a block comment',
+            '// see /* below\n$real\n// */',
+          ),
+          (
+            'a local variable',
+            '$real\n\nAuthMode _other() {\n'
+                '  const authMode = AuthMode.anonymous;\n'
+                '  return authMode;\n'
+                '}',
+          ),
+          (
+            'a constant of another name',
+            '$real\n\nconst AuthMode authModeOfTests = AuthMode.anonymous;',
+          ),
+        ])
+          name: authRole.modeWrittenIn(withLine(text)),
+      };
+
+      expect(read, {
+        for (final name in read.keys) name: AuthMode.guest,
+      });
+    });
+
+    test(
+        'does not tell the mode when a tool would have to guess: with a '
+        'value that is no mode, a computed value, two declarations, or none '
+        'that is code', () {
+      const old = 'const AuthMode authMode = AuthMode.anonymous;';
+      const computed = 'final AuthMode authMode = modeOfBuild();';
+      final read = {
+        for (final (name, text) in [
+          // A misspelt mode, which does not compile in the app either.
+          ('no mode', 'const AuthMode authMode = AuthMode.anonymus;'),
+          ('a longer name', 'const AuthMode authMode = AuthMode.guests;'),
+          ('another type', 'const AuthMode authMode = Modes.guest;'),
+          ('a computed value', computed),
+          (
+            'a value by a condition',
+            'const AuthMode authMode =\n'
+                "    bool.fromEnvironment('GUEST') ? AuthMode.guest : "
+                'AuthMode.required;',
+          ),
+          ('a member of the mode', 'final authMode = AuthMode.guest.index;'),
+          (
+            'two declarations',
+            'const AuthMode authMode = AuthMode.guest;\n'
+                'const AuthMode authMode = AuthMode.guest;',
+          ),
+          ('one in a block comment only', '/*\n$old\n*/\n$computed'),
+          ('one in a line comment only', '// $old\n$computed'),
+          (
+            'one within two block comments only',
+            '/* before /* within */\n$old\n*/\n$computed',
+          ),
+          (
+            'a comment within it',
+            'const AuthMode authMode = /* was guest */ AuthMode.anonymous;',
+          ),
+          ('one that does not start its line', '  $old'),
+          ('a field of a class', 'class Modes {\n  static $old\n}'),
+          ('none', ''),
+        ])
+          name: authRole.modeWrittenIn(withLine(text)),
+      };
+
+      expect(read, {for (final name in read.keys) name: null});
+      expect(authRole.modeWrittenIn(''), isNull);
+    });
+
+    test(
+        'is a regular expression that a tool of the app runs itself: a '
+        'match with a group is a declaration, with the name of its mode', () {
+      // As a script of the app reads it, without this package.
+      List<String?> matchesIn(String source) => [
+            for (final match in RegExp(
+              AuthRole.modeDeclaration,
+              multiLine: true,
+            ).allMatches(source))
+              match[1],
+          ];
+
+      expect(
+        AuthRole.modeDeclaration,
+        endsWith(r'(required|guest|anonymous)\s*;'),
+      );
+      expect(
+        [for (final mode in AuthMode.values) mode.name],
+        ['required', 'guest', 'anonymous'],
+      );
+      expect(
+        matchesIn(
+          '// The mode.\n'
+          'const AuthMode authMode = AuthMode.guest; /* a */ // b\n'
+          '/* const authMode = AuthMode.required; */\n'
+          'final authMode = AuthMode.anonymous;\n',
+        ),
+        [null, 'guest', null, null, null, 'anonymous'],
+      );
+      expect(
+        matchesIn(session).nonNulls,
+        ['required'],
+        reason: 'The file of the session has one declaration, and every '
+            'other match is one of its comments.',
+      );
     });
   });
 
