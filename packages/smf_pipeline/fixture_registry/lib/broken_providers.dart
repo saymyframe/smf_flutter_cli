@@ -19,6 +19,7 @@ import 'package:fake_broken/fake_broken.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
+import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
@@ -313,8 +314,7 @@ List<BrokenProvider> brokenProviders() => const [
           ),
           MatrixExpectedFailure(
             'test/router_walk_guards_test.dart',
-            'the walk of the routes holds while a guard keeps the user out, '
-                'and once the flows of the guards are over',
+            _walkGuardsTest,
             'While a guard does not allow, each location outside its flow '
                 'shows the target of the guard, and each location of its flow '
                 'its own screen.',
@@ -327,6 +327,20 @@ List<BrokenProvider> brokenProviders() => const [
             'The page on top of the innermost navigator on the screen is '
                 'named after the route of each location, or after the route '
                 'that the app starts on for a location in a flow that is over.',
+          ),
+          // A route that asks for a condition that does not hold is a
+          // location that a guard keeps the user from too.
+          MatrixExpectedFailure(
+            'test/router_conditions_test.dart',
+            _conditionsTest,
+            'go() to a route that asks for a condition that does not hold '
+                'shows the target of the guard of the condition.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_condition_gates_test.dart',
+            _conditionGatesTest,
+            'While a gate does not allow, go() to a route that asks for no '
+                'condition shows the target of the gate.',
           ),
         ],
       ),
@@ -385,6 +399,27 @@ List<BrokenProvider> brokenProviders() => const [
                 'platform, or its start screen for a router that takes no '
                 'location from the platform.',
           ),
+          // The location that was asked for while a condition did not hold
+          // is an answer like any other: the router does not show it.
+          MatrixExpectedFailure(
+            'test/router_conditions_test.dart',
+            _conditionsTest,
+            'Once the condition holds, the router shows the location that '
+                'was asked for.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_condition_gates_test.dart',
+            _conditionGatesTest,
+            'Once the gate and the condition allow, the router shows the '
+                'latest location that was asked for.',
+          ),
+          // Nor the target of the guard of a condition that stops holding
+          // on a page that asks for it.
+          MatrixExpectedFailure(
+            'test/router_condition_stops_test.dart',
+            _conditionStopsTest,
+            _pushedPageLeaves,
+          ),
         ],
       ),
       BrokenProvider(
@@ -411,6 +446,62 @@ List<BrokenProvider> brokenProviders() => const [
             'replace() with a location in a flow that is over shows the '
                 'screen that the app starts on.',
           ),
+          // And the target of the guard of a condition that does not hold,
+          // for a route that asks for it. The test of such a guard next to
+          // the gates replaces no page, so it passes.
+          MatrixExpectedFailure(
+            'test/router_conditions_test.dart',
+            _conditionsTest,
+            'replace() with a route that asks for a condition that does not '
+                'hold shows the target of the guard of the condition.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerNamingPushedPagesAfterPageBelow,
+        role: routerRole,
+        bug: 'It tells the guards of the routes of a page that a push showed '
+            'under the route of the location below the pushed pages, not '
+            'under its own. A gate keeps the user from both, so only a guard '
+            'that stands for a condition tells: when the condition stops '
+            'holding, a pushed page that asks for it stays over a page that '
+            'asks for nothing.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_condition_stops_test.dart',
+            _conditionStopsTest,
+            _pushedPageLeaves,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerAskingAboutTopLevelRoute,
+        role: routerRole,
+        bug: 'It asks the guards of the routes about a location that go(), '
+            'push() or replace() is asked to show by the name of the '
+            'top-level route of the location, not by that of its own route. '
+            'A gate answers the same for both, so only a guard that stands '
+            'for a condition tells: a route that asks for the condition '
+            'below a route that asks for nothing shows to everyone.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_conditions_test.dart',
+            _conditionsTest,
+            'go() to a route that asks for a condition that does not hold, '
+                'below a route that asks for none, shows the target of the '
+                'guard of the condition.',
+          ),
+          // The walk goes to that route while the condition does not hold.
+          MatrixExpectedFailure(
+            'test/router_walk_guards_test.dart',
+            _walkGuardsTest,
+            'While a condition does not hold, each location that asks for it '
+                'shows the target of its guard, each location of the flow of '
+                'that guard its own screen, and each other location what it '
+                'shows with guards that allow.',
+          ),
         ],
       ),
       BrokenProvider(
@@ -432,6 +523,7 @@ List<BrokenProvider> brokenProviders() => const [
           FakeSecondModule.id,
           FakeLateGateModule.id,
           FakeGateModule.id,
+          FakeClockBadgeModule.id,
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
@@ -472,6 +564,7 @@ List<BrokenProvider> brokenProviders() => const [
           FakeSecondModule.id,
           FakeLateGateModule.id,
           FakeGateModule.id,
+          FakeClockBadgeModule.id,
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
@@ -521,6 +614,7 @@ List<BrokenProvider> brokenProviders() => const [
           FakeSecondModule.id,
           FakeLateGateModule.id,
           FakeGateModule.id,
+          FakeClockBadgeModule.id,
           FakeBlocModule.id,
           FakeDiModule.id,
           FakeAnalyticsModule.id,
@@ -989,13 +1083,18 @@ List<BrokenProvider> brokenProviders() => const [
 /// The other modules of the app of a router that breaks what the role says
 /// of the guards of the routes: the fixture late gate and the fixture
 /// gates, in the order of the registry of the fixtures, whose guards the
-/// tests close and open, the fixture feature, whose screens the guards keep
-/// the user from, and what the fixture feature and the tests of the
-/// listeners of the screen need.
+/// tests close and open, with the provider of the fixture badge role, whose
+/// condition one of those guards stands for; the fixture feature, whose
+/// screens the guards keep the user from, and on whose screen the app
+/// starts; the second fixture feature, three routes of which ask for that
+/// condition; and what the fixture feature and the tests of the listeners
+/// of the screen need.
 const List<ModuleId> _appWithGates = [
   FakeFeatureModule.id,
+  FakeSecondModule.id,
   FakeLateGateModule.id,
   FakeGateModule.id,
+  FakeClockBadgeModule.id,
   FakeBlocModule.id,
   FakeDiModule.id,
   FakeAnalyticsModule.id,
@@ -1035,6 +1134,35 @@ const _returnTest =
     'a guard that does not bring the user back shows the screen that the app '
     'starts on once it allows again, or a location that was asked for while '
     'it did not allow';
+
+/// The name of the test of the walk of the routes while a guard keeps the
+/// user out.
+const _walkGuardsTest =
+    'the walk of the routes holds while a guard keeps the user out, once the '
+    'flows of the guards are over, and while a condition does not hold';
+
+/// The name of the test of a condition that stops holding on a page that
+/// asks for it, and the reason of its first expectation of the target of
+/// the guard.
+const _conditionStopsTest =
+    'a condition that stops holding shows the target of its guard in place '
+    'of a page that asks for it, a pushed one and one below a route that '
+    'asks for nothing';
+const _pushedPageLeaves =
+    'When a condition stops holding, the router shows the target of its '
+    'guard in place of a pushed page that asks for the condition, over a '
+    'page that asks for none.';
+
+/// The names of the two tests of a guard that stands for a condition: of
+/// the routes that ask for it, and of the guard next to the gates.
+const _conditionsTest =
+    'a route that asks for a condition shows only while the condition holds, '
+    'the target of its guard in its place until then, and every other route '
+    'as it is';
+const _conditionGatesTest =
+    'a gate decides before a guard of a condition, the flow that the two '
+    'have is over once both allow, and a guard of a condition that does not '
+    'bring the user back makes the router forget where the user was';
 
 /// The name of the test of the labels of the destinations.
 const _labelsTest =
@@ -1092,6 +1220,8 @@ List<MatrixFailingApp> brokenModuleApps() => const [
           FakeRouterModule(),
           FakeBlocModule(),
           FakeGateModule(open: false),
+          // The fixture badge role, which the fixture gates require.
+          FakeClockBadgeModule(),
         ],
         failures: [
           MatrixExpectedFailure(

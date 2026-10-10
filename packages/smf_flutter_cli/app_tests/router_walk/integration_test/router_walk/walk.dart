@@ -10,9 +10,11 @@
 // locations of the app from the data of its router role, and with what the
 // router shows for each. While a guard of the routes does not allow, as on
 // a device, where no test opens it, the walk expects the target of the
-// guard for each location that the guard keeps the user from. For any
-// other location in the flow of a guard, once the flow is over, it expects
-// the screen that the app starts on.
+// guard for each location that the guard keeps the user from: every
+// location outside the flow of a gate, and only those that ask for its
+// condition for a guard that stands for one. For any other location in the
+// flow of a guard, once the flow is over, it expects the screen that the
+// app starts on.
 import 'package:flutter/widgets.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
 
@@ -53,14 +55,16 @@ final class WalkProblems {
 ///
 /// It holds whichever guards of the routes allow, and whatever screen the
 /// app shows when it starts, so it depends on no probe that ran before it.
-/// While a guard does not allow, it checks that the router keeps the user
+/// While a gate does not allow, it checks that the router keeps the user
 /// in the flow of the guard: each location outside the flow shows the
 /// target, so the walk sees the page and the screen of the routes of the
 /// flow only, and with a flow of one route, the screen that is shown
-/// already. The other routes get their walk under `flutter test`, where
-/// the guards allow. There, and wherever a flow is over and no guard keeps
-/// the user from its locations, the walk checks that each of them shows
-/// the screen that the app starts on.
+/// already. While a guard that stands for a condition does not allow, it
+/// checks that the routes that ask for the condition show the target, and
+/// sees every other route. The other routes get their walk under
+/// `flutter test`, where the guards allow. There, and wherever a flow is
+/// over and no guard keeps the user from its locations, the walk checks
+/// that each of them shows the screen that the app starts on.
 Future<List<String>> probeRoutes(Future<void> Function() settle) async =>
     (await walkRoutes(settle)).all;
 

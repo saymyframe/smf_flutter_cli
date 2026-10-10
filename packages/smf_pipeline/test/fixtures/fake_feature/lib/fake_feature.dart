@@ -12,11 +12,17 @@
 /// for the settings screen of an app that has one. Its screens, its setting
 /// and the label of its destination are texts of the module, which it gives
 /// the localization role: in the language of the app with the role, and in
-/// English without it. The third has two guards
+/// English without it. It also has a route outside the main navigation,
+/// with a route below it, that asks for a condition of the fixture badge
+/// role, which it uses, and a route that asks for the same below a route
+/// that asks for nothing. The third has two guards
 /// over gates that a test opens and closes, each with a route to show while
-/// its gate is closed, the first with a route below it. It depends on one
-/// of the two fake state managers, so the apps with every fixture come with
-/// guards and without. The fourth has one guard over a gate of its own, of
+/// its gate is closed, the first with a route below it, and a third guard
+/// that stands for that condition and shows the route of the first. It
+/// depends on one of the two fake state managers, so the apps with every
+/// fixture come with guards and without, and the routes of the second
+/// feature that ask for the condition have a guard in the first and none
+/// in the others. The fourth has one guard over a gate of its own, of
 /// a later stage than the guards of the third, which does not bring the
 /// user back. It depends on the same state manager, and the registries list
 /// it before the third, so the stages of the guards go against the order of
@@ -30,6 +36,7 @@ import 'package:fake_feature/bundles/fake_gate_bundle.dart';
 import 'package:fake_feature/bundles/fake_late_gate_bundle.dart';
 import 'package:fake_feature/bundles/fake_second_bundle.dart';
 import 'package:fake_feature/bundles/fake_second_settings_bundle.dart';
+import 'package:fake_roles/fake_roles.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 /// A feature with a start screen and a details screen.
@@ -122,6 +129,19 @@ final class FakeFeatureModule extends SmfModule {
 /// file of its own: an app with both analyzes only if the screen imports
 /// the file of each with a prefix of its own, as the role asks of every
 /// provider.
+///
+/// And it uses the fixture badge role: its route `/fake_second/members`,
+/// outside the main navigation, asks for the condition that the role
+/// publishes ([BadgeRole.holder]), and so does the route below it, by being
+/// there. A third route lists the condition itself,
+/// `/fake_second/outside/vault`, below the route outside the main
+/// navigation, which asks for nothing: a router that asked the guards about
+/// the route above a route would show it to everyone. The module declares
+/// no guard and knows no module that has one. In an app with a guard that
+/// stands for the condition, the router shows the target of that guard in
+/// place of the three routes while the condition does not hold. In an app
+/// without one, as in an app without the role, they show like any other
+/// route.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
@@ -162,12 +182,15 @@ final class FakeSecondModule extends SmfModule {
 
   static const _folder = 'features/fake_second';
 
+  static const _members =
+      ImportRef.app('$_folder/fixture_members_screens.dart');
+
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
         description: 'A second start screen (fixture)',
         kind: ModuleKinds.feature,
-        uses: {localizationRole, settingsScreenRole},
+        uses: {localizationRole, settingsScreenRole, badgeRole},
       );
 
   @override
@@ -198,6 +221,7 @@ final class FakeSecondModule extends SmfModule {
               ),
               startCandidate: true,
             ),
+            // The route below it asks for the condition, and it does not.
             Route(
               '/outside',
               name: 'outside',
@@ -205,6 +229,29 @@ final class FakeSecondModule extends SmfModule {
                 'FixtureOutsideScreen',
                 import: ImportRef.app('$_folder/fixture_outside_screen.dart'),
               ),
+              children: [
+                Route(
+                  'vault',
+                  name: 'vault',
+                  screen: ScreenRef('FixtureVaultScreen', import: _members),
+                  conditions: [BadgeRole.holder],
+                ),
+              ],
+            ),
+            // The route below it asks for the condition too.
+            Route(
+              '/members',
+              name: 'members',
+              screen: ScreenRef('FixtureMembersScreen', import: _members),
+              conditions: [BadgeRole.holder],
+              children: [
+                Route(
+                  'card',
+                  name: 'memberCard',
+                  screen:
+                      ScreenRef('FixtureMemberCardScreen', import: _members),
+                ),
+              ],
             ),
           ]),
         ),
@@ -227,8 +274,10 @@ final class FakeSecondModule extends SmfModule {
       ];
 }
 
-/// A feature with two guards of the routes, which keep the user from the
-/// other screens of the app while their gates are closed.
+/// A feature with two guards of the routes that are gates, which keep the
+/// user from the other screens of the app while their gates are closed,
+/// and a guard that stands for a condition, which keeps the user only from
+/// the routes that ask for it.
 ///
 /// The gates are open unless a test closes them, so the guards allow in
 /// every app until a test of the guards says otherwise, and the other tests
@@ -240,6 +289,16 @@ final class FakeSecondModule extends SmfModule {
 /// the app asks them as the module declares them, and both bring the user
 /// back to where they were once they allow again.
 ///
+/// The third guard stands for the condition of the fixture badge role
+/// ([BadgeRole.holder]), which the module requires: it allows while the
+/// user holds the badge of the fixture, which a test takes away. It shows
+/// the gate screen of the first guard, so the two have one flow, which is
+/// over once both allow. The module declares it between the two gates, with
+/// their stage, and the app asks it after every gate, that of the fixture
+/// late gate too, a gate of a later stage. It does not bring the user back.
+/// The module knows no route that asks for the condition: those of the
+/// second fixture feature do, in an app with that feature.
+///
 /// The module depends on one of the two fake state managers, as a feature
 /// that works with one state manager does, though it uses nothing of it.
 /// So of the apps with every fixture, those with that state manager have
@@ -247,16 +306,18 @@ final class FakeSecondModule extends SmfModule {
 /// tests of the router role and of the layout role run both in apps with
 /// guards and in apps without them, which is what most apps are.
 ///
-/// With [open] `false`, the gates start closed, as the guard of a module
-/// does until the user did what it waits for, and nothing opens them for
-/// the tests of the app, as the mocks of the app test of such a module
-/// would: the app that shows that the walk of the routes fails on such a
-/// guard has them (`brokenModuleApps` of the fixture registry).
+/// With [open] `false`, the two gates start closed, as the guard of a
+/// module does until the user did what it waits for, and nothing opens
+/// them for the tests of the app, as the mocks of the app test of such a
+/// module would: the app that shows that the walk of the routes fails on
+/// such a guard has them (`brokenModuleApps` of the fixture registry). The
+/// user holds the badge there too.
 final class FakeGateModule extends SmfModule {
-  /// Creates the module, whose gates start open unless [open] is `false`.
+  /// Creates the module, whose two gates start open unless [open] is
+  /// `false`.
   const FakeGateModule({this.open = true});
 
-  /// Whether the gates are open when the app starts.
+  /// Whether the two gates are open when the app starts.
   final bool open;
 
   /// The id of the module.
@@ -276,6 +337,7 @@ final class FakeGateModule extends SmfModule {
         description: 'Screens behind two gates (fixture)',
         kind: ModuleKinds.feature,
         dependsOn: {stateManager},
+        requires: {badgeRole},
       );
 
   @override
@@ -309,6 +371,16 @@ final class FakeGateModule extends SmfModule {
                 allows: FunctionRef('fixtureGateOpen', import: _gates),
                 redirectTo: 'gate',
                 stage: GuardStage.welcome,
+              ),
+              // It has the flow of the first guard, and comes after the
+              // gates of the app though it is declared before one.
+              RouteGuard(
+                name: 'holder',
+                allows: FunctionRef('fixtureHolds', import: _gates),
+                redirectTo: 'gate',
+                stage: GuardStage.welcome,
+                resumes: false,
+                condition: BadgeRole.holder,
               ),
               RouteGuard(
                 name: 'second',

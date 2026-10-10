@@ -46,7 +46,14 @@ Set<String> _segmentsOf(String path) => {
 List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
   final origin = ModuleOrigin(input.module.id);
   final routes = [for (final data in input.data) ...data.value.routes];
-  final check = _RoutesCheck(origin, input.module);
+  // The first guard of the module that shows each route as its target.
+  final guards = <String, RouteGuard>{};
+  for (final data in input.data) {
+    for (final guard in data.value.guards) {
+      guards.putIfAbsent(guard.redirectTo, () => guard);
+    }
+  }
+  final check = _RoutesCheck(origin, input.module, guards);
   if (input.data.isNotEmpty && routes.isEmpty) {
     check.problems.add('The module contributes routes data without routes.');
   }
@@ -63,12 +70,17 @@ List<SmfIssue> _checkRoutes(ModuleRuleInput<RoutesData> input) {
 /// The checks of [_checkRoutes], which visits the routes of a module in the
 /// order they are declared, each followed by its children, depth first.
 final class _RoutesCheck {
-  _RoutesCheck(this.origin, this.module);
+  _RoutesCheck(this.origin, this.module, this.guards);
 
   final ModuleOrigin origin;
 
   /// The module whose routes are checked.
   final ModuleDescriptor module;
+
+  /// The guards of the module by the name of the route that each shows,
+  /// its target: the first guard of each target. The flow of a guard is
+  /// its target, a top-level route, and the routes below it.
+  final Map<String, RouteGuard> guards;
   final List<String> problems = [];
   final List<SmfIssue> warnings = [];
   final Map<String, Route> _names = {};
@@ -111,6 +123,7 @@ final class _RoutesCheck {
         'app can only start on a route without required parameters.',
       );
     }
+    problems.addAll(_conditionProblems(placed, label, module, guards));
     if (route.destination case final destination?) {
       problems.addAll(
         _destinationProblems(
@@ -225,6 +238,74 @@ final class _RoutesCheck {
     }
   }
 }
+
+/// The problems with the conditions that the route [placed] of [label] of
+/// [module] asks for, its own and those of its parents; [guards] are the
+/// guards of the module by the name of their target.
+///
+/// A condition is one of a role that the module lists, since the module
+/// knows the condition only through that role. And a route that asks for a
+/// condition is one that some users do not get to, which a route that
+/// every user gets to cannot be:
+/// - a route of the main navigation, a destination or a route below one;
+/// - a start candidate, whose screen the app shows first, and in place of a
+///   location in a flow that is over;
+/// - a route in the flow of a guard, which the router shows to a user that
+///   the guard does not allow.
+///
+/// The route that lists a condition gets the problem, and a start candidate
+/// also for a condition of a parent.
+List<String> _conditionProblems(
+  _PlacedRoute placed,
+  String label,
+  ModuleDescriptor module,
+  Map<String, RouteGuard> guards,
+) {
+  final route = placed.route;
+  final problems = <String>[];
+  for (final condition in route.conditions.toSet()) {
+    if (module.roles.contains(condition.role)) continue;
+    problems.add(
+      '$label asks for the condition $condition, but the module neither '
+      'requires, uses nor provides the ${condition.role}, whose condition it '
+      'is.',
+    );
+  }
+  final all = {for (final parent in placed.chain) ...parent.conditions};
+  if (route.startCandidate && all.isNotEmpty) {
+    problems.add(
+      '$label is a start candidate but asks for ${_named(all)}; every user '
+      'sees the screen that the app starts on, so a start candidate asks '
+      'for no condition, and neither does a route above it.',
+    );
+  }
+  if (route.conditions.isEmpty) return problems;
+  final asks = '$label asks for ${_named(route.conditions.toSet())}';
+  final top = placed.chain.first;
+  if (placed.inMainNavigation) {
+    final where = identical(top, route)
+        ? 'it is a destination of the main navigation'
+        : 'it is below the destination "${top.name}" of the main navigation';
+    problems.add(
+      '$asks, but $where; every user gets to the main navigation, so no '
+      'route in it asks for a condition.',
+    );
+  }
+  if (guards[top.name] case final guard?) {
+    problems.add(
+      '$asks, but it is in the flow of the guard "${guard.name}"; the router '
+      'shows the routes of a flow to a user that the guard does not allow, '
+      'so none of them asks for a condition.',
+    );
+  }
+  return problems;
+}
+
+/// How a message names [conditions], which are not empty: `the condition
+/// auth.account`, or `the conditions auth.account, plan.paid`.
+String _named(Iterable<RouteCondition> conditions) => conditions.length == 1
+    ? 'the condition ${conditions.single}'
+    : 'the conditions ${conditions.join(', ')}';
 
 /// The path of [route] from the namespace of its module: empty for the
 /// route `/`, and below [parentPath] for a child.

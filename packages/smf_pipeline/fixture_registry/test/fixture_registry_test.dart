@@ -779,7 +779,7 @@ void main() {
       };
 
       // The fixture gates and the fixture late gate are among the
-      // fixtures, with three guards between them.
+      // fixtures, with four guards between them.
       expect(await namesIn(everyFixture()), containsAll(ofGuards));
       expect(
         (await namesIn(const [FakeRouterModule.id, ModuleId('fake_second')]))
@@ -789,10 +789,12 @@ void main() {
     });
 
     test(
-        'gets the guards of the app by their stages, whatever the order of '
+        'gets the gates of the app by their stages, whatever the order of '
         'the modules: those of the fixture gates before that of the fixture '
-        'late gate, a later stage, whose module the fixtures list first; and '
-        'only the guard that does not bring the user back says so', () async {
+        'late gate, a later stage, whose module the fixtures list first; '
+        'then the guard of the fixture gates that stands for a condition, '
+        'with the routes that ask for it; and only the guards that do not '
+        'bring the user back say so', () async {
       /// The guards of `routeGuards` in the app of [modules], each as its
       /// full name and the arguments that it has besides its function, its
       /// target and its flow.
@@ -830,10 +832,19 @@ void main() {
         ];
       }
 
+      // The fixture gates declare their guard of a condition between their
+      // two gates, with the stage of both: the app asks it after every
+      // gate, that of the late gate too. Its routes are those of the second
+      // fixture feature that ask for the condition of the fixture badge
+      // role: one below a route that asks for nothing, and two more, one
+      // of them by being below the other.
+      const routes = "{'fake_second.vault', 'fake_second.members', "
+          "'fake_second.memberCard'}";
       const expected = [
         'fake_gate.first',
         'fake_gate.second',
         'fake_late_gate.late resumes: false',
+        'fake_gate.holder resumes: false routes: const $routes',
       ];
       // The apps with every fixture ask for the late gate first.
       final requested = everyFixture();
@@ -854,6 +865,71 @@ void main() {
               id,
         ]),
         expected,
+      );
+      // An app with the guard and without the feature whose routes ask for
+      // its condition: the guard keeps the user from no route, and is no
+      // gate for that.
+      expect(
+        await guardsOf(const [FakeRouterModule.id, FakeGateModule.id]),
+        [
+          'fake_gate.first',
+          'fake_gate.second',
+          'fake_gate.holder resumes: false routes: const {}',
+        ],
+      );
+    });
+
+    test(
+        'has the routes of the second fixture feature that ask for the '
+        'condition of the fixture badge role in every app with the feature, '
+        'and a guard that stands for it only in an app with the fixture '
+        'gates: without them, and without the role, the routes show like '
+        'any other', () async {
+      /// The full names of the routes of the app of [modules] that ask for
+      /// the condition, joined, then the guard that stands for it, and
+      /// whether the app has the role of the condition.
+      Future<(String, String?, bool)> conditionIn(
+        List<ModuleId> modules,
+      ) async {
+        final result = await harness.check(
+          ContractCase('fixture condition', requested: modules),
+        );
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        final hook = result.hook!;
+        final facade = routerRole.facadeOf(routerRole.hookInput(hook));
+        return (
+          [
+            for (final route in facade.routesAsking(BadgeRole.holder))
+              route.fullName,
+          ].join(', '),
+          facade.guardFor(BadgeRole.holder)?.fullName,
+          hook.presentRoles.contains(badgeRole),
+        );
+      }
+
+      const routes =
+          'fake_second.vault, fake_second.members, fake_second.memberCard';
+      // The fixture gates depend on one of the two fixture state managers.
+      expect(
+        await conditionIn(everyFixture()),
+        (routes, 'fake_gate.holder', true),
+      );
+      // With the other one, the app has the role and no guard for its
+      // condition.
+      expect(
+        await conditionIn(everyFixture(stateManager: FakeRiverpodModule.id)),
+        (routes, null, true),
+      );
+      // The feature only uses the role: an app without it.
+      expect(
+        await conditionIn(const [FakeRouterModule.id, FakeSecondModule.id]),
+        (routes, null, false),
+      );
+      // The feature that has the guard requires the role, and knows no
+      // route that asks for the condition.
+      expect(
+        await conditionIn(const [FakeRouterModule.id, FakeGateModule.id]),
+        ('', 'fake_gate.holder', true),
       );
     });
 
@@ -1940,8 +2016,14 @@ const _cases = [
   'fake_feature (fake_riverpod, fake_di, go_router)',
   'fake_feature (fake_riverpod, get_it, fake_router)',
   'fake_feature (fake_riverpod, get_it, go_router)',
+  // The second feature uses the fixture badge role too, for the condition
+  // that two of its routes ask for.
+  'fake_second (fake_router) with localization, badge',
+  'fake_second (go_router) with localization, badge',
   'fake_second (fake_router) with localization',
   'fake_second (go_router) with localization',
+  'fake_second (fake_router) with badge',
+  'fake_second (go_router) with badge',
   'fake_second (fake_router)',
   'fake_second (go_router)',
   'fake_late_gate (fake_router)',

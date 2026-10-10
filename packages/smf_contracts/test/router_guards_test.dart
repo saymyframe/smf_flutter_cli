@@ -1,15 +1,13 @@
 @TestOn('vm')
 library;
 
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
 import 'role_support.dart';
+import 'router_vm.dart';
 import 'support.dart';
 
 ScreenRef _screen(String name, String feature) => ScreenRef(
@@ -270,84 +268,6 @@ List<SmfIssue> _structuralIssues(String start, StructuralRuleRequest request) =>
       for (final issue in routerRole.checkStructure(request))
         if (issue.message.startsWith(start)) issue,
     ];
-
-/// A stand-in for the part of Flutter's foundation library that the code
-/// of the guards uses, with the signatures of Flutter 3.44.
-const _vmFoundation = '''
-typedef VoidCallback = void Function();
-
-abstract class Listenable {
-  const Listenable();
-
-  factory Listenable.merge(Iterable<Listenable?> listenables) = _Merged;
-
-  void addListener(VoidCallback listener);
-
-  void removeListener(VoidCallback listener);
-}
-
-abstract class ValueListenable<T> extends Listenable {
-  const ValueListenable();
-
-  T get value;
-}
-
-class ValueNotifier<T> implements ValueListenable<T> {
-  ValueNotifier(this._value);
-
-  final List<VoidCallback> _listeners = [];
-
-  T _value;
-
-  @override
-  T get value => _value;
-
-  set value(T value) {
-    if (value == _value) return;
-    _value = value;
-    for (final listener in [..._listeners]) {
-      listener();
-    }
-  }
-
-  @override
-  void addListener(VoidCallback listener) => _listeners.add(listener);
-
-  @override
-  void removeListener(VoidCallback listener) => _listeners.remove(listener);
-}
-
-class _Merged extends Listenable {
-  _Merged(this._listenables);
-
-  final Iterable<Listenable?> _listenables;
-
-  @override
-  void addListener(VoidCallback listener) {
-    for (final listenable in _listenables) {
-      listenable?.addListener(listener);
-    }
-  }
-
-  @override
-  void removeListener(VoidCallback listener) {
-    for (final listenable in _listenables) {
-      listenable?.removeListener(listener);
-    }
-  }
-}
-''';
-
-/// A stand-in for the part of Flutter's widgets library that the files of
-/// the router role use: what it exports of the foundation library, without
-/// `ValueListenable`, as Flutter 3.44 does.
-const _vmWidgets = '''
-export 'foundation.dart' show Listenable, ValueNotifier, VoidCallback;
-
-abstract class BuildContext {}
-
-class RouterConfig<T> {}
-''';
 
 /// The functions of the guards of the feature `intro`, which count their
 /// calls, over notifiers that a test sets.
@@ -778,19 +698,6 @@ void main() {
   print('  firstRun allows: ${told(flow)}, ${over()}');
 }
 ''';
-
-/// The lines that a script printed below its heading [heading], up to the
-/// next heading: a heading is a line that does not start with a space.
-String _section(String printed, String heading) {
-  final lines = printed.split('\n');
-  final start = lines.indexOf(heading);
-  expect(start, isNonNegative, reason: 'The script prints "$heading".');
-  return lines
-      .skip(start + 1)
-      .takeWhile((line) => line.startsWith(' '))
-      .map((line) => '$line\n')
-      .join();
-}
 
 void main() {
   group('the guards of a module', () {
@@ -1249,63 +1156,18 @@ void main() {
       );
     });
 
-    /// What the script [main] prints in the app with guards, with the
-    /// files of the router's template and stand-ins for Flutter and for the
-    /// files of the functions of the guards. print ends a line with \r\n
-    /// on Windows.
-    Future<String> printedBy(
-      String main, {
-      List<RoleData<Object>>? data,
-    }) async {
-      final directory = await Directory.systemTemp.createTemp('smf_guards');
-      addTearDown(() => directory.delete(recursive: true));
-      final rendered = await renderTemplate(
-        routerRole,
-        data: data ?? _guardedData,
-      );
-      final files = {
-        'flutter/lib/foundation.dart': _vmFoundation,
-        'flutter/lib/widgets.dart': _vmWidgets,
-        for (final MapEntry(key: path, value: text) in rendered.files.entries)
-          'app/$path': text,
-        // The file of the provider of the role, which no test here calls.
-        'app/${RouterRole.appRouterFactoryFile}': '''
-import 'app_router.dart';
-
-AppRouter createAppRouter() => throw UnimplementedError();
-''',
-        'app/lib/${_introFile.uri}': _vmIntroStatus,
-        'app/lib/${_accountFile.uri}': _vmAccount,
-        'app/bin/main.dart': main,
-        'app/.dart_tool/package_config.json': jsonEncode({
-          'configVersion': 2,
-          'packages': [
-            for (final (name, root) in [
-              ('my_app', '../'),
-              ('flutter', '../../flutter/'),
-            ])
-              {
-                'name': name,
-                'rootUri': root,
-                'packageUri': 'lib/',
-                'languageVersion': '3.6',
-              },
-          ],
-        }),
-      };
-      for (final MapEntry(key: path, value: text) in files.entries) {
-        File('${directory.path}/$path')
-          ..createSync(recursive: true)
-          ..writeAsStringSync(text);
-      }
-      final result = await Process.run(
-        Platform.resolvedExecutable,
-        ['run', '${directory.path}/app/bin/main.dart'],
-      );
-
-      expect(result.stderr, isEmpty);
-      return (result.stdout as String).replaceAll('\r\n', '\n');
-    }
+    /// What the script [main] prints in the app with guards, or in the app
+    /// of [data], with the files of the functions of the guards of the
+    /// features `intro` and `account`; see [printedByGuards].
+    Future<String> printedBy(String main, {List<RoleData<Object>>? data}) =>
+        printedByGuards(
+          main,
+          data: data ?? _guardedData,
+          files: const {
+            'lib/features/intro/intro_status.dart': _vmIntroStatus,
+            'lib/features/account/account_composition.dart': _vmAccount,
+          },
+        );
 
     /// What [_vmMemoryMain] prints, which the first test that reads it
     /// runs: the tests of the generated class each read some sections.
@@ -1361,7 +1223,7 @@ calls: 1, 1
         'that location once the guards allow it and forgets it', () async {
       final printed = await memory;
 
-      expect(_section(printed, 'asked while no guard allows'), '''
+      expect(sectionOf(printed, 'asked while no guard allows'), '''
   asked /home: /intro
   asked /intro/terms: shows it
   asked /account/login: /intro
@@ -1373,7 +1235,7 @@ calls: 1, 1
   a notification: stays
 ''');
       expect(
-        _section(printed, 'pages that a change takes out of the stack'),
+        sectionOf(printed, 'pages that a change takes out of the stack'),
         '''
   signedIn stops: /account/login
   premium stops: /intro/paywall
@@ -1384,12 +1246,12 @@ calls: 1, 1
   signedIn allows: /
 ''',
       );
-      expect(_section(printed, 'a location of a flow asked last'), '''
+      expect(sectionOf(printed, 'a location of a flow asked last'), '''
   firstRun stops: /intro
   asked /account/login: /intro
   firstRun allows: /home
 ''');
-      expect(_section(printed, 'the location / asked last'), '''
+      expect(sectionOf(printed, 'the location / asked last'), '''
   signedIn stops: /account/login
   asked /: /account/login
   signedIn allows: /
@@ -1406,7 +1268,7 @@ calls: 1, 1
       // whichever guard has the flow, and nothing is remembered for it. A
       // page of such a flow that a router still has on top leaves at the
       // next notification of a guard.
-      expect(_section(printed, 'a flow that is over'), '''
+      expect(sectionOf(printed, 'a flow that is over'), '''
   asked /intro/terms: /
   asked /intro/paywall?plan=a: /
   asked /account/login: /
@@ -1419,7 +1281,7 @@ calls: 1, 1
       // when a guard after it changes. Once the guard allows, with nothing
       // remembered, as in an app that a link opened in the flow, the router
       // leaves the flow for the start of the app.
-      expect(_section(printed, 'a flow shown with nothing remembered'), '''
+      expect(sectionOf(printed, 'a flow shown with nothing remembered'), '''
   firstRun stops: stays
   asked /intro/terms: shows it
   a notification: stays
@@ -1433,7 +1295,7 @@ calls: 1, 1
       // guard. And a location in a flow is not remembered when another
       // guard takes it out of the stack.
       expect(
-        _section(
+        sectionOf(
           printed,
           'a flow of a guard that allows, behind a guard that does not',
         ),
@@ -1477,7 +1339,7 @@ all allow: shows it
       // guard allows. The guard that does not bring the user back never
       // allowed, so it did not stop: the user comes to that location once
       // the last guard allows.
-      expect(_section(printed, 'a first launch'), '''
+      expect(sectionOf(printed, 'a first launch'), '''
   asked /home/details/3: /intro
   firstRun allows: /account/login
   signedIn allows: /intro/paywall
@@ -1485,14 +1347,14 @@ all allow: shows it
 ''');
       // Neither the pushed page nor the location below it comes back: the
       // flow of the guard is over and nothing is remembered.
-      expect(_section(printed, 'the guard stops allowing'), '''
+      expect(sectionOf(printed, 'the guard stops allowing'), '''
   signedIn stops: /account/login
   a notification: stays
   signedIn allows: /
   a notification: stays
 ''');
       expect(
-        _section(printed, 'a location asked for while it does not allow'),
+        sectionOf(printed, 'a location asked for while it does not allow'),
         '''
   signedIn stops: /account/login
   asked /home/details/7: /account/login
@@ -1505,7 +1367,7 @@ all allow: shows it
       // while the flow of that guard is shown: the location is forgotten,
       // though the guard before it still decides and the stack stays.
       expect(
-        _section(printed, 'it stops behind a guard that brings the user back'),
+        sectionOf(printed, 'it stops behind a guard that brings the user back'),
         '''
   firstRun stops: /intro
   signedIn stops: stays
@@ -1517,7 +1379,7 @@ all allow: shows it
       // the guard before it then takes the user from its target, a location
       // in a flow, which is never remembered.
       expect(
-        _section(printed, 'it stops before a guard that brings the user back'),
+        sectionOf(printed, 'it stops before a guard that brings the user back'),
         '''
   signedIn stops: /account/login
   firstRun stops: /intro
@@ -1528,7 +1390,7 @@ all allow: shows it
       // It allows again before the guard before it does: the router showed
       // nothing of it, and the location is forgotten all the same.
       expect(
-        _section(
+        sectionOf(
           printed,
           'it stops and allows again behind a guard that does not allow',
         ),
@@ -1541,7 +1403,7 @@ all allow: shows it
       );
       // A location that was asked for before it stopped is forgotten too.
       expect(
-        _section(printed, 'a location that was asked for before it stops'),
+        sectionOf(printed, 'a location that was asked for before it stops'),
         '''
   firstRun stops: /intro
   asked /home/details/8: /intro
@@ -1554,7 +1416,7 @@ all allow: shows it
       // asked: it finds that the guard does not allow, which allowed when
       // it last looked.
       expect(
-        _section(
+        sectionOf(
           printed,
           'it stops without the class being told, which is asked next',
         ),
@@ -1566,7 +1428,7 @@ all allow: shows it
       );
       // And so is the location that a guard after it took the user from.
       expect(
-        _section(printed, 'it stops while a guard after it does not allow'),
+        sectionOf(printed, 'it stops while a guard after it does not allow'),
         '''
   premium stops: /intro/paywall
   signedIn stops: /account/login
@@ -1576,7 +1438,7 @@ all allow: shows it
       );
       // The guards before and after it bring the user back as before: to
       // the location below the pushed pages.
-      expect(_section(printed, 'a guard that brings the user back'), '''
+      expect(sectionOf(printed, 'a guard that brings the user back'), '''
   firstRun stops: /intro
   firstRun allows: /home/details/5?tab=a
   premium stops: /intro/paywall

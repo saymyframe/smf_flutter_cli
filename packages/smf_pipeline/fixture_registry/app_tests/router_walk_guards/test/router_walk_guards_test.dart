@@ -11,17 +11,28 @@
 // of that file names the guard, as the test of the walk does when it
 // fails on it.
 //
-// Once the gate opens, the flows of all three guards are over, as
+// Once the gate opens, the flows of all the guards are over, as
 // flowIsOver() of the app says. The walk then expects the screen that the
 // app starts on in place of each location of a flow, and reaches every
 // other route. So it never shows a screen of a flow that is over, and no
 // such screen can change what the walk sees of the locations after it.
+//
+// The walk holds while a guard that stands for a condition does not allow
+// too, with every gate open: the third guard of the fixture gates, once
+// the test takes the badge of the fixture away. Such a guard keeps the
+// user only from the routes that ask for its condition, those of the
+// second fixture feature in an app with that feature. The walk expects the
+// target of the guard in their place, and every other location as before,
+// but for the flow of the guard, which is that of the first gate too and is
+// not over now: its locations show themselves. closedGuards() names that
+// guard as it names a gate.
 //
 // It uses what the tests of router_screens share, which every app that it
 // applies to has. Each expectation gives its reason, which a provider of
 // the role with a known bug fails the test with (brokenProviders of the
 // fixture registry).
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/router/app_router.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gates.dart';
 import 'package:{{app_name}}/features/fake_late_gate/fixture_late_gate_screen.dart';
@@ -36,8 +47,8 @@ void main() {
   // A widget test fails after ten minutes by default; a test that hangs
   // fails sooner.
   testWidgets(
-    'the walk of the routes holds while a guard keeps the user out, and '
-    'once the flows of the guards are over',
+    'the walk of the routes holds while a guard keeps the user out, once '
+    'the flows of the guards are over, and while a condition does not hold',
     (tester) async {
       fixtureGate.value = false;
       await startApp(tester);
@@ -81,7 +92,7 @@ void main() {
             'its own screen.',
       );
 
-      // The gate opens: the flows of all three guards are over. The walk
+      // The gate opens: the flows of all the guards are over. The walk
       // expects the screen that the app starts on in place of each
       // location of a flow, and each other location itself.
       fixtureGate.value = true;
@@ -145,6 +156,58 @@ void main() {
         [for (final _ in routes) ''],
         reason: 'Once the guards allow, the walk shows no screen of a flow, '
             'which is over.',
+      );
+
+      // The condition of the third guard stops holding, with every gate
+      // open. The routes that ask for it are those that the guard names,
+      // if the app has any: the walk expects its target in their place.
+      // Its flow, the one of the first gate too, is not over while it does
+      // not allow, so the locations of that flow show themselves, and
+      // every other location shows what it showed before.
+      fixtureHolder.value = false;
+      await tester.pumpAndSettle();
+      expect(
+        closedGuards(),
+        ['fake_gate.holder'],
+        reason: 'closedGuards() names a guard that stands for a condition '
+            'that does not hold, as it names a gate.',
+      );
+      final holder = routeGuards.singleWhere(
+        (guard) => guard.name == 'fake_gate.holder',
+      );
+      final asking = holder.routes!;
+      expect(
+        asking.intersection({...flows, startOfApp.route}),
+        isEmpty,
+        reason: 'No route of a flow asks for a condition, and neither does '
+            'the screen that the app starts on.',
+      );
+      expect(
+        [for (final walked in walkedLocations) shownFor(walked).route],
+        [
+          for (final route in routes)
+            if (asking.contains(route))
+              'fake_gate.gate'
+            else if (flow.contains(route))
+              route
+            else if (flows.contains(route))
+              startOfApp.route
+            else
+              route,
+        ],
+        reason: 'While a condition does not hold, the walk expects the '
+            'target of its guard in place of each location that asks for '
+            'it, the locations of the flow of that guard themselves, and '
+            'each other location as with guards that allow.',
+      );
+      final kept = await walkRoutes(tester.pumpAndSettle);
+      expect(
+        kept.all,
+        isEmpty,
+        reason: 'While a condition does not hold, each location that asks '
+            'for it shows the target of its guard, each location of the '
+            'flow of that guard its own screen, and each other location '
+            'what it shows with guards that allow.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),
