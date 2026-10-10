@@ -261,11 +261,70 @@ void main() {
     // platform and stays where it is.
     await tester.binding.handlePushRoute('/no/such/screen?x=1');
     await tester.pumpAndSettle();
+    final unmatched = heard();
     expect(
-      heard(),
+      unmatched,
       anyOf(isEmpty, [(null, '/no/such/screen?x=1')]),
       reason: 'The error screen is heard of once, at the location that no '
           'route matches.',
+    );
+
+    // The back button of the system on the screen that the user is on now,
+    // which is a page like any other for the button. A dialog over it is
+    // the route on top: the button closes it, and the screen below stays
+    // the screen of the router.
+    final screen = unmatched.isEmpty
+        ? 'the page that the router stayed on'
+        : 'the error screen';
+    final root = tester.state<NavigatorState>(find.byType(Navigator).first);
+    unawaited(
+      showDialog<void>(
+        context: root.overlay!.context,
+        builder: (_) => const Text('dialog'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'The back button of the system throws nothing with a dialog '
+          'over $screen.',
+    );
+    expect(
+      find.text('dialog'),
+      findsNothing,
+      reason: 'The back button of the system closes a dialog over $screen.',
+    );
+    expect(
+      heard(),
+      isEmpty,
+      reason: 'Below a dialog that the back button of the system closes, '
+          '$screen stays the screen of the router.',
+    );
+
+    // Without a dialog, the button closes the screen if a page is below
+    // it, and the listeners hear of that page once. With no page below it,
+    // as on the first page of the app, the router has no route to close:
+    // it leaves the button to the system, and the screen stays. Whether
+    // the error screen for a location from the platform has a page below
+    // it is up to the router.
+    final closed = await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'The back button of the system throws nothing on $screen.',
+    );
+    expect(
+      heard(),
+      hasLength(closed ? 1 : 0),
+      reason: closed
+          ? 'The back button of the system closed $screen, so the listeners '
+              'hear of the page below it once.'
+          : 'The router left the back button of the system to the system on '
+              '$screen, which stays as it is.',
     );
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
