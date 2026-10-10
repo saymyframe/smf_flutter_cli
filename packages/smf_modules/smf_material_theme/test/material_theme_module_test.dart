@@ -162,8 +162,9 @@ double _contrastOf(int a, int b) {
 /// Creates the two themes of the app with a context of the script, and
 /// sends back what each is: its brightness, whether its colours derive from
 /// the seed colour of the file, whether it is of Material 3, the colours
-/// that the file sets, and the font and the weight of each of its text
-/// styles and of the text of its buttons.
+/// that the file sets and the colour of an error, the font and the weight
+/// of each of its text styles, of the text of its buttons and of the text
+/// of a mistake of its fields, and the look of its fields.
 ///
 /// It imports only the file of the themes, which needs nothing but the
 /// stand-ins for Flutter's material and cupertino libraries.
@@ -180,6 +181,56 @@ List<Object?> font(TextStyle? style) => [
   style?.fontWeight?.value,
 ];
 
+/// The line around a field: the radius of its corners, its colour and its
+/// width, or nothing for a border that is no outline.
+List<Object?>? outline(InputBorder? border) => border is OutlineInputBorder
+    ? [
+        border.borderRadius.top.x,
+        border.borderRadius.bottom.x,
+        border.borderSide.color.value,
+        border.borderSide.width,
+      ]
+    : null;
+
+/// An icon of a field: its colour in a field as it is, in one with a
+/// mistake, in one with a mistake and the focus, and in one that is
+/// disabled, and the least width and height of its box.
+Map<String, Object?> icon(Color? color, BoxConstraints? box) => {
+  for (final MapEntry(key: name, value: states) in const {
+    'enabled': <WidgetState>{},
+    'mistake': {WidgetState.error},
+    'mistake with the focus': {WidgetState.error, WidgetState.focused},
+    'disabled': {WidgetState.disabled},
+  }.entries)
+    name: WidgetStateProperty.resolveAs(color, states)?.value,
+  'box': [box?.minWidth, box?.minHeight],
+};
+
+Map<String, Object?> fields(InputDecorationThemeData fields) => {
+  'filled': fields.filled,
+  'fill': fields.fillColor?.value,
+  'padding': switch (fields.contentPadding) {
+    final EdgeInsets padding => [padding.left, padding.top],
+    _ => null,
+  },
+  'lines': {
+    'border': outline(fields.border),
+    'enabled': outline(fields.enabledBorder),
+    'disabled': outline(fields.disabledBorder),
+    'focus': outline(fields.focusedBorder),
+    'mistake': outline(fields.errorBorder),
+    'mistake with the focus': outline(fields.focusedErrorBorder),
+  },
+  'mistake': {
+    'colour': fields.errorStyle?.color?.value,
+    'lines': fields.errorMaxLines,
+  },
+  'icons': {
+    'start': icon(fields.prefixIconColor, fields.prefixIconConstraints),
+    'end': icon(fields.suffixIconColor, fields.suffixIconConstraints),
+  },
+};
+
 Map<String, Object?> described(ThemeData theme) => {
   'brightness': [theme.brightness.name, theme.colorScheme.brightness.name],
   'derives from the seed': identical(theme.colorScheme.seed, seedColor),
@@ -189,6 +240,7 @@ Map<String, Object?> described(ThemeData theme) => {
         in theme.colorScheme.set.entries)
       name: color.value,
   },
+  'error': theme.colorScheme.error.value,
   'text styles': {
 ${textStyles.map((name) => "    '$name': font(theme.textTheme.$name),").join('\n')}
   },
@@ -197,6 +249,10 @@ ${textStyles.map((name) => "    '$name': font(theme.textTheme.$name),").join('\n
     'text': font(theme.textButtonTheme.style?.textStyle),
     'segmented': font(theme.segmentedButtonTheme.style?.textStyle),
   },
+  'texts of fields': {
+    'mistake': font(theme.inputDecorationTheme.errorStyle),
+  },
+  'fields': fields(theme.inputDecorationTheme),
 };
 
 void main(List<String> arguments, SendPort port) {
@@ -605,17 +661,20 @@ void main() {
       });
 
       test(
-          'gives every text style of both themes, and the text of their '
-          'buttons, the font that the pubspec of the app declares, in a '
-          'weight that the app has a file of', () {
+          'gives every text style of both themes, the text of their buttons '
+          'and the text of a mistake of their fields the font that the '
+          'pubspec of the app declares, in a weight that the app has a file '
+          'of', () {
         for (final name in const ['light', 'dark']) {
           final theme = themeOf(name);
           final styles = theme['text styles']! as Map<Object?, Object?>;
           final buttons = theme['buttons']! as Map<Object?, Object?>;
+          final fields = theme['texts of fields']! as Map<Object?, Object?>;
           expect(styles.keys, textStyles, reason: name);
           expect(buttons.keys, ['filled', 'text', 'segmented'], reason: name);
+          expect(fields.keys, ['mistake'], reason: name);
           for (final MapEntry(key: style, value: font)
-              in {...styles, ...buttons}.entries) {
+              in {...styles, ...buttons, ...fields}.entries) {
             final [family, weight] = font! as List<Object?>;
             expect(
               family,
@@ -700,6 +759,60 @@ void main() {
               reason: '$name: $text on $background',
             );
           }
+        }
+      });
+
+      test(
+          'gives a text field of each theme its look in the colours of that '
+          'theme: a filled box with a padding and corners of 16, and a '
+          'hairline around it that is of the primary colour and wider with '
+          'the focus and of the colour of an error with a mistake; the '
+          'text of a mistake in that colour, on as many lines as it needs, '
+          'up to five; and an icon at its start or its end that keeps its '
+          'colour with a mistake, is as dim as the text in a field that is '
+          'disabled, and stands as far from the edge as the padding is '
+          'wide', () {
+        for (final name in const ['light', 'dark']) {
+          final colours = coloursOf(name);
+          final error = themeOf(name)['error']! as int;
+          final fields = themeOf(name)['fields']! as Map<Object?, Object?>;
+
+          expect(fields['filled'], isTrue, reason: name);
+          expect(fields['fill'], colours['surfaceContainerLow'], reason: name);
+          expect(fields['padding'], [16, 18], reason: name);
+          // The corners at the top and at the bottom, the colour of the
+          // line and its width.
+          final hairline = [16, 16, colours['outlineVariant'], 1];
+          expect(
+            fields['lines'],
+            {
+              'border': hairline,
+              'enabled': hairline,
+              'disabled': hairline,
+              'focus': [16, 16, colours['primary'], 1.5],
+              'mistake': [16, 16, error, 1],
+              'mistake with the focus': [16, 16, error, 1.5],
+            },
+            reason: name,
+          );
+          expect(
+            fields['mistake'],
+            {'colour': error, 'lines': 5},
+            reason: name,
+          );
+          // The text of a field that is disabled, as Material dims it: the
+          // colour of a text on the surface at 38 % of its opacity.
+          final dim = (colours['onSurface']! & 0x00FFFFFF) | (0x61 << 24);
+          final icon = {
+            'enabled': colours['onSurfaceVariant'],
+            'mistake': colours['onSurfaceVariant'],
+            'mistake with the focus': colours['onSurfaceVariant'],
+            'disabled': dim,
+            // A box of 56 leaves 16 on each side of an icon of 24, which
+            // is the padding of the field.
+            'box': [56, 48],
+          };
+          expect(fields['icons'], {'start': icon, 'end': icon}, reason: name);
         }
       });
 

@@ -3204,6 +3204,19 @@ ThemeData _themeOf(Brightness brightness) {
   final scheme = _schemeOf(brightness);
   final text = _textThemeOf(scheme);
   final hairline = BorderSide(color: scheme.outlineVariant);
+  // The box of a text field, with the hairline around it.
+  final field = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(16),
+    borderSide: hairline,
+  );
+  // An icon in a field keeps its colour when the field has a mistake, and
+  // is as dim as the text of a field that is disabled.
+  final fieldIcon = WidgetStateColor.fromMap({
+    WidgetState.disabled: scheme.onSurface.withValues(alpha: 0.38),
+    WidgetState.any: scheme.onSurfaceVariant,
+  });
+  // A box of 56 leaves 16 on each side of an icon, the padding of a field.
+  const fieldIconBox = BoxConstraints(minWidth: 56, minHeight: 48);
   return ThemeData(
     colorScheme: scheme,
     fontFamily: _fontFamily,
@@ -3288,6 +3301,31 @@ ThemeData _themeOf(Brightness brightness) {
         textStyle: text.labelLarge,
         minimumSize: const Size(0, 44),
       ),
+    ),
+    // The line around a field tells of the focus and of a mistake. The text
+    // of a field, its hint and its label are `bodyLarge` in the colours that
+    // Material takes from the scheme.
+    inputDecorationTheme: InputDecorationThemeData(
+      filled: true,
+      fillColor: scheme.surfaceContainerLow,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      border: field,
+      enabledBorder: field,
+      disabledBorder: field,
+      focusedBorder: field.copyWith(
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+      ),
+      errorBorder: field.copyWith(borderSide: BorderSide(color: scheme.error)),
+      focusedErrorBorder: field.copyWith(
+        borderSide: BorderSide(color: scheme.error, width: 1.5),
+      ),
+      errorStyle: text.bodySmall?.copyWith(color: scheme.error),
+      // The text of a mistake takes the lines that it needs.
+      errorMaxLines: 5,
+      prefixIconColor: fieldIcon,
+      suffixIconColor: fieldIcon,
+      prefixIconConstraints: fieldIconBox,
+      suffixIconConstraints: fieldIconBox,
     ),
     listTileTheme: ListTileThemeData(
       iconColor: scheme.onSurfaceVariant,
