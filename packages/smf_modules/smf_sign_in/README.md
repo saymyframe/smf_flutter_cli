@@ -52,6 +52,8 @@ Which of the two keeps a user out is up to the sign-in mode of the app, which `s
 
 In an app that everyone may use, a screen may also offer to sign in. It opens the sign-in with `context.nav.signIn.signIn().push<void>()`, so that back leads back. In an app that needs an account, no code navigates to the sign-in: the gate shows it.
 
+A link to one of the three routes shows its screen while the user has no account. In an app that everyone may use, the router shows that screen over the screen that the app starts on, so that back leads into the app.
+
 Once the user is signed in to an account, both guards allow, and the router leaves the sign-in. From then on, a navigation to one of the three routes, such as a link, shows the screen that the app starts on. After a sign-out in an app that needs an account, the router shows the sign-in again. The next user then starts on the screen that the app starts on, wherever the last user was.
 
 Both guards have the stage `identity`. In an app with a guard of a first launch, such as that of an onboarding, that one comes first, whichever order the modules were named in.
