@@ -6,22 +6,21 @@
 //
 // Nothing overflows there. Each page scrolls to its fields and its buttons,
 // which keep to the screen and out of the insets. The message of a failure
-// leaves the page room above the keyboard, so that a field and the button
-// that submits can be scrolled above it. The message of a failure wraps
-// what the provider says to the developer of the app, a long line with an
-// address, so it pushes no button off the screen, and that text
-// and the title of a page grow only by half, while the symbol in the cell
-// of a page keeps its size, since the cell is a picture. The title of a
-// page and the label of each button and action keep their words whole: one
-// whose longest word would not fit is as large as that word allows, and
-// any other label is as large as the text size of the device asks. A
-// screen reader
-// announces the title of a page as a header, each field with its label,
-// and the message of a failure when it appears. The parts of a page come
-// in one after another and then nothing moves. In an app that asks for
-// less motion, the first frame of a page has them all in their places,
-// the message of a failure takes its place at once, and the button of a
-// form does not spin while its call is on its way.
+// leaves the page room above the keyboard, so that a field and the button that
+// submits can be scrolled above it. The message of a failure wraps what the
+// provider says to the developer of the app, a long line with a command and an
+// address, so it pushes no button off the screen, and that text and the title
+// of a page grow only by half, while the symbol in the cell of a page keeps
+// its size, since the cell is a picture. The title of a page and the label of
+// each button and action keep their words whole: one whose longest word would
+// not fit is as large as that word allows, and any other label is as large as
+// the text size of the device asks. A screen reader announces the title of a
+// page as a header, each field with its label, and the message of a failure
+// when it appears. The parts of a page come in one after another and then
+// nothing moves. In an app that asks for less motion, the first frame of a
+// page has them all in their places, the message of a failure takes its place
+// at once, and the button of a form does not spin while its call is on its
+// way.
 //
 // The session of the app gets a service of the test, which says what each
 // call does (ScriptedAuthService). The phone is that small only while the
@@ -53,12 +52,14 @@ const _email = 'small-phone@sign-in-tests.example.com';
 const _password = 'Small-phone-2468';
 
 /// What the provider of sign-in says to the developer of the app about a
-/// failure, in the test: one long line, with an address that has no space
-/// to wrap at.
-const _hint = 'CONFIGURATION_NOT_FOUND: the way to sign in is not enabled '
-    'for this project, enable it at '
+/// failure, in the test: one long line, with a command in backticks and an
+/// address, neither of which has a space to wrap at where it is long.
+const _hint = 'Sign-in is not enabled in the project sign-in-tests (the '
+    'provider answered CONFIGURATION_NOT_FOUND). To fix it, run '
+    '`dart tool/enable_the_ways_to_sign_in_of_the_provider.dart` in the '
+    'directory of the app, or enable them at '
     'https://console.provider.example.com/project/sign-in-tests/'
-    'authentication/providers and start the app again';
+    'authentication/providers';
 
 /// The text of [finder], a text that the user sees, as it is laid out.
 RenderParagraph _paragraphOf(WidgetTester tester, Finder finder) =>
@@ -398,8 +399,9 @@ void main() {
           (hintBox.left >= 0, hintBox.right <= _phone.width),
           (true, true),
           reason: 'What the provider says to the developer of the app wraps '
-              'in the message of a failure, also an address without a '
-              'space: it is at $hintBox on a screen ${_phone.width} wide.',
+              'in the message of a failure, also a command and an address '
+              'without a space: it is at $hintBox on a screen '
+              '${_phone.width} wide.',
         );
         expect(
           (
