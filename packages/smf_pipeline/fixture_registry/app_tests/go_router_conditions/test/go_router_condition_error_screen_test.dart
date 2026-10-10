@@ -8,10 +8,13 @@
 // the guards about it in its redirect when it parses it. The flow then
 // opens over the screen that the app starts on, in place of the error
 // screen, and once the condition holds the location shows as go() to it
-// does. A push() completes with null at once. A router whose error screen
-// is a page of its own stack opens the flow over that page. It uses what
-// the tests of router_screens, of router_guards and of the conditions
-// share, which every app that it applies to has.
+// does. A push() completes with null at once. For a route that asks for
+// two conditions, the flow of the second guard opens over that screen too,
+// of which the listeners of the screen hear nothing between the two flows.
+// A router whose error screen is a page of its own stack opens the flow
+// over that page. It uses what the tests of router_screens, of
+// router_guards and of the conditions share, which every app that it
+// applies to has.
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
@@ -179,6 +182,41 @@ void main() {
         reason: 'Once the condition holds, the router shows the location '
             'that was asked for from the error screen of go_router as go() '
             'to it does: in place of the stack.',
+      );
+
+      // A route that asks for two conditions, neither of which holds.
+      await toErrorScreen();
+      fixtureSenior.value = false;
+      await tester.pumpAndSettle();
+      above().nav.fakeSecond.loungeSeat().go();
+      await tester.pumpAndSettle();
+      expectFlowOverStart(
+        'go() from the error screen of go_router to a route that asks for '
+        'two conditions that do not hold opens the target of the first '
+        'guard that does not allow.',
+      );
+      await giveBadge(tester);
+      expect(
+        heard(),
+        [secondGateScreen],
+        reason: 'Once the first condition holds, the target of the guard of '
+            'the second opens for a request from the error screen of '
+            'go_router, and the listeners of the screen hear nothing of the '
+            'screen that the app starts on between the two flows.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureHomeScreen, FixtureSecondGateScreen],
+        reason: 'Once the first condition holds, the target of the guard of '
+            'the second opens over the screen that the app starts on.',
+      );
+      fixtureSenior.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [('fake_second.loungeSeat', '/fake_second/lounge/seat')],
+        reason: 'Once both conditions hold, the router shows the location '
+            'that was asked for from the error screen of go_router.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

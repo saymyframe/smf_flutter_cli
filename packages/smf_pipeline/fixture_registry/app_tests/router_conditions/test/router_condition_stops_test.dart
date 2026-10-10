@@ -16,10 +16,14 @@
 // each page that asks for the condition with the pages over it, and the
 // user is on the page below. A page that asks for it and has no page below
 // it, as after go() to it, leaves for the screen that the app starts on.
-// Nothing happens once the condition holds again: no request waits.
+// Nothing happens once the condition holds again: no request waits. A page
+// that ends the condition itself and closes itself in the same turn, which
+// a screen should not do, closes once: the page below it stays, and the
+// router does not fail.
 //
 // Each expectation gives its reason, which a provider of the role with a
 // known bug fails the test with (brokenProviders of the fixture registry).
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
@@ -194,6 +198,52 @@ void main() {
         'When a condition stops holding on a route that asks for it and '
         'has no page below it, the user comes to the screen that the app '
         'starts on, from a page that was pushed over that route too.',
+      );
+      await holdAgain();
+
+      // A page that asks for the condition ends it and closes itself in
+      // the same turn, as a sign-out on a screen of an account would. The
+      // navigator still has the route of the page that the router closed,
+      // so the page closes once, and the page below it stays.
+      below = await toDetails(tester, 3);
+      result = pushed(below.nav.fakeSecond.members());
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [membersScreen],
+        reason: 'While a condition holds, push() of a route that asks for it '
+            'shows the route.',
+      );
+      final asking = shown(tester, FixtureMembersScreen);
+      fixtureHolder.value = false;
+      Navigator.of(asking).pop('closed by its screen');
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'A page that the router closed may close itself in the same '
+            'turn.',
+      );
+      expect(
+        pagesBuilt(tester),
+        pagesBelow,
+        reason: 'When a page that asks for a condition ends it and closes '
+            'itself in the same turn, that page closes once: the router '
+            'closed it already, and the page below it stays.',
+      );
+      expect(
+        heard(),
+        [detailsScreen(3)],
+        reason: 'When a page that asks for a condition ends it and closes '
+            'itself in the same turn, the listeners of the screen hear once '
+            'of the page below it.',
+      );
+      expect(
+        result(),
+        anyOf(isNull, 'closed by its screen'),
+        reason: 'The push() of a page that the router closes completes with '
+            'null, or with the value that the page closed itself with '
+            'before the frame was over.',
       );
       await holdAgain();
     },

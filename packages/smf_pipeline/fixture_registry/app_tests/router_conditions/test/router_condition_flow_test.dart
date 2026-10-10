@@ -14,7 +14,11 @@
 // the pages over them, at once and whatever the navigator shows over them,
 // and makes the request again. When the last page of the flow leaves in
 // another way, the request is dropped. A flow that the code of the app
-// opened itself closes like one that the router opened.
+// opened itself closes like one that the router opened. In the turn in
+// which the router closes the flow, the navigator still has the routes of
+// its pages: a screen of the flow that closes itself then, which a screen
+// should not do, or the back button of the system, closes such a route and
+// no page of the router.
 //
 // Each expectation gives its reason, which a provider of the role with a
 // known bug fails the test with (brokenProviders of the fixture registry).
@@ -486,6 +490,49 @@ void main() {
         ]),
         reason: 'When a condition holds and stops holding in one turn, the '
             'user is on the page that the flow was opened over.',
+      );
+
+      // A screen of the flow makes the condition hold and closes itself in
+      // the same turn: the navigator still has the route of the target,
+      // which is what closes.
+      first = await openFlow(12);
+      flow = shown(tester, FixtureGateScreen);
+      fixtureHolder.value = true;
+      Navigator.of(flow).pop();
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'A screen of a flow that the router closed may close itself '
+            'in the same turn.',
+      );
+      await expectRequestMade(
+        12,
+        first,
+        'When a screen of a flow makes the condition hold and closes itself '
+        'in the same turn, the page of the flow closes once, and the router '
+        'makes the request that opened the flow.',
+      );
+
+      // The back button of the system in the turn in which the condition
+      // comes to hold: it closes the page of the flow, which the user
+      // still sees, and not the page of the request.
+      first = await openFlow(13);
+      fixtureHolder.value = true;
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'The back button of the system may close a page in the turn '
+            'in which the router closed it.',
+      );
+      await expectRequestMade(
+        13,
+        first,
+        'The back button of the system in the turn in which the router '
+        'closed a flow closes the page of the flow once, and the router '
+        'makes the request that opened the flow.',
       );
     },
     timeout: const Timeout(Duration(minutes: 3)),

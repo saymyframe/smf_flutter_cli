@@ -476,8 +476,10 @@ void main() {
 
       // The gate of the flow stops allowing while the flow of the
       // condition is open over a page: its target takes the place of the
-      // stack, the request with it, and the gate brings the user back to
-      // the page that the flow was opened over.
+      // stack, with nothing below it to go back to. That target is a page
+      // of the flow, so the request still waits. It is dropped once the
+      // gate brings the user back to the page that the flow was opened
+      // over.
       below = await toDetails(tester, 9);
       await takeBadge(tester);
       var waits = pushed(below.nav.fakeSecond.members());
@@ -504,6 +506,28 @@ void main() {
         [FixtureGateScreen],
         reason: 'When the gate of a flow stops allowing while the flow of a '
             'condition is open, its target takes the place of the stack.',
+      );
+      expect(
+        waits(),
+        'not completed',
+        reason: 'The request that opened the flow of a condition waits '
+            'while a page of the flow is among the pages: the target of a '
+            'gate with the same flow is one.',
+      );
+      final alone = shown(tester, FixtureGateScreen);
+      await back(tester);
+      expect(
+        heard(),
+        isEmpty,
+        reason: 'The target of a gate that took the place of the stack has '
+            'no page below it, so back leaves it where it is: a page that '
+            'was open over another page before is alone now.',
+      );
+      expect(
+        alone.mounted,
+        isTrue,
+        reason: 'The target of a gate that took the place of the stack has '
+            'no page below it, so back leaves it where it is.',
       );
       fixtureHolder.value = true;
       fixtureGate.value = true;
