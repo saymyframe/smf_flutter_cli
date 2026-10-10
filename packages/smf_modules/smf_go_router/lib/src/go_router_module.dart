@@ -100,6 +100,20 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// delegate of go_router answers without a page, the router can leave
 /// this out.
 ///
+/// While go_router has no page of a route, on that error screen and before
+/// it shows its first location, it has none to push over or to replace
+/// either. On the error screen, `GoRouter.push` keeps that screen and
+/// never completes, though the listeners of the screen would hear of its
+/// page, and throws for a location in the main navigation. Before the
+/// first location, the app starts on the pushed page alone.
+/// `GoRouter.pushReplacement` throws for want of a page, and before the
+/// first location the app then starts with no page at all. So `push()` and
+/// `replace()` of the router give go_router their location as `go()` does
+/// then: it shows with the pages of its chain, in place of the error
+/// screen, and such a `push()` completes with `null`. An error screen that
+/// a push showed over a page is a page of go_router, which pushes over it
+/// and replaces it like any other.
+///
 /// In an app whose modules declare guards, the router asks them as the
 /// router role says, through the `GuardedNavigation` of the role, which
 /// keeps the location that the user comes back to: the router remembers
@@ -137,20 +151,18 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// router sends it to `/` and pushes the target in a microtask, once the
 /// parse is over. go_router tells nobody of pages that it has already, as
 /// when the user is on `/`, so the router does not wait for it to do so.
-/// The listeners of the screen hear nothing of `/` then. Before go_router
-/// has a page, it has no stack to push on and no page to replace: `go()`,
-/// `push()` and `replace()` give it the location as `go()` does, the
-/// `redirect` asks about it, and such a `push()` completes with `null`.
-/// On its error screen, go_router has no page of a route to open a flow
-/// over. When the role answers a request there with a flow, the router
-/// gives go_router the location the same way, and the flow opens over `/`
-/// in place of the error screen. Two locations from the platform in one
-/// turn open the target once, for the later one: the microtask of the
-/// first finds that another one is waiting, and does nothing. A location
-/// from the platform that arrives while a flow covers a page that was
-/// pushed in a branch of the main navigation opens the new flow over `/`
-/// as any other does. go_router keeps that page built below the new flow
-/// until the user goes back, and then shows `/`.
+/// The listeners of the screen hear nothing of `/` then. While go_router
+/// has no page of a route, before its first location and on its error
+/// screen, the router asks the role nothing itself: `go()`, `push()` and
+/// `replace()` give go_router the location as `go()` does, as said above,
+/// and the `redirect` asks about it, with no pages. So a flow opens over
+/// `/` there, in place of the error screen too. Two locations from the
+/// platform in one turn open the target once, for the later one: the
+/// microtask of the first finds that another one is waiting, and does
+/// nothing. A location from the platform that arrives while a flow covers
+/// a page that was pushed in a branch of the main navigation opens the new
+/// flow over `/` as any other does. go_router keeps that page built below
+/// the new flow until the user goes back, and then shows `/`.
 ///
 /// The router listens to `guardChanges` itself. When a guard starts or
 /// stops allowing, it tells the role of the pages that pushes showed, the

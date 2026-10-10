@@ -174,10 +174,13 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // completes with the value of its page after a refresh, and the back
       // button of the system on its error screen for a location that only
       // GoRouter can be asked for, where its delegate has no page to close,
-      // and once the root of the app is mounted anew over the router. It
-      // checks no role, so it names its module, as
-      // `tools/app_tests_test.dart` lets it. The apps it applies to have
-      // the tests of router_screens, whose helpers it uses.
+      // and once the root of the app is mounted anew over the router. And
+      // push() and replace() while go_router has no page of a route to push
+      // over or to replace, on that error screen and before its first
+      // location, which it gets as go() gives it a location. It checks no
+      // role, so it names its module, as `tools/app_tests_test.dart` lets
+      // it. The apps it applies to have the tests of router_screens, whose
+      // helpers it uses.
       MatrixAppTest(
         '$appTests/go_router_screens',
         appliesTo: (app) =>
