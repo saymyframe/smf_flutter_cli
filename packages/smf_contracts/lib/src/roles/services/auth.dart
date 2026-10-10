@@ -45,11 +45,11 @@ enum AuthMode {
 ///
 /// The template also writes the section [readmeHeading] of the README of
 /// the app, from its render hook, since the section tells the mode of the
-/// app: what each mode means, that the mode gates nothing on its own, how
-/// to change it, and where the data of a guest moves. A provider tells in
-/// a section of its own what its side needs for a mode. In the guide for
-/// coding agents of the app, the template writes the note of the role
-/// under its description.
+/// app: what each mode means, that the mode gates nothing on its own and
+/// which guard keeps a user from what, how to change the mode, and where
+/// the data of a guest moves. A provider tells in a section of its own
+/// what its side needs for a mode. In the guide for coding agents of the
+/// app, the template writes the note of the role under its description.
 ///
 /// ## The session
 ///
@@ -119,6 +119,30 @@ enum AuthMode {
 /// A provider reads the mode in its render hook with [modeIn]. A module
 /// that is no provider has no hook, so its code is the same in every mode
 /// and reads `authMode` when the app runs.
+///
+/// ## A route that needs an account
+///
+/// [account] is the condition of a route whose screen is only for the user
+/// of an account, such as an account screen. A feature asks for it on such
+/// a route ([Route.conditions]) and lists the role among its roles. A
+/// module with the screens of sign-in stands for it with a guard
+/// ([RouteGuard.condition]) whose function returns
+/// `appSession.hasAccount`. So the feature and the module with the guard
+/// know the role and not each other.
+///
+/// The role uses the router role for it, so its hooks and those of its
+/// provider may read the routes and the guards of the app
+/// ([RouterRole.facadeOf]). When the app is generated, the template warns
+/// of the routes that ask for [account] while no guard of the app stands
+/// for it, each by its full name: such a route shows to every user, as the
+/// router role says of a condition without a guard. An app with a provider
+/// and such a feature, and without a module with the screens of sign-in,
+/// is such an app. It is a warning and no error, since the developer of
+/// the app may write the guard later. A gate is no guard for the
+/// condition, so an app whose only guard reads `appSession.allowsApp` gets
+/// the warning too: in the modes `guest` and `anonymous` that gate lets a
+/// user without an account in. In an app without a router no route of a
+/// module applies, and the role warns of nothing.
 ///
 /// ## The data of a guest
 ///
@@ -227,6 +251,23 @@ final class AuthRole extends Role<RoleImplementation> {
     values: ['required', 'guest', 'anonymous'],
   );
 
+  /// A user with an account: the condition that a route asks for when its
+  /// screen is only for such a user, such as an account screen
+  /// ([Route.conditions]). An anonymous user has no account.
+  ///
+  /// A feature marks its route with it and lists the role among its roles.
+  /// It knows no module with a guard. A module with the screens of sign-in
+  /// stands for the condition with a guard ([RouteGuard.condition]), whose
+  /// function returns `appSession.hasAccount` from a file of that module:
+  /// the role has no function for a guard, since the template of the
+  /// router imports the files of the modules that give it data and no file
+  /// of the template of another role.
+  ///
+  /// In an app without a guard for it, a route that asks for it shows to
+  /// every user, and the template of the role warns of each such route when
+  /// the app is generated; see [AuthRole].
+  static const account = RouteCondition(authRole, 'account');
+
   /// The implementation of `AuthService`, which the template renders from
   /// the provider's [RoleImplementation]; modules do not contribute to it.
   static const implementations = SocketRef<CodeSocket>.role(
@@ -243,6 +284,13 @@ final class AuthRole extends Role<RoleImplementation> {
 
   @override
   RoleCardinality get cardinality => RoleCardinality.atMostOne;
+
+  /// The router, whose routes ask for [account]: the template of the role
+  /// reads the routes and the guards of the app to warn of a route that
+  /// asks for it without a guard. An app without a router has no routes,
+  /// and the role works there as it is.
+  @override
+  Set<Role> get uses => {routerRole};
 
   @override
   List<SocketRef> get sockets => const [implementations];
@@ -398,10 +446,51 @@ List<SmfIssue> _checkAuthStart(
       ],
     ];
 
+/// A warning of the routes of the app in [input] that ask for
+/// [AuthRole.account] while no guard of the app stands for it, or nothing
+/// for an app without such routes or with such a guard.
+///
+/// Such a route shows to every user, as the router role says of a
+/// condition without a guard: the app has a provider of sign-in and a
+/// feature with a screen for users with an account, and no module with the
+/// screens of sign-in, whose guard stands for the account. It is a warning
+/// and no error, since the developer of the app may write the guard later.
+/// It names every route that is open, the routes below a route that asks
+/// among them.
+///
+/// In an app without a router, the routes of the modules do not apply, so
+/// the role finds none that ask.
+List<SmfIssue> _openAccountRoutes(RoleHookInput<RoleImplementation> input) {
+  final facade = routerRole.facadeOf(input);
+  final asking = facade.routesAsking(AuthRole.account);
+  if (asking.isEmpty || facade.guardFor(AuthRole.account) != null) {
+    return const [];
+  }
+  final names = [for (final route in asking) route.fullName].join(', ');
+  final one = asking.length == 1;
+  return [
+    SmfIssue.warning(
+      '${one ? 'The route $names is' : 'The routes $names are'} for users '
+      'with an account (${one ? 'it asks' : 'they ask'} for the condition '
+      '${AuthRole.account}), but no module of the app has a guard for that '
+      'condition, so every user gets to ${one ? 'it' : 'them'}.',
+      hint: 'Add a module with the screens of sign-in to the app, or keep '
+          'the other users away later with a guard of your own that reads '
+          'appSession.hasAccount.',
+    ),
+  ];
+}
+
 /// The section of the role in the README of an app in [mode]: the mode of
 /// the app and where it is written, what each mode means, that the mode
-/// gates nothing on its own, how to change it, and where the data of a
-/// guest moves. It holds with every provider and names none.
+/// gates nothing on its own, which guard keeps a user from the whole app
+/// and which from the screens that need an account, how to change the
+/// mode, and where the data of a guest moves. It holds with every provider
+/// and names none.
+///
+/// It is the same in an app with a guard for [AuthRole.account] and in one
+/// without: the warning of [_openAccountRoutes] names the routes that are
+/// open, and the section only tells that there was one.
 String _readmeSection(AuthMode mode) => '''
 The sign-in mode of the app says who may use it without an account. This app was generated in the mode `${mode.name}`: `authMode` in `${AuthRole.sessionFile}` is `AuthMode.${mode.name}`.
 
@@ -409,7 +498,7 @@ The sign-in mode of the app says who may use it without an account. This app was
 - In `${AuthMode.guest.name}`, everyone may. The app has no user until someone signs in, and `appSession.allowsApp` is always true.
 - In `${AuthMode.anonymous.name}`, everyone may, as an anonymous user that the app signs in itself when it starts. Code then has the id of a user, `appSession.value.uid`, before anyone has an account, and signing up gives that same user the account. The app waits up to 3 seconds for that sign-in. When it fails or takes longer, the app starts without a user and tries again each time the user comes back to it. `appSession.allowsApp` is always true.
 
-The mode keeps nobody from a screen on its own. A guard of the routes does, which reads `appSession.allowsApp`, or `appSession.hasAccount` for a screen that needs an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `${AuthMode.required.name}` too, until you write a guard of your own that reads `appSession.allowsApp`.
+The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `${AuthMode.required.name}` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
 
 To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `${AuthMode.anonymous.name}`. Where the provider has a section in this README, that section tells how.
 
@@ -445,15 +534,16 @@ final class _AuthTemplate extends _ServiceTemplate {
 
   /// The note of the role in the guide for coding agents: that the code of
   /// an app signs in through the session, how it shows a failure, what the
-  /// mode does and does not do, where the data of a guest moves, and which
-  /// functions of the role are not for the code of the app. The section of
-  /// the role in the README of the app tells the mode of the app and what
-  /// each mode means.
+  /// mode does and does not do, which guard keeps a user from the whole app
+  /// and which from the screens that need an account, where the data of a
+  /// guest moves, and which functions of the role are not for the code of
+  /// the app. The section of the role in the README of the app tells the
+  /// mode of the app and what each mode means.
   @override
   String get agentNote => '''
 - `appSession` in `$file` tells who uses the app, and knows it before the first frame. Its `value` is a `SignedOutSession`, an `AnonymousSession` or an `AccountSession`, and `appSession.value.uid` is the id of the user. Sign in, sign up, sign out and delete the account only through `appSession`. The app has one, so create no other `AppSessionController`.
 - A call of `appSession` fails only with an `AuthFailure`. Catch it and show a text of the app for its `reason`. Show its `developerHint` in debug mode only. After `recentSignInRequired`, tell the user to sign out and sign in again.
-- `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes, which reads `appSession.allowsApp`, or `appSession.hasAccount` for a screen that needs an account. In an app without such a guard every screen is open, whatever the mode. A screen does not redirect itself.
+- `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes. One that reads `appSession.allowsApp` stands before the whole app, and one that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. In an app without such a guard every screen is open, whatever the mode, and that includes a screen that needs an account. A screen does not redirect itself.
 - When an anonymous user signs in to an account that exists already, `takeGuestData()` in `${AuthRole.guestDataFile}` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user. Call no method of `appSession` in it, since the sign-in that calls it would wait for that call.
 - A new provider implements `$service` of `${AuthRole.serviceFile}`, and only the file of that implementation imports it. The code of the app imports `$file`, which exports `AuthFailure` and `AuthFailureReason`, and calls neither `$initFunction()` nor `$factory()` nor `appSession.start()`.
 ''';
@@ -469,6 +559,13 @@ final class _AuthTemplate extends _ServiceTemplate {
           AgentNote.ofRole(agentNote),
         ),
       ];
+
+  /// The problems of the implementation, and a warning of the routes that
+  /// ask for an account in an app without a guard for it; see
+  /// [_openAccountRoutes].
+  @override
+  List<SmfIssue> validate(RoleHookInput<RoleImplementation> input) =>
+      [...super.validate(input), ..._openAccountRoutes(input)];
 
   /// The mode of the app: the value of [AuthRole.modeOption], or its first
   /// value, which the question offers first and which a run without a

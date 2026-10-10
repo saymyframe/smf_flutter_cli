@@ -107,13 +107,14 @@ void main() {
       'requires': <String>{},
       'uses': {'di'},
     });
-    // The auth role works with no other role, not with a DI container
-    // either: the code of an app reaches sign-in through the session that
-    // the role generates, a top-level variable.
+    // The auth role works with a router, whose routes ask for the account
+    // that it publishes as a condition. It does not work with a DI
+    // container: the code of an app reaches sign-in through the session
+    // that the role generates, a top-level variable.
     expect(shape(authRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
-      'uses': <String>{},
+      'uses': {'router'},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,

@@ -1492,6 +1492,93 @@ List<SmfIssue> _structureIssues(
       ),
     );
 
+/// The screen [name] of the feature [feature], for the routes of the tests.
+ScreenRef _screen(String name, String feature) => ScreenRef(
+      name,
+      import: ImportRef.app(
+        'features/$feature/${SmfNames.snakeCaseOf(name)}.dart',
+      ),
+    );
+
+/// The routes of the feature `profile`, which has no guard: a screen that
+/// every user sees, and a screen for the users of an account with a screen
+/// below it, which asks for the account by being there.
+final RoutesData _profileRoutes = RoutesData([
+  Route('/', name: 'overview', screen: _screen('ProfileScreen', 'profile')),
+  Route(
+    '/account',
+    name: 'account',
+    screen: _screen('AccountScreen', 'profile'),
+    conditions: const [AuthRole.account],
+    children: [
+      Route('email', name: 'email', screen: _screen('EmailScreen', 'profile')),
+    ],
+  ),
+]);
+
+/// The routes of the feature `shop`, which has no guard either: one screen,
+/// for the users of an account.
+final RoutesData _shopRoutes = RoutesData([
+  Route(
+    '/orders',
+    name: 'orders',
+    screen: _screen('OrdersScreen', 'shop'),
+    conditions: const [AuthRole.account],
+  ),
+]);
+
+/// The routes of the feature `login`, the screens of sign-in, with
+/// [guards].
+RoutesData _loginRoutes(List<RouteGuard> guards) => RoutesData(
+      [Route('/', name: 'signIn', screen: _screen('SignInScreen', 'login'))],
+      guards: guards,
+    );
+
+/// The file of the functions of the guards of the feature `login`.
+const _loginGuards = ImportRef.app('features/login/login_guards.dart');
+
+/// The gate of the feature `login`, which keeps a user from the whole app.
+const _loginGate = RouteGuard(
+  name: 'app',
+  allows: FunctionRef('allowsApp', import: _loginGuards),
+  redirectTo: 'signIn',
+  stage: GuardStage.identity,
+  resumes: false,
+);
+
+/// The guard of the feature `login` that stands for the account.
+const _accountGuard = RouteGuard(
+  name: 'account',
+  allows: FunctionRef('hasAccount', import: _loginGuards),
+  redirectTo: 'signIn',
+  stage: GuardStage.identity,
+  condition: AuthRole.account,
+);
+
+/// What the template of the role reports for an app with a provider of
+/// the role, with [routes], the routes of the features by their ids, and
+/// with the roles in [present] besides the auth role.
+List<SmfIssue> _issuesWith(
+  Map<String, RoutesData> routes, {
+  Set<Role> present = const {routerRole},
+  RoleImplementation? implementation,
+}) =>
+    authRole.template.validate(
+      inputOf(
+        authRole,
+        data: [
+          dataOf(
+            authRole,
+            implementation ?? _implementation(async: false),
+            module: 'fake_auth',
+          ),
+          for (final MapEntry(key: module, value: data) in routes.entries)
+            dataOf(routerRole, data, module: module),
+        ],
+        present: present,
+      ),
+    );
+
 /// The index of the file at [path] that imports the file of the session
 /// and calls [function] of it.
 DartFileIndex _calling(String path, String function) => DartFileIndex(
@@ -1505,16 +1592,18 @@ DartFileIndex _calling(String path, String function) => DartFileIndex(
 void main() {
   group('the auth role', () {
     test(
-        'takes one provider, needs no other role, and has the socket of its '
-        'implementation, the option of the mode and three files', () {
+        'takes one provider, requires no other role, works with a router, '
+        'and has the socket of its implementation, the option of the mode '
+        'and three files', () {
       expect(authRole.id, 'auth');
       expect(authRole.description, 'Authentication');
       expect(authRole.presenceFlag, 'has_auth');
       expect('$authRole', 'authentication role');
       expect(authRole.cardinality, RoleCardinality.atMostOne);
       expect(authRole.requires, isEmpty);
-      // Not the DI role either: the role registers nothing in a container.
-      expect(authRole.uses, isEmpty);
+      // The router, whose routes ask for the account. Not the DI role: the
+      // role registers nothing in a container.
+      expect(authRole.uses, {routerRole});
       expect(authRole.sockets, const [AuthRole.implementations]);
       expect(AuthRole.implementations.tag, 'smf_auth__implementations');
       expect(authRole.options, const [AuthRole.modeOption]);
@@ -1622,6 +1711,203 @@ void main() {
       for (final mode in AuthMode.values) {
         expect(authRole.modeIn(inputOf(authRole, choice: mode)), mode);
       }
+    });
+  });
+
+  group('the account condition of the auth role', () {
+    /// What every warning of the role says to do.
+    const hint = 'Add a module with the screens of sign-in to the app, or '
+        'keep the other users away later with a guard of your own that '
+        'reads appSession.hasAccount.';
+
+    test(
+        'is the condition account of the role, which a route asks for and '
+        'a guard stands for', () {
+      const account = AuthRole.account;
+
+      expect(account.role, same(authRole));
+      expect(account.name, 'account');
+      expect('$account', 'auth.account');
+      // A condition of the same role and name, created anew, is the same
+      // one, and a condition of that name of another role is not.
+      expect(account, RouteCondition(authRole, ['acc', 'ount'].join()));
+      expect(account, isNot(RouteCondition(_otherRole, 'account')));
+    });
+
+    test(
+        'lets the hooks of the role and of its provider read the routes '
+        'that ask for it and the guard that stands for it, in an app with '
+        'a router', () {
+      final data = [
+        dataOf(routerRole, _profileRoutes, module: 'profile'),
+        dataOf(
+          routerRole,
+          _loginRoutes(const [_loginGate, _accountGuard]),
+          module: 'login',
+        ),
+      ];
+      final input = inputOf(authRole, data: data, present: {routerRole});
+
+      expect(input.has(routerRole), isTrue);
+      final facade = routerRole.facadeOf(input);
+      expect(
+        [
+          for (final route in facade.routesAsking(AuthRole.account))
+            route.fullName,
+        ],
+        ['profile.account', 'profile.email'],
+      );
+      expect(facade.guardFor(AuthRole.account)!.fullName, 'login.account');
+
+      // Without a router, the routes of the modules are no part of the app.
+      final without = inputOf(authRole, data: data);
+      expect(without.has(routerRole), isFalse);
+      expect(routerRole.facadeOf(without).routes, isEmpty);
+    });
+
+    test(
+        'warns of the routes that ask for it in an app without a guard for '
+        'it, each by its full name, those below a route that asks too, and '
+        'says what to do', () {
+      final issue = _issuesWith({
+        'profile': _profileRoutes,
+        'shop': _shopRoutes,
+      }).single;
+
+      // A warning: an app whose developer writes the guard later is an app.
+      expect(issue.isError, isFalse);
+      expect(
+        issue.message,
+        'The routes profile.account, profile.email, shop.orders are for '
+        'users with an account (they ask for the condition auth.account), '
+        'but no module of the app has a guard for that condition, so every '
+        'user gets to them.',
+      );
+      expect(issue.hint, hint);
+      // The pipeline names the template of the role as the one who says so.
+      expect(issue.origin, isNull);
+      expect(issue.path, isNull);
+    });
+
+    test('warns of one route as of one', () {
+      final issue = _issuesWith({'shop': _shopRoutes}).single;
+
+      expect(issue.isError, isFalse);
+      expect(
+        issue.message,
+        'The route shop.orders is for users with an account (it asks for '
+        'the condition auth.account), but no module of the app has a guard '
+        'for that condition, so every user gets to it.',
+      );
+      expect(issue.hint, hint);
+    });
+
+    test(
+        'warns in an app whose guards stand for something else: a gate '
+        'over the whole app, and a guard for a condition of another role', () {
+      final ofOtherRole = RouteGuard(
+        name: 'account',
+        allows: const FunctionRef('hasAccount', import: _loginGuards),
+        redirectTo: 'signIn',
+        stage: GuardStage.identity,
+        condition: RouteCondition(_otherRole, 'account'),
+      );
+
+      final issues = _issuesWith({
+        'shop': _shopRoutes,
+        'login': _loginRoutes([_loginGate, ofOtherRole]),
+      });
+
+      expect(issues.single.isError, isFalse);
+      expect(issues.single.message, contains('The route shop.orders is for'));
+    });
+
+    test('reports nothing in an app with a guard for it, of whichever module',
+        () {
+      expect(
+        _issuesWith({
+          'profile': _profileRoutes,
+          'shop': _shopRoutes,
+          'login': _loginRoutes(const [_loginGate, _accountGuard]),
+        }),
+        isEmpty,
+      );
+      // The module with the guard comes first, and has such a route itself.
+      expect(
+        _issuesWith({
+          'login': RoutesData(
+            [
+              Route(
+                '/',
+                name: 'signIn',
+                screen: _screen('SignInScreen', 'login'),
+              ),
+              Route(
+                '/account',
+                name: 'account',
+                screen: _screen('AccountScreen', 'login'),
+                conditions: const [AuthRole.account],
+              ),
+            ],
+            guards: const [_accountGuard],
+          ),
+          'shop': _shopRoutes,
+        }),
+        isEmpty,
+      );
+    });
+
+    test(
+        'reports nothing in an app whose routes do not ask for it: an app '
+        'without routes, routes without a condition, and a route that asks '
+        'for a condition of that name of another role', () {
+      expect(_issuesWith(const {}), isEmpty);
+      expect(
+        _issuesWith({
+          'profile': RoutesData([
+            Route(
+              '/',
+              name: 'overview',
+              screen: _screen('ProfileScreen', 'profile'),
+            ),
+            Route(
+              '/account',
+              name: 'account',
+              screen: _screen('AccountScreen', 'profile'),
+              conditions: [RouteCondition(_otherRole, 'account')],
+            ),
+          ]),
+          'login': _loginRoutes(const [_loginGate]),
+        }),
+        isEmpty,
+      );
+    });
+
+    test(
+        'reports nothing in an app without a router, where no route of a '
+        'module is part of the app', () {
+      expect(
+        _issuesWith(
+          {'profile': _profileRoutes, 'shop': _shopRoutes},
+          present: const {},
+        ),
+        isEmpty,
+      );
+    });
+
+    test('comes after the problems of the implementation, which stay errors',
+        () {
+      final issues = _issuesWith(
+        {'shop': _shopRoutes},
+        implementation: const RoleImplementation(
+          type: TypeRef('_Private'),
+          create: FactoryRef('create', import: _fakeFile),
+        ),
+      );
+
+      expect([for (final issue in issues) issue.isError], [true, false]);
+      expect(issues.first.origin, const ModuleOrigin(ModuleId('fake_auth')));
+      expect(issues.last.message, contains('shop.orders'));
     });
   });
 
@@ -2424,6 +2710,33 @@ void main() {
       final wait = RegExp(r'anonymousWait = const Duration\(seconds: (\d+)\)')
           .firstMatch(rendered.files[AuthRole.sessionFile]!)![1];
       expect(section, contains('The app waits up to $wait seconds'));
+    });
+
+    test(
+        'tells in every mode which guard keeps a user from the whole app '
+        'and which only from the screens that need an account, and that '
+        'such a screen is open too in an app without a guard for it', () async {
+      for (final mode in AuthMode.values) {
+        final section = sectionOf(await _rendered(mode: mode));
+
+        expect(
+          section,
+          contains(
+            'One that reads `appSession.allowsApp` stands before the whole '
+            'app. One that reads `appSession.hasAccount` stands only before '
+            'the routes that it lists, the screens that need an account.',
+          ),
+        );
+        expect(
+          section,
+          contains(
+            'A screen that a module made for users with an account is open '
+            'then too. A warning named each such route when the app was '
+            'generated, and a guard of your own for them reads '
+            '`appSession.hasAccount`.',
+          ),
+        );
+      }
     });
   });
 
