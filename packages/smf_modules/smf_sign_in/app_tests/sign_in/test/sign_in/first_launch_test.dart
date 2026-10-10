@@ -223,6 +223,12 @@ Future<void> _asksForAccount(WidgetTester tester) async {
         'session of the app.',
   );
   _expectApp('Once the user has signed in');
+
+  // The flow of the sign-in is over: a link to one of its routes shows the
+  // app, and the screens need no code for that.
+  await followLinksToSignIn(tester);
+  _expectApp('After a link to each route of the sign-in, for a user with an '
+      'account');
 }
 
 /// Everyone may use the app: the sign-in comes when code asks for it.
@@ -292,6 +298,9 @@ Future<void> _opensForEveryone(WidgetTester tester) async {
 
   await pushSignIn(tester);
   _expectApp('After a navigation to the sign-in by a user with an account');
+  await followLinksToSignIn(tester);
+  _expectApp('After a link to each route of the sign-in, for a user with an '
+      'account');
 
   await _nextLaunch(tester);
   expect(
@@ -310,7 +319,14 @@ Future<void> _opensForEveryone(WidgetTester tester) async {
         '$withoutAccount signed in.',
   );
   _expectApp('After a sign-out, in an app that everyone may use');
+  final page = tester.element(find.byType(startScreen));
+  final couldPop = rootCanPop(tester);
   await pushSignIn(tester);
+  expect(
+    signInScreen,
+    findsOneWidget,
+    reason: 'After a sign-out, a navigation to the sign-in shows it again.',
+  );
   await fill(tester, email: _email, password: _password);
   await tapInRealTime(
     tester,
@@ -324,6 +340,17 @@ Future<void> _opensForEveryone(WidgetTester tester) async {
         'session of the app.',
   );
   _expectApp('Once the user has signed in');
+  expect(
+    (
+      identical(tester.element(find.byType(startScreen)), page),
+      rootCanPop(tester)
+    ),
+    (true, couldPop),
+    reason: 'Once the user has signed in, the router has closed the page of '
+        'the sign-in, and the user is on the page that it was opened over, '
+        'with the pages that were below it: the screen of the sign-in '
+        'closes nothing itself, which would close that page.',
+  );
 }
 
 void main() {

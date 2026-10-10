@@ -170,13 +170,31 @@ Future<void> startApp(WidgetTester tester) async {
 AppNavigator navigatorOf(WidgetTester tester) =>
     appRouter.navigatorOf(tester.element(find.byType(Navigator).last));
 
-/// Shows the sign-in over the page that the user sees, as the code of a
-/// screen does that needs an account, and waits for it. Nothing awaits the
-/// page: its future completes when the page is closed.
+/// Asks the router for the sign-in over the page that the user sees, as the
+/// code of a screen does that offers to sign in, and waits for the screen.
+/// Nothing awaits the page: its future completes when the page is closed.
 Future<void> pushSignIn(WidgetTester tester) async {
   unawaited(navigatorOf(tester).push<void>(const SignInSignInLocation()));
   await tester.pumpAndSettle();
 }
+
+/// Asks the router for each of the three routes of the sign-in in turn, in
+/// place of the stack, as a link to it does, and waits for the screen after
+/// each.
+Future<void> followLinksToSignIn(WidgetTester tester) async {
+  for (final AppLocation location in const [
+    SignInSignInLocation(),
+    SignInSignUpLocation(),
+    SignInResetPasswordLocation(),
+  ]) {
+    navigatorOf(tester).go(location);
+    await tester.pumpAndSettle();
+  }
+}
+
+/// Whether the navigator at the root of the app has a page to go back to.
+bool rootCanPop(WidgetTester tester) =>
+    tester.state<NavigatorState>(find.byType(Navigator).first).canPop();
 
 /// Types [email] and [password] into the form that the user sees, each
 /// unless it is `null`, as with a form that has no such field.
