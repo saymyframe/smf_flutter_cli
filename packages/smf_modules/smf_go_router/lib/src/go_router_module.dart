@@ -27,6 +27,26 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// of its start route. The other top-level routes stay outside the main
 /// navigation, which the router matches first.
 ///
+/// go_router keeps the pages of the branches, and the navigators that show
+/// them, under keys of the route of the main navigation, for as long as a
+/// page of that route is in the widget tree: until the transition to the
+/// page that took its place is over. A main navigation that comes back
+/// sooner, such as in the same turn, would have the pages of its branches
+/// again, and Flutter would find those keys twice in the tree while the
+/// page that left is still there
+/// (https://github.com/flutter/flutter/issues/148768). So the router keeps
+/// its routes in a `RoutingConfig` that go_router follows, and each time
+/// the main navigation leaves the pages of the router, it puts a new route
+/// for the main navigation there, which `_mainNavigation()` creates: the
+/// main navigation comes back with each branch on its destination, at any
+/// time. The other routes stay the same objects, and the new configuration
+/// has what the one before it had. When its routes change, go_router
+/// matches its location again, without the redirects of the routes, which
+/// would give a location that a redirect refused the page of its route. So
+/// the router puts back the pages that go_router had, and the error screen
+/// stays. Once go_router gives the main navigation that comes back a state
+/// of its own, the router can leave this out.
+///
 /// Screens get the values of their parameters from the location, parsed
 /// with `tryParse`, a `bool` being `true` or `false` exactly: an optional
 /// value that the location does not have, or not of its type, is `null`,
@@ -74,17 +94,19 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// the branches of the main navigation that are not selected as they are,
 /// so they keep their pages when a flow that is over sends the user to
 /// `/`. The target of a guard is outside the main navigation, so going to
-/// it takes the pages of every branch. The router listens to
-/// `guardChanges` itself. When a guard starts or stops allowing, it tells
-/// the role of the pages that pushes showed, the one on top first, and of
-/// the location below them, and goes to the location that the role
-/// answers. Before it showed its first location, it has no page to tell
-/// of and does nothing: go_router asks about that location when it parses
-/// it. A page that `replace()` showed over other pages counts as one that a
-/// push showed, as it is one to go_router. The router does not hand
-/// `guardChanges` to go_router as its `refreshListenable`: a refresh asks
-/// only about the location below the pushed pages, and gives each of those
-/// pages a new completer.
+/// it takes the main navigation out of the pages of the router, which then
+/// gives go_router a new one: no branch keeps a page, also when the guard
+/// allows again in the same turn, or before the transition to its target
+/// is over. The router listens to `guardChanges` itself. When a guard
+/// starts or stops allowing, it tells the role of the pages that pushes
+/// showed, the one on top first, and of the location below them, and goes
+/// to the location that the role answers. Before it showed its first
+/// location, it has no page to tell of and does nothing: go_router asks
+/// about that location when it parses it. A page that `replace()` showed
+/// over other pages counts as one that a push showed, as it is one to
+/// go_router. The router does not hand `guardChanges` to go_router as its
+/// `refreshListenable`: a refresh asks only about the location below the
+/// pushed pages, and gives each of those pages a new completer.
 ///
 /// The router tells the listeners of the screen of the router role about
 /// the page on top of the app: the delegate of go_router hears of every
@@ -98,7 +120,8 @@ import 'package:smf_go_router/src/go_routes.dart';
 ///
 /// In the guide for coding agents, the module adds to the section of the
 /// router how its file writes a route, and, in an app with a main
-/// navigation, where the destinations are among the routes.
+/// navigation, where the destinations are among the routes and that the
+/// router creates the route of the main navigation anew.
 final class GoRouterModule extends SmfModule {
   /// Creates the module.
   const GoRouterModule();
@@ -157,6 +180,7 @@ final class _GoRouterProvider extends RoleProvider<RoutesData> {
         'initial_location': routes.initialLocation,
         'main_navigation': routes.hasMainNavigation,
         'routes': routes.routes,
+        'main_navigation_route': routes.mainNavigation,
         'value_checks': routes.valueChecks,
         // Whether the modules of the app declare guards, which the router
         // then asks.

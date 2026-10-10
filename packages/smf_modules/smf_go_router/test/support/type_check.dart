@@ -137,6 +137,7 @@ abstract final class Icons {
 const _goRouter = '''
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 abstract class GoRouterState {
@@ -202,11 +203,14 @@ class StatefulShellRoute extends RouteBase {
   });
 }
 
-abstract class RouteMatchBase {}
+abstract class RouteMatchBase {
+  RouteBase get route;
+}
 
 class RouteMatch extends RouteMatchBase {
   RouteMatch(this.route, this.pageKey);
 
+  @override
   final GoRoute route;
 
   final ValueKey<String> pageKey;
@@ -226,6 +230,11 @@ class ImperativeRouteMatch extends RouteMatch {
 }
 
 class ShellRouteMatch extends RouteMatchBase {
+  ShellRouteMatch(this.route);
+
+  @override
+  final RouteBase route;
+
   final List<RouteMatchBase> matches = const [];
 }
 
@@ -252,6 +261,36 @@ class RouteConfiguration {
   RouteMatchList findMatch(Uri uri, {Object? extra}) => RouteMatchList();
 }
 
+typedef OnEnter = FutureOr<Object> Function(
+  BuildContext context,
+  GoRouterState currentState,
+  GoRouterState nextState,
+  GoRouter goRouter,
+);
+
+class RoutingConfig {
+  const RoutingConfig({
+    required this.routes,
+    this.onEnter,
+    this.redirect = _defaultRedirect,
+    this.redirectLimit = 5,
+  });
+
+  static FutureOr<String?> _defaultRedirect(
+    BuildContext context,
+    GoRouterState state,
+  ) =>
+      null;
+
+  final List<RouteBase> routes;
+
+  final OnEnter? onEnter;
+
+  final GoRouterRedirect redirect;
+
+  final int redirectLimit;
+}
+
 class GoRouter implements RouterConfig<RouteMatchList> {
   factory GoRouter({
     required List<RouteBase> routes,
@@ -261,11 +300,19 @@ class GoRouter implements RouterConfig<RouteMatchList> {
   }) =>
       throw UnimplementedError();
 
+  GoRouter.routingConfig({
+    required ValueListenable<RoutingConfig> routingConfig,
+    String? initialLocation,
+    List<NavigatorObserver>? observers,
+  });
+
   late final RouteConfiguration configuration;
 
   late final GoRouterDelegate routerDelegate;
 
   void go(String location, {Object? extra}) {}
+
+  void restore(RouteMatchList matchList) {}
 
   Future<T?> push<T extends Object?>(String location, {Object? extra}) async =>
       null;

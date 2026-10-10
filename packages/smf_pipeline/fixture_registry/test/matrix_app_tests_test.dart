@@ -304,10 +304,10 @@ void main() {
 
   test(
       'the test of the auth role applies to every app with the role, the '
-      'apps of the fixture sign-in alone and the apps with every module, in '
-      'each mode of the role, and gets the mode that the role chose for '
-      'each: required in an app that got no value of the option of the '
-      'role', () {
+      'apps of the fixture sign-in alone, with a router and without one, '
+      'and the apps with every module, in each mode of the role, and gets '
+      'the mode that the role chose for each: required in an app that got '
+      'no value of the option of the role', () {
     final authTest = named('auth_role');
     final withRole = [
       for (final app in apps)
@@ -318,9 +318,14 @@ void main() {
     expect(
       appsOf(authTest),
       containsAll([
+        // The role uses the router role, so its provider has an app with
+        // each router and one without, and the app of each other mode has
+        // the first router.
+        'fake_auth (fake_router) with router',
+        'fake_auth (go_router) with router',
         'fake_auth',
-        'auth by fake_auth --auth-mode=guest',
-        'auth by fake_auth --auth-mode=anonymous',
+        'auth by fake_auth (fake_router) with router --auth-mode=guest',
+        'auth by fake_auth (fake_router) with router --auth-mode=anonymous',
         for (final app in apps)
           if (app.everyModuleWith != null) app.name,
       ]),
@@ -338,18 +343,18 @@ void main() {
           },
       },
     );
-    // The apps of each mode: the app of the fixture alone, and each app
-    // with every module with a clock of 24 hours and with one of 12.
-    for (final mode in AuthMode.values) {
-      expect(
-        [
-          for (final app in withRole)
-            if (authTest.values!(app)['auth_mode'] == mode.name) app.name,
-        ],
-        hasLength(17),
-        reason: mode.name,
-      );
-    }
+    // The apps of each mode: those of the fixture alone, three in the
+    // default mode and one in each other mode, and each app with every
+    // module with a clock of 24 hours and with one of 12.
+    expect(
+      {
+        for (final mode in AuthMode.values)
+          mode.name: withRole
+              .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
+              .length,
+      },
+      {'required': 19, 'guest': 17, 'anonymous': 17},
+    );
     // The mode comes from the choice of the role, which an app has without
     // the option too.
     final byDefault = withRole.first;
@@ -745,10 +750,45 @@ void main() {
       'router_walk_guards',
       'layout_screens',
       'go_router_screens',
+      'go_router_branches',
       'bottom_tabs_screens',
     ]) {
       expect(routerScreens, containsAll(appsOf(named(name))), reason: name);
     }
+  });
+
+  test(
+      'the test of the branches of go_router applies to the apps of '
+      'go_router with a main navigation of both fixture features, those '
+      'with guards and those without', () {
+    final branches = named('go_router_branches');
+    bool hasGuards(MatrixApp app) =>
+        routerRole.facadeOf(routerRole.hookInput(app.hook!)).guards.isNotEmpty;
+    final withBranches = apps.where(branches.appliesTo).toList();
+
+    // The router asks the guards in the redirect of its routes, which stays
+    // with the routes that get a new main navigation.
+    expect(withBranches.where(hasGuards), isNotEmpty);
+    expect(withBranches.where((app) => !hasGuards(app)), isNotEmpty);
+    for (final app in withBranches) {
+      expect(
+        [
+          for (final route
+              in layoutRole.destinationsIn(layoutRole.hookInput(app.hook!)))
+            route.fullName,
+        ],
+        containsAll(['fake_feature.home', 'fake_second.second']),
+        reason: app.name,
+      );
+    }
+    // And to no app that the tests of go_router of every app do not apply
+    // to.
+    expect(
+      appsOf(named('go_router_screens')),
+      containsAll(appsOf(branches)),
+    );
+    expect(named('go_router_screens').roles, isEmpty);
+    expect(branches.roles, isEmpty);
   });
 
   test(

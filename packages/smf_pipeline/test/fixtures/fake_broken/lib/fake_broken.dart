@@ -326,6 +326,73 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that, when it shows the location that the guards of
+  /// the routes answer, leaves the pages of the branches of the main
+  /// navigation where they are, and takes them when it next builds its
+  /// pages without the main navigation, as a router does that keeps the
+  /// pages of the branches with the page of the main navigation. A branch
+  /// that the user does not come back to is on its destination once a
+  /// frame showed the target of a guard. But when the guard stops allowing
+  /// and allows again in one turn, no frame shows the target, and that
+  /// branch still has a page that the guard kept the user from.
+  static const routerKeepingBranchesForAFrame = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_branches_for_a_frame'),
+    'A plain navigator whose guards take the branches at a frame (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    _stack.clear();\n'
+            '    for (final (index, branch) in _branches.indexed) {\n'
+            '      branch\n'
+            '        ..clear()\n'
+            '        ..add(_destinations[index]);\n'
+            '    }\n'
+            '    if (location != null) _show(location);\n',
+        '    _stack.clear();\n'
+            '    if (location != null) _show(location);\n',
+      ),
+      (
+        '  Widget build(BuildContext context) {\n'
+            '    _showScreen();\n',
+        '  Widget build(BuildContext context) {\n'
+            '    if (!_stack.contains(_mainNavigation)) {\n'
+            '      for (final (index, branch) in _branches.indexed) {\n'
+            '        branch\n'
+            '          ..clear()\n'
+            '          ..add(_destinations[index]);\n'
+            '      }\n'
+            '    }\n'
+            '    _showScreen();\n',
+      ),
+    ],
+  );
+
+  /// The fake router that keeps the navigators of the branches of the main
+  /// navigation when the main navigation leaves its stack, as when the
+  /// location that the guards of the routes answer takes its place, or
+  /// `go()` shows a page outside it. The page of the main navigation that
+  /// left stays in the tree, with those navigators, until the transition
+  /// to the page that took its place is over. So a main navigation that
+  /// comes back before that, as when the guard allows again, has the keys
+  /// of the navigators in the tree a second time, which Flutter throws for.
+  static const routerKeepingNavigatorsOfBranches = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_navigators_of_branches'),
+    'A plain navigator whose branches keep their navigators (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    if (!_stack.contains(_mainNavigation)) {\n'
+            '      _branchNavigators.clear();\n'
+            '      _branchObservers.clear();\n'
+            '    }\n'
+            '    super.notifyListeners();\n',
+        '    super.notifyListeners();\n',
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.

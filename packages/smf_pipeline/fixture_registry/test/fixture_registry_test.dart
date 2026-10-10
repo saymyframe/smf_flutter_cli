@@ -1813,16 +1813,28 @@ void main() {
     });
 
     test(
-        'the harness builds an app of it for each other mode, which the '
-        'matrix generates with the option, and the other apps with the role '
-        'get no value of the option and the mode required', () async {
+        'the harness builds an app of it with each router and without one, '
+        'since the role uses the router role, and one for each other mode, '
+        'which the matrix generates with the option, and the other apps with '
+        'the role get no value of the option and the mode required', () async {
+      // The auth role uses the router role, for the routes that ask for an
+      // account, so its provider is checked with each router and without
+      // one.
+      const withRouter = 'fake_auth (fake_router) with router';
       expect(harness.casesOfModule(FakeAuthModule.id).map((c) => '$c'), [
+        withRouter,
+        'fake_auth (go_router) with router',
         'fake_auth',
       ]);
+      // The case of another mode is the first case of the provider, which
+      // has every role that the role uses: the app of such a mode has a
+      // router, the first one of the registry.
       expect(harness.casesOfRole(authRole).map((c) => '$c'), [
+        'auth by $withRouter',
+        'auth by fake_auth (go_router) with router',
         'auth by fake_auth',
-        'auth by fake_auth --auth-mode=guest',
-        'auth by fake_auth --auth-mode=anonymous',
+        'auth by $withRouter --auth-mode=guest',
+        'auth by $withRouter --auth-mode=anonymous',
       ]);
       // The role asks, and the harness answers as a user who presses Enter:
       // with the first value.
@@ -1838,8 +1850,9 @@ void main() {
       MatrixApp named(String name) =>
           apps.singleWhere((app) => app.name == name);
       for (final mode in AuthMode.values.skip(1)) {
-        final ofMode = named('auth by fake_auth --auth-mode=${mode.name}');
-        expect(ofMode.modules, named('fake_auth').modules);
+        final ofMode = named('auth by $withRouter --auth-mode=${mode.name}');
+        expect(ofMode.modules, named(withRouter).modules);
+        expect(ofMode.hook!.presentRoles, contains(routerRole));
         expect(ofMode.modes, {'auth-mode': mode.name});
         expect(
           ofMode.createArguments('app_1', '/apps'),
@@ -1853,10 +1866,15 @@ void main() {
               !app.modes.containsKey('auth-mode'))
             app,
       ];
+      // The apps of the fixture alone, without a router and with each of
+      // the two, and each app with every module, with a clock of 24 hours
+      // and with one of 12.
       expect(withoutMode, contains(named('fake_auth')));
-      // The app of the fixture alone, and each app with every module, with
-      // a clock of 24 hours and with one of 12.
-      expect(withoutMode, hasLength(17));
+      expect(
+        named('fake_auth').hook!.presentRoles,
+        isNot(contains(routerRole)),
+      );
+      expect(withoutMode, hasLength(19));
       for (final app in withoutMode) {
         expect(
           app.createArguments('app_1', '/apps'),
@@ -2328,6 +2346,10 @@ const _cases = [
   'fake_preferences_user',
   'fake_theme with localization',
   'fake_theme',
+  // The fixture sign-in with each router and without one: the auth role
+  // uses the router role.
+  'fake_auth (fake_router) with router',
+  'fake_auth (go_router) with router',
   'fake_auth',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
@@ -2340,9 +2362,10 @@ const _cases = [
   'bottom_tabs (fake_router) with localization',
   'bottom_tabs (go_router) with localization',
   // The other values of the mode option of the auth role, with the
-  // fixture sign-in, which provides it.
-  'auth by fake_auth --auth-mode=guest',
-  'auth by fake_auth --auth-mode=anonymous',
+  // fixture sign-in, which provides it, and the first router, since the
+  // role uses the router role.
+  'auth by fake_auth (fake_router) with router --auth-mode=guest',
+  'auth by fake_auth (fake_router) with router --auth-mode=anonymous',
   // The other value of the mode option of the fixture clock, with its
   // provider.
   'clock by fake_clock_badge --clock-hours=12',

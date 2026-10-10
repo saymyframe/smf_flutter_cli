@@ -555,6 +555,106 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.routerKeepingBranchesForAFrame,
+        role: routerRole,
+        bug: 'When it shows the location that the guards of the routes '
+            'answer, it leaves the pages of the branches of the main '
+            'navigation where they are, and takes them when it next builds '
+            'its pages without the main navigation. So when a guard stops '
+            'allowing and allows again in one turn, as when one user signs '
+            'out and the next one in, no frame shows the target of the '
+            'guard, and a branch that the user does not come back to still '
+            'has a page that the guard kept the user from.',
+        // The app of the guards with a layout and the second fixture
+        // feature, whose destination has the branch that the user does not
+        // come back to. The fixture feature comes first, so the app starts
+        // on its screen.
+        app: [
+          BottomTabsModule.id,
+          FakeFeatureModule.id,
+          FakeSecondModule.id,
+          FakeLateGateModule.id,
+          FakeGateModule.id,
+          FakeClockBadgeModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/layout_guards_test.dart',
+            'the user comes back into the main navigation, to the '
+                'destination that a pushed page was opened from',
+            'A guard stopped allowing and allowed again in one turn. The '
+                'target of the guard took the stacks of every branch of the '
+                'main navigation all the same: a branch that was not '
+                'selected is back on its destination.',
+          ),
+          MatrixExpectedFailure(
+            'test/layout_guard_return_test.dart',
+            'after a guard that does not bring the user back, the user is in '
+                'the main navigation on the screen that the app starts on, '
+                'and every branch is back on its destination',
+            'The target of the guard took the stacks of every branch of the '
+                'main navigation all the same: the other branch is back on '
+                'its destination when the user selects it.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerKeepingNavigatorsOfBranches,
+        role: routerRole,
+        bug: 'When the main navigation leaves its stack, as when the '
+            'location that the guards of the routes answer takes its place '
+            'or go() shows a page outside it, the branches keep their '
+            'navigators. The page of the main navigation that left stays in '
+            'the tree until the transition to the page that took its place '
+            'is over. So a main navigation that comes back before that has '
+            'the keys of those navigators in the tree a second time, and '
+            'Flutter throws.',
+        // The app of the guards with a layout and the second fixture
+        // feature, so that the main navigation has two branches, and with
+        // the fixture screen log, which the tests of the main navigation
+        // need. The fixture feature comes first, so the app starts on its
+        // screen.
+        app: [
+          BottomTabsModule.id,
+          FakeFeatureModule.id,
+          FakeSecondModule.id,
+          FakeLateGateModule.id,
+          FakeGateModule.id,
+          FakeClockBadgeModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeScreenLogModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/layout_guard_return_test.dart',
+            'after a guard that does not bring the user back, the user is in '
+                'the main navigation on the screen that the app starts on, '
+                'and every branch is back on its destination',
+            'A guard that allows again while the transition to its target '
+                'is on its way leaves the router with one main navigation, '
+                'which it shows without an error.',
+          ),
+          MatrixExpectedFailure(
+            'test/main_navigation_return_test.dart',
+            'go() out of the main navigation and back shows the destination '
+                'without an error, in one turn and while the transition is '
+                'on its way',
+            'go() back into the main navigation while the transition to the '
+                'page that took its place is on its way leaves the router '
+                'with one main navigation, which it shows without an error.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenLayoutModule.givingFirstDestination(),
         role: layoutRole,
         bug: 'Its AppShell shows a tab for each destination, but gives only '
