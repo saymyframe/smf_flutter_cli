@@ -576,6 +576,19 @@ bool _hasGates(MatrixApp app) =>
     app.modules.contains(const ModuleId('fake_gate')) &&
     app.modules.contains(const ModuleId('fake_late_gate'));
 
+/// The apps of the registry of several providers
+/// (`severalProvidersModules`) that its tool generates and checks: one app
+/// with every module for each provider of the app entry. The registry has
+/// one such provider, so that is one app, the first, which has the first
+/// provider of each other role that takes one. So a module with a variant
+/// for each state manager, such as the sign-in of the CLI, brings the
+/// registry a second app with every module, and the tool no second app to
+/// check. It checks no app of another mode of a role either.
+const MatrixSelection severalProvidersApps = MatrixSelection(
+  everyModule: true,
+  everyModuleApps: EveryModuleAppPerProvider(appEntryRole),
+);
+
 /// The tests of the app with every module of the registry of several
 /// providers (`severalProvidersModules`): those that the modules of the CLI
 /// keep for the apps they are in (`smfAppTests`), which must pass next to
