@@ -390,7 +390,8 @@ const _ofOneProvider = {
     'go_router',
   },
   // A refresh of the routes of go_router while the flow of a condition is
-  // open, a request on its error screen, and two links in one turn.
+  // open, a request on its error screen, two links in one turn, and the
+  // redirect of go_router within the calls of the router.
   'packages/smf_pipeline/fixture_registry/app_tests/go_router_conditions': {
     'go_router',
   },

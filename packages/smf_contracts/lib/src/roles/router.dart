@@ -245,12 +245,12 @@ final class RouterRole extends Role<RoutesData> {
   /// The provider asks once for each request, and does what the answer
   /// says. The class keeps no request, so a second call for a request that
   /// it answered `ShowOver` for finds the flow open and answers
-  /// `ShowNothing`. A second call for a location that the provider shows
-  /// changes nothing: for a location that the class answered `null` for,
-  /// and for one that it gave in an answer, it answers `null` again while
-  /// no guard changed, also with no pages. So a router whose own navigation
-  /// asks once more, as one whose redirect runs for each location that it
-  /// goes to, may let it.
+  /// `ShowNothing`. And the answer depends on the pages that the provider
+  /// gives: a page of the flow of a guard that stands for a condition shows
+  /// as it was asked when it is asked for on a page, and opens over `/`
+  /// when it is asked for with no pages. So a router that asks again inside
+  /// its own navigation, as one whose redirect runs for each location that
+  /// it goes to, with no pages, keeps that second call from the class.
   ///
   /// A provider that has no page to push over or to replace, as before it
   /// shows its first location, or on an error screen that took the place
@@ -275,6 +275,8 @@ final class RouterRole extends Role<RoutesData> {
   ///   stack and then the target over it, and the listeners of
   ///   [screenListeners] hear only of the target. It keeps the request
   ///   waiting, as said below, and a `push()` that waits does not complete.
+  ///   For a page of that flow that was itself asked for with no pages,
+  ///   the location of the answer is the one that was asked for.
   /// - `ShowNothing()`: it shows nothing and leaves its pages as they are.
   ///   Such a `push()` completes with `null` at once.
   ///
@@ -394,6 +396,20 @@ final class RouterRole extends Role<RoutesData> {
   ///   never opens over itself: a further request while it is open does
   ///   nothing, and the first one waits. The class remembers no location
   ///   for such a guard, only how many pages it opened the flow over.
+  /// - The routes of the flow of such a guard show while the condition does
+  ///   not hold, so `asked` answers `null` for one that is asked for on a
+  ///   page: it shows as the code of the app asked, over that page for
+  ///   `push()` and in place of the stack for `go()`. Asked for with no
+  ///   pages, as by a link, it would stand alone, with no way back into
+  ///   the app. So `asked` then answers `ShowOver` of the location itself,
+  ///   with its query, and of the flow: the page opens over `/`, back
+  ///   leads to `/`, and once the condition holds the provider closes the
+  ///   flow. That goes for a route below the target too, which then has
+  ///   `/` alone below it. The request that waits is the page itself:
+  ///   asked about again once the flow closes, it is answered with `/`,
+  ///   where the user is then. While a gate with the same flow does not
+  ///   allow, the flow is the gate's, and its page takes the place of the
+  ///   stack as before.
   /// - `changed` first answers `ShowInstead` of the target of the gate that
   ///   keeps the user from one of the pages, so that no such page stays in
   ///   the stack. If that gate brings the user back

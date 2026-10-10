@@ -118,16 +118,18 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// router role says, through the `GuardedNavigation` of the role, which
 /// keeps the location that the user comes back to: the router remembers
 /// nothing of the gates itself. It knows a location by its URI. `go()`,
-/// `push()` and `replace()` ask before they hand a location to go_router,
-/// with the routes of the pages that the user can get back to. The
-/// top-level `redirect` of go_router asks about what go_router parses on
-/// its own: the location that the app starts on, those of the platform,
-/// and that of a branch of the main navigation that the user selects. Such
-/// a location takes the place of the stack, so the role is told of no
-/// pages for it. The `redirect` runs inside each call of go_router that
-/// the router makes too, with a location that the role let the user see or
-/// that it answered. The role answers nothing for such a location a second
-/// time, so the router does not keep those calls from it.
+/// `push()` and `replace()` ask once, before they hand a location to
+/// go_router, with the routes of the pages that the user can get back to.
+/// The top-level `redirect` of go_router runs inside each call of
+/// go_router, and asks with no pages. Asked so about a page of the flow of
+/// a guard that stands for a condition, the role opens it over `/`, as for
+/// a link, though the router shows it over the page that the user is on.
+/// So the router counts the calls that it makes with a location that it
+/// asked about, or that the role answered, and the `redirect` asks only
+/// about what go_router parses on its own: the location that the app
+/// starts on, those of the platform, and that of a branch of the main
+/// navigation that the user selects. Such a location takes the place of
+/// the stack, so the role is told of no pages for it.
 ///
 /// For a gate, or a flow that is over, the role answers a location, the
 /// target of the gate or `/`, and the router goes to it: `push()` then
