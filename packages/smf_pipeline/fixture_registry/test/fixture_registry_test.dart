@@ -841,19 +841,24 @@ void main() {
         ];
       }
 
-      // The fixture gates declare their guard of a condition between their
-      // two gates, with the stage of both: the app asks it after every
-      // gate, that of the late gate too. Its routes are those of the second
-      // fixture feature that ask for the condition of the fixture badge
-      // role: one below a route that asks for nothing, and two more, one
-      // of them by being below the other.
+      // The fixture gates declare their first guard of a condition between
+      // their two gates, with the stage of both: the app asks it after
+      // every gate, that of the late gate too, and then the second one, as
+      // the module declares them. The routes of the first are those of the
+      // second fixture feature that ask for the first condition of the
+      // fixture badge role: one below a route that asks for nothing, two
+      // more, one of them by being below the other, and one that asks for
+      // both conditions. The routes of the second guard are the two that
+      // ask for the second condition.
       const routes = "{'fake_second.vault', 'fake_second.members', "
-          "'fake_second.memberCard'}";
+          "'fake_second.memberCard', 'fake_second.loungeSeat'}";
+      const ofSecond = "{'fake_second.lounge', 'fake_second.loungeSeat'}";
       const expected = [
         'fake_gate.first',
         'fake_gate.second',
         'fake_late_gate.late resumes: false',
         'fake_gate.holder resumes: false routes: const $routes',
+        'fake_gate.senior routes: const $ofSecond',
       ];
       // The apps with every fixture ask for the late gate first.
       final requested = everyFixture();
@@ -875,15 +880,16 @@ void main() {
         ]),
         expected,
       );
-      // An app with the guard and without the feature whose routes ask for
-      // its condition: the guard keeps the user from no route, and is no
-      // gate for that.
+      // An app with the guards and without the feature whose routes ask
+      // for their conditions: such a guard keeps the user from no route,
+      // and is no gate for that.
       expect(
         await guardsOf(const [FakeRouterModule.id, FakeGateModule.id]),
         [
           'fake_gate.first',
           'fake_gate.second',
           'fake_gate.holder resumes: false routes: const {}',
+          'fake_gate.senior routes: const {}',
         ],
       );
     });
@@ -916,8 +922,8 @@ void main() {
         );
       }
 
-      const routes =
-          'fake_second.vault, fake_second.members, fake_second.memberCard';
+      const routes = 'fake_second.vault, fake_second.members, '
+          'fake_second.memberCard, fake_second.loungeSeat';
       // The fixture gates depend on one of the two fixture state managers.
       expect(
         await conditionIn(everyFixture()),

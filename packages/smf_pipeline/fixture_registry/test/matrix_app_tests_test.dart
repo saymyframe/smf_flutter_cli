@@ -411,8 +411,9 @@ void main() {
         lessThan(app.modules.indexOf(FakeGateModule.id)),
         reason: app.name,
       );
-      // And the guard that stands for a condition comes after the gates,
-      // that of a later stage too, though its module declares it second.
+      // And the guards that stand for a condition come after the gates,
+      // that of a later stage too, though their module declares the first
+      // of them second.
       final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
       expect(
         [
@@ -428,6 +429,7 @@ void main() {
           'fake_gate.second welcome',
           'fake_late_gate.late identity',
           'fake_gate.holder welcome badge.holder',
+          'fake_gate.senior welcome badge.senior',
         ],
         reason: app.name,
       );
@@ -441,18 +443,33 @@ void main() {
           'fake_gate.first',
           'fake_gate.holder',
           'fake_gate.second',
+          'fake_gate.senior',
         ],
         reason: app.name,
       );
-      // The app has the role of the condition, which the fixture gates
-      // require, and the routes of the second fixture feature ask for it.
+      // The app has the role of the conditions, which the fixture gates
+      // require, and the routes of the second fixture feature ask for
+      // them, one of them for both.
       expect(app.hook!.presentRoles, contains(badgeRole), reason: app.name);
       expect(
         [
           for (final route in facade.routesAsking(BadgeRole.holder))
             route.fullName,
         ],
-        ['fake_second.vault', 'fake_second.members', 'fake_second.memberCard'],
+        [
+          'fake_second.vault',
+          'fake_second.members',
+          'fake_second.memberCard',
+          'fake_second.loungeSeat',
+        ],
+        reason: app.name,
+      );
+      expect(
+        [
+          for (final route in facade.routesAsking(BadgeRole.senior))
+            route.fullName,
+        ],
+        ['fake_second.lounge', 'fake_second.loungeSeat'],
         reason: app.name,
       );
     }
@@ -578,18 +595,39 @@ void main() {
                 '${parent.conditions.length}';
       }
 
+      // And one asks for a second condition too, by being below a route
+      // that asks for that one.
       expect(
         routes.map(asks),
         [
           'vault 1 below outside, which asks for 0',
           'members 1',
           'memberCard 0 below members, which asks for 1',
+          'loungeSeat 1 below lounge, which asks for 1',
         ],
         reason: app.name,
       );
       for (final route in routes) {
         expect(route.topLevel.route.destination, isNull, reason: app.name);
       }
+      // The second condition has a guard of its own, with another flow:
+      // that of the second gate. The app asks it after the first.
+      final second = facade.guardFor(BadgeRole.senior);
+      expect(second?.fullName, 'fake_gate.senior', reason: app.name);
+      expect(
+        [
+          for (final other in facade.guards)
+            if (other.isGate && other.target == second!.target) other.fullName,
+        ],
+        ['fake_gate.second'],
+        reason: app.name,
+      );
+      expect(second!.target, isNot(guard.target), reason: app.name);
+      expect(
+        facade.guards.indexOf(guard),
+        lessThan(facade.guards.indexOf(second)),
+        reason: app.name,
+      );
     }
     for (final router in routers()) {
       expect(
@@ -711,6 +749,8 @@ void main() {
           'fake_second.vault',
           'fake_second.members',
           'fake_second.memberCard',
+          'fake_second.lounge',
+          'fake_second.loungeSeat',
           'fake_late_gate.gate',
           'fake_gate.gate',
           'fake_gate.step',
@@ -767,7 +807,8 @@ void main() {
     expect(withConditions, isNotEmpty);
     for (final app in withConditions) {
       expect(app.modules, contains(const ModuleId('go_router')));
-      // A guard of the app stands for a condition that its routes ask for.
+      // Each guard of the app that stands for a condition has routes that
+      // ask for it.
       final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
       expect(
         [
@@ -775,7 +816,7 @@ void main() {
             if (guard.guard.condition case final condition?)
               facade.routesAsking(condition).length,
         ],
-        [isPositive],
+        [isPositive, isPositive],
         reason: app.name,
       );
     }

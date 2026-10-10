@@ -71,6 +71,8 @@ const _pages = {
   FixtureMembersScreen,
   FixtureMemberCardScreen,
   FixtureVaultScreen,
+  FixtureLoungeScreen,
+  FixtureLoungeSeatScreen,
   FixtureGateScreen,
   FixtureGateStepScreen,
   FixtureSecondGateScreen,
@@ -102,13 +104,14 @@ Element builtLast(WidgetTester tester, Type screen) =>
 /// Goes to the screen that the app starts on, and then to the details of
 /// the item [id], a page on top of that screen, which asks for no
 /// condition: the pages of [pagesBelow]. Every guard of the fixture gates
-/// allows then, and the user holds the badge again. Returns the context of
-/// the details.
+/// allows then, and the user holds both badges again. Returns the context
+/// of the details.
 Future<BuildContext> toDetails(WidgetTester tester, int id) async {
   fixtureSession.value = (app: true, holder: true);
   fixtureGate.value = true;
   fixtureSecondGate.value = true;
   fixtureHolder.value = true;
+  fixtureSenior.value = true;
   await tester.pumpAndSettle();
   tester.element(find.byType(Navigator).first).nav.fakeFeature.home().go();
   await tester.pumpAndSettle();

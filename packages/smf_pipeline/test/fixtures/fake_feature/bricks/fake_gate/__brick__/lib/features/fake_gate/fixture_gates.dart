@@ -29,6 +29,14 @@ final FixtureGate fixtureSecondGate = FixtureGate();
 /// the user is on.
 final FixtureGate fixtureHolder = FixtureGate()..value = true;
 
+/// Whether the user holds the senior badge of the fixture: while this gate
+/// is open, which it is until a test closes it, also in an app whose gates
+/// start closed. The fourth guard of the fixture reads it. That guard
+/// keeps the user only from the routes of the app that ask for a holder of
+/// a senior badge, and opens the second gate screen over the page that the
+/// user is on.
+final FixtureGate fixtureSenior = FixtureGate()..value = true;
+
 /// One notifier for what the first guard and the third guard of the
 /// fixture read besides their gates, as the session of a sign-in has
 /// whether it lets the user into the app and whether the user has an
@@ -87,3 +95,7 @@ ValueListenable<bool> fixtureSecondGateOpen() => fixtureSecondGate;
 /// Whether the third guard of the fixture allows: while the user holds the
 /// badge of the fixture, by its gate and by the session of the fixture.
 ValueListenable<bool> fixtureHolds() => _holds;
+
+/// Whether the fourth guard of the fixture allows: while the user holds
+/// the senior badge of the fixture.
+ValueListenable<bool> fixtureIsSenior() => fixtureSenior;
