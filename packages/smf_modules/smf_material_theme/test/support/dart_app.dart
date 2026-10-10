@@ -11,7 +11,8 @@ import 'package:smf_pipeline/testing.dart';
 import 'package:yaml/yaml.dart';
 
 /// The colours of a colour scheme of Flutter 3.44 that the file of the
-/// themes sets or reads.
+/// themes sets or reads, but for the colour of an error, which it reads and
+/// leaves to `ColorScheme.fromSeed`.
 const schemeColors = [
   'primary',
   'onPrimary',
