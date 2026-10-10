@@ -27,8 +27,9 @@
 // unless the run may register apps, with SMF_FIREBASE_REGISTER=1, as the
 // test of firebase_core that configures the app does for the Android and
 // iOS apps (see webAppProblem). When the script fails, the test tells a
-// lack of a permission of the service account from the other failures
-// (see enablingFailure).
+// lack of a permission of the service account from the other failures,
+// with the permissions that the Firebase CLI printed as denied or missing
+// and a role to grant for them (see enablingFailure).
 @TestOn('vm')
 library;
 
@@ -188,10 +189,12 @@ void main() {
         );
         final output = '${enabled.stdout}${enabled.stderr}';
         if (enabled.exitCode != 0) {
-          // The Firebase CLI names the permissions that its account lacks
-          // only in its debug output, of which the test takes those lines
-          // and prints nothing else.
-          final withDebug = lacksPermission(output)
+          // What Google denied is in what the Firebase CLI printed. Only
+          // when that names no permission does the test run the script
+          // again, for the debug output of the Firebase CLI, which lists
+          // the permissions that its own check found missing. Of that
+          // output the test takes those alone and prints nothing else.
+          final withDebug = debugMayNamePermission(output)
               ? await _run(
                   executable,
                   [...arguments, '--debug'],
@@ -204,11 +207,9 @@ void main() {
               project: project,
               code: enabled.exitCode,
               output: output,
-              missing: withDebug == null
-                  ? const []
-                  : missingPermissionsIn(
-                      '${withDebug.stdout}${withDebug.stderr}',
-                    ),
+              debugOutput: withDebug == null
+                  ? ''
+                  : '${withDebug.stdout}${withDebug.stderr}',
             ),
           );
         }
