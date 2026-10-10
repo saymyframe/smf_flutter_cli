@@ -19,6 +19,10 @@ import 'package:test/test.dart';
 import 'mode_registry.dart';
 
 void main() {
+  // The time of a test that lists the apps of a registry, in the tool and
+  // again in the test: on a busy Windows runner that takes most of the
+  // default 30 seconds, and more with each module that the CLI offers.
+  const timeout = Timeout(Duration(minutes: 2));
   late Directory temp;
   late String kernel;
 
@@ -83,33 +87,35 @@ void main() {
   }
 
   test(
-      'prints the arguments of smf create of each app with every module, '
-      'one for each combination of the providers of the roles that take '
-      'one, as the matrix generates it but with the full dart fix, as '
-      'app_1, app_2 and so on', () async {
-    const directory = '/tmp/SMF apps from pub.dev';
+    'prints the arguments of smf create of each app with every module, '
+    'one for each combination of the providers of the roles that take '
+    'one, as the matrix generates it but with the full dart fix, as '
+    'app_1, app_2 and so on',
+    () async {
+      const directory = '/tmp/SMF apps from pub.dev';
 
-    final result = await run([directory]);
+      final result = await run([directory]);
 
-    expect(result.exitCode, 0, reason: '${result.stderr}');
-    final (:apps, :failed) = await everyModuleAppsOf(smfModules);
-    expect(failed, isEmpty);
-    expect(apps, hasLength(greaterThan(1)));
-    expect(jsonDecode('${result.stdout}'), [
-      for (final (index, app) in apps.indexed)
-        {
-          'name': app.name,
-          'arguments': [
-            for (final argument
-                in app.createArguments('app_${index + 1}', directory))
-              if (argument != '--no-dart-fix') argument,
-          ],
-        },
-    ]);
-  });
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      final (:apps, :failed) = await everyModuleAppsOf(smfModules);
+      expect(failed, isEmpty);
+      expect(apps, hasLength(greaterThan(1)));
+      expect(jsonDecode('${result.stdout}'), [
+        for (final (index, app) in apps.indexed)
+          {
+            'name': app.name,
+            'arguments': [
+              for (final argument
+                  in app.createArguments('app_${index + 1}', directory))
+                if (argument != '--no-dart-fix') argument,
+            ],
+          },
+      ]);
+    },
+    timeout: timeout,
+  );
 
-  // The test compiles a copy of the tool, which alone takes most of the
-  // default 30 seconds on a busy Windows runner.
+  // This test also compiles a copy of the tool.
   test(
     'prints no app with every module of another value of a mode option '
     'of a role: each app gets no value of the option, as an app that a '
@@ -149,7 +155,7 @@ void main() {
         ),
       );
     },
-    timeout: const Timeout(Duration(minutes: 2)),
+    timeout: timeout,
   );
 
   test('fails with its usage without a directory, or with more', () async {
