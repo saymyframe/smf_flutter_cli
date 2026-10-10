@@ -3,24 +3,33 @@
 // the fixture late gate and the second fixture feature: a guard that
 // stands for a condition next to the gates of the app, as
 // RouterRole.guardedNavigation says. The third guard of the fixture gates
-// stands for the condition of the fixture badge role, which two routes of
-// the second fixture feature ask for, and shows the target of the first
+// stands for the condition of the fixture badge role, which three routes
+// of the second fixture feature ask for, and shows the target of the first
 // guard, a gate: the two have one flow. It does not bring the user back.
 //
 // The app starts with that gate closed and the condition not holding. The
 // gate decides for every route, whether or not the route asks for the
-// condition, also once the condition holds. Once both allow, the router
-// shows the location that was asked for, and the flow is over. While only
-// the condition does not hold, the flow is not over, and its target shows
-// like any route. A gate of a later stage decides before the guard of the
-// condition too, and once that gate allows while the condition still does
-// not hold, the user leaves its flow for the screen that the app starts
-// on. And when the guard of the condition stops allowing, the router
-// forgets the location that another guard took the user from. Last, the
-// user asks for a route whose condition does not hold and moves on from
-// the target of the guard to another screen: the router forgets what was
-// asked for, so a gate that brings the user back brings them to that
-// screen, and nothing happens once the condition holds.
+// condition, also once the condition holds: its target takes the place of
+// the stack, and the router remembers the location that was asked for.
+// Once both allow, the router shows that location, and the flow is over.
+// While only the condition does not hold, the flow is not over, and its
+// target shows like any route. A gate of a later stage decides before the
+// guard of the condition too. And when the guard of the condition stops
+// allowing, the router forgets the location that a gate took the user
+// from.
+//
+// A known limit, which the test pins: a location that asks for the
+// condition and is asked for behind a gate is lost when the gate allows
+// while the condition does not hold. The user comes to the screen that the
+// app starts on, where the same request with no gate in its way opens the
+// flow over the page. So two guards with one flow read one notifier, as
+// the session of the fixture is for the first and the third guard: when
+// both change in one turn, the location shows.
+//
+// A gate that stops allowing while the flow of the condition is open takes
+// the place of the stack, the request with it, and brings the user back to
+// the page that the flow was opened over, not to the location that it was
+// opened for.
 //
 // Each expectation gives its reason, which a provider of the role with a
 // known bug fails the test with (brokenProviders of the fixture registry).
@@ -262,7 +271,8 @@ void main() {
       // though that guard is of the first stage. Once the gate allows, the
       // condition still keeps the user from what was asked for: the flow of
       // the gate is over, and the user leaves it for the screen that the
-      // app starts on.
+      // app starts on. This is the known limit: the location is lost, and
+      // the flow of the condition does not open.
       fixtureLateGate.value = false;
       await tester.pumpAndSettle();
       expect(
@@ -283,30 +293,41 @@ void main() {
       expect(
         heard(),
         [startScreen],
-        reason: 'Once a gate allows while a condition still keeps the user '
-            'from the location that was asked for, the router leaves the '
-            'flow of the gate, which is over, for the screen that the app '
-            'starts on.',
+        reason: 'KNOWN LIMIT: once a gate allows while a condition still '
+            'keeps the user from the location that was asked for behind the '
+            'gate, the router leaves the flow of the gate, which is over, '
+            'for the screen that the app starts on.',
       );
       expect(
-        builtForHolders(tester),
-        isEmpty,
-        reason: 'The router builds no screen of a route whose condition '
-            'does not hold.',
+        pagesBuilt(tester),
+        [FixtureHomeScreen],
+        reason: 'KNOWN LIMIT: a location that asks for a condition and was '
+            'asked for behind a gate is lost once the gate allows: the flow '
+            'of the condition does not open over the screen that the app '
+            'starts on.',
       );
+      await giveBadge(tester);
+      expect(
+        heard(),
+        isEmpty,
+        reason: 'KNOWN LIMIT: a location that asks for a condition and was '
+            'asked for behind a gate is lost once the gate allows: nothing '
+            'happens when the condition comes to hold.',
+      );
+      await takeBadge(tester);
 
       // The user asks for a route whose condition does not hold, and moves
       // on from the target of its guard to another screen: the router
-      // forgets what was asked for. So a gate that brings the user back
-      // takes them from that screen and brings them back to it, and
-      // nothing happens once the condition holds.
+      // drops the request. So a gate that brings the user back takes them
+      // from that screen and brings them back to it, and nothing happens
+      // once the condition holds.
       shown(tester, FixtureHomeScreen).nav.fakeSecond.members().go();
       await tester.pumpAndSettle();
       expect(
         heard(),
         [gateScreen],
         reason: 'go() to a route that asks for a condition that does not '
-            'hold shows the target of the guard of the condition.',
+            'hold opens the target of the guard of the condition.',
       );
       shown(tester, FixtureGateScreen).nav.fakeFeature.details(id: 7).go();
       await tester.pumpAndSettle();
@@ -331,8 +352,8 @@ void main() {
         [('fake_feature.details', '/fake_feature/details/7')],
         reason: 'Once a gate that brings the user back allows, the router '
             'shows the screen that the user moved on to from the target of '
-            'a guard of a condition: what was asked for behind that guard '
-            'is forgotten, and does not stand in the way.',
+            'a guard of a condition: the request that opened that flow was '
+            'dropped, and does not stand in the way.',
       );
       final movedOn = details(tester, 7);
       fixtureHolder.value = true;
@@ -351,7 +372,193 @@ void main() {
             'from the target of its guard, the router leaves the user where '
             'they are.',
       );
+
+      // Two guards with one flow over one notifier, as the gate and the
+      // guard of an account of a sign-in: both stop allowing in one turn,
+      // on a page that asks for the condition over a page that does not.
+      // The gate decides, and brings the user back to the page below the
+      // pushed one.
+      var below = await toDetails(tester, 8);
+      pushed(below.nav.fakeSecond.members());
+      await tester.pumpAndSettle();
+      expect(heard(), [membersScreen], reason: 'push() shows its location.');
+      fixtureSession.value = (app: false, holder: false);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [gateScreen],
+        reason: 'When a gate and a guard of a condition with one flow stop '
+            'allowing in one turn, the gate decides: the router shows its '
+            'target, once.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureGateScreen],
+        reason: 'When a gate and a guard of a condition with one flow stop '
+            'allowing in one turn, the target of the gate takes the place '
+            'of the stack.',
+      );
+      fixtureSession.value = (app: true, holder: true);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [detailsScreen(8)],
+        reason: 'Once a gate and a guard of a condition with one flow allow '
+            'in one turn, the router shows the location below the pushed '
+            'pages that the gate took the user from, once.',
+      );
+      expect(
+        pagesBuilt(tester),
+        pagesBelow,
+        reason: 'Once a gate and a guard of a condition with one flow allow '
+            'in one turn, the router shows the location below the pushed '
+            'pages that the gate took the user from.',
+      );
+
+      // A location that asks for the condition, asked for behind the gate:
+      // both allow in one turn, so the router shows it.
+      fixtureSession.value = (app: false, holder: false);
+      await tester.pumpAndSettle();
+      expect(heard(), [gateScreen], reason: 'The gate shows its target.');
+      await staysOn(
+        FixtureGateScreen,
+        gateScreen,
+        (gate) => gate.nav.fakeSecond.memberCard().go(),
+        reason: 'While a gate does not allow, go() to a route that asks for '
+            'a condition shows the target of the gate.',
+      );
+      fixtureSession.value = (app: true, holder: true);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [memberCardScreen],
+        reason: 'Once a gate and a guard of a condition with one flow allow '
+            'in one turn, the router shows the location that was asked for '
+            'behind the gate, though it asks for the condition.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureMembersScreen, FixtureMemberCardScreen],
+        reason: 'Once a gate and a guard of a condition with one flow allow '
+            'in one turn, the router shows the location that was asked for '
+            'behind the gate, though it asks for the condition.',
+      );
+
+      // The same request when the two change apart, the gate first: the
+      // known limit. The location is lost, and the user comes to the
+      // screen that the app starts on.
+      fixtureSession.value = (app: false, holder: false);
+      await tester.pumpAndSettle();
+      expect(heard(), [gateScreen], reason: 'The gate shows its target.');
+      shown(tester, FixtureGateScreen).nav.fakeSecond.members().go();
+      await tester.pumpAndSettle();
+      heard();
+      fixtureSession.value = (app: true, holder: false);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [startScreen],
+        reason: 'KNOWN LIMIT: when the gate of a flow allows before the '
+            'condition of the guard with that flow holds, a location that '
+            'asks for the condition and was asked for behind the gate is '
+            'lost: the user comes to the screen that the app starts on.',
+      );
+      fixtureSession.value = (app: true, holder: true);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        isEmpty,
+        reason: 'KNOWN LIMIT: when the gate of a flow allows before the '
+            'condition of the guard with that flow holds, a location that '
+            'asks for the condition and was asked for behind the gate is '
+            'lost: nothing happens once the condition holds.',
+      );
+
+      // The gate of the flow stops allowing while the flow of the
+      // condition is open over a page: its target takes the place of the
+      // stack, the request with it, and the gate brings the user back to
+      // the page that the flow was opened over.
+      below = await toDetails(tester, 9);
+      await takeBadge(tester);
+      var waits = pushed(below.nav.fakeSecond.members());
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [gateScreen],
+        reason: 'push() of a route that asks for a condition that does not '
+            'hold opens the target of the guard of the condition.',
+      );
+      final open = shown(tester, FixtureGateScreen);
+      fixtureGate.value = false;
+      await tester.pumpAndSettle();
+      expectHeardAtMostOnce(
+        tester,
+        open,
+        gateScreen,
+        reason: 'When the gate of a flow stops allowing while the flow of a '
+            'condition is open, its target is the screen that the user '
+            'sees.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [FixtureGateScreen],
+        reason: 'When the gate of a flow stops allowing while the flow of a '
+            'condition is open, its target takes the place of the stack.',
+      );
+      fixtureHolder.value = true;
+      fixtureGate.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [detailsScreen(9)],
+        reason: 'Once the gate allows, the router shows the page that the '
+            'flow of the condition was opened over, which the gate took the '
+            'user from, not the location that the flow was opened for.',
+      );
+      expect(
+        waits(),
+        isNull,
+        reason: 'The request that opened the flow of a condition is dropped '
+            'once another location takes the place of the pages of the '
+            'flow, as when a gate brings the user back.',
+      );
+
+      // A gate with another flow stops allowing while the flow of the
+      // condition is open.
+      await takeBadge(tester);
+      waits = pushed(details(tester, 9).nav.fakeSecond.members());
+      await tester.pumpAndSettle();
+      expect(heard(), [gateScreen], reason: 'The flow opens over the page.');
+      fixtureSecondGate.value = false;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [secondGateScreen],
+        reason: 'When a gate stops allowing while the flow of a condition '
+            'is open, the router shows the target of the gate.',
+      );
+      expect(
+        waits(),
+        isNull,
+        reason: 'The request that opened the flow of a condition is dropped '
+            'when the target of a gate takes the place of the stack.',
+      );
+      fixtureSecondGate.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [detailsScreen(9)],
+        reason: 'Once the gate allows, the router shows the page that the '
+            'flow of the condition was opened over, which the gate took the '
+            'user from.',
+      );
+      expect(
+        pagesBuilt(tester),
+        pagesBelow,
+        reason: 'Once the gate allows, the router shows the page that the '
+            'flow of the condition was opened over, without the flow.',
+      );
     },
-    timeout: const Timeout(Duration(minutes: 2)),
+    timeout: const Timeout(Duration(minutes: 3)),
   );
 }

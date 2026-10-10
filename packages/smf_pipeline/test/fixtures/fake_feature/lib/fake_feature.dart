@@ -138,10 +138,10 @@ final class FakeFeatureModule extends SmfModule {
 /// navigation, which asks for nothing: a router that asked the guards about
 /// the route above a route would show it to everyone. The module declares
 /// no guard and knows no module that has one. In an app with a guard that
-/// stands for the condition, the router shows the target of that guard in
-/// place of the three routes while the condition does not hold. In an app
-/// without one, as in an app without the role, they show like any other
-/// route.
+/// stands for the condition, a request for one of the three routes opens
+/// the target of that guard over the page that the user is on while the
+/// condition does not hold. In an app without one, as in an app without
+/// the role, they show like any other route.
 final class FakeSecondModule extends SmfModule {
   /// Creates the module.
   const FakeSecondModule();
@@ -298,6 +298,12 @@ final class FakeSecondModule extends SmfModule {
 /// late gate too, a gate of a later stage. It does not bring the user back.
 /// The module knows no route that asks for the condition: those of the
 /// second fixture feature do, in an app with that feature.
+///
+/// The first and the third guard each read a gate of their own, which a
+/// test closes and opens apart from the other, and both read one more
+/// notifier, the session of the fixture, as two guards with one flow do:
+/// a test changes what both allow with one assignment to it, so the router
+/// never finds one of them changed and the other not.
 ///
 /// The module depends on one of the two fake state managers, as a feature
 /// that works with one state manager does, though it uses nothing of it.

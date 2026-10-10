@@ -12,21 +12,20 @@
 // guard that stands for a condition shows whether a router names a page
 // rightly: it keeps the user from a pushed page that asks for the
 // condition though the page below asks for nothing, and from a route that
-// asks for it below a route that asks for nothing. The router then shows
-// the target of the guard, once, and no screen of a route that asks for
-// the condition stays.
+// asks for it below a route that asks for nothing. The router then closes
+// each page that asks for the condition with the pages over it, and the
+// user is on the page below. A page that asks for it and has no page below
+// it, as after go() to it, leaves for the screen that the app starts on.
+// Nothing happens once the condition holds again: no request waits.
 //
-// The guard does not bring the user back, so once the condition holds
-// again, the router leaves the target for the screen that the app starts
-// on. Each expectation gives its reason, which a provider of the role with
-// a known bug fails the test with (brokenProviders of the fixture
-// registry).
+// Each expectation gives its reason, which a provider of the role with a
+// known bug fails the test with (brokenProviders of the fixture registry).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
-import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gates.dart';
 import 'package:{{app_name}}/features/fake_second/fixture_members_screens.dart';
+import 'package:{{app_name}}/features/fake_second/fixture_outside_screen.dart';
 
 import 'conditions.dart';
 import 'guards.dart';
@@ -38,47 +37,45 @@ void main() {
   // A widget test fails after ten minutes by default; a test that hangs
   // fails sooner.
   testWidgets(
-    'a condition that stops holding shows the target of its guard in place '
-    'of a page that asks for it, a pushed one and one below a route that '
-    'asks for nothing',
+    'a condition that stops holding closes the pages that ask for it with '
+    'the pages over them, a pushed one and one below a route that asks for '
+    'nothing, and the user is on the page below',
     (tester) async {
-      /// Checks that the target of the guard of the condition is on top,
-      /// which the listeners heard of once, that it is the only page, and
-      /// that no screen of a route that asks for the condition is left. A
-      /// failure gives [reason].
-      void expectTargetOnTop(String reason) {
-        expect(heard(), [gateScreen], reason: reason);
+      /// Takes the badge away, and checks that the user is on the details
+      /// of the item [id] again, with the pages of [pagesBelow] alone, of
+      /// which the listeners heard once, and that no screen of a route
+      /// that asks for the condition is left. A failure gives [reason].
+      Future<void> expectBackOnDetails(int id, String reason) async {
+        fixtureHolder.value = false;
+        await tester.pumpAndSettle();
+        expect(pagesBuilt(tester), pagesBelow, reason: reason);
         expect(
-          builtScreens(tester),
-          [FixtureGateScreen],
-          reason: '$reason The target takes the place of the whole stack.',
-        );
-        expect(
-          builtForHolders(tester),
-          isEmpty,
-          reason: 'When a condition stops holding, no page that asks for it '
-              'stays in the stack.',
+          heard(),
+          [detailsScreen(id)],
+          reason: '$reason The listeners of the screen hear once of the '
+              'page that the user ends on.',
         );
       }
 
-      /// Gives the badge back, and checks that the router leaves the target
-      /// of the guard for the screen that the app starts on.
-      Future<void> holdAgain() async {
-        fixtureHolder.value = true;
+      /// Takes the badge away, and checks that the user is on the screen
+      /// that the app starts on, alone, and that no screen of a route that
+      /// asks for the condition is left. A failure gives [reason].
+      Future<void> expectOnStart(String reason) async {
+        fixtureHolder.value = false;
         await tester.pumpAndSettle();
+        expect(heard(), [startScreen], reason: reason);
+        expect(pagesBuilt(tester), [FixtureHomeScreen], reason: reason);
+      }
+
+      /// Gives the badge back, which changes nothing: no request waits.
+      Future<void> holdAgain() async {
+        await giveBadge(tester);
         expect(
           heard(),
-          [startScreen],
-          reason: 'Once a condition holds again whose guard does not bring '
-              'the user back, the router leaves the target of the guard for '
-              'the screen that the app starts on.',
-        );
-        expect(
-          builtScreens(tester),
-          [FixtureHomeScreen],
-          reason: 'Once a condition holds again whose guard does not bring '
-              'the user back, the router leaves the target of the guard for '
-              'the screen that the app starts on.',
+          isEmpty,
+          reason: 'Once a condition holds again, the router leaves the user '
+              'where they are: it closed the pages that asked for it, and '
+              'no request waits.',
         );
       }
 
@@ -91,14 +88,8 @@ void main() {
 
       // A page that a push showed and that asks for the condition, by
       // being below a route that does, over a page that asks for nothing.
-      shown(tester, FixtureHomeScreen).nav.fakeFeature.details(id: 1).go();
-      await tester.pumpAndSettle();
-      expect(
-        heard(),
-        [('fake_feature.details', '/fake_feature/details/1')],
-        reason: 'A route that asks for no condition shows as it is.',
-      );
-      pushed(details(tester, 1).nav.fakeSecond.memberCard());
+      var below = await toDetails(tester, 1);
+      var result = pushed(below.nav.fakeSecond.memberCard());
       await tester.pumpAndSettle();
       expect(
         heard(),
@@ -112,18 +103,56 @@ void main() {
         reason: 'While a condition holds, push() of a route that asks for it '
             'shows the route.',
       );
-      fixtureHolder.value = false;
-      await tester.pumpAndSettle();
-      expectTargetOnTop(
-        'When a condition stops holding, the router shows the target of its '
-        'guard in place of a pushed page that asks for the condition, over '
-        'a page that asks for none.',
+      await expectBackOnDetails(
+        1,
+        'When a condition stops holding, the router closes a pushed page '
+        'that asks for the condition, over a page that asks for none: the '
+        'user is on the page below.',
+      );
+      expect(
+        result(),
+        isNull,
+        reason: 'The push() of a page that the router closes completes with '
+            'null.',
       );
       await holdAgain();
 
-      // A route that lists the condition itself, below a route that
-      // asks for nothing, which go() showed.
-      shown(tester, FixtureHomeScreen).nav.fakeSecond.vault().go();
+      // A page that asks for nothing over a page that asks for the
+      // condition: both close, and the listeners hear of one page.
+      below = await toDetails(tester, 2);
+      result = pushed(below.nav.fakeSecond.members());
+      await tester.pumpAndSettle();
+      final over = pushed(
+        shown(tester, FixtureMembersScreen).nav.fakeSecond.outside(),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [membersScreen, outsideScreen],
+        reason: 'While a condition holds, push() shows its location.',
+      );
+      expect(
+        pagesBuilt(tester),
+        [...pagesBelow, FixtureMembersScreen, FixtureOutsideScreen],
+        reason: 'While a condition holds, push() shows its location.',
+      );
+      await expectBackOnDetails(
+        2,
+        'When a condition stops holding, the router closes a page that '
+        'asks for it with the page that was pushed over it.',
+      );
+      expect(
+        [result(), over()],
+        [isNull, isNull],
+        reason: 'The push() of each page that the router closes completes '
+            'with null.',
+      );
+      await holdAgain();
+
+      // A route that lists the condition itself, below a route that asks
+      // for nothing, which go() showed: it has no page below it that the
+      // router could leave the user on.
+      details(tester, 2).nav.fakeSecond.vault().go();
       await tester.pumpAndSettle();
       expect(
         heard(),
@@ -132,22 +161,20 @@ void main() {
             'shows the route.',
       );
       expect(
-        builtForHolders(tester),
-        [FixtureVaultScreen],
+        pagesBuilt(tester),
+        [FixtureOutsideScreen, FixtureVaultScreen],
         reason: 'While a condition holds, go() to a route that asks for it '
-            'shows the route.',
+            'shows the chain of the route.',
       );
-      fixtureHolder.value = false;
-      await tester.pumpAndSettle();
-      expectTargetOnTop(
-        'When a condition stops holding, the router shows the target of its '
-        'guard in place of a route that asks for the condition, below a '
-        'route that asks for none.',
+      await expectOnStart(
+        'When a condition stops holding on a route that asks for it, below '
+        'a route that asks for none, which took the place of the stack, the '
+        'user comes to the screen that the app starts on.',
       );
       await holdAgain();
 
-      // A pushed page whose route lists the condition itself, over a route
-      // that asks for it too.
+      // A pushed page over a route that asks for the condition and that
+      // took the place of the stack.
       shown(tester, FixtureHomeScreen).nav.fakeSecond.members().go();
       await tester.pumpAndSettle();
       expect(
@@ -156,19 +183,17 @@ void main() {
         reason: 'While a condition holds, go() to a route that asks for it '
             'shows the route.',
       );
-      pushed(shown(tester, FixtureMembersScreen).nav.fakeSecond.vault());
+      pushed(shown(tester, FixtureMembersScreen).nav.fakeSecond.outside());
       await tester.pumpAndSettle();
       expect(
         heard(),
-        [vaultScreen],
-        reason: 'While a condition holds, push() of a route that asks for it '
-            'shows the route.',
+        [outsideScreen],
+        reason: 'push() of a route that asks for no condition shows it.',
       );
-      fixtureHolder.value = false;
-      await tester.pumpAndSettle();
-      expectTargetOnTop(
-        'When a condition stops holding, the router shows the target of its '
-        'guard in place of the pages that ask for the condition.',
+      await expectOnStart(
+        'When a condition stops holding on a route that asks for it and '
+        'has no page below it, the user comes to the screen that the app '
+        'starts on, from a page that was pushed over that route too.',
       );
       await holdAgain();
     },
