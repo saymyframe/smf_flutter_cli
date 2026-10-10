@@ -41,13 +41,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // The listeners of the screen, the navigator observers, the back
       // button of the system, which the router handles when it closes a
       // route and leaves to the system otherwise, on its error screen as
-      // on any other page, and the configuration of the router, which it
-      // creates once, whichever module provides the router: the tests
-      // start the app with main() and navigate through the navigation
-      // facade of the router role.
+      // on any other page, push() and replace() on that screen, and the
+      // configuration of the router, which it creates once, whichever
+      // module provides the router: the tests start the app with main()
+      // and navigate through the navigation facade of the router role.
       MatrixAppTest(
         '$appTests/router_screens',
         appliesTo: _hearsScreens,
+        generatedFiles: _locationsFromAnyPageOf,
         roles: {routerRole},
       ),
       // The listeners of the screen, which the router calls each on its
@@ -486,6 +487,57 @@ Future<void> chooseLanguage(String language) async {}
 /// chosen.
 Future<void> followDevice() async {}
 ''';
+
+/// The file of the tests of the screens that the matrix writes for an app
+/// with a router from the routes of the app: `locationsFromAnyPage`, the
+/// locations that a router shows from any page, one of which the tests ask
+/// the router for from its error screen.
+const locationsFromAnyPageFile = 'test/locations_from_any_page.dart';
+
+/// The file at [locationsFromAnyPageFile] of [app], an app of the matrix
+/// with a router, whose package is [packageName].
+///
+/// The locations are those of the routes of the app that a router shows
+/// from any page while the gates of the app allow, in the order of the
+/// routes: such a route needs no values, no guard keeps the user from it,
+/// as it asks for no condition and is in no flow, and in an app with a
+/// main navigation it is outside it, since a router refuses to push a
+/// location in the main navigation from a page that is shown over it.
+Map<String, String> _locationsFromAnyPageOf(
+  MatrixApp app,
+  String packageName,
+) {
+  final hook = app.hook!;
+  final facade = routerRole.facadeOf(routerRole.hookInput(hook));
+  final inMainNavigation = hook.presentRoles.contains(layoutRole)
+      ? {...facade.destinations}
+      : const <FacadeRoute>{};
+  final inFlows = {for (final guard in facade.guards) ...guard.flow};
+  final locations = [
+    for (final route in facade.routes)
+      if (!route.hasRequiredParams &&
+          route.conditions.isEmpty &&
+          !inFlows.contains(route) &&
+          !inMainNavigation.contains(route.topLevel))
+        '  ${route.locationClass}(),\n',
+  ];
+  final navigation =
+      ImportRef.app(RouterRole.navigationFile.substring('lib/'.length))
+          .resolveUri(packageName);
+  return {
+    locationsFromAnyPageFile: '''
+// Locations of the app for the tests of the screens, router_screens_test.dart,
+// which the matrix of SMF writes from the routes of the app.
+import '$navigation';
+
+/// The locations that the router of the app shows from any page, in the
+/// order of the routes: each of a route that needs no values, that no guard
+/// keeps the user from while the gates of the app allow, and that is
+/// outside the main navigation of an app with one.
+const List<AppLocation> locationsFromAnyPage = [${locations.isEmpty ? '' : '\n${locations.join()}'}];
+''',
+  };
+}
 
 /// Whether the tests of the listeners of the screen can hear the screens of
 /// [app]: it has a router, whichever module provides it, the fixture
