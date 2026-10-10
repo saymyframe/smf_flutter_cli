@@ -21,7 +21,15 @@
 // call is on its way, its action shows it and neither action takes a tap.
 // A deletion that failed leaves the screen with the text of the failure.
 // And when the session ends while the sheet is open, as on the server, the
-// sheet goes with the page under it.
+// sheet goes with the page under it. No call of the app ended that
+// session, so the session has nobody then, in every mode: an app that
+// signs an anonymous user in does so again when the user comes back to it.
+//
+// The sign-in that the entry opens for a user without an account is a page
+// over the settings screen, and once the user has signed in there, the
+// screen of the account is. A screen of the sign-in that closed itself
+// after the sign-in would close that screen instead, so this is where the
+// test shows that the screens of the sign-in close nothing themselves.
 //
 // The matrix writes of_app.dart next to this file, with the settings
 // screen of the app and the entry of the module, from the settings screen
@@ -113,13 +121,18 @@ bool _spins(Finder action) => find
 /// says, once [what] took the account: on the settings screen in an app
 /// that everyone may use, and on the sign-in, in place of every screen, in
 /// an app that asks for an account. No page of the account is left, and
-/// no sheet.
-void _expectWithoutAccount(WidgetTester tester, String what) {
+/// no sheet. The session has [session], which is what the mode of the app
+/// says of a user without an account unless it is given.
+void _expectWithoutAccount(
+  WidgetTester tester,
+  String what, {
+  String? session,
+}) {
   expect(
     sessionNow(),
-    _withoutAccount,
-    reason: 'Once $what, the session has $_withoutAccount, as the mode '
-        '${authMode.name} says.',
+    session ?? _withoutAccount,
+    reason: 'Once $what, the session has ${session ?? _withoutAccount}, in '
+        'the mode ${authMode.name}.',
   );
   expect(
     (builtAccountScreen.evaluate().length, deleteSheet.evaluate().length),
@@ -342,6 +355,66 @@ void main() {
             'account.',
       );
 
+      // Code of the app signs the user in again as soon as the session has
+      // no account, as an app does that keeps its user signed in. The
+      // router has closed the page of the account by then, and the screen
+      // that the user opens next is not busy.
+      var signedInAgain = false;
+      void signInAgain() {
+        if (appSession.hasAccount.value) return;
+        appSession.removeListener(signInAgain);
+        unawaited(
+          appSession
+              .signIn(email: _email, password: _password)
+              .whenComplete(() => signedInAgain = true),
+        );
+      }
+
+      appSession.addListener(signInAgain);
+      addTearDown(() => appSession.removeListener(signInAgain));
+      await _tap(tester, submitButton);
+      await tester.pumpAndSettle();
+      expect(
+        (signedInAgain, sessionNow()),
+        (true, 'the account of $_email'),
+        reason: 'Code of the app has signed the user in again in the turn '
+            'of the sign-out.',
+      );
+      expect(
+        (
+          builtAccountScreen.evaluate().length,
+          anySignInScreen.evaluate().length,
+          find.byType(CircularProgressIndicator).evaluate().length,
+        ),
+        (0, 0, 0),
+        reason: 'The router closed the page of the account when the session '
+            'had no account, and nothing of the sign-out is left: no page '
+            'of the account, no sign-in, and nothing that spins.',
+      );
+      if (_open) {
+        _expectRow(_email, 'Once that user is signed in again');
+      } else {
+        expect(
+          builtStartScreen,
+          findsOneWidget,
+          reason: 'In an app that asks for an account, a user who is signed '
+              'in again is on the screen that the app starts on: the gate '
+              'brings nobody back to a page.',
+        );
+      }
+      await _openAccount(tester);
+      expect(
+        (
+          accountScreen.evaluate().length,
+          _spins(submitButton),
+          _takesTap<FilledButton>(tester, submitButton),
+          _takesTap<TextButton>(tester, deleteAction),
+        ),
+        (1, false, true, true),
+        reason: 'The screen of the account that the user opens then is not '
+            'busy: both of its actions take a tap.',
+      );
+
       // The deletion asks first, in each language, and the way out of the
       // sheet deletes nothing.
       calls = service.calls.length;
@@ -459,16 +532,43 @@ void main() {
         findsOneWidget,
         reason: 'The sheet is open over the screen of the account.',
       );
+      calls = service.calls.length;
       service.endSession();
       await tester.pumpAndSettle();
+      // No call of the app left the user signed out, so no anonymous
+      // sign-in follows, in any mode.
       _expectWithoutAccount(
         tester,
         'the session has ended elsewhere while the sheet was open',
+        session: 'nobody',
       );
       expect(
-        _open ? rootCanPop(tester) : couldPop,
-        couldPop,
-        reason: 'No page and no sheet is left over the settings screen.',
+        (_open ? rootCanPop(tester) : couldPop, service.calls.length - calls),
+        (couldPop, 0),
+        reason: 'No page and no sheet is left over the settings screen, and '
+            'the session called nothing: it only followed its service.',
+      );
+
+      // The user comes back to the app: one that signs an anonymous user in
+      // does so again, and the user stays where the router left them.
+      tester.binding
+        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      _expectWithoutAccount(
+        tester,
+        'the user has come back to the app after that',
+        session: _withoutAccount,
+      );
+      expect(
+        (
+          _open ? rootCanPop(tester) : couldPop,
+          service.calls.sublist(calls).join(', '),
+        ),
+        (couldPop, authMode == AuthMode.anonymous ? 'signInAnonymously' : ''),
+        reason: 'Once the user has come back, an app that signs an '
+            'anonymous user in has done so, and no other app has called '
+            'its service; no page was opened or closed for it.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

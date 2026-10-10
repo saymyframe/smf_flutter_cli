@@ -1,8 +1,9 @@
 // A test that continuous integration runs in the apps with the sign-in
-// module, in each mode of the auth role: the three screens of the sign-in
-// on a phone of 320 by 480 with insets and the text at three times its
-// size, in each language of the app, and what they say to a screen reader
-// and do for a user who asks for less motion.
+// module, in each mode of the auth role: the three screens of the sign-in,
+// the screen of the account and the sheet that asks before a deletion, on
+// a phone of 320 by 480 with insets and the text at three times its size,
+// in each language of the app, and what they say to a screen reader and do
+// for a user who asks for less motion.
 //
 // Nothing overflows there. Each page scrolls to its fields and its buttons,
 // which keep to the screen and out of the insets. The message of a failure
@@ -22,10 +23,17 @@
 // at once, and the button of a form does not spin while its call is on its
 // way.
 //
+// The screen of the account scrolls to the address, to its button and to
+// its action in the same way, and so does the sheet to its two buttons,
+// which keep out of the insets. The title of the sheet is a header too, and
+// grows only by half.
+//
 // The session of the app gets a service of the test, which says what each
-// call does (ScriptedAuthService). The phone is that small only while the
-// sign-in is shown: whether the other screens of the app fit it is a
-// matter for the tests of their own modules. The matrix writes of_app.dart
+// call does (ScriptedAuthService). The phone is that small only while a
+// screen of the module is the only one that the app has built: whether the
+// other screens of the app fit it is a matter for the tests of their own
+// modules. So the test goes to the screen of the account in place of the
+// stack, as a link does. The matrix writes of_app.dart
 // next to this file, with the texts of the module in each language of the
 // app. The test starts the app once, since the start-up of an app may not
 // run twice, and each expectation gives its reason.
@@ -35,6 +43,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
+import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/sign_in/sign_in_widgets.dart';
 
 import 'app.dart';
@@ -193,20 +202,27 @@ void _expectWholeWords(
 
 /// Checks the title of the page that the user sees, the text [title]: a
 /// screen reader announces it as a header, it grows only by half with the
-/// text size of the device, and it keeps its words whole.
-void _expectTitle(WidgetTester tester, String title, String language) {
+/// text size of the device, and it keeps its words whole. The title of the
+/// sheet that asks before a deletion is the one [inSheet].
+void _expectTitle(
+  WidgetTester tester,
+  String title,
+  String language, {
+  bool inSheet = false,
+}) {
   // The title comes first on its page, before a button with the same text.
-  final shown = find.text(title).first;
+  final shown = inSheet ? inDeleteSheet(find.text(title)) : find.text(title);
   expect(
-    tester.getSemantics(shown),
+    tester.getSemantics(shown.first),
     isSemantics(label: title, isHeader: true),
-    reason: 'A screen reader announces the title of a page of the sign-in '
-        'as a header: "$title", in $language.',
+    reason: 'A screen reader announces the title of a page of the sign-in, '
+        'and that of the sheet, as a header: "$title", in $language.',
   );
-  final base = Theme.of(tester.element(shown)).textTheme.headlineLarge!;
+  final theme = Theme.of(tester.element(shown.first)).textTheme;
+  final base = inSheet ? theme.headlineSmall! : theme.headlineLarge!;
   _expectWholeWords(
     tester,
-    shown,
+    shown.first,
     title,
     what: 'the title',
     language: language,
@@ -245,10 +261,11 @@ void main() {
   // A widget test fails after ten minutes by default; a test that hangs
   // fails sooner.
   testWidgets(
-    'the screens of the sign-in fit a small phone with a large text size in '
-    'each language of the app, tell a screen reader of their titles, their '
-    'fields and a failure, and keep still for a user who asks for less '
-    'motion',
+    'the screens of the sign-in, the screen of the account and the sheet '
+    'that asks before a deletion fit a small phone with a large text size '
+    'in each language of the app, tell a screen reader of their titles, '
+    'their fields and a failure, and keep still for a user who asks for '
+    'less motion',
     (tester) async {
       addTearDown(tester.view.reset);
       addTearDown(tester.platformDispatcher.clearAllTestValues);
@@ -557,6 +574,86 @@ void main() {
         reason: 'In an app that asks for less motion, the message of a '
             'failure takes its place at once: nothing lets it grow.',
       );
+
+      // The screen of the account. The user gets the account on a phone of
+      // the usual size, where the router may show another screen of the
+      // app, and the phone is small again once the screen of the account is
+      // the only one.
+      tester.platformDispatcher
+        ..clearAccessibilityFeaturesTestValue()
+        ..clearTextScaleFactorTestValue();
+      tester.view.reset();
+      useTallPhone(tester);
+      service.failure = null;
+      await appSession.signIn(email: _email, password: _password);
+      await tester.pumpAndSettle();
+      navigatorOf(tester).go(const SignInAccountLocation());
+      await tester.pumpAndSettle();
+      expect(
+        (
+          accountScreen.evaluate().length,
+          builtStartScreen.evaluate().length,
+          rootCanPop(tester),
+        ),
+        (1, 0, false),
+        reason: 'A link to the screen of the account shows it alone, for a '
+            'user with an account.',
+      );
+      tester.view
+        ..physicalSize = _phone
+        ..devicePixelRatio = 1
+        ..padding = insets
+        ..viewPadding = insets;
+      tester.platformDispatcher.textScaleFactorTestValue = _textScale;
+      await tester.pumpAndSettle();
+      for (final language in languages) {
+        await useLanguage(tester, language);
+        _expectTitle(tester, texts['accountTitle']!, language);
+        await _expectReached(
+          tester,
+          find.byType(EmailAddress),
+          'the address of the account',
+        );
+        for (final (action, label) in [
+          (submitButton, texts['signOut']!),
+          (deleteAction, texts['deleteAccount']!),
+        ]) {
+          await _expectReached(tester, action, 'the action "$label"');
+          _expectLabel(tester, action, label, language);
+        }
+
+        // The sheet that asks before a deletion.
+        await _tap(tester, deleteAction);
+        _expectTitle(tester, texts['deleteTitle']!, language, inSheet: true);
+        final sheet = tester.getRect(deleteSheet);
+        expect(
+          (sheet.left >= 0, sheet.right <= _phone.width, sheet.bottom),
+          (true, true, _phone.height),
+          reason: 'The sheet that asks before a deletion keeps to the width '
+              'of the small phone, at its bottom: it is at $sheet.',
+        );
+        await _expectReached(
+          tester,
+          inDeleteSheet(text('deleteText')),
+          'what the sheet says of the deletion',
+        );
+        final delete = inDeleteSheet(find.byType(FilledButton));
+        final cancel = inDeleteSheet(find.byType(TextButton));
+        for (final (button, label) in [
+          (delete, texts['delete']!),
+          (cancel, texts['cancel']!),
+        ]) {
+          await _expectReached(tester, button, 'the button "$label"');
+          _expectLabel(tester, button, label, language);
+        }
+        await _tap(tester, cancel);
+        expect(
+          (deleteSheet.evaluate().length, accountScreen.evaluate().length),
+          (0, 1),
+          reason: 'On the small phone, the way out of the sheet closes it, '
+              'in $language.',
+        );
+      }
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );
