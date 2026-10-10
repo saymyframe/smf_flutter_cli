@@ -189,6 +189,14 @@ final class RouteCondition {
 /// - when a gate stops allowing meanwhile, its target takes the place of
 ///   the stack, and the request is dropped.
 ///
+/// A known limit: behind a gate that does not allow, the router remembers
+/// such a location for the gate, as it does any other, and opens no flow.
+/// Once the gate allows while the condition does not hold, the user comes
+/// to the screen that the app starts on, and the location is lost. So a
+/// link to such a route that opens the app on a first launch, behind an
+/// onboarding, does not open the target of the guard, which it does in an
+/// app whose gates allow.
+///
 /// When the condition stops holding, the router closes each page that asks
 /// for it, with the pages over it, so the user is on the page that it was
 /// opened from. A page that asks for it and has no page below it, as after

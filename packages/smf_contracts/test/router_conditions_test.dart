@@ -498,7 +498,7 @@ void main() {
   memberNow.value = true;
   changed('both allow', [login]);
 
-  print('a flow that is over while a condition keeps what is remembered');
+  print('a link to a route that asks for a condition, behind a gate');
   introSeenNow.value = false;
   memberNow.value = false;
   changed('firstRun stops', [home]);
@@ -508,6 +508,10 @@ void main() {
   changed('a notification', [home]);
   memberNow.value = true;
   changed('member holds', [home]);
+  memberNow.value = false;
+  changed('member stops', [home]);
+  asked('rooms.members', '/rooms/members');
+  memberNow.value = true;
 
   print('a location asked for once the gates allow, before the class is told');
   introSeenNow.value = false;
@@ -1249,17 +1253,24 @@ a gate of the first stage does not allow
     });
 
     test(
-        'the generated class leaves the flow of a gate for the start of the '
-        'app while a guard with routes keeps the user from the location '
-        'that it remembers, which it forgets then', () async {
-      // The app is asked for a route of the members behind a gate. Once the
-      // gate allows, its flow is over, and the user is no member: the user
-      // comes to the start of the app, and nothing happens once the
-      // condition holds.
+        'KNOWN LIMIT: a location that asks for a condition and is asked for '
+        'behind a gate is lost once the gate allows while the condition '
+        'does not hold: the generated class answers the start of the app, '
+        'though it opens the flow for the same location with no gate in its '
+        'way', () async {
+      // A link to a route of the members opens the app behind a gate, as
+      // on a first launch. The class remembers it for the gate. Once the
+      // gate allows, the user is no member, and the class, which opens a
+      // flow only when it is asked and keeps no request waiting, answers
+      // the start of the app and forgets the link: nothing happens once the
+      // condition holds. The same link in an app whose gates allow opens
+      // the target of the guard over the start of the app, and its request
+      // waits with the router. To close the gap, `changed` would answer
+      // with the flow to open and the request to keep.
       expect(
         sectionOf(
           await flow,
-          'a flow that is over while a condition keeps what is remembered',
+          'a link to a route that asks for a condition, behind a gate',
         ),
         '''
   firstRun stops: /intro
@@ -1267,6 +1278,8 @@ a gate of the first stage does not allow
   firstRun allows: /
   a notification: stays
   member holds: stays
+  member stops: stays
+  asked /rooms/members on no page: $opensLogin
 ''',
       );
     });

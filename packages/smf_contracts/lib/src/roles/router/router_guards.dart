@@ -444,6 +444,13 @@ final class $_navigation<L> {
   /// closes when the condition stops holding. A page that took the place
   /// of the stack, as after `go()` to it, has nothing below it: the user
   /// then comes to [start].
+  ///
+  /// A known limit of the second answer: a location that a guard with
+  /// [RouteGuard.routes] keeps the user from, and that was asked for
+  /// behind a gate, is lost once the gate allows. A link to such a route
+  /// that opens the app on a first launch, behind an onboarding, leaves
+  /// the user on [start], though [asked] opens the flow of the guard over
+  /// [start] for the same link when no gate is in its way.
   WhenChanged<L>? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {

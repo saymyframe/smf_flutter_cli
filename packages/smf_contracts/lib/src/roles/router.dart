@@ -386,14 +386,19 @@ final class RouterRole extends Role<RoutesData> {
   ///   it forgets nothing then.
   /// - With no page that a gate keeps the user from, `changed` answers
   ///   `ShowInstead` of the location that it remembers, once no gate keeps
-  ///   the user from that location, and forgets it. If a guard that stands
-  ///   for a condition still keeps the user from it, the answer is `/`
-  ///   instead: the class cannot keep a request waiting, so a location
-  ///   that asks for a condition and was asked for behind a gate is lost
-  ///   when the gate allows before the condition holds. Two guards with
-  ///   one flow, as the gate and the guard of an account of a sign-in,
-  ///   therefore read one notifier, so that the class never sees the gate
-  ///   allow while the condition does not hold yet.
+  ///   the user from that location, and forgets it.
+  /// - A known limit: if a guard that stands for a condition still keeps
+  ///   the user from the remembered location then, the answer is
+  ///   `ShowInstead` of `/`, and the location is lost. The class answers
+  ///   `ShowOver` only when it is asked, and it keeps no request waiting.
+  ///   So a link to a route that asks for a condition, which opens the app
+  ///   behind a gate, as on a first launch with an onboarding, leaves the
+  ///   user on the screen that the app starts on once the gate allows,
+  ///   while the same link opens the flow over that screen when no gate is
+  ///   in its way. For the same reason two guards with one flow, as the
+  ///   gate and the guard of an account of a sign-in, read one notifier:
+  ///   the class then never finds that the gate allows while the condition
+  ///   does not hold yet.
   /// - The class also forgets the location that it remembers when the user
   ///   moves on: when `asked` answers for a location that no gate keeps
   ///   the user from and that is outside every flow, or in a flow that is
