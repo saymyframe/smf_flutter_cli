@@ -10,15 +10,18 @@
 // each leads back. A sign-up and a sign-in show the screen that the app
 // starts on, the next launch has the account, and a sign-out shows the
 // sign-in again. For a user with an account, a link to a route of the
-// sign-in shows the screen that the app starts on.
+// sign-in shows the screen that the app starts on. The next user after a
+// sign-out starts on that screen too, wherever the last one was. And when
+// code of the app signs the user out in the turn of the sign-in, before the
+// router took the screen away, the form is back and takes the next sign-in.
 //
 // An app that everyone may use shows the screen that it starts on, and the
 // sign-in once code asks for it, over that screen, with a button that leads
 // back. A sign-up closes the sign-in, and the user is back on the screen
 // below. In an app that signs an anonymous user in, that user keeps the id
 // with the account. A sign-out leaves the app open. After a sign-in over a
-// screen, the user is on that same page, with the pages that were below
-// it: the router closed the sign-in, and its screen closed nothing.
+// screen, the user is on that same page, and no page of the sign-in is
+// left.
 //
 // The screens only change the session of the app: the router of the app,
 // whichever module provides it, shows them and leaves them, as the router
@@ -26,6 +29,8 @@
 // to this file, with the screen that the app starts on. The test starts the
 // app once, since the start-up of an app may not run twice, and each
 // expectation gives its reason.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
@@ -232,6 +237,84 @@ Future<void> _asksForAccount(WidgetTester tester) async {
   await followLinksToSignIn(tester);
   _expectApp('After a link to each route of the sign-in, for a user with an '
       'account');
+
+  // The next user after a sign-out starts on the screen that the app
+  // starts on, not on the page that the last one was on.
+  for (final (:location, :screen) in otherPages) {
+    navigatorOf(tester).go(location);
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(screen),
+      findsOneWidget,
+      reason: 'The user goes to another page of the app: ${location.path}.',
+    );
+    await _signOut(tester);
+    _expectSignInAlone('After a sign-out on another page of the app');
+    await fill(tester, email: _email, password: _password);
+    await tapInRealTime(
+      tester,
+      submitButton,
+      until: () => appSession.hasAccount.value,
+    );
+    _expectApp('For the next user after a sign-out');
+    expect(
+      find.byType(screen),
+      findsNothing,
+      reason: 'The next user after a sign-out does not come to the page '
+          'that the last one was on, ${location.path}.',
+    );
+  }
+
+  // Code of the app signs the user out as soon as the session has the
+  // account, as an app that lets only some accounts in does: the router has
+  // not taken the screen of the sign-in away, and its form is back.
+  await _signOut(tester);
+  var turnedAway = false;
+  void turnAway() {
+    if (!appSession.hasAccount.value) return;
+    appSession.removeListener(turnAway);
+    unawaited(appSession.signOut().whenComplete(() => turnedAway = true));
+  }
+
+  appSession.addListener(turnAway);
+  addTearDown(() => appSession.removeListener(turnAway));
+  await fill(tester, email: _email, password: _password);
+  await tapInRealTime(
+    tester,
+    submitButton,
+    until: () => turnedAway,
+    settle: false,
+  );
+  for (var frame = 0; frame < 20; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  expect(
+    (turnedAway, sessionNow(), signInScreen.evaluate().length),
+    (true, 'nobody', 1),
+    reason: 'A user whom code of the app signs out in the turn of the '
+        'sign-in is on the sign-in.',
+  );
+  expect(
+    submitSpins(),
+    isFalse,
+    reason: 'Once the user is signed out again, the button of the sign-in '
+        'spins no more, also when the router has not taken the screen away '
+        'in between: the form is back.',
+  );
+  await tester.pumpAndSettle();
+  await fill(tester, email: _email, password: _password);
+  await tapInRealTime(
+    tester,
+    submitButton,
+    until: () => appSession.hasAccount.value,
+  );
+  expect(
+    sessionNow(),
+    'the account of $_email',
+    reason: 'The form of a user who was signed out in the turn of the '
+        'sign-in takes the next sign-in.',
+  );
+  _expectApp('Once that user has signed in');
 }
 
 /// Everyone may use the app: the sign-in comes when code asks for it.
@@ -351,8 +434,7 @@ Future<void> _opensForEveryone(WidgetTester tester) async {
     (true, couldPop),
     reason: 'Once the user has signed in, the router has closed the page of '
         'the sign-in, and the user is on the page that it was opened over, '
-        'with the pages that were below it: the screen of the sign-in '
-        'closes nothing itself, which would close that page.',
+        'with the pages that were below it.',
   );
 }
 

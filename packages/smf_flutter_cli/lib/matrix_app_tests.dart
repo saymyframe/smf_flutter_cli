@@ -1495,9 +1495,12 @@ Future<void> chooseLanguage(String? language) =>
 
 /// The path in an app of what the matrix writes for the tests of the
 /// sign-in module: `startScreen`, the type of the screen that the app
-/// starts on, which the app shows once its user may see it, and
-/// `signInTexts`, the texts of the module ([SignInModule.texts]), each by
-/// its name, in each language of the app, by the code of the language. The
+/// starts on, which the app shows once its user may see it; `otherPages`,
+/// a location of the app that is neither the one that the app starts on nor
+/// in the flow of a guard, with the type of its screen, or nothing in an
+/// app without such a route; and `signInTexts`, the texts of the module
+/// ([SignInModule.texts]), each by its name, in each language of the app,
+/// by the code of the language. The
 /// languages are those of the localization role of the app
 /// ([LocalizationRole.localesIn]), in its order, and English alone in an
 /// app without the role, whose screens have the English texts.
@@ -1515,18 +1518,52 @@ const signInOfAppFile = 'test/sign_in/of_app.dart';
 Map<String, String> _signInOfAppOf(MatrixApp app, String packageName) {
   final (import, screen) = _startScreenClassOf(app);
   final texts = _textsByLanguageOf(app, SignInModule.texts);
+  // A page that a user may be on other than the one that the app starts
+  // on: a route that needs no values, in no flow of a guard, that asks for
+  // no condition.
+  final input = routerRole.hookInput(app.hook!);
+  final facade = routerRole.facadeOf(input);
+  final start = routerRole.startIn(input);
+  final inFlows = {
+    for (final guard in facade.guards)
+      for (final route in guard.flow) route.fullName,
+  };
+  final other = [
+    for (final route in facade.routes)
+      if (!route.hasRequiredParams &&
+          route.fullName != start?.fullName &&
+          !inFlows.contains(route.fullName) &&
+          route.route.conditions.isEmpty)
+        route,
+  ].firstOrNull;
+  final otherScreen = other?.route.screen;
+  final otherPage = other == null
+      ? ''
+      : '  (location: ${other.locationClass}(), '
+          'screen: other.${otherScreen!.className}),\n';
+  final otherImport = otherScreen == null
+      ? ''
+      : "import '${otherScreen.import.resolveUri(packageName)}' "
+          'as other;\n';
   return {
     signInOfAppFile: '''
 // What the tests of the sign-in module, in test/sign_in, need to know of
 // the app, which the matrix of SMF writes from the data of the router role
 // of the app, from the texts of the module and from the languages of the
 // localization role of the app.
-import '${import.resolveUri(packageName)}' as screen;
+import '${_navigationOf(packageName)}';
+${otherImport}import '${import.resolveUri(packageName)}' as screen;
 
 /// The type of the screen that the app starts on: that of the route that
 /// the router role chose, or the fallback start screen of the app entry
 /// role in an app that no route can start.
 const Type startScreen = screen.$screen;
+
+/// A location of the app that is neither the one that the app starts on
+/// nor in the flow of a guard, with the type of its screen, for a user who
+/// is somewhere else in the app; empty in an app without such a route.
+const List<({AppLocation location, Type screen})> otherPages = [
+$otherPage];
 
 /// The texts of the screens of sign-in by the code of each language of the
 /// app, the first of which the app uses when the device asks for none of

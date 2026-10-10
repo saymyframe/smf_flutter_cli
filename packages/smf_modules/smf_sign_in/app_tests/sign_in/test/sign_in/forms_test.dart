@@ -8,8 +8,9 @@
 // A form tells of an email address and a password that are missing, and of
 // an address that is none, without a call. A call gets the address without
 // the spaces around it. While it is on its way, the button of the form
-// spins, and neither the form nor the other action of the screen takes
-// input, so a second tap makes no second call. A call that fails leaves
+// spins, and neither the form nor an action of the screen takes input, a
+// tap or the keyboard, so a second tap makes no second call. A field that
+// has the focus keeps it, and takes typing again once the call has failed. A call that fails leaves
 // the form as it was, with the text of the app for the reason of the
 // failure, in each language of the app, and with what the provider says to
 // the developer of the app, which a debug build shows. The screen that
@@ -65,13 +66,13 @@ Future<void> _submit(WidgetTester tester) async {
 
 /// Whether the button of the form that the user sees shows that a call is
 /// on its way.
-bool _spins(WidgetTester tester) => find
-    .descendant(
-      of: submitButton,
-      matching: find.byType(CircularProgressIndicator),
-    )
-    .evaluate()
-    .isNotEmpty;
+bool _spins(WidgetTester tester) => submitSpins();
+
+/// The field of the email address of the form that the user sees, as the
+/// keyboard has it.
+EditableText _emailInput(WidgetTester tester) => tester.widget<EditableText>(
+      find.descendant(of: emailField, matching: find.byType(EditableText)),
+    );
 
 /// Checks the form that the user sees, which [screen] names, with a call
 /// that [service] holds back: it shows that the call is on its way and
@@ -86,7 +87,22 @@ Future<void> _expectBusyUntilTheCallEnds(
   service.failure = const AuthFailure(AuthFailureReason.network);
   final calls = service.calls.length;
   final typed = _typed(tester);
+  // The field of the address has the focus, as for a user who submits
+  // with the keyboard open.
+  await tester.showKeyboard(emailField);
+  await tester.pump();
   await _submit(tester);
+  expect(
+    (
+      _emailInput(tester).focusNode.hasFocus,
+      _emailInput(tester).readOnly,
+      tester.testTextInput.hasAnyClients,
+    ),
+    (true, true, false),
+    reason: 'While a call of $screen is on its way, a field that has the '
+        'focus keeps it and takes no typing: the keyboard has no field to '
+        'type into.',
+  );
 
   expect(
     (service.calls.length - calls, _spins(tester)),
@@ -107,6 +123,15 @@ Future<void> _expectBusyUntilTheCallEnds(
     reason: 'While a call of $screen is on its way, its form takes no '
         'input.',
   );
+  final forgot = find.widgetWithText(TextButton, texts['forgotPassword']!);
+  if (forgot.evaluate().isNotEmpty) {
+    expect(
+      tester.widget<TextButton>(forgot).onPressed,
+      isNull,
+      reason: 'While a call of $screen is on its way, the action at the '
+          'field of the password takes neither a tap nor a key.',
+    );
+  }
   if (otherScreenAction.evaluate().isNotEmpty) {
     expect(
       tester
@@ -133,6 +158,16 @@ Future<void> _expectBusyUntilTheCallEnds(
   hold.complete();
   service.hold = null;
   await tester.pumpAndSettle();
+  expect(
+    (
+      _emailInput(tester).focusNode.hasFocus,
+      _emailInput(tester).readOnly,
+      tester.testTextInput.hasAnyClients,
+    ),
+    (true, false, true),
+    reason: 'Once a call of $screen has failed, the field that had the '
+        'focus still has it and takes typing again.',
+  );
   expect(
     service.calls.length - calls,
     1,
@@ -292,6 +327,16 @@ void main() {
         );
       }
       await useLanguage(tester, languages.first);
+      // The state of a screen outlives a rebuild of the screen: the last
+      // failure is still shown.
+      tester.element(signInScreen).markNeedsBuild();
+      await tester.pump();
+      expect(
+        failureMessage(AuthFailureReason.values.last),
+        findsOneWidget,
+        reason: 'A screen of the sign-in keeps its state when it is built '
+            'again: it creates what holds the state once.',
+      );
       await _expectBusyUntilTheCallEnds(tester, service, 'the sign-in');
 
       // The screen that creates an account.

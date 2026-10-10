@@ -1997,6 +1997,7 @@ void main() {
     );
 
     final screens = <String, String>{};
+    final others = <String, String>{};
     final languages = <String, List<String>>{};
     for (final app in applies) {
       final files = test.generatedFiles!(app, 'my_app');
@@ -2007,14 +2008,28 @@ void main() {
       expect(errors, isEmpty, reason: app.name);
       expect(
         index.declarations.map((declaration) => declaration.name),
-        ['startScreen', 'signInTexts'],
+        ['startScreen', 'otherPages', 'signInTexts'],
         reason: app.name,
       );
-      final import = index.imports.single;
-      expect(import.prefix, 'screen', reason: app.name);
+      final import =
+          index.imports.singleWhere((import) => import.prefix == 'screen');
       screens[app.name] = '${import.uri}: '
           '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
+      others[app.name] =
+          RegExp(r'\(location: (\w+)\(\), screen: other\.(\w+)\)')
+              .allMatches(text)
+              .map((match) => '${match[1]} ${match[2]}')
+              .join(', ');
     }
+    // Another page of the app for a user to be on: the settings screen in
+    // the apps with every module, whose other routes are the screen that
+    // the app starts on and those in the flows of the guards, and none in
+    // an app of the module alone.
+    expect(others, {
+      for (final name in _signIn) name: '',
+      for (final name in _everyModule)
+        name: 'SettingsSettingsLocation SettingsScreen',
+    });
     expect(screens, {
       // No route can start the app, since those of the sign-in cannot.
       for (final name in _signIn)

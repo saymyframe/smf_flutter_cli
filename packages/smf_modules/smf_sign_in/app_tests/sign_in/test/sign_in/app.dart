@@ -211,12 +211,14 @@ Future<void> fill(
 /// Taps [target], which starts a call of the module that provides the
 /// sign-in, in real time, and waits there until [holds], for three seconds
 /// at most, with a frame after each wait: the platform side of that module
-/// may answer in real time. Then the screen settles. A test expects what
+/// may answer in real time. Then the screen settles, unless [settle] is
+/// `false`, for a screen whose button may still spin. A test expects what
 /// [holds] says, with its reason.
 Future<void> tapInRealTime(
   WidgetTester tester,
   Finder target, {
   required bool Function() until,
+  bool settle = true,
 }) async {
   await inRealTime(tester, 'a tap that starts a call of sign-in', () async {
     await tester.tap(target);
@@ -225,8 +227,18 @@ Future<void> tapInRealTime(
       await tester.pump();
     }
   });
-  await tester.pumpAndSettle();
+  if (settle) await tester.pumpAndSettle();
 }
+
+/// Whether the button that submits the form that the user sees shows that a
+/// call is on its way.
+bool submitSpins() => find
+    .descendant(
+      of: submitButton,
+      matching: find.byType(CircularProgressIndicator),
+    )
+    .evaluate()
+    .isNotEmpty;
 
 /// Who the session of the app says uses it, as a test compares it.
 String sessionNow() => switch (appSession.value) {

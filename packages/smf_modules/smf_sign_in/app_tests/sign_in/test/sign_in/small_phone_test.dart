@@ -6,8 +6,10 @@
 //
 // Nothing overflows there. Each page scrolls to its fields and its buttons,
 // which keep to the screen and out of the insets. The message of a failure
-// wraps what the provider says to the developer of the app, a long line
-// with an address, so it pushes no button off the screen, and that text
+// leaves the page room above the keyboard, so that a field and the button
+// that submits can be scrolled above it. The message of a failure wraps
+// what the provider says to the developer of the app, a long line with an
+// address, so it pushes no button off the screen, and that text
 // and the title of a page grow only by half, while the symbol in the cell
 // of a page keeps its size, since the cell is a picture. A screen reader
 // announces the title of a page as a header, each field with its label,
@@ -217,6 +219,36 @@ void main() {
       );
       await fill(tester, email: _email, password: _password);
       await _tap(tester, submitButton);
+
+      // The keyboard of the device, of about half the height of the small
+      // phone: the page scrolls a field and the button that submits above
+      // it.
+      const keyboard = 260.0;
+      tester.view.viewInsets = const FakeViewPadding(bottom: keyboard);
+      await tester.pumpAndSettle();
+      for (final (target, what) in [
+        (passwordField, 'the field of the password'),
+        (submitButton, 'the button that submits'),
+      ]) {
+        final element = tester.element(target);
+        await Scrollable.ensureVisible(element);
+        await tester.pumpAndSettle();
+        final top = tester.getRect(target).top;
+        await Scrollable.ensureVisible(element, alignment: 1);
+        await tester.pumpAndSettle();
+        expect(
+          (
+            top >= _inset,
+            tester.getRect(target).bottom <= _phone.height - keyboard
+          ),
+          (true, true),
+          reason: 'With the keyboard open on the small phone, the page '
+              'scrolls $what above it: the page ends where the keyboard '
+              'begins.',
+        );
+      }
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pumpAndSettle();
 
       for (final language in languages) {
         await useLanguage(tester, language);
