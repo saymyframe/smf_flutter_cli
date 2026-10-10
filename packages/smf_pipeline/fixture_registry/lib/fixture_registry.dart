@@ -26,6 +26,7 @@ import 'package:fake_state/fake_state.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
+import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -144,11 +145,14 @@ List<ModuleId> everyFixture({
 /// after the entry of the theme mode; the onboarding module of the CLI,
 /// for the app test that it keeps, whose guard of the routes keeps the user
 /// from every other screen of the app until the mocks of that test open it
-/// for the tests of the other modules; and the home module of the CLI, for
+/// for the tests of the other modules; the home module of the CLI, for
 /// the app test that it keeps for its screen. It comes after the fixture
 /// feature, on whose screen the app starts, so that test goes to its screen
 /// through the navigation of the router role, and reads its texts from the
-/// fixture texts.
+/// fixture texts; and Firebase Authentication, the provider of the auth
+/// role that the CLI has, for the app test that it keeps and for the test
+/// of that role that the CLI keeps, which run there next to the other
+/// Firebase modules and with the fixture texts as the languages of the app.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their
@@ -176,4 +180,5 @@ List<SmfModule> severalProvidersModules() => const [
       FakeL10nModule(),
       OnboardingModule(),
       HomeModule(),
+      FirebaseAuthModule(),
     ];
