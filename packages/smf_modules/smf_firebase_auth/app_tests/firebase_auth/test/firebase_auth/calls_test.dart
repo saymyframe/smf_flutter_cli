@@ -7,7 +7,7 @@
 // user as its current one until the platform tells it of the sign-out. A
 // password reset asks for the message in the language that the app is in,
 // and for none in an app without languages of its own. And the service
-// tells of a sign-out that Firebase makes by itself.
+// tells of a sign-out that Firebase makes without a call of the app.
 //
 // It uses the service of the module and runs none of the start-up of the
 // app but the start of Firebase (service.dart). The matrix sets up the
@@ -175,8 +175,8 @@ void main() {
   });
 
   test(
-      'the service tells of a sign-out that Firebase makes by itself, and '
-      'has nobody then', () async {
+      'the service tells of a sign-out that Firebase makes without a call '
+      'of the app, and has nobody then', () async {
     final email = addressOf('signed-out-by-firebase');
     final heard = <String>[];
     final subscription = service.userChanges.listen(
@@ -206,7 +206,7 @@ void main() {
         'nobody',
       ],
       reason: 'The service follows the user of Firebase Authentication: '
-          'when the Firebase SDK signs the user out by itself, the service '
+          'when the Firebase SDK signs the user out on its own, the service '
           'has nobody, and tells its listeners so, once.',
     );
   });

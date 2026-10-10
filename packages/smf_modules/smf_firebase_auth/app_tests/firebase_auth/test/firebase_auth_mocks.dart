@@ -144,8 +144,8 @@ final class MockFirebaseAuth {
   }
 
   /// Signs the user out on the platform side and tells the plugin, as the
-  /// Firebase SDK does by itself, such as when it finds that the session of
-  /// the user has ended on the server.
+  /// Firebase SDK does without a call of the app, such as when it finds
+  /// that the session of the user has ended on the server.
   void signOutOnPlatform() {
     _current = null;
     for (final stream in _streams.values) {

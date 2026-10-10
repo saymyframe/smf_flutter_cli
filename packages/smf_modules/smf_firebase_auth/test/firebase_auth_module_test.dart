@@ -604,14 +604,26 @@ void main() {
         expect(app.files[path]!.owner, file.owner, reason: path);
         if (app.files[path]!.text != file.text) changed.add(path);
       }
+      // The provider of the app entry renders the start-up, which now
+      // starts the session, into a file of its own, whichever module it is.
+      final startUp = [
+        for (final path in changed)
+          if (app.files[path]!.addedImports.any(
+            (added) => added.contributor == const RoleTemplateOrigin(authRole),
+          ))
+            path,
+      ];
+      expect(startUp, hasLength(1));
       expect(
-        changed,
-        unorderedEquals([
-          'pubspec.yaml',
-          AppEntryRole.readmeFile,
-          AppEntryRole.agentsFile,
-          AppEntryRole.bootstrapFile,
-        ]),
+        {
+          for (final module in result.resolution!.providersOf(appEntryRole))
+            ModuleOrigin(module.id),
+        },
+        contains(app.files[startUp.single]!.owner),
+      );
+      expect(
+        changed.toSet().difference(startUp.toSet()),
+        {'pubspec.yaml', AppEntryRole.readmeFile, AppEntryRole.agentsFile},
       );
       expect(
         _yamlOf(app.files['pubspec.yaml']!.text)['dependencies'],

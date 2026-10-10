@@ -151,7 +151,7 @@ Locale basicLocaleListResolution(
 /// each call that reached it, with its arguments; `userChangesListeners`,
 /// how many of its streams of the user have a listener; and
 /// `platformSignsOut()` and `platformFails()`, what the platform tells of
-/// by itself.
+/// without a call.
 const _firebaseAuth = r'''
 import 'dart:async';
 
@@ -166,7 +166,7 @@ int userChangesListeners = 0;
 
 final StreamController<User?> _platform = StreamController.broadcast();
 
-/// The platform signs the user out by itself, and tells of it.
+/// The platform signs the user out without a call, and tells of it.
 void platformSignsOut() {
   FirebaseAuth.instance._current = null;
   _platform.add(null);
