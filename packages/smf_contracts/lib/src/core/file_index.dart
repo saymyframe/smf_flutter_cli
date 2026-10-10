@@ -55,7 +55,7 @@ final class DartFileIndex {
   /// The class of a constructor that the file calls is an invocation, and
   /// is not among them, and neither is a name in a comment or in an
   /// annotation. So code that tells a value by its type, as in
-  /// `case Close(:final pages)`, names the type here and nowhere else.
+  /// `case ClosePages(:final pages)`, names the type here and nowhere else.
   final List<IndexedTypeName> typeNames;
 
   /// Whether the file imports [uri].
@@ -413,8 +413,9 @@ final class IndexedMemberAccess {
   final int offset;
 }
 
-/// A type that an indexed file names, such as `Close` in the pattern
-/// `Close(:final pages)` or `router.Close` in `answer is router.Close<L>`.
+/// A type that an indexed file names, such as `ClosePages` in the pattern
+/// `ClosePages(:final pages)`, or `router.ClosePages` in the type test
+/// `answer is router.ClosePages<L>`.
 final class IndexedTypeName {
   /// Creates the index of the type [name].
   const IndexedTypeName(

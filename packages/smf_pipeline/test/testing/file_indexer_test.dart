@@ -598,12 +598,12 @@ final class Reader extends Base<Item> implements other.Marker {
   final Answer<String>? last;
 
   String read(Object? answer, List<other.Item> items) {
-    if (answer is Stay) return 'stay';
+    if (answer is ShowNothing) return 'nothing';
     final shown = answer as other.Shown<String>?;
     final made = const Made<Part>();
     final built = other.Built();
     return switch (answer) {
-      Close(:final pages) => 'close',
+      ClosePages(:final pages) => 'close',
       other.ShowOver<String>(flow: Set<String> _) => 'over',
       final Kept kept => 'kept',
       _ => 'none',
@@ -636,14 +636,14 @@ final Map<String, Answer<int>> answers = {};
         'Object in Reader',
         'List in Reader',
         'other.Item in Reader',
-        'Stay in Reader',
+        'ShowNothing in Reader',
         'other.Shown in Reader',
         'String in Reader',
         // The class of `const Made<Part>()` is an invocation, and its type
         // argument is a type that the code names. Without the types
         // resolved, `other.Built()` is the call of a method.
         'Part in Reader',
-        'Close in Reader',
+        'ClosePages in Reader',
         'other.ShowOver in Reader',
         'String in Reader',
         'Set in Reader',
@@ -670,8 +670,10 @@ final Map<String, Answer<int>> answers = {};
       [for (final reference in index.references) reference.name],
       ['answer', 'answer', 'other', 'answer'],
     );
-    final close = index.typeNames.singleWhere((type) => type.name == 'Close');
-    expect(close.offset, source.indexOf('Close(:final pages)'));
+    final close = index.typeNames.singleWhere(
+      (type) => type.name == 'ClosePages',
+    );
+    expect(close.offset, source.indexOf('ClosePages(:final pages)'));
   });
 
   test('parse returns the index and the errors at once', () {

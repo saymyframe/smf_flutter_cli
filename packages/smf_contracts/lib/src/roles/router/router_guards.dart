@@ -233,14 +233,14 @@ const String _changes = RouterRole.guardChanges;
 /// in the app.
 const String _instead = 'ShowInstead';
 const String _onTop = 'ShowOver';
-const String _stay = 'Stay';
-const String _close = 'Close';
+const String _nothing = 'ShowNothing';
+const String _close = 'ClosePages';
 
 /// The classes of the app for what its guards answer its router.
 const _answers = '''
 
 /// What [$_navigation.asked] answers a router that is not to show the
-/// location that it asked about: [$_instead], [$_onTop] or [$_stay].
+/// location that it asked about: [$_instead], [$_onTop] or [$_nothing].
 sealed class WhenAsked<L> {}
 
 /// What [$_navigation.changed] answers a router that is to change its
@@ -281,9 +281,9 @@ final class $_onTop<L> implements WhenAsked<L> {
 /// The router shows nothing and leaves its pages as they are: the flow of
 /// the guard is open already. A `push()` that it asked about completes
 /// with `null`.
-final class $_stay<L> implements WhenAsked<L> {
+final class $_nothing<L> implements WhenAsked<L> {
   /// Creates the answer.
-  const $_stay();
+  const $_nothing();
 }
 
 /// The router closes the [pages] pages on top, at once and whatever its
@@ -367,14 +367,14 @@ final class $_navigation<L> {
   /// - [$_instead] of [start] for a location in a flow that is over (see
   ///   [$_over]).
   /// - for a location that a guard with [RouteGuard.routes] keeps the user
-  ///   from: [$_stay] while a page of the flow of that guard is among
+  ///   from: [$_nothing] while a page of the flow of that guard is among
   ///   [onTopOf], on top or below another page, since the flow is open
   ///   already; and else [$_onTop] of the target of the guard, with its
   ///   flow.
   ///
   /// Nothing is remembered for a guard with routes, so the answer depends
   /// on what the router did about the request before: asked twice about
-  /// one request, the class answers [$_stay] for a flow that the first
+  /// one request, the class answers [$_nothing] for a flow that the first
   /// answer opened.
   ///
   /// What a gate made the class remember is forgotten when no gate keeps
@@ -398,7 +398,7 @@ final class $_navigation<L> {
     if (over || !_inAFlow(route)) _remembered = null;
     if (over) return $_instead(start);
     if (guard == null) return null;
-    if (onTopOf.any(guard.flow.contains)) return const $_stay();
+    if (onTopOf.any(guard.flow.contains)) return const $_nothing();
     return $_onTop(locationOf(guard.redirectTo), flow: guard.flow);
   }
 

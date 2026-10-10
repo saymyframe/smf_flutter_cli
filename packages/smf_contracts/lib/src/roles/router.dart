@@ -212,11 +212,11 @@ final class RouterRole extends Role<RoutesData> {
   /// The name of the class through which the provider asks the guards of an
   /// app with guards, which the role's template generates in
   /// [appRouterFile], as `GuardedNavigation<L>`, with the classes of its
-  /// answers: `ShowInstead`, `ShowOver`, `Stay` and `Close`. The class
-  /// decides what a router does about the guards, and keeps what the gates
-  /// make it remember, so that this is written once: providers that ask it
-  /// alike and do what it answers show the user the same pages at the same
-  /// time.
+  /// answers: `ShowInstead`, `ShowOver`, `ShowNothing` and `ClosePages`. The
+  /// class decides what a router does about the guards, and keeps what the
+  /// gates make it remember, so that this is written once: providers that
+  /// ask it alike and do what it answers show the user the same pages at
+  /// the same time.
   ///
   /// `L` is how the provider knows a location that it can show as `go()`
   /// does, such as the URI of the location. The provider creates one
@@ -238,7 +238,7 @@ final class RouterRole extends Role<RoutesData> {
   ///
   /// The provider asks once for each request. The class remembers nothing
   /// of a request that it answers `ShowOver` for, so a second call for the
-  /// same request finds the flow open and answers `Stay`. A router that
+  /// same request finds the flow open and answers `ShowNothing`. A router that
   /// asks again inside its own navigation, as one whose redirect runs for
   /// each location that it goes to, keeps that second call from the class.
   ///
@@ -257,8 +257,8 @@ final class RouterRole extends Role<RoutesData> {
   ///   stack and then the target over it, and the listeners of
   ///   [screenListeners] hear only of the target. It keeps the request
   ///   waiting, as said below, and a `push()` that waits does not complete.
-  /// - `Stay()`: it shows nothing and leaves its pages as they are. Such a
-  ///   `push()` completes with `null` at once.
+  /// - `ShowNothing()`: it shows nothing and leaves its pages as they are.
+  ///   Such a `push()` completes with `null` at once.
   ///
   /// The target of a gate also takes the stacks of every branch of the
   /// main navigation, so that each branch is back on its destination when
@@ -267,7 +267,7 @@ final class RouterRole extends Role<RoutesData> {
   /// location `/` for a flow that is over hides nothing from the user. The
   /// provider shows it as its `go()` to that location does, and whether the
   /// branches that are not selected keep their pages then is up to the
-  /// provider, as it is for that `go()`. `ShowOver` and `Close` leave the
+  /// provider, as it is for that `go()`. `ShowOver` and `ClosePages` leave the
   /// main navigation and its branches as they are: no route of the main
   /// navigation asks for a condition.
   ///
@@ -280,7 +280,7 @@ final class RouterRole extends Role<RoutesData> {
   /// while a page of a route of the `flow` of the answer is among the
   /// pages that the user can get back to, so it is still there after a
   /// `push()` or a `replace()` inside the flow. It ends in one of two ways:
-  /// - `changed` answers `Close` and no page of the flow is left after the
+  /// - `changed` answers `ClosePages` and no page of the flow is left after the
   ///   provider closed the pages. The provider then makes the request
   ///   again as it was made, on top of the pages that are left, and asks
   ///   the class about it again: `push()` shows the location over the page
@@ -323,16 +323,16 @@ final class RouterRole extends Role<RoutesData> {
   ///   hear of a target that no frame showed is up to the provider, and so
   ///   is whether the `push()` of a page that the answer takes out of the
   ///   stack completes, as it is when `go()` replaces the stack.
-  /// - `Close(n)`: it closes the `n` pages on top, each of which it told of
-  ///   as `pushed`, and leaves the pages below them as they are. The pages
-  ///   leave at once, whatever the navigator shows over them, such as a
-  ///   dialog, and also a page that a `push()` of the same turn showed and
-  ///   that the navigator has not built yet. Each `push()` that showed one
-  ///   of them completes with `null`. The provider then makes the request
-  ///   that waits again, if no page of its flow is left. The listeners of
-  ///   [screenListeners] hear of the page that the user ends on, and not of
-  ///   the page below the closed ones when the request shows another page
-  ///   over it: the user never saw that page come back.
+  /// - `ClosePages(n)`: it closes the `n` pages on top, each of which it
+  ///   told of as `pushed`, and leaves the pages below them as they are.
+  ///   The pages leave at once, whatever the navigator shows over them,
+  ///   such as a dialog, and also a page that a `push()` of the same turn
+  ///   showed and that the navigator has not built yet. Each `push()` that
+  ///   showed one of them completes with `null`. The provider then makes
+  ///   the request that waits again, if no page of its flow is left. The
+  ///   listeners of [screenListeners] hear of the page that the user ends
+  ///   on, and not of the page below the closed ones when the request shows
+  ///   another page over it: the user never saw that page come back.
   ///
   /// What the class answers, and what it remembers:
   /// - While a gate keeps the user from a location, `asked` answers
@@ -350,7 +350,7 @@ final class RouterRole extends Role<RoutesData> {
   ///   one does not allow.
   /// - For a route that asks for a condition that does not hold, `asked`
   ///   answers `ShowOver` of the target of the guard that stands for it,
-  ///   and `Stay` while a page of the flow of that guard is among
+  ///   and `ShowNothing` while a page of the flow of that guard is among
   ///   `onTopOf`. The page may be on top or below another page, such as a
   ///   page outside the flow that was pushed from the target. So the flow
   ///   never opens over itself: a further request while it is open does
@@ -403,7 +403,7 @@ final class RouterRole extends Role<RoutesData> {
   ///   guard: once that guard allows, its flow is over.
   /// - Otherwise `changed` looks for the lowest page that has to leave: a
   ///   page in a flow that is over, or a page that a guard that stands for
-  ///   a condition keeps the user from. It answers `Close` of that page
+  ///   a condition keeps the user from. It answers `ClosePages` of that page
   ///   and the pages over it when the provider can close each of them and
   ///   a page stays below. So once a condition holds, the pages of its
   ///   flow close, with a page outside the flow that was pushed from them,
@@ -627,7 +627,7 @@ final class RouterRole extends Role<RoutesData> {
           id: 'router.guards_asked',
           description: 'In an app with guards, the files of the provider of '
               'the role create a GuardedNavigation, read guardChanges, and '
-              'name its answers ShowOver and Close.',
+              'name its answers ShowOver and ClosePages.',
           check: _checkGuardsAsked,
         ),
         StructuralRule(

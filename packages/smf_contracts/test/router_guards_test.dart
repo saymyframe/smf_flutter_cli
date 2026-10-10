@@ -1780,7 +1780,7 @@ two guards with one target, in the other order
         routerRole.structuralRules[3].description,
         'In an app with guards, the files of the provider of the role create '
         'a GuardedNavigation, read guardChanges, and name its answers '
-        'ShowOver and Close.',
+        'ShowOver and ClosePages.',
       );
     });
 
@@ -1958,7 +1958,7 @@ two guards with one target, in the other order
                 references: [IndexedReference('guardChanges')],
                 typeNames: [
                   IndexedTypeName('ShowOver'),
-                  IndexedTypeName('Close'),
+                  IndexedTypeName('ClosePages'),
                 ],
               ),
             },
@@ -2004,7 +2004,7 @@ two guards with one target, in the other order
     DartFileIndex asking() => factory(
           calls: ['GuardedNavigation'],
           reads: ['guardChanges'],
-          types: ['ShowOver', 'Close'],
+          types: ['ShowOver', 'ClosePages'],
         );
 
     String problem(String what) =>
@@ -2018,13 +2018,13 @@ two guards with one target, in the other order
 
     test(
         'accepts a provider whose files create a GuardedNavigation, read '
-        'guardChanges, and name the answers ShowOver and Close', () {
+        'guardChanges, and name the answers ShowOver and ClosePages', () {
       expect(check([asking()]), isEmpty);
       // In two of its files, one of which imports the file of the role
       // with a prefix.
       expect(
         check([
-          factory(calls: ['GuardedNavigation'], types: ['Close']),
+          factory(calls: ['GuardedNavigation'], types: ['ClosePages']),
           const DartFileIndex(
             path: delegatePath,
             imports: [
@@ -2050,7 +2050,7 @@ two guards with one target, in the other order
 
     test('reports a provider that does not ask the guards', () {
       final issues = check([
-        factory(types: ['ShowOver', 'Close']),
+        factory(types: ['ShowOver', 'ClosePages']),
       ]);
 
       expect(
@@ -2074,7 +2074,10 @@ two guards with one target, in the other order
       expect(
         [
           for (final issue in check([
-            factory(calls: ['GuardedNavigation'], types: ['ShowOver', 'Close']),
+            factory(
+              calls: ['GuardedNavigation'],
+              types: ['ShowOver', 'ClosePages'],
+            ),
           ]))
             issue.message,
         ],
@@ -2083,7 +2086,7 @@ two guards with one target, in the other order
       expect(
         [
           for (final issue in check([
-            factory(reads: ['guardChanges'], types: ['ShowOver', 'Close']),
+            factory(reads: ['guardChanges'], types: ['ShowOver', 'ClosePages']),
           ]))
             issue.message,
         ],
@@ -2096,7 +2099,7 @@ two guards with one target, in the other order
           factory(
             calls: ['redirectOf'],
             reads: ['guardChanges'],
-            types: ['ShowOver', 'Close'],
+            types: ['ShowOver', 'ClosePages'],
           ),
         ]),
         hasLength(1),
@@ -2114,13 +2117,13 @@ two guards with one target, in the other order
           reads: ['guardChanges'],
           // The other answers, and a type that it only declares a field
           // with.
-          types: ['ShowInstead', 'Stay', 'GuardedNavigation'],
+          types: ['ShowInstead', 'ShowNothing', 'GuardedNavigation'],
         ),
       ]);
 
       expect(
         [for (final issue in issues) issue.message],
-        [unanswered('ShowOver'), unanswered('Close')],
+        [unanswered('ShowOver'), unanswered('ClosePages')],
       );
       for (final issue in issues) {
         expect(issue.origin, provider);
@@ -2130,7 +2133,7 @@ two guards with one target, in the other order
           issue.hint,
           'A router opens the target of a guard with routes over the page '
           'on top for the answer ShowOver, and closes the pages on top for '
-          'the answer Close; see RouterRole.guardedNavigation.',
+          'the answer ClosePages; see RouterRole.guardedNavigation.',
         );
       }
       expect(
@@ -2144,7 +2147,7 @@ two guards with one target, in the other order
           ]))
             issue.message,
         ],
-        [unanswered('Close')],
+        [unanswered('ClosePages')],
       );
       // A call of a function of that name is no answer of the guards that
       // the provider tells apart.
@@ -2152,9 +2155,9 @@ two guards with one target, in the other order
         [
           for (final issue in check([
             factory(
-              calls: ['GuardedNavigation', 'ShowOver', 'Close'],
-              reads: ['guardChanges', 'ShowOver', 'Close'],
-              types: ['Close'],
+              calls: ['GuardedNavigation', 'ShowOver', 'ClosePages'],
+              reads: ['guardChanges', 'ShowOver', 'ClosePages'],
+              types: ['ClosePages'],
             ),
           ]))
             issue.message,
@@ -2183,7 +2186,7 @@ two guards with one target, in the other order
             typeNames: [
               // Of other.dart too, and after a prefix that no import has.
               IndexedTypeName('ShowOver'),
-              IndexedTypeName('Close', prefix: 'other'),
+              IndexedTypeName('ClosePages', prefix: 'other'),
             ],
           ),
         ]),
@@ -2196,7 +2199,10 @@ two guards with one target, in the other order
           asking(),
           const DartFileIndex(
             path: delegatePath,
-            typeNames: [IndexedTypeName('ShowOver'), IndexedTypeName('Close')],
+            typeNames: [
+              IndexedTypeName('ShowOver'),
+              IndexedTypeName('ClosePages'),
+            ],
           ),
         ]),
         isEmpty,
@@ -2207,7 +2213,10 @@ two guards with one target, in the other order
           const DartFileIndex(
             path: delegatePath,
             imports: [IndexedImport('package:my_app/core/other.dart')],
-            typeNames: [IndexedTypeName('ShowOver'), IndexedTypeName('Close')],
+            typeNames: [
+              IndexedTypeName('ShowOver'),
+              IndexedTypeName('ClosePages'),
+            ],
           ),
         ]),
         hasLength(2),

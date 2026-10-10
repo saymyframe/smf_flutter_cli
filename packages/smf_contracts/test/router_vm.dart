@@ -102,7 +102,7 @@ String whenAsked(WhenAsked<String>? answer) => switch (answer) {
       ShowInstead(:final location) => location,
       ShowOver(:final location, :final flow) =>
         '$location over the page, while ${flow.join(', ')}',
-      Stay() => 'nothing',
+      ShowNothing() => 'nothing',
     };
 
 /// What `changed` answered: `stays` for none, the location that the router
@@ -110,7 +110,7 @@ String whenAsked(WhenAsked<String>? answer) => switch (answer) {
 String whenChanged(WhenChanged<String>? answer) => switch (answer) {
       null => 'stays',
       ShowInstead(:final location) => location,
-      Close(:final pages) => 'closes $pages',
+      ClosePages(:final pages) => 'closes $pages',
     };
 
 /// The pages of a stack for `changed`, the one on top first: each of
