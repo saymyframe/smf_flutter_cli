@@ -1377,6 +1377,52 @@ void main() {
     });
 
     test(
+        'has one filled action and one text action on the sign-in and on '
+        'the sign-up, the text action leading to the other screen and '
+        'waiting while the form submits', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+      final signIn = _parsed(app, _views[0]);
+      final signUp = _parsed(app, _views[1]);
+
+      for (final view in [signIn, signUp]) {
+        // The button that submits is the one filled button of the screen.
+        expect(_callsOf(view, 'SubmitButton'), hasLength(1));
+        expect(_callsOf(view, 'FilledButton'), isEmpty);
+        expect(_callsOf(view, 'OutlinedButton'), isEmpty);
+      }
+      final [forgot, create] = _callsOf(signIn, 'TextButton');
+      final have = _callsOf(signUp, 'TextButton').single;
+      // What belongs to the password is at the end of its field, inside
+      // the form, and takes no input while the form submits, as the form.
+      expect(forgot['onPressed'], 'widget.onForgotPassword');
+      expect(forgot['child'], contains('TextAlign.end'));
+      // The way to the other screen is the same kind of action on both
+      // screens, in the middle below the button.
+      expect(
+          create['onPressed'], 'widget.busy ? null : widget.onCreateAccount');
+      expect(have['onPressed'], 'widget.busy ? null : widget.onSignIn');
+      for (final action in [create, have]) {
+        expect(action.keys, ['onPressed', 'child']);
+        expect(action['child'], contains('TextAlign.center'));
+      }
+      expect(
+        _textsReadIn(_classOf(signIn, '_SignInViewState')),
+        containsAllInOrder([
+          _getterOf('forgotPassword'),
+          _getterOf('submit'),
+          _getterOf('createAccount'),
+        ]),
+      );
+      expect(
+        _textsReadIn(_classOf(signUp, '_SignUpViewState')),
+        containsAllInOrder([
+          _getterOf('signUpSubmit'),
+          _getterOf('haveAccount'),
+        ]),
+      );
+    });
+
+    test(
         'lets the parts of a page rise in once, and not at all in an app '
         'that asks for less motion', () {
       final app = localized[SignInModule.blocVariant]!.app!;

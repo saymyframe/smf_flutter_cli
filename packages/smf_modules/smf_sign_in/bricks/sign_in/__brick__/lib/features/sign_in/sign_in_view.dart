@@ -95,6 +95,7 @@ class _SignInViewState extends State<SignInView> {
                     autofillHints: const [AutofillHints.password],
                     onSubmitted: _submit,
                   ),
+                  // It belongs to the password: at the end of its field.
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
                     child: TextButton(
@@ -120,8 +121,11 @@ class _SignInViewState extends State<SignInView> {
               busy: widget.busy,
               onPressed: _submit,
             ),
-            const SizedBox(height: 12),
-            FilledButton.tonal(
+            const SizedBox(height: 4),
+            // The way to the other screen, as on the screen that creates an
+            // account: in the middle below the button, apart from what
+            // belongs to the password above it.
+            TextButton(
               onPressed: widget.busy ? null : widget.onCreateAccount,
               child: Text(
                 {{{text_create_account}}},
