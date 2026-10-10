@@ -584,6 +584,96 @@ class A {}
     ]);
   });
 
+  test(
+      'indexes the types that code names, with their prefixes: in patterns, '
+      'type tests and casts, declarations and type arguments, but not the '
+      'class of a constructor that it calls', () {
+    const source = '''
+import 'answers.dart';
+import 'other.dart' as other;
+
+/// Tells [Missing] apart.
+@Annotated(Wrong)
+final class Reader extends Base<Item> implements other.Marker {
+  final Answer<String>? last;
+
+  String read(Object? answer, List<other.Item> items) {
+    if (answer is Stay) return 'stay';
+    final shown = answer as other.Shown<String>?;
+    final made = const Made<Part>();
+    final built = other.Built();
+    return switch (answer) {
+      Close(:final pages) => 'close',
+      other.ShowOver<String>(flow: Set<String> _) => 'over',
+      final Kept kept => 'kept',
+      _ => 'none',
+    };
+  }
+}
+
+Future<void> top(Item item) async {}
+
+final Map<String, Answer<int>> answers = {};
+''';
+    final index = DartFileIndexer.index('lib/a.dart', source);
+
+    expect(
+      [
+        for (final type in index.typeNames)
+          [
+            if (type.prefix case final prefix?) '$prefix.',
+            type.name,
+            if (type.enclosingDeclaration case final within?) ' in $within',
+          ].join(),
+      ],
+      [
+        'Base in Reader',
+        'Item in Reader',
+        'other.Marker in Reader',
+        'Answer in Reader',
+        'String in Reader',
+        'String in Reader',
+        'Object in Reader',
+        'List in Reader',
+        'other.Item in Reader',
+        'Stay in Reader',
+        'other.Shown in Reader',
+        'String in Reader',
+        // The class of `const Made<Part>()` is an invocation, and its type
+        // argument is a type that the code names. Without the types
+        // resolved, `other.Built()` is the call of a method.
+        'Part in Reader',
+        'Close in Reader',
+        'other.ShowOver in Reader',
+        'String in Reader',
+        'Set in Reader',
+        'String in Reader',
+        'Kept in Reader',
+        'Future in top',
+        'void in top',
+        'Item in top',
+        // The type of a top-level variable is in none of its variables.
+        'Map',
+        'String',
+        'Answer',
+        'int',
+      ],
+    );
+    expect(
+      [for (final call in index.invocations) call.name],
+      ['Made', 'Built'],
+    );
+    // A type is no reference, and a name in a comment or an annotation is
+    // no type that the code names. The prefix of `other.Built()` is the
+    // target of that call.
+    expect(
+      [for (final reference in index.references) reference.name],
+      ['answer', 'answer', 'other', 'answer'],
+    );
+    final close = index.typeNames.singleWhere((type) => type.name == 'Close');
+    expect(close.offset, source.indexOf('Close(:final pages)'));
+  });
+
   test('parse returns the index and the errors at once', () {
     final result = DartFileIndexer.parse('lib/b.dart', 'void f( {');
 
