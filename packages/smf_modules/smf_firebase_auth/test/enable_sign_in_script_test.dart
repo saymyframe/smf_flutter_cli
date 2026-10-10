@@ -22,13 +22,15 @@ import 'support/dart_app.dart';
 
 /// The stand-in for the Firebase CLI. It appends to the file that
 /// `STAND_IN_CALLS` names a line of JSON for each call: its arguments, and
-/// for a call other than `--version` the directory it ran in and the files
-/// there, with their texts.
+/// for a call other than `--version` the directory it ran in, the files
+/// there, with their texts, and whether it may check for a newer version,
+/// which the Firebase CLI does unless `NO_UPDATE_NOTIFIER` is set.
 ///
 /// `--version` prints the lines of `STAND_IN_VERSION`, which `|` separates,
 /// or 15.14.0, and what `STAND_IN_VERSION_ERRORS` has on the standard
 /// error, and exits with `STAND_IN_VERSION_CODE`. Any other call prints a
-/// line on each stream and exits with `STAND_IN_DEPLOY_CODE`.
+/// line on each stream and exits with `STAND_IN_DEPLOY_CODE`. With
+/// `STAND_IN_REMOVES_DIRECTORY`, it removes the directory it ran in first.
 const _standIn = r'''
 import 'dart:convert';
 import 'dart:io';
@@ -46,6 +48,7 @@ void main(List<String> arguments) {
           for (final file in directory.listSync().whereType<File>())
             file.uri.pathSegments.last: file.readAsStringSync(),
         },
+        'checksForUpdates': !environment.containsKey('NO_UPDATE_NOTIFIER'),
       },
     })}\n',
     mode: FileMode.append,
@@ -59,6 +62,9 @@ void main(List<String> arguments) {
   }
   stdout.writeln('stand-in: deploying');
   stderr.writeln('stand-in: on the standard error');
+  if (environment.containsKey('STAND_IN_REMOVES_DIRECTORY')) {
+    directory.deleteSync(recursive: true);
+  }
   exitCode = int.parse(environment['STAND_IN_DEPLOY_CODE'] ?? '0');
 }
 ''';
@@ -177,12 +183,13 @@ String _enabling(String project, AuthMode mode) => 'Enabling Email/Password'
     'project $project (the mode of the app is ${mode.name}).';
 
 /// A call of the stand-in for the Firebase CLI: its arguments, and for a
-/// call other than `--version` the directory it ran in and the files
-/// there, by name, with their texts.
+/// call other than `--version` the directory it ran in, the files there,
+/// by name, with their texts, and whether it may check for a newer version.
 typedef _Call = ({
   List<String> arguments,
   String? directory,
   Map<String, String>? files,
+  bool? checksForUpdates,
 });
 
 /// What a run of the script left: its exit code, what it and the Firebase
@@ -202,6 +209,7 @@ _Call _callOf(String line) {
     arguments: (call['arguments']! as List<Object?>).cast<String>(),
     directory: call['directory'] as String?,
     files: (call['files'] as Map<String, Object?>?)?.cast<String, String>(),
+    checksForUpdates: call['checksForUpdates'] as bool?,
   );
 }
 
@@ -407,6 +415,14 @@ void main() {
       );
       expect(deploy.files, {'firebase.json': _emailPassword});
       expect(Directory(deploy.directory!).existsSync(), isFalse);
+      expect(
+        deploy.checksForUpdates,
+        isFalse,
+        reason: 'The Firebase CLI checks for a newer version in a process '
+            'of its own, which goes on after the command. On Windows, the '
+            'directory of a process that runs cannot be removed, so the '
+            'script turns the check off.',
+      );
       // The script says what it enables and where, and then the Firebase
       // CLI has the terminal.
       expect(result.output.split('\n'), [
@@ -779,16 +795,57 @@ void main() {
       expect(
         result.errors,
         'stand-in: on the standard error\n'
-        'The Firebase CLI did not enable the sign-in methods (exit code 2). '
-        'It ran as the default account of "firebase login:list": an account '
-        'that "firebase login:use" chose for the directory of the app does '
-        'not apply in the temporary directory in which this script runs the '
-        'Firebase CLI. For another account, run: $enableSignInCommand '
-        '--account <email>\n'
-        '${_inConsole('smf-app')}\n',
+        'The Firebase CLI did not enable the sign-in methods (exit code 2).\n'
+        '- It ran as the default account of "firebase login:list": an '
+        'account that "firebase login:use" chose for the directory of the '
+        'app does not apply in the temporary directory in which this script '
+        'runs the Firebase CLI. For another account, run: '
+        '$enableSignInCommand --account <email>\n'
+        '- Its log, firebase-debug.log, was in that directory, which this '
+        'script removes. To see what the Firebase CLI did, run: '
+        '$enableSignInCommand --debug\n'
+        '- ${_inConsole('smf-app')}\n',
       );
       expect(File(configOf(app)).readAsStringSync(), _configuredFor('smf-app'));
     });
+
+    test(
+      'tells when it cannot remove its temporary directory, and exits with '
+      'the code of the Firebase CLI all the same',
+      () async {
+        File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
+
+        for (final code in [0, 2]) {
+          // The stand-in removes the directory, so the script fails to.
+          final result = await run(
+            standIn: {
+              'STAND_IN_REMOVES_DIRECTORY': '1',
+              'STAND_IN_DEPLOY_CODE': '$code',
+            },
+          );
+
+          expect(result.code, code);
+          final directory = result.calls.last.directory!;
+          expect(
+            result.errors.split('\n'),
+            contains(
+              allOf(
+                startsWith(
+                  'The temporary directory $directory of this script is '
+                  'left: ',
+                ),
+                endsWith('.'),
+              ),
+            ),
+            reason: 'exit code $code',
+          );
+          File('${machine.path}/calls').deleteSync();
+        }
+      },
+      // On Windows, a process cannot remove the directory that it runs in,
+      // which is why the script may fail to remove it there.
+      testOn: '!windows',
+    );
 
     test(
         'stops on a machine without the Firebase CLI, and tells where to get '
@@ -849,8 +906,14 @@ void main() {
         'to update it, and does not run it', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
 
-      for (final version in ['15.5.1', '14.27.0', '9.23.3']) {
-        final result = await run(standIn: {'STAND_IN_VERSION': version});
+      for (final (printed, version) in [
+        ('15.5.1', '15.5.1'),
+        ('14.27.0', '14.27.0'),
+        ('9.23.3', '9.23.3'),
+        // The last line that is a version is that of the Firebase CLI.
+        ('16.0.0|15.5.1', '15.5.1'),
+      ]) {
+        final result = await run(standIn: {'STAND_IN_VERSION': printed});
 
         expect(result.code, 1, reason: version);
         expect(
@@ -879,9 +942,10 @@ void main() {
         '15.6.1',
         '15.14.0',
         '16.0.0',
-        // With a notice before the version, as of an update, which has the
-        // version that the machine could have.
+        // With notices before the version, which have versions too, and
+        // after a line that is another version.
         _withNotices,
+        '15.5.1|15.6.0',
         '15.6.0-rc.1',
         // Nothing that the script reads as a version: the Firebase CLI
         // tells itself what it cannot do.

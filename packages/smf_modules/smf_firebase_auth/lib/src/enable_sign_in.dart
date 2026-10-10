@@ -30,11 +30,20 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   an `auth` key in `firebase.json` of the app, every later
 ///   `firebase deploy` of the app would deploy the sign-in methods too, and
 ///   ask for the permissions of that. A `.firebaserc` would make
-///   `flutterfire configure` take its project without asking.
+///   `flutterfire configure` take its project without asking. The Firebase
+///   CLI keeps its log, `firebase-debug.log`, in the directory it runs in,
+///   so that is not a file of the app either.
+/// - It runs the Firebase CLI with `NO_UPDATE_NOTIFIER`, without its check
+///   for a newer version: that check runs on as a process of its own in
+///   the same directory (`update-notifier-cjs` of firebase-tools 15.14.0),
+///   and on Windows the directory of a process that runs cannot be
+///   removed. When the script cannot remove the directory, it says so and
+///   exits with the code of the Firebase CLI all the same.
 /// - It passes `--non-interactive`, and then its own arguments as they are.
 ///   The Firebase CLI takes the account that `firebase login:use` chose for
 ///   the directory it runs in, which here is the temporary one, so the
-///   script tells of `--account` when the Firebase CLI fails.
+///   script tells of `--account` when the Firebase CLI fails, and of
+///   `--debug`, since the log is removed with the directory.
 /// - It asks the Firebase CLI for its version first, and stops with what to
 ///   do when the Firebase CLI is missing or older than
 ///   [firstFirebaseCliWithSignIn].

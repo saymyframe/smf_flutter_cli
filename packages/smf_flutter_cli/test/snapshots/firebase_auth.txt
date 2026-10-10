@@ -1863,6 +1863,10 @@ Future<int> _enable(Directory app, List<String> arguments) async {
         ...arguments,
       ],
       workingDirectory: directory.path,
+      // Without its check for a newer version, which runs on as a process
+      // of its own: on Windows, the directory of a process that runs
+      // cannot be removed.
+      environment: const {'NO_UPDATE_NOTIFIER': '1'},
       mode: ProcessStartMode.inheritStdio,
       // On Windows, npm installs the Firebase CLI as `firebase.cmd`.
       runInShell: Platform.isWindows,
@@ -1871,17 +1875,28 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     if (code != 0) {
       stderr.writeln(
         'The Firebase CLI did not enable the sign-in methods (exit code '
-        '$code). It ran as the default account of "firebase login:list": an '
+        '$code).\n'
+        '- It ran as the default account of "firebase login:list": an '
         'account that "firebase login:use" chose for the directory of the '
         'app does not apply in the temporary directory in which this script '
         'runs the Firebase CLI. For another account, run: $_command '
         '--account <email>\n'
-        '${_inConsole(project)}',
+        '- Its log, firebase-debug.log, was in that directory, which this '
+        'script removes. To see what the Firebase CLI did, run: $_command '
+        '--debug\n'
+        '- ${_inConsole(project)}',
       );
     }
     return code;
   } finally {
-    directory.deleteSync(recursive: true);
+    try {
+      directory.deleteSync(recursive: true);
+    } on FileSystemException catch (error) {
+      stderr.writeln(
+        'The temporary directory ${directory.path} of this script is left: '
+        '${error.message}.',
+      );
+    }
   }
 }
 
