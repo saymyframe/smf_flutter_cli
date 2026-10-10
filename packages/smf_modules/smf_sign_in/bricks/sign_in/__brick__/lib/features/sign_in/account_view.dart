@@ -136,12 +136,10 @@ class _DeleteAccountSheet extends StatelessWidget {
               header: true,
               // As the title of a page, it grows only by half with the
               // text size of the device.
-              child: MediaQuery.withClampedTextScaling(
+              child: WholeWords(
+                {{{text_delete_title}}},
+                style: theme.textTheme.headlineSmall,
                 maxScaleFactor: 1.5,
-                child: Text(
-                  {{{text_delete_title}}},
-                  style: theme.textTheme.headlineSmall,
-                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -152,35 +150,23 @@ class _DeleteAccountSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            // The label of each button is one word, which has the width of
-            // the sheet. So at a large text size they grow only by half,
-            // and no word breaks on a narrow phone.
-            MediaQuery.withClampedTextScaling(
-              maxScaleFactor: 1.5,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: colors.error,
-                      foregroundColor: colors.onError,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: Text(
-                      {{{text_delete}}},
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(
-                      {{{text_cancel}}},
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.error,
+                foregroundColor: colors.onError,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: WholeWords(
+                {{{text_delete}}},
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: WholeWords(
+                {{{text_cancel}}},
+                textAlign: TextAlign.center,
               ),
             ),
           ],

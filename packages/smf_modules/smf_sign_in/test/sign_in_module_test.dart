@@ -1686,14 +1686,18 @@ void main() {
     });
 
     test(
-        'gives the title of a page and the label of every button the one '
-        'text that keeps its words whole, the title with half more of its '
-        'size at most and a label with the text size of the device', () {
+        'gives the title of a page, the title of the sheet and the label '
+        'of every button the one text that keeps its words whole, a title '
+        'with half more of its size at most and a label with the text '
+        'size of the device', () {
       final app = localized[SignInModule.blocVariant]!.app!;
 
-      // The title, in the style that the theme has for one.
+      // The titles, in the styles that the theme has for them.
       final page = _parsed(app, _page);
-      final title = _callsOf(page, 'Semantics').single['child']!;
+      expect(
+        _callsOf(page, 'Semantics').single['child'],
+        startsWith('WholeWords('),
+      );
       expect(
         _callsOf(page, 'WholeWords').single,
         {
@@ -1702,27 +1706,59 @@ void main() {
           'maxScaleFactor': '1.5',
         },
       );
-      expect(title, startsWith('WholeWords('));
-      // The label of each button and action: with no style of its own, so
-      // it is as the theme has the label of its button, and it grows as
-      // the text size of the device asks.
-      final labels = <String, List<Map<String, String>>>{};
+      final sheet = _classOf(_parsed(app, _accountView), '_DeleteAccountSheet');
+      expect(
+        _callsOf(sheet, 'Semantics').single['child'],
+        startsWith('WholeWords('),
+      );
+      expect(
+        _callsOf(sheet, 'WholeWords')
+            .where((text) => text.containsKey('style'))
+            .single,
+        {
+          '0': 'context.l10n.${_getterOf('deleteTitle')}',
+          'style': 'theme.textTheme.headlineSmall',
+          'maxScaleFactor': '1.5',
+        },
+      );
+      // The label of each button and action is that text, also below what
+      // spins in its place: with no style of its own, so it is as the
+      // theme has the label of its button, and it grows as the text size
+      // of the device asks.
+      final buttons = <String, List<String>>{};
+      final labels = <Map<String, String>>[];
       for (final path in _look) {
         final unit = _parsed(app, path);
-        final buttons = [
+        final children = [
           for (final button in ['FilledButton', 'TextButton', 'OutlinedButton'])
-            ..._callsOf(unit, button),
+            for (final arguments in _callsOf(unit, button))
+              // Not the style of a button.
+              if (arguments['child'] case final child?) child,
         ];
-        for (final button in buttons) {
-          expect(button['child'], contains('WholeWords('), reason: path);
-        }
-        if (path == _page) continue;
-        final texts = _callsOf(unit, 'WholeWords');
-        if (texts.isNotEmpty) labels[path] = texts;
-        expect(texts, hasLength(buttons.length), reason: path);
+        if (children.isNotEmpty) buttons[path] = children;
+        labels.addAll(
+          _callsOf(unit, 'WholeWords')
+              .where((text) => !text.containsKey('style')),
+        );
       }
-      expect(labels.keys, {_views[0], _views[2], _widgets});
-      for (final label in labels.values.expand((texts) => texts)) {
+      expect(buttons.keys, {_views[0], _views[2], _accountView, _widgets});
+      expect(
+        buttons.values.expand((children) => children),
+        everyElement(
+          anyOf(startsWith('WholeWords('), startsWith('_BusyLabel(')),
+        ),
+      );
+      final busy = _classOf(_parsed(app, _widgets), '_BusyLabel');
+      expect(
+        _callsOf(busy, 'Visibility').single['child'],
+        'WholeWords(label, textAlign: TextAlign.center)',
+      );
+      // The action at the field of the password, the button that leads
+      // back from the sent message, the two buttons of the sheet, the
+      // label below what spins, and the action that leads to the other
+      // screen.
+      expect(labels, hasLength(6));
+      for (final label in labels) {
         expect(label.keys, ['0', 'textAlign']);
       }
       // One piece measures the words, for the titles and the labels.
@@ -1742,6 +1778,21 @@ void main() {
         'textAlign',
         'textScaler',
       ]);
+      // Nothing else of the look sets the text size of a part of a page,
+      // but the picture of a page, which does not grow, and what the
+      // provider says to the developer of the app.
+      expect(
+        {
+          for (final path in _look)
+            for (final scaling in [
+              'withClampedTextScaling',
+              'withNoTextScaling',
+            ])
+              if (_invocationsOf(_parsed(app, path), scaling).isNotEmpty)
+                (path, scaling),
+        },
+        {(_page, 'withNoTextScaling'), (_widgets, 'withClampedTextScaling')},
+      );
     });
 
     test(
