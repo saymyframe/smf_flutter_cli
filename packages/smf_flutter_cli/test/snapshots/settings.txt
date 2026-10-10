@@ -642,13 +642,35 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
+    if (_withoutPage) {
+      go(location);
+      return Future.value();
+    }
     return config.push<T>(location.path);
   }
 
   @override
   void replace(AppLocation location) {
+    if (_withoutPage) return go(location);
     config.pushReplacement<Object?>(location.path);
   }
+
+  /// Whether go_router has no page of a route: before it shows its first
+  /// location, and while it shows its error screen in place of the whole
+  /// stack, as for a location that no route matches.
+  ///
+  /// It has no page to push over then, and none to replace.
+  /// `GoRouter.push` would keep the error screen and never complete, or
+  /// throw for a location in the main navigation, and before the first
+  /// location the app would start on the pushed page alone.
+  /// `GoRouter.pushReplacement` throws for want of a page. So [push] and
+  /// [replace] give go_router their location as [go] does: it shows with
+  /// the pages of its chain, in place of the error screen, and such a push
+  /// completes with `null`. An error screen that a push showed over a page
+  /// is a page of go_router, which pushes over it and replaces it like any
+  /// other.
+  bool get _withoutPage =>
+      config.routerDelegate.currentConfiguration.matches.isEmpty;
 
   /// Follows the pages of go_router, whose delegate notifies its listeners
   /// of each change of them: keeps each push completing with the value of

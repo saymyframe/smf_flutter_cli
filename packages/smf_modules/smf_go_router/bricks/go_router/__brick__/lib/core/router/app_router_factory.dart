@@ -148,10 +148,12 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// `GoRouter.pushReplacement` throws for want of a page. So [push] and
   /// [replace] give go_router their location as [go] does: it shows with
   /// the pages of its chain, in place of the error screen, and such a push
-  /// completes with `null`.{{#guards}} The router asks the guards nothing
-  /// itself then: the `redirect` of go_router asks, with no pages.{{/guards}}
-  /// An error screen that a push showed over a page is a page of
-  /// go_router, which pushes over it and replaces it like any other.
+  /// completes with `null`. An error screen that a push showed over a page
+  /// is a page of go_router, which pushes over it and replaces it like any
+  /// other.{{#guards}}
+  ///
+  /// The router asks the guards nothing itself then: the `redirect` of
+  /// go_router asks, with no pages.{{/guards}}
   bool get _withoutPage =>
       config.routerDelegate.currentConfiguration.matches.isEmpty;{{#guards}}
 
