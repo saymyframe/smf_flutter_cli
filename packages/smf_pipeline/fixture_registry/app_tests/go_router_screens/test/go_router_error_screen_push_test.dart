@@ -9,13 +9,16 @@
 // throws for a location in the main navigation. So the router of the
 // module gives go_router the location as go() does: it shows in place of
 // the error screen, with the pages of its chain below it, and the push
-// completes with null at once. The test asks for the routes of the fixture
-// feature, which are in the main navigation of an app with one. A location
-// outside the main navigation of such an app is asked for in
-// router_screens, under any router. It uses what the tests of
-// router_screens share, which every app that it applies to has.
+// completes with null at once. An error screen that a push showed over a
+// page is a page of go_router, which pushes over it like over any other.
+// The test asks for the routes of the fixture feature, which are in the
+// main navigation of an app with one. A location outside the main
+// navigation of such an app is asked for in router_screens, under any
+// router. It uses what the tests of router_screens share, which every app
+// that it applies to has.
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
@@ -41,6 +44,57 @@ void main() {
     final router = appRouter.config as GoRouter;
     // Any context navigates: the router of the app is not below it.
     final above = tester.binding.rootElement!;
+
+    // An error screen that a push showed over a page is a page of
+    // go_router: push() shows its location over it, and completes with the
+    // value of its page. In an app with a main navigation, the routes of
+    // the fixture feature are in it, and no router pushes one of them from
+    // a page over the main navigation, so the step is for an app without
+    // one.
+    if (router.routerDelegate.currentConfiguration.matches.first
+        is! ShellRouteMatch) {
+      unawaited(router.push<Object?>('/no/such/screen'));
+      await tester.pumpAndSettle();
+      expect(heard(), [(null, '/no/such/screen')]);
+      Object? over = 'not completed';
+      unawaited(
+        above.nav.fakeFeature
+            .details(id: 9)
+            .push<Object?>()
+            .then((value) => over = value),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [('fake_feature.details', '/fake_feature/details/9')],
+        reason: 'push() shows its location over an error screen that a push '
+            'showed over a page.',
+      );
+      expect(
+        over,
+        'not completed',
+        reason: 'push() over an error screen that a push showed over a page '
+            'waits for the value of its page, as over any other page.',
+      );
+      Navigator.of(tester.element(find.byType(FixtureDetailsScreen)))
+          .pop('closed');
+      await tester.pumpAndSettle();
+      expect(
+        over,
+        'closed',
+        reason: 'push() over an error screen that a push showed over a page '
+            'completes with the value of its page.',
+      );
+      expect(
+        heard(),
+        [(null, '/no/such/screen')],
+        reason: 'The error screen that a push showed over a page is below '
+            'the page that push() showed over it.',
+      );
+      router.go(_startScreen.$2);
+      await tester.pumpAndSettle();
+      expect(heard(), [_startScreen]);
+    }
 
     var id = 0;
     for (final unshown in ['/no/such/screen', '/fake_feature/details/abc']) {

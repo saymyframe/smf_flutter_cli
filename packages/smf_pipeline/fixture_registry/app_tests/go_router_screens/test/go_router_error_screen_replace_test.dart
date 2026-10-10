@@ -6,9 +6,13 @@
 // route then, and GoRouter.pushReplacement throws for want of a page to
 // replace. So the router of the module gives go_router the location as
 // go() does: it shows in place of the error screen, with the pages of its
-// chain below it. A location outside the main navigation of an app with
-// one is asked for in router_screens, under any router. It uses what the
-// tests of router_screens share, which every app that it applies to has.
+// chain below it. An error screen that a push showed over a page is a page
+// of go_router, which replaces it like any other. A location outside the
+// main navigation of an app with one is asked for in router_screens, under
+// any router. It uses what the tests of router_screens share, which every
+// app that it applies to has.
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
@@ -34,6 +38,41 @@ void main() {
     final router = appRouter.config as GoRouter;
     // Any context navigates: the router of the app is not below it.
     final above = tester.binding.rootElement!;
+
+    // An error screen that a push showed over a page is a page of
+    // go_router: replace() shows its location in place of it, over the
+    // page below. In an app with a main navigation, the routes of the
+    // fixture feature are in it, and no router replaces a page over the
+    // main navigation with one of them, so the step is for an app without
+    // one.
+    if (router.routerDelegate.currentConfiguration.matches.first
+        is! ShellRouteMatch) {
+      unawaited(router.push<Object?>('/no/such/screen'));
+      await tester.pumpAndSettle();
+      expect(heard(), [(null, '/no/such/screen')]);
+      above.nav.fakeFeature.details(id: 9).replace();
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [('fake_feature.details', '/fake_feature/details/9')],
+        reason: 'replace() shows its location in place of an error screen '
+            'that a push showed over a page.',
+      );
+      expect(
+        await tester.binding.handlePopRoute(),
+        isTrue,
+        reason: 'The back button of the system closes the page that '
+            'replace() showed in place of an error screen over a page.',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [_startScreen],
+        reason: 'replace() on an error screen that a push showed over a page '
+            'leaves the page below that screen, which the back button of the '
+            'system returns to.',
+      );
+    }
 
     var id = 0;
     for (final unshown in ['/no/such/screen', '/fake_feature/details/abc']) {
