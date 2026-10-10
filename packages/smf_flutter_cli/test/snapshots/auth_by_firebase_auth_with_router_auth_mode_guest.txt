@@ -629,6 +629,10 @@ enum AuthMode {
 /// The mode gates nothing on its own. It decides what [appSession] does when
 /// it starts and what [AppSessionController.allowsApp] says, which a guard
 /// of the routes reads.
+///
+/// To change the mode, change its value and keep the declaration as it is,
+/// on a line that it starts: a tool of the app that cannot import this
+/// file, which imports Flutter, reads the mode from this line.
 const AuthMode authMode = AuthMode.guest;
 
 /// Who uses the app: nobody that the app knows, an anonymous user, or the
