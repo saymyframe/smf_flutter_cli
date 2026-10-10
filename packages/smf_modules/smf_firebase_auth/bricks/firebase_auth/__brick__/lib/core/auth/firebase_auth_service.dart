@@ -33,8 +33,9 @@ const _endedSession = {
 ///
 /// The ways to sign in are enabled in the Firebase project, not here:
 /// Email/Password, and Anonymous for an app that signs in anonymous users.
-/// Until they are, a call fails with [AuthFailureReason.notConfigured], and
-/// its [AuthFailure.developerHint] tells where to enable them.
+/// `tool/enable_firebase_sign_in.dart` enables them. Until they are, a call
+/// fails with [AuthFailureReason.notConfigured], and its
+/// [AuthFailure.developerHint] tells how to enable them.
 ///
 /// An empty address or password fails here, before Firebase is asked, since
 /// Android and iOS answer it with different codes: an empty address with
@@ -230,8 +231,10 @@ final class FirebaseAuthService implements AuthService {
         (error.message ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
     final answer = message.isEmpty ? error.code : '${error.code}: $message';
     final project = _auth.app.options.projectId;
-    final enable = 'enable Email/Password, and Anonymous for an app that '
-        'signs in anonymous users, under Authentication > Sign-in method: '
+    final enable = 'run `dart tool/enable_firebase_sign_in.dart` in the '
+        'directory of the app, or enable Email/Password, and Anonymous for '
+        'an app that signs in anonymous users, in the Firebase console '
+        'under Authentication > Sign-in method: '
         'https://console.firebase.google.com/project/$project/'
         'authentication/providers';
     // A way to sign in that is not enabled, which Firebase tells by its
