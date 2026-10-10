@@ -855,7 +855,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// rather than through the router above a context, so that any context
   /// can navigate, even one above the router.
   @override
-  late final GoRouter config = GoRouter(
+  late final GoRouter config = _GoRouter(
     initialLocation: '/',
     observers: _observers(),
     routes: [
@@ -1010,6 +1010,69 @@ void _callAlone(
       debugPrint('A listener of the screen failed: $error');
     }
   }
+}
+
+/// The [GoRouter] of the app, which hears of the back button of the system
+/// through [_BackButton]: go_router takes no dispatcher of the button, so
+/// the router has one of its own in place of that of [GoRouter].
+final class _GoRouter extends GoRouter {
+  /// Creates the router of [routes], as [GoRouter.new] does.
+  _GoRouter({
+    required List<RouteBase> routes,
+    super.initialLocation,
+    super.observers,
+  }) : super.routingConfig(
+         routingConfig: ValueNotifier(RoutingConfig(routes: routes)),
+       );
+
+  @override
+  BackButtonDispatcher get backButtonDispatcher => _backButton;
+
+  late final _BackButton _backButton = _BackButton(this);
+}
+
+/// The dispatcher of the back button of the system for go_router, which
+/// asks go_router to close the route on top only while go_router has a page
+/// of a route.
+///
+/// go_router shows its error screen in place of the whole stack, for a
+/// location that no route matches or that the redirect of a route refuses:
+/// it then has no page of a route. Asked to close the route on top, its
+/// delegate looks for the last of those pages and throws a [StateError]
+/// (https://github.com/flutter/flutter/issues/187616). So on that screen
+/// the dispatcher asks the root navigator, the only one there, itself: a
+/// route that is shown over the error screen, such as a dialog, closes, and
+/// with no route to close the button is left to the system, as on the
+/// first page of the app. An error screen that a push showed over a page is
+/// a page of go_router, which closes it. Once the delegate of go_router
+/// answers without a page, this can go.
+final class _BackButton extends RootBackButtonDispatcher {
+  /// Creates the dispatcher of the back button of [_router].
+  _BackButton(this._router);
+
+  final GoRouter _router;
+
+  /// For each callback that the dispatcher was given, the one that it
+  /// calls in its place.
+  final Map<ValueGetter<Future<bool>>, ValueGetter<Future<bool>>> _asked = {};
+
+  /// Takes [callback], with which the `Router` of Flutter asks the delegate
+  /// of go_router to close the route on top, and calls it only while
+  /// go_router has a page. A `BackButtonListener` below the router still
+  /// hears of the button first, on the error screen too.
+  @override
+  void addCallback(ValueGetter<Future<bool>> callback) => super.addCallback(
+    _asked[callback] = () {
+      final delegate = _router.routerDelegate;
+      if (delegate.currentConfiguration.matches.isNotEmpty) return callback();
+      return delegate.navigatorKey.currentState?.maybePop() ??
+          Future.value(false);
+    },
+  );
+
+  @override
+  void removeCallback(ValueGetter<Future<bool>> callback) =>
+      super.removeCallback(_asked.remove(callback) ?? callback);
 }
 === lib/core/router/navigation.dart (role:router) ===
 import 'package:flutter/widgets.dart';
