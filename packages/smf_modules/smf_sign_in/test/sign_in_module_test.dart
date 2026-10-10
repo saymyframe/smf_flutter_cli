@@ -14,6 +14,7 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
+import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/bundles/sign_in_bloc_bundle.dart';
 import 'package:smf_sign_in/bundles/sign_in_bundle.dart';
@@ -33,7 +34,8 @@ const _feed = StartFeature('feed');
 /// go_router, which routes it and asks the guards of the module, the two
 /// modules that manage state, sign-in with accounts in memory, gen_l10n,
 /// which provides the localization role, with the preferences that it
-/// requires, a feature that can start the app, and this module.
+/// requires, the settings module, which provides the settings screen that
+/// the module requires, a feature that can start the app, and this module.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   GoRouterModule(),
@@ -42,6 +44,7 @@ const List<SmfModule> _modules = [
   MemoryAuthModule(),
   SharedPreferencesModule(),
   GenL10nModule(),
+  SettingsModule(),
   _feed,
   SignInModule(),
 ];
