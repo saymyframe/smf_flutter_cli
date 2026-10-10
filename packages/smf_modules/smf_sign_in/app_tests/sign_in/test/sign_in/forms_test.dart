@@ -134,6 +134,13 @@ Future<void> _expectBusyUntilTheCallEnds(
   service.hold = null;
   await tester.pumpAndSettle();
   expect(
+    service.calls.length - calls,
+    1,
+    reason: 'A tap on the button of $screen while its call is on its way '
+        'makes no call that waits for the first one either: the session '
+        'would make it once that one has ended.',
+  );
+  expect(
     _spins(tester),
     isFalse,
     reason: 'Once a call of $screen has failed, its button spins no more.',
