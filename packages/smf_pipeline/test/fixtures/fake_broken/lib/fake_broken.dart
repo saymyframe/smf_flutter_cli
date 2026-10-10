@@ -201,8 +201,9 @@ final class BrokenModule extends SmfModule {
             '    }\n',
         // It still tells an answer that closes pages from the others, and
         // closes none of them.
-        '    if (_guards.changed(_pages) is ClosePages<AppLocation?>) '
-            '_close(0, dropsRequest: false);\n',
+        '    if (_guards.changed(_pages) is ClosePages<AppLocation?>) {\n'
+            '      _close(0, dropsRequest: false);\n'
+            '    }\n',
       ),
     ],
   );

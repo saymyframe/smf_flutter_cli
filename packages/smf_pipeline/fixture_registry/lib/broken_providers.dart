@@ -362,6 +362,11 @@ List<BrokenProvider> brokenProviders() => const [
             'While a gate does not allow, go() to a route that asks for no '
                 'condition shows the target of the gate.',
           ),
+          MatrixExpectedFailure(
+            'test/router_condition_early_test.dart',
+            _conditionEarlyTest,
+            _earlyRequestOpensFlow,
+          ),
         ],
       ),
       BrokenProvider(
@@ -450,6 +455,11 @@ List<BrokenProvider> brokenProviders() => const [
             _conditionStopsTest,
             _pushedPageLeaves,
           ),
+          MatrixExpectedFailure(
+            'test/router_condition_early_test.dart',
+            _conditionEarlyTest,
+            _earlyRequestOpensNext,
+          ),
         ],
       ),
       BrokenProvider(
@@ -477,13 +487,20 @@ List<BrokenProvider> brokenProviders() => const [
                 'screen that the app starts on.',
           ),
           // Nor does it open the flow of a guard of a condition for a route
-          // that asks for it. The other tests of such a guard replace no
-          // page with such a route while the flow is closed, so they pass.
+          // that asks for it. The other tests of such a guard, but that of
+          // two conditions, replace no page with such a route while the
+          // flow is closed, so they pass.
           MatrixExpectedFailure(
             'test/router_conditions_test.dart',
             _conditionsTest,
             'replace() with a route that asks for a condition that does not '
                 'hold opens the target of the guard of the condition.',
+          ),
+          MatrixExpectedFailure(
+            'test/router_condition_two_test.dart',
+            _conditionTwoTest,
+            'A request for a route that asks for a condition that does not '
+                'hold opens the target of its guard.',
           ),
         ],
       ),
@@ -531,6 +548,19 @@ List<BrokenProvider> brokenProviders() => const [
             _walkGuardsTest,
             _walkOfCondition,
           ),
+          MatrixExpectedFailure(
+            'test/router_condition_early_test.dart',
+            _conditionEarlyTest,
+            _earlyRequestOpensNext,
+          ),
+          // Nor does it find the target of a gate among its pages when that
+          // target was pushed, so it drops the request that waits for the
+          // flow of the target.
+          MatrixExpectedFailure(
+            'test/router_condition_gates_test.dart',
+            _conditionGatesTest,
+            _requestWaitsBehindGate,
+          ),
         ],
       ),
       BrokenProvider(
@@ -572,6 +602,11 @@ List<BrokenProvider> brokenProviders() => const [
             _walkGuardsTest,
             _walkOfCondition,
           ),
+          MatrixExpectedFailure(
+            'test/router_condition_early_test.dart',
+            _conditionEarlyTest,
+            _earlyRequestOpensFlow,
+          ),
         ],
       ),
       BrokenProvider(
@@ -612,15 +647,19 @@ List<BrokenProvider> brokenProviders() => const [
             'The target of a guard of a condition opens over the main '
                 'navigation, which stays below it.',
           ),
-          // The page that the flow was opened over is gone, so a gate that
-          // stops allowing meanwhile has no location to bring the user
-          // back to.
+          // It keeps no request waiting, so none waits either when the gate
+          // of the flow stops allowing meanwhile. And the page that the flow
+          // was opened over is gone, so that gate has no location to bring
+          // the user back to.
           MatrixExpectedFailure(
             'test/router_condition_gates_test.dart',
             _conditionGatesTest,
-            'Once the gate allows, the router shows the page that the flow '
-                'of the condition was opened over, which the gate took the '
-                'user from, not the location that the flow was opened for.',
+            _requestWaitsBehindGate,
+          ),
+          MatrixExpectedFailure(
+            'test/router_condition_early_test.dart',
+            _conditionEarlyTest,
+            _earlyRequestOpensFlow,
           ),
         ],
       ),
@@ -649,6 +688,11 @@ List<BrokenProvider> brokenProviders() => const [
             'test/router_condition_two_test.dart',
             _conditionTwoTest,
             _nextOfTwoOpens,
+          ),
+          MatrixExpectedFailure(
+            'test/router_condition_early_test.dart',
+            _conditionEarlyTest,
+            _earlyRequestOpensNext,
           ),
         ],
       ),
@@ -1422,6 +1466,32 @@ const _conditionTwoTest =
     'for a route that asks for two conditions, the flow of the first guard '
     'that does not allow opens, and that of the next once the first allows; '
     'the router keeps one request waiting';
+
+/// The name of the test of a push() before the router has a page, and the
+/// reasons of two of its expectations: that the flow of the first guard
+/// opens over the screen that the app starts on, and that of the next once
+/// the first allows.
+const _conditionEarlyTest =
+    'a push() of a route that asks for two conditions before the router has '
+    'a page opens the flow of each guard in turn over the screen that the '
+    'app starts on, and shows the route once both hold';
+const _earlyRequestOpensFlow =
+    'A request for a route that asks for a condition that does not hold, '
+    'made before the router has a page, opens the target of the guard over '
+    'the screen that the app starts on.';
+const _earlyRequestOpensNext =
+    'Once the first condition holds, the target of the guard of the second '
+    'opens for a request that was made before the router had a page, and '
+    'the listeners of the screen hear nothing of the screen that the app '
+    'starts on between the two flows.';
+
+/// The reason of the expectation of the test of a condition next to the
+/// gates that the request of an open flow still waits when the gate of
+/// that flow stops allowing.
+const _requestWaitsBehindGate =
+    'The request that opened the flow of a condition waits while a page of '
+    'the flow is among the pages: the target of a gate with the same flow '
+    'is one.';
 
 /// The reasons of some expectations of the tests of a condition: that its
 /// flow opens for a push(), that the push() waits while the flow is open,
