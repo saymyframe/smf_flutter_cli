@@ -953,7 +953,10 @@ void main() {
         // Firebase project, comes first.
         expect(at('Firebase'), inExclusiveRange(0, at(readmeHeading)));
         expect(at(AuthRole.readmeHeading), isNonNegative);
-        expect(readmeSection, contains('(see ${AuthRole.readmeHeading})'));
+        expect(
+          readmeSection,
+          contains('(see the section ${AuthRole.readmeHeading})'),
+        );
       });
 
       test(

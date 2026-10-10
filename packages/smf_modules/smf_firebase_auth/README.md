@@ -2,7 +2,7 @@
 
 The SMF module of [Firebase Authentication](https://firebase.google.com/docs/auth) with [firebase_auth](https://pub.dev/packages/firebase_auth). It provides the auth role of SMF: the users of the app sign in with an email address and a password, and the app can sign in anonymous users.
 
-The auth role generates `appSession`, which tells who uses the app and through which the code of the app signs in, up and out, and the `AuthService` interface. This module adds `firebase_auth` to the app and implements the interface on `FirebaseAuth`. Firebase keeps the user on the device, so the app knows who is signed in before its first frame. The service gives each error code of Firebase a reason that the app shows a text for, and tells in debug mode when sign-in is not enabled in the Firebase project.
+The auth role generates `appSession`, which tells who uses the app and through which the code of the app signs in, up and out, and the `AuthService` interface. This module adds `firebase_auth` to the app and implements the interface on `FirebaseAuth`. Firebase keeps the user on the device, so the app knows who is signed in before its first frame. The service gives each error code of Firebase a reason that the app shows a text for. When sign-in is not enabled in the Firebase project, the failure has a hint for the developer with the link to the page of the project where it is enabled.
 
 Firebase Authentication works on the Firebase app, so the module depends on [smf_firebase_core](https://pub.dev/packages/smf_firebase_core), which comes with it and sets up Firebase.
 
