@@ -272,7 +272,8 @@ final class $_onTop<L> implements WhenAsked<L> {
   const $_onTop(this.location, {required this.flow});
 
   /// The location to show on top: the target of a guard with
-  /// [RouteGuard.routes].
+  /// [RouteGuard.routes], or a page of its flow that was asked for with no
+  /// pages.
   final L location;
 
   /// The full names of the routes of the flow of that guard.
@@ -384,6 +385,15 @@ final class $_navigation<L> {
   ///   [onTopOf], on top or below another page, since the flow is open
   ///   already; and else [$_onTop] of the target of the guard, with its
   ///   flow.
+  /// - for a location that no guard keeps the user from and that is asked
+  ///   for with no pages, in a flow that only guards with
+  ///   [RouteGuard.routes] keep open: [$_onTop] of the location itself,
+  ///   with that flow. So a page of such a flow never stands alone when a
+  ///   link asks for it: the router shows it over [start], and back leads
+  ///   into the app. The request that waits is the page itself: asked
+  ///   about again once the flow closes, it is answered with [start],
+  ///   where the user is then. A flow that a gate keeps open too is the
+  ///   gate's, and takes the place of the stack.
   ///
   /// For a guard with routes the class remembers no location, only over
   /// how many pages its flow was opened, for [changed]. So the answer
@@ -411,7 +421,12 @@ final class $_navigation<L> {
     final over = $_over(route);
     if (over || !_inAFlow(route)) _remembered = null;
     if (over) return $_instead(start);
-    if (guard == null) return null;
+    if (guard == null) {
+      final flow = onTopOf.isEmpty ? _openFlowOf(route) : null;
+      if (flow == null) return null;
+      _below = 0;
+      return $_onTop(location, flow: flow);
+    }
     if (onTopOf.any(guard.flow.contains)) return const $_nothing();
     _below = onTopOf.length;
     return $_onTop(locationOf(guard.redirectTo), flow: guard.flow);
@@ -523,6 +538,21 @@ final class $_navigation<L> {
   /// Whether [route] is in the flow of a guard, of whichever guard.
   static bool _inAFlow(String? route) =>
       $_list.any((guard) => guard.flow.contains(route));
+
+  /// The flow that [route] is a page of and that only guards with
+  /// [RouteGuard.routes] keep open: that of the first guard that does not
+  /// allow and has the route in its flow; or `null` if there is none, or if
+  /// a gate that does not allow has the route in its flow too, since the
+  /// flow of a gate takes the place of the stack.
+  static Set<String>? _openFlowOf(String? route) {
+    Set<String>? flow;
+    for (final guard in $_list) {
+      if (guard.allows.value || !guard.flow.contains(route)) continue;
+      if (guard.routes == null) return null;
+      flow ??= guard.flow;
+    }
+    return flow;
+  }
 }''';
 
 List<SmfIssue> _checkGuards(ModuleRuleInput<RoutesData> input) {

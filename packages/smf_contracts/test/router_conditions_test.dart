@@ -478,6 +478,40 @@ void main() {
   changed('firstRun allows', [intro]);
   asked('rooms.members', '/rooms/members?tab=a');
 
+  print('a page of the flow of a condition, asked for with no pages');
+  memberNow.value = false;
+  paidNow.value = false;
+  changed('both stop', [home]);
+  asked('account.login', '/account/login');
+  asked('account.reset', '/account/login/reset');
+  asked('account.login', '/account/login?next=a');
+  asked('shop.plans', '/shop/plans');
+  asked('account.login', '/account/login', on: [home]);
+  asked('account.reset', '/account/login/reset', on: [over(login), home]);
+  print('  redirectOf: ${redirectOf('account.login')?.path}, '
+      '${redirectOf('account.reset')?.path}');
+  asked('rooms.lounge', '/rooms/lounge', on: [home]);
+  asked('account.login', '/account/login');
+  memberNow.value = true;
+  changed('member holds', [over(login), home]);
+  asked('account.login', '/account/login');
+  asked('shop.plans', '/shop/plans');
+  memberNow.value = false;
+  signedInNow.value = false;
+  changed('the gate and member stop', [home]);
+  asked('account.login', '/account/login');
+  asked('account.reset', '/account/login/reset');
+  signedInNow.value = true;
+  changed('the gate allows', [login]);
+  asked('account.login', '/account/login');
+  introSeenNow.value = false;
+  asked('account.login', '/account/login');
+  introSeenNow.value = true;
+  changed('firstRun allows', [intro]);
+  memberNow.value = true;
+  paidNow.value = true;
+  changed('both hold', [home]);
+
   print('a gate and a condition with one flow, in one turn');
   signedInNow.value = false;
   memberNow.value = false;
@@ -1056,12 +1090,13 @@ a gate of the first stage does not allow
 ''',
       );
       // The flow is not over while the condition does not hold, though
-      // every gate allows: its routes show like any other, over a page and
-      // in place of the stack.
+      // every gate allows: its routes show like any other for a request
+      // that is made on a page. Asked for with no pages, as by a link, a
+      // page of the flow opens over the screen that the app starts on.
       expect(sectionOf(printed, 'the flow of a guard with routes'), '''
   asked /account/login on rooms.lobby: shows it
   asked /account/login/reset on account.login + rooms.lobby: shows it
-  asked /account/login on no page: shows it
+  asked /account/login on no page: /account/login over the page, while account.login, account.reset
 ''');
     });
 
@@ -1227,16 +1262,74 @@ a gate of the first stage does not allow
     });
 
     test(
+        'a page of the flow of a guard with routes that is asked for with no '
+        'pages, as by a link, opens over the screen that the app starts on, '
+        'while only guards with routes keep that flow open', () async {
+      const loginFlow = 'while account.login, account.reset';
+      // The target of the guard, a route below it, a location with a query
+      // and the target of the other guard: each opens over the page, which
+      // is the screen that the app starts on for a router that has no page,
+      // with the flow that the page is in. A request that is made on a page
+      // shows the page as it was asked: over that page for push(), and in
+      // its place for go(), which is the choice of the code of the app. So
+      // redirectOf() answers nothing for these routes, as before.
+      //
+      // The same holds while the flow of the other guard is open: a link
+      // takes the place of the stack. The request that waits is the page
+      // itself. Once its condition holds, the router closes the flow and
+      // asks about the page again, and the answer is the screen that the
+      // app starts on, since the flow is over: the user is there already.
+      //
+      // While a gate with the same flow does not allow, the flow is the
+      // gate's, which takes the place of the stack: the page shows as it
+      // is. Once the gate lets everyone in, the rule holds again. And a
+      // gate with another flow decides first, as for any location.
+      expect(
+        sectionOf(
+          await flow,
+          'a page of the flow of a condition, asked for with no pages',
+        ),
+        '''
+  both stop: stays
+  asked /account/login on no page: /account/login over the page, $loginFlow
+  asked /account/login/reset on no page: /account/login/reset over the page, $loginFlow
+  asked /account/login?next=a on no page: /account/login?next=a over the page, $loginFlow
+  asked /shop/plans on no page: /shop/plans over the page, while shop.plans
+  asked /account/login on home.root: shows it
+  asked /account/login/reset on account.login + home.root: shows it
+  redirectOf: null, null
+  asked /rooms/lounge on home.root: /shop/plans over the page, while shop.plans
+  asked /account/login on no page: /account/login over the page, $loginFlow
+  member holds: closes 1
+  asked /account/login on no page: /
+  asked /shop/plans on no page: /shop/plans over the page, while shop.plans
+  the gate and member stop: /account/login
+  asked /account/login on no page: shows it
+  asked /account/login/reset on no page: shows it
+  the gate allows: stays
+  asked /account/login on no page: /account/login over the page, $loginFlow
+  asked /account/login on no page: /intro
+  firstRun allows: /
+  both hold: stays
+''',
+      );
+    });
+
+    test(
         'a second call for a location that the router shows, with no pages, '
-        'answers nothing and changes nothing: a router whose own navigation '
-        'asks again may let it', () async {
+        'answers nothing but for a page of the flow of a guard with routes, '
+        'so a router keeps the calls of its own navigation from the class',
+        () async {
       // A router such as one whose redirect runs for each location that it
-      // goes to asks a second time, with no pages: about a location that
-      // the class let the user see, about the target that it answered for
-      // a request, and about the location that it remembered for a gate.
-      // The flow that the first call opened is still the one whose request
-      // waits, and the location that a gate made the class remember is
-      // still remembered.
+      // goes to would ask a second time, with no pages: about a location
+      // that the class let the user see, about the target that it answered
+      // for a request, and about the location that it remembered for a
+      // gate. The class answers nothing for the first and the last, and the
+      // location that a gate made it remember is still remembered. But the
+      // target of a guard with routes is a page of its flow, which the
+      // class opens over the screen that the app starts on when it is asked
+      // for with no pages: a router that showed it over a page must not
+      // ask about it again.
       expect(
         sectionOf(
           await flow,
@@ -1247,7 +1340,7 @@ a gate of the first stage does not allow
   asked /rooms on home.root: shows it
   asked /rooms on no page: shows it
   asked /rooms/members on rooms.lobby: $opensLogin
-  asked /account/login on no page: shows it
+  asked /account/login on no page: /account/login over the page, while account.login, account.reset
   member holds: closes 1
   asked /rooms/members?tab=a on rooms.lobby: /intro
   asked /intro on no page: shows it
