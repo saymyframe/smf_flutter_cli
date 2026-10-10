@@ -914,10 +914,11 @@ void main() {
       test(
           'names the file of the themes and what the file has: the function '
           'that creates both themes, those of their colours and of their '
-          'text styles, the seed colour, the family of the font, the '
-          'brightness that tells the two themes apart and the two functions '
-          'of the role; and the files of the font with their licence, and '
-          'the pubspec that declares them', () {
+          'text styles, the themes of a card and of a text field, the seed '
+          'colour, the family of the font, the brightness that tells the '
+          'two themes apart and the two functions of the role; and the '
+          'files of the font with their licence, and the pubspec that '
+          'declares them', () {
         final index = DartFileIndexer.index(
           ThemeRole.appThemeFile,
           withTheme.files[ThemeRole.appThemeFile]!.text,
@@ -954,7 +955,13 @@ void main() {
               .invocationsOf('ThemeData', within: '_themeOf')
               .single
               .namedArguments,
-          containsAll(['colorScheme', 'fontFamily', 'textTheme', 'cardTheme']),
+          containsAll([
+            'colorScheme',
+            'fontFamily',
+            'textTheme',
+            'cardTheme',
+            'inputDecorationTheme',
+          ]),
         );
         for (final name in const ['_schemeOf', '_textThemeOf']) {
           expect(
@@ -1012,6 +1019,7 @@ void main() {
           '_schemeOf',
           '_textThemeOf',
           'cardTheme',
+          'inputDecorationTheme',
           'brightness',
           'ColorScheme.fromSeed',
           'seedColor',

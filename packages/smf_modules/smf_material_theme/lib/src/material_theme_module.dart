@@ -9,8 +9,8 @@ import 'package:smf_material_theme/src/agents.dart';
 /// another look, with the two functions that the role requires of its
 /// provider, `createLightTheme` and `createDarkTheme`. Both themes have the
 /// colours of one palette, the text styles of one font and the same look of
-/// the components, such as cards, buttons and sheets. The look is fixed, so
-/// the functions leave their context alone.
+/// the components, such as cards, buttons, text fields and sheets. The look
+/// is fixed, so the functions leave their context alone.
 ///
 /// The font is part of the app: the module generates its files, with their
 /// licence, in [fontDirectory], and declares its family in `pubspec.yaml`.
@@ -26,8 +26,8 @@ import 'package:smf_material_theme/src/agents.dart';
 ///
 /// In the guide for coding agents, the module adds to the section of the
 /// theme where its file creates the two themes, how to change their
-/// colours, their font and what they share by hand, and what a change must
-/// keep for the role.
+/// colours, their font and what they share by hand, where a text field
+/// takes its look from, and what a change must keep for the role.
 final class MaterialThemeModule extends SmfModule {
   /// Creates the module.
   const MaterialThemeModule();
