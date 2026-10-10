@@ -515,7 +515,15 @@ void main() {
             'gate with the same flow is one.',
       );
       final alone = shown(tester, FixtureGateScreen);
-      await back(tester);
+      final closed = await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(
+        closed,
+        isFalse,
+        reason: 'The target of a gate that took the place of the stack has '
+            'no page below it: the router has no route to close for the '
+            'back button of the system.',
+      );
       expect(
         heard(),
         isEmpty,

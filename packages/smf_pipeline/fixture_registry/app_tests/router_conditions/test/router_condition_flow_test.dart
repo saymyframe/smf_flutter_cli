@@ -519,13 +519,20 @@ void main() {
       // still sees, and not the page of the request.
       first = await openFlow(13);
       fixtureHolder.value = true;
-      await tester.binding.handlePopRoute();
+      final closed = await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(
         tester.takeException(),
         isNull,
         reason: 'The back button of the system may close a page in the turn '
             'in which the router closed it.',
+      );
+      expect(
+        closed,
+        isTrue,
+        reason: 'The back button of the system in the turn in which the '
+            'router closed a flow closes the route of the page of the flow, '
+            'which the navigator still has.',
       );
       await expectRequestMade(
         13,
