@@ -24,8 +24,9 @@ const _endedSession = {
   'no-current-user',
 };
 
-/// Sign-in with [Firebase Authentication](https://firebase.google.com/docs/auth),
-/// with an email address and a password, and as an anonymous user.
+/// Sign-in with
+/// [Firebase Authentication](https://firebase.google.com/docs/auth), with
+/// an email address and a password, and as an anonymous user.
 ///
 /// The code of the app does not use it: it signs in through `appSession` of
 /// `app_session.dart`.
