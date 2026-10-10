@@ -41,23 +41,17 @@ const _notFound = 'An internal error has occurred. [ CONFIGURATION_NOT_FOUND ]';
 const _internal = 'An internal error has occurred, print and inspect the '
     'error details for more information.';
 
-/// The message with which iOS answers a sign-in, a sign-up and an anonymous
-/// sign-in for a project in which Authentication was never set up, under
-/// the code of an internal error: the description of the error, over
-/// several lines, with addresses in memory and the answer of the server.
-/// Its first line is as an iPhone simulator had it, and the others are
-/// the answer of the server as such a description prints it.
+/// The message with which iOS answers an anonymous sign-in for a project
+/// in which Authentication was never set up, under the code of an internal
+/// error: the description of the error, as an iPhone simulator had it, with
+/// the addresses in memory replaced by one value. A sign-in and a sign-up
+/// get such a message too. What the server answered is under one of the
+/// keys of the description, which come in another order from call to call,
+/// so the service only looks for `CONFIGURATION_NOT_FOUND` in the message.
 const _notFoundOnIos = 'Error Domain=FIRAuthErrorDomain Code=17999 '
-    '"$_internal" UserInfo={NSLocalizedDescription=$_internal, '
-    'FIRAuthErrorUserInfoNameKey=ERROR_INTERNAL_ERROR, '
-    'NSUnderlyingError=0x600000c5e910 {Error '
+    '"$_internal" UserInfo={NSUnderlyingError=0x600000c00000 {Error '
     'Domain=FIRAuthInternalErrorDomain Code=3 "(null)" '
-    'UserInfo={NSUnderlyingError=0x600000c2ff90 {Error '
-    'Domain=com.google.HTTPStatus Code=400 "(null)" '
-    'UserInfo={data={length = 220, bytes = 0x7b0a2020 22657272 6f72223a '
-    '207b0a20 ... 5d0a2020 7d0a7d0a }, '
-    'data_content_type=application/json; charset=UTF-8}}, '
-    'FIRAuthErrorUserInfoDeserializedResponseKey={\n'
+    'UserInfo={FIRAuthErrorUserInfoDeserializedResponseKey={\n'
     '    code = 400;\n'
     '    errors =     (\n'
     '                {\n'
@@ -67,7 +61,12 @@ const _notFoundOnIos = 'Error Domain=FIRAuthErrorDomain Code=17999 '
     '        }\n'
     '    );\n'
     '    message = "CONFIGURATION_NOT_FOUND";\n'
-    '}}}}';
+    '}, NSUnderlyingError=0x600000c00000 {Error Domain=com.google.HTTPStatus '
+    'Code=400 "(null)" UserInfo={data={length = 220, bytes = 0x7b0a2020 '
+    '22657272 6f72223a 207b0a20 ... 5d0a2020 7d0a7d0a }, '
+    'data_content_type=application/json; charset=UTF-8}}}}, '
+    'NSLocalizedDescription=$_internal, '
+    'FIRAuthErrorUserInfoNameKey=ERROR_INTERNAL_ERROR}';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
