@@ -9,6 +9,8 @@ import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
+import 'package:fixture_registry/matrix_app_tests.dart';
+import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
@@ -16,6 +18,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
 
 import 'host.dart';
@@ -155,18 +158,29 @@ void main() {
       }
     });
 
-    test('builds one app with every module, whose cases have no errors',
-        () async {
+    test(
+        'builds an app with every module for each of the two state managers '
+        'that the sign-in has a variant for, whose cases have no errors, and '
+        'its tool checks the first of them', () async {
       final (:apps, :failed) = await everyModuleAppsOf(
         severalProvidersModules(),
       );
 
       expect(failed, isEmpty);
+      // A registry has every provider that one of its modules has a variant
+      // for, and an app has one state manager.
+      final ids = [
+        for (final module in severalProvidersModules()) module.descriptor.id,
+      ];
       expect(apps.map((app) => app.modules), [
-        unorderedEquals([
-          for (final module in severalProvidersModules()) module.descriptor.id,
-        ]),
+        unorderedEquals(ids.where((id) => id != RiverpodModule.id)),
+        unorderedEquals(ids.where((id) => id != BlocModule.id)),
       ]);
+      expect(
+        severalProvidersApps.everyModuleApps
+            .select(apps, severalProvidersModules()),
+        [apps.first],
+      );
     });
 
     test(
@@ -179,7 +193,8 @@ void main() {
       );
 
       expect(failed, isEmpty);
-      final hook = apps.single.hook!;
+      // The app that the tool of the registry checks.
+      final hook = apps.first.hook!;
       expect(hook.presentRoles, contains(settingsScreenRole));
       final entries = settingsScreenRole.entriesIn(
         settingsScreenRole.hookInput(hook),

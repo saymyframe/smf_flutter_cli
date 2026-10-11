@@ -230,10 +230,12 @@ void main() {
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
       'which get Firebase, the apps of Firebase Authentication with and '
-      'without the localization and the router, which get Firebase, and '
-      'one with the router for each other mode of the auth role, and one of '
-      'every module for each state manager, each once more for each other '
-      'mode', () async {
+      'without the localization and the router, which get Firebase, the '
+      'apps of the sign-in for each state manager with the localization '
+      'and without, which get Firebase Authentication and the router, one '
+      'of Firebase Authentication with the router for each other mode of '
+      'the auth role, and one of every module for each state manager, each '
+      'once more for each other mode', () async {
     final (:apps, :failed) = await matrixOf(smfModules);
     // The modules whose labels and titles are texts of the app, each with
     // the provider of the texts. The app of settings with it is the app of
@@ -244,7 +246,15 @@ void main() {
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, onboarding, firebase_core, '
-        'firebase_crashlytics, firebase_analytics, firebase_auth)';
+        'firebase_crashlytics, firebase_analytics, firebase_auth, sign_in)';
+    // The app of the sign-in with a state manager, which gets the provider
+    // of the auth role and its Firebase, and the router.
+    String signIn(String stateManager, {bool localized = false}) => [
+          'sign_in ($stateManager)${localized ? ' with localization' : ''} ',
+          '(sign_in, ${localized ? 'gen_l10n, ' : ''}flutter_core, ',
+          'firebase_auth, firebase_core, go_router, $stateManager',
+          '${localized ? ', shared_preferences' : ''})',
+        ].join();
     // The app of Firebase Authentication with the router in another mode of
     // the auth role.
     String inMode(String mode) => 'auth by firebase_auth with router '
@@ -337,6 +347,10 @@ void main() {
         'flutter_core)',
       ),
       'firebase_auth (firebase_auth, firebase_core, flutter_core)',
+      signIn('bloc', localized: true),
+      signIn('riverpod', localized: true),
+      signIn('bloc'),
+      signIn('riverpod'),
       inMode('guest'),
       inMode('anonymous'),
       everyModule('bloc'),
