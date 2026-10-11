@@ -223,6 +223,124 @@ List<String> _namedWith(
   ];
 }
 
+/// What the notes of the providers that modules have variants for name
+/// without code that shows it, in the apps of [results]: for each such
+/// provider, a line for each name.
+///
+/// A module with variants writes its code with the package of the provider
+/// of their role, as a feature writes the state of its screens with the
+/// state manager of the app. The note of such a provider tells how that
+/// code is written, and the app of the provider alone has none of it. So a
+/// name that the note gives is looked up in the apps in which a module has
+/// its variant for the provider: in their Dart files that import a package
+/// which the provider adds. A provider that is in no such app is no key of
+/// the result, since nothing was looked up for it.
+///
+/// The names are those of [_namesOfCodeIn], and what a file uses is that of
+/// [_usedIn].
+Map<ModuleId, List<String>> _unshownNames(Iterable<ContractResult> results) {
+  // For each provider: the packages that it adds, its notes by their
+  // headings, and what the code with those packages uses.
+  final packages = <ModuleId, Set<String>>{};
+  final notes = <ModuleId, Set<(String, String)>>{};
+  final used = <ModuleId, Set<String>>{};
+  // The index of a Dart file, by its text.
+  final indexes = <String, DartFileIndex>{};
+  for (final result in results) {
+    final app = result.app!;
+    final providers = {
+      for (final module in result.resolution!.modules)
+        if (module.variant case final provider?) provider,
+    };
+    for (final provider in providers) {
+      final origin = ModuleOrigin(provider);
+      final added = packages.putIfAbsent(provider, () => {})
+        ..addAll([
+          for (final dependency
+              in result.validation!.pubspec.dependencies.values)
+            if (dependency.source == PubspecSource.hosted &&
+                dependency.origins.contains(origin))
+              dependency.package,
+        ]);
+      notes.putIfAbsent(provider, () => {}).addAll([
+        for (final (from, heading, note)
+            in app.entriesOf(AppEntryRole.agentSections))
+          if (from == origin) (heading, note.text),
+      ]);
+      final shown = used.putIfAbsent(provider, () => {});
+      for (final file in app.files.values) {
+        if (!file.isText || !file.path.endsWith('.dart')) continue;
+        final index = indexes.putIfAbsent(
+          file.text,
+          () => DartFileIndexer.index(file.path, file.text),
+        );
+        final withPackage = index.imports.any(
+          (import) => added.any(
+            (package) => import.uri.startsWith('package:$package/'),
+          ),
+        );
+        if (withPackage) shown.addAll(_usedIn(index));
+      }
+    }
+  }
+  return {
+    for (final MapEntry(key: provider, value: ofProvider) in notes.entries)
+      provider: [
+        for (final (heading, text) in ofProvider)
+          for (final name in {..._namesOfCodeIn(text, packages[provider]!)})
+            if (!used[provider]!.contains(name))
+              _unshown(provider, heading, name, packages[provider]!),
+      ],
+  };
+}
+
+/// The line of [_unshownNames] for [name], which the note of [provider]
+/// under [heading] gives and no code with one of [packages] uses.
+String _unshown(
+  ModuleId provider,
+  String heading,
+  String name,
+  Set<String> packages,
+) =>
+    'The note of $provider under "$heading" names `$name`, which no Dart '
+    'file that imports ${packages.join(' or ')} uses in an app with a '
+    'module that has a variant for $provider. Name what the code of such a '
+    'variant shows, as that code writes it, or tell it without the name.';
+
+/// The names of code that [markdown] gives in inline code, outside its
+/// fenced code blocks: each span as it is, without the `()` of a call, such
+/// as `emit` of `emit()`, and `ref.mounted`. A span with a `/` is a path,
+/// which the rule `app_entry.agent_guide_paths` checks, and one of
+/// [packages] is a package, so neither is a name of code.
+Iterable<String> _namesOfCodeIn(String markdown, Set<String> packages) sync* {
+  final text = markdown.replaceAll(RegExp(r'```[\s\S]*?```'), '');
+  for (final match in RegExp('`([^`]+)`').allMatches(text)) {
+    final span = match[1]!;
+    if (span.contains('/') || packages.contains(span)) continue;
+    yield span.replaceAll('()', '');
+  }
+}
+
+/// What the code of the Dart file of [index] uses: each type that it
+/// names, each name that it reads, and each thing that it calls or
+/// accesses, by its name and after its target, such as `mounted` and
+/// `ref.mounted`. A file that awaits a call uses `await` too, a keyword
+/// that a note gives as code. Comments and the text of strings use
+/// nothing.
+Set<String> _usedIn(DartFileIndex index) => {
+      for (final type in index.typeNames) type.name,
+      for (final reference in index.references) reference.name,
+      for (final call in index.invocations) ...[
+        call.name,
+        if (call.target case final target?) '$target.${call.name}',
+        if (call.awaited) 'await',
+      ],
+      for (final access in index.memberAccesses) ...[
+        access.name,
+        '${access.target}.${access.name}',
+      ],
+    };
+
 /// Sentences that a note of a role may have: they name what the roles
 /// guarantee, and names of Dart and of Flutter, also where only the file of
 /// one module has such a name.
@@ -535,6 +653,99 @@ final class _PageKit extends SmfModule {
       ];
 }
 
+/// An infrastructure module `state_kit` that provides the state management
+/// role with the package `state_kit_core`, and has [note] in the guide for
+/// coding agents.
+final class _StateKit extends SmfModule {
+  const _StateKit(this.note);
+
+  static const id = ModuleId('state_kit');
+
+  final String note;
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'State kit',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(stateManagementRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        const PubspecContribution.hosted('state_kit_core', '^1.0.0'),
+        AppEntryRole.agentSections.entry(
+          stateManagementRole.description,
+          AgentNote(note),
+        ),
+      ];
+}
+
+/// A module `counter` with a variant for [_StateKit], which generates
+/// [store], a file with the package of that module, and [log], a file
+/// without it.
+final class _Counter extends SmfModule {
+  const _Counter();
+
+  /// The file of the variant that imports the package.
+  static const store = 'lib/core/counter/counter_store.dart';
+
+  /// The file of the variant that does not.
+  static const log = 'lib/core/counter/counter_log.dart';
+
+  static const Map<String, String> _files = {
+    store: "import 'package:state_kit_core/state_kit_core.dart';\n"
+        '\n'
+        '/// The count, which `Store.dispose()` would end.\n'
+        'class CounterStore extends Store<int> {\n'
+        '  /// Loads the count with [read].\n'
+        '  Future<void> load(Future<int> Function() read) async {\n'
+        '    final count = await read();\n'
+        '    if (isOpen) put(count);\n'
+        '  }\n'
+        '}\n',
+    log: '/// What the counter did.\n'
+        'final counterLog = <String>[];\n'
+        '\n'
+        '/// Forgets what the counter did.\n'
+        'void dispose() => counterLog.clear();\n',
+  };
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: ModuleId('counter'),
+        description: 'A counter',
+        // Infrastructure has no variants; a kind is data.
+        kind: ModuleKind(id: 'with_variants', label: 'With variants'),
+        variants: Variants(
+          role: stateManagementRole,
+          byProvider: {_StateKit.id: _withStateKit},
+        ),
+      );
+
+  static List<Contribution> _withStateKit(ModuleContext context) => [
+        const PubspecContribution.hosted('state_kit_core', 'any'),
+        BrickContribution(
+          MasonBundle(
+            name: 'counter_state_kit',
+            description: 'The counter',
+            version: '0.1.0',
+            files: [
+              for (final MapEntry(key: path, value: text) in _files.entries)
+                MasonBundledFile(
+                  path,
+                  base64.encode(utf8.encode(text)),
+                  'text',
+                ),
+            ],
+          ),
+        ),
+      ];
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => const [];
+}
+
 void main() {
   late List<ContractResult> results;
 
@@ -627,6 +838,37 @@ void main() {
         );
       }
     });
+  });
+
+  test(
+      'the note of a provider that modules have variants for, as that of a '
+      'module that manages state, names only what the code of such a '
+      'variant uses', () {
+    final roles = {
+      for (final module in smfModules)
+        if (module.descriptor.variants case final variants?) variants.role,
+    };
+    final unshown = _unshownNames(results);
+
+    // The screens of a feature keep their state as its variant for the
+    // state manager of the app writes it, so the notes of the state
+    // managers have code to be held against.
+    expect(roles, contains(stateManagementRole));
+    // Every provider of such a role is in an app with a module that has a
+    // variant for it, so the check read its note.
+    expect(unshown.keys.toSet(), {
+      for (final module in smfModules)
+        if (module.descriptor.provides.any(roles.contains))
+          module.descriptor.id,
+    });
+    expect(
+      unshown.values.expand((lines) => lines),
+      isEmpty,
+      reason: 'The note of such a provider tells how code is written with '
+          'its package, and no app of the provider alone has that code. A '
+          'name that no module writes in its variant for the provider is '
+          'one that nothing checks. $_convention',
+    );
   });
 
   test(
@@ -870,6 +1112,63 @@ void main() {
         ).single,
         '`allowed` has `Widget` ("A class of Flutter."), which no note of a '
         'role names in a way that the check refuses. Remove the entry.',
+      );
+    });
+
+    test(
+        'a name in the note of a provider that no module writes with the '
+        'package of the provider in its variant for it', () async {
+      const note = '''
+With `state_kit_core`:
+
+- The state of a screen is a `Store`, which needs no widget in `${AppEntryRole.mainFile}`.
+- After an `await`, a `Store` checks `isOpen` before it calls `put()`. It never calls `Store.dispose()` or `dispose()` itself.
+
+```dart
+store.close();
+```
+''';
+      final results = await _appsOf(const [
+        FlutterCoreModule(),
+        _StateKit(note),
+        _Counter(),
+      ]);
+
+      expect(
+        [
+          for (final result in results)
+            for (final issue in result.errors) issue.message,
+        ],
+        isEmpty,
+      );
+      // The names of the comment of the one file and of the code of the
+      // other, which does not import the package. The package, the path
+      // and the code of the block are no names that the check reads.
+      expect(_unshownNames(results), {
+        _StateKit.id: [
+          for (final name in ['Store.dispose', 'dispose'])
+            _unshown(
+              _StateKit.id,
+              'State management',
+              name,
+              {'state_kit_core'},
+            ),
+        ],
+      });
+      expect(
+        _unshown(_StateKit.id, 'State management', 'dispose', {'a', 'b'}),
+        'The note of state_kit under "State management" names `dispose`, '
+        'which no Dart file that imports a or b uses in an app with a module '
+        'that has a variant for state_kit. Name what the code of such a '
+        'variant shows, as that code writes it, or tell it without the name.',
+      );
+      // Without a module with a variant for it, nothing shows how code is
+      // written with the provider, and the check reads no note of it.
+      expect(
+        _unshownNames(
+          await _appsOf(const [FlutterCoreModule(), _StateKit(note)]),
+        ),
+        isEmpty,
       );
     });
 

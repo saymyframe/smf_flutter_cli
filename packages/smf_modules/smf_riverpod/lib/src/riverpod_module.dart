@@ -29,9 +29,11 @@ import 'package:smf_riverpod/src/agents.dart';
 /// modules read no provider, and their place around it follows their ids.
 ///
 /// The section of the state management in the guide for coding agents of
-/// the app is the note of the module: where the state of a screen lives,
-/// that a widget talks only to providers, and that the scope stays above
-/// the widgets that read them.
+/// the app is the note of the module: how a screen with state is written
+/// with a provider, which provider holds the state that several screens
+/// read, what a notifier minds around a call that it awaits, that a widget
+/// talks only to providers, and that the scope stays above the widgets
+/// that read them.
 final class RiverpodModule extends SmfModule {
   /// Creates the module.
   const RiverpodModule();
