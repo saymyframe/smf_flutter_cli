@@ -55,7 +55,7 @@ class _AccountViewState extends State<AccountView> {
   }
 
   /// Asks whether to delete the account, and deletes it on a yes. The
-  /// sheet of the question is closed by then: once the account is deleted,
+  /// route of the sheet is popped by then: once the account is deleted,
   /// the router closes this page, and the page closes nothing itself.
   Future<void> _delete() async {
     final confirmed = await confirmDeleteAccount(context);
@@ -100,7 +100,13 @@ class _AccountViewState extends State<AccountView> {
 
 /// Asks the user whether to delete the account, in a sheet over the page of
 /// [context], as the settings of the app ask in sheets, and returns whether
-/// the user said yes. The sheet is closed when it returns.
+/// the user said yes. A sheet that the user dismisses in another way, as
+/// with the back button of the system or a tap outside it, is a no.
+///
+/// When it returns, the route of the sheet is popped: the sheet still
+/// slides away for a moment, but it takes no tap any more. So the deletion
+/// may start then. A router that closes the page below while the sheet
+/// slides away closes a route that is leaving already.
 Future<bool> confirmDeleteAccount(BuildContext context) async {
   final confirmed = await showModalBottomSheet<bool>(
     context: context,

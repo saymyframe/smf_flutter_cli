@@ -28,6 +28,8 @@ Delete account is a text button in the colour that the theme has for an error. I
 
 The settings screen of the app has an entry for the account. It shows the email address of the account, or Not signed in, and a tap on it opens the screen of the account over the settings screen. The route of that screen needs an account. So for a user without one, in an app that everyone may use, the router opens the sign-in over the settings screen first, and shows the screen of the account once the user is signed in. In an app that signs in anonymous users, such a user creates the account on the sign-up and keeps everything that the anonymous user had.
 
+The entry is within reach where the settings screen is. A module that provides the layout role, the main navigation of the app, shows the settings screen among its destinations. In an app without a main navigation, no screen opens the settings screen by itself. A screen of yours then opens it through the navigation of the app, with `context.nav.settings.settings().push<void>()` for the settings screen of the `settings` module, or opens the account directly with `context.nav.signIn.account().push<void>()`.
+
 The screen neither closes itself nor navigates. After a sign-out or a deletion the session has no account, and the router closes the page: the user is on the settings screen again, or on the sign-in in an app that nobody may use without an account. The same happens when the session ends elsewhere, as when the account is deleted on another device. An open sheet goes with the page.
 
 ## Look and state
@@ -50,6 +52,8 @@ The screens are `SignInScreen`, `SignUpScreen`, `ResetPasswordScreen` and `Accou
 
 While a call is on its way, the state of a screen is busy and takes no second call. A failure ends that, and the state has the failure. A sign-in or a sign-up that succeeded leaves the state busy for as long as the session has the account: the user is signed in then, and the router takes the screen away. When the session has no account again before that, as when code of the app signs the user out at once, the form is back. For the screen of the account it is the reverse. After a sign-out or a deletion that succeeded, the state is busy for as long as the session has no account, and the screen is back when the session has one again.
 
+With `bloc`, each page of a screen has a cubit of its own. With `riverpod`, a provider is one for the app, so two pages of one screen that are open at once show the same state.
+
 ## Who uses the app, in a widget
 
 The module also gives the widgets of the app the session, so that a widget rebuilds when the user signs in or out:
@@ -58,8 +62,6 @@ The module also gives the widgets of the app the session, so that a widget rebui
 - With `riverpod`, `sessionProvider` in `session_provider.dart` follows it. A widget reads `ref.watch(sessionProvider)`.
 
 Both give an `AppSession`: nobody, an anonymous user, or the user of an account with its email address. The entry of the settings screen reads the session this way.
-
-With `bloc`, each page of a screen has a cubit of its own. With `riverpod`, a provider is one for the app, so two pages of one screen that are open at once show the same state.
 
 ## What shows the sign-in
 
@@ -94,11 +96,13 @@ A page starts its entrance when it is first built. A widget test that starts the
 
 ## Use with the SMF CLI
 
-`smf create` asks which features the app has. To choose this one without the question, here with a start screen and BLoC:
+`smf create` asks which features the app has. To choose this one without the question, here with a start screen, BLoC and `bottom_tabs`, which provides the layout role, the main navigation of the app:
 
 ```bash
-smf create my_app -m home,sign_in,bloc
+smf create my_app -m home,sign_in,bloc,bottom_tabs
 ```
+
+The tabs of that app lead to the start screen and to the settings screen, where the entry of the account is.
 
 The feature requires a router, a module that provides sign-in, a settings screen and a module that manages state. `smf create` adds each when only one module provides it, and asks, or takes it from `-m`, when several do.
 

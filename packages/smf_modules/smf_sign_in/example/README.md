@@ -1,10 +1,10 @@
 # Generate a Flutter app with sign-in screens
 
-`sign_in` is the feature with the sign-in screens of the apps that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) generates. On its screens a user signs in with an email address and a password, creates an account, and resets a password. On the screen of the account, the user signs out or deletes the account. Choose it with `-m`, here with the start screen `home` and BLoC for the state of the screens:
+`sign_in` is the feature with the sign-in screens of the apps that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) generates. On its screens a user signs in with an email address and a password, creates an account, and resets a password. On the screen of the account, the user signs out or deletes the account. Choose it with `-m`, here with the start screen `home`, BLoC for the state of the screens, and `bottom_tabs`, which provides the layout role, the main navigation of the app:
 
 ```bash
 dart pub global activate smf_flutter_cli
-smf create my_app -m home,sign_in,bloc --no-input
+smf create my_app -m home,sign_in,bloc,bottom_tabs --no-input
 ```
 
 The screens need a router, a module that provides sign-in, a settings screen and a module that manages state. `smf create` adds a module when it is the only one that provides what another one requires, and says which module needs it.
@@ -104,6 +104,8 @@ The settings screen of the app gets an entry for the account. It reads who uses 
 ```
 
 That route needs an account. For a user without one, in an app that everyone may use, the router opens the sign-in over the settings screen first, and shows the screen of the account once the user is signed in. With `riverpod`, a widget reads the same from `ref.watch(sessionProvider)`.
+
+The tabs of `bottom_tabs` lead to the settings screen. In an app without a main navigation, a screen of yours opens it, or opens the account directly with `context.nav.signIn.account().push<void>()`.
 
 The fields and the buttons of the screens are those of the theme of the app, so they change with the theme. The texts are in English and in Ukrainian, and a failure of sign-in has a text for each of its reasons, in `authFailureText()` of `sign_in_widgets.dart`.
 

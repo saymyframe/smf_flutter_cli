@@ -91,7 +91,7 @@ With `go_router`:
 - That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, for as long as the session has the account, since the router leaves the screen then. When the session has no account again before that, the form is back.
 - A failure gets its text in `authFailureText()` of `lib/features/sign_in/sign_in_widgets.dart`, which has a text for every `AuthFailureReason`. `FailureMessage` shows that text, and the `developerHint` of the failure in debug mode only.
 - While a call is on its way, `SubmitButton` spins. A widget test that waits with `pumpAndSettle()` returns only once the call has ended, so until then it shows frames with `pump()`.
-- The screen of the account is `AccountScreen`, the route `sign_in.account` at `/sign_in/account`, with its look in `AccountView` of `lib/features/sign_in/account_view.dart`. The route needs an account, so for a user without one the router opens the sign-in over the page first. `AccountSetting` of `lib/features/sign_in/account_setting.dart` is the entry of the account on the settings screen. It opens the screen with `context.nav.signIn.account().push<void>()`.
+- The screen of the account is `AccountScreen`, the route `sign_in.account` at `/sign_in/account`, with its look in `AccountView` of `lib/features/sign_in/account_view.dart`. The route needs an account, so for a user without one the router opens the sign-in over the page first. `AccountSetting` of `lib/features/sign_in/account_setting.dart` is the entry of the account on the settings screen. It opens the screen with `context.nav.signIn.account().push<void>()`. In an app without a main navigation, no screen opens the settings screen by itself: a screen of the app opens it through `context.nav`, or opens the account with that same call.
 - The screen of the account signs out and deletes the account through its state, an `AccountState`. It neither closes itself nor navigates after that: the router closes its page, or shows the sign-in in place of every screen. The state stays busy after a call that succeeded for as long as the session has no account. `confirmDeleteAccount()` asks in a sheet first, and the screen deletes the account only once that sheet is closed. `DestructiveAction` is a text button of the theme in the colour `colorScheme.error`.
 
 - The state of each screen is a cubit in a file next to it: `SignInCubit`, `SignUpCubit`, `ResetPasswordCubit` and `AccountCubit`. The screen provides its cubit and builds its view from the state. A cubit takes the session through its constructor, so a test creates one with an `AppSessionController` of its own. `lib/features/sign_in/sign_in_composition.dart` creates the cubits with `appSession`, and apart from the file of the guards, no other file of the feature names `appSession`.
@@ -3251,7 +3251,7 @@ class _AccountViewState extends State<AccountView> {
   }
 
   /// Asks whether to delete the account, and deletes it on a yes. The
-  /// sheet of the question is closed by then: once the account is deleted,
+  /// route of the sheet is popped by then: once the account is deleted,
   /// the router closes this page, and the page closes nothing itself.
   Future<void> _delete() async {
     final confirmed = await confirmDeleteAccount(context);
@@ -3296,7 +3296,13 @@ class _AccountViewState extends State<AccountView> {
 
 /// Asks the user whether to delete the account, in a sheet over the page of
 /// [context], as the settings of the app ask in sheets, and returns whether
-/// the user said yes. The sheet is closed when it returns.
+/// the user said yes. A sheet that the user dismisses in another way, as
+/// with the back button of the system or a tap outside it, is a no.
+///
+/// When it returns, the route of the sheet is popped: the sheet still
+/// slides away for a moment, but it takes no tap any more. So the deletion
+/// may start then. A router that closes the page below while the sheet
+/// slides away closes a route that is leaving already.
 Future<bool> confirmDeleteAccount(BuildContext context) async {
   final confirmed = await showModalBottomSheet<bool>(
     context: context,
