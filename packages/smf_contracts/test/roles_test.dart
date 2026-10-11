@@ -16,6 +16,7 @@ const List<Role> _roles = [
   preferencesRole,
   analyticsRole,
   crashReportingRole,
+  authRole,
   settingsScreenRole,
   themeRole,
 ];
@@ -48,6 +49,7 @@ void main() {
       'preferences role',
       'analytics role',
       'crash reporting role',
+      'authentication role',
       'settings screen role',
       'theme role',
     ]);
@@ -104,6 +106,15 @@ void main() {
       'cardinality': RoleCardinality.many,
       'requires': <String>{},
       'uses': {'di'},
+    });
+    // The auth role works with a router, whose routes ask for the account
+    // that it publishes as a condition. It does not work with a DI
+    // container: the code of an app reaches sign-in through the session
+    // that the role generates, a top-level variable.
+    expect(shape(authRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'router'},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -197,6 +208,7 @@ void main() {
           'preferences',
           'analytics',
           'crash_reporting',
+          'auth',
           'settings_screen',
           'theme',
         ],
@@ -383,6 +395,7 @@ void main() {
         'text_system',
         'text_light',
         'text_dark',
+        'auth_mode',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};

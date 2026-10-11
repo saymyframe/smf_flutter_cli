@@ -1,0 +1,13 @@
+name: sign_in
+description: "The look of the sign-in screens of an SMF app: the views of sign-in, sign-up, password reset and the account, their widgets, the row of the settings screen, the values of their state, and the functions of the guards of the routes."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: app_symbol, the symbol of the app in the cell of a screen as a
+# Dart string, app_number, the number in that cell, and text_<name> for each
+# text of the module, the code that reads it.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

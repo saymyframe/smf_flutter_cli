@@ -5,6 +5,7 @@ library;
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
+import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
@@ -12,6 +13,7 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
+import 'package:smf_sign_in/smf_sign_in.dart';
 
 /// The tests that the matrix of the modules of `smf create` adds to its
 /// apps, which the CLI and the packages of its modules keep in their
@@ -27,12 +29,14 @@ Future<MatrixAppTests> smfAppTests() async {
   final firebaseCore = await appTestsDirectoryOf('smf_firebase_core');
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
+  final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
   final home = await appTestsDirectoryOf('smf_home_flutter');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
     'smf_shared_preferences',
   );
+  final signIn = await appTestsDirectoryOf('smf_sign_in');
   return MatrixAppTests(
     [
       // The app starts and shows its first screen: a check that CI builds
@@ -100,6 +104,35 @@ Future<MatrixAppTests> smfAppTests() async {
         values: (app) => {'start_screen': _startScreenOf(app)},
         roles: {routerRole},
       ),
+      // The sign-in service of the module on Firebase Authentication: what
+      // each of its calls sends to Firebase; the reason that it gives each
+      // code of Firebase, in the form in which Android and iOS send it;
+      // the user whom it finds on the device when it is created; a call
+      // for a user whose session has ended on the server, which signs that
+      // user out; and the language in which it asks Firebase for the
+      // message of a password reset, the one that the app is in (see
+      // _messageLanguagesOf). The tests use the service of the module, and
+      // leave what every provider of the auth role does to the test of the
+      // role. The mocks are a backend in memory with no account and nobody
+      // signed in, and the matrix sets them up for the tests of every
+      // module of the app, since the start-up of the app starts the
+      // session of the app on Firebase Authentication. Its probe compares,
+      // on a device, the user of the session with the one that the Firebase
+      // SDK has there.
+      MatrixAppTest(
+        '$firebaseAuth/firebase_auth',
+        appliesTo: _has(FirebaseAuthModule.id),
+        devDependencies: const ['firebase_auth_platform_interface'],
+        generatedFiles: _messageLanguagesOf,
+        mocks: const MatrixMocks(
+          'test/firebase_auth_mocks.dart',
+          'mockFirebaseAuth',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/firebase_auth/probe.dart',
+          'probeFirebaseAuth',
+        ),
+      ),
       // The onboarding of the module: on its first launch, the app shows
       // it in place of the screen that it starts on (see
       // _startScreenFileOf), and the button of its last page or Skip saves
@@ -116,11 +149,11 @@ Future<MatrixAppTests> smfAppTests() async {
       // onboarding on a device, where a first launch finds nothing saved,
       // unless the onboarding is finished there. The test comes before the
       // walk of the routes in this list, whose probe then goes through the
-      // routes of an app past its onboarding. The walk goes to the route of
-      // the onboarding last, as it does to every route in the flow of a
-      // guard. By then the onboarding is finished, so its screen starts it
-      // again, and on a device the start check leaves the app in that
-      // state.
+      // routes of an app past its onboarding. For the route of the
+      // onboarding, whose flow is over by then, the walk expects the screen
+      // that the app starts on, or the target of a guard that does not
+      // allow there. So on a device the start check leaves the app with the
+      // onboarding finished.
       MatrixAppTest(
         '$onboarding/onboarding',
         appliesTo: _has(OnboardingModule.id),
@@ -192,6 +225,43 @@ Future<MatrixAppTests> smfAppTests() async {
         appliesTo: _has(HomeModule.id),
         generatedFiles: (app, packageName) => _homeTextsFileOf(app),
       ),
+      // The screens of sign-in of the module, in each mode of the auth
+      // role, which the app has as a constant: an app that asks for an
+      // account shows the sign-in on its first launch in place of the
+      // screen that it starts on (see _signInOfAppOf), and an app that
+      // everyone may use shows it once code asks for it; a sign-up, a
+      // sign-in and a sign-out go through the session of the app, and an
+      // anonymous user keeps the id with the account; the forms show what
+      // is wrong with an email address and a password, the text of each
+      // failure of a call in each language of the app, and that a call is
+      // on its way; a password reset tells where the message went; and the
+      // screens fit a small phone with a large text size. The screen of
+      // the account signs out and deletes the account, which it asks about
+      // first in a sheet, and the entry of the settings screen leads to
+      // it, through the sign-in for a user without an account. For them
+      // the matrix writes the settings screen of the app, whether it is a
+      // destination of the main navigation, and the entry that the module
+      // gave it, from the settings screen role and the layout role (see
+      // _signInOfAppOf). The screens only change the session: the router
+      // shows them and leaves them, whichever module provides it, as the
+      // router role says of the guards of the routes and of the routes that
+      // ask for a condition, so this is a test of the router role too.
+      // The mocks sign a test account up before the app starts, through
+      // the session, and the matrix sets them up for the tests of every
+      // module of the app, which expect the screens that the guards of the
+      // sign-in would keep them from. The test has no probe for the start
+      // check: nobody can sign in on a device, and the walk of the routes
+      // shows the screens there.
+      MatrixAppTest(
+        '$signIn/sign_in',
+        appliesTo: _has(SignInModule.id),
+        generatedFiles: _signInOfAppOf,
+        roles: {routerRole},
+        mocks: const MatrixMocks(
+          'test/sign_in_mocks.dart',
+          'signUpTestAccount',
+        ),
+      ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
       await diRoleAppTest(),
@@ -201,6 +271,11 @@ Future<MatrixAppTests> smfAppTests() async {
       // The preferences of the apps with the preferences role, whichever
       // module provides it.
       await preferencesRoleAppTest(),
+      // The sign-in of the apps with the auth role, whichever module
+      // provides it, in the mode that the role chose for each: the service
+      // of the provider keeps its contract, and the session of the app
+      // does what the mode says.
+      await authRoleAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -253,15 +328,16 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the settings screen role, of the theme role and of the
-    // localization role gets the tests of its role. Each provider of the
-    // app entry role gets the test of the theme role, which checks that
-    // its root rebuilds.
+    // role, of the auth role, of the settings screen role, of the theme
+    // role and of the localization role gets the tests of its role. Each
+    // provider of the app entry role gets the test of the theme role, which
+    // checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
       eventsRole,
       preferencesRole,
+      authRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,
@@ -567,6 +643,54 @@ $ofDevice};
   };
 }
 
+/// The test of the auth role that the CLI keeps in its
+/// `app_tests/auth_role`, for the apps with the role, whichever module
+/// provides it, in each mode of the role. Each of its four files runs the
+/// start-up of the app once, with `bootstrap()`:
+/// - the service of the provider keeps the contract of `AuthService`, the
+///   same in every mode. When a call completes, the user of the service is
+///   its result; signing up creates an account, whose user has the same id
+///   each time; a wrong password and an address without an account fail
+///   alike; a call that fails leaves whoever is signed in; the user of a
+///   call replaces the user who was signed in; each anonymous user has an
+///   id of its own, and keeps it with an account; deleting removes the
+///   account; a call for the user who is signed in fails when nobody is;
+///   and the stream of the changes tells every listener of each change,
+///   once the user has changed;
+/// - the session of the app does what the mode of the app says: the app is
+///   in the mode that the role chose, and without an account nobody uses it
+///   in the modes `required` and `guest`, and an anonymous user in the mode
+///   `anonymous`, who keeps the id with an account. The session follows a
+///   change that none of its calls made, and only an app in the mode
+///   `anonymous` signs a user in when the user comes back to it;
+/// - the next start, `initAuth()` again, has the user of the device as soon
+///   as it is over, after a sign-up, a sign-in and a link, and so has a
+///   session of the test that never had a user; a start that finds nobody
+///   has nobody, and in the mode `anonymous` a new anonymous user, also
+///   after a deletion; and the account of a user whom a start found can be
+///   deleted, at the latest once the user has signed in again;
+/// - an account that is signed up before the app starts is signed in when
+///   the start-up is over, as the mocks of a module with a guard that asks
+///   for an account rely on.
+///
+/// The test knows only the role. The matrix fills in the mode of each app,
+/// which the test expects the app to be in: the choice of the role
+/// ([AuthRole.modeIn]), which an app that got no value of
+/// [AuthRole.modeOption] has too. So the same files hold in an app of every
+/// mode, and the test applies to every app with the role. No file expects
+/// anything of who is signed in right after the start-up, since the mocks
+/// of a module of the app may have signed a user up before it: each test
+/// signs out first and uses email addresses of its own. It has no probe for
+/// the start check: nobody can sign in on a device.
+Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/auth_role',
+      appliesTo: (app) => app.hook!.presentRoles.contains(authRole),
+      values: (app) => {
+        'auth_mode': authRole.modeIn(authRole.hookInput(app.hook!)).name,
+      },
+      roles: {authRole},
+    );
+
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them. Once the app started
@@ -675,20 +799,24 @@ const Type themeModeEntry = ${widget.codeWith('entry')};
 /// an `ErrorWidget` on the screen or an error that Flutter reports.
 ///
 /// In an app with guards of the routes, the walk expects what the role
-/// says: for a location that a guard keeps the user from, the page and the
-/// screen of the target of that guard (`redirectOf()` of the role). So its
-/// probe, `probeRoutes()`, which the start check runs on a device, holds
-/// whichever guards allow there, where no test can open one, such as a
-/// guard that asks for a signed-in user. The test itself first fails on
-/// each guard that does not allow, by its name: under `flutter test`, the
-/// module of a guard opens it for the tests of the app, in the mocks of its
-/// app test ([MatrixAppTest.mocks]), so that the walk reaches every route
-/// and the tests of the other modules see the screens that they expect.
-///
-/// The walk goes to the locations in the flows of the guards last (see
-/// [routerWalkFile]): a screen of a flow may change what its guard allows
-/// when it is shown, and the router then shows the target of that guard in
-/// place of each location that the walk goes to after it.
+/// says. For a location that a guard keeps the user from, that is the page
+/// and the screen of the target of that guard (`redirectOf()` of the
+/// role): every location outside the flow of a gate, and for a guard that
+/// stands for a condition, only the locations of the routes that ask for
+/// the condition. The target of a gate takes the place of the stack, and
+/// that of a guard of a condition opens over the page that the walk is on:
+/// either way it is the page on top, which the walk looks at. For any other
+/// location in a flow that is over, it is the screen that the app starts on
+/// (`flowIsOver()` of the role). So its probe, `probeRoutes()`, which the
+/// start check runs on a device, holds whichever guards allow there, where
+/// no test can open one, such as a guard that asks for a signed-in user.
+/// The test itself first fails on each guard that does not allow, by its
+/// name, a guard of a condition too: under `flutter test`, the module of a
+/// guard opens it for the tests of the app, in the mocks of its app test
+/// ([MatrixAppTest.mocks]), so that the walk reaches every route outside
+/// the flows and the tests of the other modules see the screens that they
+/// expect. The screens of a flow are then for the tests of its module,
+/// since the router shows them only while the guard does not allow.
 ///
 /// The test knows only the role. The matrix writes the locations of each
 /// app for it, from the routes and the guards of its router role, into
@@ -717,40 +845,36 @@ Future<MatrixAppTest> routerWalkAppTest({
 /// locations of the routes that need no values, each with the full name of
 /// its route ([FacadeRoute.fullName]), the location, created as `const`
 /// from its class of the navigation of the role, and the type of the screen
-/// that the route shows.
+/// that the route shows. They are in the order of the routes of the app
+/// ([RouterFacade.routes]).
 ///
-/// The locations are in the order of the routes of the app
-/// ([RouterFacade.routes]), but for those of the routes in the flow of a
-/// guard ([FacadeGuard.flow]), which come after every other, in the same
-/// order among themselves. A screen of a flow may change what its guard
-/// allows when it is shown: one that is shown although its flow is over
-/// may start the flow again, for example. From then on the router shows
-/// the target of that guard in place of each location outside its flow.
-/// The walk expects what `redirectOf()` says, so it would pass without
-/// seeing the screens of the locations that come after. With the flows
-/// last, it has seen every other location by then. The order does not
-/// help among the flows themselves: once a screen of one flow has made its
-/// guard stop allowing, the walk checks the locations of the flows of the
-/// other guards only against `redirectOf()`.
-///
-/// The file also says what the guards of the routes of the app
-/// ([RouterFacade.guards]) do to the walk, with two functions that every
-/// app gets, so that the walk is the same in an app with guards and in one
-/// without, which has nothing of what the role generates for them:
-/// - `shownFor(walked)`, the location that the router shows when it is
-///   asked to show `walked`: `walked` itself, or the target of the guard
-///   that keeps the user from it, as `redirectOf()` of the role says. In an
-///   app without guards it returns `walked`. The targets are in
-///   `guardTargets`, in the order of the guards, also those that are not
-///   among the first [routerWalkLimit] locations;
+/// The file also says what the router shows for each of them, with two
+/// functions that every app gets, so that the walk is the same in an app
+/// with guards of the routes ([RouterFacade.guards]) and in one without,
+/// which has nothing of what the role generates for them:
+/// - `shownFor(walked)`, the full name of the route and the type of the
+///   screen that the router shows when it is asked to show `walked`, a
+///   `ShownScreen`. In an app without guards, those are the ones of
+///   `walked`. In an app with guards, they are the ones of the target of
+///   the guard that keeps the user from `walked`, as `redirectOf()` of the
+///   role says; else `startOfApp` for a location in a flow that is over,
+///   as `flowIsOver()` of the role says; else the ones of `walked`. The
+///   targets are in `guardTargets`, in the order of the guards, those of
+///   the gates first and then those of the guards that stand for a
+///   condition, each once, also those that are not among the first
+///   [routerWalkLimit] locations.
+///   `startOfApp` is the screen that the app starts on: that of the route
+///   that the role chose ([RouterRole.startIn]), with the name of that
+///   route, or the fallback start screen of the app entry role
+///   ([AppEntryRole.fallbackStartScreen]) without the name of a route, in
+///   an app that no route can start;
 /// - `closedGuards()`, the full names of the guards that do not allow, in
-///   the order of `routeGuards` of the role; none in an app without guards.
+///   the order of `routeGuards` of the role, a guard whose condition does
+///   not hold among them; none in an app without guards.
 const routerWalkFile = 'integration_test/router_walk/locations.dart';
 
 /// The most locations that the walk of the test of the router role goes
-/// to, the first of [routerWalkFile]. The locations in the flows of the
-/// guards count among them and are the last of the file, so the walk
-/// leaves them out first in an app with more locations than it goes to.
+/// to, the first of [routerWalkFile].
 const routerWalkLimit = 20;
 
 /// The file at [routerWalkFile] of [app], an app of the matrix with the
@@ -762,41 +886,47 @@ const routerWalkLimit = 20;
 /// that no name clashes. In an app with guards it imports the file of the
 /// role that has them too, without a prefix either.
 Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
-  final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
-  // The routes in the flow of a guard, which the walk goes to last: their
-  // screens may change what their guard allows when they are shown.
-  final inFlows = {
-    for (final guard in facade.guards)
-      for (final route in guard.flow) route.fullName,
-  };
-  final walkable = [
+  final input = routerRole.hookInput(app.hook!);
+  final facade = routerRole.facadeOf(input);
+  final routes = [
     for (final route in facade.routes)
       if (!route.hasRequiredParams) route,
-  ];
-  final routes = [
-    ...walkable.where((route) => !inFlows.contains(route.fullName)),
-    ...walkable.where((route) => inFlows.contains(route.fullName)),
   ].take(routerWalkLimit);
   final screens = <String, String>{};
+  String prefixOf(ImportRef import) => screens.putIfAbsent(
+        import.resolveUri(packageName),
+        () => 'screen${screens.length}',
+      );
   String walked(FacadeRoute route) {
     final screen = route.route.screen;
-    final prefix = screens.putIfAbsent(
-      screen.import.resolveUri(packageName),
-      () => 'screen${screens.length}',
-    );
     return '  (\n'
         '    route: ${SmfNames.dartString(route.fullName)},\n'
         '    location: ${route.locationClass}(),\n'
-        '    screen: $prefix.${screen.className},\n'
+        '    screen: ${prefixOf(screen.import)}.${screen.className},\n'
         '  ),\n';
   }
 
   final locations = routes.map(walked).join();
-  // Each target once: two guards may show the same one.
+  // Each target once: two guards may show the same one, such as a gate and
+  // a guard that stands for a condition.
   final targets = {for (final guard in facade.guards) guard.target};
+  const fallback = AppEntryRole.fallbackStartScreen;
   final guards = targets.isEmpty
       ? _withoutGuards
-      : _withGuards(targets.map(walked).join());
+      : _withGuards(
+          targets: targets.map(walked).join(),
+          start: switch (routerRole.startIn(input)) {
+            final start? => (
+                route: SmfNames.dartString(start.fullName),
+                screen: '${prefixOf(start.route.screen.import)}.'
+                    '${start.route.screen.className}',
+              ),
+            null => (
+                route: 'null',
+                screen: '${prefixOf(fallback.importRef)}.${fallback.name}',
+              ),
+          },
+        );
   String ofRole(String file) =>
       ImportRef.app(file.substring('lib/'.length)).resolveUri(packageName);
   final imports = [
@@ -808,18 +938,22 @@ Map<String, String> _walkedLocationsOf(MatrixApp app, String packageName) {
   return {
     routerWalkFile: '''
 // The locations of the app that need no values, at most $routerWalkLimit,
-// and what the guards of its routes show in their place, which the matrix
-// of SMF writes from the data of the router role of the app for the walk of
-// its routes, walk.dart.
+// and what the router shows for each, which the matrix of SMF writes from
+// the data of the router role of the app for the walk of its routes,
+// walk.dart.
 ${imports.join('\n')}
 
 /// A location of the app that needs no values: the full name of its route,
 /// the location, and the type of the screen that the route shows.
 typedef WalkedLocation = ({String route, AppLocation location, Type screen});
 
+/// What the router shows for a location: the full name of the route of the
+/// page on top, or `null` for a screen that is no route of a module, and
+/// the type of the screen.
+typedef ShownScreen = ({String? route, Type screen});
+
 /// The locations of the app that need no values, in the order of the
-/// routes of the app, with those in the flow of a guard after the others:
-/// a screen of a flow may change what its guard allows when it is shown.
+/// routes of the app.
 const List<WalkedLocation> walkedLocations = [
 $locations];
 $guards''',
@@ -827,12 +961,15 @@ $guards''',
 }
 
 /// What [routerWalkFile] says of the guards in an app without guards, which
-/// has neither `redirectOf()` nor `routeGuards` of the router role.
+/// has none of `redirectOf()`, `flowIsOver()` and `routeGuards` of the
+/// router role.
 const _withoutGuards = '''
 
-/// The location that the router shows when it is asked to show [walked]:
-/// [walked] itself, since no module of the app has a guard of the routes.
-WalkedLocation shownFor(WalkedLocation walked) => walked;
+/// What the router shows when it is asked to show [walked]: the page and
+/// the screen of [walked] itself, since no module of the app has a guard of
+/// the routes.
+ShownScreen shownFor(WalkedLocation walked) =>
+    (route: walked.route, screen: walked.screen);
 
 /// The full names of the guards of the routes that do not allow: none,
 /// since no module of the app has a guard.
@@ -840,8 +977,15 @@ List<String> closedGuards() => const [];
 ''';
 
 /// What [routerWalkFile] says of the guards in an app with guards, whose
-/// targets are [targets], each as a location of the walk.
-String _withGuards(String targets) => '''
+/// targets are [targets], each as a location of the walk, and which starts
+/// on the screen [start]: the code of the full name of its route, or of
+/// `null` for the fallback start screen, and the code of the type of the
+/// screen.
+String _withGuards({
+  required String targets,
+  required ({String route, String screen}) start,
+}) =>
+    '''
 
 /// The targets of the guards of the routes of the app, in the order of the
 /// guards: the location that the router shows while a guard does not
@@ -849,15 +993,31 @@ String _withGuards(String targets) => '''
 const List<WalkedLocation> guardTargets = [
 $targets];
 
-/// The location that the router shows when it is asked to show [walked]:
-/// [walked] itself, or the target of the guard that keeps the user from it,
-/// as redirectOf() of the router role says.
-WalkedLocation shownFor(WalkedLocation walked) {
+/// The screen that the app starts on, which the router shows in place of a
+/// location in a flow that is over: that of the route that starts the app,
+/// or the fallback start screen of the app entry, which is no route, in an
+/// app that no route can start.
+const ShownScreen startOfApp = (
+  route: ${start.route},
+  screen: ${start.screen},
+);
+
+/// What the router shows on top when it is asked to show [walked], as the
+/// router role says: the target of the guard that keeps the user from it
+/// (redirectOf()), in place of the stack for a gate, and over the page that
+/// the user is on for a guard of a condition that [walked] asks for; or
+/// else the screen that the app starts on if the flow of [walked] is over
+/// (flowIsOver()), or else the page and the screen of [walked] itself.
+ShownScreen shownFor(WalkedLocation walked) {
   final target = ${RouterRole.redirectOf}(walked.route);
-  if (target == null) return walked;
-  return guardTargets.firstWhere(
-    (shown) => shown.route == target.routeName,
-  );
+  if (target != null) {
+    final shown = guardTargets.firstWhere(
+      (shown) => shown.route == target.routeName,
+    );
+    return (route: shown.route, screen: shown.screen);
+  }
+  if (${RouterRole.flowIsOver}(walked.route)) return startOfApp;
+  return (route: walked.route, screen: walked.screen);
 }
 
 /// The full names of the guards of the routes that do not allow, in the
@@ -1033,20 +1193,7 @@ const homeTextsFile = 'test/home/texts.dart';
 /// is the English one there, as the localization role says of the texts of
 /// an app.
 Map<String, String> _homeTextsFileOf(MatrixApp app) {
-  final hook = app.hook!;
-  final languages = hook.presentRoles.contains(localizationRole)
-      ? localizationRole.localesIn(localizationRole.hookInput(hook))
-      : const ['en'];
-  final texts = StringBuffer();
-  for (final language in languages) {
-    texts.writeln('  ${SmfNames.dartString(language)}: {');
-    for (final text in HomeModule.texts.texts) {
-      final name = SmfNames.dartString(text.name);
-      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
-      texts.writeln('    $name: $shown,');
-    }
-    texts.writeln('  },');
-  }
+  final texts = _textsByLanguageOf(app, HomeModule.texts);
   return {
     homeTextsFile: '''
 // The texts of the start screen of the home module in each language of the
@@ -1083,13 +1230,8 @@ const settingsOfAppFile = 'test/settings_of_app.dart';
 /// so the test of the back button pushes the screen only where it is no
 /// destination.
 Map<String, String> _settingsOfAppOf(MatrixApp app) {
-  final hook = app.hook!;
-  final input = settingsScreenRole.hookInput(hook);
-  final screen = settingsScreenRole.screenIn(input);
-  final destination = hook.presentRoles.contains(layoutRole) &&
-      layoutRole
-          .destinationsIn(layoutRole.hookInput(hook))
-          .any((route) => route.fullName == screen?.fullName);
+  final input = settingsScreenRole.hookInput(app.hook!);
+  final destination = _settingsInMainNavigationOf(app);
   return {
     settingsOfAppFile: '''
 // What the settings screen has in the app and where it is, which the matrix
@@ -1107,6 +1249,21 @@ const int settingsEntryCount = ${settingsScreenRole.entriesIn(input).length};
 const bool settingsInMainNavigation = $destination;
 ''',
   };
+}
+
+/// Whether the settings screen of [app], an app of the matrix with the
+/// settings screen role, is a destination of its main navigation: the app
+/// has the layout role, and the route of the screen
+/// ([SettingsScreenRole.screenIn]) is one of the destinations of that role
+/// ([LayoutRole.destinationsIn]).
+bool _settingsInMainNavigationOf(MatrixApp app) {
+  final hook = app.hook!;
+  final screen =
+      settingsScreenRole.screenIn(settingsScreenRole.hookInput(hook));
+  return hook.presentRoles.contains(layoutRole) &&
+      layoutRole
+          .destinationsIn(layoutRole.hookInput(hook))
+          .any((route) => route.fullName == screen?.fullName);
 }
 
 /// The test of the DI role that the CLI keeps in its `app_tests/di_role`,
@@ -1236,14 +1393,7 @@ const onboardingStartScreenFile = 'test/onboarding/start_screen.dart';
 ///
 /// It imports the file of the screen with the prefix `screen`.
 Map<String, String> _startScreenFileOf(MatrixApp app, String packageName) {
-  final start = routerRole.startIn(routerRole.hookInput(app.hook!))?.route;
-  final (import, screen) = switch (start?.screen) {
-    final screen? => (screen.import, screen.className),
-    null => (
-        AppEntryRole.fallbackStartScreen.importRef,
-        AppEntryRole.fallbackStartScreen.name,
-      ),
-  };
+  final (import, screen) = _startScreenClassOf(app);
   return {
     onboardingStartScreenFile: '''
 // The screen that the app starts on, which the matrix of SMF writes from
@@ -1274,20 +1424,7 @@ const onboardingTextsFile = 'test/onboarding/texts.dart';
 /// is the English one there, as the localization role says of the texts of
 /// an app.
 Map<String, String> _onboardingTextsFileOf(MatrixApp app) {
-  final hook = app.hook!;
-  final languages = hook.presentRoles.contains(localizationRole)
-      ? localizationRole.localesIn(localizationRole.hookInput(hook))
-      : const ['en'];
-  final texts = StringBuffer();
-  for (final language in languages) {
-    texts.writeln('  ${SmfNames.dartString(language)}: {');
-    for (final text in OnboardingModule.texts.texts) {
-      final name = SmfNames.dartString(text.name);
-      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
-      texts.writeln('    $name: $shown,');
-    }
-    texts.writeln('  },');
-  }
+  final texts = _textsByLanguageOf(app, OnboardingModule.texts);
   return {
     onboardingTextsFile: '''
 // The texts of the onboarding in each language of the app, which the
@@ -1303,6 +1440,239 @@ const Map<String, Map<String, String>> onboardingTexts = {
 $texts};
 ''',
   };
+}
+
+/// The path in an app of what the matrix writes for the test of the
+/// language of the messages of Firebase Authentication that the
+/// firebase_auth module keeps in its `app_tests/firebase_auth`:
+/// `messageLanguages`, the codes of the languages in which the app asks
+/// Firebase for its messages, those of the app
+/// ([LocalizationRole.localesIn]), and `chooseLanguage()`, which chooses
+/// one of them for the app as its user does, or lets the app follow the
+/// device again.
+const messageLanguagesFile = 'test/firebase_auth/languages.dart';
+
+/// The file at [messageLanguagesFile] of [app], an app of the matrix whose
+/// package is [packageName].
+///
+/// In an app with the localization role, the languages are those of the
+/// role, and choosing one goes through `appLocale` of the file of the role.
+/// An app without the role asks Firebase for no language, so the file has
+/// none, and nothing to choose.
+Map<String, String> _messageLanguagesOf(MatrixApp app, String packageName) {
+  const about = '''
+// The languages in which the app asks Firebase Authentication for its
+// messages, which the matrix of SMF writes from the localization role of
+// the app for the test of the calls of the firebase_auth module,
+// calls_test.dart.''';
+  final hook = app.hook!;
+  if (!hook.presentRoles.contains(localizationRole)) {
+    return {
+      messageLanguagesFile: '''
+$about
+
+/// The codes of the languages in which the app asks for the messages: the
+/// app has no languages of its own, so it asks for none, and Firebase sends
+/// each message in the language of its template.
+const List<String> messageLanguages = [];
+
+/// The app has no language to choose.
+Future<void> chooseLanguage(String? language) async {}
+''',
+    };
+  }
+  final languages = [
+    for (final language
+        in localizationRole.localesIn(localizationRole.hookInput(hook)))
+      SmfNames.dartString(language),
+  ];
+  final appLocale = ImportRef.app(
+    LocalizationRole.appLocaleFile.substring('lib/'.length),
+  ).resolveUri(packageName);
+  return {
+    messageLanguagesFile: '''
+$about
+import 'dart:ui';
+
+import '$appLocale';
+
+/// The codes of the languages in which the app asks for the messages:
+/// those of the app, the first of which the app is in when the device asks
+/// for none of them.
+const List<String> messageLanguages = [${languages.join(', ')}];
+
+/// Chooses [language], one of [messageLanguages], as the language of the
+/// app, as its user does, or with `null` lets the app follow the languages
+/// of the device again.
+Future<void> chooseLanguage(String? language) =>
+    appLocale.choose(language == null ? null : Locale(language));
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the tests of the
+/// sign-in module: `startScreen`, the type of the screen that the app
+/// starts on, which the app shows once its user may see it; `otherPages`,
+/// a location of the app that is neither the one that the app starts on nor
+/// in the flow of a guard, with the type of its screen, or nothing in an
+/// app without such a route; `settingsLocation` and `settingsScreen`, the
+/// location of the route that the provider of the settings screen role
+/// names as the settings screen and the type of that screen,
+/// `settingsInMainNavigation`, whether that screen is a destination of the
+/// main navigation of the app, and `accountEntry`, the type of the widget
+/// of the entry that the module gives that screen; and `signInTexts`, the
+/// texts of the module
+/// ([SignInModule.texts]), each by its name, in each language of the app,
+/// by the code of the language. The languages are those of the
+/// localization role of the app
+/// ([LocalizationRole.localesIn]), in its order, and English alone in an
+/// app without the role, whose screens have the English texts.
+const signInOfAppFile = 'test/sign_in/of_app.dart';
+
+/// The file at [signInOfAppFile] of [app], an app of the matrix with the
+/// router role and the settings screen role, whose package is
+/// [packageName].
+///
+/// The screen that the app starts on is that of the route that the router
+/// role chose, or the fallback start screen of the app entry role when no
+/// route of its modules can start it; the file imports its file with the
+/// prefix `screen`. The settings screen and the entry come from the data of
+/// the settings screen role, whichever module provides it: the entry is
+/// the one that the module gave the role. The screen is a destination by
+/// the layout role of the app. The router role refuses to push a location
+/// of the main navigation over it, so the tests push the settings screen
+/// over another page only where it is no destination. A text of the module
+/// without a translation into a language of the app is the English one
+/// there, as the localization role says of the texts of an app.
+Map<String, String> _signInOfAppOf(MatrixApp app, String packageName) {
+  final (import, screen) = _startScreenClassOf(app);
+  final texts = _textsByLanguageOf(app, SignInModule.texts);
+  // A page that a user may be on other than the one that the app starts
+  // on: a route that needs no values, in no flow of a guard, that asks for
+  // no condition.
+  final input = routerRole.hookInput(app.hook!);
+  final facade = routerRole.facadeOf(input);
+  final start = routerRole.startIn(input);
+  final inFlows = {
+    for (final guard in facade.guards)
+      for (final route in guard.flow) route.fullName,
+  };
+  final other = [
+    for (final route in facade.routes)
+      if (!route.hasRequiredParams &&
+          route.fullName != start?.fullName &&
+          !inFlows.contains(route.fullName) &&
+          route.route.conditions.isEmpty)
+        route,
+  ].firstOrNull;
+  final otherScreen = other?.route.screen;
+  final otherPage = other == null
+      ? ''
+      : '  (location: ${other.locationClass}(), '
+          'screen: other.${otherScreen!.className}),\n';
+  final otherImport = otherScreen == null
+      ? ''
+      : "import '${otherScreen.import.resolveUri(packageName)}' "
+          'as other;\n';
+  final settingsInput = settingsScreenRole.hookInput(app.hook!);
+  final settings = _settingsRouteOf(app, settingsInput);
+  final entries = [
+    for (final RoleData(:value, :origin) in settingsInput.data)
+      if (value is SettingsEntry &&
+          origin == const ModuleOrigin(SignInModule.id))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The module ${SignInModule.id} gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry of the '
+      'account alone.',
+    );
+  }
+  final entry = entries.single.widget;
+  final settingsScreen = settings.route.screen;
+  return {
+    signInOfAppFile: '''
+// What the tests of the sign-in module, in test/sign_in, need to know of
+// the app, which the matrix of SMF writes from the data of the router role
+// of the app and of the settings screen role of the app, from the texts of
+// the module and from the languages of the localization role of the app.
+import '${_navigationOf(packageName)}';
+import '${entry.import!.resolveUri(packageName)}' as entry;
+import '${settingsScreen.import.resolveUri(packageName)}' as settings;
+${otherImport}import '${import.resolveUri(packageName)}' as screen;
+
+/// The type of the screen that the app starts on: that of the route that
+/// the router role chose, or the fallback start screen of the app entry
+/// role in an app that no route can start.
+const Type startScreen = screen.$screen;
+
+/// A location of the app that is neither the one that the app starts on
+/// nor in the flow of a guard, with the type of its screen, for a user who
+/// is somewhere else in the app; empty in an app without such a route.
+const List<({AppLocation location, Type screen})> otherPages = [
+$otherPage];
+
+/// The location of the route that shows the settings screen.
+const AppLocation settingsLocation = ${settings.locationClass}();
+
+/// The type of the settings screen.
+const Type settingsScreen = settings.${settingsScreen.className};
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = ${_settingsInMainNavigationOf(app)};
+
+/// The type of the widget of the entry of the account on the settings
+/// screen.
+const Type accountEntry = ${entry.codeWith('entry')};
+
+/// The texts of the screens of sign-in by the code of each language of the
+/// app, the first of which the app uses when the device asks for none of
+/// them: each text by its name in the module. An app without the
+/// localization role has the English texts alone.
+const Map<String, Map<String, String>> signInTexts = {
+$texts};
+''',
+  };
+}
+
+/// The file and the name of the class of the screen that [app], an app of
+/// the matrix with the router role, starts on: the screen of the route
+/// that the role chose to start the app on, or the fallback start screen of
+/// the app entry role when no route of its modules can start it.
+(ImportRef, String) _startScreenClassOf(MatrixApp app) {
+  final start = routerRole.startIn(routerRole.hookInput(app.hook!))?.route;
+  return switch (start?.screen) {
+    final screen? => (screen.import, screen.className),
+    null => (
+        AppEntryRole.fallbackStartScreen.importRef,
+        AppEntryRole.fallbackStartScreen.name,
+      ),
+  };
+}
+
+/// The entries of a Dart map of the [texts] of a module in each language
+/// of [app], an app of the matrix: for the code of each language, each
+/// text by its name. The languages are those of the localization role of
+/// the app, in its order, or English alone in an app without the role. A
+/// text without a translation into a language is the English one there.
+String _textsByLanguageOf(MatrixApp app, TextsData texts) {
+  final hook = app.hook!;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final entries = StringBuffer();
+  for (final language in languages) {
+    entries.writeln('  ${SmfNames.dartString(language)}: {');
+    for (final text in texts.texts) {
+      final name = SmfNames.dartString(text.name);
+      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
+      entries.writeln('    $name: $shown,');
+    }
+    entries.writeln('  },');
+  }
+  return '$entries';
 }
 
 /// The name under which the listener of Firebase Analytics logs the

@@ -1,0 +1,1554 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+
+## Authentication
+
+- `appSession` in `lib/core/auth/app_session.dart` tells who uses the app, and knows it before the first frame. Its `value` is a `SignedOutSession`, an `AnonymousSession` or an `AccountSession`, and `appSession.value.uid` is the id of the user. Sign in, sign up, sign out and delete the account only through `appSession`. The app has one, so create no other `AppSessionController`.
+- A call of `appSession` fails only with an `AuthFailure`. Catch it and show a text of the app for its `reason`. Show its `developerHint` in debug mode only. After `recentSignInRequired`, tell the user to sign out and sign in again.
+- `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes. One that reads `appSession.allowsApp` stands before the whole app, and one that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. In an app without such a guard every screen is open, whatever the mode, and that includes a screen that needs an account. A screen does not redirect itself.
+- When an anonymous user signs in to an account that exists already, `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user. Call no method of `appSession` in it, since the sign-in that calls it would wait for that call.
+- A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure` and `AuthFailureReason`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# fixture_app
+
+A new Flutter project.
+
+## Sign-in
+
+The sign-in mode of the app says who may use it without an account. This app was generated in the mode `anonymous`: `authMode` in `lib/core/auth/app_session.dart` is `AuthMode.anonymous`.
+
+- In `required`, nobody may. `appSession.allowsApp` is true only for a user who signed in to an account.
+- In `guest`, everyone may. The app has no user until someone signs in, and `appSession.allowsApp` is always true.
+- In `anonymous`, everyone may, as an anonymous user that the app signs in itself when it starts. Code then has the id of a user, `appSession.value.uid`, before anyone has an account, and signing up gives that same user the account. The app waits up to 3 seconds for that sign-in. When it fails or takes longer, the app starts without a user and tries again each time the user comes back to it. `appSession.allowsApp` is always true.
+
+The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `required` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
+
+To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
+
+When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.fixture_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.fixture_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="Fixture App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Fixture App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>FixtureApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
+
+import 'core/app/fallback_start_screen.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'Fixture App',
+    home: const FallbackStartScreen(),
+    builder: (context, child) => Builder(
+      builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarBrightness: Theme.of(context).brightness,
+          statusBarIconBrightness:
+              Theme.of(context).brightness == Brightness.dark
+              ? Brightness.light
+              : Brightness.dark,
+        ),
+        child: child!,
+      ),
+    ),
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:fixture_app/core/auth/app_session.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  await initAuth();
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const FallbackStartView(
+    hint:
+        'No start screen yet. Add a feature with a route, or replace this screen.',
+    copied: 'Copied',
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '10',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Fa',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'Fixture App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/auth/app_session.dart (role:auth) ===
+import 'dart:async';
+
+import 'package:fixture_app/core/fixture_auth/fixture_auth.dart' as impl0;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'auth_service.dart';
+import 'guest_data.dart';
+
+export 'auth_service.dart' show AuthFailure, AuthFailureReason;
+
+/// Who may use the app without an account.
+enum AuthMode {
+  /// Nobody: the user signs in first.
+  required,
+
+  /// Everyone. The app has no user until someone signs in, and asks for an
+  /// account only where a screen needs one.
+  guest,
+
+  /// Everyone, as an anonymous user that the app signs in itself when it
+  /// starts, so that code has the id of a user from the first frame. An
+  /// account is asked for only where a screen needs one, and signing up
+  /// gives it to that same user.
+  anonymous,
+}
+
+/// The mode of this app, which was chosen when the app was generated.
+///
+/// The mode gates nothing on its own. It decides what [appSession] does when
+/// it starts and what [AppSessionController.allowsApp] says, which a guard
+/// of the routes reads.
+///
+/// To change the mode, change its value and keep the declaration as it is,
+/// on a line that it starts: a tool of the app that cannot import this
+/// file, which imports Flutter, reads the mode from this line.
+const AuthMode authMode = AuthMode.anonymous;
+
+/// Who uses the app: nobody that the app knows, an anonymous user, or the
+/// user of an account.
+@immutable
+sealed class AppSession {
+  const AppSession();
+
+  /// The id of the user, or `null` when nobody is signed in.
+  String? get uid;
+}
+
+/// Nobody is signed in.
+final class SignedOutSession extends AppSession {
+  /// Creates the session of an app without a user.
+  const SignedOutSession();
+
+  @override
+  String? get uid => null;
+
+  @override
+  bool operator ==(Object other) => other is SignedOutSession;
+
+  @override
+  int get hashCode => (SignedOutSession).hashCode;
+}
+
+/// An anonymous user is signed in: one without an account, whom the app
+/// signed in itself.
+final class AnonymousSession extends AppSession {
+  /// Creates the session of the anonymous user [uid].
+  const AnonymousSession(this.uid);
+
+  @override
+  final String uid;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AnonymousSession && other.uid == uid;
+
+  @override
+  int get hashCode => uid.hashCode;
+}
+
+/// The user of an account is signed in.
+final class AccountSession extends AppSession {
+  /// Creates the session of the account [uid].
+  const AccountSession(this.uid, {this.email});
+
+  @override
+  final String uid;
+
+  /// The email address of the account, or `null` if it has none.
+  final String? email;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountSession && other.uid == uid && other.email == email;
+
+  @override
+  int get hashCode => Object.hash(uid, email);
+}
+
+/// The session of the app: who uses it, known before the first frame, and
+/// the way to sign in, up and out.
+///
+/// Its `value` is the [AppSession], and it tells its listeners when that
+/// changes. A widget follows it with a `ValueListenableBuilder`.
+final appSession = AppSessionController(
+  mode: authMode,
+  takeGuestData: takeGuestData,
+);
+
+/// Keeps the session of the app up to date with the service of the provider
+/// of sign-in, and signs in, up and out through that service. The app has
+/// one, [appSession].
+///
+/// Every call here fails only with an [AuthFailure], whose reason the app
+/// shows in a text of its own. An error of another kind becomes a failure
+/// with the reason [AuthFailureReason.unknown] and the error as its
+/// [AuthFailure.developerHint].
+///
+/// The calls run one after another, in the order they were made, and none
+/// runs next to an anonymous sign-in that is on its way. So the user of the
+/// app is the result of the call that was made last. In the mode
+/// [AuthMode.anonymous], a call that leaves nobody signed in is followed by
+/// an anonymous sign-in.
+final class AppSessionController extends ChangeNotifier
+    implements ValueListenable<AppSession> {
+  /// Creates a controller for an app in [mode]. The app creates
+  /// [appSession] and no other. A test creates one to see another mode, or
+  /// a shorter [anonymousWait], and disposes of it.
+  AppSessionController({
+    required this.mode,
+    required this.takeGuestData,
+    this.anonymousWait = const Duration(seconds: 3),
+  });
+
+  /// Who may use the app without an account.
+  final AuthMode mode;
+
+  /// Takes what an anonymous user has before that user signs in to an
+  /// account: `takeGuestData` of `guest_data.dart`.
+  final Future<GiveGuestData?> Function(String guestUid) takeGuestData;
+
+  /// How long the app waits for its anonymous user when it starts, and
+  /// after a sign-out or the deletion of an account, in the mode
+  /// [AuthMode.anonymous].
+  final Duration anonymousWait;
+
+  AuthService? _service;
+  StreamSubscription<AuthUser?>? _userChanges;
+  AppSession _session = const SignedOutSession();
+  bool _disposed = false;
+
+  /// Completes when the app has started for the first time.
+  final Completer<void> _started = Completer<void>();
+
+  /// The call that was made last, while a call is on its way: the next one
+  /// waits for it. It is `null` when none is, and a call then awaits
+  /// nothing. A future that completed in another zone would hold the call
+  /// back in a widget test, where the app starts in real time and the test
+  /// goes on in fake time.
+  Future<void>? _lastCall;
+
+  /// The anonymous sign-ins that are on their way, each by its service, so
+  /// that the app starts no second one next to it.
+  final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
+
+  /// Tells when the user comes back to the app, in the mode
+  /// [AuthMode.anonymous].
+  _ResumeObserver? _observer;
+
+  /// Who uses the app.
+  @override
+  AppSession get value => _session;
+
+  /// Whether the user may see the app: always in the modes [AuthMode.guest]
+  /// and [AuthMode.anonymous], and with an account in the mode
+  /// [AuthMode.required].
+  ///
+  /// It is computed from the session each time it is read, and its
+  /// listeners are those of the session. So when the session changes, a
+  /// listener finds this value and [hasAccount] both up to date, whichever
+  /// of the two it listens to. A listener is also called for a change of
+  /// the session that leaves this value as it was.
+  late final ValueListenable<bool> allowsApp = _SessionFlag(
+    this,
+    (session) => mode != AuthMode.required || session is AccountSession,
+  );
+
+  /// Whether the user of an account is signed in, which an anonymous user
+  /// is not. It follows the session as [allowsApp] does.
+  late final ValueListenable<bool> hasAccount = _SessionFlag(
+    this,
+    (session) => session is AccountSession,
+  );
+
+  /// Starts the session with [service]: takes the user who is signed in on
+  /// this device, and follows the changes that the service tells of.
+  ///
+  /// `initAuth()` calls it in `bootstrap()`, so the session is known before
+  /// the first frame. In the mode [AuthMode.anonymous], an app without a
+  /// user signs in anonymously here and waits for that for at most
+  /// [anonymousWait]. When the sign-in fails or takes longer, the app
+  /// starts without a user. A sign-in that takes longer still becomes the
+  /// session when it comes, and the app tries again each time the user
+  /// comes back to it.
+  ///
+  /// A call made before the first start waits for it: [signIn], [signUp],
+  /// [sendPasswordReset], [signOut] and [deleteAccount]. Such calls run in
+  /// their order once the start has the user, and the future of this start
+  /// completes after them, but waits for no call that is made while it
+  /// runs. The mocks of the tests of an app use this: a call of [signUp]
+  /// made before `bootstrap()`, which nothing awaits, gives the app an
+  /// account before its first frame. A test makes such a call outside the
+  /// body of a test, as in a `setUpAll`: made in the body of a widget
+  /// test, it waits in the fake time of that body, and a start that runs in
+  /// real time never completes.
+  ///
+  /// It may be called again, with the service that the session has from
+  /// then on: `initAuth()` does so in a test of the next launch of the app,
+  /// and a test gives it a service of its own. Such a start takes its turn
+  /// after the calls that are on their way.
+  Future<void> start(AuthService service) async {
+    // The calls that were made before this start. The first start lets
+    // them run once it has the user, and a later one waits for them.
+    final earlier = _lastCall;
+    final first = !_started.isCompleted;
+    if (!first) await earlier;
+    unawaited(_userChanges?.cancel());
+    _service = service;
+    _userChanges = service.userChanges.listen(
+      (_) => _sync(),
+      onError: (Object error, StackTrace stackTrace) => _report(
+        error,
+        stackTrace,
+        'while following the user of the provider of sign-in',
+      ),
+    );
+    _sync();
+    if (mode == AuthMode.anonymous) {
+      if (_observer == null) {
+        final observer = _observer = _ResumeObserver(_retry);
+        WidgetsBinding.instance.addObserver(observer);
+      }
+      await _signInAnonymously();
+    }
+    if (!_started.isCompleted) _started.complete();
+    if (first) await earlier;
+  }
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// An anonymous user becomes the user of that account, and what the
+  /// anonymous user had moves to the account as `takeGuestData` says.
+  Future<void> signIn({required String email, required String password}) =>
+      _call(
+        (service) =>
+            _toAccount(() => service.signIn(email: email, password: password)),
+      );
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// An anonymous user gets the account and keeps the id, so everything
+  /// that the user had stays.
+  Future<void> signUp({required String email, required String password}) =>
+      _call(
+        (service) => _session is AnonymousSession
+            ? service.linkPassword(email: email, password: password)
+            : service.signUp(email: email, password: password),
+      );
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password. It completes whether [email] has an account or not.
+  Future<void> sendPasswordReset(String email) =>
+      _call((service) => service.sendPasswordReset(email));
+
+  /// Signs the user out. In the mode [AuthMode.anonymous], the app then
+  /// signs in anonymously again, as when it starts.
+  Future<void> signOut() =>
+      _call((service) => service.signOut(), waitsForAnonymousUser: true);
+
+  /// Deletes the user who is signed in. The app is then without a user, as
+  /// after [signOut], and in the mode [AuthMode.anonymous] it signs in
+  /// anonymously again.
+  ///
+  /// It may fail with [AuthFailureReason.recentSignInRequired]: the user
+  /// then signs out, signs in again and repeats it.
+  Future<void> deleteAccount() =>
+      _call((service) => service.deleteAccount(), waitsForAnonymousUser: true);
+
+  /// Stops following the service and the lifecycle of the app. A call that
+  /// is on its way still ends as it would have, but tells no listener, and
+  /// no anonymous sign-in follows it.
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_userChanges?.cancel());
+    if (_observer case final observer?) {
+      WidgetsBinding.instance.removeObserver(observer);
+    }
+    super.dispose();
+  }
+
+  /// The user came back to the app. In the mode [AuthMode.anonymous], an
+  /// app without a user then signs in anonymously again: as what follows
+  /// every call, so this takes a turn among the calls with nothing else to
+  /// do, and starts no anonymous sign-in next to a sign-in.
+  void _retry() => unawaited(_call((service) async {}));
+
+  /// Runs [call] with the service once the calls made before it are over,
+  /// and not before the app has started for the first time.
+  ///
+  /// In the mode [AuthMode.anonymous], a call that leaves nobody signed in
+  /// is followed by an anonymous sign-in. A call that
+  /// [waitsForAnonymousUser], as a sign-out, completes once that sign-in is
+  /// over or took too long, as the start does.
+  Future<void> _call(
+    Future<void> Function(AuthService service) call, {
+    bool waitsForAnonymousUser = false,
+  }) async {
+    final earlier =
+        _lastCall ?? (_started.isCompleted ? null : _started.future);
+    final done = Completer<void>();
+    final own = _lastCall = done.future;
+    if (earlier != null) await earlier;
+    try {
+      await _guarded(call);
+      final signIn = _signInAnonymously();
+      if (waitsForAnonymousUser) await signIn;
+    } finally {
+      if (identical(_lastCall, own)) _lastCall = null;
+      done.complete();
+    }
+  }
+
+  /// Runs [call] with the service, once an anonymous sign-in that is on its
+  /// way is over: of a call and a sign-in that run at the same time, the
+  /// one that ended last would decide who the user is.
+  ///
+  /// Whatever [call] throws that is no [AuthFailure] becomes one, and the
+  /// session has the user of the service when it is over, also when it
+  /// failed. A call that failed does not wait for the anonymous sign-in
+  /// that follows it, so that its failure is not late.
+  Future<void> _guarded(Future<void> Function(AuthService service) call) async {
+    final service = _service!;
+    try {
+      await _anonymousSignIns[service];
+      await call(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      unawaited(_signInAnonymously());
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+    _sync();
+  }
+
+  /// Signs in to an account with [signIn], in whichever way, and moves what
+  /// an anonymous user had to that account.
+  ///
+  /// It takes the data before the sign-in, while the anonymous user is
+  /// still signed in, and gives it once the user of another id has an
+  /// account. If taking fails, the call fails and nothing has changed. If
+  /// giving fails, the user is signed in already, so the call completes and
+  /// the error is reported as an error of the app.
+  Future<void> _toAccount(Future<void> Function() signIn) async {
+    final guest = _session;
+    final give = guest is AnonymousSession
+        ? await takeGuestData(guest.uid)
+        : null;
+    await signIn();
+    _sync();
+    final account = _session;
+    if (give == null ||
+        account is! AccountSession ||
+        account.uid == guest.uid) {
+      return;
+    }
+    try {
+      await give(account.uid);
+    } on Object catch (error, stackTrace) {
+      _report(
+        error,
+        stackTrace,
+        'while giving the data of a guest to the account',
+      );
+    }
+  }
+
+  /// Reports [error], which no call can fail with, as an error of the app.
+  void _report(Object error, StackTrace stackTrace, String during) =>
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'app session',
+          context: ErrorDescription(during),
+        ),
+      );
+
+  /// In the mode [AuthMode.anonymous], signs in anonymously when nobody is
+  /// signed in, and waits for that for at most [anonymousWait].
+  ///
+  /// It never fails. A sign-in that takes longer goes on and becomes the
+  /// session when it comes. One that fails leaves the app without a user
+  /// until the next try, and in debug mode its error is printed.
+  Future<void> _signInAnonymously() async {
+    final service = _service!;
+    if (_disposed ||
+        mode != AuthMode.anonymous ||
+        service.currentUser != null) {
+      return;
+    }
+    final signIn = _anonymousSignIns[service] ??= _tryAnonymously(service)
+        .whenComplete(() {
+          _anonymousSignIns.remove(service);
+          _sync();
+        });
+    await signIn.timeout(anonymousWait, onTimeout: () {});
+  }
+
+  Future<void> _tryAnonymously(AuthService service) async {
+    try {
+      await service.signInAnonymously();
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          'The anonymous sign-in failed, so the app has no user: $error',
+        );
+      }
+    }
+  }
+
+  /// Takes the user of the service as the session, and tells the listeners
+  /// when that changes it, unless the session was disposed of.
+  void _sync() {
+    if (_disposed) return;
+    final session = switch (_service!.currentUser) {
+      null => const SignedOutSession(),
+      AuthUser(isAnonymous: true, :final uid) => AnonymousSession(uid),
+      AuthUser(:final uid, :final email) => AccountSession(uid, email: email),
+    };
+    if (session == _session) return;
+    _session = session;
+    notifyListeners();
+  }
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// A flag of the session of a controller: its value is computed from the
+/// session each time it is read, and its listeners are those of the
+/// session.
+final class _SessionFlag implements ValueListenable<bool> {
+  const _SessionFlag(this._controller, this._of);
+
+  final AppSessionController _controller;
+  final bool Function(AppSession session) _of;
+
+  @override
+  bool get value => _of(_controller.value);
+
+  @override
+  void addListener(VoidCallback listener) => _controller.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _controller.removeListener(listener);
+}
+
+/// Returns the service of the provider of sign-in, which [initAuth] created:
+/// `bootstrap()` awaits it before the first frame, and there is none to
+/// return before that.
+///
+/// The code of the app does not call it: it signs in through [appSession].
+AuthService createAuthService() => _authService;
+
+late AuthService _authService;
+
+/// Creates the service of the provider of sign-in and starts the session of
+/// the app with it; `bootstrap()` awaits it before the first frame, and
+/// nothing else in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with the user who is signed in, and
+/// starts the session with it.
+Future<void> initAuth() async {
+  _authService = await impl0.openFixtureAuth();
+  await appSession.start(_authService);
+}
+=== lib/core/auth/auth_service.dart (role:auth) ===
+/// A user as the provider of sign-in knows them.
+final class AuthUser {
+  /// Creates the user [uid].
+  const AuthUser({required this.uid, required this.isAnonymous, this.email});
+
+  /// The id of the user. It stays the same for as long as the user exists,
+  /// also when an anonymous user gets an account.
+  final String uid;
+
+  /// Whether the user is anonymous: a user that the app signed in itself,
+  /// who has no account and nothing to sign in with again.
+  final bool isAnonymous;
+
+  /// The email address of the user, or `null` for a user without one, such
+  /// as an anonymous user.
+  final String? email;
+}
+
+/// Why a call of sign-in failed.
+enum AuthFailureReason {
+  /// The email address and the password match no account. A wrong password
+  /// and an address without an account are this one reason, so that nobody
+  /// learns from the app which addresses have an account.
+  invalidCredentials,
+
+  /// The email address has an account already.
+  emailInUse,
+
+  /// The provider takes no password as weak as this one.
+  weakPassword,
+
+  /// The text is no email address.
+  invalidEmail,
+
+  /// The account is disabled.
+  userDisabled,
+
+  /// Too many attempts: the provider takes no more for a while.
+  tooManyAttempts,
+
+  /// The device did not reach the provider.
+  network,
+
+  /// The call needs a user who signed in a short while ago, as the deletion
+  /// of an account does: the user signs in again and repeats it.
+  ///
+  /// It is also the reason of a call for a user whose session has ended on
+  /// the server. The service signs that user out on the device before it
+  /// fails.
+  recentSignInRequired,
+
+  /// Sign-in is not set up at the provider, such as a way to sign in that
+  /// is not enabled there. This is a mistake in the setup of the app, which
+  /// [AuthFailure.developerHint] explains.
+  notConfigured,
+
+  /// Anything else. [AuthFailure.developerHint] has the error.
+  unknown,
+}
+
+/// The failure of a call of sign-in: the only thing that such a call throws.
+final class AuthFailure implements Exception {
+  /// Creates the failure for [reason].
+  const AuthFailure(this.reason, {this.developerHint});
+
+  /// Why the call failed. The app shows a text of its own for each reason.
+  final AuthFailureReason reason;
+
+  /// What went wrong in the words of the provider, for the developer of the
+  /// app, or `null`. It is no text for the user: show it in debug mode
+  /// only.
+  final String? developerHint;
+
+  @override
+  String toString() => developerHint == null
+      ? 'AuthFailure: ${reason.name}'
+      : 'AuthFailure: ${reason.name} ($developerHint)';
+}
+
+/// The accounts of the users of the app and the user of this device, as the
+/// provider of sign-in keeps them.
+///
+/// The provider implements it. The code of the app does not call it: it
+/// signs in through `appSession` of `app_session.dart`, which calls this
+/// service and does what is the same with every provider.
+///
+/// Every implementation keeps to this, in every mode of the app, whatever
+/// the provider generates for the mode:
+/// - The service has [currentUser] from the moment it is created: the user
+///   who was signed in on this device when the app last ran, without a
+///   request to the server. The function that creates the service may be
+///   called again, and the service that it returns then has the user who is
+///   signed in now.
+/// - When the future of a call completes, [currentUser] is the result of
+///   the call. [userChanges] tells of every change of [currentUser], also
+///   of one that no call here made, and when it tells of a user,
+///   [currentUser] is that user.
+/// - A call fails only with an [AuthFailure], and every call ends: when the
+///   server does not answer, its future completes with
+///   [AuthFailureReason.network].
+/// - A call that fails leaves the user who is signed in as that user was:
+///   an anonymous user stays signed in when [linkPassword] fails, and so
+///   does whoever is signed in when [signIn] or [signUp] fails. The one
+///   exception is a call for a user whose session has ended on the server.
+/// - [linkPassword] and [deleteAccount] are calls for the user who is
+///   signed in. Made when nobody is signed in, or when the session of that
+///   user has ended on the server, such a call fails with
+///   [AuthFailureReason.recentSignInRequired], and in the second case it
+///   signs the user out on the device first.
+abstract interface class AuthService {
+  /// The user who is signed in on this device, or `null`.
+  AuthUser? get currentUser;
+
+  /// Tells of each change of [currentUser], once [currentUser] has changed:
+  /// a broadcast stream. When it tells of a user, [currentUser] is that
+  /// user. It may also tell of a user who has not changed.
+  ///
+  /// An error that it sends changes nothing: the session reports it as an
+  /// error of the app and goes on listening.
+  Stream<AuthUser?> get userChanges;
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// A wrong password and an address without an account both fail with
+  /// [AuthFailureReason.invalidCredentials].
+  ///
+  /// It is also called while a user is signed in, an anonymous one or the
+  /// user of another account: the user of this account then replaces that
+  /// user on the device. When it fails, that user stays signed in.
+  Future<void> signIn({required String email, required String password});
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: that account keeps
+  /// its password, and whoever is signed in stays signed in.
+  ///
+  /// It is also called while the user of another account is signed in, and
+  /// the user of the new account then replaces that user on the device.
+  /// For an anonymous user, the session calls [linkPassword] instead.
+  Future<void> signUp({required String email, required String password});
+
+  /// Gives the anonymous user who is signed in an account for [email] with
+  /// [password]. The user keeps the [AuthUser.uid] and is no longer
+  /// anonymous.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: the anonymous user
+  /// stays signed in, with the same id.
+  Future<void> linkPassword({required String email, required String password});
+
+  /// Creates an anonymous user, with an id of its own, and signs in as that
+  /// user.
+  Future<void> signInAnonymously();
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password.
+  ///
+  /// It completes whether [email] has an account or not, so that nobody
+  /// learns from the app which addresses have one.
+  Future<void> sendPasswordReset(String email);
+
+  /// Signs the user out on this device. It completes when nobody is signed
+  /// in too.
+  Future<void> signOut();
+
+  /// Deletes the user who is signed in, an anonymous one too, and signs
+  /// out.
+  ///
+  /// It succeeds for a user who has just signed in, in whichever way, and
+  /// for an anonymous user who was just created. For a user who signed in
+  /// longer ago, such as one whom the service found on the device when it
+  /// was created, it may fail with
+  /// [AuthFailureReason.recentSignInRequired]. It then succeeds once the
+  /// user has signed in again, in whichever way the account allows.
+  Future<void> deleteAccount();
+}
+=== lib/core/auth/guest_data.dart (role:auth) ===
+/// Gives the account [accountUid] what a guest had: the function that
+/// [takeGuestData] returns.
+typedef GiveGuestData = Future<void> Function(String accountUid);
+
+/// Takes what the guest [guestUid] has in the app, and returns the function
+/// that gives it to an account, or `null` when there is nothing to move.
+///
+/// A guest is an anonymous user. When a guest signs in to an account that
+/// exists already, the user of the app changes from the guest to that
+/// account, and what was kept under the id of the guest, such as a cart on
+/// a server, would be left behind. So the session of the app calls this
+/// function before the sign-in, while the guest is still signed in and may
+/// read that data, and calls the function that it returns once the user of
+/// the account is signed in:
+///
+/// ```dart
+/// Future<GiveGuestData?> takeGuestData(String guestUid) async {
+///   final cart = await carts.read(guestUid);
+///   if (cart.isEmpty) return null;
+///   return (accountUid) => carts.add(accountUid, cart);
+/// }
+/// ```
+///
+/// Only read here: the sign-in may still fail, and then the guest stays. An
+/// error thrown here fails the sign-in before it starts. An error of the
+/// function that this one returns is reported as an error of the app, and
+/// the user stays signed in.
+///
+/// Call no method of `appSession` here, nor in the function that this one
+/// returns. The sign-in is one of its calls, which run one after another,
+/// so such a call would wait for the sign-in, and the sign-in for it.
+///
+/// It is not called when a guest signs up, since the guest then keeps the
+/// id and everything under it, nor in an app without anonymous users.
+Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
+=== lib/core/fixture_auth/fixture_auth.dart (fake_auth) ===
+import 'dart:async';
+
+import '../auth/auth_service.dart';
+
+/// The accounts of the fixture by their email addresses, each with the id
+/// of its user and its password. They stand for the server of a provider of
+/// sign-in, which every start of the app finds as the last one left it.
+final Map<String, ({String uid, String password})> _accounts = {};
+
+/// The user who is signed in on this device, or `null`. It stands for the
+/// storage of a device, which a start of the app reads.
+AuthUser? _onDevice;
+
+/// How many users the fixture created, anonymous ones too.
+int _users = 0;
+
+/// The id of a new user.
+String _newUid() => 'fixture-user-${++_users}';
+
+/// Waits for the answer of the server or of the storage of the device,
+/// which takes a moment, as with a provider that has them: a turn of the
+/// event loop. So a test makes the calls of sign-in in real time, as it
+/// runs the start-up of the app.
+Future<void> _answer() => Future<void>.delayed(Duration.zero);
+
+/// Opens the sign-in of the fixture, as a start of the app does: it reads
+/// from the storage of the device who is signed in, which takes a moment,
+/// and returns the service with that user.
+///
+/// A start keeps the accounts, and the user who was signed in on the
+/// device, an anonymous one too. It loses that the user signed in a short
+/// while ago: the service deletes the account of a user whom it found on
+/// the device only once that user has signed in again. Nothing outlives the
+/// process of the app, so each run of the tests of a file starts without
+/// an account and with nobody signed in.
+Future<AuthService> openFixtureAuth() async {
+  final service = FixtureAuth._();
+  await service._restore();
+  return service;
+}
+
+/// Sign-in with accounts in memory. It takes any text for an email address
+/// and any password, and sends no message to reset one. Each of its calls
+/// takes a moment, as one that asks a server does.
+final class FixtureAuth implements AuthService {
+  FixtureAuth._();
+
+  final StreamController<AuthUser?> _changes = StreamController.broadcast();
+
+  AuthUser? _user;
+
+  /// Whether the user signed in through this service, and so since the app
+  /// started: a short while ago.
+  bool _signedInHere = false;
+
+  /// Takes the user who is signed in on the device, once its storage
+  /// answered.
+  Future<void> _restore() async {
+    await _answer();
+    _user = _onDevice;
+    // No listener hears this: nothing has the service before
+    // [openFixtureAuth] returns it, which waits for this. It is here so
+    // that the fixture with a known bug that returns the service first
+    // differs in one line, and tells of the user that it finds late.
+    _changes.add(_user);
+  }
+
+  /// Signs [user] in on the device, or nobody, and tells of the change once
+  /// [currentUser] has changed.
+  void _set(AuthUser? user) {
+    _signedInHere = user != null;
+    _user = user;
+    _onDevice = user;
+    _changes.add(user);
+  }
+
+  /// The user who is signed in, for a call that is about that user; it
+  /// fails when nobody is.
+  AuthUser _signedIn() {
+    final user = _user;
+    if (user == null) {
+      throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+    }
+    return user;
+  }
+
+  /// Fails when [email] has an account already.
+  void _checkFree(String email) {
+    if (_accounts.containsKey(email)) {
+      throw const AuthFailure(AuthFailureReason.emailInUse);
+    }
+  }
+
+  @override
+  AuthUser? get currentUser => _user;
+
+  @override
+  Stream<AuthUser?> get userChanges => _changes.stream;
+
+  @override
+  Future<void> signIn({required String email, required String password}) async {
+    await _answer();
+    final account = _accounts[email];
+    if (account == null || account.password != password) {
+      throw const AuthFailure(AuthFailureReason.invalidCredentials);
+    }
+    _set(AuthUser(uid: account.uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> signUp({required String email, required String password}) async {
+    await _answer();
+    _checkFree(email);
+    final uid = _newUid();
+    _accounts[email] = (uid: uid, password: password);
+    _set(AuthUser(uid: uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> linkPassword({
+    required String email,
+    required String password,
+  }) async {
+    await _answer();
+    final user = _signedIn();
+    if (!user.isAnonymous) {
+      throw const AuthFailure(
+        AuthFailureReason.unknown,
+        developerHint: 'The user who is signed in has an account already.',
+      );
+    }
+    _checkFree(email);
+    // The anonymous user keeps the id.
+    final uid = user.uid;
+    _accounts[email] = (uid: uid, password: password);
+    _set(AuthUser(uid: uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> signInAnonymously() async {
+    await _answer();
+    _set(AuthUser(uid: _newUid(), isAnonymous: true));
+  }
+
+  @override
+  Future<void> sendPasswordReset(String email) => _answer();
+
+  @override
+  Future<void> signOut() async {
+    await _answer();
+    _set(null);
+  }
+
+  /// An anonymous user has nothing to sign in with again, so the service
+  /// deletes one whenever it is asked to. It deletes the user of an account
+  /// only if that user signed in through this service, since the app
+  /// started.
+  @override
+  Future<void> deleteAccount() async {
+    await _answer();
+    final user = _signedIn();
+    if (!user.isAnonymous && !_signedInHere) {
+      throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+    }
+    _accounts.removeWhere((email, account) => account.uid == user.uid);
+    _set(null);
+  }
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(const App());
+}
+=== pubspec.yaml (flutter_core) ===
+name: fixture_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  uses-material-design: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fixture_app/core/app/fallback_start_screen.dart';
+
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
+void main() {
+  testWidgets('names the app, and tells where its first screen goes', (
+    tester,
+  ) async {
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
+
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('10'), findsNothing);
+    final name = find.bySemanticsLabel('Fixture App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Fa').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
+  });
+}

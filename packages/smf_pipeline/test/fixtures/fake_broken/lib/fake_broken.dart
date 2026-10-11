@@ -161,7 +161,7 @@ final class BrokenModule extends SmfModule {
   /// that the app starts on, and again when one of them starts or stops
   /// allowing, but not about the locations that `go()`, `push()` and
   /// `replace()` are asked to show: it shows a location that a guard keeps
-  /// the user from.
+  /// the user from, and one in a flow that is over.
   static const routerAskingGuardsOnlyAtStart = BrokenModule._(
     FakeRouterModule(),
     ModuleId('broken_router_asks_guards_at_start'),
@@ -169,13 +169,13 @@ final class BrokenModule extends SmfModule {
     RouterRole.appRouterFactoryFile,
     [
       (
-        '  bool _redirected(AppLocation location) {\n'
-            '    final guarded = _guards.asked(location.routeName, location);\n'
-            '    if (guarded == null) return false;\n'
-            '    _go(guarded.location);\n'
-            '    return true;\n'
-            '  }\n',
-        '  bool _redirected(AppLocation location) => false;\n',
+        '  WhenAsked<AppLocation?>? _asked(AppLocation location) => '
+            '_guards.asked(\n'
+            '        location.routeName,\n'
+            '        location,\n'
+            '        onTopOf: [for (final page in _pages) page.route],\n'
+            '      );\n',
+        '  WhenAsked<AppLocation?>? _asked(AppLocation location) => null;\n',
       ),
     ],
   );
@@ -191,18 +191,30 @@ final class BrokenModule extends SmfModule {
     RouterRole.appRouterFactoryFile,
     [
       (
-        '    final shown = _guards.changed(_pages);\n'
-            '    if (shown != null) _go(shown.location);\n',
-        '    _guards.changed(_pages);\n',
+        '    switch (_guards.changed(_pages)) {\n'
+            '      case null:\n'
+            '        break;\n'
+            '      case ShowInstead(:final location):\n'
+            '        _go(location);\n'
+            '      case ClosePages(:final pages, :final dropsRequest):\n'
+            '        _close(pages, dropsRequest: dropsRequest);\n'
+            '    }\n',
+        // It still tells an answer that closes pages from the others, and
+        // closes none of them.
+        '    if (_guards.changed(_pages) is ClosePages<AppLocation?>) {\n'
+            '      _close(0, dropsRequest: false);\n'
+            '    }\n',
       ),
     ],
   );
 
   /// The fake router whose `replace()` asks the guards of the routes about
-  /// its location, and leaves the stack as it is when a guard keeps the
-  /// user from the location, rather than showing the target of the guard
-  /// in place of the whole stack: from a page of the flow that is not the
-  /// target, the user stays on that page.
+  /// its location, and leaves the stack as it is when they answer another
+  /// location, rather than showing that location in place of the whole
+  /// stack. When a guard keeps the user from the location, the user stays
+  /// on a page of the flow that is not the target. And for a location in a
+  /// flow that is over, the user stays on the page that they are on, not
+  /// on the screen that the app starts on.
   static const routerKeepingPageOnGuardedReplace = BrokenModule._(
     FakeRouterModule(),
     ModuleId('broken_router_keeps_page_on_guarded_replace'),
@@ -210,13 +222,262 @@ final class BrokenModule extends SmfModule {
     RouterRole.appRouterFactoryFile,
     [
       (
-        '    {{#guards}}if (_redirected(location)) return;\n'
+        '    {{#guards}}if (_redirected(location, again: () => '
+            'replace(location))) return;\n'
             '    {{/guards}}final branch = _branchOf(location);\n'
             "    _checkMainNavigation(location, branch, 'replace');\n",
-        '    {{#guards}}if (_guards.asked(location.routeName, location) != '
-            'null) return;\n'
+        '    {{#guards}}if (_asked(location) != null) return;\n'
             '    {{/guards}}final branch = _branchOf(location);\n'
             "    _checkMainNavigation(location, branch, 'replace');\n",
+      ),
+    ],
+  );
+
+  /// The fake router that, when it shows the location that the guards of
+  /// the routes answer, puts the branches of the main navigation back on
+  /// their destinations, but for the selected one, which keeps its pages.
+  /// A location that brings the user back into that branch makes its stack
+  /// anew, so the bug shows only when the user comes back somewhere else,
+  /// as after a guard that does not bring the user back: the branch then
+  /// still has a page that the guard kept the user from.
+  static const routerKeepingSelectedBranch = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_selected_branch'),
+    'A plain navigator whose guards leave the selected branch (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    for (final (index, branch) in _branches.indexed) {\n'
+            '      branch\n'
+            '        ..clear()\n'
+            '        ..add(_destinations[index]);\n'
+            '    }\n'
+            '    if (location != null) _show(location);\n',
+        '    for (final (index, branch) in _branches.indexed) {\n'
+            '      if (index == _selected) continue;\n'
+            '      branch\n'
+            '        ..clear()\n'
+            '        ..add(_destinations[index]);\n'
+            '    }\n'
+            '    if (location != null) _show(location);\n',
+      ),
+    ],
+  );
+
+  /// The fake router that tells the guards of the routes of a page that a
+  /// push showed under the route of the location below the pushed pages,
+  /// not under its own. A gate keeps the user from every route outside its
+  /// flow, so its answer is the same. A guard that stands for a condition
+  /// keeps the user only from the routes that ask for it: when the
+  /// condition stops holding, a pushed page that asks for it stays if the
+  /// page below asks for nothing.
+  static const routerNamingPushedPagesAfterPageBelow = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_names_pushed_pages_after_page_below'),
+    'A plain navigator that names a pushed page after the page below it '
+    '(fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '            (\n'
+            '              route: location.routeName,\n'
+            '              location: location,\n'
+            '              pushed: _results.containsKey(location),\n'
+            '            ),\n'
+            '        if (_overFallback) (route: null, location: null, '
+            'pushed: false),\n'
+            '      ];\n',
+        '            (\n'
+            '              route: _results.containsKey(location)\n'
+            '                  ? _belowPushed?.routeName\n'
+            '                  : location.routeName,\n'
+            '              location: location,\n'
+            '              pushed: _results.containsKey(location),\n'
+            '            ),\n'
+            '        if (_overFallback) (route: null, location: null, '
+            'pushed: false),\n'
+            '      ];\n'
+            '\n'
+            '  /// The location below the pages that pushes showed, or `null` '
+            'if\n'
+            '  /// pushes showed every page.\n'
+            '  AppLocation? get _belowPushed {\n'
+            '    for (final entry in _stack.reversed) {\n'
+            '      final locations = entry is AppLocation\n'
+            '          ? [entry]\n'
+            '          : _branches[_selected].reversed;\n'
+            '      for (final location in locations) {\n'
+            '        if (!_results.containsKey(location)) return location;\n'
+            '      }\n'
+            '    }\n'
+            '    return null;\n'
+            '  }\n',
+      ),
+    ],
+  );
+
+  /// The fake router that asks the guards of the routes about a location
+  /// that `go()`, `push()` or `replace()` is asked to show by the name of
+  /// its top-level route, not by that of its own route. The flow of a
+  /// guard is a top-level route with the routes below it, so a gate
+  /// answers the same. A guard that stands for a condition does not: a
+  /// route that asks for the condition below a route that asks for
+  /// nothing shows to everyone.
+  static const routerAskingAboutTopLevelRoute = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_asks_about_top_level_route'),
+    'A plain navigator that asks the guards about the top-level route '
+    '(fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '  WhenAsked<AppLocation?>? _asked(AppLocation location) => '
+            '_guards.asked(\n'
+            '        location.routeName,\n',
+        '  WhenAsked<AppLocation?>? _asked(AppLocation location) => '
+            '_guards.asked(\n'
+            '        location.chain.first.routeName,\n',
+      ),
+    ],
+  );
+
+  /// The fake router that shows the target of a guard that stands for a
+  /// condition in place of its whole stack, as it shows the target of a
+  /// gate, where the guards answer to show it over the page on top, and
+  /// that keeps no request waiting. So the user cannot go back from the
+  /// target to the page that they were on, and nothing happens once the
+  /// condition holds but that the flow, which is over, leaves for the
+  /// screen that the app starts on.
+  static const routerShowingFlowInPlace = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_shows_flow_in_place'),
+    'A plain navigator that opens the flow of a condition in place of its '
+    'stack (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '      case ShowOver(location: final target, :final flow):\n'
+            '        _drop();\n'
+            '        _stack.add(target!);\n'
+            '        _results[target] = Completer<Object?>();\n'
+            '        _waiting = (flow: flow, again: again, drop: drop);\n'
+            '        notifyListeners();\n',
+        '      case ShowOver(location: final target):\n'
+            '        _go(target);\n'
+            '        drop?.call();\n',
+      ),
+    ],
+  );
+
+  /// The fake router that opens the target of a guard that stands for a
+  /// condition over the page on top and keeps the request waiting, but
+  /// drops the request when the guards close the pages of the flow, rather
+  /// than making it again. So once the condition holds, the user is back on
+  /// the page that the flow was opened over, the location that was asked
+  /// for does not show, and a `push()` that waited completes with `null`.
+  static const routerForgettingWaitingRequest = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_forgets_waiting_request'),
+    'A plain navigator that forgets the request that waits for a flow '
+    '(fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '      } else {\n'
+            '        waiting.again();\n'
+            '      }\n',
+        '      } else {\n'
+            '        waiting.drop?.call();\n'
+            '      }\n',
+      ),
+    ],
+  );
+
+  /// The fake router that, when it shows the location that the guards of
+  /// the routes answer, leaves the pages of the branches of the main
+  /// navigation where they are, and takes them when it next builds its
+  /// pages without the main navigation, as a router does that keeps the
+  /// pages of the branches with the page of the main navigation. A branch
+  /// that the user does not come back to is on its destination once a
+  /// frame showed the target of a guard. But when the guard stops allowing
+  /// and allows again in one turn, no frame shows the target, and that
+  /// branch still has a page that the guard kept the user from.
+  static const routerKeepingBranchesForAFrame = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_branches_for_a_frame'),
+    'A plain navigator whose guards take the branches at a frame (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    _stack.clear();\n'
+            '    for (final (index, branch) in _branches.indexed) {\n'
+            '      branch\n'
+            '        ..clear()\n'
+            '        ..add(_destinations[index]);\n'
+            '    }\n'
+            '    if (location != null) _show(location);\n',
+        '    _stack.clear();\n'
+            '    if (location != null) _show(location);\n',
+      ),
+      (
+        '  Widget build(BuildContext context) {\n'
+            '    _showScreen();\n',
+        '  Widget build(BuildContext context) {\n'
+            '    if (!_stack.contains(_mainNavigation)) {\n'
+            '      for (final (index, branch) in _branches.indexed) {\n'
+            '        branch\n'
+            '          ..clear()\n'
+            '          ..add(_destinations[index]);\n'
+            '      }\n'
+            '    }\n'
+            '    _showScreen();\n',
+      ),
+    ],
+  );
+
+  /// The fake router that keeps the navigators of the branches of the main
+  /// navigation when the main navigation leaves its stack, as when the
+  /// location that the guards of the routes answer takes its place, or
+  /// `go()` shows a page outside it. The page of the main navigation that
+  /// left stays in the tree, with those navigators, until the transition
+  /// to the page that took its place is over. So a main navigation that
+  /// comes back before that, as when the guard allows again, has the keys
+  /// of the navigators in the tree a second time, which Flutter throws for.
+  static const routerKeepingNavigatorsOfBranches = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_keeps_navigators_of_branches'),
+    'A plain navigator whose branches keep their navigators (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    if (!_stack.contains(_mainNavigation)) {\n'
+            '      _branchNavigators.clear();\n'
+            '      _branchObservers.clear();\n'
+            '    }\n'
+            '    super.notifyListeners();\n',
+        '    super.notifyListeners();\n',
+      ),
+    ],
+  );
+
+  /// The fake router that throws when the back button of the system has no
+  /// route to close, rather than leaving the button to the system: its
+  /// navigators still close a route on top, such as a dialog or a pushed
+  /// page, but on the first page of the app it throws a `StateError`, as a
+  /// router does that looks for the last of its pages where it has none.
+  static const routerThrowingWithNoRouteToClose = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_throws_with_no_route_to_close'),
+    'A plain navigator whose back button throws on its first page (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '      if (await navigator.maybePop()) return true;\n'
+            '    }\n'
+            '    return false;\n',
+        '      if (await navigator.maybePop()) return true;\n'
+            '    }\n'
+            "    throw StateError('No element');\n",
       ),
     ],
   );
@@ -380,6 +641,41 @@ final class BrokenModule extends SmfModule {
       ),
     ],
   );
+
+  /// The fixture sign-in whose function returns its service before it has
+  /// read who is signed in on the device, as a provider does that takes its
+  /// user from a stream of its SDK rather than from what the SDK has
+  /// already: the service has nobody at first, and tells of the user of the
+  /// device a moment later. So a start of the app is over without that
+  /// user, and the first frame of the app has nobody signed in.
+  static const authRestoringUserLate = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_restores_user_late'),
+    'Sign-in that finds its user after the start (fixture)',
+    _fixtureAuthFile,
+    [('  await service._restore();\n', '  unawaited(service._restore());\n')],
+  );
+
+  /// The fixture sign-in whose `linkPassword()` creates a new user for the
+  /// account, rather than giving the account to the anonymous user who is
+  /// signed in: the user of the account has another id than the anonymous
+  /// user had, so what the app keeps under that id is left behind.
+  static const authLinkingAsNewUser = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_links_as_new_user'),
+    'Sign-in that gives an anonymous user a new id with an account (fixture)',
+    _fixtureAuthFile,
+    [
+      (
+        '    // The anonymous user keeps the id.\n'
+            '    final uid = user.uid;\n',
+        '    final uid = _newUid();\n',
+      ),
+    ],
+  );
+
+  /// The file of the fixture sign-in.
+  static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
 
   /// The module with the bug.
   final SmfModule of;

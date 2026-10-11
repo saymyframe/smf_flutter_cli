@@ -112,7 +112,7 @@ final class GeneratedApp {
   final List<LeftOut> leftOut;
 
   /// The post-generation steps that did not run, with their commands for
-  /// the user to run later.
+  /// the user to run later, and their notices.
   final List<SkippedStep> skippedSteps;
 }
 
@@ -352,7 +352,7 @@ extension CreatePlanning on CreatePipeline {
       }
 
       final preflight = await runPreflight(
-        plannedChecks(collection, sdkCheck),
+        plannedChecks(collection, sdkCheck, resolution),
         environment,
         explain: request.explain,
         strict: request.strict,

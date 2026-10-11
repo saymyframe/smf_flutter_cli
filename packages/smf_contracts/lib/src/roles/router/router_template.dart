@@ -14,9 +14,10 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         ),
       ];
 
-  /// Checks what the module rule `router.routes` cannot see from one module:
-  /// data of role templates, the getters of `context.nav` and the location
-  /// classes of all modules.
+  /// Checks what the module rules `router.routes` and `router.guards`
+  /// cannot see from one module: data of role templates, the getters of
+  /// `context.nav`, the location classes of all modules, and the guards of
+  /// two modules that stand for one condition.
   @override
   List<SmfIssue> validate(RoleHookInput<RoutesData> input) {
     final issues = <SmfIssue>[
@@ -61,6 +62,24 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         );
       }
     }
+
+    // A route that asks for a condition shows the target of one guard, and
+    // the module rule sees the guards of one module.
+    for (final guard in facade.guards) {
+      final condition = guard.guard.condition;
+      if (condition == null) continue;
+      final first = facade.guardFor(condition)!;
+      if (first.feature.module == guard.feature.module) continue;
+      issues.add(
+        SmfIssue(
+          'The $guard and the $first both stand for the condition '
+          '$condition; an app has one guard for a condition.',
+          hint: 'Leave one of the modules ${first.feature.module} and '
+              '${guard.feature.module} out of the app.',
+          origin: ModuleOrigin(guard.feature.module),
+        ),
+      );
+    }
     return issues;
   }
 
@@ -104,9 +123,12 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
 
   /// The choice of the route at [start], the path the user asked the app to
   /// start on, which must be a route without required parameters, and
-  /// outside the flow of every guard: once a guard allows, the app shows the
-  /// location that the guard kept the user from, and an app that starts in
-  /// the flow has none.
+  /// outside the flow of every guard: once a flow is over, the app shows
+  /// the screen that it starts on in place of the routes of the flow. Nor
+  /// does the route ask for a condition, its own or that of a route above
+  /// it: every user sees the screen that the app starts on. The hook
+  /// cannot tell whether the role of a condition is in the app, so it
+  /// refuses such a route also where no guard stands for the condition.
   RouterChoice _startOn(RouterFacade facade, String start) {
     final route = facade.routeAt(start);
     if (route == null) {
@@ -132,6 +154,14 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
           'the screen that it starts on.',
         );
       }
+    }
+    if (route.conditions.isNotEmpty) {
+      throw SmfUsageException(
+        'The app cannot start on $start, because the route asks for '
+        '${_named(route.conditions)}: every user sees the screen that the '
+        'app starts on. That holds in an app without a guard for the '
+        'condition too, where the route shows like any other.',
+      );
     }
     return RouterChoice(startPath: route.fullPath);
   }
@@ -178,16 +208,23 @@ const String _agentNote = '''
 ''';
 
 /// The note of the router role about the guards, in the guide for coding
-/// agents of an app with guards: where they are, how the code of the app
-/// adds one and changes what it allows, that the router navigates when it
-/// does, and how the code keeps the user from coming back to where they
-/// were, as after a sign-out (see [RouteGuard]), whichever module provides
-/// the role.
+/// agents of an app with guards: where they are and in which order the
+/// router asks them, what tells a gate from a guard that keeps the user
+/// only from some routes, how the code of the app adds either and changes
+/// what it allows, that the router navigates when it does, what the user
+/// sees while a guard of either kind does not allow and once it allows
+/// again, that a screen neither closes itself nor navigates after it
+/// changed a guard, and when and how code may navigate into the flow of a
+/// guard, whose routes show only while a guard with that flow does not
+/// allow (see [RouteGuard]), whichever module provides the role.
 ///
 /// The note leaves out what the comments of the generated code say, such as
 /// what `redirectOf()` and `guardChanges` are for.
 const String _guardsAgentNote = '''
-- `${RouterRole.routeGuards}` in `${RouterRole.appRouterFile}` lists the guards of the routes, each a `RouteGuard`.
-- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
-- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
+- `${RouterRole.routeGuards}` in `${RouterRole.appRouterFile}` lists the guards of the routes, each a `RouteGuard`, in the order the router asks them. A guard without `routes` is a gate over the whole app. The gates come first, and the first one whose `allows` is `false` decides: the router asks no guard after it. A guard with `routes` keeps the user only from the routes that it names there, each as `<feature>.<route>`, and comes after the gates.
+- To keep the user from the rest of the app, add a gate to that list, never a redirect to the files of the router. Put it at the place among the gates where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation. To keep the user from some routes only, add their names to the `routes` of the guard that stands for what they need, or add such a guard after the gates. Add the name of each route below such a route too: a route does not ask because the route above it does. The `routes` are outside the main navigation and outside every `flow`, and the screen that the app starts on is none of them.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. While the `allows` of a gate is `false`, the router shows its `redirectTo` in place of the whole stack, whichever location was asked for. Once the gates allow, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A gate with `resumes: false` does not bring the user back. When the `allows` of a guard with `resumes: false` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the gates allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
+- While the `allows` of a guard with `routes` is `false`, `go()`, `push()` or `replace()` of one of those routes opens its `redirectTo` over the page that the user is on, and the request waits. Back returns to that page, and a `push()` that waited completes with `null`. Once the value is `true`, the router closes the pages of the `flow` and does what was asked: `push()` shows the route over the page that the user was on and completes with the value of its page, `go()` shows it in place of the stack, and `replace()` in place of that page. When the value turns `false`, the router closes the pages of the `routes` with the pages over them. The user is then on the page below them, or on the screen that the app starts on when no page is below, as after `go()` to one of the `routes`.
+- A screen neither closes itself nor navigates after it changed the value of `allows` of a guard: the router has done both by then. This goes for a screen of a `flow` that turned the value `true`, as after a sign-in, and for a screen of the `routes` that turned it `false`, as a screen with a sign-out button. A `pop()` after the change closes the page that is on top by then: the page that the user asked for, or the page below the one that the router closed, which may be the main navigation of the app.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of a gate whose `allows` is `false`. So no code navigates into the `flow` of a gate, and no screen of a `flow` navigates out of it once its guard allows: the router does. The first does not hold for a guard with `routes`. While it does not allow and every gate does, its `redirectTo` shows like any route, so a screen may open it with `push()`. `go()` to it from a screen takes the place of the stack, with no way back. A link to a route of its `flow` opens that route over the screen that the app starts on, so back leads into the app. Such a link is lost while a gate with another `flow` does not allow: once the gate allows, the user is on the screen that the app starts on. Inside a `flow`, navigate with `push()` or `replace()`. `go()` takes the place of the pages below the `flow`, and the request that waits is lost with them.
 ''';

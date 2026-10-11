@@ -8,7 +8,7 @@ import 'package:smf_pipeline/src/shell.dart';
 import 'package:smf_pipeline/src/steps.dart';
 
 /// A post-generation step that did not run or did not succeed, with the
-/// command to run later.
+/// command to run later, and the notice of the step, if it has one.
 final class SkippedStep {
   /// Creates the record of the step [description], which is not done
   /// because of [reason].
@@ -17,6 +17,7 @@ final class SkippedStep {
     this.command,
     this.reason, {
     this.failed = false,
+    this.notice,
   });
 
   /// What the step does.
@@ -35,6 +36,11 @@ final class SkippedStep {
   /// continues (see [PostGenStep.followUpOf]), whose record tells why that
   /// one is not done.
   final bool failed;
+
+  /// What the user has to know before running the [command] and the
+  /// [description] does not tell, which goes after the command, or `null`
+  /// if the step has no notice (see [PostGenStep.notice]).
+  final String? notice;
 
   @override
   String toString() => '$description: $command ($reason)';
@@ -78,16 +84,20 @@ const importCleanupCodes = [
 /// A step for other systems than that of the run (see [PostGenStep.hosts])
 /// neither runs nor is returned. A step that needs a terminal in a run that
 /// cannot ask the user, or external setup in a run that skips it, does not
-/// run; the pipeline checked before that such a step is skippable. Nor does
-/// a step that [PostGenStep.needs] a check which has not passed among
-/// [checks], the results of stage 6, and the user is not asked about it. In
-/// an interactive run the user may also leave a skippable step for later,
-/// but for a step that continues another, which is part of that step. A
-/// skippable step whose tool is missing, or that fails, is left for later
-/// too; a failure is reported with the output of the command. The steps
-/// that continue a step that is not done are left for later after it.
-/// Returns the steps that are not done, with their commands for later, in
-/// the order they would run.
+/// run, and neither does a step with a notice (see [PostGenStep.notice]) in
+/// a run that cannot ask; the pipeline checked before that such a step is
+/// skippable. Nor does a step that [PostGenStep.needs] a check which has
+/// not passed among [checks], the results of stage 6, and the user is not
+/// asked about it. In an interactive run the user may also leave a
+/// skippable step for later, but for a step that continues another, which
+/// is part of that step, unless it has a notice: the question about a step
+/// with a notice has the notice, and comes once the step that it continues
+/// succeeded. A skippable step whose tool is missing, or that fails, is
+/// left for later too; a failure is reported with the output of the
+/// command. The steps that continue a step that is not done, such as one
+/// that the user left for later, are left for later after it, without a
+/// question. Returns the steps that are not done, with their commands for
+/// later and their notices, in the order they would run.
 ///
 /// Throws a [GenerationFailedException] when `pub get`, code generation or
 /// a step that is not skippable fails or cannot run, unless it continues a
@@ -173,9 +183,9 @@ final class _ModuleSteps {
 
   /// Runs [bound], then the steps that continue it once it succeeded, or
   /// records it and them as not done. The user is not asked about a
-  /// [followUp], which is part of the step it continues. A step for other
-  /// systems neither runs nor is recorded, and neither are the steps that
-  /// continue it.
+  /// [followUp], which is part of the step it continues, unless it has a
+  /// notice. A step for other systems neither runs nor is recorded, and
+  /// neither are the steps that continue it.
   Future<void> run(BoundStep bound, {bool followUp = false}) async {
     final BoundStep(:step, :origin) = bound;
     if (!_isForHost(step)) return;
@@ -213,14 +223,23 @@ final class _ModuleSteps {
       reason = failure.reason;
       failed = true;
     }
-    skipped.add(SkippedStep(description, command, reason, failed: failed));
+    skipped.add(
+      SkippedStep(
+        description,
+        command,
+        reason,
+        failed: failed,
+        notice: step.notice,
+      ),
+    );
     await _leaveFollowUps(bound, description);
   }
 
   /// Why [step] of [origin], whose tool is [resolved] and whose [command]
   /// the user would run, does not run now, and whether that is a failure;
   /// no reason if it runs. In an interactive run, the user is asked about a
-  /// skippable step that is not a [followUp] of another.
+  /// skippable step that is not a [followUp] of another, and about a step
+  /// with a notice, which a run that cannot ask leaves for later.
   ///
   /// Throws a [GenerationFailedException] if a step that is not skippable
   /// cannot run.
@@ -244,7 +263,8 @@ final class _ModuleSteps {
         failed: false,
       );
     }
-    if (step.interactive && !environment.interactive) {
+    final hasNotice = step.notice != null;
+    if ((step.interactive || hasNotice) && !environment.interactive) {
       return (reason: alsoUnmet('the run cannot ask the user'), failed: false);
     }
     if (unmet.isNotEmpty) {
@@ -265,8 +285,10 @@ final class _ModuleSteps {
       }
       return (reason: '${step.tool.executable} was not found', failed: true);
     }
-    if (!followUp &&
-        step.skippable &&
+    // A step that continues another is part of that step, so only its
+    // notice makes a question of its own.
+    final asked = hasNotice || (!followUp && step.skippable);
+    if (asked &&
         environment.interactive &&
         !await _confirmRun(step, origin, command)) {
       return (reason: 'you chose to run it later', failed: false);
@@ -275,16 +297,17 @@ final class _ModuleSteps {
   }
 
   /// Asks the user whether to run [step] of [origin], whose [command] the
-  /// user would run, now.
+  /// user would run, now, with the notice of the step after what it does.
   Future<bool> _confirmRun(
     PostGenStep step,
     ContributionOrigin origin,
     String command,
   ) {
     final description = step.description;
+    final notice = step.notice;
     return _environment.prompter.confirm(
       '${description == null ? command : '$description ($command)'}'
-      ', for $origin. Run it now?',
+      ', for $origin. ${notice == null ? '' : '$notice '}Run it now?',
       defaultValue: true,
     );
   }
@@ -295,8 +318,8 @@ final class _ModuleSteps {
       step.hosts.isEmpty || step.hosts.contains(_environment.operatingSystem);
 
   /// Records the steps that continue [bound], the step of [description]
-  /// that is not done, as not done either, each before the steps that
-  /// continue it in turn, but for those of other systems.
+  /// that is not done, as not done either, each with its notice and before
+  /// the steps that continue it in turn, but for those of other systems.
   Future<void> _leaveFollowUps(BoundStep bound, String description) async {
     for (final followUp in bound.followUps) {
       final next = followUp.step;
@@ -309,6 +332,7 @@ final class _ModuleSteps {
           nextDescription,
           command,
           'it runs after "$description", which is not done',
+          notice: next.notice,
         ),
       );
       await _leaveFollowUps(followUp, nextDescription);

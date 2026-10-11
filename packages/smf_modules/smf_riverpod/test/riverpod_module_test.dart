@@ -165,6 +165,11 @@ List<String> _importsOfModuleIn(RenderedApp app) => [
 bool _holdsCodeOfModule(RenderedFile file) => file.addedImports
     .any((added) => added.contributor == const ModuleOrigin(RiverpodModule.id));
 
+/// The inline code of [markdown]: what stands between two backticks.
+Set<String> _codeOf(String markdown) => {
+      for (final match in RegExp('`([^`]+)`').allMatches(markdown)) match[1]!,
+    };
+
 void main() {
   const module = RiverpodModule();
 
@@ -285,6 +290,49 @@ void main() {
       }
       expect(_rootWrappersOf(result).single, contains('ProviderScope('));
       expect(agentNote, contains('`ProviderScope` is around the root widget'));
+    });
+
+    test(
+        'tells in its note how a screen with state, state that several '
+        'screens read and an awaited call are written, with these names of '
+        'the package and no other code', () {
+      // The paths of the note are for the rule of the app entry role,
+      // which finds each of them in every app that the harness renders.
+      final code = _codeOf(agentNote).where((span) => !span.contains('/'));
+
+      expect(code.toSet(), {
+        'flutter_riverpod',
+        // What holds the state of a screen for as long as the screen
+        // lasts, and how the widget of the screen reads it.
+        'NotifierProvider.autoDispose',
+        'Notifier',
+        'ConsumerWidget',
+        'ref.watch',
+        // What holds state that several screens read, and what it lasts as
+        // long as.
+        'autoDispose',
+        'NotifierProvider',
+        'ProviderScope',
+        // What a notifier minds around a call that it awaits.
+        'await',
+        'ref.mounted',
+        'state',
+        'ref',
+        // Where the scope is.
+        'runApp()',
+      });
+      // Of this app, only the file with the scope is written with the
+      // package, so no file shows the other names. A module with screens
+      // writes such code in its variant for this one, and the tests of a
+      // registry with such a module look up there each name that the note
+      // gives.
+      final withPackage = [
+        for (final file in withRiverpod.files.values)
+          if (file.isText && file.text.contains('package:flutter_riverpod/'))
+            file,
+      ];
+      expect(withPackage, hasLength(1));
+      expect(_holdsCodeOfModule(withPackage.single), isTrue);
     });
 
     test('runs the app inside a ProviderScope', () {

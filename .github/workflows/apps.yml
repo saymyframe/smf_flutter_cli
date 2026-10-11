@@ -259,7 +259,10 @@ jobs:
       # build_runner. flutter analyze of Flutter 3.44 and 3.47 fails in a
       # directory whose path has letters beyond ASCII, on every system
       # (https://github.com/flutter/flutter/pull/191377), so the matrix
-      # analyzes the apps there with dart analyze.
+      # analyzes the apps there with dart analyze. The apps with every module
+      # of the other values of a mode option of a role, which differ from
+      # these in their Dart code only, are not among them: the step before
+      # checked each of them once.
       - name: Generate, analyze and test the apps with every module of the shard in a directory with letters beyond ASCII
         if: ${{ !cancelled() }}
         env: *shard_env
@@ -273,7 +276,8 @@ jobs:
             "$RUNNER_TEMP/SMF apps застосунки é"
 
   # The tests that the modules of the CLI keep for the apps they are in, in
-  # the one app with every module of the registry of several providers
+  # one app with every module of the registry of several providers, the
+  # one with its first state manager
   # (severalProvidersModules of the fixture registry): the modules of the
   # CLI that provide a role an app can have several providers of, next to
   # fixture providers of the same roles, whose start-up and services go
@@ -1287,8 +1291,13 @@ jobs:
 
       - *pub_get
 
+      # A test has 90 seconds here, three times the default of dart test: the
+      # runner has four cores for the four packages that it tests at a time,
+      # and a test that analyzes the apps of a module, which takes 3 seconds
+      # on a laptop, has taken more than 30 there. A test with a timeout of
+      # its own keeps it.
       - name: Test the packages
-        run: dart run melos exec -c 4 --dir-exists=test -- dart test --reporter expanded --file-reporter json:build/test-results/test.json
+        run: dart run melos exec -c 4 --dir-exists=test -- dart test --timeout 3x --reporter expanded --file-reporter json:build/test-results/test.json
 
       - name: Test the tools
         if: ${{ !cancelled() }}

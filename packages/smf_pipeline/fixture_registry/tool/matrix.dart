@@ -25,6 +25,12 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// alone, it prints the plan of the jobs of CI that check the matrix, one
 /// shard for each job; see `matrixPlanOf`.
 ///
+/// The clock role of the fixtures has a mode option, so the matrix has its
+/// apps with every module once more with `--clock-hours=12`; see
+/// `modeAppsOf`. A run of the matrix checks those that its covering takes,
+/// once, as any app of the matrix, and `--every-module` and `--app` take
+/// none of them.
+///
 /// The tests of the router role and of the layout role apply to the apps
 /// of every module that provides the role, and the run fails when a
 /// provider has apps that none of them applies to.

@@ -225,8 +225,19 @@ void expectNamesOfCode(
   AgentNote note,
   Map<String, List<String>> names, {
   required Map<String, String> files,
+}) =>
+    expectNamesOfCodeIn(note.text, names, files: files);
+
+/// Fails unless the Markdown [text] gives each of the [names] inside a span
+/// of inline code, and the file that the name is listed under declares it,
+/// as [expectNamesOfCode] tells: for a text that is no note for coding
+/// agents, such as a section of the README of an app.
+void expectNamesOfCodeIn(
+  String text,
+  Map<String, List<String>> names, {
+  required Map<String, String> files,
 }) {
-  final spans = codeSpansOf(note.text);
+  final spans = codeSpansOf(text);
   for (final MapEntry(key: file, value: ofFile) in names.entries) {
     final declared = declarationsOf(files[file]!);
     for (final name in ofFile) {
@@ -237,7 +248,7 @@ void expectNamesOfCode(
       expect(
         spans.any(word.hasMatch),
         isTrue,
-        reason: 'The note does not give $given in inline code.',
+        reason: 'The text does not give $given in inline code.',
       );
     }
   }
@@ -264,7 +275,7 @@ bool declaresSealedClass(String code, String name) => parseString(content: code)
 
 /// What the Dart [code] declares: the names of its top-level declarations,
 /// and the members of its classes, mixins, enums and extensions as
-/// `Type.member`.
+/// `Type.member`, the values of an enum among them.
 Set<String> declarationsOf(String code) {
   final declarations = _Declarations();
   parseString(content: code).unit.accept(declarations);
@@ -307,6 +318,10 @@ final class _Declarations extends RecursiveAstVisitor<void> {
         node.name!.lexeme,
         () => super.visitExtensionDeclaration(node),
       );
+
+  @override
+  void visitEnumConstantDeclaration(EnumConstantDeclaration node) =>
+      _add(node.name.lexeme);
 
   // The bodies of functions and methods declare nothing of the file.
   @override
@@ -357,6 +372,10 @@ final class PromptingEnvironment implements SmfEnvironment {
 
   /// The displayed choices of the last selection.
   List<String> shown = const [];
+
+  /// The displayed choice that the last selection offered as its default,
+  /// which a user who presses Enter gets, or `null` if it offered none.
+  String? shownDefault;
 
   /// The warnings reported to the user, in order.
   final List<String> warnings = [];
@@ -444,9 +463,10 @@ final class _Prompter implements SmfPrompter {
     T? defaultValue,
   }) async {
     _environment.asked.add(message);
-    _environment.shown = [
-      for (final choice in choices) display?.call(choice) ?? '$choice',
-    ];
+    String shown(T choice) => display?.call(choice) ?? '$choice';
+    _environment
+      ..shown = [for (final choice in choices) shown(choice)]
+      ..shownDefault = defaultValue == null ? null : shown(defaultValue);
     return choices[_environment.pick];
   }
 }

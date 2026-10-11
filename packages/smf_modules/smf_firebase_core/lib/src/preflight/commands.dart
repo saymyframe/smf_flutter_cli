@@ -65,3 +65,9 @@ String tailOf(String output, {int lines = 20}) {
   return (all.length <= lines ? all : ['…', ...all.sublist(all.length - lines)])
       .join('\n');
 }
+
+/// The lines of [text] that are not blank, on one line.
+String oneLine(String text) => [
+      for (final line in text.split('\n'))
+        if (line.trim() case final trimmed when trimmed.isNotEmpty) trimmed,
+    ].join(' ');

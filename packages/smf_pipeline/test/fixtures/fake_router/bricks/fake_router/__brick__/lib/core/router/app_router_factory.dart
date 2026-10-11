@@ -48,9 +48,15 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     }{{#guards}}
     // The guards are asked about the screen that the app starts on before
     // the router builds it, and told of its pages when one of them changes.
+    // That screen asks for no condition, so they let the user see it or
+    // answer the location to show in its place.
     final start = _guards.start;
-    final guarded = _guards.asked(start?.routeName, start);
-    if (guarded != null) _go(guarded.location);
+    final guarded = _guards.asked(
+      start?.routeName,
+      start,
+      onTopOf: const [],
+    );
+    if (guarded case ShowInstead(:final location)) _go(location);
     guardChanges.addListener(_guardsChanged);{{/guards}}
   }
 
@@ -95,12 +101,18 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     locationOf: (location) => location,
   );
 
+  /// The request that waits for a flow that the guards opened over the page
+  /// on top, if there is one: the routes of the flow, how to make the
+  /// request again, and how to end it without showing its location.
+  ({Set<String> flow, void Function() again, void Function()? drop})? _waiting;
+
   /// The pages that the user can get back to, the one on top first: those
   /// of the root navigator and, in place of the main navigation, those of
-  /// its selected branch, or the fallback screen alone. A page is one that
-  /// a push showed while its push waits for the value that it closes with.
+  /// its selected branch, and the fallback screen where it is at the bottom.
+  /// A page is one that a push showed while its push waits for the value
+  /// that it closes with: the router can close it on its own. A page that
+  /// [replace] shows in place of such a page is one too.
   List<({String? route, AppLocation? location, bool pushed})> get _pages => [
-        if (_stack.isEmpty) (route: null, location: null, pushed: false),
         for (final entry in _stack.reversed)
           for (final location in entry is AppLocation
               ? [entry]
@@ -110,12 +122,19 @@ final class _FixtureDelegate extends RouterDelegate<Object>
               location: location,
               pushed: _results.containsKey(location),
             ),
+        if (_overFallback) (route: null, location: null, pushed: false),
       ];
 
   /// Shows [location] in place of the whole stack and of the stacks of
   /// every branch of the main navigation, each of which is back on its
-  /// destination; `null` is the fallback screen.
+  /// destination; `null` is the fallback screen. The push of each page that
+  /// leaves completes with `null`, so [location] is no page that a push
+  /// showed, as the target of a guard is that was open over a page.
   void _go(AppLocation? location) {
+    for (final result in _results.values) {
+      result.complete(null);
+    }
+    _results.clear();
     _stack.clear();
     for (final (index, branch) in _branches.indexed) {
       branch
@@ -126,20 +145,91 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     notifyListeners();
   }
 
-  /// Shows what the guards show in place of [location], as [go] to it
-  /// does; `false` if the guards let the user see [location].
-  bool _redirected(AppLocation location) {
-    final guarded = _guards.asked(location.routeName, location);
-    if (guarded == null) return false;
-    _go(guarded.location);
+  /// What the guards answer for [location], which [go], [push] or [replace]
+  /// is asked to show on top of the pages of the router.
+  WhenAsked<AppLocation?>? _asked(AppLocation location) => _guards.asked(
+        location.routeName,
+        location,
+        onTopOf: [for (final page in _pages) page.route],
+      );
+
+  /// Does what the guards answer for [location], which [go], [push] or
+  /// [replace] is asked to show; `false` if they let the user see it.
+  ///
+  /// [again] makes the request again, and [drop] ends it without showing
+  /// its location, as a push does that completes with `null`. For the flow
+  /// of a guard that the guards open over the page on top, the request
+  /// waits while a page of the flow is among the pages: [_close] makes it
+  /// again, and [notifyListeners] drops it. The target of such a guard is
+  /// outside the main navigation, so its page goes on the root navigator,
+  /// as a page that a push showed.
+  bool _redirected(
+    AppLocation location, {
+    required void Function() again,
+    void Function()? drop,
+  }) {
+    switch (_asked(location)) {
+      case null:
+        return false;
+      case ShowInstead(location: final shown):
+        _go(shown);
+        drop?.call();
+      case ShowNothing():
+        drop?.call();
+      case ShowOver(location: final target, :final flow):
+        _drop();
+        _stack.add(target!);
+        _results[target] = Completer<Object?>();
+        _waiting = (flow: flow, again: again, drop: drop);
+        notifyListeners();
+    }
     return true;
   }
 
+  /// Drops the request that waits, if there is one.
+  void _drop() {
+    final waiting = _waiting;
+    _waiting = null;
+    waiting?.drop?.call();
+  }
+
   /// Tells the guards of the pages of the router, as when one of them
-  /// starts or stops allowing, and shows the location that they answer.
+  /// starts or stops allowing, and does what they answer: shows a location
+  /// in place of the stack, or closes the pages on top.
   void _guardsChanged() {
-    final shown = _guards.changed(_pages);
-    if (shown != null) _go(shown.location);
+    switch (_guards.changed(_pages)) {
+      case null:
+        break;
+      case ShowInstead(:final location):
+        _go(location);
+      case ClosePages(:final pages, :final dropsRequest):
+        _close(pages, dropsRequest: dropsRequest);
+    }
+  }
+
+  /// Closes the [count] pages on top, each of which a push showed, whatever
+  /// the navigator shows over them, and completes their pushes with `null`.
+  /// Then it drops the request that waits, with [dropsRequest], or else
+  /// makes it again, if no page of its flow is left. The listeners of the
+  /// screen hear of the page that the user ends on when the router next
+  /// builds its pages.
+  void _close(int count, {required bool dropsRequest}) {
+    final waiting = _waiting;
+    _waiting = null;
+    for (var closed = 0; closed < count; closed++) {
+      final stack = _onMainNavigation ? _branches[_selected] : _stack;
+      _results.remove(stack.removeLast())?.complete(null);
+    }
+    if (waiting != null) {
+      if (dropsRequest) {
+        waiting.drop?.call();
+      } else if (_pages.any((page) => waiting.flow.contains(page.route))) {
+        _waiting = waiting;
+      } else {
+        waiting.again();
+      }
+    }
+    notifyListeners();
   }
 
 {{/guards}}  /// The page on top: the branch it is in, or -1 for the root navigator,
@@ -155,6 +245,36 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   bool get _onMainNavigation =>
       _stack.isNotEmpty && identical(_stack.last, _mainNavigation);
 
+  /// Whether the fallback screen is at the bottom of the root navigator:
+  /// when the stack is empty, and below the pages that pushes showed over
+  /// the fallback screen.
+  bool get _overFallback => _stack.every(_results.containsKey);
+
+  /// Tells the router of a change of the stacks, as each navigation does.
+  ///
+  /// When the main navigation has left the stack, the branches get new
+  /// navigators, with observers of their own, when they are selected next.
+  /// The page of the main navigation that left stays in the tree until the
+  /// transition to the page that took its place is over, with the
+  /// navigators that it had: a main navigation that comes back sooner
+  /// would have their keys in the tree twice.{{#guards}}
+  ///
+  /// Before that, the request that waits for a flow is dropped once no
+  /// page of the flow is among the pages, as when the user went back from
+  /// it or another location took the place of the stack.{{/guards}}
+  @override
+  void notifyListeners() {
+{{#guards}}    if (_waiting case final waiting?
+        when !_pages.any((page) => waiting.flow.contains(page.route))) {
+      _drop();
+    }
+{{/guards}}    if (!_stack.contains(_mainNavigation)) {
+      _branchNavigators.clear();
+      _branchObservers.clear();
+    }
+    super.notifyListeners();
+  }
+
   @override
   Widget build(BuildContext context) {
     _showScreen();
@@ -162,7 +282,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       key: _navigatorKey,
       observers: _observers,
       pages: [
-        if (_stack.isEmpty)
+        if (_overFallback)
           const MaterialPage<Object?>(child: FallbackStartScreen()),
         for (final entry in _stack)
           if (entry case final AppLocation location)
@@ -179,7 +299,8 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   /// The navigators of the branches of the main navigation, of which the
   /// selected one shows: a branch gets its navigator when it is first
-  /// selected, and keeps it.
+  /// selected, and keeps it until the main navigation leaves the stack; see
+  /// [notifyListeners].
   Widget _branchesWidget() => IndexedStack(
         index: _selected,
         children: [
@@ -315,14 +436,23 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void go(AppLocation location) {
-    {{#guards}}if (_redirected(location)) return;
+    {{#guards}}if (_redirected(location, again: () => go(location))) return;
     {{/guards}}_show(location);
     notifyListeners();
   }
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
-    {{#guards}}if (_redirected(location)) return Future.value();
+    {{#guards}}// A push that waits for a flow completes with what the request
+    // completes with when the router makes it again, or with `null`.
+    final waiting = Completer<T?>();
+    if (_redirected(
+      location,
+      again: () => waiting.complete(push<T>(location)),
+      drop: waiting.complete,
+    )) {
+      return waiting.future;
+    }
     {{/guards}}final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'push');
     if (branch == null) {
@@ -340,9 +470,12 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void replace(AppLocation location) {
-    {{#guards}}if (_redirected(location)) return;
+    {{#guards}}if (_redirected(location, again: () => replace(location))) return;
     {{/guards}}final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'replace');
+    // A page that takes the place of one that a push showed closes without
+    // the pages below it too, so it is one that a push showed.
+    final (_, replaced) = _top;
     if (branch != null && _onMainNavigation) {
       _branches[_selected]
         ..removeLast()
@@ -354,6 +487,9 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       } else {
         _showMainNavigation(branch, location);
       }
+    }
+    if (_results.containsKey(replaced)) {
+      _results[location] = Completer<Object?>();
     }
     notifyListeners();
   }

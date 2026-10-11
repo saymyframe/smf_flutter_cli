@@ -8,12 +8,18 @@
 // ErrorWidget on the screen and no error of Flutter.
 //
 // The guards of the routes of the app must allow, so that the walk reaches
-// every route: the test fails on each guard that does not, by its name.
-// The module of a guard opens it for the tests of the app in the mocks of
-// its app test (MatrixAppTest.mocks), which the matrix sets up before the
-// tests of each test file. On a device, where no test opens a guard, the
-// walk expects the target of the guard in place of each location that the
-// guard keeps the user from.
+// every route outside their flows, and every route that asks for a
+// condition that a guard stands for: the test fails on each guard that
+// does not, by its name. The module of a guard opens it for the tests of the
+// app in the mocks of its app test (MatrixAppTest.mocks), which the matrix
+// sets up before the tests of each test file. On a device, where no test
+// opens a guard, the walk expects the target of the guard in place of each
+// location that the guard keeps the user from.
+//
+// A location in the flow of a guard shows only while the guard does not
+// allow. So here, where the flows are over, the walk expects the screen
+// that the app starts on in place of each of them, as the router role
+// says, with its page on top if it is a route.
 //
 // It knows only the role. The matrix writes the locations of the app next
 // to the walk, from the data of its router role, and sets up the mocks of
@@ -68,7 +74,7 @@ void main() {
   // fails sooner.
   testWidgets(
     'each location that needs no values shows the page and the screen of '
-    'its route',
+    'its route, or the screen that the app starts on if its flow is over',
     (tester) async {
       await _startApp(tester);
 
@@ -95,12 +101,14 @@ void main() {
         walk.pages,
         isEmpty,
         reason: 'The page on top of the innermost navigator on the screen is '
-            'named after the route of each location.',
+            'named after the route of each location, or after the route '
+            'that the app starts on for a location in a flow that is over.',
       );
       expect(
         walk.screens,
         isEmpty,
-        reason: 'Each location shows the screen of its route.',
+        reason: 'Each location shows the screen of its route, or the screen '
+            'that the app starts on if it is in a flow that is over.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

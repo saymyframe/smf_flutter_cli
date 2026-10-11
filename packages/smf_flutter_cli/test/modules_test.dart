@@ -163,6 +163,64 @@ final class _Module extends SmfModule {
       );
 }
 
+/// A module [id] of the tests that provides [role].
+final class _Provider extends SmfModule {
+  const _Provider(this.id, this.role);
+
+  final ModuleId id;
+  final Role role;
+
+  @override
+  ModuleDescriptor get descriptor => ModuleDescriptor(
+        id: id,
+        description: 'The module $id',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(role)],
+      );
+}
+
+/// A feature [id] of the tests with a variant for each of the providers
+/// [variants] of the state management role.
+final class _WithVariants extends SmfModule {
+  const _WithVariants(this.id, this.variants);
+
+  final ModuleId id;
+  final Set<ModuleId> variants;
+
+  @override
+  ModuleDescriptor get descriptor => ModuleDescriptor(
+        id: id,
+        description: 'The module $id',
+        kind: ModuleKinds.feature,
+        variants: Variants(
+          role: stateManagementRole,
+          byProvider: {
+            for (final provider in variants)
+              provider: (context) => const <Contribution>[],
+          },
+        ),
+      );
+}
+
+/// The providers among [modules] that a module of [modules] with variants
+/// has no variant for, each as "`<module>` has no variant for `<provider>`
+/// of the `<role>`": an app with the two cannot be generated, so a user who
+/// picks that provider cannot have the module.
+List<String> _missingVariantsOf(List<SmfModule> modules) => [
+      for (final module in modules)
+        if (module.descriptor.variants case final variants?)
+          for (final provider in modules)
+            if (provider.descriptor.provides.contains(variants.role) &&
+                !variants.byProvider.containsKey(provider.descriptor.id))
+              _missingVariant(module, provider, variants.role),
+    ];
+
+/// The line of [_missingVariantsOf] for [module], which has no variant for
+/// [provider] of [role].
+String _missingVariant(SmfModule module, SmfModule provider, Role role) =>
+    '${module.descriptor.id} has no variant for ${provider.descriptor.id} of '
+    'the $role';
+
 void main() {
   test('every module follows the rules of its roles in every app', () async {
     final results =
@@ -185,6 +243,57 @@ void main() {
     expect(
       await ContractHarness(ModuleRegistry(smfModules)).uncheckedProviders(),
       isEmpty,
+    );
+  });
+
+  test(
+      'a module with variants has one for each provider of their role that '
+      'the CLI offers, such as the sign-in for each state manager, so a user '
+      'gets the module whichever of them the app has', () {
+    expect(_missingVariantsOf(smfModules), isEmpty);
+    // The check is not empty-handed: the CLI has a module with variants,
+    // and its role has several providers.
+    expect(
+      {
+        for (final module in smfModules)
+          if (module.descriptor.variants case final variants?)
+            '${module.descriptor.id} for the ${variants.role}':
+                variants.byProvider.keys.toList(),
+      },
+      {
+        'sign_in for the state management role': const [
+          ModuleId('bloc'),
+          ModuleId('riverpod'),
+        ],
+      },
+    );
+  });
+
+  test(
+      'a module with variants that has none for a provider of their role is '
+      'found, by its id and that of the provider', () {
+    const bloc = ModuleId('bloc');
+    const riverpod = ModuleId('riverpod');
+    const providers = [
+      _Provider(bloc, stateManagementRole),
+      _Provider(riverpod, stateManagementRole),
+      // A provider of another role needs no variant.
+      _Provider(ModuleId('router'), routerRole),
+    ];
+
+    expect(
+      _missingVariantsOf(const [
+        ...providers,
+        _WithVariants(ModuleId('both'), {bloc, riverpod}),
+        _WithVariants(ModuleId('one'), {bloc}),
+        _WithVariants(ModuleId('none'), {}),
+        _Module(ModuleId('plain')),
+      ]),
+      const [
+        'one has no variant for riverpod of the state management role',
+        'none has no variant for bloc of the state management role',
+        'none has no variant for riverpod of the state management role',
+      ],
     );
   });
 

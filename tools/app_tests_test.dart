@@ -377,9 +377,22 @@ List<String> roleFunctionProblemsOf(
 /// apps by their roles and by the modules it knows.
 const _ofOneProvider = {
   // The notifications of the delegate of go_router that leave the page on
-  // top as it is, which the listeners of the screen do not hear of, and
-  // push() after a refresh of its routes.
+  // top as it is, which the listeners of the screen do not hear of, push()
+  // after a refresh of its routes, and push() and replace() while
+  // go_router has no page of a route.
   'packages/smf_pipeline/fixture_registry/app_tests/go_router_screens': {
+    'go_router',
+  },
+  // The new route that the router of go_router gives it for the main
+  // navigation each time the main navigation leaves its pages, since
+  // go_router keeps the pages of the branches with the route.
+  'packages/smf_pipeline/fixture_registry/app_tests/go_router_branches': {
+    'go_router',
+  },
+  // A refresh of the routes of go_router while the flow of a condition is
+  // open, a request on its error screen, two links in one turn, and the
+  // redirect of go_router within the calls of the router.
+  'packages/smf_pipeline/fixture_registry/app_tests/go_router_conditions': {
     'go_router',
   },
   // A tap on a tab of the bar of bottom_tabs, which selects its
