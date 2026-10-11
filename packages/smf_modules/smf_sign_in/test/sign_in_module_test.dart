@@ -1495,34 +1495,46 @@ void main() {
             expect(calls.found, isEmpty, reason: '$path: $method');
           }
         }
-        // The screen of the account and its state close nothing and ask
-        // the router for nothing: the router closes the page.
-        for (final path in [
-          _screens['AccountScreen']!,
-          ...variant.stateFiles,
-        ]) {
-          final unit = _parsed(app, path);
-          for (final method in ['pop', 'maybePop', 'push', 'popUntil']) {
-            final calls = _Invocations(method);
-            unit.accept(calls);
-            expect(calls.found, isEmpty, reason: '$path: $method');
-          }
-        }
-        // Only the sheet that asks before a deletion closes itself, with
-        // the answer, and the view calls for the deletion after it.
-        final pops = {
-          for (final path in _ownFilesOf(app))
-            path: _invocationsOf(_parsed(app, path), 'pop')
-                .map((call) => call.toSource())
-                .toList(),
-        }..removeWhere((path, calls) => calls.isEmpty);
+        // No file of the feature closes a page or asks the router for one,
+        // but where the user asks for it: the two actions of the sign-in
+        // that lead on, the entry of the settings screen, the action of
+        // the sign-up and the button of the reset that lead back, and the
+        // two buttons of the sheet, which close it with the answer before
+        // the view calls for the deletion. So no view, no screen and no
+        // state closes a page once the session has changed: the router
+        // closes it.
+        final navigation = {
+          for (final method in ['pop', 'maybePop', 'popUntil', 'push'])
+            method: {
+              for (final path in _ownFilesOf(app))
+                if (_invocationsOf(_parsed(app, path), method) case final calls
+                    when calls.isNotEmpty)
+                  path: [for (final call in calls) call.toSource()],
+            },
+        };
         expect(
-          pops,
+          navigation,
           {
-            _accountView: [
-              'Navigator.of(context).pop(true)',
-              'Navigator.of(context).pop(false)',
-            ],
+            'pop': {
+              _accountView: [
+                'Navigator.of(context).pop(true)',
+                'Navigator.of(context).pop(false)',
+              ],
+            },
+            'maybePop': {
+              _screens['SignUpScreen']: ['Navigator.of(context).maybePop()'],
+              _screens['ResetPasswordScreen']: [
+                'Navigator.of(context).maybePop()',
+              ],
+            },
+            'popUntil': <String, List<String>>{},
+            'push': {
+              _screens['SignInScreen']: [
+                'context.nav.signIn.signUp().push<void>()',
+                'context.nav.signIn.resetPassword().push<void>()',
+              ],
+              _setting: ['context.nav.signIn.account().push<void>()'],
+            },
           },
           reason: '$variant',
         );
@@ -3089,6 +3101,7 @@ void main() {
   group('the documentation of the package', () {
     late Map<ModuleId, RenderedApp> apps;
     late Set<String> paths;
+    late String openSettings;
 
     /// The text of [path] in the package, with the line endings of Git on
     /// any system.
@@ -3109,6 +3122,13 @@ void main() {
         for (final route in _facadeOf(results.values.first).routes)
           route.fullPath,
       };
+      // The call of the facade for the route that the settings screen role
+      // names as the settings screen, in the apps of these tests.
+      final screen = settingsScreenRole.screenIn(
+        settingsScreenRole.hookInput(results.values.first.hook!),
+      )!;
+      openSettings = 'context.nav.${screen.feature.accessor}.'
+          '${screen.route.name}().push<void>()';
     });
 
     test(
@@ -3146,7 +3166,21 @@ void main() {
           (_setting, null),
         ],
       );
-      expect(example, contains('smf create my_app -m home,sign_in,bloc'));
+      // An app with a main navigation, whose tabs lead to the settings
+      // screen with the entry of the account.
+      const command = 'smf create my_app -m home,sign_in,bloc,bottom_tabs';
+      expect(example, contains('$command --no-input'));
+      expect(read('README.md'), contains('$command\n'));
+      // For an app without a main navigation, the README gives the call
+      // that opens the settings screen, as the facade has it, and the one
+      // that opens the account.
+      expect(
+        _codeOf(read('README.md')),
+        containsAll([
+          openSettings,
+          'context.nav.signIn.account().push<void>()',
+        ]),
+      );
     });
 
     test(
