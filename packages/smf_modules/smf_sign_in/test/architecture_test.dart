@@ -25,6 +25,7 @@ void main() {
           'smf_gen_l10n',
           'smf_go_router',
           'smf_riverpod',
+          'smf_settings',
           'smf_shared_preferences',
         },
       ).problems(),

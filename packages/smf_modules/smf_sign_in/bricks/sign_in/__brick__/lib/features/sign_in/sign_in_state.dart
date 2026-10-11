@@ -59,3 +59,40 @@ final class ResetPasswordState {
   @override
   int get hashCode => Object.hash(busy, failure, sentTo);
 }
+
+/// An action of the screen of the account.
+enum AccountAction {
+  /// Signing the user out.
+  signOut,
+
+  /// Deleting the account.
+  delete,
+}
+
+/// The state of the screen of the account: which of its two actions is on
+/// its way, and why the last one failed.
+@immutable
+final class AccountState {
+  /// Creates the state.
+  const AccountState({this.busy, this.failure});
+
+  /// The action whose call is on its way, or `null` when none is. While it
+  /// is, the screen takes no other action.
+  ///
+  /// It stays so once the call succeeded, for as long as the session has
+  /// no account. What comes next is up to the router, which leaves the
+  /// screen: the screen neither closes itself nor navigates. A failure
+  /// ends it, and so does a session that has an account again before the
+  /// router took the screen away.
+  final AccountAction? busy;
+
+  /// Why the last action failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountState && other.busy == busy && other.failure == failure;
+
+  @override
+  int get hashCode => Object.hash(busy, failure);
+}

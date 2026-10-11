@@ -14,6 +14,7 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
+import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/bundles/sign_in_bloc_bundle.dart';
 import 'package:smf_sign_in/bundles/sign_in_bundle.dart';
@@ -33,7 +34,8 @@ const _feed = StartFeature('feed');
 /// go_router, which routes it and asks the guards of the module, the two
 /// modules that manage state, sign-in with accounts in memory, gen_l10n,
 /// which provides the localization role, with the preferences that it
-/// requires, a feature that can start the app, and this module.
+/// requires, the settings module, which provides the settings screen that
+/// the module requires, a feature that can start the app, and this module.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   GoRouterModule(),
@@ -42,6 +44,7 @@ const List<SmfModule> _modules = [
   MemoryAuthModule(),
   SharedPreferencesModule(),
   GenL10nModule(),
+  SettingsModule(),
   _feed,
   SignInModule(),
 ];
@@ -50,42 +53,62 @@ const List<SmfModule> _modules = [
 const _folder = 'lib/features/sign_in';
 
 /// The files of the look of the screens, which every app with the module
-/// has: the three views, the frame of a screen, the fields and the buttons,
-/// the values of the state, and the functions of the guards.
-const _views = [
+/// has: the four views, the frame of a screen, the fields and the buttons,
+/// the row of the settings screen, the values of the state, and the
+/// functions of the guards.
+const _accountView = '$_folder/account_view.dart';
+const List<String> _views = [
   '$_folder/sign_in_view.dart',
   '$_folder/sign_up_view.dart',
   '$_folder/reset_password_view.dart',
+  _accountView,
 ];
 const _page = '$_folder/sign_in_page.dart';
 const _widgets = '$_folder/sign_in_widgets.dart';
+const _settingRow = '$_folder/account_setting_row.dart';
 const _state = '$_folder/sign_in_state.dart';
 const _guards = '$_folder/sign_in_guards.dart';
-const List<String> _look = [..._views, _page, _widgets, _state, _guards];
+const List<String> _look = [
+  ..._views,
+  _page,
+  _widgets,
+  _settingRow,
+  _state,
+  _guards,
+];
 
 /// The files of the screens, which each variant has at the same paths.
 const _screens = {
   'SignInScreen': '$_folder/sign_in_screen.dart',
   'SignUpScreen': '$_folder/sign_up_screen.dart',
   'ResetPasswordScreen': '$_folder/reset_password_screen.dart',
+  'AccountScreen': '$_folder/account_screen.dart',
 };
 
+/// The file of the entry of the settings screen, which each variant has at
+/// the same path.
+const _setting = '$_folder/account_setting.dart';
+
 /// The files of the state of the screens in the variant for bloc: the
-/// file that creates the cubits, and the cubits.
+/// file that creates the cubits, the cubits of the screens, and the cubit
+/// with the session of the app.
 const _composition = '$_folder/sign_in_composition.dart';
+const _sessionCubit = '$_folder/session_cubit.dart';
 const _cubits = [
   '$_folder/sign_in_cubit.dart',
   '$_folder/sign_up_cubit.dart',
   '$_folder/reset_password_cubit.dart',
+  '$_folder/account_cubit.dart',
 ];
 
 /// The files of the state of the screens in the variant for riverpod: the
-/// provider of the session, and the providers of the screens.
+/// providers of the session, and the providers of the screens.
 const _sessionProvider = '$_folder/session_provider.dart';
 const _notifiers = [
   '$_folder/sign_in_notifier.dart',
   '$_folder/sign_up_notifier.dart',
   '$_folder/reset_password_notifier.dart',
+  '$_folder/account_notifier.dart',
 ];
 
 /// The variants of the module, each with the id of its state manager, the
@@ -95,7 +118,7 @@ const List<({ModuleId id, String package, List<String> stateFiles})> _variants =
   (
     id: SignInModule.blocVariant,
     package: 'flutter_bloc',
-    stateFiles: [_composition, ..._cubits],
+    stateFiles: [_composition, _sessionCubit, ..._cubits],
   ),
   (
     id: SignInModule.riverpodVariant,
@@ -109,7 +132,9 @@ const _module = ModuleOrigin(SignInModule.id);
 
 /// The names of the texts of the module, in their order: those of the
 /// sign-in, of the sign-up and of the password reset, what a form says of
-/// a field, and the texts of the failures.
+/// a field, the texts of the failures, those of the screen of the account
+/// and of the sheet that asks before a deletion, and those of the entry of
+/// the settings screen.
 const _textNames = [
   'title',
   'intro',
@@ -142,6 +167,17 @@ const _textNames = [
   'failureRecentSignIn',
   'failureNotSetUp',
   'failureUnknown',
+  'accountTitle',
+  'signedInAs',
+  'signedIn',
+  'signOut',
+  'deleteAccount',
+  'deleteTitle',
+  'deleteText',
+  'cancel',
+  'delete',
+  'settingSignedIn',
+  'notSignedIn',
 ];
 
 /// The text of the module for each reason of a failure of the auth role,
@@ -509,6 +545,35 @@ Screen resetScreen(AppSessionController session) {
     leave: cubit.close,
   );
 }
+
+/// The screen of the account, whose button signs out, or whose action
+/// deletes the account with [deletes]; [other] is the other of the two.
+Screen accountScreen(AppSessionController session, {bool deletes = false}) {
+  final cubit = AccountCubit(session);
+  final states = <String>[];
+  cubit.stream.listen((state) => states.add(show(state)));
+  return Screen(
+    state: () => show(cubit.state),
+    states: states,
+    submit: deletes ? cubit.deleteAccount : cubit.signOut,
+    other: deletes ? cubit.signOut : cubit.deleteAccount,
+    leave: cubit.close,
+  );
+}
+
+/// What follows [session] for the widgets of the app: its state, each
+/// state that it told of, and what ends it.
+Screen sessionBridge(AppSessionController session) {
+  final cubit = SessionCubit(session);
+  final states = <String>[];
+  cubit.stream.listen((state) => states.add(show(state)));
+  return Screen(
+    state: () => show(cubit.state),
+    states: states,
+    submit: () async {},
+    leave: cubit.close,
+  );
+}
 ''';
 
 /// The same over the providers of the variant for riverpod: a container
@@ -561,6 +626,45 @@ Screen resetScreen(AppSessionController session) => _screenOf(
   resetPasswordProvider,
   (container) => container.read(resetPasswordProvider.notifier).send(email),
 );
+
+/// The screen of the account, whose button signs out, or whose action
+/// deletes the account with [deletes]; [other] is the other of the two.
+Screen accountScreen(AppSessionController session, {bool deletes = false}) {
+  late ProviderContainer app;
+  Future<void> signOut() => app.read(accountProvider.notifier).signOut();
+  Future<void> delete() => app.read(accountProvider.notifier).deleteAccount();
+  final screen = _screenOf(session, accountProvider, (container) {
+    app = container;
+    return deletes ? delete() : signOut();
+  });
+  return Screen(
+    state: screen.state,
+    states: screen.states,
+    submit: screen.submit,
+    other: deletes ? signOut : delete,
+    leave: screen.leave,
+  );
+}
+
+/// What follows [session] for the widgets of the app: its state, each
+/// state that it told of, and what ends it.
+Screen sessionBridge(AppSessionController session) {
+  final container = ProviderContainer(
+    overrides: [appSessionProvider.overrideWithValue(session)],
+  );
+  final states = <String>[];
+  container.listen<AppSession>(
+    sessionProvider,
+    (_, state) => states.add(show(state)),
+  );
+  return Screen(
+    state: () => show(container.read(sessionProvider)),
+    states: states,
+    submit: () async {},
+    // The app is torn down: its container is disposed of.
+    leave: () async => container.dispose(),
+  );
+}
 ''';
 
 /// What the script of every variant does: the scenarios of each screen,
@@ -624,6 +728,101 @@ const _scenarios = r'''
       session.dispose();
     }
   }
+
+  // The two actions of the screen of the account.
+  result['sign-out'] = await scenariosOf(accountScreen);
+  result['delete'] = await scenariosOf(
+    (session) => accountScreen(session, deletes: true),
+  );
+
+  // One action of that screen while the other is on its way.
+  for (final deletes in [false, true]) {
+    final service = Scripted()..hold = Completer<void>();
+    final session = await sessionOf(service);
+    final screen = accountScreen(session, deletes: deletes);
+    final first = screen.submit();
+    await turn();
+    final second = screen.other!();
+    await turn();
+    final name = deletes ? 'delete, then sign-out' : 'sign-out, then delete';
+    result['$name: states'] = [...screen.states];
+    service.hold!.complete();
+    await first;
+    await second;
+    await turn();
+    result['$name: calls in the end'] = [...service.calls];
+  }
+
+  // The session has an account again after a sign-out or a deletion that
+  // succeeded: a moment later, and in the turn in which the session lost
+  // it, as when code of the app signs a user in. The screen has not left,
+  // and its state is as before the call. Once the user has left the
+  // screen, its state listens to the session no more.
+  for (final deletes in [false, true]) {
+    for (final atOnce in [false, true]) {
+      final service = Scripted();
+      final session = await sessionOf(service);
+      await session.signIn(email: email, password: password);
+      void signInAgain() {
+        if (!session.hasAccount.value) {
+          unawaited(session.signIn(email: email, password: password));
+        }
+      }
+
+      if (atOnce) session.addListener(signInAgain);
+      final screen = accountScreen(session, deletes: deletes);
+      await screen.submit();
+      await turn();
+      if (!atOnce) await session.signIn(email: email, password: password);
+      await turn();
+      final name = '${deletes ? 'delete' : 'sign-out'}, '
+          'signed in ${atOnce ? 'at once' : 'later'}';
+      result['$name: state'] = screen.state();
+      result['$name: session'] = show(session.value);
+      // The next call is made.
+      service.failure = const AuthFailure(AuthFailureReason.network);
+      session.removeListener(signInAgain);
+      final calls = service.calls.length;
+      await screen.submit();
+      await turn();
+      result['$name: next call'] = service.calls.length - calls;
+      result['$name: state then'] = screen.state();
+      await screen.leave();
+      await turn();
+      result['$name: listeners after'] = session.hasListeners;
+      session.dispose();
+    }
+  }
+
+  // What gives the widgets of the app the session follows a change that no
+  // screen made, such as a session that ended on the server, and listens no
+  // more once the app is torn down.
+  {
+    final service = Scripted();
+    final session = await sessionOf(service, mode: AuthMode.guest);
+    result['bridge: listeners before'] = session.hasListeners;
+    final bridge = sessionBridge(session);
+    result['bridge: at first'] = bridge.state();
+    result['bridge: listeners'] = session.hasListeners;
+    service.change(
+      const AuthUser(uid: 'account', isAnonymous: false, email: email),
+    );
+    await turn();
+    result['bridge: signed in elsewhere'] = bridge.state();
+    service.change(null);
+    await turn();
+    result['bridge: ended on the server'] = bridge.state();
+    result['bridge: states'] = [...bridge.states];
+    await bridge.leave();
+    await turn();
+    result['bridge: listeners after'] = session.hasListeners;
+    service.change(const AuthUser(uid: 'late', isAnonymous: true));
+    await turn();
+    result['bridge: states after'] = bridge.states.length;
+    // The session is not that of the bridge to end: it goes on.
+    result['bridge: session after'] = show(session.value);
+    session.dispose();
+  }
 ''';
 
 /// What the script of each variant does last: the state of a screen in the
@@ -634,10 +833,15 @@ const _blocApp = r'''
     await appSession.start(service);
     final cubit = createSignInCubit();
     await cubit.signIn(email: email, password: password);
+    final ofRoot = createSessionCubit();
     result['app: created'] = [
       '${createSignUpCubit().runtimeType}',
       '${createResetPasswordCubit().runtimeType}',
+      '${createAccountCubit().runtimeType}',
+      '${ofRoot.runtimeType}',
     ];
+    result['app: session cubit'] = show(ofRoot.state);
+    await ofRoot.close();
     result['app: calls'] = [...service.calls];
     result['app: session'] = show(appSession.value);
   }
@@ -668,20 +872,22 @@ void main() {
 
   group('SignInModule', () {
     test(
-        'is a feature that requires the router, sign-in and a state '
-        'manager, uses the localization, and needs neither a DI container '
-        'nor a settings screen', () {
+        'is a feature that requires the router, sign-in, a settings screen '
+        'and a state manager, uses the localization, and needs no DI '
+        'container', () {
       final descriptor = module.descriptor;
 
       expect(descriptor.id, const ModuleId('sign_in'));
       expect(descriptor.kind, ModuleKinds.feature);
       expect(descriptor.provides, isEmpty);
-      expect(descriptor.requires, {authRole});
+      // The entry of the settings screen is the entrance to the screen of
+      // the account, so an app with the module has a settings screen.
+      expect(descriptor.requires, {authRole, settingsScreenRole});
       // The kind makes a feature require the router, and the variants the
       // state management.
       expect(
         descriptor.effectiveRequires,
-        {authRole, routerRole, stateManagementRole},
+        {authRole, settingsScreenRole, routerRole, stateManagementRole},
       );
       expect(descriptor.effectiveUses, {localizationRole});
       expect(descriptor.dependsOn, isEmpty);
@@ -704,8 +910,9 @@ void main() {
 
     test(
         'declares the sign-in at / of the module, with the sign-up and the '
-        'password reset below it, none of them a destination, a screen '
-        'that starts the app or a route with a condition', () {
+        'password reset below it, and the account at /account, which alone '
+        'asks for the account condition of the auth role; none of them is '
+        'a destination or a screen that starts the app', () {
       final data = [
         for (final contribution
             in module.contribute(ContractHarness.defaultContext))
@@ -713,7 +920,7 @@ void main() {
       ].single;
 
       expect(data.role, routerRole);
-      final signIn = data.value.routes.single;
+      final [signIn, account] = data.value.routes;
       expect(signIn.path, '/');
       expect(signIn.name, 'signIn');
       expect(
@@ -722,7 +929,11 @@ void main() {
         ],
         [('sign_up', 'signUp'), ('reset_password', 'resetPassword')],
       );
-      final routes = [signIn, ...signIn.children];
+      // A route of its own, outside the flow of the guards, which is the
+      // sign-in and the routes below it.
+      expect((account.path, account.name), ('/account', 'account'));
+      expect(account.children, isEmpty);
+      final routes = [signIn, ...signIn.children, account];
       expect(
         {
           for (final route in routes) route.screen.className: route.screen.file,
@@ -733,7 +944,11 @@ void main() {
         expect(route.params, isEmpty, reason: route.name);
         expect(route.destination, isNull, reason: route.name);
         expect(route.startCandidate, isFalse, reason: route.name);
-        expect(route.conditions, isEmpty, reason: route.name);
+        expect(
+          route.conditions,
+          route == account ? [AuthRole.account] : isEmpty,
+          reason: route.name,
+        );
       }
       expect(signIn.children.expand((route) => route.children), isEmpty);
     });
@@ -758,7 +973,7 @@ void main() {
       expect(account.condition, AuthRole.account);
       expect(account.allows.name, 'signInHasAccount');
       for (final guard in [gate, account]) {
-        expect(guard.redirectTo, data.value.routes.single.name);
+        expect(guard.redirectTo, data.value.routes.first.name);
         expect(
           guard.allows.import,
           const ImportRef.app('features/sign_in/sign_in_guards.dart'),
@@ -787,11 +1002,12 @@ void main() {
 
     test(
         'contributes the brick of the look with the symbol and the number '
-        'of the app and the texts, its routes with the guards, its texts '
-        'and its note for coding agents, and nothing else', () {
+        'of the app and the texts, its routes with the guards, the entry of '
+        'the settings screen, its texts and its note for coding agents, and '
+        'nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(4));
+      expect(contributions, hasLength(5));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(signInBundle));
       expect(brick.bundle.name, 'sign_in');
@@ -829,10 +1045,16 @@ void main() {
         ],
       );
       expect(contributions[1], isA<RoleData<RoutesData>>());
-      final texts = contributions[2] as RoleData<TextsData>;
+      // The entry of the settings screen, whose file each variant has.
+      final entry = contributions[2] as RoleData<SettingsData>;
+      expect(entry.role, settingsScreenRole);
+      final widget = (entry.value as SettingsEntry).widget;
+      expect(widget.name, 'AccountSetting');
+      expect((entry.value as SettingsEntry).file, _setting);
+      final texts = contributions[3] as RoleData<TextsData>;
       expect(texts.role, localizationRole);
       expect(texts.value, same(SignInModule.texts));
-      final note = contributions[3] as SocketContribution;
+      final note = contributions[4] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, agentHeading);
       expect(note.entryValue, AgentNote(agentNote));
@@ -842,20 +1064,32 @@ void main() {
     test(
         'adds with each variant the brick of its state, the package of its '
         'state manager with the constraint of the provider, and its part '
-        'of the note, and nothing else', () {
+        'of the note; the variant for bloc also puts the cubit with the '
+        'session of the app around the root of the app', () {
       final variants = module.descriptor.variants!.byProvider;
       final expected = {
         SignInModule.blocVariant: (
           bundle: signInBlocBundle,
           name: 'sign_in_bloc',
-          files: [_composition, ..._cubits, ..._screens.values],
+          files: [
+            _composition,
+            _sessionCubit,
+            ..._cubits,
+            ..._screens.values,
+            _setting,
+          ],
           package: 'flutter_bloc',
           note: blocAgentNote,
         ),
         SignInModule.riverpodVariant: (
           bundle: signInRiverpodBundle,
           name: 'sign_in_riverpod',
-          files: [_sessionProvider, ..._notifiers, ..._screens.values],
+          files: [
+            _sessionProvider,
+            ..._notifiers,
+            ..._screens.values,
+            _setting,
+          ],
           package: 'flutter_riverpod',
           note: riverpodAgentNote,
         ),
@@ -865,7 +1099,8 @@ void main() {
       for (final MapEntry(key: id, value: variant) in expected.entries) {
         final contributions = variants[id]!(ContractHarness.defaultContext);
 
-        expect(contributions, hasLength(3), reason: '$id');
+        final bloc = id == SignInModule.blocVariant;
+        expect(contributions, hasLength(bloc ? 4 : 3), reason: '$id');
         final brick = contributions[0] as BrickContribution;
         expect(brick.bundle, same(variant.bundle), reason: '$id');
         expect(brick.bundle.name, variant.name);
@@ -882,7 +1117,24 @@ void main() {
         expect(package.constraint, 'any', reason: '$id');
         expect(package.source, PubspecSource.hosted);
         expect(package.dev, isFalse);
-        final note = contributions[2] as SocketContribution;
+        if (bloc) {
+          // Riverpod has its scope around the root already.
+          final wrapper = contributions[2] as SocketContribution;
+          expect(wrapper.socket, AppEntryRole.rootWrappers);
+          final fragment = wrapper.fragment!;
+          expect(
+            fragment.code,
+            'BlocProvider(create: (_) => createSessionCubit(), child: ',
+          );
+          expect(
+            [for (final import in fragment.imports) import.uri],
+            [
+              'package:flutter_bloc/flutter_bloc.dart',
+              'features/sign_in/sign_in_composition.dart',
+            ],
+          );
+        }
+        final note = contributions.last as SocketContribution;
         expect(note.socket, AppEntryRole.agentSections);
         expect(note.entryKey, agentHeading);
         expect(note.entryValue, AgentNote(variant.note), reason: '$id');
@@ -901,8 +1153,8 @@ void main() {
 
     test(
         'builds the app of the module with each state manager, with the '
-        'localization and without, each with the router and the sign-in '
-        'that it requires', () {
+        'localization and without, each with the router, the sign-in and '
+        'the settings screen that it requires', () {
       final own = [
         for (final result in results)
           if (result.contractCase.name.startsWith('sign_in')) result,
@@ -918,12 +1170,17 @@ void main() {
         final name = result.contractCase.name;
         expect(
           [
-            for (final role in <Role>[routerRole, authRole])
+            for (final role in <Role>[
+              routerRole,
+              authRole,
+              settingsScreenRole,
+            ])
               _providersOf(result, role),
           ],
           [
             {GoRouterModule.id},
             {MemoryAuthModule.id},
+            {SettingsModule.id},
           ],
           reason: name,
         );
@@ -937,12 +1194,8 @@ void main() {
           name.contains('localization') ? {GenL10nModule.id} : isEmpty,
           reason: name,
         );
-        // The module asks for no DI container and no settings screen.
+        // The module asks for no DI container.
         expect(result.hook!.presentRoles, isNot(contains(diRole)));
-        expect(
-          result.hook!.presentRoles,
-          isNot(contains(settingsScreenRole)),
-        );
       }
     });
 
@@ -1031,7 +1284,8 @@ void main() {
 
     test(
         'has the files of the look and of the guards, the same with each '
-        'state manager, and the screens of each variant at the same paths', () {
+        'state manager, and the screens and the entry of the settings '
+        'screen of each variant at the same paths', () {
       for (final apps in [localized, english]) {
         final [bloc, riverpod] = [
           for (final variant in _variants) apps[variant.id]!.app!,
@@ -1039,12 +1293,24 @@ void main() {
 
         expect(
           _ownFilesOf(bloc),
-          [..._look, _composition, ..._cubits, ..._screens.values]..sort(),
+          [
+            ..._look,
+            _composition,
+            _sessionCubit,
+            ..._cubits,
+            ..._screens.values,
+            _setting,
+          ]..sort(),
         );
         expect(
           _ownFilesOf(riverpod),
-          [..._look, _sessionProvider, ..._notifiers, ..._screens.values]
-            ..sort(),
+          [
+            ..._look,
+            _sessionProvider,
+            ..._notifiers,
+            ..._screens.values,
+            _setting,
+          ]..sort(),
         );
         for (final path in _look) {
           expect(
@@ -1170,8 +1436,11 @@ void main() {
     });
 
     test(
-        'navigates only to the two screens over the sign-in, each on top '
-        'of the stack, and back from them by closing their page', () {
+        'navigates only to the two screens over the sign-in and, from the '
+        'entry of the settings screen, to the account, each on top of the '
+        'stack, and back from the two by closing their page; the screen of '
+        'the account navigates nowhere, and only the sheet of its question '
+        'closes itself, before the call', () {
       for (final variant in _variants) {
         final app = localized[variant.id]!.app!;
         final accesses = {
@@ -1183,7 +1452,21 @@ void main() {
             ],
         }..removeWhere((path, accesses) => accesses.isEmpty);
 
-        expect(accesses.keys, [_screens['SignInScreen']], reason: '$variant');
+        expect(
+          accesses.keys,
+          [_setting, _screens['SignInScreen']],
+          reason: '$variant',
+        );
+        // The entry asks for the route of the account, over the settings
+        // screen: for a user without an account, the router opens the
+        // sign-in over that screen first.
+        expect(
+          RegExp(r'context\.nav\.signIn\.(\w+)\(\)\.(\w+)<void>\(\)')
+              .allMatches(app.files[_setting]!.text)
+              .map((match) => (match[1], match[2])),
+          [('account', 'push')],
+          reason: '$variant',
+        );
         final source = app.files[_screens['SignInScreen']]!.text;
         expect(
           RegExp(r'context\.nav\.signIn\.(\w+)\(\)\.(\w+)<void>\(\)')
@@ -1202,7 +1485,8 @@ void main() {
             reason: screen,
           );
         }
-        // No screen goes anywhere once the user is signed in.
+        // No screen goes anywhere once the user is signed in, signed out
+        // or without the account.
         for (final path in _ownFilesOf(app)) {
           final unit = _parsed(app, path);
           for (final method in ['go', 'replace', 'pushReplacement']) {
@@ -1211,6 +1495,60 @@ void main() {
             expect(calls.found, isEmpty, reason: '$path: $method');
           }
         }
+        // No file of the feature closes a page or asks the router for one,
+        // but where the user asks for it: the two actions of the sign-in
+        // that lead on, the entry of the settings screen, the action of
+        // the sign-up and the button of the reset that lead back, and the
+        // two buttons of the sheet, which close it with the answer before
+        // the view calls for the deletion. So no view, no screen and no
+        // state closes a page once the session has changed: the router
+        // closes it.
+        final navigation = {
+          for (final method in ['pop', 'maybePop', 'popUntil', 'push'])
+            method: {
+              for (final path in _ownFilesOf(app))
+                if (_invocationsOf(_parsed(app, path), method) case final calls
+                    when calls.isNotEmpty)
+                  path: [for (final call in calls) call.toSource()],
+            },
+        };
+        expect(
+          navigation,
+          {
+            'pop': {
+              _accountView: [
+                'Navigator.of(context).pop(true)',
+                'Navigator.of(context).pop(false)',
+              ],
+            },
+            'maybePop': {
+              _screens['SignUpScreen']: ['Navigator.of(context).maybePop()'],
+              _screens['ResetPasswordScreen']: [
+                'Navigator.of(context).maybePop()',
+              ],
+            },
+            'popUntil': <String, List<String>>{},
+            'push': {
+              _screens['SignInScreen']: [
+                'context.nav.signIn.signUp().push<void>()',
+                'context.nav.signIn.resetPassword().push<void>()',
+              ],
+              _setting: ['context.nav.signIn.account().push<void>()'],
+            },
+          },
+          reason: '$variant',
+        );
+        final sheet =
+            _classOf(_parsed(app, _accountView), '_DeleteAccountSheet');
+        expect(_invocationsOf(sheet, 'pop'), hasLength(2), reason: '$variant');
+        expect(
+          _classOf(_parsed(app, _accountView), '_AccountViewState').toSource(),
+          contains(
+            'final confirmed = await confirmDeleteAccount(context); '
+            'if (confirmed && mounted) widget.onDeleteAccount();',
+          ),
+          reason: '$variant',
+        );
       }
     });
 
@@ -1248,10 +1586,21 @@ void main() {
       for (final path in _look) {
         expect(
           _identifiersIn(_parsed(app, path)).intersection(styling),
-          isEmpty,
+          // The button that deletes, in the sheet that asks first, has the
+          // colours that the theme has for an error.
+          path == _accountView ? {'styleFrom'} : isEmpty,
           reason: path,
         );
       }
+      expect(
+        _callsOf(_parsed(app, _accountView), 'FilledButton')
+            .where((arguments) => !arguments.containsKey('child'))
+            .single,
+        {
+          'backgroundColor': 'colors.error',
+          'foregroundColor': 'colors.onError',
+        },
+      );
     });
 
     test(
@@ -1318,18 +1667,35 @@ void main() {
           path: _callsOf(_parsed(app, path), 'CircularProgressIndicator'),
       }..removeWhere((path, calls) => calls.isEmpty);
 
-      // The one animation of the screens without an end.
+      // The one animation of the screens without an end: what spins in
+      // place of the label of a button whose call is on its way, in the
+      // button that submits and in the action that cannot be undone.
       expect(spinners.keys, [_widgets]);
       expect(spinners[_widgets], hasLength(1));
-      final button = _classOf(_parsed(app, _widgets), 'SubmitButton');
-      expect(_callsOf(button, 'CircularProgressIndicator'), hasLength(1));
+      final widgets = _parsed(app, _widgets);
+      final label = _classOf(widgets, '_BusyLabel');
+      expect(_callsOf(label, 'CircularProgressIndicator'), hasLength(1));
+      expect(label.toSource(), contains('if (spins)'));
       expect(
-        button.toSource(),
+        widgets.toSource(),
         contains(
-          'final spins = busy && !MediaQuery.disableAnimationsOf(context);',
+          'bool _spins(BuildContext context, {required bool busy}) => '
+          'busy && !MediaQuery.disableAnimationsOf(context);',
         ),
       );
-      expect(button.toSource(), contains('if (spins)'));
+      final button = _classOf(widgets, 'SubmitButton');
+      for (final name in ['SubmitButton', 'DestructiveAction']) {
+        final source = _classOf(widgets, name).toSource();
+        expect(
+          source,
+          allOf(
+            contains('final spins = _spins(context, busy: busy);'),
+            contains('_whileBusy(onPressed, busy: busy, spins: spins)'),
+            contains('_BusyLabel(label, spins: spins)'),
+          ),
+          reason: name,
+        );
+      }
       expect(
         button.documentationComment!.tokens.map((token) => token.lexeme).join(),
         contains('pumpAndSettle()'),
@@ -1373,14 +1739,18 @@ void main() {
     });
 
     test(
-        'gives the title of a page and the label of every button the one '
-        'text that keeps its words whole, the title with half more of its '
-        'size at most and a label with the text size of the device', () {
+        'gives the title of a page, the title of the sheet and the label '
+        'of every button the one text that keeps its words whole, a title '
+        'with half more of its size at most and a label with the text '
+        'size of the device', () {
       final app = localized[SignInModule.blocVariant]!.app!;
 
-      // The title, in the style that the theme has for one.
+      // The titles, in the styles that the theme has for them.
       final page = _parsed(app, _page);
-      final title = _callsOf(page, 'Semantics').single['child']!;
+      expect(
+        _callsOf(page, 'Semantics').single['child'],
+        startsWith('WholeWords('),
+      );
       expect(
         _callsOf(page, 'WholeWords').single,
         {
@@ -1389,27 +1759,59 @@ void main() {
           'maxScaleFactor': '1.5',
         },
       );
-      expect(title, startsWith('WholeWords('));
-      // The label of each button and action: with no style of its own, so
-      // it is as the theme has the label of its button, and it grows as
-      // the text size of the device asks.
-      final labels = <String, List<Map<String, String>>>{};
+      final sheet = _classOf(_parsed(app, _accountView), '_DeleteAccountSheet');
+      expect(
+        _callsOf(sheet, 'Semantics').single['child'],
+        startsWith('WholeWords('),
+      );
+      expect(
+        _callsOf(sheet, 'WholeWords')
+            .where((text) => text.containsKey('style'))
+            .single,
+        {
+          '0': 'context.l10n.${_getterOf('deleteTitle')}',
+          'style': 'theme.textTheme.headlineSmall',
+          'maxScaleFactor': '1.5',
+        },
+      );
+      // The label of each button and action is that text, also below what
+      // spins in its place: with no style of its own, so it is as the
+      // theme has the label of its button, and it grows as the text size
+      // of the device asks.
+      final buttons = <String, List<String>>{};
+      final labels = <Map<String, String>>[];
       for (final path in _look) {
         final unit = _parsed(app, path);
-        final buttons = [
+        final children = [
           for (final button in ['FilledButton', 'TextButton', 'OutlinedButton'])
-            ..._callsOf(unit, button),
+            for (final arguments in _callsOf(unit, button))
+              // Not the style of a button.
+              if (arguments['child'] case final child?) child,
         ];
-        for (final button in buttons) {
-          expect(button['child'], contains('WholeWords('), reason: path);
-        }
-        if (path == _page) continue;
-        final texts = _callsOf(unit, 'WholeWords');
-        if (texts.isNotEmpty) labels[path] = texts;
-        expect(texts, hasLength(buttons.length), reason: path);
+        if (children.isNotEmpty) buttons[path] = children;
+        labels.addAll(
+          _callsOf(unit, 'WholeWords')
+              .where((text) => !text.containsKey('style')),
+        );
       }
-      expect(labels.keys, {_views[0], _views[2], _widgets});
-      for (final label in labels.values.expand((texts) => texts)) {
+      expect(buttons.keys, {_views[0], _views[2], _accountView, _widgets});
+      expect(
+        buttons.values.expand((children) => children),
+        everyElement(
+          anyOf(startsWith('WholeWords('), startsWith('_BusyLabel(')),
+        ),
+      );
+      final busy = _classOf(_parsed(app, _widgets), '_BusyLabel');
+      expect(
+        _callsOf(busy, 'Visibility').single['child'],
+        'WholeWords(label, textAlign: TextAlign.center)',
+      );
+      // The action at the field of the password, the button that leads
+      // back from the sent message, the two buttons of the sheet, the
+      // label below what spins, and the action that leads to the other
+      // screen.
+      expect(labels, hasLength(6));
+      for (final label in labels) {
         expect(label.keys, ['0', 'textAlign']);
       }
       // One piece measures the words, for the titles and the labels.
@@ -1429,6 +1831,21 @@ void main() {
         'textAlign',
         'textScaler',
       ]);
+      // Nothing else of the look sets the text size of a part of a page,
+      // but the picture of a page, which does not grow, and what the
+      // provider says to the developer of the app.
+      expect(
+        {
+          for (final path in _look)
+            for (final scaling in [
+              'withClampedTextScaling',
+              'withNoTextScaling',
+            ])
+              if (_invocationsOf(_parsed(app, path), scaling).isNotEmpty)
+                (path, scaling),
+        },
+        {(_page, 'withNoTextScaling'), (_widgets, 'withClampedTextScaling')},
+      );
     });
 
     test(
@@ -1570,6 +1987,23 @@ void main() {
         '{WidgetState.disabled:null,'
         'WidgetState.any:Theme.of(context).colorScheme.secondary}',
       );
+      // The action that cannot be undone is such a text button too, in the
+      // colour that the theme has for an error.
+      final destructive = _classOf(_parsed(app, _widgets), 'DestructiveAction');
+      expect(_callsOf(destructive, 'ButtonStyle').single.keys, [
+        'foregroundColor',
+      ]);
+      expect(
+        compact(_callsOf(destructive, 'WidgetStateProperty').single['0']),
+        '{WidgetState.disabled:null,'
+        'WidgetState.any:Theme.of(context).colorScheme.error}',
+      );
+      expect(
+        destructive.documentationComment!.tokens
+            .map((token) => token.lexeme)
+            .join(' '),
+        allOf(contains('cannot be undone'), contains('for an error')),
+      );
       // No other widget of the look has a style of its own.
       expect(
         [
@@ -1578,7 +2012,7 @@ void main() {
         ],
         [_widgets],
       );
-      expect(_callsOf(_parsed(app, _widgets), 'ButtonStyle'), hasLength(1));
+      expect(_callsOf(_parsed(app, _widgets), 'ButtonStyle'), hasLength(2));
       // The file says why this one button has a colour of its own.
       expect(
         action.documentationComment!.tokens
@@ -1641,7 +2075,8 @@ void main() {
     test(
         'reads each text of the module once from the texts of an app with '
         'the localization, but for the text of an address that is none, '
-        'which a form and a failure share', () {
+        'which a form and a failure share, and the title of the account, '
+        'which its screen and its entry share', () {
       for (final variant in _variants) {
         final result = localized[variant.id]!;
         final app = result.app!;
@@ -1659,11 +2094,16 @@ void main() {
           [
             for (final name in _textNames) _getterOf(name),
             _getterOf('emailInvalid'),
+            _getterOf('accountTitle'),
           ]..sort(),
           reason: '${variant.id}',
         );
         // Only the look reads a text.
-        for (final path in [...variant.stateFiles, ..._screens.values]) {
+        for (final path in [
+          ...variant.stateFiles,
+          ..._screens.values,
+          _setting,
+        ]) {
           expect(_textsReadIn(_parsed(app, path)), isEmpty, reason: path);
         }
       }
@@ -2058,12 +2498,130 @@ void main() {
       });
 
       test(
+          'is busy after a sign-out or a deletion that succeeded only while '
+          'the session has no account: once the user has one again, a '
+          'moment later or in the turn of the call, the screen is back and '
+          'takes the next call, and a screen that the user left listens to '
+          'the session no more', () {
+        for (final action in ['sign-out', 'delete']) {
+          for (final when in ['later', 'at once']) {
+            final name = '$action, signed in $when';
+
+            expect(
+              result['$name: session'],
+              'account account ann@example.com',
+              reason: name,
+            );
+            expect(
+              result['$name: state'],
+              'busy: null, failure: null',
+              reason: name,
+            );
+            expect(result['$name: next call'], 1, reason: name);
+            expect(
+              result['$name: state then'],
+              'busy: null, failure: network',
+              reason: name,
+            );
+            expect(result['$name: listeners after'], isFalse, reason: name);
+          }
+        }
+      });
+
+      test(
+          'signs out and deletes the account through the session, and '
+          'stays busy with that action once it succeeded, while the '
+          'session has no account: the router leaves the screen then', () {
+        for (final (screen, action, call) in [
+          ('sign-out', 'signOut', 'signOut'),
+          ('delete', 'delete', 'deleteAccount'),
+        ]) {
+          final states = of(screen);
+
+          expect(states['at first'], 'busy: null, failure: null');
+          expect(states['success: calls'], [call], reason: screen);
+          expect(
+            states['success: states'],
+            ['busy: $action, failure: null'],
+            reason: screen,
+          );
+          expect(states['success: state'], 'busy: $action, failure: null');
+          // A failure ends it, and the next call starts without it.
+          expect(
+            states['failure: states'],
+            ['busy: $action, failure: null', 'busy: null, failure: network'],
+            reason: screen,
+          );
+          expect(states['again: calls'], 2, reason: screen);
+          // A second tap makes no second call.
+          expect(states['busy: states'], hasLength(1), reason: screen);
+          expect(states['busy: calls in the end'], [call], reason: screen);
+          for (final end in ['a failure', 'a success']) {
+            expect(states['left, then $end: error'], isNull, reason: screen);
+            expect(
+              states['left, then $end: states told since'],
+              0,
+              reason: '$screen, $end',
+            );
+          }
+        }
+      });
+
+      test(
+          'takes neither action of the screen of the account while the '
+          'other is on its way', () {
+        expect(result['sign-out, then delete: states'], [
+          'busy: signOut, failure: null',
+        ]);
+        expect(result['sign-out, then delete: calls in the end'], ['signOut']);
+        expect(result['delete, then sign-out: states'], [
+          'busy: delete, failure: null',
+        ]);
+        expect(
+          result['delete, then sign-out: calls in the end'],
+          ['deleteAccount'],
+        );
+      });
+
+      test(
+          'gives the widgets of the app the session, follows a change of '
+          'it that no screen made, and listens to it no more once the app '
+          'is torn down, without ending the session', () {
+        expect(result['bridge: listeners before'], isFalse);
+        expect(result['bridge: at first'], 'nobody');
+        expect(result['bridge: listeners'], isTrue);
+        expect(
+          result['bridge: signed in elsewhere'],
+          'account account ann@example.com',
+        );
+        // The session ended on the server.
+        expect(result['bridge: ended on the server'], 'nobody');
+        expect(result['bridge: states'], [
+          'account account ann@example.com',
+          'nobody',
+        ]);
+        expect(result['bridge: listeners after'], isFalse);
+        expect(result['bridge: states after'], 2);
+        expect(result['bridge: session after'], 'anonymous late');
+      });
+
+      test(
           'has the session of the app in the app, from the one file of '
           'the state that names it', () {
         expect(result['app: calls'], ['signIn ann@example.com secret']);
         expect(result['app: session'], 'account account ann@example.com');
         if (isBloc) {
-          expect(result['app: created'], ['SignUpCubit', 'ResetPasswordCubit']);
+          expect(result['app: created'], [
+            'SignUpCubit',
+            'ResetPasswordCubit',
+            'AccountCubit',
+            'SessionCubit',
+          ]);
+          // The cubit of the root has the session of the app.
+          expect(
+            result['app: session cubit'],
+            'account account ann@example.com',
+          );
         } else {
           expect(result['app: provider'], isTrue);
         }
@@ -2129,11 +2687,17 @@ void main() {
           ],
         );
       }
-      // No route of the module asks for the account, and none can start
-      // the app: an app with the module alone starts on the fallback
-      // screen of its app entry, and one with another feature on a screen
-      // of that feature.
-      expect(facade.routesAsking(AuthRole.account), isEmpty);
+      // The route of the account asks for the account, at a path of its
+      // own outside the flow. No route of the module can start the app: an
+      // app with the module alone starts on the fallback screen of its app
+      // entry, and one with another feature on a screen of that feature.
+      expect(
+        [
+          for (final route in facade.routesAsking(AuthRole.account))
+            (route.fullName, route.fullPath),
+        ],
+        [('sign_in.account', '/sign_in/account')],
+      );
       expect(routerRole.startIn(routerRole.hookInput(result.hook!)), isNull);
       final withFeed = await _rendered(
         SignInModule.blocVariant,
@@ -2374,20 +2938,28 @@ void main() {
     });
 
     test(
-        'names with bloc the cubits of the screens and the file that '
-        'creates them with the session', () {
+        'names with bloc the cubits of the screens, the file that creates '
+        'them with the session, and the cubit with the session for the '
+        'widgets of the app', () {
       final code = _codeOf(blocAgentNote);
       final app = results[SignInModule.blocVariant]!.app!;
       const cubits = {
         'SignInCubit': '$_folder/sign_in_cubit.dart',
         'SignUpCubit': '$_folder/sign_up_cubit.dart',
         'ResetPasswordCubit': '$_folder/reset_password_cubit.dart',
+        'AccountCubit': '$_folder/account_cubit.dart',
+        'SessionCubit': _sessionCubit,
       };
 
-      expect(
-        code,
-        {...cubits.keys, _composition, 'appSession', 'AppSessionController'},
-      );
+      expect(code, {
+        ...cubits.keys,
+        _composition,
+        _sessionCubit,
+        'appSession',
+        'AppSessionController',
+        'AppSession',
+        'context.watch<SessionCubit>().state',
+      });
       for (final MapEntry(key: name, value: path) in cubits.entries) {
         expect(
           _indexOf(app, path).declaration(name)?.kind,
@@ -2404,15 +2976,18 @@ void main() {
     });
 
     test(
-        'names with riverpod the providers of the screens and the '
-        'provider through which they reach the session', () {
+        'names with riverpod the providers of the screens, the provider '
+        'through which they reach the session, and the provider of the '
+        'session for the widgets of the app', () {
       final code = _codeOf(riverpodAgentNote);
       final app = results[SignInModule.riverpodVariant]!.app!;
       const providers = {
         'signInProvider': '$_folder/sign_in_notifier.dart',
         'signUpProvider': '$_folder/sign_up_notifier.dart',
         'resetPasswordProvider': '$_folder/reset_password_notifier.dart',
+        'accountProvider': '$_folder/account_notifier.dart',
         'appSessionProvider': _sessionProvider,
+        'sessionProvider': _sessionProvider,
       };
 
       expect(code, {
@@ -2421,6 +2996,8 @@ void main() {
         'Notifier',
         'appSession',
         'AppSessionController',
+        'AppSession',
+        'ref.watch(sessionProvider)',
       });
       for (final MapEntry(key: name, value: path) in providers.entries) {
         expect(
@@ -2440,44 +3017,91 @@ void main() {
     });
 
     test(
-        'says nothing of how a widget reads who uses the app: no file of '
-        'the module gives the widgets of the app the session', () {
-      for (final variant in _variants) {
-        final app = results[variant.id]!.app!;
+        'tells with each variant how a widget reads who uses the app, with '
+        'the names of the app: the cubit that the root provides, or the '
+        'provider, each in its file', () {
+      final bloc = results[SignInModule.blocVariant]!.app!;
+      final riverpod = results[SignInModule.riverpodVariant]!.app!;
 
-        expect(
-          [
-            for (final path in _ownFilesOf(app))
-              ..._identifiersIn(_parsed(app, path)).intersection({
-                'SessionCubit',
-                'sessionProvider',
-                'createSessionCubit',
-              }),
-          ],
-          isEmpty,
-          reason: '${variant.id}',
-        );
-      }
-      for (final note in [agentNote, blocAgentNote, riverpodAgentNote]) {
-        expect(note, isNot(contains('context.watch')));
-        expect(note, isNot(contains('ref.watch')));
-      }
-      // Nor does the module put a widget around the root of the app.
-      final bloc = results[SignInModule.blocVariant]!;
       expect(
-        [
-          for (final collected in bloc.app!
-                  .socketOrders[AppEntryRole.rootWrappers]?.contributions ??
-              const <Collected>[])
-            if (collected.origin == _module) collected,
-        ],
-        isEmpty,
+        blocAgentNote,
+        allOf(
+          contains('`context.watch<SessionCubit>().state`'),
+          contains('`SessionCubit` of `$_sessionCubit`'),
+          contains('`AccountCubit`'),
+        ),
       );
+      expect(
+        _indexOf(bloc, _sessionCubit).declaration('SessionCubit')?.kind,
+        DeclarationKind.classType,
+      );
+      expect(
+        riverpodAgentNote,
+        allOf(
+          contains('`ref.watch(sessionProvider)`'),
+          contains('`sessionProvider` of `$_sessionProvider`'),
+          contains('`accountProvider`'),
+        ),
+      );
+      expect(
+        _indexOf(riverpod, _sessionProvider)
+            .declaration('sessionProvider')
+            ?.kind,
+        DeclarationKind.variable,
+      );
+      // The entry of the settings screen and the screen of the account
+      // read the session in that way, and no file of the look reads it.
+      for (final (app, read) in [
+        (bloc, 'context.watch<SessionCubit>().state'),
+        (riverpod, 'ref.watch(sessionProvider)'),
+      ]) {
+        for (final path in [_setting, _screens['AccountScreen']!]) {
+          expect(_parsed(app, path).toSource(), contains(read), reason: path);
+        }
+        for (final path in _look) {
+          expect(
+            _identifiersIn(_parsed(app, path)).intersection({
+              'SessionCubit',
+              'sessionProvider',
+              'appSession',
+            }),
+            path == _guards ? {'appSession'} : isEmpty,
+            reason: path,
+          );
+        }
+      }
+      // What the other variant has is in neither the note nor the app.
+      expect(blocAgentNote, isNot(contains('ref.watch')));
+      expect(riverpodAgentNote, isNot(contains('context.watch')));
+      expect(agentNote, isNot(contains('.watch')));
+    });
+
+    test(
+        'puts the cubit with the session around the root of an app with '
+        'bloc, once, and nothing around the root of an app with riverpod, '
+        'whose scope is there already', () {
+      List<String> wrappersOf(ModuleId variant) => [
+            for (final collected in results[variant]!
+                    .app!
+                    .socketOrders[AppEntryRole.rootWrappers]
+                    ?.contributions ??
+                const <Collected>[])
+              if (collected.origin case ModuleOrigin(:final module)
+                  when module == SignInModule.id)
+                (collected.contribution as SocketContribution).fragment!.code,
+          ];
+
+      expect(wrappersOf(SignInModule.blocVariant), [
+        'BlocProvider(create: (_) => createSessionCubit(), child: ',
+      ]);
+      expect(wrappersOf(SignInModule.riverpodVariant), isEmpty);
     });
   });
+
   group('the documentation of the package', () {
     late Map<ModuleId, RenderedApp> apps;
     late Set<String> paths;
+    late String openSettings;
 
     /// The text of [path] in the package, with the line endings of Git on
     /// any system.
@@ -2498,6 +3122,13 @@ void main() {
         for (final route in _facadeOf(results.values.first).routes)
           route.fullPath,
       };
+      // The call of the facade for the route that the settings screen role
+      // names as the settings screen, in the apps of these tests.
+      final screen = settingsScreenRole.screenIn(
+        settingsScreenRole.hookInput(results.values.first.hook!),
+      )!;
+      openSettings = 'context.nav.${screen.feature.accessor}.'
+          '${screen.route.name}().push<void>()';
     });
 
     test(
@@ -2513,7 +3144,7 @@ void main() {
           .where((path) => app.files[path]!.text.contains(part))
           .firstOrNull;
 
-      expect(shown, hasLength(5));
+      expect(shown, hasLength(6));
       expect(
         [
           for (final part in shown)
@@ -2524,16 +3155,32 @@ void main() {
         ],
         [
           // The screen and the cubit of the variant for bloc, the screen of
-          // the variant for riverpod, and the two functions of the guards,
-          // which every app has.
+          // the variant for riverpod, the two functions of the guards,
+          // which every app has, and the entry of the settings screen of
+          // the variant for bloc.
           (_screens['SignInScreen'], null),
           (_cubits.first, null),
           (null, _screens['SignInScreen']),
           (_guards, _guards),
           (_guards, _guards),
+          (_setting, null),
         ],
       );
-      expect(example, contains('smf create my_app -m home,sign_in,bloc'));
+      // An app with a main navigation, whose tabs lead to the settings
+      // screen with the entry of the account.
+      const command = 'smf create my_app -m home,sign_in,bloc,bottom_tabs';
+      expect(example, contains('$command --no-input'));
+      expect(read('README.md'), contains('$command\n'));
+      // For an app without a main navigation, the README gives the call
+      // that opens the settings screen, as the facade has it, and the one
+      // that opens the account.
+      expect(
+        _codeOf(read('README.md')),
+        containsAll([
+          openSettings,
+          'context.nav.signIn.account().push<void>()',
+        ]),
+      );
     });
 
     test(
@@ -2570,8 +3217,9 @@ void main() {
             .map((name) => name.replaceFirst('()', ''))
             .where(
               (name) => RegExp(
-                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message|Action|Words)|'
-                r'authFailureText|signIn\w+)$',
+                r'^(\w+(Screen|View|Cubit|Provider|State|Page|Message|Action|Words|'
+                'Setting|Row)|authFailureText|confirmDeleteAccount|'
+                r'signIn\w+)$',
               ).hasMatch(name),
             )
             .toSet();
@@ -2588,6 +3236,13 @@ void main() {
 }
 
 /// The invocations of the method or the function [name] in a node.
+/// The calls of the method [name] in [node].
+List<MethodInvocation> _invocationsOf(AstNode node, String name) {
+  final calls = _Invocations(name);
+  node.accept(calls);
+  return calls.found;
+}
+
 final class _Invocations extends RecursiveAstVisitor<void> {
   _Invocations(this.name);
 

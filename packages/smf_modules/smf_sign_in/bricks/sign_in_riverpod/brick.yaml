@@ -1,5 +1,5 @@
 name: sign_in_riverpod
-description: "The state of the sign-in screens of an SMF app with Riverpod: a provider for each screen, the screens that give their views its state, and the provider through which they reach the session of the app."
+description: "The state of the sign-in screens of an SMF app with Riverpod: a provider for each screen, the screens that give their views its state, the entry of the settings screen, and the providers through which they reach the session of the app and the widgets of the app read it."
 
 # A brick of the SMF module model. Its files are relative to the root of the
 # generated app. The pipeline renders it with app_name, org_name, the

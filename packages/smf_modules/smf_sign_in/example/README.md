@@ -1,13 +1,13 @@
 # Generate a Flutter app with sign-in screens
 
-`sign_in` is the feature with the sign-in screens of the apps that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) generates. On its screens a user signs in with an email address and a password, creates an account, and resets a password. Choose it with `-m`, here with the start screen `home` and BLoC for the state of the screens:
+`sign_in` is the feature with the sign-in screens of the apps that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) generates. On its screens a user signs in with an email address and a password, creates an account, and resets a password. On the screen of the account, the user signs out or deletes the account. Choose it with `-m`, here with the start screen `home`, BLoC for the state of the screens, and `bottom_tabs`, which provides the layout role, the main navigation of the app:
 
 ```bash
 dart pub global activate smf_flutter_cli
-smf create my_app -m home,sign_in,bloc --no-input
+smf create my_app -m home,sign_in,bloc,bottom_tabs --no-input
 ```
 
-The screens need a router, a module that provides sign-in and a module that manages state. `smf create` adds a module when it is the only one that provides what another one requires, and says which module needs it.
+The screens need a router, a module that provides sign-in, a settings screen and a module that manages state. `smf create` adds a module when it is the only one that provides what another one requires, and says which module needs it.
 
 The module writes its files into `lib/features/sign_in/`. The look of a screen is a view, a plain Flutter widget. The screen gives the view the state of a cubit:
 
@@ -89,6 +89,23 @@ ValueListenable<bool> signInHasAccount() => appSession.hasAccount;
 ```
 
 While the first is false, the router shows the sign-in at `/sign_in` in place of every other screen. In an app that nobody may use without an account, that lasts until the user is signed in. While the second is false, the router shows the sign-in in place of a route that needs an account, in an app that everyone may use. Once the user is signed in to an account, both are true, and the router leaves the sign-in. On a first launch, it then shows the start screen at `/home`.
+
+The settings screen of the app gets an entry for the account. It reads who uses the app from `SessionCubit`, which the module puts around the root of the app, so it follows a sign-in and a sign-out. A tap opens the screen of the account at `/sign_in/account`:
+
+```dart
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionCubit>().state;
+    return AccountSettingRow(
+      signedIn: session is AccountSession,
+      email: session is AccountSession ? session.email : null,
+      onTap: () => context.nav.signIn.account().push<void>(),
+    );
+  }
+```
+
+That route needs an account. For a user without one, in an app that everyone may use, the router opens the sign-in over the settings screen first, and shows the screen of the account once the user is signed in. With `riverpod`, a widget reads the same from `ref.watch(sessionProvider)`.
+
+The tabs of `bottom_tabs` lead to the settings screen. In an app without a main navigation, a screen of yours opens it, or opens the account directly with `context.nav.signIn.account().push<void>()`.
 
 The fields and the buttons of the screens are those of the theme of the app, so they change with the theme. The texts are in English and in Ukrainian, and a failure of sign-in has a text for each of its reasons, in `authFailureText()` of `sign_in_widgets.dart`.
 

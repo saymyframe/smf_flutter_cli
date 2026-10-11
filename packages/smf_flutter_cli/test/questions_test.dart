@@ -212,7 +212,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
-      'sign_in — Sign-in, sign-up and password reset with an email',
+      'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -370,7 +370,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
-      'sign_in — Sign-in, sign-up and password reset with an email',
+      'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(
       run.lines,
@@ -1516,14 +1516,14 @@ void main() {
   test(
       'a run in a terminal offers the sign-in among the features, asks '
       'which module manages the state of its screens, with no choice of '
-      'none, adds the only provider of the authentication without a '
-      'question, and asks who may use the app without an account', () async {
+      'none, adds the only providers of the authentication and of the '
+      'settings screen without a question, and asks who may use the app '
+      'without an account', () async {
     final run = await _create(
       {
         'Features': ['home', 'sign_in'],
         'Infrastructure': [],
         'Layout': ['None'],
-        'Settings screen': ['None'],
         'State management': ['riverpod'],
         'Theme': ['None'],
         'Localization': ['None'],
@@ -1566,6 +1566,15 @@ void main() {
       run.lines,
       contains('Adding firebase_core: a dependency of firebase_auth.'),
     );
+    // Nor about the settings screen, which has the entry of the account.
+    expect(asked.keys, isNot(contains(startsWith('Settings screen'))));
+    expect(
+      run.lines,
+      contains(
+        'Adding settings: the only provider of the settings screen role, '
+        'which sign_in requires.',
+      ),
+    );
     // The mode of the auth role is asked last, as in an app without the
     // screens.
     expect(run.asked.last.message, 'Who may use the app without an account?');
@@ -1578,6 +1587,18 @@ void main() {
     expect(
       app.childFile('lib/features/sign_in/sign_in_cubit.dart').existsSync(),
       isFalse,
+    );
+    // The settings screen has the entry of the account, which leads to the
+    // screen of the account.
+    expect(
+      app
+          .childFile('lib/features/settings/settings_screen.dart')
+          .readAsStringSync(),
+      contains('AccountSetting()'),
+    );
+    expect(
+      app.childFile('lib/features/sign_in/account_screen.dart').existsSync(),
+      isTrue,
     );
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),

@@ -1,5 +1,5 @@
 name: smf_sign_in
-description: "The SMF module of the sign-in screens of the Flutter app that SMF generates: sign-in, sign-up and password reset with an email address, with BLoC or with Riverpod."
+description: "The SMF module of the sign-in screens of the Flutter app that SMF generates: sign-in, sign-up, password reset and an account screen for an email address, with BLoC or Riverpod."
 version: 0.4.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_sign_in
@@ -39,6 +39,8 @@ dev_dependencies:
   smf_pipeline: ^0.4.0
   # The other module that manages state, for the variant with it.
   smf_riverpod: ^0.3.1
+  # The provider of the settings screen role, which the module requires.
+  smf_settings: ^0.4.0
   # The provider of the preferences role, which the localization role
   # requires.
   smf_shared_preferences: ^0.4.0
