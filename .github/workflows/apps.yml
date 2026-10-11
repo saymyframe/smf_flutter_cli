@@ -1291,8 +1291,13 @@ jobs:
 
       - *pub_get
 
+      # A test has 90 seconds here, three times the default of dart test: the
+      # runner has four cores for the four packages that it tests at a time,
+      # and a test that analyzes the apps of a module, which takes 3 seconds
+      # on a laptop, has taken more than 30 there. A test with a timeout of
+      # its own keeps it.
       - name: Test the packages
-        run: dart run melos exec -c 4 --dir-exists=test -- dart test --reporter expanded --file-reporter json:build/test-results/test.json
+        run: dart run melos exec -c 4 --dir-exists=test -- dart test --timeout 3x --reporter expanded --file-reporter json:build/test-results/test.json
 
       - name: Test the tools
         if: ${{ !cancelled() }}
