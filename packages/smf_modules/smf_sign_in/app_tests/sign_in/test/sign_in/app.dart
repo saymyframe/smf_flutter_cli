@@ -6,16 +6,17 @@
 // entry on the settings screen, and a service of sign-in of the test, which
 // a test gives the session of the app to script what a call does.
 //
-// They know the module, and of the rest of the app only its roles: the
-// session of the auth role, whichever module provides the sign-in, in the
-// mode that the app has as a constant, and the router, which shows the
-// screens and leaves them. The matrix writes of_app.dart next to this
-// file: the screen that the app starts on, the settings screen of the app
-// with the entry of the module, from the settings screen role, and the
-// texts of the module in each language of the app. It sets up the mocks of the platform side of
-// every module of the app before the tests of each test file
-// (flutter_test_config.dart), so the start-up runs whatever other modules
-// the app has, and a guard of the routes of another module is open.
+// They know the module, and of the rest of the app only its roles: the session
+// of the auth role, whichever module provides the sign-in, in the mode that
+// the app has as a constant, and the router, which shows the screens and
+// leaves them. The matrix writes of_app.dart next to this file: the screen
+// that the app starts on, the settings screen of the app with the entry of the
+// module, from the settings screen role, whether that screen is a destination
+// of the main navigation, from the layout role, and the texts of the module in
+// each language of the app. It sets up the mocks of the platform side of every
+// module of the app before the tests of each test file
+// (flutter_test_config.dart), so the start-up runs whatever other modules the
+// app has, and a guard of the routes of another module is open.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -266,10 +267,24 @@ Future<void> expectRouterTakesNoLinks(WidgetTester tester, String when) async {
   }
 }
 
-/// Goes to the settings screen of the app, in place of the stack, and waits
-/// for it.
-Future<void> goToSettings(WidgetTester tester) async {
-  navigatorOf(tester).go(settingsLocation);
+/// Opens the settings screen of the app for a user with an account, and
+/// waits for it.
+///
+/// Where the screen is no destination of the main navigation, it opens over
+/// the screen that the app starts on, as a screen of the app opens it. So a
+/// page over it that closes more than itself leaves the user on the screen
+/// that the app starts on, which a test sees. A destination cannot be
+/// pushed, so there the screen takes the place of the stack.
+Future<void> openSettings(WidgetTester tester) async {
+  if (settingsInMainNavigation) {
+    navigatorOf(tester).go(settingsLocation);
+  } else {
+    // The screen that the app starts on, alone: the router shows it to a
+    // user with an account who asks for the sign-in, whose flow is over.
+    navigatorOf(tester).go(const SignInSignInLocation());
+    await tester.pumpAndSettle();
+    unawaited(navigatorOf(tester).push<void>(settingsLocation));
+  }
   await tester.pumpAndSettle();
 }
 

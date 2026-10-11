@@ -5,18 +5,18 @@
 // what each call does (ScriptedAuthService), so the test sees every failure
 // that a call can have, and a call that is on its way.
 //
-// A form tells of an email address and a password that are missing, and of
-// an address that is none, without a call. A call gets the address without
-// the spaces around it. While it is on its way, the button of the form
-// spins, and neither the form nor an action of the screen takes input, a
-// tap or the keyboard, so a second tap makes no second call. A field that
-// has the focus keeps it, and takes typing again once the call has failed. A call that fails leaves
-// the form as it was, with the text of the app for the reason of the
-// failure, in each language of the app, and with what the provider says to
-// the developer of the app, which a debug build shows. The screen that
-// creates an account calls the session, which gives an anonymous user the
-// account. The screen that resets a password tells where the message went.
-// And the button of the field of a password shows and hides it.
+// A form tells of an email address and a password that are missing, and of an
+// address that is none, without a call. A call gets the address without the
+// spaces around it. While it is on its way, the button of the form spins, and
+// neither the form nor an action of the screen takes input, a tap or the
+// keyboard, so a second tap makes no second call. A field that has the focus
+// keeps it, and takes typing again once the call has failed. A call that fails
+// leaves the form as it was, with the text of the app for the reason of the
+// failure, in each language of the app, and with what the provider says to the
+// developer of the app, which a debug build shows. The screen that creates an
+// account calls the session, which gives an anonymous user the account. The
+// screen that resets a password tells where the message went. And the button
+// of the field of a password shows and hides it.
 //
 // The matrix writes of_app.dart next to this file, with the texts of the
 // module in each language of the app. The test starts the app once, since

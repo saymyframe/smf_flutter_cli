@@ -235,10 +235,17 @@ Future<MatrixAppTests> smfAppTests() async {
       // is wrong with an email address and a password, the text of each
       // failure of a call in each language of the app, and that a call is
       // on its way; a password reset tells where the message went; and the
-      // screens fit a small phone with a large text size. The screens only
-      // change the session: the router shows them and leaves them,
-      // whichever module provides it, as the router role says of the
-      // guards of the routes, so this is a test of the router role too.
+      // screens fit a small phone with a large text size. The screen of
+      // the account signs out and deletes the account, which it asks about
+      // first in a sheet, and the entry of the settings screen leads to
+      // it, through the sign-in for a user without an account. For them
+      // the matrix writes the settings screen of the app, whether it is a
+      // destination of the main navigation, and the entry that the module
+      // gave it, from the settings screen role and the layout role (see
+      // _signInOfAppOf). The screens only change the session: the router
+      // shows them and leaves them, whichever module provides it, as the
+      // router role says of the guards of the routes and of the routes that
+      // ask for a condition, so this is a test of the router role too.
       // The mocks sign a test account up before the app starts, through
       // the session, and the matrix sets them up for the tests of every
       // module of the app, which expect the screens that the guards of the
@@ -1223,13 +1230,8 @@ const settingsOfAppFile = 'test/settings_of_app.dart';
 /// so the test of the back button pushes the screen only where it is no
 /// destination.
 Map<String, String> _settingsOfAppOf(MatrixApp app) {
-  final hook = app.hook!;
-  final input = settingsScreenRole.hookInput(hook);
-  final screen = settingsScreenRole.screenIn(input);
-  final destination = hook.presentRoles.contains(layoutRole) &&
-      layoutRole
-          .destinationsIn(layoutRole.hookInput(hook))
-          .any((route) => route.fullName == screen?.fullName);
+  final input = settingsScreenRole.hookInput(app.hook!);
+  final destination = _settingsInMainNavigationOf(app);
   return {
     settingsOfAppFile: '''
 // What the settings screen has in the app and where it is, which the matrix
@@ -1247,6 +1249,21 @@ const int settingsEntryCount = ${settingsScreenRole.entriesIn(input).length};
 const bool settingsInMainNavigation = $destination;
 ''',
   };
+}
+
+/// Whether the settings screen of [app], an app of the matrix with the
+/// settings screen role, is a destination of its main navigation: the app
+/// has the layout role, and the route of the screen
+/// ([SettingsScreenRole.screenIn]) is one of the destinations of that role
+/// ([LayoutRole.destinationsIn]).
+bool _settingsInMainNavigationOf(MatrixApp app) {
+  final hook = app.hook!;
+  final screen =
+      settingsScreenRole.screenIn(settingsScreenRole.hookInput(hook));
+  return hook.presentRoles.contains(layoutRole) &&
+      layoutRole
+          .destinationsIn(layoutRole.hookInput(hook))
+          .any((route) => route.fullName == screen?.fullName);
 }
 
 /// The test of the DI role that the CLI keeps in its `app_tests/di_role`,
@@ -1500,9 +1517,11 @@ Future<void> chooseLanguage(String? language) =>
 /// in the flow of a guard, with the type of its screen, or nothing in an
 /// app without such a route; `settingsLocation` and `settingsScreen`, the
 /// location of the route that the provider of the settings screen role
-/// names as the settings screen and the type of that screen, and
-/// `accountEntry`, the type of the widget of the entry that the module
-/// gives that screen; and `signInTexts`, the texts of the module
+/// names as the settings screen and the type of that screen,
+/// `settingsInMainNavigation`, whether that screen is a destination of the
+/// main navigation of the app, and `accountEntry`, the type of the widget
+/// of the entry that the module gives that screen; and `signInTexts`, the
+/// texts of the module
 /// ([SignInModule.texts]), each by its name, in each language of the app,
 /// by the code of the language. The languages are those of the
 /// localization role of the app
@@ -1519,9 +1538,12 @@ const signInOfAppFile = 'test/sign_in/of_app.dart';
 /// route of its modules can start it; the file imports its file with the
 /// prefix `screen`. The settings screen and the entry come from the data of
 /// the settings screen role, whichever module provides it: the entry is
-/// the one that the module gave the role. A text of the module without a
-/// translation into a language of the app is the English one there, as the
-/// localization role says of the texts of an app.
+/// the one that the module gave the role. The screen is a destination by
+/// the layout role of the app. The router role refuses to push a location
+/// of the main navigation over it, so the tests push the settings screen
+/// over another page only where it is no destination. A text of the module
+/// without a translation into a language of the app is the English one
+/// there, as the localization role says of the texts of an app.
 Map<String, String> _signInOfAppOf(MatrixApp app, String packageName) {
   final (import, screen) = _startScreenClassOf(app);
   final texts = _textsByLanguageOf(app, SignInModule.texts);
@@ -1596,6 +1618,10 @@ const AppLocation settingsLocation = ${settings.locationClass}();
 
 /// The type of the settings screen.
 const Type settingsScreen = settings.${settingsScreen.className};
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = ${_settingsInMainNavigationOf(app)};
 
 /// The type of the widget of the entry of the account on the settings
 /// screen.

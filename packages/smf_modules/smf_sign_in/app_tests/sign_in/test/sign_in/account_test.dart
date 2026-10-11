@@ -5,8 +5,10 @@
 // (ScriptedAuthService).
 //
 // The entry shows the email address of the account, or that nobody is
-// signed in, and follows a change of the session that no screen made. A
-// tap on it shows the screen of the account over the settings screen. For
+// signed in, and follows a change of the session that no screen made, also
+// while it is on the screen: another account that is signed in with no
+// sign-out in between. A tap on it shows the screen of the account over
+// the settings screen. For
 // a user without an account, in an app that everyone may use, the router
 // shows the sign-in over the settings screen first: back from there drops
 // the request, and once the user has an account the router closes the
@@ -17,7 +19,9 @@
 // closes its page, and the user is on the settings screen; in an app that
 // signs an anonymous user in, a new one is signed in. In an app that asks
 // for an account, the sign-in takes the place of every screen. The
-// deletion asks first, in a sheet that is closed before the call. While a
+// deletion asks first, in a sheet that is closed before the call. The way
+// out of the sheet, the back button of the system and a tap outside the
+// sheet close it and delete nothing. While a
 // call is on its way, its action shows it and neither action takes a tap.
 // A deletion that failed leaves the screen with the text of the failure.
 // And when the session ends while the sheet is open, as on the server, the
@@ -35,9 +39,18 @@
 // router closes then anyway, as the router role says: no test tells that
 // from a screen that closes nothing.
 //
+// Where the settings screen is no destination of the main navigation, the
+// test opens it over the screen that the app starts on, as a screen of an
+// app without a main navigation does. In an app that everyone may use, the
+// user is then on the settings screen after a sign-out and a deletion, with
+// the screen that the app starts on below it: a screen of the account that
+// closed a page itself, after the router closed its own, would leave the
+// user on the screen that the app starts on.
+//
 // The matrix writes of_app.dart next to this file, with the settings
-// screen of the app and the entry of the module, from the settings screen
-// role, whichever module provides it. The test starts the app once, since
+// screen of the app, whether it is a destination of the main navigation,
+// and the entry of the module, from the settings screen role and the layout
+// role, whichever modules provide them. The test starts the app once, since
 // the start-up of an app may not run twice, and each expectation gives its
 // reason.
 import 'dart:async';
@@ -52,6 +65,10 @@ import 'of_app.dart';
 
 const _email = 'account@sign-in-tests.example.com';
 const _password = 'Account-2468';
+
+/// The email address of another account, which the test signs in to while
+/// the entry of the first one is on the screen.
+const _otherEmail = 'other-account@sign-in-tests.example.com';
 
 /// Whether everyone may use the app, which then asks for an account only
 /// where a screen needs one.
@@ -71,7 +88,7 @@ Future<void> _signIn(WidgetTester tester) async {
 
 /// Opens the screen of the account from its entry on the settings screen.
 Future<void> _openAccount(WidgetTester tester) async {
-  await goToSettings(tester);
+  await openSettings(tester);
   await tester.tap(accountRow);
   await tester.pumpAndSettle();
 }
@@ -125,11 +142,15 @@ bool _spins(Finder action) => find
 /// says, once [what] took the account: on the settings screen in an app
 /// that everyone may use, and on the sign-in, in place of every screen, in
 /// an app that asks for an account. No page of the account is left, and
-/// no sheet. The session has [session], which is what the mode of the app
-/// says of a user without an account unless it is given.
+/// no sheet, and in an app that everyone may use the pages below the
+/// settings screen are as before the screen of the account was opened: the
+/// root navigator can pop if it [couldPop] then. The session has [session],
+/// which is what the mode of the app says of a user without an account
+/// unless it is given.
 void _expectWithoutAccount(
   WidgetTester tester,
   String what, {
+  required bool couldPop,
   String? session,
 }) {
   expect(
@@ -150,6 +171,14 @@ void _expectWithoutAccount(
       anySignInScreen,
       findsNothing,
       reason: 'Once $what, an app that everyone may use shows no sign-in.',
+    );
+    expect(
+      rootCanPop(tester),
+      couldPop,
+      reason: 'Once $what, the pages below the settings screen are as '
+          'they were before the screen of the account was opened: the '
+          'router closed the page of the account, and the screen closed no '
+          'page itself.',
     );
   } else {
     expect(
@@ -186,12 +215,34 @@ void main() {
       final uid = appSession.value.uid;
 
       // The entry and the screen, in each language of the app.
-      await goToSettings(tester);
+      await openSettings(tester);
       final couldPop = rootCanPop(tester);
+      if (!settingsInMainNavigation) {
+        expect(
+          (couldPop, builtStartScreen.evaluate().length),
+          (true, 1),
+          reason: 'Where the settings screen is no destination of the main '
+              'navigation, the test opens it over the screen that the app '
+              'starts on.',
+        );
+      }
       for (final language in languages) {
         await useLanguage(tester, language);
         _expectRow(_email, 'With an account, in $language');
       }
+
+      // The entry follows the session while it is on the screen: another
+      // account, with no sign-out in between, and the first one again.
+      await useLanguage(tester, languages.first);
+      await appSession.signUp(email: _otherEmail, password: _password);
+      await tester.pumpAndSettle();
+      _expectRow(
+        _otherEmail,
+        'Once another account is signed in, with the entry on the screen',
+      );
+      await appSession.signIn(email: _email, password: _password);
+      await tester.pumpAndSettle();
+      _expectRow(_email, 'Once the first account is signed in again');
       await tester.tap(accountRow);
       await tester.pumpAndSettle();
       expect(
@@ -269,7 +320,11 @@ void main() {
         reason: 'The screen signs out through the session, once; in an '
             'app that signs an anonymous user in, the session then does.',
       );
-      _expectWithoutAccount(tester, 'the user has signed out');
+      _expectWithoutAccount(
+        tester,
+        'the user has signed out',
+        couldPop: couldPop,
+      );
 
       // Back to an account.
       if (_open) {
@@ -455,6 +510,44 @@ void main() {
         reason: 'The way out of the sheet closes it and deletes nothing.',
       );
 
+      // The back button of the system and a tap outside the sheet close it
+      // too, and delete nothing.
+      for (final (dismiss, how) in <(Future<bool> Function(), String)>[
+        (() => pressSystemBack(tester), 'The back button of the system'),
+        (
+          () async {
+            // Above the sheet, which leaves room there on the phone of the
+            // test.
+            final sheet = tester.getRect(deleteSheet);
+            await tester.tapAt(Offset(sheet.center.dx, sheet.top / 2));
+            await tester.pumpAndSettle();
+            return sheet.top > 0;
+          },
+          'A tap outside the sheet',
+        ),
+      ]) {
+        await tester.tap(deleteAction);
+        await tester.pumpAndSettle();
+        expect(
+          deleteSheet,
+          findsOneWidget,
+          reason: 'The action that deletes the account opens the sheet.',
+        );
+        expect(
+          (
+            await dismiss(),
+            deleteSheet.evaluate().length,
+            accountScreen.evaluate().length,
+            service.calls.length - calls,
+            sessionNow(),
+          ),
+          (true, 0, 1, 0, 'the account of $_email'),
+          reason: '$how closes the sheet that asks before a deletion: the '
+              'app handles it, deletes nothing, and the user is on the '
+              'screen of the account.',
+        );
+      }
+
       // A deletion that fails leaves the screen, with the text of the
       // failure.
       service.failure = const AuthFailure(
@@ -503,7 +596,11 @@ void main() {
       hold.complete();
       service.hold = null;
       await tester.pumpAndSettle();
-      _expectWithoutAccount(tester, 'the account is deleted');
+      _expectWithoutAccount(
+        tester,
+        'the account is deleted',
+        couldPop: couldPop,
+      );
       if (authMode == AuthMode.anonymous) {
         expect(
           appSession.value.uid,
@@ -512,12 +609,6 @@ void main() {
               'in has a new one.',
         );
       }
-      expect(
-        _open ? rootCanPop(tester) : couldPop,
-        couldPop,
-        reason: 'After the deletion, no page is left over the settings '
-            'screen.',
-      );
 
       // The session ends elsewhere while the sheet is open: the sheet goes
       // with the page under it.
@@ -544,6 +635,7 @@ void main() {
       _expectWithoutAccount(
         tester,
         'the session has ended elsewhere while the sheet was open',
+        couldPop: couldPop,
         session: 'nobody',
       );
       expect(
@@ -562,6 +654,7 @@ void main() {
       _expectWithoutAccount(
         tester,
         'the user has come back to the app after that',
+        couldPop: couldPop,
         session: _withoutAccount,
       );
       expect(

@@ -2006,6 +2006,7 @@ void main() {
     final screens = <String, String>{};
     final others = <String, String>{};
     final settings = <String>{};
+    final destinations = <String, String>{};
     final languages = <String, List<String>>{};
     for (final app in applies) {
       final files = test.generatedFiles!(app, 'my_app');
@@ -2021,6 +2022,7 @@ void main() {
           'otherPages',
           'settingsLocation',
           'settingsScreen',
+          'settingsInMainNavigation',
           'accountEntry',
           'signInTexts',
         ],
@@ -2047,6 +2049,10 @@ void main() {
         },
         reason: app.name,
       );
+      destinations[app.name] = RegExp(
+        r'^const bool settingsInMainNavigation = (\w+);$',
+        multiLine: true,
+      ).firstMatch(text)![1]!;
       settings.add(
         [
           for (final name in [
@@ -2081,6 +2087,13 @@ void main() {
     const everywhere = 'SettingsSettingsLocation(), settings.SettingsScreen, '
         'entry.AccountSetting';
     expect(settings, {everywhere});
+    // The settings screen is a destination of the main navigation in the
+    // apps with every module, which have a layout, and in no app of the
+    // module alone: there the tests open it over another page.
+    expect(destinations, {
+      for (final name in _signIn) name: 'false',
+      for (final name in _everyModule) name: 'true',
+    });
     expect(screens, {
       // No route can start the app, since those of the sign-in cannot.
       for (final name in _signIn)
