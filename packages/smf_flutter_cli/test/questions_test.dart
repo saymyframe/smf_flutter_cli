@@ -73,6 +73,9 @@ final class _Prompter implements SmfPrompter {
 final class _Logger implements SmfLogger {
   final List<String> lines = [];
 
+  /// Those of the [lines] that the run reported as warnings.
+  final List<String> warnings = [];
+
   @override
   void info(String message) => lines.add(message);
 
@@ -80,7 +83,10 @@ final class _Logger implements SmfLogger {
   void detail(String message) {}
 
   @override
-  void warn(String message) => lines.add(message);
+  void warn(String message) {
+    lines.add(message);
+    warnings.add(message);
+  }
 
   @override
   void error(String message) => lines.add(message);
@@ -130,11 +136,13 @@ final class _Commands implements SmfProcessRunner {
 }
 
 /// What a run of `smf create` in a terminal did: its exit code, the
-/// questions it asked, what it reported, and the file system with the app.
+/// questions it asked, what it reported, which of that as warnings, and the
+/// file system with the app.
 typedef _Run = ({
   int code,
   List<_Question> asked,
   List<String> lines,
+  List<String> warnings,
   MemoryFileSystem files,
 });
 
@@ -170,7 +178,13 @@ Future<_Run> _create(
       hasTerminal: true,
     ),
   );
-  return (code: code, asked: prompter.asked, lines: logger.lines, files: files);
+  return (
+    code: code,
+    asked: prompter.asked,
+    lines: logger.lines,
+    warnings: logger.warnings,
+    files: files,
+  );
 }
 
 void main() {
@@ -1137,20 +1151,27 @@ void main() {
       app.childFile('README.md').readAsStringSync(),
       contains('\n## Firebase\n'),
     );
-    expect(
-      run.lines,
-      contains(
-        // The reason names what the command needs too, which the machine of
-        // the test lacks.
-        'Configuring Firebase with flutterfire is not done, because the run '
-        'skips external setup, and Firebase CLI, Firebase login, FlutterFire '
-        'CLI 1.4.1 or a later 1.x and Xcode project tools of flutterfire are '
-        'missing. Run it in the app: dart pub global run '
-        'flutterfire_cli:flutterfire configure --platforms=android,ios '
-        '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
+    // The run ends with the configuration as a step for later, between the
+    // line of the app and the lines on running it. The reason names what
+    // the command needs too, which the machine of the test lacks.
+    expect(run.lines.sublist(run.lines.length - 3), [
+      'Created my_app in /work/my_app.',
+      equals(
+        'One step is left for later. Run it in the app:\n'
+        '  Configuring Firebase with flutterfire (the run skips external '
+        'setup, and Firebase CLI, Firebase login, FlutterFire CLI 1.4.1 or a '
+        'later 1.x and Xcode project tools of flutterfire are missing):\n'
+        '    dart pub global run flutterfire_cli:flutterfire configure '
+        '--platforms=android,ios --overwrite-firebase-options '
+        '--ios-bundle-id=com.example.my-app '
         '--android-package-name=com.example.my_app',
       ),
-    );
+      'Then run the app:\n  cd /work/my_app\n  flutter run',
+    ]);
+    // The run asked for it with --skip-external-setup, so only the checks
+    // of the machine warn.
+    expect(run.warnings, hasLength(4));
+    expect(run.warnings, everyElement(contains(' is missing. ')));
     // Nothing continues the configuration in an app without the modules
     // that depend on firebase_core.
     expect(run.lines, isNot(contains(contains('Crashlytics'))));
@@ -1245,19 +1266,23 @@ void main() {
       ),
     );
     // The fix of the phase for Crashlytics that flutterfire adds is left
-    // for later with the configuration, which it continues.
+    // for later with the configuration, which it continues: the second
+    // step of the list, after the first, and no warning.
+    const configuration = '2 steps are left for later. Run them in the app, '
+        'in this order:\n'
+        '  1. Configuring Firebase with flutterfire (the run skips external '
+        'setup, and ';
+    const itsCommand = 'are missing):\n'
+        '     dart pub global run flutterfire_cli:flutterfire configure ';
+    const fix = '\n  2. Fixing the Crashlytics phase of flutterfire for '
+        'flutter build ipa (it runs after step 1):\n'
+        "     ruby -e 'f = ARGV[0]; ";
     expect(
-      run.lines,
-      containsAllInOrder([
-        startsWith('Configuring Firebase with flutterfire is not done'),
-        startsWith(
-          'Fixing the Crashlytics phase of flutterfire for flutter build ipa '
-          'is not done, because it runs after "Configuring Firebase with '
-          'flutterfire", which is not done. Run it in the app: ruby -e '
-          "'f = ARGV[0]; ",
-        ),
-      ]),
+      run.lines[run.lines.length - 2],
+      stringContainsInOrder([configuration, itsCommand, fix]),
     );
+    expect(run.warnings, isNot(contains(contains('flutterfire is not done'))));
+    expect(run.warnings, isNot(contains(contains('Crashlytics phase'))));
     expect(
       app.childFile('README.md').readAsStringSync(),
       allOf(contains('\n## Firebase\n'), contains('\n## Crashlytics\n')),
@@ -1367,8 +1392,12 @@ void main() {
       ),
     );
     expect(
-      run.lines,
-      contains(startsWith('Configuring Firebase with flutterfire is not done')),
+      run.lines[run.lines.length - 2],
+      startsWith(
+        'One step is left for later. Run it in the app:\n'
+        '  Configuring Firebase with flutterfire (the run skips external '
+        'setup, and ',
+      ),
     );
   });
 
