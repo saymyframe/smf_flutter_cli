@@ -74,6 +74,18 @@ const modulePaths = {
     'smf_firebase_core',
   ): 'The test of firebase_core that configures the app of the job with '
       'Firebase with the command of its README, before CI starts it.',
+  (
+    'Enable the sign-in methods of the app with every module in Firebase',
+    'smf_firebase_auth',
+  ): 'The test of firebase_auth that asks the Firebase project of the app '
+      'whether Email/Password is enabled there, and in one job of the '
+      'workflow Build enables the sign-in methods first with the script of '
+      'the app, as its README says.',
+  (
+    'Check the sign-in methods of the app with every module in Firebase',
+    'smf_firebase_auth',
+  ): 'The test of firebase_auth that asks the Firebase project of the app '
+      'whether Email/Password is enabled there, before CI starts the app.',
   ('Archive the app with every module', 'smf_firebase_crashlytics'):
       'The test of firebase_crashlytics that archives the app of the job '
           'with the build phase for Crashlytics fixed by the command of its '
