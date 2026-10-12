@@ -449,10 +449,15 @@ void main() {
     );
     const added = 'Adding go_router: the only provider of the router role, '
         'which settings requires.';
-    // The screen is a route that nothing opens in an app without a layout.
+    // The screen is a destination, which an app without a layout has no
+    // main navigation for, and the app starts on none of its routes.
     const start = 'No route is marked as a start candidate, so the app starts '
         'on its fallback screen. Choose a start route with --start.';
-    expect(run.lines, containsAll([added, start]));
+    const destination = 'No module provides the layout role, so the app has '
+        'no main navigation to lead to the destination /settings (settings). '
+        'Choose a provider of the role, or open it from a screen of yours '
+        'with context.nav.';
+    expect(run.lines, containsAllInOrder([added, start, destination]));
     final app = run.files.directory('/work/my_app');
     expect(
       app
@@ -1666,6 +1671,77 @@ void main() {
         'sign_in.gate',
         'sign_in.hasAccount',
       ],
+    });
+  });
+
+  group('the warning of the destinations of an app without a layout', () {
+    // What `smf create` reports of the destinations of an app with
+    // [modules], without a terminal.
+    Future<List<String>> warningsOf(
+      String modules, {
+      List<String> options = const [],
+    }) async {
+      final run = await _create(
+        {},
+        options: [
+          '--no-input',
+          '--skip-external-setup',
+          '-m',
+          modules,
+          ...options,
+        ],
+      );
+      expect(run.code, 0, reason: run.lines.join('\n'));
+      return [
+        for (final line in run.lines)
+          if (line.contains('main navigation')) line,
+      ];
+    }
+
+    const ofSettings = 'No module provides the layout role, so the app has no '
+        'main navigation to lead to the destination /settings (settings). '
+        'Choose a provider of the role, or open it from a screen of yours '
+        'with context.nav.';
+
+    test(
+        'is given once, with the path and the module of each destination '
+        'that the app does not start in, also with --strict, and not in an '
+        'app with a layout', () async {
+      expect(await warningsOf('home,settings'), [ofSettings]);
+      // --strict stops a run that would leave a module out, and the
+      // warning leaves none out.
+      expect(
+        await warningsOf('home,settings', options: ['--strict']),
+        [ofSettings],
+      );
+      // The app starts on the settings screen, so the other destination is
+      // the one that it has no main navigation for.
+      expect(
+        await warningsOf('home,settings', options: ['--start', '/settings']),
+        [ofSettings.replaceFirst('/settings (settings)', '/home (home)')],
+      );
+
+      expect(await warningsOf('home,settings,bottom_tabs'), isEmpty);
+      // The only destination of the app is the screen that it starts on.
+      expect(await warningsOf('home'), isEmpty);
+    });
+
+    test(
+        'has only what the router knows of a destination, so it is the same '
+        'line for an app with sign-in and for one without it, with no word '
+        'of an account or of a setting', () async {
+      final without = await warningsOf('home,settings');
+      final withSignIn = await warningsOf('home,sign_in,bloc');
+
+      expect(without, [ofSettings]);
+      expect(withSignIn, without);
+      // The path and the module of the destination are all that the line
+      // has of the features of the app.
+      final words =
+          without.single.replaceAll('/settings (settings)', '').toLowerCase();
+      for (final word in ['account', 'sign', 'setting', 'tab']) {
+        expect(words, isNot(contains(word)), reason: word);
+      }
     });
   });
 }

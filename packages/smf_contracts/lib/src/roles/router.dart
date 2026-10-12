@@ -72,6 +72,11 @@ const routerRole = RouterRole._();
 ///   class `AppRouter`;
 /// - creates `config` once.
 ///
+/// An app without a layout has no main navigation to lead to its
+/// destinations. When the role's template chooses the route that the app
+/// starts on, it warns there of each destination other than the one that
+/// the app starts on or below, by its path and its module.
+///
 /// A module may keep the user from the rest of the app until a condition
 /// holds, with the guards of its [RoutesData.guards] (see [RouteGuard]): a
 /// guard is a gate over the whole app, unless it stands for a condition

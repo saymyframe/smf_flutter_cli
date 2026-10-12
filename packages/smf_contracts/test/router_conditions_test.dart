@@ -1917,6 +1917,8 @@ a gate of the first stage does not allow
   });
 
   group('the start route of an app with conditions', () {
+    // The app has a layout, which shows its destinations, so the hook warns
+    // of none of them.
     Future<Object?> choose(
       String? start, {
       List<RoleData<Object>>? data,
@@ -1925,7 +1927,7 @@ a gate of the first stage does not allow
           routerRole.choiceContext(
             RoleChoiceRequest(
               data: data ?? _clubData,
-              presentRoles: {routerRole},
+              presentRoles: {routerRole, layoutRole},
               optionValues: {'start': start},
               environment: FakeEnvironment(),
               context: testContext,
