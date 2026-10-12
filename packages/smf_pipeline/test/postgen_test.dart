@@ -957,6 +957,13 @@ void main() {
           'tidy: tidy (it runs after "Set up Firebase", which is not done)',
         ]);
         expect(skipped.map((step) => step.failed), everyElement(isFalse));
+        // Each record of a step that continues another has the record of
+        // that step, which a report may refer to in another way.
+        final [setUpRecord, fixRecord, checkRecord, tidyRecord] = skipped;
+        expect(setUpRecord.after, isNull);
+        expect(fixRecord.after, same(setUpRecord));
+        expect(checkRecord.after, same(fixRecord));
+        expect(tidyRecord.after, same(setUpRecord));
         expect(host.prompter.asked, hasLength(1));
         expect(runner.lines, isNot(contains(startsWith('fix'))));
         expect(runner.lines, isNot(contains(startsWith('check'))));
@@ -982,6 +989,10 @@ void main() {
         ]);
         // Only the step failed; its record tells why the rest is not done.
         expect(skipped.map((step) => step.failed), [true, false, false, false]);
+        expect(
+          skipped.map((step) => step.after),
+          [isNull, same(skipped[0]), same(skipped[1]), same(skipped[0])],
+        );
         expect(runner.lines, isNot(contains(startsWith('fix'))));
       });
 

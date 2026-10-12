@@ -18,6 +18,7 @@ final class SkippedStep {
     this.reason, {
     this.failed = false,
     this.notice,
+    this.after,
   });
 
   /// What the step does.
@@ -41,6 +42,12 @@ final class SkippedStep {
   /// [description] does not tell, which goes after the command, or `null`
   /// if the step has no notice (see [PostGenStep.notice]).
   final String? notice;
+
+  /// The record of the step that this one continues and was left for later
+  /// with, or `null` if it is not done for a reason of its own. The [reason]
+  /// names that step by its description; a report that lists both may refer
+  /// to it in another way, such as by its place in the list.
+  final SkippedStep? after;
 
   @override
   String toString() => '$description: $command ($reason)';
@@ -223,16 +230,15 @@ final class _ModuleSteps {
       reason = failure.reason;
       failed = true;
     }
-    skipped.add(
-      SkippedStep(
-        description,
-        command,
-        reason,
-        failed: failed,
-        notice: step.notice,
-      ),
+    final record = SkippedStep(
+      description,
+      command,
+      reason,
+      failed: failed,
+      notice: step.notice,
     );
-    await _leaveFollowUps(bound, description);
+    skipped.add(record);
+    await _leaveFollowUps(bound, record);
   }
 
   /// Why [step] of [origin], whose tool is [resolved] and whose [command]
@@ -317,25 +323,24 @@ final class _ModuleSteps {
   bool _isForHost(PostGenStep step) =>
       step.hosts.isEmpty || step.hosts.contains(_environment.operatingSystem);
 
-  /// Records the steps that continue [bound], the step of [description]
-  /// that is not done, as not done either, each with its notice and before
-  /// the steps that continue it in turn, but for those of other systems.
-  Future<void> _leaveFollowUps(BoundStep bound, String description) async {
+  /// Records the steps that continue [bound], the step of the record
+  /// [notDone], as not done either, each with its notice and before the
+  /// steps that continue it in turn, but for those of other systems.
+  Future<void> _leaveFollowUps(BoundStep bound, SkippedStep notDone) async {
     for (final followUp in bound.followUps) {
       final next = followUp.step;
       if (!_isForHost(next)) continue;
       final resolved = await _commands.resolve(next.tool, next.arguments);
       final command = _commands.display(next.tool, next.arguments, resolved);
-      final nextDescription = next.description ?? command;
-      skipped.add(
-        SkippedStep(
-          nextDescription,
-          command,
-          'it runs after "$description", which is not done',
-          notice: next.notice,
-        ),
+      final record = SkippedStep(
+        next.description ?? command,
+        command,
+        'it runs after "${notDone.description}", which is not done',
+        notice: next.notice,
+        after: notDone,
       );
-      await _leaveFollowUps(followUp, nextDescription);
+      skipped.add(record);
+      await _leaveFollowUps(followUp, record);
     }
   }
 }

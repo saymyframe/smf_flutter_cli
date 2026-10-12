@@ -64,10 +64,31 @@ const _replace = 'Activate 1.4.1 in its place with "dart pub global activate '
 const _replaceFlutterfire = 'FlutterFire CLI 1.4.1 or a later 1.x is needed '
     'by firebase_core, but $_tooOld. $_replace Set it up now?';
 
-/// The warning that Firebase is not configured, because of [reason].
+/// The warning that Firebase is not configured, because of [reason], which
+/// tells why the configuration could not run or how it failed.
 String _notConfigured(String reason) =>
     'Configuring Firebase with flutterfire is not done, because $reason. Run '
     'it in the app: $_later';
+
+/// How a run ends that left the configuration for later, because of
+/// [reason]: after the line of the app, the configuration with its command,
+/// and then how to run the app. None of it is a warning.
+List<String> _leftForLater(String reason) {
+  final step = 'info: One step is left for later. Run it in the app:\n'
+      '  Configuring Firebase with flutterfire ($reason):\n'
+      '    $_later';
+  return [
+    'success: Created my_app in /work/my_app.',
+    step,
+    'info: Then run the app:\n  cd /work/my_app\n  flutter run',
+  ];
+}
+
+/// How a run ends that left no step for later.
+const _nothingLeft = [
+  'success: Created my_app in /work/my_app.',
+  'info: Run it:\n  cd /work/my_app\n  flutter run',
+];
 
 /// What a firebase command in `/bin` that runs the Firebase CLI of another
 /// Node.js writes when it cannot find it.
@@ -289,6 +310,12 @@ final class _Machine {
   /// The warnings that the run printed.
   List<String> get warnings => _reports('warn: ');
 
+  /// The end of what the run printed, from the line of the app, each
+  /// message after its level.
+  List<String> get end => fake.reports
+      .skipWhile((report) => !report.startsWith('success: '))
+      .toList();
+
   /// What the run printed as information, such as the lines of `--explain`.
   List<String> get infos => _reports('info: ');
 
@@ -330,6 +357,9 @@ void main() {
         '1.x are missing',
       ),
     ]);
+    // The configuration could not run, so it is no step that the run left
+    // for later.
+    expect(machine.end, _nothingLeft);
     expect(
       machine.files.file('/work/my_app/lib/firebase_options.dart').existsSync(),
       isTrue,
@@ -406,9 +436,9 @@ void main() {
     expect(machine.fake.questions.last, _configureNow);
     expect(machine.fake.questions, hasLength(4));
     expect(machine.checks, isNot(contains(_configure)));
-    expect(machine.warnings, [
-      _notConfigured('you chose to run it later'),
-    ]);
+    // The user chose it, so nothing warns.
+    expect(machine.warnings, isEmpty);
+    expect(machine.end, _leftForLater('you chose to run it later'));
     expect(
       machine.files.file('/work/my_app/README.md').readAsStringSync(),
       contains(
@@ -436,6 +466,7 @@ void main() {
       ),
       _notConfigured('it exited with code 1'),
     ]);
+    expect(machine.end, _nothingLeft);
   });
 
   test(
@@ -834,14 +865,16 @@ void main() {
       '$_dart pub global list',
       "/bin/ruby -e require 'xcodeproj'; print Xcodeproj::VERSION",
     ]);
-    // The reason names what configure needs too, for when the user runs it.
-    expect(machine.warnings, [
-      ...List.filled(3, contains('is missing.')),
-      _notConfigured(
+    // Only the checks warn. The reason names what configure needs too, for
+    // when the user runs it.
+    expect(machine.warnings, List.filled(3, contains('is missing.')));
+    expect(
+      machine.end,
+      _leftForLater(
         'the run skips external setup, and Firebase CLI, Firebase login and '
         'FlutterFire CLI 1.4.1 or a later 1.x are missing',
       ),
-    ]);
+    );
   });
 
   test('a run without a terminal prints the command to configure Firebase',
@@ -852,9 +885,10 @@ void main() {
 
     expect(code, SmfExitCodes.success, reason: machine.fake.reports.join('\n'));
     expect(machine.fake.questions, isEmpty);
+    expect(machine.warnings, List.filled(3, contains('is missing.')));
     expect(
-      machine.warnings.last,
-      _notConfigured(
+      machine.end,
+      _leftForLater(
         'the run cannot ask the user, and Firebase CLI, Firebase login and '
         'FlutterFire CLI 1.4.1 or a later 1.x are missing',
       ),

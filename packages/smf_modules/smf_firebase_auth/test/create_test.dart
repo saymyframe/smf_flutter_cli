@@ -1,8 +1,9 @@
 // What a user of `smf create` sees of the step that enables the sign-in
 // methods: the check of the machine before generation, the question before
-// the step, and the command for later when the step does not run. The
-// machine is in memory, so no command runs for real; the script of the step
-// runs in `enable_sign_in_script_test.dart`.
+// the step, and the command for later when the step does not run, which is
+// a warning only when the step could not run or failed. The machine is in
+// memory, so no command runs for real; the script of the step runs in
+// `enable_sign_in_script_test.dart`.
 @TestOn('vm')
 library;
 
@@ -66,20 +67,44 @@ const _installFirebase = 'Firebase CLI is missing (needed by firebase_core). '
 const _update = 'Update it with "npm install -g firebase-tools" if npm '
     'installed it, or see https://firebase.google.com/docs/cli#update-cli.';
 
-/// The warning that Firebase is not configured, because of [reason].
-String _notConfigured(String reason) =>
-    'Configuring Firebase with flutterfire is not done, because $reason. Run '
-    'it in the app: $_configureLater';
-
 /// The warning that the sign-in methods are not enabled, because of
-/// [reason], with the command for later and the notice of the step.
+/// [reason], which tells why the step could not run or how it failed, with
+/// the command for later and the notice of the step.
 String _notEnabled(String reason) =>
     '$_enabling is not done, because $reason. Run it in the app: '
     '$_enableLater\n$_notice';
 
-/// Why the step is left for later with `flutterfire configure`.
-const _afterConfigure = 'it runs after "Configuring Firebase with '
-    'flutterfire", which is not done';
+/// The line that the app is created, and how to run it when no step is left
+/// for later, and when some are, as the logger of the machine got them.
+const _created = 'success: Created my_app in /work/my_app.';
+const _runIt = 'info: Run it:\n  cd /work/my_app\n  flutter run';
+const _thenRunIt = 'info: Then run the app:\n  cd /work/my_app\n  flutter run';
+
+/// How a run ends that left only the step of the module for later, because
+/// of [reason]: after the line of the app, the step with its command and
+/// the notice below it, and then how to run the app. None of it is a
+/// warning.
+List<String> _enableLeft(String reason) {
+  final step = 'info: One step is left for later. Run it in the app:\n'
+      '  $_enabling ($reason):\n'
+      '    $_enableLater\n'
+      '    $_notice';
+  return [_created, step, _thenRunIt];
+}
+
+/// How a run ends that left `flutterfire configure` for later, because of
+/// [reason], and the step of the module with it: the two in the order in
+/// which they run, the second after the first by its number.
+List<String> _bothLeft(String reason) {
+  final steps = 'info: 2 steps are left for later. Run them in the app, in '
+      'this order:\n'
+      '  1. Configuring Firebase with flutterfire ($reason):\n'
+      '     $_configureLater\n'
+      '  2. $_enabling (it runs after step 1):\n'
+      '     $_enableLater\n'
+      '     $_notice';
+  return [_created, steps, _thenRunIt];
+}
 
 /// The path of the install script of the Firebase CLI in a command.
 final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
@@ -196,6 +221,12 @@ final class _Machine {
   /// The warnings that the run printed.
   List<String> get warnings => _reports('warn: ');
 
+  /// The end of what the run printed, from the line of the app, each
+  /// message after its level.
+  List<String> get end => terminal.reports
+      .skipWhile((report) => !report.startsWith('success: '))
+      .toList();
+
   /// What the run printed as information, such as the lines of `--explain`.
   List<String> get infos => _reports('info: ');
 
@@ -238,6 +269,7 @@ void main() {
             'terminal.',
       );
       expect(machine.warnings, isEmpty);
+      expect(machine.end, [_created, _runIt]);
       expect(machine.hasScript, isTrue);
     });
 
@@ -256,7 +288,9 @@ void main() {
       expect(machine.terminal.questions, [_configureNow, _enableNow]);
       expect(machine.commands, contains(_configure));
       expect(machine.commands, isNot(contains(_enable)));
-      expect(machine.warnings, [_notEnabled('you chose to run it later')]);
+      // The user chose it, so nothing warns.
+      expect(machine.warnings, isEmpty);
+      expect(machine.end, _enableLeft('you chose to run it later'));
       expect(machine.hasScript, isTrue);
     });
 
@@ -275,10 +309,8 @@ void main() {
       expect(machine.terminal.questions, [_configureNow]);
       expect(machine.commands, isNot(contains(_configure)));
       expect(machine.commands, isNot(contains(_enable)));
-      expect(machine.warnings, [
-        _notConfigured('you chose to run it later'),
-        _notEnabled(_afterConfigure),
-      ]);
+      expect(machine.warnings, isEmpty);
+      expect(machine.end, _bothLeft('you chose to run it later'));
     });
 
     test(
@@ -301,6 +333,8 @@ void main() {
         ),
         _notEnabled('it exited with code 2'),
       ]);
+      // It failed, so it is no step that the run left for later.
+      expect(machine.end, [_created, _runIt]);
     });
 
     test(
@@ -325,6 +359,8 @@ void main() {
         endsWith('$older. $_update'),
         _notEnabled(older),
       ]);
+      // It could not run, so it is no step that the run left for later.
+      expect(machine.end, [_created, _runIt]);
     });
 
     test(
@@ -368,10 +404,8 @@ void main() {
       expect(machine.terminal.questions, isEmpty);
       expect(machine.commands, isNot(contains(_configure)));
       expect(machine.commands, isNot(contains(_enable)));
-      expect(machine.warnings, [
-        _notConfigured('the run skips external setup'),
-        _notEnabled(_afterConfigure),
-      ]);
+      expect(machine.warnings, isEmpty);
+      expect(machine.end, _bothLeft('the run skips external setup'));
       expect(machine.hasScript, isTrue);
     });
 
@@ -445,10 +479,8 @@ void main() {
       expect(machine.terminal.selections, isEmpty);
       expect(machine.commands, isNot(contains(_configure)));
       expect(machine.commands, isNot(contains(_enable)));
-      expect(machine.warnings, [
-        _notConfigured('the run cannot ask the user'),
-        _notEnabled(_afterConfigure),
-      ]);
+      expect(machine.warnings, isEmpty);
+      expect(machine.end, _bothLeft('the run cannot ask the user'));
       expect(machine.hasScript, isTrue);
     });
   });

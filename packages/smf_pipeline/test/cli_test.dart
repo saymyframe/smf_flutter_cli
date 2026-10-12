@@ -42,6 +42,12 @@ void main() {
     created = [];
   });
 
+  /// The end of what the run reported, from the line that the app is
+  /// created, each message after its level.
+  List<String> end() => host.logger.reports
+      .skipWhile((report) => !report.startsWith('success: '))
+      .toList();
+
   test('creates the app and says how to run it', () async {
     expect(
       await smf([
@@ -62,6 +68,12 @@ void main() {
       host.logger.infos.last,
       'Run it:\n  cd /work/my_app\n  flutter run',
     );
+    // Nothing comes between the two, and nothing after them.
+    expect(end(), [
+      'success: Created my_app in /work/my_app.',
+      'info: Run it:\n  cd /work/my_app\n  flutter run',
+    ]);
+    expect(host.logger.warnings, isEmpty);
     expect(flags, [false]);
     expect(created.single.path, '/work/my_app');
   });
@@ -167,18 +179,15 @@ void main() {
     );
   });
 
-  test('says which steps to run later', () async {
-    modules = modulesWith([
-      const PostGenStep(
-        ToolRef('firebase'),
-        ['login'],
-        description: 'Log in to Firebase',
-        external: true,
-        skippable: true,
-      ),
-    ]);
-
-    await smf([
+  group('a step that is left for later', () {
+    const logIn = PostGenStep(
+      ToolRef('firebase'),
+      ['login'],
+      description: 'Log in to Firebase',
+      external: true,
+      skippable: true,
+    );
+    const create = [
       'create',
       'my_app',
       '-o',
@@ -186,14 +195,271 @@ void main() {
       '-m',
       'extra',
       '--skip-external-setup',
-    ]);
+    ];
 
-    expect(
-      host.logger.warnings.last,
-      'Log in to Firebase is not done, because the run skips external '
-      'setup. Run it in the app: firebase login',
-    );
-    expect(created.single.skippedSteps.single.command, 'firebase login');
+    test(
+        'is no warning: it comes after the line of the app, with its reason '
+        'and its command, before the lines on running the app', () async {
+      modules = modulesWith([logIn]);
+
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(host.logger.warnings, isEmpty);
+      expect(end(), [
+        'success: Created my_app in /work/my_app.',
+        equals(
+          'info: One step is left for later. Run it in the app:\n'
+          '  Log in to Firebase (the run skips external setup):\n'
+          '    firebase login',
+        ),
+        'info: Then run the app:\n  cd /work/my_app\n  flutter run',
+      ]);
+      expect(created.single.skippedSteps.single.command, 'firebase login');
+    });
+
+    test('has its whole command on one line, however long it is', () async {
+      const arguments = [
+        'configure',
+        '--platforms=android,ios',
+        '--overwrite-firebase-options',
+        '--ios-bundle-id=com.example.my-app',
+        '--android-package-name=com.example.my_app',
+        '--out',
+        'lib/my options.dart',
+      ];
+      const command = 'flutterfire configure --platforms=android,ios '
+          '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
+          "--android-package-name=com.example.my_app --out 'lib/my "
+          "options.dart'";
+      modules = modulesWith([
+        const PostGenStep(
+          ToolRef('flutterfire'),
+          arguments,
+          description: 'Configuring',
+          external: true,
+          skippable: true,
+        ),
+      ]);
+
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(command.length, greaterThan(160));
+      expect(host.logger.infos[host.logger.infos.length - 2].split('\n'), [
+        'One step is left for later. Run it in the app:',
+        '  Configuring (the run skips external setup):',
+        '    $command',
+      ]);
+    });
+
+    test('is numbered among several, in the order in which they run', () async {
+      host = FakeHost(processRunner: runner, terminal: true, answers: [false]);
+      modules = [
+        ...modulesWith([logIn]),
+        TestModule(
+          'other',
+          contributions: const [
+            PostGenStep(
+              ToolRef('dart'),
+              ['run', 'deploy'],
+              description: 'Deploying the rules',
+              skippable: true,
+            ),
+          ],
+        ),
+      ];
+
+      expect(
+        await smf([
+          'create',
+          'my_app',
+          '-o',
+          '/work',
+          '--org',
+          'com.example',
+          '-m',
+          'extra,other',
+          '--skip-external-setup',
+        ]),
+        SmfExitCodes.success,
+      );
+
+      expect(host.logger.warnings, isEmpty);
+      expect(end(), [
+        'success: Created my_app in /work/my_app.',
+        equals(
+          'info: 2 steps are left for later. Run them in the app, in this '
+          'order:\n'
+          '  1. Log in to Firebase (the run skips external setup):\n'
+          '     firebase login\n'
+          '  2. Deploying the rules (you chose to run it later):\n'
+          '     dart run deploy',
+        ),
+        'info: Then run the app:\n  cd /work/my_app\n  flutter run',
+      ]);
+    });
+
+    test('comes before the directory of the app, quoted for Windows', () async {
+      host = FakeHost(
+        processRunner: runner,
+        operatingSystem: HostOperatingSystem.windows,
+      );
+      modules = modulesWith([logIn]);
+
+      expect(
+        await smf([
+          'create',
+          'my_app',
+          '-o',
+          r'C:\work\my apps',
+          '-m',
+          'extra',
+          '--skip-external-setup',
+        ]),
+        SmfExitCodes.success,
+      );
+
+      expect(end(), [
+        r'success: Created my_app in C:\work\my apps\my_app.',
+        equals(
+          'info: One step is left for later. Run it in the app:\n'
+          '  Log in to Firebase (the run skips external setup):\n'
+          '    firebase login',
+        ),
+        equals(
+          'info: Then run the app:\n'
+          r'  cd "C:\work\my apps\my_app"'
+          '\n  flutter run',
+        ),
+      ]);
+    });
+  });
+
+  group('a step that fails', () {
+    const first = PostGenStepId(ModuleId('extra'), 'first');
+    const enable = PostGenStepId(ModuleId('auth'), 'enable');
+    const notice = 'The tool also registers a web app in the project.';
+    const create = [
+      'create',
+      'my_app',
+      '-o',
+      '/work',
+      '--org',
+      'com.example',
+    ];
+    const notDone = 'Setting up is not done, because it exited with code 1. '
+        'Run it in the app: dart run first';
+    const failed = [
+      'The step "Setting up" failed: it exited with code 1',
+      notDone,
+    ];
+
+    setUp(() {
+      host = FakeHost(
+        processRunner: runner,
+        terminal: true,
+        answers: [true, false],
+      );
+      runner.onRun = (call) => call.line == 'dart run first'
+          ? const SmfProcessResult(exitCode: 1)
+          : const SmfProcessResult(exitCode: 0);
+      modules = [
+        ...modulesWith([
+          const PostGenStep(
+            ToolRef('dart'),
+            ['run', 'first'],
+            id: first,
+            description: 'Setting up',
+            skippable: true,
+          ),
+        ]),
+        // Its steps continue the step that fails, one after the other.
+        TestModule(
+          'auth',
+          dependsOn: {'extra'},
+          contributions: const [
+            PostGenStep(
+              ToolRef('dart'),
+              ['run', 'enable'],
+              id: enable,
+              followUpOf: first,
+              description: 'Enabling the methods',
+              notice: notice,
+              skippable: true,
+            ),
+            PostGenStep(
+              ToolRef('dart'),
+              ['run', 'verify'],
+              followUpOf: enable,
+              description: 'Verifying the methods',
+              skippable: true,
+            ),
+          ],
+        ),
+        TestModule(
+          'other',
+          contributions: const [
+            PostGenStep(
+              ToolRef('dart'),
+              ['run', 'deploy'],
+              description: 'Deploying the rules',
+              skippable: true,
+            ),
+          ],
+        ),
+      ];
+    });
+
+    test('is a warning, before the line of the app, and no step for later',
+        () async {
+      host = FakeHost(processRunner: runner, terminal: true, answers: [true]);
+
+      expect(await smf([...create, '-m', 'extra']), SmfExitCodes.success);
+
+      expect(host.logger.warnings, failed);
+      expect(host.logger.reports.sublist(host.logger.reports.length - 4), [
+        for (final warning in failed) 'warn: $warning',
+        'success: Created my_app in /work/my_app.',
+        'info: Run it:\n  cd /work/my_app\n  flutter run',
+      ]);
+      expect(created.single.skippedSteps.single.failed, isTrue);
+    });
+
+    test(
+        'is a warning, and the steps that are left for later with it are '
+        'not: the one that continues it names it, and the next one its '
+        'number', () async {
+      expect(
+        await smf([...create, '-m', 'auth,other']),
+        SmfExitCodes.success,
+      );
+
+      expect(host.prompter.asked.map((prompt) => prompt.message), [
+        'Setting up (dart run first), for extra. Run it now?',
+        'Deploying the rules (dart run deploy), for other. Run it now?',
+      ]);
+      expect(host.logger.warnings, failed);
+      expect(host.logger.reports.sublist(host.logger.reports.length - 5), [
+        for (final warning in failed) 'warn: $warning',
+        'success: Created my_app in /work/my_app.',
+        equals(
+          'info: 3 steps are left for later. Run them in the app, in this '
+          'order:\n'
+          '  1. Enabling the methods (it runs after "Setting up", which is '
+          'not done):\n'
+          '     dart run enable\n'
+          '     $notice\n'
+          '  2. Verifying the methods (it runs after step 1):\n'
+          '     dart run verify\n'
+          '  3. Deploying the rules (you chose to run it later):\n'
+          '     dart run deploy',
+        ),
+        'info: Then run the app:\n  cd /work/my_app\n  flutter run',
+      ]);
+      expect(
+        created.single.skippedSteps.map((step) => step.failed),
+        [true, false, false, false],
+      );
+    });
   });
 
   group('a step with a notice that continues a step of another module', () {
@@ -214,6 +480,15 @@ void main() {
     /// A host with a terminal, whose user gives [answers].
     FakeHost terminal([List<Object?> answers = const []]) =>
         FakeHost(processRunner: runner, terminal: true, answers: answers);
+
+    /// What the run reports after the line of the app when the step is the
+    /// only one that is left for later, because of [reason]: the notice
+    /// comes below the command.
+    String leftAlone(String reason) =>
+        'info: One step is left for later. Run it in the app:\n'
+        '  Enabling the methods ($reason):\n'
+        '    dart run enable\n'
+        '    $notice';
 
     setUp(() {
       modules = [
@@ -266,12 +541,8 @@ void main() {
       expect(host.prompter.asked, hasLength(1));
       expect(runner.lines, contains('dart run first'));
       expect(runner.lines, isNot(contains('dart run enable')));
-      expect(
-        host.logger.warnings.single,
-        'Enabling the methods is not done, because you chose to run it '
-        'later. Run it in the app: dart run enable\n'
-        '$notice',
-      );
+      expect(host.logger.warnings, isEmpty);
+      expect(end()[1], leftAlone('you chose to run it later'));
     });
 
     test('is left for later with --no-input, with the notice', () async {
@@ -282,12 +553,8 @@ void main() {
       expect(host.prompter.asked, isEmpty);
       expect(runner.lines, contains('dart run first'));
       expect(runner.lines, isNot(contains('dart run enable')));
-      expect(
-        host.logger.warnings.single,
-        'Enabling the methods is not done, because the run cannot ask the '
-        'user. Run it in the app: dart run enable\n'
-        '$notice',
-      );
+      expect(host.logger.warnings, isEmpty);
+      expect(end()[1], leftAlone('the run cannot ask the user'));
       expect(created.single.skippedSteps.single.notice, notice);
     });
 
@@ -303,12 +570,8 @@ void main() {
       expect(host.prompter.asked, isEmpty);
       expect(runner.lines, contains('dart run first'));
       expect(runner.lines, isNot(contains('dart run enable')));
-      expect(
-        host.logger.warnings.single,
-        'Enabling the methods is not done, because the run skips external '
-        'setup. Run it in the app: dart run enable\n'
-        '$notice',
-      );
+      expect(host.logger.warnings, isEmpty);
+      expect(end()[1], leftAlone('the run skips external setup'));
     });
 
     test(
@@ -336,16 +599,20 @@ void main() {
 
       expect(host.prompter.asked, isEmpty);
       expect(runner.lines, isNot(contains(startsWith('dart run'))));
-      expect(host.logger.warnings, [
+      expect(host.logger.warnings, isEmpty);
+      expect(end(), [
+        'success: Created my_app in /work/my_app.',
         equals(
-          'Setting up is not done, because the run skips external setup. Run '
-          'it in the app: dart run first',
+          'info: 2 steps are left for later. Run them in the app, in this '
+          'order:\n'
+          '  1. Setting up (the run skips external setup):\n'
+          '     dart run first\n'
+          // It refers to the step by its number in the list.
+          '  2. Enabling the methods (it runs after step 1):\n'
+          '     dart run enable\n'
+          '     $notice',
         ),
-        equals(
-          'Enabling the methods is not done, because it runs after "Setting '
-          'up", which is not done. Run it in the app: dart run enable\n'
-          '$notice',
-        ),
+        'info: Then run the app:\n  cd /work/my_app\n  flutter run',
       ]);
     });
 
@@ -367,6 +634,11 @@ void main() {
           'Run it in the app: dart run enable\n'
           '$notice',
         ),
+      ]);
+      // It is no step that the run left for later.
+      expect(end(), [
+        'success: Created my_app in /work/my_app.',
+        'info: Run it:\n  cd /work/my_app\n  flutter run',
       ]);
       expect(created.single.skippedSteps.single.failed, isTrue);
     });

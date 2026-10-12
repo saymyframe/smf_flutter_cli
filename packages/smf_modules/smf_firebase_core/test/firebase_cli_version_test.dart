@@ -33,10 +33,17 @@ const _update = 'Update it with "npm install -g firebase-tools" if npm '
     'installed it, or see https://firebase.google.com/docs/cli#update-cli.';
 
 /// The warning that the step of [_RulesModule] is not done, because of
-/// [reason].
+/// [reason], which tells why it could not run.
 String _notDeployed(String reason) =>
     'Deploying the rules of the storage is not done, because $reason. Run it '
     'in the app: firebase deploy --only storage';
+
+/// What a run prints of the step of [_RulesModule] after the line of the
+/// app, when it left only that step for later, because of [reason].
+String _deployLater(String reason) =>
+    'One step is left for later. Run it in the app:\n'
+    '  Deploying the rules of the storage ($reason):\n'
+    '    firebase deploy --only storage';
 
 /// The path of the install script of the Firebase CLI in a command.
 final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
@@ -328,12 +335,27 @@ void main() {
               'install -g firebase-tools", or see '
               'https://firebase.google.com/docs/cli.',
             ),
-            _notDeployed(
-              'it runs after "Configuring Firebase with flutterfire", which '
-              'is not done',
+            // flutterfire configure could not run, which is a warning.
+            startsWith(
+              'Configuring Firebase with flutterfire is not done, because '
+              'Firebase CLI and Firebase login are missing. Run it in the '
+              'app: ',
             ),
           ]),
         );
+        // The step was only left for later with it, which is none: it comes
+        // after the line of the app, and names the step that it continues.
+        expect(
+          machine.warnings,
+          isNot(contains(contains('Deploying the rules of the storage'))),
+        );
+        const afterConfigure = 'it runs after "Configuring Firebase with '
+            'flutterfire", which is not done';
+        expect(machine.fake.reports.sublist(machine.fake.reports.length - 3), [
+          'success: Created my_app in /work/my_app.',
+          'info: ${_deployLater(afterConfigure)}',
+          'info: Then run the app:\n  cd /work/my_app\n  flutter run',
+        ]);
       });
     });
   }
