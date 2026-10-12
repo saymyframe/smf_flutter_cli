@@ -1472,11 +1472,13 @@ two guards with one target, in the other order
   });
 
   group('the start route of an app with guards', () {
+    // The app has a layout, which shows its destinations, so the hook warns
+    // of none of them.
     Future<Object?> choose(String? start) => routerRole.template.choose(
           routerRole.choiceContext(
             RoleChoiceRequest(
               data: _guardedData,
-              presentRoles: {routerRole},
+              presentRoles: {routerRole, layoutRole},
               optionValues: {'start': start},
               environment: FakeEnvironment(),
               context: testContext,

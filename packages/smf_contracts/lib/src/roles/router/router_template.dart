@@ -83,9 +83,24 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
     return issues;
   }
 
+  /// Chooses the route that the app starts on, and warns of the
+  /// destinations of an app without a layout, which has no main navigation
+  /// to lead to them; see [_warnOfDestinations].
   @override
   Future<Object?> choose(RoleChoiceContext<RoutesData> context) async {
     final facade = RouterFacade.of(context.data);
+    final start = await _start(context, facade);
+    if (!context.has(layoutRole)) _warnOfDestinations(context, facade, start);
+    return RouterChoice(startPath: start?.fullPath);
+  }
+
+  /// The route of [facade] that the app starts on, or `null` for an app
+  /// that no route can start: the route of `--start`, the only start
+  /// candidate, or the one that the user picks among several.
+  Future<FacadeRoute?> _start(
+    RoleChoiceContext<RoutesData> context,
+    RouterFacade facade,
+  ) async {
     final start = context.option(RouterRole.startOption.name);
     if (start != null) return _startOn(facade, start);
 
@@ -101,11 +116,9 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
           '--${RouterRole.startOption.name}.',
         );
       }
-      return const RouterChoice();
+      return null;
     }
-    if (candidates.length == 1) {
-      return RouterChoice(startPath: candidates.single.fullPath);
-    }
+    if (candidates.length == 1) return candidates.single;
     if (!context.environment.interactive) {
       throw SmfUsageException(
         'Several screens can start the app: '
@@ -113,23 +126,63 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         'one with --${RouterRole.startOption.name}.',
       );
     }
-    final picked = await context.environment.prompter.select(
+    return context.environment.prompter.select(
       'Which screen does the app start on?',
       candidates,
       display: (route) => '${route.fullPath} (${route.feature.module})',
     );
-    return RouterChoice(startPath: picked.fullPath);
   }
 
-  /// The choice of the route at [start], the path the user asked the app to
-  /// start on, which must be a route without required parameters, and
-  /// outside the flow of every guard: once a flow is over, the app shows
-  /// the screen that it starts on in place of the routes of the flow. Nor
-  /// does the route ask for a condition, its own or that of a route above
-  /// it: every user sees the screen that the app starts on. The hook
-  /// cannot tell whether the role of a condition is in the app, so it
-  /// refuses such a route also where no guard stands for the condition.
-  RouterChoice _startOn(RouterFacade facade, String start) {
+  /// Warns of the destinations of [facade] in an app without a layout,
+  /// which starts on [start], or on its fallback screen without one.
+  ///
+  /// A destination is a route that the main navigation of the app leads
+  /// to, and such an app has none. It shows the destination of its start
+  /// route: the route itself, or the route that it is below, which is the
+  /// first page of the stack that the app starts on. The role cannot tell
+  /// from its data whether a screen of a module opens one of the others,
+  /// so the warning says what the app lacks rather than that nothing leads
+  /// to them. It names each by its path and its module, as the question of
+  /// the start names a route, and tells nothing of what its screen shows.
+  ///
+  /// An app that starts on its fallback screen shows none of them, so the
+  /// warning names them all, after the warning of the start. The two tell
+  /// different things: `--start` shows one destination at most, and a first
+  /// screen that the developer writes in place of the fallback screen leads
+  /// to none.
+  ///
+  /// A route that is no destination gets no warning: its module keeps it
+  /// out of the main navigation, so the code of a screen opens it.
+  void _warnOfDestinations(
+    RoleChoiceContext<RoutesData> context,
+    RouterFacade facade,
+    FacadeRoute? start,
+  ) {
+    final shown = start?.topLevel;
+    final others = [
+      for (final destination in facade.destinations)
+        if (destination != shown)
+          '${destination.fullPath} (${destination.feature.module})',
+    ];
+    if (others.isEmpty) return;
+    final one = others.length == 1;
+    context.environment.logger.warn(
+      'No module provides the $layoutRole, so the app has no main navigation '
+      'to lead to the ${one ? 'destination' : 'destinations'} '
+      '${others.join(', ')}. Choose a provider of the role, or open '
+      '${one ? 'it' : 'them'} from a screen of yours with context.nav.',
+    );
+  }
+
+  /// The route at [start], the path the user asked the app to start on,
+  /// which must be a route without required parameters, and outside the
+  /// flow of every guard: once a flow is over, the app shows the screen
+  /// that it starts on in place of the routes of the flow. Nor does the
+  /// route ask for a condition, its own or that of a route above it: every
+  /// user sees the screen that the app starts on. The hook cannot tell
+  /// whether the role of a condition is in the app, so it refuses such a
+  /// route also where no guard stands for the condition.
+  FacadeRoute _startOn(RouterFacade facade, String start) {
     final route = facade.routeAt(start);
     if (route == null) {
       final routes = [for (final route in facade.routes) route.fullPath];
@@ -163,7 +216,7 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         'condition too, where the route shows like any other.',
       );
     }
-    return RouterChoice(startPath: route.fullPath);
+    return route;
   }
 
   /// `--start` with the start route of [choice], if it has one.
