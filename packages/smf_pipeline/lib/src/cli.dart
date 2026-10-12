@@ -4,6 +4,7 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/host.dart';
 import 'package:smf_pipeline/src/pipeline.dart';
+import 'package:smf_pipeline/src/postgen.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/request.dart';
 import 'package:smf_pipeline/src/shell.dart';
@@ -231,6 +232,11 @@ final class _CreateCommand extends Command<int> {
   }
 
   /// Tells the user what came out, what is missing and what to run later.
+  ///
+  /// Only what went wrong is a warning: a module that was left out, and a
+  /// step that could not run or failed. The steps that were left for later,
+  /// as the user or the options of the run asked, come after the line of
+  /// the app as a list; see [_leftForLater].
   void _report(GeneratedApp app, SmfHost host) {
     final logger = host.logger;
     if (app.leftOut.isNotEmpty) {
@@ -240,7 +246,12 @@ final class _CreateCommand extends Command<int> {
         'such a problem stops the run instead.',
       );
     }
+    final later = <SkippedStep>[];
     for (final step in app.skippedSteps) {
+      if (!step.failed) {
+        later.add(step);
+        continue;
+      }
       final notice = step.notice;
       logger.warn(
         '${step.description} is not done, because ${step.reason}. Run it '
@@ -249,12 +260,47 @@ final class _CreateCommand extends Command<int> {
         '${notice == null ? '' : '\n$notice'}',
       );
     }
-    logger
-      ..success('Created ${app.name} in ${app.path}.')
-      ..info(
-        'Run it:\n'
-        '  cd ${shellQuoted(app.path, host.operatingSystem)}\n'
-        '  flutter run',
-      );
+    logger.success('Created ${app.name} in ${app.path}.');
+    if (later.isNotEmpty) logger.info(_leftForLater(later));
+    logger.info(
+      // After the steps, since the run does not know which of them the app
+      // needs to start.
+      '${later.isEmpty ? 'Run it' : 'Then run the app'}:\n'
+      '  cd ${shellQuoted(app.path, host.operatingSystem)}\n'
+      '  flutter run',
+    );
   }
+}
+
+/// The list of [steps], which the run left for later, in the order in which
+/// they run: each with why it is left, its command on a line of its own,
+/// whole, since the user copies it, and its notice below the command. Several
+/// steps are numbered.
+String _leftForLater(List<SkippedStep> steps) {
+  final numbered = steps.length > 1;
+  final lines = [
+    if (numbered)
+      '${steps.length} steps are left for later. Run them in the app, in '
+          'this order:'
+    else
+      'One step is left for later. Run it in the app:',
+  ];
+  for (final (index, step) in steps.indexed) {
+    final mark = numbered ? '${index + 1}. ' : '';
+    final below = ' ' * (numbered ? 2 + mark.length : 4);
+    // A step that was left with a step of the list names that step by its
+    // number, which tells two steps of one description apart. The step that
+    // it continues may also have failed: then a warning told of it, and the
+    // reason names it by its description.
+    final after = step.after;
+    final place = after == null ? -1 : steps.indexOf(after);
+    final reason = place < 0 ? step.reason : 'it runs after step ${place + 1}';
+    final notice = step.notice;
+    lines.addAll([
+      '  $mark${step.description} ($reason):',
+      '$below${step.command}',
+      if (notice != null) '$below$notice',
+    ]);
+  }
+  return lines.join('\n');
 }

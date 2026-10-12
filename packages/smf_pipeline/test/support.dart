@@ -349,24 +349,40 @@ final class FakeLogger implements SmfLogger {
   final List<String> errors = [];
   final List<String> successes = [];
 
+  /// The messages but the details, in the order they came, each after its
+  /// level, as in `warn: The tool is missing.`.
+  final List<String> reports = [];
+
   /// What happened to progress indicators: `start`, `update`, `complete`
   /// or `fail`, each with its message.
   final List<String> progresses = [];
 
   @override
-  void info(String message) => infos.add(message);
+  void info(String message) {
+    infos.add(message);
+    reports.add('info: $message');
+  }
 
   @override
   void detail(String message) => details.add(message);
 
   @override
-  void warn(String message) => warnings.add(message);
+  void warn(String message) {
+    warnings.add(message);
+    reports.add('warn: $message');
+  }
 
   @override
-  void error(String message) => errors.add(message);
+  void error(String message) {
+    errors.add(message);
+    reports.add('error: $message');
+  }
 
   @override
-  void success(String message) => successes.add(message);
+  void success(String message) {
+    successes.add(message);
+    reports.add('success: $message');
+  }
 
   @override
   SmfProgress progress(String message) {
