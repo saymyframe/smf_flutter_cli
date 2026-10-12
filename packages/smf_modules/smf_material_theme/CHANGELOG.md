@@ -1,3 +1,7 @@
+## 0.4.1
+
+ - **FEAT**(material_theme): give text fields the look of the theme ([#160](https://github.com/saymyframe/smf_flutter_cli/issues/160)). ([2d1d6a24](https://github.com/saymyframe/smf_flutter_cli/commit/2d1d6a2446b29a5a5486aba0a97d34909589186b))
+
 ## 0.4.0
 
  - **FEAT**(flutter_core): give the fallback start screen the look of the app ([#139](https://github.com/saymyframe/smf_flutter_cli/issues/139)). ([75d223f1](https://github.com/saymyframe/smf_flutter_cli/commit/75d223f1644b821594a73f88099fa720c65d673e))

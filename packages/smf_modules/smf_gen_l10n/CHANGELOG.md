@@ -1,3 +1,7 @@
+## 0.4.1
+
+ - Update a dependency to the latest release.
+
 ## 0.4.0
 
  - **FEAT**(flutter_core): give the fallback start screen the look of the app ([#139](https://github.com/saymyframe/smf_flutter_cli/issues/139)). ([75d223f1](https://github.com/saymyframe/smf_flutter_cli/commit/75d223f1644b821594a73f88099fa720c65d673e))

@@ -1,3 +1,7 @@
+## 0.3.2
+
+ - Update a dependency to the latest release.
+
 ## 0.3.1
 
  - **FIX**(contracts): say that on<T>() delivers the events fired once its stream is listened to. ([06668c45](https://github.com/saymyframe/smf_flutter_cli/commit/06668c45dd58e3d7de05b71f89c8eb474920ac5b))
