@@ -40,6 +40,7 @@ workspace:
   - packages/smf_modules/smf_riverpod
   - packages/smf_modules/smf_settings
   - packages/smf_modules/smf_shared_preferences
+  - packages/smf_modules/smf_sign_in
 
 executables:
   smfflutter: smfflutter_dev

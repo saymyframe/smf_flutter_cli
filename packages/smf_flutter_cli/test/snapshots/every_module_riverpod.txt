@@ -159,7 +159,7 @@ With `shared_preferences`:
 - A feature changes the value of `allows` of its guard, and the router navigates when it does. While the `allows` of a gate is `false`, the router shows its `redirectTo` in place of the whole stack, whichever location was asked for. Once the gates allow, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A gate with `resumes: false` does not bring the user back. When the `allows` of a guard with `resumes: false` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the gates allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
 - While the `allows` of a guard with `routes` is `false`, `go()`, `push()` or `replace()` of one of those routes opens its `redirectTo` over the page that the user is on, and the request waits. Back returns to that page, and a `push()` that waited completes with `null`. Once the value is `true`, the router closes the pages of the `flow` and does what was asked: `push()` shows the route over the page that the user was on and completes with the value of its page, `go()` shows it in place of the stack, and `replace()` in place of that page. When the value turns `false`, the router closes the pages of the `routes` with the pages over them. The user is then on the page below them, or on the screen that the app starts on when no page is below, as after `go()` to one of the `routes`.
 - A screen neither closes itself nor navigates after it changed the value of `allows` of a guard: the router has done both by then. This goes for a screen of a `flow` that turned the value `true`, as after a sign-in, and for a screen of the `routes` that turned it `false`, as a screen with a sign-out button. A `pop()` after the change closes the page that is on top by then: the page that the user asked for, or the page below the one that the router closed, which may be the main navigation of the app.
-- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of a gate whose `allows` is `false`. So no code navigates into the `flow` of a gate, and no screen of a `flow` navigates out of it once its guard allows: the router does. The first does not hold for a guard with `routes`. While it does not allow and every gate does, its `redirectTo` shows like any route, so a screen may open it with `push()`. Inside a `flow`, navigate with `push()` or `replace()`. `go()` takes the place of the pages below the `flow`, and the request that waits is lost with them.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of a gate whose `allows` is `false`. So no code navigates into the `flow` of a gate, and no screen of a `flow` navigates out of it once its guard allows: the router does. The first does not hold for a guard with `routes`. While it does not allow and every gate does, its `redirectTo` shows like any route, so a screen may open it with `push()`. `go()` to it from a screen takes the place of the stack, with no way back. A link to a route of its `flow` opens that route over the screen that the app starts on, so back leads into the app. Such a link is lost while a gate with another `flow` does not allow: once the gate allows, the user is on the screen that the app starts on. Inside a `flow`, navigate with `push()` or `replace()`. `go()` takes the place of the pages below the `flow`, and the request that waits is lost with them.
 
 With `go_router`:
 
@@ -180,12 +180,32 @@ With `go_router`:
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
+## Sign-in
+
+- The sign-in is three screens in `lib/features/sign_in/`: `SignInScreen`, the route `sign_in.signIn` at `/sign_in`, and over it `SignUpScreen` at `/sign_in/sign_up` and `ResetPasswordScreen` at `/sign_in/reset_password`. Two guards of `routeGuards` show them, with the functions of `lib/features/sign_in/sign_in_guards.dart`. `sign_in.gate` reads `appSession.allowsApp` and shows the sign-in in place of every other screen. `sign_in.hasAccount` reads `appSession.hasAccount` and shows it in place of a route that needs an account.
+- A screen of the sign-in neither closes itself nor navigates once the user is signed in. It signs in or up through its state. The session changes then, and the router leaves the sign-in. While `authMode` is `AuthMode.required`, no code navigates to the sign-in either: the gate shows it. In the other modes, a screen that offers to sign in opens it with `context.nav.signIn.signIn().push<void>()`, so that back leads back.
+- The look of a screen and its state are in different files. The look is `SignInView`, `SignUpView` and `ResetPasswordView`, each in a file of its name, such as `lib/features/sign_in/sign_in_view.dart`. They share `AuthPage` of `lib/features/sign_in/sign_in_page.dart`, which is the frame of a screen, and the fields and buttons of `lib/features/sign_in/sign_in_widgets.dart`. All of them are plain Flutter widgets: a view gets the state of its call and callbacks, and imports nothing that manages state. The file of a screen, such as `lib/features/sign_in/sign_in_screen.dart`, only gives its view the state.
+- The fields, the buttons and the cards of the screens are those of the theme of the app. These files give a field no colour, border or padding, so for another look of a field, change the theme of the app. `OtherScreenAction`, the way from the sign-in to the sign-up and back, is a text button of the theme with one colour of its own, `colorScheme.secondary`.
+- The title of a page and the label of each button are each a `WholeWords` of `lib/features/sign_in/sign_in_widgets.dart`, not a `Text`. It breaks a text between its words and never inside one. Where the longest word would not fit, as on a narrow phone with a large text size, the text is only as large as that word allows. Use it for the label of a new button of the feature too.
+- That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, for as long as the session has the account, since the router leaves the screen then. When the session has no account again before that, the form is back.
+- A failure gets its text in `authFailureText()` of `lib/features/sign_in/sign_in_widgets.dart`, which has a text for every `AuthFailureReason`. `FailureMessage` shows that text, and the `developerHint` of the failure in debug mode only.
+- While a call is on its way, `SubmitButton` spins. A widget test that waits with `pumpAndSettle()` returns only once the call has ended, so until then it shows frames with `pump()`.
+- The screen of the account is `AccountScreen`, the route `sign_in.account` at `/sign_in/account`, with its look in `AccountView` of `lib/features/sign_in/account_view.dart`. The route needs an account, so for a user without one the router opens the sign-in over the page first. `AccountSetting` of `lib/features/sign_in/account_setting.dart` is the entry of the account on the settings screen. It opens the screen with `context.nav.signIn.account().push<void>()`. In an app without a main navigation, no screen leads to the settings screen: a screen of the app opens it through `context.nav`, or opens the account with that same call.
+- The screen of the account signs out and deletes the account through its state, an `AccountState`. It neither closes itself nor navigates after that: the router closes its page, or shows the sign-in in place of every screen. The state stays busy after a call that succeeded for as long as the session has no account. `confirmDeleteAccount()` asks in a sheet first, and the screen deletes the account only once that sheet is closed. `DestructiveAction` is a text button of the theme in the colour `colorScheme.error`.
+
+- The state of each screen is a provider in a file next to it, with its `Notifier`: `signInProvider`, `signUpProvider`, `resetPasswordProvider` and `accountProvider`. Each lasts as long as its screen. They sign in through `appSessionProvider` of `lib/features/sign_in/session_provider.dart`, which a test overrides with an `AppSessionController` of its own. Apart from the file of the guards, that file is the only one of the feature that names `appSession`.
+- A provider is one for the app, so two pages of one screen that are open at once show the same state.
+- A widget reads who uses the app with `ref.watch(sessionProvider)`, an `AppSession`. `sessionProvider` of `lib/features/sign_in/session_provider.dart` follows `appSession`.
+
 ## State management
 
 With `flutter_riverpod`:
 
-- The state of a screen is a provider in the directory of its feature, such as a `NotifierProvider` with its `Notifier`. Write it by hand: the app has no code generation for providers.
-- A widget talks only to providers, never to a service. A provider gets a service through another provider.
+- The state of a screen is a provider in the directory of its feature: a `NotifierProvider.autoDispose` with its `Notifier`, so the state lasts as long as the screen. Write it by hand: the app has no code generation for providers.
+- The screen is a `ConsumerWidget`. It reads the state with `ref.watch` and passes it on to its view as plain values, and the methods of the `Notifier` as callbacks. The view is a widget in a file of its own that imports no `flutter_riverpod`, so the look of a screen does not depend on what manages its state.
+- State that several screens read is a provider without `autoDispose`, such as a `NotifierProvider`. It lasts as long as the `ProviderScope`.
+- After an `await`, a `Notifier` checks `ref.mounted` before it sets `state`. The user may have left the screen while the call was on its way, and a provider that is disposed of throws when its `Notifier` reads from `ref` or sets `state`. So the `Notifier` reads what the call needs from `ref` before the `await`.
+- A widget talks only to providers, never to a service or a DI container. A provider gets a service through another provider, which a test overrides.
 - `ProviderScope` is around the root widget in `runApp()`, in `lib/main.dart`: keep it above every widget that reads a provider.
 
 ## Theme
@@ -3232,6 +3252,7 @@ final class SharedAppPreferences implements AppPreferences {
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:my_app/features/onboarding/onboarding_status.dart' as guard0;
+import 'package:my_app/features/sign_in/sign_in_guards.dart' as guard1;
 
 import 'app_router_factory.dart';
 import 'navigation.dart';
@@ -3374,6 +3395,21 @@ final List<RouteGuard> routeGuards = [
     redirectTo: const OnboardingOnboardingLocation(),
     flow: const {'onboarding.onboarding'},
   ),
+  RouteGuard(
+    'sign_in.gate',
+    allows: guard1.signInAllowsApp(),
+    redirectTo: const SignInSignInLocation(),
+    flow: const {'sign_in.signIn', 'sign_in.signUp', 'sign_in.resetPassword'},
+    resumes: false,
+  ),
+  RouteGuard(
+    'sign_in.hasAccount',
+    allows: guard1.signInHasAccount(),
+    redirectTo: const SignInSignInLocation(),
+    flow: const {'sign_in.signIn', 'sign_in.signUp', 'sign_in.resetPassword'},
+    resumes: false,
+    routes: const {'sign_in.account'},
+  ),
 ];
 
 /// The location that the router shows when it is asked for the route
@@ -3461,7 +3497,8 @@ final class ShowOver<L> implements WhenAsked<L> {
   const ShowOver(this.location, {required this.flow});
 
   /// The location to show on top: the target of a guard with
-  /// [RouteGuard.routes].
+  /// [RouteGuard.routes], or a page of its flow that was asked for with no
+  /// pages.
   final L location;
 
   /// The full names of the routes of the flow of that guard.
@@ -3546,9 +3583,9 @@ final class GuardedNavigation<L> {
   /// What the router does in place of showing [location], whose route has
   /// the full name [route], or `null` to show it.
   ///
-  /// The router asks once for each request, before it shows the location:
-  /// the one the app starts on, each one that `go()`, `push()` or
-  /// `replace()` is asked to show, and each one from the platform.
+  /// The router asks about a location before it shows it: the one the app
+  /// starts on, each one that `go()`, `push()` or `replace()` is asked to
+  /// show, and each one from the platform.
   /// [onTopOf] are the full names of the routes of the pages that the user
   /// can get back to then, as the router tells [changed] of them. The
   /// router gives none when it has no page yet, and none for a location
@@ -3568,12 +3605,24 @@ final class GuardedNavigation<L> {
   ///   [onTopOf], on top or below another page, since the flow is open
   ///   already; and else [ShowOver] of the target of the guard, with its
   ///   flow.
+  /// - for a location that no guard keeps the user from and that is asked
+  ///   for with no pages, in a flow that only guards with
+  ///   [RouteGuard.routes] keep open: [ShowOver] of the location itself,
+  ///   with that flow. So a page of such a flow never stands alone when a
+  ///   link asks for it: the router shows it over [start], and back leads
+  ///   into the app. The request that waits is the page itself: asked
+  ///   about again once the flow closes, it is answered with [start],
+  ///   where the user is then. A flow that a gate keeps open too is the
+  ///   gate's, and takes the place of the stack.
   ///
   /// For a guard with routes the class remembers no location, only over
   /// how many pages its flow was opened, for [changed]. So the answer
-  /// depends on what the router did about the request before: asked twice
-  /// about one request, the class answers [ShowNothing] for a flow that the
-  /// first answer opened.
+  /// depends on [onTopOf] and not on what the class answered before. Asked
+  /// again about a location that it answered [ShowOver] for, with a page of
+  /// the flow among [onTopOf], it answers [ShowNothing] for a location that
+  /// the guard keeps the user from and `null` for a page of the flow. With
+  /// no pages it answers [ShowOver] again, so a router never asks with none
+  /// about a location that it shows over a page.
   ///
   /// What a gate made the class remember is forgotten when no gate keeps
   /// the user from the location and it is outside every flow, or in one
@@ -3595,7 +3644,12 @@ final class GuardedNavigation<L> {
     final over = flowIsOver(route);
     if (over || !_inAFlow(route)) _remembered = null;
     if (over) return ShowInstead(start);
-    if (guard == null) return null;
+    if (guard == null) {
+      final flow = onTopOf.isEmpty ? _openFlowOf(route) : null;
+      if (flow == null) return null;
+      _below = 0;
+      return ShowOver(location, flow: flow);
+    }
     if (onTopOf.any(guard.flow.contains)) return const ShowNothing();
     _below = onTopOf.length;
     return ShowOver(locationOf(guard.redirectTo), flow: guard.flow);
@@ -3707,6 +3761,21 @@ final class GuardedNavigation<L> {
   /// Whether [route] is in the flow of a guard, of whichever guard.
   static bool _inAFlow(String? route) =>
       routeGuards.any((guard) => guard.flow.contains(route));
+
+  /// The flow that [route] is a page of and that only guards with
+  /// [RouteGuard.routes] keep open: that of the first guard that does not
+  /// allow and has the route in its flow; or `null` if there is none, or if
+  /// a gate that does not allow has the route in its flow too, since the
+  /// flow of a gate takes the place of the stack.
+  static Set<String>? _openFlowOf(String? route) {
+    Set<String>? flow;
+    for (final guard in routeGuards) {
+      if (guard.allows.value || !guard.flow.contains(route)) continue;
+      if (guard.routes == null) return null;
+      flow ??= guard.flow;
+    }
+    return flow;
+  }
 }
 === lib/core/router/app_router_factory.dart (go_router) ===
 import 'dart:async';
@@ -3721,6 +3790,10 @@ import 'package:my_app/core/layout/destination.dart' show appDestinations;
 import 'package:my_app/features/home/home_screen.dart' as screen0;
 import 'package:my_app/features/onboarding/onboarding_screen.dart' as screen2;
 import 'package:my_app/features/settings/settings_screen.dart' as screen1;
+import 'package:my_app/features/sign_in/account_screen.dart' as screen6;
+import 'package:my_app/features/sign_in/reset_password_screen.dart' as screen5;
+import 'package:my_app/features/sign_in/sign_in_screen.dart' as screen3;
+import 'package:my_app/features/sign_in/sign_up_screen.dart' as screen4;
 
 import 'app_router.dart'
     show
@@ -3756,6 +3829,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     routingConfig: _routes,
     initialLocation: '/home',
     observers: _observers(),
+    own: _own,
   )..routerDelegate.addListener(_pagesChanged);
 
   /// The routes of the app, which go_router follows when they change, so
@@ -3772,6 +3846,28 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
           path: '/onboarding',
           name: 'onboarding.onboarding',
           builder: (context, state) => const screen2.OnboardingScreen(),
+        ),
+        GoRoute(
+          path: '/sign_in',
+          name: 'sign_in.signIn',
+          builder: (context, state) => const screen3.SignInScreen(),
+          routes: [
+            GoRoute(
+              path: 'sign_up',
+              name: 'sign_in.signUp',
+              builder: (context, state) => const screen4.SignUpScreen(),
+            ),
+            GoRoute(
+              path: 'reset_password',
+              name: 'sign_in.resetPassword',
+              builder: (context, state) => const screen5.ResetPasswordScreen(),
+            ),
+          ],
+        ),
+        GoRoute(
+          path: '/sign_in/account',
+          name: 'sign_in.account',
+          builder: (context, state) => const screen6.AccountScreen(),
         ),
       ],
     ),
@@ -3804,17 +3900,24 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// that the user comes back to once the gates allow it. The router knows
   /// a location by its URI, and `/` is the screen that the app starts on.
   ///
-  /// The router asks them about each location before go_router shows it:
-  /// [go], [push] and [replace] ask in [_redirected], with the pages that
-  /// the location is asked for on top of, and the `redirect` of go_router
-  /// asks in [_redirect] about the locations that go_router parses on its
-  /// own, which take the place of the stack. The `redirect` runs for the
-  /// calls of the router too, with a location that the guards let the user
-  /// see or that they answered: they then answer nothing a second time.
+  /// The router asks them once about each location, before go_router shows
+  /// it: [go], [push] and [replace] ask in [_redirected], with the pages
+  /// that the location is asked for on top of, and the `redirect` of
+  /// go_router asks in [_redirect] about the locations that go_router
+  /// parses on its own, which take the place of the stack.
   final GuardedNavigation<String> _guards = GuardedNavigation(
     start: '/',
     locationOf: (location) => location.path,
   );
+
+  /// How many calls of go_router the router is in that are its own: with a
+  /// location that it asked the guards about itself, or that they
+  /// answered, or with pages that are shown already. The `redirect` of
+  /// go_router runs within each of them, and does not ask the guards then.
+  /// Asked with no pages, they would open a page of the flow of a guard
+  /// that stands for a condition over `/`, as for a link, though the router
+  /// shows it over the page that the user is on.
+  int _asking = 0;
 
   /// The request that waits for a flow that the guards opened over the page
   /// on top, if there is one: the routes of the flow, how to make the
@@ -3834,10 +3937,9 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
 
   @override
   void go(AppLocation location) {
-    if (!_withoutPage && _redirected(location, again: () => go(location))) {
-      return;
-    }
-    config.go(location.path);
+    if (_withoutPage) return config.go(location.path);
+    if (_redirected(location, again: () => go(location))) return;
+    _own(() => config.go(location.path));
   }
 
   @override
@@ -3857,7 +3959,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       return waiting.future;
     }
     _checkMainNavigation(location, 'push');
-    return config.push<T>(location.path);
+    return _own(() => config.push<T>(location.path));
   }
 
   @override
@@ -3865,7 +3967,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     if (_withoutPage) return go(location);
     if (_redirected(location, again: () => replace(location))) return;
     _checkMainNavigation(location, 'replace');
-    config.pushReplacement<Object?>(location.path);
+    _own(() => config.pushReplacement<Object?>(location.path));
   }
 
   /// Whether go_router has no page of a route: before it shows its first
@@ -3887,6 +3989,18 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// go_router asks, with no pages.
   bool get _withoutPage =>
       config.routerDelegate.currentConfiguration.matches.isEmpty;
+
+  /// Runs [navigate], a call of go_router that is the router's own: with a
+  /// location that it asked the guards about itself, or that they
+  /// answered, or with pages that are shown already.
+  R _own<R>(R Function() navigate) {
+    _asking++;
+    try {
+      return navigate();
+    } finally {
+      _asking--;
+    }
+  }
 
   /// Runs [navigate], of which the listeners of the screen hear only the
   /// page that it ends on. That page is not there yet while the `redirect`
@@ -3913,8 +4027,18 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// that the app starts on, and the router shows the target over it once
   /// the parse is over: go_router tells nobody of pages that it has
   /// already, as when the user is on that screen. The listeners of the
-  /// screen hear only of the target.
+  /// screen hear only of the target. When the page on top is the target
+  /// already, as for a second link to a page of the flow, the router puts
+  /// that page back over `/` rather than push a new one: no frame shows the
+  /// change, so the page stays as the user left it, and the listeners hear
+  /// nothing.
+  ///
+  /// The push of the target is a call of the router's own, so the
+  /// `redirect` is not asked about it. If it ever is, the guards answer by
+  /// opening the target again, without end: the router throws rather than
+  /// hang the app.
   String? _redirect(String? route, String location) {
+    if (_asking > 0) return null;
     switch (_guards.asked(route, location, onTopOf: const [])) {
       case null || ShowNothing():
         return null;
@@ -3922,11 +4046,23 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
         return shown;
       case ShowOver(location: final target, :final flow):
         _muted = true;
+        final onTop = config.routerDelegate.currentConfiguration.lastOrNull;
+        final kept =
+            onTop is ImperativeRouteMatch && '${onTop.matches.uri}' == target
+            ? onTop
+            : null;
         void open() {
           if (_opening != open) return;
           _opening = null;
           _muted = false;
-          _open(target, flow, again: () => config.go(location));
+          _open(target, flow, again: () => config.go(location), kept: kept);
+          if (_opening == null) return;
+          _opening = null;
+          throw StateError(
+            'The redirect of go_router asked the guards about $target, '
+            'which the router pushes itself, and would open it without '
+            'end: it must ask nothing within a call of the router.',
+          );
         }
         _opening = open;
         scheduleMicrotask(open);
@@ -3958,7 +4094,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       case null:
         return false;
       case ShowInstead(location: final shown):
-        config.go(shown);
+        _own(() => config.go(shown));
         drop?.call();
       case ShowNothing():
         drop?.call();
@@ -3971,15 +4107,21 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// Shows [target], the target of a guard, over the page on top, and keeps
   /// the request of [again] and [drop] waiting while a page of [flow] is
   /// among the pages: [_close] makes it again, and [_pagesChanged] drops
-  /// it. A request that waited before is dropped.
+  /// it. A request that waited before is dropped. With [kept], the page of
+  /// [target] that go_router had on top, the router puts that page over
+  /// the page on top rather than push a new one.
   void _open(
     String target,
     Set<String> flow, {
     required void Function() again,
     void Function()? drop,
+    ImperativeRouteMatch? kept,
   }) {
     _drop();
-    unawaited(config.push<Object?>(target));
+    _own(() {
+      if (kept == null) return unawaited(config.push<Object?>(target));
+      config.restore(config.routerDelegate.currentConfiguration.push(kept));
+    });
     _waiting = (flow: flow, again: again, drop: drop);
   }
 
@@ -4015,7 +4157,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       final closing = _pushedPages(
         shown.matches,
       ).toList().reversed.take(count).toList();
-      config.restore(shown.remove(closing.last));
+      _own(() => config.restore(shown.remove(closing.last)));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (final page in closing) {
           if (!page.completer.isCompleted) page.completer.complete();
@@ -4077,7 +4219,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
       case null:
         break;
       case ShowInstead(:final location):
-        config.go(location);
+        _own(() => config.go(location));
       case ClosePages(pages: final count, :final dropsRequest):
         _close(count, dropsRequest: dropsRequest);
     }
@@ -4124,7 +4266,14 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   /// its location again, without the redirects of the routes. So a
   /// location that a redirect refused, such as one without a value that its
   /// route requires, would get the page of its route in place of the error
-  /// screen: the router puts back the pages that go_router had.
+  /// screen: the router puts back the pages that go_router had. The
+  /// `redirect` of go_router runs as it matches and as the router puts the
+  /// pages back, for the location that just took the place of the main
+  /// navigation. The router does not count that among its own calls. The
+  /// main navigation leaves within a call of the router's own, where the
+  /// `redirect` asks nothing; or for a location that go_router parsed on
+  /// its own, which the `redirect` has just answered with no pages, so the
+  /// guards answer the same again.
   void _renewMainNavigation() {
     final shown = config.routerDelegate.currentConfiguration;
     if (shown.matches.any(
@@ -4339,7 +4488,22 @@ final class _GoRouter extends GoRouter {
     required super.routingConfig,
     super.initialLocation,
     super.observers,
+    required this.own,
   }) : super.routingConfig();
+
+  /// Runs a call of go_router as one of the router of the app, within which
+  /// the `redirect` of go_router does not ask the guards of the routes.
+  final R Function<R>(R Function() navigate) own;
+
+  /// Shows the pages of go_router anew, as [GoRouter.refresh] does, as a
+  /// call of the router of the app. go_router parses the location below
+  /// its pushed pages again then, and its `redirect` runs for it, with no
+  /// pages, as for a link. Asked so, the guards would open a page of the
+  /// flow of a guard that stands for a condition over `/`, though the code
+  /// of the app went to it, and the pages that were pushed over it would
+  /// be gone.
+  @override
+  void refresh() => own(super.refresh);
 
   @override
   BackButtonDispatcher get backButtonDispatcher => _backButton;
@@ -4476,6 +4640,60 @@ final class OnboardingOnboardingLocation extends AppLocation {
   String get path => '/onboarding';
 }
 
+/// The location of `sign_in.signIn`: `/sign_in`.
+final class SignInSignInLocation extends AppLocation {
+  /// Creates the location.
+  const SignInSignInLocation();
+
+  @override
+  String get routeName => 'sign_in.signIn';
+
+  @override
+  String get path => '/sign_in';
+}
+
+/// The location of `sign_in.signUp`: `/sign_in/sign_up`.
+final class SignInSignUpLocation extends AppLocation {
+  /// Creates the location.
+  const SignInSignUpLocation();
+
+  @override
+  String get routeName => 'sign_in.signUp';
+
+  @override
+  String get path => '/sign_in/sign_up';
+
+  @override
+  AppLocation get parent => const SignInSignInLocation();
+}
+
+/// The location of `sign_in.resetPassword`: `/sign_in/reset_password`.
+final class SignInResetPasswordLocation extends AppLocation {
+  /// Creates the location.
+  const SignInResetPasswordLocation();
+
+  @override
+  String get routeName => 'sign_in.resetPassword';
+
+  @override
+  String get path => '/sign_in/reset_password';
+
+  @override
+  AppLocation get parent => const SignInSignInLocation();
+}
+
+/// The location of `sign_in.account`: `/sign_in/account`.
+final class SignInAccountLocation extends AppLocation {
+  /// Creates the location.
+  const SignInAccountLocation();
+
+  @override
+  String get routeName => 'sign_in.account';
+
+  @override
+  String get path => '/sign_in/account';
+}
+
 /// Typed navigation to the routes of the app.
 extension AppNavigation on BuildContext {
   /// The routes of the app by module.
@@ -4496,6 +4714,9 @@ final class AppNav {
 
   /// The routes of the module `onboarding`.
   OnboardingRoutes get onboarding => OnboardingRoutes._(_context);
+
+  /// The routes of the module `sign_in`.
+  SignInRoutes get signIn => SignInRoutes._(_context);
 }
 
 /// The routes of the module `home`.
@@ -4527,6 +4748,26 @@ final class OnboardingRoutes {
   /// The route `onboarding.onboarding`: `/onboarding`.
   NavLink onboarding() =>
       NavLink(_context, const OnboardingOnboardingLocation());
+}
+
+/// The routes of the module `sign_in`.
+final class SignInRoutes {
+  const SignInRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `sign_in.signIn`: `/sign_in`.
+  NavLink signIn() => NavLink(_context, const SignInSignInLocation());
+
+  /// The route `sign_in.signUp`: `/sign_in/sign_up`.
+  NavLink signUp() => NavLink(_context, const SignInSignUpLocation());
+
+  /// The route `sign_in.resetPassword`: `/sign_in/reset_password`.
+  NavLink resetPassword() =>
+      NavLink(_context, const SignInResetPasswordLocation());
+
+  /// The route `sign_in.account`: `/sign_in/account`.
+  NavLink account() => NavLink(_context, const SignInAccountLocation());
 }
 === lib/core/theme/app_theme.dart (material_theme) ===
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -6377,8 +6618,9 @@ void restoreOnboarding(AppPreferences preferences) =>
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
-import 'package:my_app/core/l10n/language_setting.dart' as entry1;
-import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
+import 'package:my_app/core/l10n/language_setting.dart' as entry2;
+import 'package:my_app/core/theme/theme_mode_setting.dart' as entry1;
+import 'package:my_app/features/sign_in/account_setting.dart' as entry0;
 
 /// The settings of the app: an entry for each setting that a module of the
 /// app has, one below the other in one group.
@@ -6420,7 +6662,11 @@ class SettingsScreen extends StatelessWidget {
             title,
             const SizedBox(height: 20),
             const _Group(
-              children: [entry0.ThemeModeSetting(), entry1.LanguageSetting()],
+              children: [
+                entry0.AccountSetting(),
+                entry1.ThemeModeSetting(),
+                entry2.LanguageSetting(),
+              ],
             ),
           ],
         ),
@@ -6449,6 +6695,2125 @@ class _Group extends StatelessWidget {
       ],
     ),
   );
+}
+=== lib/features/sign_in/account_notifier.dart (sign_in (riverpod)) ===
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/app_session.dart';
+import 'session_provider.dart';
+import 'sign_in_state.dart';
+
+/// The state of the screen of the account, which lasts as long as the
+/// screen does.
+///
+/// A provider is one for the app, where a cubit would be one for each page:
+/// two pages of this screen that are open at once, as a leaving one and a
+/// new one during a transition, show the same state.
+final accountProvider =
+    NotifierProvider.autoDispose<AccountNotifier, AccountState>(
+      AccountNotifier.new,
+    );
+
+/// Signs out and deletes the account through the session of the app, and
+/// tells which of the two is on its way and why the last one failed.
+class AccountNotifier extends Notifier<AccountState> {
+  /// Whether a call of this notifier is on its way.
+  var _calling = false;
+
+  @override
+  AccountState build() {
+    final session = ref.watch(appSessionProvider);
+    // Ends the busy state that a call left once the session has an
+    // account: the user got one again before the router took the screen
+    // away, as by code of the app that signs a user in, and the screen is
+    // back.
+    void follow() {
+      if (_calling || state.busy == null) return;
+      if (session.hasAccount.value) state = const AccountState();
+    }
+
+    session.hasAccount.addListener(follow);
+    ref.onDispose(() => session.hasAccount.removeListener(follow));
+    return const AccountState();
+  }
+
+  /// Signs the user out.
+  Future<void> signOut() =>
+      _run(AccountAction.signOut, (session) => session.signOut());
+
+  /// Deletes the account of the user.
+  Future<void> deleteAccount() =>
+      _run(AccountAction.delete, (session) => session.deleteAccount());
+
+  /// Makes [call], the call of [action], unless a call is on its way.
+  ///
+  /// Once it succeeded, the user has no account, and the router leaves the
+  /// screen, so the state stays busy for as long as the session has no
+  /// account.
+  Future<void> _run(
+    AccountAction action,
+    Future<void> Function(AppSessionController session) call,
+  ) async {
+    if (state.busy != null) return;
+    final session = ref.read(appSessionProvider);
+    _calling = true;
+    state = AccountState(busy: action);
+    try {
+      await call(session);
+    } on AuthFailure catch (failure) {
+      _calling = false;
+      // The user may have left the screen while the call was on its way.
+      if (ref.mounted) state = AccountState(failure: failure);
+      return;
+    }
+    _calling = false;
+    // The user may have an account again already.
+    if (ref.mounted && session.hasAccount.value) {
+      state = const AccountState();
+    }
+  }
+}
+=== lib/features/sign_in/account_screen.dart (sign_in (riverpod)) ===
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/app_session.dart';
+import 'account_notifier.dart';
+import 'account_view.dart';
+import 'session_provider.dart';
+
+/// The screen of the account: the [AccountView] with the state of
+/// [accountProvider], and the address of the account from
+/// [sessionProvider].
+///
+/// It neither closes itself nor navigates once the user is signed out or
+/// the account is deleted: the router leaves the screen then.
+class AccountScreen extends ConsumerWidget {
+  /// Creates the screen.
+  const AccountScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(accountProvider);
+    final session = ref.watch(sessionProvider);
+    return AccountView(
+      email: session is AccountSession ? session.email : null,
+      busy: state.busy,
+      failure: state.failure,
+      onSignOut: ref.read(accountProvider.notifier).signOut,
+      onDeleteAccount: ref.read(accountProvider.notifier).deleteAccount,
+    );
+  }
+}
+=== lib/features/sign_in/account_setting.dart (sign_in (riverpod)) ===
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/app_session.dart';
+import '../../core/router/navigation.dart';
+import 'account_setting_row.dart';
+import 'session_provider.dart';
+
+/// The entry of the account on the settings screen: the
+/// [AccountSettingRow] with who is signed in, from [sessionProvider],
+/// which leads to the screen of the account.
+///
+/// For a user without an account, the router shows the sign-in over the
+/// settings screen first, and the screen of the account once the user is
+/// signed in.
+class AccountSetting extends ConsumerWidget {
+  /// Creates the entry.
+  const AccountSetting({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider);
+    return AccountSettingRow(
+      signedIn: session is AccountSession,
+      email: session is AccountSession ? session.email : null,
+      onTap: () => context.nav.signIn.account().push<void>(),
+    );
+  }
+}
+=== lib/features/sign_in/account_setting_row.dart (sign_in) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+/// What the entry of the account on the settings screen shows: a row, as
+/// the other entries of the screen are, with the email address of the
+/// account that the user is signed in to, or that nobody is, which leads to
+/// the screen of the account.
+///
+/// It keeps nothing: the entry gives it who is signed in and takes the tap.
+/// So it is the same whichever way the app manages state.
+class AccountSettingRow extends StatelessWidget {
+  /// Creates the row.
+  const AccountSettingRow({
+    required this.signedIn,
+    required this.email,
+    required this.onTap,
+    super.key,
+  });
+
+  /// Whether the user is signed in to an account.
+  final bool signedIn;
+
+  /// The email address of the account, or `null` for an account without
+  /// one, and for a user without an account.
+  final String? email;
+
+  /// Shows the screen of the account.
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final signedInText = context.l10n.signInSettingSignedIn;
+    final notSignedInText = context.l10n.signInNotSignedIn;
+    return ListTile(
+      leading: const Icon(Icons.person_outline),
+      title: Text(context.l10n.signInAccountTitle),
+      // Below the title, where an address has the width of the row.
+      subtitle: Text(
+        signedIn ? email ?? signedInText : notSignedInText,
+        style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+      ),
+      trailing: Icon(Icons.chevron_right, color: muted),
+      onTap: onTap,
+    );
+  }
+}
+=== lib/features/sign_in/account_view.dart (sign_in) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import '../../core/auth/app_session.dart';
+import 'sign_in_page.dart';
+import 'sign_in_state.dart';
+import 'sign_in_widgets.dart';
+
+/// What the screen of the account shows: the email address of the account
+/// that the user is signed in to, the button that signs out, and the
+/// action that deletes the account, which asks first.
+///
+/// It keeps nothing of the calls themselves: the screen gives it the
+/// address and the state of the calls, and takes what the user asks for.
+/// So it is the same whichever way the app manages state.
+class AccountView extends StatefulWidget {
+  /// Creates the view.
+  const AccountView({
+    required this.email,
+    required this.busy,
+    required this.failure,
+    required this.onSignOut,
+    required this.onDeleteAccount,
+    super.key,
+  });
+
+  /// The email address of the account, or `null` for an account without
+  /// one, and once nobody is signed in to an account.
+  final String? email;
+
+  /// The action whose call is on its way, or `null` when none is.
+  final AccountAction? busy;
+
+  /// Why the last action failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  /// Signs the user out.
+  final VoidCallback onSignOut;
+
+  /// Deletes the account, once the user has confirmed it.
+  final VoidCallback onDeleteAccount;
+
+  @override
+  State<AccountView> createState() => _AccountViewState();
+}
+
+class _AccountViewState extends State<AccountView> {
+  /// The address that the page shows: that of the account, also once the
+  /// user is signed out, since the page shows until the router closes it.
+  late String? _email = widget.email;
+
+  @override
+  void didUpdateWidget(AccountView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.email != null) _email = widget.email;
+  }
+
+  /// Asks whether to delete the account, and deletes it on a yes. The
+  /// route of the sheet is popped by then: once the account is deleted,
+  /// the router closes this page, and the page closes nothing itself.
+  Future<void> _delete() async {
+    final confirmed = await confirmDeleteAccount(context);
+    if (confirmed && mounted) widget.onDeleteAccount();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final email = _email;
+    final idle = widget.busy == null;
+    return AuthPage(
+      title: context.l10n.signInAccountTitle,
+      intro: email == null
+          ? context.l10n.signInSignedIn
+          : context.l10n.signInSignedInAs,
+      children: [
+        if (email != null) EmailAddress(email),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 28),
+            FailureMessage(widget.failure),
+            SubmitButton(
+              label: context.l10n.signInSignOut,
+              busy: widget.busy == AccountAction.signOut,
+              onPressed: idle ? widget.onSignOut : null,
+            ),
+            const SizedBox(height: 4),
+            // Apart from the button, and in the colour of an error: it
+            // cannot be undone.
+            DestructiveAction(
+              label: context.l10n.signInDeleteAccount,
+              busy: widget.busy == AccountAction.delete,
+              onPressed: idle ? _delete : null,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Asks the user whether to delete the account, in a sheet over the page of
+/// [context], as the settings of the app ask in sheets, and returns whether
+/// the user said yes. A sheet that the user dismisses in another way, as
+/// with the back button of the system or a tap outside it, is a no.
+///
+/// When it returns, the route of the sheet is popped: the sheet still
+/// slides away for a moment, but it takes no tap any more. So the deletion
+/// may start then. A router that closes the page below while the sheet
+/// slides away closes a route that is leaving already.
+Future<bool> confirmDeleteAccount(BuildContext context) async {
+  final confirmed = await showModalBottomSheet<bool>(
+    context: context,
+    // Over the main navigation of the app too.
+    useRootNavigator: true,
+    showDragHandle: true,
+    // As tall as what it shows, up to the height of the screen.
+    isScrollControlled: true,
+    builder: (context) => const _DeleteAccountSheet(),
+  );
+  return confirmed ?? false;
+}
+
+/// The sheet that asks whether to delete the account: what the deletion
+/// means, the button that deletes, in the colours that the theme of the
+/// app has for an error, and the way out. It scrolls where it does not fit,
+/// as with a large text size on a small phone.
+class _DeleteAccountSheet extends StatelessWidget {
+  const _DeleteAccountSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              header: true,
+              // As the title of a page, it grows only by half with the
+              // text size of the device.
+              child: WholeWords(
+                context.l10n.signInDeleteTitle,
+                style: theme.textTheme.headlineSmall,
+                maxScaleFactor: 1.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.l10n.signInDeleteText,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.error,
+                foregroundColor: colors.onError,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: WholeWords(
+                context.l10n.signInDelete,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: WholeWords(
+                context.l10n.signInCancel,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+=== lib/features/sign_in/reset_password_notifier.dart (sign_in (riverpod)) ===
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/app_session.dart';
+import 'session_provider.dart';
+import 'sign_in_state.dart';
+
+/// The state of the screen that resets a password, which lasts as long as
+/// the screen does.
+final resetPasswordProvider =
+    NotifierProvider.autoDispose<ResetPasswordNotifier, ResetPasswordState>(
+      ResetPasswordNotifier.new,
+    );
+
+/// Sends the message with the link through the session of the app, and
+/// tells whether the message is on its way, why it was not sent, and the
+/// address that it went to.
+class ResetPasswordNotifier extends Notifier<ResetPasswordState> {
+  @override
+  ResetPasswordState build() => const ResetPasswordState();
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password.
+  Future<void> send(String email) async {
+    if (state.busy) return;
+    final session = ref.read(appSessionProvider);
+    state = const ResetPasswordState(busy: true);
+    try {
+      await session.sendPasswordReset(email);
+      // The user may have left the screen while the call was on its way.
+      if (ref.mounted) state = ResetPasswordState(sentTo: email);
+    } on AuthFailure catch (failure) {
+      if (ref.mounted) state = ResetPasswordState(failure: failure);
+    }
+  }
+}
+=== lib/features/sign_in/reset_password_screen.dart (sign_in (riverpod)) ===
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'reset_password_notifier.dart';
+import 'reset_password_view.dart';
+
+/// The screen that resets a password: the [ResetPasswordView] with the
+/// state of [resetPasswordProvider].
+class ResetPasswordScreen extends ConsumerWidget {
+  /// Creates the screen.
+  const ResetPasswordScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(resetPasswordProvider);
+    return ResetPasswordView(
+      busy: state.busy,
+      failure: state.failure,
+      sentTo: state.sentTo,
+      onSubmit: (email) => ref.read(resetPasswordProvider.notifier).send(email),
+      // Closes this page. The screen of the sign-in is the page below it,
+      // whether that one is the first page of the app or shown over
+      // another screen.
+      onSignIn: () => Navigator.of(context).maybePop(),
+    );
+  }
+}
+=== lib/features/sign_in/reset_password_view.dart (sign_in) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import '../../core/auth/app_session.dart';
+import 'sign_in_page.dart';
+import 'sign_in_widgets.dart';
+
+/// What the screen that resets a password shows: the form with the email
+/// address of an account, and, once the message with the link is sent, the
+/// address that it went to and the way back to the sign-in.
+///
+/// It keeps the form and what the user types, and nothing of the call
+/// itself: the screen gives it the state of the call and takes what the
+/// user asks for. So it is the same whichever way the app manages state.
+class ResetPasswordView extends StatefulWidget {
+  /// Creates the view.
+  const ResetPasswordView({
+    required this.busy,
+    required this.failure,
+    required this.sentTo,
+    required this.onSubmit,
+    required this.onSignIn,
+    super.key,
+  });
+
+  /// Whether the message is on its way.
+  final bool busy;
+
+  /// Why the message was not sent, or `null` if nothing failed.
+  final AuthFailure? failure;
+
+  /// The address that the message was sent to, or `null` before it is
+  /// sent.
+  final String? sentTo;
+
+  /// Sends the message to the address that the form has.
+  final void Function(String email) onSubmit;
+
+  /// Leads back to the sign-in.
+  final VoidCallback onSignIn;
+
+  @override
+  State<ResetPasswordView> createState() => _ResetPasswordViewState();
+}
+
+class _ResetPasswordViewState extends State<ResetPasswordView> {
+  final _form = GlobalKey<FormState>();
+  final _email = TextEditingController();
+
+  /// Whether the user has submitted the form: from then on it tells of a
+  /// mistake as the user types.
+  var _submitted = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (widget.busy) return;
+    setState(() => _submitted = true);
+    if (!_form.currentState!.validate()) return;
+    widget.onSubmit(_email.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sentTo = widget.sentTo;
+    if (sentTo != null) {
+      // A page of its own, which rises in as the form did.
+      return AuthPage(
+        key: const ValueKey('sent'),
+        icon: Icons.mark_email_read_outlined,
+        title: context.l10n.signInResetSentTitle,
+        intro: context.l10n.signInResetSent,
+        children: [
+          EmailAddress(sentTo),
+          Padding(
+            padding: const EdgeInsets.only(top: 28),
+            child: FilledButton(
+              onPressed: widget.onSignIn,
+              child: WholeWords(
+                context.l10n.signInBackToSignIn,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return AuthPage(
+      title: context.l10n.signInResetTitle,
+      intro: context.l10n.signInResetIntro,
+      children: [
+        // While the message is on its way, the form takes no input: no tap,
+        // and no typing into the field while it has the focus.
+        AbsorbPointer(
+          absorbing: widget.busy,
+          child: Form(
+            key: _form,
+            autovalidateMode: _submitted
+                ? AutovalidateMode.onUserInteraction
+                : AutovalidateMode.disabled,
+            child: EmailField(
+              controller: _email,
+              readOnly: widget.busy,
+              autofillHints: const [
+                AutofillHints.username,
+                AutofillHints.email,
+              ],
+              textInputAction: TextInputAction.done,
+              onSubmitted: _submit,
+            ),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 24),
+            FailureMessage(widget.failure),
+            SubmitButton(
+              label: context.l10n.signInSendLink,
+              busy: widget.busy,
+              onPressed: _submit,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+=== lib/features/sign_in/session_provider.dart (sign_in (riverpod)) ===
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/app_session.dart';
+
+/// The session of the app, through which the providers of the sign-in sign
+/// in, up and out. No other file of the screens names the session: a test
+/// overrides this provider with a session of its own.
+final appSessionProvider = Provider<AppSessionController>((ref) => appSession);
+
+/// Who uses the app, for the widgets of the app: the session of the app, an
+/// `AppSession`, which a widget reads with `ref.watch(sessionProvider)` and
+/// which rebuilds the widget when the user changes.
+final sessionProvider = NotifierProvider<SessionNotifier, AppSession>(
+  SessionNotifier.new,
+);
+
+/// Follows the session of the app.
+class SessionNotifier extends Notifier<AppSession> {
+  @override
+  AppSession build() {
+    final session = ref.watch(appSessionProvider);
+    void follow() => state = session.value;
+    session.addListener(follow);
+    ref.onDispose(() => session.removeListener(follow));
+    return session.value;
+  }
+}
+=== lib/features/sign_in/sign_in_guards.dart (sign_in) ===
+import 'package:flutter/foundation.dart';
+
+import '../../core/auth/app_session.dart';
+
+/// Whether the user may see the app, as the gate of the sign-in asks it:
+/// while the value is `false`, the router shows the sign-in in place of
+/// every other screen. It is always `true` in an app that everyone may use
+/// without an account; see `authMode`.
+ValueListenable<bool> signInAllowsApp() => appSession.allowsApp;
+
+/// Whether the user of an account is signed in, as the guard of the routes
+/// that need an account asks it: while the value is `false`, the router
+/// shows the sign-in in place of such a route.
+ValueListenable<bool> signInHasAccount() => appSession.hasAccount;
+=== lib/features/sign_in/sign_in_notifier.dart (sign_in (riverpod)) ===
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/app_session.dart';
+import 'session_provider.dart';
+import 'sign_in_state.dart';
+
+/// The state of the screen of the sign-in, which lasts as long as the
+/// screen does.
+///
+/// A provider is one for the app, where a cubit would be one for each page:
+/// two pages of this screen that are open at once, as a leaving one and a
+/// new one during a transition, show the same state.
+final signInProvider =
+    NotifierProvider.autoDispose<SignInNotifier, AuthActionState>(
+      SignInNotifier.new,
+    );
+
+/// Signs in through the session of the app, and tells whether the sign-in
+/// is on its way and why the last one failed.
+class SignInNotifier extends Notifier<AuthActionState> {
+  /// Whether a call of this notifier is on its way.
+  var _calling = false;
+
+  @override
+  AuthActionState build() {
+    final session = ref.watch(appSessionProvider);
+    // Ends the busy state that a call left once the session has no
+    // account: the user was signed out again before the router took the
+    // screen away, as by code of the app that turns a user away, and the
+    // form is back.
+    void follow() {
+      if (_calling || !state.busy) return;
+      if (!session.hasAccount.value) state = const AuthActionState();
+    }
+
+    session.hasAccount.addListener(follow);
+    ref.onDispose(() => session.hasAccount.removeListener(follow));
+    return const AuthActionState();
+  }
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// Once the user is signed in, the router leaves the screen, so the state
+  /// stays busy for as long as the session has the account.
+  Future<void> signIn({required String email, required String password}) async {
+    if (state.busy) return;
+    final session = ref.read(appSessionProvider);
+    _calling = true;
+    state = const AuthActionState(busy: true);
+    try {
+      await session.signIn(email: email, password: password);
+    } on AuthFailure catch (failure) {
+      _calling = false;
+      // The user may have left the screen while the call was on its way.
+      if (ref.mounted) state = AuthActionState(failure: failure);
+      return;
+    }
+    _calling = false;
+    // The user may be signed out again already.
+    if (ref.mounted && !session.hasAccount.value) {
+      state = const AuthActionState();
+    }
+  }
+}
+=== lib/features/sign_in/sign_in_page.dart (sign_in) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'sign_in_widgets.dart';
+
+/// The symbol of the app in its cell, as an element of the periodic table
+/// has one: the first letters of the first two words of its name, or the
+/// first two letters of a name of one word.
+const _appSymbol = 'Ma';
+
+/// The number in the cell of the app: how many letters and digits its name
+/// has.
+const _appNumber = 5;
+
+/// The font of the number of a cell: the monospaced font of the device,
+/// whose name differs between the platforms.
+const _monospace = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The side of the cell above the title of a page, the side of the cells of
+/// the table next to it, and the space between two of them.
+const _cellSide = 88.0;
+const _smallCellSide = 40.0;
+const _cellGap = 8.0;
+
+/// A page of the sign-in of the app: the cell of the app among the cells of
+/// a table, its [title] and its [intro], and its [children] one below the
+/// other, such as the fields and the buttons of a form.
+///
+/// The page scrolls when it is too small for them, as with the keyboard
+/// open or a large text size, and is no wider than a phone. Its parts rise
+/// in one after another, once, and are there at once in an app that asks
+/// for less motion. Over another page, it has an app bar with the button
+/// that leads back.
+class AuthPage extends StatefulWidget {
+  /// Creates the page.
+  const AuthPage({
+    required this.title,
+    required this.intro,
+    required this.children,
+    this.icon,
+    super.key,
+  });
+
+  /// The title of the page, which a screen reader announces as a header.
+  final String title;
+
+  /// What the page says below its title.
+  final String intro;
+
+  /// The icon in the cell of the page, in place of the symbol of the app:
+  /// for a page that tells that something is done.
+  final IconData? icon;
+
+  /// What the page shows below its texts.
+  final List<Widget> children;
+
+  @override
+  State<AuthPage> createState() => _AuthPageState();
+}
+
+class _AuthPageState extends State<AuthPage>
+    with SingleTickerProviderStateMixin {
+  /// Lets the parts of the page rise in one after another, once.
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1000),
+  );
+
+  var _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // An app that asks for less motion shows the page at once.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entrance.value = 1;
+    } else {
+      // The entrance starts when the page is first built. A widget test
+      // that starts the app in real time, as with tester.runAsync(), does
+      // so once in its file: when a second test of the file starts the app
+      // again, the time of this animation runs backwards, and Flutter
+      // fails an assertion.
+      _entrance.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Whether a page below this one is there to go back to.
+    final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+    return Scaffold(
+      appBar: back ? AppBar() : null,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(24, back ? 8 : 32, 24, 32),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Rise(
+                    animation: _entrance,
+                    order: 0,
+                    child: _Cells(animation: _entrance, icon: widget.icon),
+                  ),
+                  const SizedBox(height: 32),
+                  _Rise(
+                    animation: _entrance,
+                    order: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Semantics(
+                          header: true,
+                          // The title is large already, so it grows only by
+                          // half with the text size of the device.
+                          child: WholeWords(
+                            widget.title,
+                            style: theme.textTheme.headlineLarge,
+                            maxScaleFactor: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          widget.intro,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  for (final (index, child) in widget.children.indexed)
+                    _Rise(animation: _entrance, order: 2 + index, child: child),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets [child] fade in and rise while [animation] runs, later for a higher
+/// [order].
+class _Rise extends StatelessWidget {
+  const _Rise({
+    required this.animation,
+    required this.order,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final int order;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = (order * 0.08).clamp(0.0, 0.5);
+    final curve = Interval(
+      start,
+      start + 0.5,
+      curve: Easing.emphasizedDecelerate,
+    );
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final shown = curve.transform(animation.value);
+        return Opacity(
+          opacity: shown,
+          child: Transform.translate(
+            offset: Offset(0, (1 - shown) * 18),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+/// The picture of a page: the cell of the app, or a cell with [icon], as an
+/// element of a table, and next to it the cells of that table, some of
+/// which light up one after another while [animation] runs.
+///
+/// It is a picture, so a screen reader passes over it.
+class _Cells extends StatelessWidget {
+  const _Cells({required this.animation, this.icon});
+
+  final Animation<double> animation;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ExcludeSemantics(
+      child: SizedBox(
+        height: _cellSide,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _TablePainter(
+                  animation,
+                  outline: colors.outlineVariant,
+                  // The cells that light up, by column from the cell of
+                  // the page and row from the top, in the order in which
+                  // they do.
+                  lit: [
+                    (0, 1, colors.secondaryContainer),
+                    (1, 0, colors.tertiaryContainer),
+                    (2, 1, colors.primaryContainer),
+                    (3, 0, colors.secondary),
+                  ],
+                ),
+              ),
+            ),
+            _Cell(icon: icon),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The cell of a page: the symbol of the app with its number in the corner,
+/// as an element has them, or [icon] on the primary colour.
+class _Cell extends StatelessWidget {
+  const _Cell({this.icon});
+
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final icon = this.icon;
+    // The letters and the number are part of the picture, in a cell of a
+    // fixed size: they do not grow with the text size of the device.
+    return MediaQuery.withNoTextScaling(
+      child: Container(
+        width: _cellSide,
+        height: _cellSide,
+        decoration: BoxDecoration(
+          color: icon == null ? colors.surfaceContainerLowest : colors.primary,
+          border: Border.all(
+            color: icon == null ? colors.onSurface : colors.primary,
+            width: 1.5,
+          ),
+        ),
+        child: icon != null
+            ? Icon(icon, size: 44, color: colors.onPrimary)
+            : Stack(
+                children: [
+                  PositionedDirectional(
+                    top: 6,
+                    end: 8,
+                    child: Text(
+                      '$_appNumber',
+                      style: _monospace.copyWith(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: colors.onSurface,
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Text(
+                      _appSymbol,
+                      style: theme.textTheme.displayMedium?.copyWith(
+                        fontSize: 42,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -1.5,
+                        color: colors.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+/// The cells of a table to the right of the cell of a page, in two rows:
+/// outlines that fade towards the edge, of which the cells of [lit] fill
+/// with their colours one after another while [animation] runs.
+class _TablePainter extends CustomPainter {
+  _TablePainter(this.animation, {required this.outline, required this.lit})
+    : super(repaint: animation);
+
+  final Animation<double> animation;
+
+  /// The colour of the outline of a cell.
+  final Color outline;
+
+  /// The cells that light up, each with its column, its row and its colour,
+  /// in the order in which they do.
+  final List<(int, int, Color)> lit;
+
+  /// How many columns of cells the widest page has.
+  static const _columns = 6;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (var column = 0; column < _columns; column++) {
+      final left = _cellSide + _cellGap + column * (_smallCellSide + _cellGap);
+      // A narrow page has no room for every column.
+      if (left + _smallCellSide > size.width) break;
+      for (var row = 0; row < 2; row++) {
+        final rect = Rect.fromLTWH(
+          left,
+          row * (_smallCellSide + _cellGap),
+          _smallCellSide,
+          _smallCellSide,
+        );
+        for (final (order, (litColumn, litRow, color)) in lit.indexed) {
+          if (litColumn != column || litRow != row) continue;
+          final start = 0.2 + order * 0.12;
+          final shown = Interval(
+            start,
+            start + 0.3,
+            curve: Curves.easeOut,
+          ).transform(animation.value);
+          canvas.drawRect(
+            rect,
+            Paint()..color = color.withValues(alpha: color.a * shown),
+          );
+        }
+        // The outlines fade towards the edge of the page.
+        line.color = outline.withValues(
+          alpha: outline.a * (1 - column / _columns),
+        );
+        canvas.drawRect(rect.deflate(0.5), line);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TablePainter oldDelegate) =>
+      oldDelegate.animation != animation ||
+      oldDelegate.outline != outline ||
+      !listEquals(oldDelegate.lit, lit);
+}
+=== lib/features/sign_in/sign_in_screen.dart (sign_in (riverpod)) ===
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/router/navigation.dart';
+import 'sign_in_notifier.dart';
+import 'sign_in_view.dart';
+
+/// The screen of the sign-in: the [SignInView] with the state of
+/// [signInProvider].
+///
+/// It does not navigate once the user is signed in, and nothing navigates
+/// to it: the router shows it while a guard of the sign-in does not allow,
+/// and leaves it once the user is signed in.
+class SignInScreen extends ConsumerWidget {
+  /// Creates the screen.
+  const SignInScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(signInProvider);
+    return SignInView(
+      busy: state.busy,
+      failure: state.failure,
+      onSubmit: (email, password) => ref
+          .read(signInProvider.notifier)
+          .signIn(email: email, password: password),
+      onCreateAccount: () => context.nav.signIn.signUp().push<void>(),
+      onForgotPassword: () => context.nav.signIn.resetPassword().push<void>(),
+    );
+  }
+}
+=== lib/features/sign_in/sign_in_state.dart (sign_in) ===
+import 'package:flutter/foundation.dart';
+
+import '../../core/auth/app_session.dart';
+
+/// The state of a form of the sign-in that makes one call, such as the
+/// sign-in itself: whether the call is on its way, and why the last one
+/// failed.
+@immutable
+final class AuthActionState {
+  /// Creates the state.
+  const AuthActionState({this.busy = false, this.failure});
+
+  /// Whether the call is on its way.
+  ///
+  /// It stays so once the call succeeded, for as long as the session has
+  /// the account. The user is signed in then, and what comes next is up to
+  /// the router, which leaves the screen: the screen neither navigates nor
+  /// shows its form again. A failure ends it, and so does a session that
+  /// has no account any more, as when code of the app signs the user out
+  /// before the router took the screen away.
+  final bool busy;
+
+  /// Why the last call failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthActionState &&
+      other.busy == busy &&
+      other.failure == failure;
+
+  @override
+  int get hashCode => Object.hash(busy, failure);
+}
+
+/// The state of the form that sends the message to reset a password.
+@immutable
+final class ResetPasswordState {
+  /// Creates the state.
+  const ResetPasswordState({this.busy = false, this.failure, this.sentTo});
+
+  /// Whether the call is on its way.
+  final bool busy;
+
+  /// Why the last call failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  /// The address that the message was sent to, or `null` before it is
+  /// sent.
+  final String? sentTo;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ResetPasswordState &&
+      other.busy == busy &&
+      other.failure == failure &&
+      other.sentTo == sentTo;
+
+  @override
+  int get hashCode => Object.hash(busy, failure, sentTo);
+}
+
+/// An action of the screen of the account.
+enum AccountAction {
+  /// Signing the user out.
+  signOut,
+
+  /// Deleting the account.
+  delete,
+}
+
+/// The state of the screen of the account: which of its two actions is on
+/// its way, and why the last one failed.
+@immutable
+final class AccountState {
+  /// Creates the state.
+  const AccountState({this.busy, this.failure});
+
+  /// The action whose call is on its way, or `null` when none is. While it
+  /// is, the screen takes no other action.
+  ///
+  /// It stays so once the call succeeded, for as long as the session has
+  /// no account. What comes next is up to the router, which leaves the
+  /// screen: the screen neither closes itself nor navigates. A failure
+  /// ends it, and so does a session that has an account again before the
+  /// router took the screen away.
+  final AccountAction? busy;
+
+  /// Why the last action failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountState && other.busy == busy && other.failure == failure;
+
+  @override
+  int get hashCode => Object.hash(busy, failure);
+}
+=== lib/features/sign_in/sign_in_view.dart (sign_in) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import '../../core/auth/app_session.dart';
+import 'sign_in_page.dart';
+import 'sign_in_widgets.dart';
+
+/// What the screen of the sign-in shows: the form with the email address
+/// and the password of an account, and the ways to the screens that create
+/// an account and reset a password.
+///
+/// It keeps the form and what the user types, and nothing of the sign-in
+/// itself: the screen gives it the state of the call and takes what the
+/// user asks for. So it is the same whichever way the app manages state.
+class SignInView extends StatefulWidget {
+  /// Creates the view.
+  const SignInView({
+    required this.busy,
+    required this.failure,
+    required this.onSubmit,
+    required this.onCreateAccount,
+    required this.onForgotPassword,
+    super.key,
+  });
+
+  /// Whether the sign-in is on its way.
+  final bool busy;
+
+  /// Why the last sign-in failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  /// Signs in with what the form has, once the form has both.
+  final void Function(String email, String password) onSubmit;
+
+  /// Shows the screen that creates an account.
+  final VoidCallback onCreateAccount;
+
+  /// Shows the screen that resets a password.
+  final VoidCallback onForgotPassword;
+
+  @override
+  State<SignInView> createState() => _SignInViewState();
+}
+
+class _SignInViewState extends State<SignInView> {
+  final _form = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+
+  /// Whether the user has submitted the form: from then on it tells of a
+  /// mistake as the user types.
+  var _submitted = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (widget.busy) return;
+    setState(() => _submitted = true);
+    if (!_form.currentState!.validate()) return;
+    widget.onSubmit(_email.text.trim(), _password.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AuthPage(
+      title: context.l10n.signInTitle,
+      intro: context.l10n.signInIntro,
+      children: [
+        // While the sign-in is on its way, the form takes no input: no tap,
+        // and no typing into a field that has the focus.
+        AbsorbPointer(
+          absorbing: widget.busy,
+          child: AutofillGroup(
+            child: Form(
+              key: _form,
+              autovalidateMode: _submitted
+                  ? AutovalidateMode.onUserInteraction
+                  : AutovalidateMode.disabled,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  EmailField(
+                    controller: _email,
+                    readOnly: widget.busy,
+                    autofillHints: const [
+                      AutofillHints.username,
+                      AutofillHints.email,
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  PasswordField(
+                    controller: _password,
+                    readOnly: widget.busy,
+                    autofillHints: const [AutofillHints.password],
+                    onSubmitted: _submit,
+                  ),
+                  // It belongs to the password: at the end of its field.
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton(
+                      // Nor a key: the action takes none while busy.
+                      onPressed: widget.busy ? null : widget.onForgotPassword,
+                      child: WholeWords(
+                        context.l10n.signInForgotPassword,
+                        textAlign: TextAlign.end,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 12),
+            FailureMessage(widget.failure),
+            SubmitButton(
+              label: context.l10n.signInSubmit,
+              busy: widget.busy,
+              onPressed: _submit,
+            ),
+            const SizedBox(height: 4),
+            // The way to the other screen, as on the screen that creates an
+            // account: in the middle below the button, apart from what
+            // belongs to the password above it.
+            OtherScreenAction(
+              label: context.l10n.signInCreateAccount,
+              onPressed: widget.busy ? null : widget.onCreateAccount,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+=== lib/features/sign_in/sign_in_widgets.dart (sign_in) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import '../../core/auth/app_session.dart';
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class WholeWords extends StatelessWidget {
+  /// Creates the text.
+  const WholeWords(
+    this.text, {
+    this.style,
+    this.textAlign,
+    this.maxScaleFactor = double.infinity,
+    super.key,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none,
+  /// the text is as the text around it, as the label of a button is in the
+  /// style that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// How the lines of the text are aligned.
+  final TextAlign? textAlign;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: over that of the text around it,
+    // and bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in text.split(' ')) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textAlign: textAlign,
+          textScaler: scaler,
+        );
+      },
+    );
+  }
+}
+
+/// A field of a form with its [label] above it. The label takes as many
+/// lines as it needs, and a screen reader announces it with the field.
+///
+/// The field itself is as the theme of the app has its fields: no widget
+/// of the sign-in gives a field a colour, a border or a padding.
+class _Labelled extends StatelessWidget {
+  const _Labelled({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ExcludeSemantics(
+          child: Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Semantics(label: label, child: child),
+      ],
+    );
+  }
+}
+
+/// What every field of the sign-in has of its own: the text of a mistake
+/// takes the lines that it needs, as with a large text size, whatever the
+/// theme of the app says of its fields.
+const _mistakeLines = 5;
+
+/// The field of the email address of a form. It tells the form of an
+/// address that is missing or that has no `@`: whether the address is one,
+/// the provider of sign-in knows.
+class EmailField extends StatelessWidget {
+  /// Creates the field.
+  const EmailField({
+    required this.controller,
+    required this.autofillHints,
+    this.readOnly = false,
+    this.textInputAction = TextInputAction.next,
+    this.onSubmitted,
+    super.key,
+  });
+
+  /// The controller of the address.
+  final TextEditingController controller;
+
+  /// Whether the field takes no typing, as while the call of its form is on
+  /// its way. It keeps the focus then, so the user goes on typing once the
+  /// call has failed.
+  final bool readOnly;
+
+  /// What the field is for the autofill of the device: the address of an
+  /// account that exists, or of a new one.
+  final List<String> autofillHints;
+
+  /// The button of the keyboard: the next field, unless this is the last.
+  final TextInputAction textInputAction;
+
+  /// What the button of the keyboard does on the last field of a form.
+  final VoidCallback? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final missing = context.l10n.signInEmailRequired;
+    final invalid = context.l10n.signInEmailInvalid;
+    return _Labelled(
+      label: context.l10n.signInEmail,
+      child: TextFormField(
+        controller: controller,
+        readOnly: readOnly,
+        decoration: const InputDecoration(errorMaxLines: _mistakeLines),
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: textInputAction,
+        autofillHints: autofillHints,
+        autocorrect: false,
+        enableSuggestions: false,
+        onFieldSubmitted: (_) => onSubmitted?.call(),
+        validator: (value) {
+          final email = value?.trim() ?? '';
+          if (email.isEmpty) return missing;
+          return email.contains('@') ? null : invalid;
+        },
+      ),
+    );
+  }
+}
+
+/// The field of the password of a form, with a button that shows the
+/// password and hides it again. It tells the form of a password that is
+/// missing: which passwords are good enough, the provider of sign-in knows.
+class PasswordField extends StatefulWidget {
+  /// Creates the field.
+  const PasswordField({
+    required this.controller,
+    required this.autofillHints,
+    required this.onSubmitted,
+    this.readOnly = false,
+    super.key,
+  });
+
+  /// The controller of the password.
+  final TextEditingController controller;
+
+  /// Whether the field takes no typing, as while the call of its form is on
+  /// its way. It keeps the focus then, so the user goes on typing once the
+  /// call has failed.
+  final bool readOnly;
+
+  /// What the field is for the autofill of the device: the password of an
+  /// account, or a new one.
+  final List<String> autofillHints;
+
+  /// What the button of the keyboard does: the field is the last of its
+  /// form.
+  final VoidCallback onSubmitted;
+
+  @override
+  State<PasswordField> createState() => _PasswordFieldState();
+}
+
+class _PasswordFieldState extends State<PasswordField> {
+  var _hidden = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final missing = context.l10n.signInPasswordRequired;
+    return _Labelled(
+      label: context.l10n.signInPassword,
+      child: TextFormField(
+        controller: widget.controller,
+        readOnly: widget.readOnly,
+        decoration: InputDecoration(
+          errorMaxLines: _mistakeLines,
+          suffixIcon: IconButton(
+            onPressed: () => setState(() => _hidden = !_hidden),
+            tooltip: _hidden
+                ? context.l10n.signInShowPassword
+                : context.l10n.signInHidePassword,
+            icon: Icon(
+              _hidden
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+            ),
+          ),
+        ),
+        obscureText: _hidden,
+        keyboardType: TextInputType.visiblePassword,
+        textInputAction: TextInputAction.done,
+        autofillHints: widget.autofillHints,
+        autocorrect: false,
+        enableSuggestions: false,
+        onFieldSubmitted: (_) => widget.onSubmitted(),
+        validator: (value) => value == null || value.isEmpty ? missing : null,
+      ),
+    );
+  }
+}
+
+/// The button that submits a form, as wide as the form. While the call of
+/// the form is on its way, it shows that it is [busy] and does nothing.
+///
+/// It spins for as long as the call takes. So a widget test that waits for
+/// the screen with `pumpAndSettle()` returns only once the call has ended:
+/// while a call is on its way, such a test pumps frames one at a time.
+class SubmitButton extends StatelessWidget {
+  /// Creates the button.
+  const SubmitButton({
+    required this.label,
+    required this.busy,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The text of the button, which takes as many lines as it needs and
+  /// keeps its words whole.
+  final String label;
+
+  /// Whether the call of the form is on its way.
+  final bool busy;
+
+  /// Submits the form, or `null` while the button takes no tap, as while
+  /// another call of its page is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spins = _spins(context, busy: busy);
+    return FilledButton(
+      onPressed: _whileBusy(onPressed, busy: busy, spins: spins),
+      child: _BusyLabel(label, spins: spins),
+    );
+  }
+}
+
+/// Whether a button whose call is on its way spins. In an app that asks for
+/// less motion, nothing spins: the button is disabled and keeps its label.
+bool _spins(BuildContext context, {required bool busy}) =>
+    busy && !MediaQuery.disableAnimationsOf(context);
+
+/// What a tap on a button does while its call may be on its way: a button
+/// that spins keeps its colour and does nothing, and one that is busy
+/// without spinning takes no tap.
+VoidCallback? _whileBusy(
+  VoidCallback? onPressed, {
+  required bool busy,
+  required bool spins,
+}) {
+  if (!busy) return onPressed;
+  return spins ? () {} : null;
+}
+
+/// The label of a button, or what spins in its place while the call of the
+/// button is on its way.
+class _BusyLabel extends StatelessWidget {
+  const _BusyLabel(this.label, {required this.spins});
+
+  final String label;
+  final bool spins;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    alignment: Alignment.center,
+    children: [
+      // The label keeps its place, so that the button keeps its size.
+      Visibility.maintain(
+        visible: !spins,
+        child: WholeWords(label, textAlign: TextAlign.center),
+      ),
+      if (spins)
+        // In the colour that the button gives its label.
+        SizedBox.square(
+          dimension: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: DefaultTextStyle.of(context).style.color,
+          ),
+        ),
+    ],
+  );
+}
+
+/// The action of a screen that leads to the other screen of the sign-in:
+/// from the sign-in to the screen that creates an account, and from there
+/// back.
+///
+/// It is a text button of the theme of the app with one colour of its own,
+/// the accent of the colour scheme. A theme makes a text button quiet,
+/// which suits what belongs to a field, such as the way to a forgotten
+/// password. This action is the second way on of its screen, so it stands
+/// out. Its shape, its text style, its padding and what a touch shows stay
+/// those of the theme, and so does the colour of a button that takes no
+/// tap, as while the form of the screen submits.
+class OtherScreenAction extends StatelessWidget {
+  /// Creates the action.
+  const OtherScreenAction({
+    required this.label,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The text of the action, which takes as many lines as it needs and
+  /// keeps its words whole.
+  final String label;
+
+  /// Shows the other screen, or `null` while the action takes no tap.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+    style: ButtonStyle(
+      foregroundColor: WidgetStateProperty.fromMap({
+        // The theme has the colour of a button that takes no tap.
+        WidgetState.disabled: null,
+        WidgetState.any: Theme.of(context).colorScheme.secondary,
+      }),
+    ),
+    onPressed: onPressed,
+    child: WholeWords(label, textAlign: TextAlign.center),
+  );
+}
+
+/// The action of a screen that cannot be undone, such as the deletion of
+/// the account. While its call is on its way, it shows that it is [busy]
+/// and does nothing.
+///
+/// It is a text button of the theme of the app in the colour that the theme
+/// has for an error, which tells it apart from the other actions. Its
+/// shape, its text style, its padding and what a touch shows stay those of
+/// the theme, and so does the colour of a button that takes no tap.
+class DestructiveAction extends StatelessWidget {
+  /// Creates the action.
+  const DestructiveAction({
+    required this.label,
+    required this.busy,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The text of the action, which takes as many lines as it needs and
+  /// keeps its words whole.
+  final String label;
+
+  /// Whether the call of the action is on its way.
+  final bool busy;
+
+  /// Starts the action, or `null` while it takes no tap, as while another
+  /// call of its page is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spins = _spins(context, busy: busy);
+    return TextButton(
+      style: ButtonStyle(
+        foregroundColor: WidgetStateProperty.fromMap({
+          // The theme has the colour of a button that takes no tap.
+          WidgetState.disabled: null,
+          WidgetState.any: Theme.of(context).colorScheme.error,
+        }),
+      ),
+      onPressed: _whileBusy(onPressed, busy: busy, spins: spins),
+      child: _BusyLabel(label, spins: spins),
+    );
+  }
+}
+
+/// Why the last call of a form failed, in the language of the app, or
+/// nothing while [failure] is `null`. It takes its place smoothly, and a
+/// screen reader announces it when it appears.
+///
+/// In debug mode it also shows what the provider of sign-in says to the
+/// developer of the app, which is no text for a user.
+class FailureMessage extends StatelessWidget {
+  /// Creates the message of [failure].
+  const FailureMessage(this.failure, {super.key});
+
+  /// The failure, or `null` when the last call did not fail.
+  final AuthFailure? failure;
+
+  @override
+  Widget build(BuildContext context) {
+    final failure = this.failure;
+    final message = failure == null
+        ? const SizedBox(width: double.infinity)
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: _Failure(failure),
+          );
+    // An app that asks for less motion shows the message at once. It does
+    // so without an AnimatedSize: one with a duration of zero fails an
+    // assertion of Flutter when the size of its child changes.
+    if (MediaQuery.disableAnimationsOf(context)) return message;
+    return AnimatedSize(
+      duration: Durations.short4,
+      curve: Easing.emphasizedDecelerate,
+      alignment: Alignment.topCenter,
+      child: message,
+    );
+  }
+}
+
+/// The box with the text of [failure]: a card as the theme of the app has
+/// its cards, in a tint of the colour that the theme has for an error.
+class _Failure extends StatelessWidget {
+  const _Failure(this.failure);
+
+  final AuthFailure failure;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final hint = kDebugMode ? failure.developerHint : null;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Card.outlined(
+        // In the theme of any app, the card is as wide as the form.
+        margin: EdgeInsets.zero,
+        color: Color.alphaBlend(
+          colors.error.withValues(alpha: 0.08),
+          colors.surface,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                // The icon grows with the first line of the text next to
+                // it.
+                size: MediaQuery.textScalerOf(context).scale(20),
+                color: colors.error,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      authFailureText(context, failure.reason),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurface,
+                      ),
+                    ),
+                    if (hint != null) ...[
+                      const SizedBox(height: 6),
+                      // As a path, it is not much larger than usual.
+                      MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: 1.5,
+                        child: Text(
+                          hint,
+                          // The monospaced font of the device: Android has
+                          // it under the first name, and iOS under the
+                          // next.
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontFamilyFallback: const ['Menlo', 'Courier'],
+                            fontSize: 12,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The text of the app for [reason], the reason of a failure of sign-in.
+///
+/// It has a text for every reason: a reason that the app gets later has
+/// none here, and the app does not compile until it has.
+String authFailureText(BuildContext context, AuthFailureReason reason) =>
+    switch (reason) {
+      AuthFailureReason.invalidCredentials =>
+        context.l10n.signInFailureCredentials,
+      AuthFailureReason.emailInUse => context.l10n.signInFailureEmailInUse,
+      AuthFailureReason.weakPassword => context.l10n.signInFailureWeakPassword,
+      AuthFailureReason.invalidEmail => context.l10n.signInEmailInvalid,
+      AuthFailureReason.userDisabled => context.l10n.signInFailureDisabled,
+      AuthFailureReason.tooManyAttempts =>
+        context.l10n.signInFailureTooManyAttempts,
+      AuthFailureReason.network => context.l10n.signInFailureNoNetwork,
+      AuthFailureReason.recentSignInRequired =>
+        context.l10n.signInFailureRecentSignIn,
+      AuthFailureReason.notConfigured => context.l10n.signInFailureNotSetUp,
+      AuthFailureReason.unknown => context.l10n.signInFailureUnknown,
+    };
+
+/// An email address on a line of its own, as a page shows the address that
+/// a message went to: a text of the app has no place for it. It is a card
+/// as the theme of the app has its cards.
+class EmailAddress extends StatelessWidget {
+  /// Creates the widget of [address].
+  const EmailAddress(this.address, {super.key});
+
+  /// The address.
+  final String address;
+
+  @override
+  Widget build(BuildContext context) => Card.outlined(
+    // In the theme of any app, the card is as wide as the form.
+    margin: EdgeInsets.zero,
+    child: ListTile(
+      leading: const Icon(Icons.mail_outline_rounded),
+      // A long address takes more lines.
+      title: Text(address),
+    ),
+  );
+}
+=== lib/features/sign_in/sign_up_notifier.dart (sign_in (riverpod)) ===
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/app_session.dart';
+import 'session_provider.dart';
+import 'sign_in_state.dart';
+
+/// The state of the screen that creates an account, which lasts as long as
+/// the screen does.
+///
+/// A provider is one for the app, where a cubit would be one for each page:
+/// two pages of this screen that are open at once, as a leaving one and a
+/// new one during a transition, show the same state.
+final signUpProvider =
+    NotifierProvider.autoDispose<SignUpNotifier, AuthActionState>(
+      SignUpNotifier.new,
+    );
+
+/// Signs up through the session of the app, and tells whether the sign-up
+/// is on its way and why the last one failed.
+class SignUpNotifier extends Notifier<AuthActionState> {
+  /// Whether a call of this notifier is on its way.
+  var _calling = false;
+
+  @override
+  AuthActionState build() {
+    final session = ref.watch(appSessionProvider);
+    // Ends the busy state that a call left once the session has no
+    // account: the user was signed out again before the router took the
+    // screen away, as by code of the app that turns a user away, and the
+    // form is back.
+    void follow() {
+      if (_calling || !state.busy) return;
+      if (!session.hasAccount.value) state = const AuthActionState();
+    }
+
+    session.hasAccount.addListener(follow);
+    ref.onDispose(() => session.hasAccount.removeListener(follow));
+    return const AuthActionState();
+  }
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// Once the user is signed in, the router leaves the screen, so the state
+  /// stays busy for as long as the session has the account.
+  Future<void> signUp({required String email, required String password}) async {
+    if (state.busy) return;
+    final session = ref.read(appSessionProvider);
+    _calling = true;
+    state = const AuthActionState(busy: true);
+    try {
+      await session.signUp(email: email, password: password);
+    } on AuthFailure catch (failure) {
+      _calling = false;
+      // The user may have left the screen while the call was on its way.
+      if (ref.mounted) state = AuthActionState(failure: failure);
+      return;
+    }
+    _calling = false;
+    // The user may be signed out again already.
+    if (ref.mounted && !session.hasAccount.value) {
+      state = const AuthActionState();
+    }
+  }
+}
+=== lib/features/sign_in/sign_up_screen.dart (sign_in (riverpod)) ===
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'sign_up_notifier.dart';
+import 'sign_up_view.dart';
+
+/// The screen that creates an account: the [SignUpView] with the state of
+/// [signUpProvider].
+///
+/// It does not navigate once the user has an account: the router leaves
+/// the sign-in then.
+class SignUpScreen extends ConsumerWidget {
+  /// Creates the screen.
+  const SignUpScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(signUpProvider);
+    return SignUpView(
+      busy: state.busy,
+      failure: state.failure,
+      onSubmit: (email, password) => ref
+          .read(signUpProvider.notifier)
+          .signUp(email: email, password: password),
+      // Closes this page. The screen of the sign-in is the page below it,
+      // whether that one is the first page of the app or shown over
+      // another screen.
+      onSignIn: () => Navigator.of(context).maybePop(),
+    );
+  }
+}
+=== lib/features/sign_in/sign_up_view.dart (sign_in) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import '../../core/auth/app_session.dart';
+import 'sign_in_page.dart';
+import 'sign_in_widgets.dart';
+
+/// What the screen that creates an account shows: the form with the email
+/// address and the password of the new account, and the way back to the
+/// sign-in.
+///
+/// It keeps the form and what the user types, and nothing of the sign-up
+/// itself: the screen gives it the state of the call and takes what the
+/// user asks for. So it is the same whichever way the app manages state.
+class SignUpView extends StatefulWidget {
+  /// Creates the view.
+  const SignUpView({
+    required this.busy,
+    required this.failure,
+    required this.onSubmit,
+    required this.onSignIn,
+    super.key,
+  });
+
+  /// Whether the sign-up is on its way.
+  final bool busy;
+
+  /// Why the last sign-up failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  /// Creates the account with what the form has, once the form has both.
+  final void Function(String email, String password) onSubmit;
+
+  /// Leads back to the sign-in, for a user who has an account.
+  final VoidCallback onSignIn;
+
+  @override
+  State<SignUpView> createState() => _SignUpViewState();
+}
+
+class _SignUpViewState extends State<SignUpView> {
+  final _form = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+
+  /// Whether the user has submitted the form: from then on it tells of a
+  /// mistake as the user types.
+  var _submitted = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (widget.busy) return;
+    setState(() => _submitted = true);
+    if (!_form.currentState!.validate()) return;
+    widget.onSubmit(_email.text.trim(), _password.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AuthPage(
+      title: context.l10n.signInSignUpTitle,
+      intro: context.l10n.signInSignUpIntro,
+      children: [
+        // While the sign-up is on its way, the form takes no input: no tap,
+        // and no typing into a field that has the focus.
+        AbsorbPointer(
+          absorbing: widget.busy,
+          child: AutofillGroup(
+            child: Form(
+              key: _form,
+              autovalidateMode: _submitted
+                  ? AutovalidateMode.onUserInteraction
+                  : AutovalidateMode.disabled,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  EmailField(
+                    controller: _email,
+                    readOnly: widget.busy,
+                    autofillHints: const [
+                      AutofillHints.email,
+                      AutofillHints.newUsername,
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // The device offers a new password, and to keep it.
+                  PasswordField(
+                    controller: _password,
+                    readOnly: widget.busy,
+                    autofillHints: const [AutofillHints.newPassword],
+                    onSubmitted: _submit,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 24),
+            FailureMessage(widget.failure),
+            SubmitButton(
+              label: context.l10n.signInSignUpSubmit,
+              busy: widget.busy,
+              onPressed: _submit,
+            ),
+            const SizedBox(height: 4),
+            OtherScreenAction(
+              label: context.l10n.signInHaveAccount,
+              onPressed: widget.busy ? null : widget.onSignIn,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 === lib/firebase_options.dart (firebase_core) ===
 // File generated by FlutterFire CLI.
@@ -6535,6 +8900,48 @@ class DefaultFirebaseOptions {
   "onboardingSkip": "Skip",
   "onboardingNext": "Next",
   "onboardingDone": "Get started",
+  "signInTitle": "Sign in",
+  "signInIntro": "Enter the email and the password of your account.",
+  "signInEmail": "Email",
+  "signInPassword": "Password",
+  "signInShowPassword": "Show password",
+  "signInHidePassword": "Hide password",
+  "signInSubmit": "Sign in",
+  "signInForgotPassword": "Forgot password?",
+  "signInCreateAccount": "Create account",
+  "signInSignUpTitle": "Create account",
+  "signInSignUpIntro": "All it takes is an email and a password.",
+  "signInSignUpSubmit": "Create account",
+  "signInHaveAccount": "I already have an account",
+  "signInResetTitle": "Reset password",
+  "signInResetIntro": "Enter the email of your account, and we will send you a link to set a new password.",
+  "signInSendLink": "Send link",
+  "signInResetSentTitle": "Check your email",
+  "signInResetSent": "If this address has an account, a link to set a new password is on its way to:",
+  "signInBackToSignIn": "Back to sign in",
+  "signInEmailRequired": "Enter your email.",
+  "signInEmailInvalid": "Enter a valid email address.",
+  "signInPasswordRequired": "Enter a password.",
+  "signInFailureCredentials": "The email or the password is wrong.",
+  "signInFailureEmailInUse": "This email already has an account. Sign in instead.",
+  "signInFailureWeakPassword": "This password is too weak. Choose a stronger one.",
+  "signInFailureDisabled": "This account is disabled.",
+  "signInFailureTooManyAttempts": "Too many attempts. Try again later.",
+  "signInFailureNoNetwork": "No connection. Check the internet and try again.",
+  "signInFailureRecentSignIn": "Sign out and sign in again, then try once more.",
+  "signInFailureNotSetUp": "Sign-in is unavailable right now.",
+  "signInFailureUnknown": "Something went wrong. Try again.",
+  "signInAccountTitle": "Account",
+  "signInSignedInAs": "You are signed in to this account:",
+  "signInSignedIn": "You are signed in.",
+  "signInSignOut": "Sign out",
+  "signInDeleteAccount": "Delete account",
+  "signInDeleteTitle": "Delete your account?",
+  "signInDeleteText": "This deletes your account for good. You cannot undo it.",
+  "signInCancel": "Cancel",
+  "signInDelete": "Delete",
+  "signInSettingSignedIn": "Signed in",
+  "signInNotSignedIn": "Not signed in",
   "themeTitle": "Theme",
   "themeSystem": "System",
   "themeLight": "Light",
@@ -6569,6 +8976,48 @@ class DefaultFirebaseOptions {
   "onboardingSkip": "Пропустити",
   "onboardingNext": "Далі",
   "onboardingDone": "Почати",
+  "signInTitle": "Вхід",
+  "signInIntro": "Введіть пошту й пароль свого акаунта.",
+  "signInEmail": "Електронна пошта",
+  "signInPassword": "Пароль",
+  "signInShowPassword": "Показати пароль",
+  "signInHidePassword": "Приховати пароль",
+  "signInSubmit": "Увійти",
+  "signInForgotPassword": "Забули пароль?",
+  "signInCreateAccount": "Створити акаунт",
+  "signInSignUpTitle": "Новий акаунт",
+  "signInSignUpIntro": "Потрібні лише пошта й пароль.",
+  "signInSignUpSubmit": "Створити акаунт",
+  "signInHaveAccount": "У мене вже є акаунт",
+  "signInResetTitle": "Відновлення пароля",
+  "signInResetIntro": "Введіть пошту свого акаунта, і ми надішлемо посилання, щоб задати новий пароль.",
+  "signInSendLink": "Надіслати посилання",
+  "signInResetSentTitle": "Перевірте пошту",
+  "signInResetSent": "Якщо для цієї адреси є акаунт, посилання для нового пароля вже надіслано на:",
+  "signInBackToSignIn": "Назад до входу",
+  "signInEmailRequired": "Введіть пошту.",
+  "signInEmailInvalid": "Введіть правильну адресу пошти.",
+  "signInPasswordRequired": "Введіть пароль.",
+  "signInFailureCredentials": "Неправильна пошта або пароль.",
+  "signInFailureEmailInUse": "Для цієї пошти вже є акаунт. Увійдіть у нього.",
+  "signInFailureWeakPassword": "Цей пароль надто слабкий. Виберіть надійніший.",
+  "signInFailureDisabled": "Цей акаунт заблоковано.",
+  "signInFailureTooManyAttempts": "Забагато спроб. Спробуйте пізніше.",
+  "signInFailureNoNetwork": "Немає зв’язку. Перевірте інтернет і спробуйте ще раз.",
+  "signInFailureRecentSignIn": "Вийдіть і увійдіть знову, а тоді спробуйте ще раз.",
+  "signInFailureNotSetUp": "Вхід зараз недоступний.",
+  "signInFailureUnknown": "Щось пішло не так. Спробуйте ще раз.",
+  "signInAccountTitle": "Акаунт",
+  "signInSignedInAs": "Ви увійшли в цей акаунт:",
+  "signInSignedIn": "Ви увійшли в акаунт.",
+  "signInSignOut": "Вийти",
+  "signInDeleteAccount": "Видалити акаунт",
+  "signInDeleteTitle": "Видалити акаунт?",
+  "signInDeleteText": "Акаунт буде видалено назавжди. Відновити його не можна.",
+  "signInCancel": "Скасувати",
+  "signInDelete": "Видалити",
+  "signInSettingSignedIn": "Вхід виконано",
+  "signInNotSignedIn": "Вхід не виконано",
   "themeTitle": "Тема",
   "themeSystem": "Системна",
   "themeLight": "Світла",

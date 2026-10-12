@@ -12,6 +12,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 import 'package:yaml/yaml.dart';
@@ -82,13 +83,15 @@ final _apps = <String, (List<SmfModule>, ContractCase)>{
     ),
   ),
   // Providers of a role created synchronously and asynchronously, in one
-  // app.
+  // app: the app with every module of the registry that its tool checks,
+  // with the first of its two state managers.
   'several_providers': (
     severalProvidersModules(),
     ContractCase(
       'several providers',
       requested: [
-        for (final module in severalProvidersModules()) module.descriptor.id,
+        for (final module in severalProvidersModules())
+          if (module.descriptor.id != RiverpodModule.id) module.descriptor.id,
       ],
     ),
   ),

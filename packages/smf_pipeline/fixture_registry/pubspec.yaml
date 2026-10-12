@@ -18,6 +18,9 @@ dependencies:
   fake_roles: any
   fake_router: any
   fake_state: any
+  # The state managers that the sign-in has a variant for, in the registry
+  # of several providers.
+  smf_bloc: ^0.3.1
   smf_bottom_tabs: ^0.4.0
   smf_contracts: ^0.4.0
   # The providers of the roles that an app can have several providers of,
@@ -42,12 +45,16 @@ dependencies:
   # The onboarding of the CLI, for its app test in the app of several
   # providers, whose other tests its mocks open its guard for.
   smf_onboarding: ^0.4.0
+  smf_riverpod: ^0.3.1
   # The settings screen of the CLI, for its app tests in the app of several
   # providers.
   smf_settings: ^0.4.0
   # The provider of the preferences role in the registry of several
   # providers, for the test of the role that the CLI keeps.
   smf_shared_preferences: ^0.4.0
+  # The sign-in of the CLI, for its app test in the app of several
+  # providers, whose other tests its mocks sign an account up for.
+  smf_sign_in: ^0.4.0
 
 dev_dependencies:
   analyzer: ^14.4.0

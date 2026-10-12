@@ -16,6 +16,7 @@ import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
+import 'package:smf_sign_in/smf_sign_in.dart';
 
 /// The modules that `smf create` offers.
 ///
@@ -50,4 +51,5 @@ const List<SmfModule> smfModules = [
   FirebaseCrashlyticsModule(),
   FirebaseAnalyticsModule(),
   FirebaseAuthModule(),
+  SignInModule(),
 ];

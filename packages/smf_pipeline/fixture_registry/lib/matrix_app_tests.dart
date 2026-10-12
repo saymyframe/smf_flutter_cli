@@ -96,6 +96,20 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(const ModuleId('fake_second')),
         roles: {routerRole},
       ),
+      // A request for a route that asks for a condition, which opens the
+      // target of the guard of the condition once, and the router throws
+      // nothing, whichever module provides the router: in the apps with the
+      // two fixture features and the fixture gates. It needs fewer modules
+      // than the tests of router_conditions, so the app of a router with a
+      // known bug that fails it has few other tests.
+      MatrixAppTest(
+        '$appTests/router_flow_opens',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            app.modules.contains(const ModuleId('fake_gate')) &&
+            app.modules.contains(const ModuleId('fake_second')),
+        roles: {routerRole},
+      ),
       // The guards over the fallback screen of the app entry, the location
       // `/`, which is no route of a module, whichever module provides the
       // router: in the apps with the fixture gates in which no route starts
@@ -211,11 +225,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // What only go_router does about the flow of a guard that stands for
       // a condition: a refresh of its routes while the flow is open, after
       // which the push that waits still completes with the value of its
-      // page; a request on its error screen, which it gets as go() gives
-      // it a location and asks about in its redirect; and two links in one
-      // turn, for which it opens the flow once. It checks no role, so it
-      // names its module, as `tools/app_tests_test.dart` lets it. The apps
-      // it applies to have the tests of router_conditions, whose helpers it
+      // page, and the pages stay; a request on its error screen, which it
+      // gets as go() gives it a location and asks about in its redirect;
+      // two links in one turn, for which it opens the flow once, and a
+      // second link to the page on top, which keeps that page; and the
+      // calls of go_router that the router makes itself, within which its
+      // redirect does not ask the guards. It checks no role, so it names
+      // its module, as `tools/app_tests_test.dart` lets it. The apps it
+      // applies to have the tests of router_conditions, whose helpers it
       // uses with those of router_screens and of router_guards.
       MatrixAppTest(
         '$appTests/go_router_conditions',
@@ -558,6 +575,19 @@ bool _hearsScreens(MatrixApp app) =>
 bool _hasGates(MatrixApp app) =>
     app.modules.contains(const ModuleId('fake_gate')) &&
     app.modules.contains(const ModuleId('fake_late_gate'));
+
+/// The apps of the registry of several providers
+/// (`severalProvidersModules`) that its tool generates and checks: one app
+/// with every module for each provider of the app entry. The registry has
+/// one such provider, so that is one app, the first, which has the first
+/// provider of each other role that takes one. So a module with a variant
+/// for each state manager, such as the sign-in of the CLI, brings the
+/// registry a second app with every module, and the tool no second app to
+/// check. It checks no app of another mode of a role either.
+const MatrixSelection severalProvidersApps = MatrixSelection(
+  everyModule: true,
+  everyModuleApps: EveryModuleAppPerProvider(appEntryRole),
+);
 
 /// The tests of the app with every module of the registry of several
 /// providers (`severalProvidersModules`): those that the modules of the CLI

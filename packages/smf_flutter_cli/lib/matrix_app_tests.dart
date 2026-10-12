@@ -13,6 +13,7 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
+import 'package:smf_sign_in/smf_sign_in.dart';
 
 /// The tests that the matrix of the modules of `smf create` adds to its
 /// apps, which the CLI and the packages of its modules keep in their
@@ -35,6 +36,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final sharedPreferences = await appTestsDirectoryOf(
     'smf_shared_preferences',
   );
+  final signIn = await appTestsDirectoryOf('smf_sign_in');
   return MatrixAppTests(
     [
       // The app starts and shows its first screen: a check that CI builds
@@ -222,6 +224,43 @@ Future<MatrixAppTests> smfAppTests() async {
         '$home/home',
         appliesTo: _has(HomeModule.id),
         generatedFiles: (app, packageName) => _homeTextsFileOf(app),
+      ),
+      // The screens of sign-in of the module, in each mode of the auth
+      // role, which the app has as a constant: an app that asks for an
+      // account shows the sign-in on its first launch in place of the
+      // screen that it starts on (see _signInOfAppOf), and an app that
+      // everyone may use shows it once code asks for it; a sign-up, a
+      // sign-in and a sign-out go through the session of the app, and an
+      // anonymous user keeps the id with the account; the forms show what
+      // is wrong with an email address and a password, the text of each
+      // failure of a call in each language of the app, and that a call is
+      // on its way; a password reset tells where the message went; and the
+      // screens fit a small phone with a large text size. The screen of
+      // the account signs out and deletes the account, which it asks about
+      // first in a sheet, and the entry of the settings screen leads to
+      // it, through the sign-in for a user without an account. For them
+      // the matrix writes the settings screen of the app, whether it is a
+      // destination of the main navigation, and the entry that the module
+      // gave it, from the settings screen role and the layout role (see
+      // _signInOfAppOf). The screens only change the session: the router
+      // shows them and leaves them, whichever module provides it, as the
+      // router role says of the guards of the routes and of the routes that
+      // ask for a condition, so this is a test of the router role too.
+      // The mocks sign a test account up before the app starts, through
+      // the session, and the matrix sets them up for the tests of every
+      // module of the app, which expect the screens that the guards of the
+      // sign-in would keep them from. The test has no probe for the start
+      // check: nobody can sign in on a device, and the walk of the routes
+      // shows the screens there.
+      MatrixAppTest(
+        '$signIn/sign_in',
+        appliesTo: _has(SignInModule.id),
+        generatedFiles: _signInOfAppOf,
+        roles: {routerRole},
+        mocks: const MatrixMocks(
+          'test/sign_in_mocks.dart',
+          'signUpTestAccount',
+        ),
       ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
@@ -1154,20 +1193,7 @@ const homeTextsFile = 'test/home/texts.dart';
 /// is the English one there, as the localization role says of the texts of
 /// an app.
 Map<String, String> _homeTextsFileOf(MatrixApp app) {
-  final hook = app.hook!;
-  final languages = hook.presentRoles.contains(localizationRole)
-      ? localizationRole.localesIn(localizationRole.hookInput(hook))
-      : const ['en'];
-  final texts = StringBuffer();
-  for (final language in languages) {
-    texts.writeln('  ${SmfNames.dartString(language)}: {');
-    for (final text in HomeModule.texts.texts) {
-      final name = SmfNames.dartString(text.name);
-      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
-      texts.writeln('    $name: $shown,');
-    }
-    texts.writeln('  },');
-  }
+  final texts = _textsByLanguageOf(app, HomeModule.texts);
   return {
     homeTextsFile: '''
 // The texts of the start screen of the home module in each language of the
@@ -1204,13 +1230,8 @@ const settingsOfAppFile = 'test/settings_of_app.dart';
 /// so the test of the back button pushes the screen only where it is no
 /// destination.
 Map<String, String> _settingsOfAppOf(MatrixApp app) {
-  final hook = app.hook!;
-  final input = settingsScreenRole.hookInput(hook);
-  final screen = settingsScreenRole.screenIn(input);
-  final destination = hook.presentRoles.contains(layoutRole) &&
-      layoutRole
-          .destinationsIn(layoutRole.hookInput(hook))
-          .any((route) => route.fullName == screen?.fullName);
+  final input = settingsScreenRole.hookInput(app.hook!);
+  final destination = _settingsInMainNavigationOf(app);
   return {
     settingsOfAppFile: '''
 // What the settings screen has in the app and where it is, which the matrix
@@ -1228,6 +1249,21 @@ const int settingsEntryCount = ${settingsScreenRole.entriesIn(input).length};
 const bool settingsInMainNavigation = $destination;
 ''',
   };
+}
+
+/// Whether the settings screen of [app], an app of the matrix with the
+/// settings screen role, is a destination of its main navigation: the app
+/// has the layout role, and the route of the screen
+/// ([SettingsScreenRole.screenIn]) is one of the destinations of that role
+/// ([LayoutRole.destinationsIn]).
+bool _settingsInMainNavigationOf(MatrixApp app) {
+  final hook = app.hook!;
+  final screen =
+      settingsScreenRole.screenIn(settingsScreenRole.hookInput(hook));
+  return hook.presentRoles.contains(layoutRole) &&
+      layoutRole
+          .destinationsIn(layoutRole.hookInput(hook))
+          .any((route) => route.fullName == screen?.fullName);
 }
 
 /// The test of the DI role that the CLI keeps in its `app_tests/di_role`,
@@ -1357,14 +1393,7 @@ const onboardingStartScreenFile = 'test/onboarding/start_screen.dart';
 ///
 /// It imports the file of the screen with the prefix `screen`.
 Map<String, String> _startScreenFileOf(MatrixApp app, String packageName) {
-  final start = routerRole.startIn(routerRole.hookInput(app.hook!))?.route;
-  final (import, screen) = switch (start?.screen) {
-    final screen? => (screen.import, screen.className),
-    null => (
-        AppEntryRole.fallbackStartScreen.importRef,
-        AppEntryRole.fallbackStartScreen.name,
-      ),
-  };
+  final (import, screen) = _startScreenClassOf(app);
   return {
     onboardingStartScreenFile: '''
 // The screen that the app starts on, which the matrix of SMF writes from
@@ -1395,20 +1424,7 @@ const onboardingTextsFile = 'test/onboarding/texts.dart';
 /// is the English one there, as the localization role says of the texts of
 /// an app.
 Map<String, String> _onboardingTextsFileOf(MatrixApp app) {
-  final hook = app.hook!;
-  final languages = hook.presentRoles.contains(localizationRole)
-      ? localizationRole.localesIn(localizationRole.hookInput(hook))
-      : const ['en'];
-  final texts = StringBuffer();
-  for (final language in languages) {
-    texts.writeln('  ${SmfNames.dartString(language)}: {');
-    for (final text in OnboardingModule.texts.texts) {
-      final name = SmfNames.dartString(text.name);
-      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
-      texts.writeln('    $name: $shown,');
-    }
-    texts.writeln('  },');
-  }
+  final texts = _textsByLanguageOf(app, OnboardingModule.texts);
   return {
     onboardingTextsFile: '''
 // The texts of the onboarding in each language of the app, which the
@@ -1492,6 +1508,171 @@ Future<void> chooseLanguage(String? language) =>
     appLocale.choose(language == null ? null : Locale(language));
 ''',
   };
+}
+
+/// The path in an app of what the matrix writes for the tests of the
+/// sign-in module: `startScreen`, the type of the screen that the app
+/// starts on, which the app shows once its user may see it; `otherPages`,
+/// a location of the app that is neither the one that the app starts on nor
+/// in the flow of a guard, with the type of its screen, or nothing in an
+/// app without such a route; `settingsLocation` and `settingsScreen`, the
+/// location of the route that the provider of the settings screen role
+/// names as the settings screen and the type of that screen,
+/// `settingsInMainNavigation`, whether that screen is a destination of the
+/// main navigation of the app, and `accountEntry`, the type of the widget
+/// of the entry that the module gives that screen; and `signInTexts`, the
+/// texts of the module
+/// ([SignInModule.texts]), each by its name, in each language of the app,
+/// by the code of the language. The languages are those of the
+/// localization role of the app
+/// ([LocalizationRole.localesIn]), in its order, and English alone in an
+/// app without the role, whose screens have the English texts.
+const signInOfAppFile = 'test/sign_in/of_app.dart';
+
+/// The file at [signInOfAppFile] of [app], an app of the matrix with the
+/// router role and the settings screen role, whose package is
+/// [packageName].
+///
+/// The screen that the app starts on is that of the route that the router
+/// role chose, or the fallback start screen of the app entry role when no
+/// route of its modules can start it; the file imports its file with the
+/// prefix `screen`. The settings screen and the entry come from the data of
+/// the settings screen role, whichever module provides it: the entry is
+/// the one that the module gave the role. The screen is a destination by
+/// the layout role of the app. The router role refuses to push a location
+/// of the main navigation over it, so the tests push the settings screen
+/// over another page only where it is no destination. A text of the module
+/// without a translation into a language of the app is the English one
+/// there, as the localization role says of the texts of an app.
+Map<String, String> _signInOfAppOf(MatrixApp app, String packageName) {
+  final (import, screen) = _startScreenClassOf(app);
+  final texts = _textsByLanguageOf(app, SignInModule.texts);
+  // A page that a user may be on other than the one that the app starts
+  // on: a route that needs no values, in no flow of a guard, that asks for
+  // no condition.
+  final input = routerRole.hookInput(app.hook!);
+  final facade = routerRole.facadeOf(input);
+  final start = routerRole.startIn(input);
+  final inFlows = {
+    for (final guard in facade.guards)
+      for (final route in guard.flow) route.fullName,
+  };
+  final other = [
+    for (final route in facade.routes)
+      if (!route.hasRequiredParams &&
+          route.fullName != start?.fullName &&
+          !inFlows.contains(route.fullName) &&
+          route.route.conditions.isEmpty)
+        route,
+  ].firstOrNull;
+  final otherScreen = other?.route.screen;
+  final otherPage = other == null
+      ? ''
+      : '  (location: ${other.locationClass}(), '
+          'screen: other.${otherScreen!.className}),\n';
+  final otherImport = otherScreen == null
+      ? ''
+      : "import '${otherScreen.import.resolveUri(packageName)}' "
+          'as other;\n';
+  final settingsInput = settingsScreenRole.hookInput(app.hook!);
+  final settings = _settingsRouteOf(app, settingsInput);
+  final entries = [
+    for (final RoleData(:value, :origin) in settingsInput.data)
+      if (value is SettingsEntry &&
+          origin == const ModuleOrigin(SignInModule.id))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The module ${SignInModule.id} gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry of the '
+      'account alone.',
+    );
+  }
+  final entry = entries.single.widget;
+  final settingsScreen = settings.route.screen;
+  return {
+    signInOfAppFile: '''
+// What the tests of the sign-in module, in test/sign_in, need to know of
+// the app, which the matrix of SMF writes from the data of the router role
+// of the app and of the settings screen role of the app, from the texts of
+// the module and from the languages of the localization role of the app.
+import '${_navigationOf(packageName)}';
+import '${entry.import!.resolveUri(packageName)}' as entry;
+import '${settingsScreen.import.resolveUri(packageName)}' as settings;
+${otherImport}import '${import.resolveUri(packageName)}' as screen;
+
+/// The type of the screen that the app starts on: that of the route that
+/// the router role chose, or the fallback start screen of the app entry
+/// role in an app that no route can start.
+const Type startScreen = screen.$screen;
+
+/// A location of the app that is neither the one that the app starts on
+/// nor in the flow of a guard, with the type of its screen, for a user who
+/// is somewhere else in the app; empty in an app without such a route.
+const List<({AppLocation location, Type screen})> otherPages = [
+$otherPage];
+
+/// The location of the route that shows the settings screen.
+const AppLocation settingsLocation = ${settings.locationClass}();
+
+/// The type of the settings screen.
+const Type settingsScreen = settings.${settingsScreen.className};
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = ${_settingsInMainNavigationOf(app)};
+
+/// The type of the widget of the entry of the account on the settings
+/// screen.
+const Type accountEntry = ${entry.codeWith('entry')};
+
+/// The texts of the screens of sign-in by the code of each language of the
+/// app, the first of which the app uses when the device asks for none of
+/// them: each text by its name in the module. An app without the
+/// localization role has the English texts alone.
+const Map<String, Map<String, String>> signInTexts = {
+$texts};
+''',
+  };
+}
+
+/// The file and the name of the class of the screen that [app], an app of
+/// the matrix with the router role, starts on: the screen of the route
+/// that the role chose to start the app on, or the fallback start screen of
+/// the app entry role when no route of its modules can start it.
+(ImportRef, String) _startScreenClassOf(MatrixApp app) {
+  final start = routerRole.startIn(routerRole.hookInput(app.hook!))?.route;
+  return switch (start?.screen) {
+    final screen? => (screen.import, screen.className),
+    null => (
+        AppEntryRole.fallbackStartScreen.importRef,
+        AppEntryRole.fallbackStartScreen.name,
+      ),
+  };
+}
+
+/// The entries of a Dart map of the [texts] of a module in each language
+/// of [app], an app of the matrix: for the code of each language, each
+/// text by its name. The languages are those of the localization role of
+/// the app, in its order, or English alone in an app without the role. A
+/// text without a translation into a language is the English one there.
+String _textsByLanguageOf(MatrixApp app, TextsData texts) {
+  final hook = app.hook!;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final entries = StringBuffer();
+  for (final language in languages) {
+    entries.writeln('  ${SmfNames.dartString(language)}: {');
+    for (final text in texts.texts) {
+      final name = SmfNames.dartString(text.name);
+      final shown = SmfNames.dartString(text.textIn(language) ?? text.en);
+      entries.writeln('    $name: $shown,');
+    }
+    entries.writeln('  },');
+  }
+  return '$entries';
 }
 
 /// The name under which the listener of Firebase Analytics logs the

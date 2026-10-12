@@ -23,6 +23,7 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
+import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
@@ -35,8 +36,10 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
+import 'package:smf_sign_in/smf_sign_in.dart';
 
 /// Every fixture module, with a fake DI container of all capabilities, or
 /// of [diCapabilities] if set, and the real modules: flutter_core, which
@@ -149,10 +152,23 @@ List<ModuleId> everyFixture({
 /// the app test that it keeps for its screen. It comes after the fixture
 /// feature, on whose screen the app starts, so that test goes to its screen
 /// through the navigation of the router role, and reads its texts from the
-/// fixture texts; and Firebase Authentication, the provider of the auth
+/// fixture texts; Firebase Authentication, the provider of the auth
 /// role that the CLI has, for the app test that it keeps and for the test
 /// of that role that the CLI keeps, which run there next to the other
-/// Firebase modules and with the fixture texts as the languages of the app.
+/// Firebase modules and with the fixture texts as the languages of the
+/// app; and the sign-in module of the CLI, for the app test that it keeps,
+/// with the two state managers of the CLI, bloc and riverpod, since a
+/// registry has every provider that one of its modules has a variant for.
+/// The app asks for an account, as an app in the first mode of the auth
+/// role does, so the guards of the sign-in keep the user from every other
+/// screen until the mocks of that test sign an account up for the tests of
+/// the other modules.
+///
+/// With two state managers, the registry has two apps with every module,
+/// one for each. Its tool checks the first one, in which the screens of the
+/// sign-in keep their state with bloc (see `severalProvidersApps` of
+/// `matrix_app_tests.dart`): the matrix of the CLI checks the sign-in with
+/// each state manager.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their
@@ -181,4 +197,7 @@ List<SmfModule> severalProvidersModules() => const [
       OnboardingModule(),
       HomeModule(),
       FirebaseAuthModule(),
+      BlocModule(),
+      RiverpodModule(),
+      SignInModule(),
     ];

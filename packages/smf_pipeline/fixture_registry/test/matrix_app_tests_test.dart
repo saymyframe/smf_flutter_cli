@@ -90,6 +90,7 @@ void main() {
     expect(named('router_listeners').roles, {routerRole});
     expect(named('router_guards').roles, {routerRole});
     expect(named('router_conditions').roles, {routerRole});
+    expect(named('router_flow_opens').roles, {routerRole});
     expect(named('router_guards_fallback').roles, {routerRole});
     expect(named('layout_guards').roles, {routerRole});
     expect(named('router_fallback').roles, {routerRole});
@@ -778,6 +779,31 @@ void main() {
   });
 
   test(
+      'the test of a request that opens the flow of a condition applies to '
+      'each app with the tests of the conditions, and its apps have the '
+      'guard of the condition and the route that the test asks for', () {
+    final opens = named('router_flow_opens');
+
+    expect(appsOf(opens), containsAll(appsOf(named('router_conditions'))));
+    for (final app in apps.where(opens.appliesTo)) {
+      final facade = routerRole.facadeOf(routerRole.hookInput(app.hook!));
+      expect(
+        facade.guardFor(BadgeRole.holder)?.fullName,
+        'fake_gate.holder',
+        reason: app.name,
+      );
+      expect(
+        [
+          for (final route in facade.routesAsking(BadgeRole.holder))
+            route.fullName,
+        ],
+        contains('fake_second.members'),
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
       'the tests that use the helpers of router_screens apply only to the '
       'apps that have them', () {
     final routerScreens = appsOf(named('router_screens'));
@@ -786,6 +812,7 @@ void main() {
       'router_listeners',
       'router_guards',
       'router_conditions',
+      'router_flow_opens',
       'layout_guards',
       'router_walk_guards',
       'layout_screens',
@@ -1091,10 +1118,13 @@ void main() {
       final (apps: all, :failed) = await matrixOf(severalProvidersModules());
       expect(failed, isEmpty);
       matrix = all;
-      // The app that the tool of several providers checks: the one that a
-      // run of the apps with every module takes.
-      everyModule =
-          const MatrixSelection(everyModule: true).of(matrix).single.$2;
+      // The app that the tool of several providers checks: the one that its
+      // selection takes of the matrix that a run with it builds.
+      final checked = await matrixOf(
+        severalProvidersModules(),
+        everyModuleApps: severalProvidersApps.everyModuleApps,
+      );
+      everyModule = severalProvidersApps.of(checked.apps).single.$2;
     });
 
     /// The app test of the app of several providers whose files are in the
@@ -1103,22 +1133,27 @@ void main() {
         severalProviders.tests.singleWhere((test) => nameOf(test) == name);
 
     test(
-        'is the app with every module in the first mode of the auth role, '
-        'which Firebase Authentication provides there: the matrix of the '
-        'registry has it once more for each other mode, which a run of the '
-        'apps with every module leaves out', () {
+        'is the app with every module with the first state manager, in the '
+        'first mode of the auth role, which Firebase Authentication provides '
+        'there: the matrix of the registry has such an app for each of the '
+        'two state managers that the sign-in has a variant for, and each '
+        'once more for each other mode, all of which the tool leaves out', () {
       expect(
         [
           for (final app in matrix)
             if (app.everyModuleWith != null) app.name,
         ],
         [
-          'every module',
-          'every module --auth-mode=guest',
-          'every module --auth-mode=anonymous',
+          'every module (bloc)',
+          'every module (riverpod)',
+          'every module (bloc) --auth-mode=guest',
+          'every module (bloc) --auth-mode=anonymous',
+          'every module (riverpod) --auth-mode=guest',
+          'every module (riverpod) --auth-mode=anonymous',
         ],
       );
-      expect(everyModule.name, 'every module');
+      expect(everyModule.name, 'every module (bloc)');
+      expect(everyModule.everyModuleWith, isEmpty);
       expect(everyModule.modes, isEmpty);
       // It gets no value of the option, so the role chooses the first mode,
       // as for a user who does not give the option.

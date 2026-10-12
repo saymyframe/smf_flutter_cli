@@ -226,11 +226,15 @@ final class RouteCondition {
 /// module may navigate to the target of its guard while the condition does
 /// not hold, as to a sign-in screen that a guest opens. With `push()` the
 /// user can go back from it, and once the condition holds the router
-/// closes it as it closes a target that it opened itself. The screens of
-/// the flow move between its routes with `push()` or `replace()`, which
-/// keep the request waiting; `go()` takes the place of the page that the
-/// flow was opened over, and the request goes with it. A guard with a
-/// condition may show the target of a gate of its module. The two then
+/// closes it as it closes a target that it opened itself. With `go()` the
+/// page takes the place of the stack, as the code asked. A link to a route
+/// of the flow, which the platform asks for with no page of the app below
+/// it, opens that route over the screen that the app starts on, so that
+/// back leads into the app. The screens of the flow move between its
+/// routes with `push()` or `replace()`, which keep the request waiting;
+/// `go()` takes the place of the page that the flow was opened over, and
+/// the request goes with it. A guard with a condition may show the target
+/// of a gate of its module. The two then
 /// have one flow, which is over only once both allow: the screens of a
 /// sign-in whose gate lets everyone in still show while its guard of an
 /// account does not allow. Their functions read one notifier, so that the

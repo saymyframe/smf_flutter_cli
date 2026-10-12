@@ -286,6 +286,8 @@ class RouteMatchList {
   RouteMatch? get lastOrNull => null;
 
   RouteMatchList remove(RouteMatchBase match) => this;
+
+  RouteMatchList push(ImperativeRouteMatch match) => this;
 }
 
 class GoRouterDelegate implements Listenable {
@@ -356,6 +358,8 @@ class GoRouter implements RouterConfig<RouteMatchList> {
   void go(String location, {Object? extra}) {}
 
   void restore(RouteMatchList matchList) {}
+
+  void refresh() {}
 
   Future<T?> push<T extends Object?>(String location, {Object? extra}) async =>
       null;
