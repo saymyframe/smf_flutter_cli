@@ -3,6 +3,171 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 2026-10-12
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - [`smf_contracts` - `v0.5.0`](#smf_contracts---v050)
+ - [`smf_flutter_cli` - `v0.5.0`](#smf_flutter_cli---v050)
+ - [`smf_go_router` - `v0.5.0`](#smf_go_router---v050)
+ - [`smf_onboarding` - `v0.5.0`](#smf_onboarding---v050)
+ - [`smf_pipeline` - `v0.5.0`](#smf_pipeline---v050)
+
+Packages with other changes:
+
+ - [`smf_sign_in` - `v0.5.0`](#smf_sign_in---v050)
+ - [`smf_firebase_auth` - `v0.5.0`](#smf_firebase_auth---v050)
+ - [`smf_bloc` - `v0.3.2`](#smf_bloc---v032)
+ - [`smf_firebase_core` - `v0.4.1`](#smf_firebase_core---v041)
+ - [`smf_material_theme` - `v0.4.1`](#smf_material_theme---v041)
+ - [`smf_riverpod` - `v0.3.2`](#smf_riverpod---v032)
+ - [`smf_settings` - `v0.4.1`](#smf_settings---v041)
+ - [`smf_bottom_tabs` - `v0.4.1`](#smf_bottom_tabs---v041)
+ - [`smf_event_bus` - `v0.3.2`](#smf_event_bus---v032)
+ - [`smf_firebase_analytics` - `v0.4.1`](#smf_firebase_analytics---v041)
+ - [`smf_firebase_crashlytics` - `v0.4.1`](#smf_firebase_crashlytics---v041)
+ - [`smf_flutter_core` - `v0.4.1`](#smf_flutter_core---v041)
+ - [`smf_gen_l10n` - `v0.4.1`](#smf_gen_l10n---v041)
+ - [`smf_get_it` - `v0.4.1`](#smf_get_it---v041)
+ - [`smf_home_flutter` - `v0.4.1`](#smf_home_flutter---v041)
+ - [`smf_shared_preferences` - `v0.4.1`](#smf_shared_preferences---v041)
+
+Packages with dependency updates only:
+
+> Packages listed below depend on other packages in this workspace that have had changes. Their versions have been incremented to bump the minimum dependency versions of the packages they depend upon in this project.
+
+ - `smf_bottom_tabs` - `v0.4.1`
+ - `smf_event_bus` - `v0.3.2`
+ - `smf_firebase_analytics` - `v0.4.1`
+ - `smf_firebase_crashlytics` - `v0.4.1`
+ - `smf_flutter_core` - `v0.4.1`
+ - `smf_gen_l10n` - `v0.4.1`
+ - `smf_get_it` - `v0.4.1`
+ - `smf_home_flutter` - `v0.4.1`
+ - `smf_shared_preferences` - `v0.4.1`
+
+---
+
+#### `smf_contracts` - `v0.5.0`
+
+ - **FIX**(contracts,go_router): open a page of the flow of a condition over the start screen when a link asks for it ([#166](https://github.com/saymyframe/smf_flutter_cli/issues/166)). ([0c42e365](https://github.com/saymyframe/smf_flutter_cli/commit/0c42e36578dac19accdf3767c7a00a299f50fbf2))
+ - **FIX**(go_router): show what push() and replace() ask for when go_router shows its error screen alone ([#165](https://github.com/saymyframe/smf_flutter_cli/issues/165)). ([c55c01e2](https://github.com/saymyframe/smf_flutter_cli/commit/c55c01e2c74ec839e11cef3d5a1bf8a07a7cbc5e))
+ - **FIX**(go_router): keep the back button of the system from throwing on the error screen ([#161](https://github.com/saymyframe/smf_flutter_cli/issues/161)). ([5a933e9f](https://github.com/saymyframe/smf_flutter_cli/commit/5a933e9fd848545f747ea4c91749a7d8bcf7a6c7))
+ - **FIX**(go_router): drop the pages of every branch when a guard closes and opens in one turn ([#157](https://github.com/saymyframe/smf_flutter_cli/issues/157)). ([976dbad8](https://github.com/saymyframe/smf_flutter_cli/commit/976dbad8458eda9cbaf2dfdb8b48b5008294362b))
+ - **FIX**(pipeline): check the machine for a module after the modules it depends on ([#151](https://github.com/saymyframe/smf_flutter_cli/issues/151)). ([494c1eb0](https://github.com/saymyframe/smf_flutter_cli/commit/494c1eb0839d4fba35eac6dca80203d416cabd9d))
+ - **FEAT**(contracts): warn of the destinations of an app without a main navigation ([#175](https://github.com/saymyframe/smf_flutter_cli/issues/175)). ([39a624ba](https://github.com/saymyframe/smf_flutter_cli/commit/39a624ba72cb4d4c878409f46bb8b266820d3ebd))
+ - **FEAT**(contracts): say how the auth role writes the mode of the app, for a tool that reads it ([#167](https://github.com/saymyframe/smf_flutter_cli/issues/167)). ([c61033c6](https://github.com/saymyframe/smf_flutter_cli/commit/c61033c65a401179eea8c5452e387b44a688047a))
+ - **FEAT**(contracts): publish the account condition of the auth role, and warn when no guard stands for it ([#156](https://github.com/saymyframe/smf_flutter_cli/issues/156)). ([b35edee1](https://github.com/saymyframe/smf_flutter_cli/commit/b35edee1dc1838bc960defd4047793fcd7a78f46))
+ - **FEAT**(contracts): a condition that only some routes ask for ([#155](https://github.com/saymyframe/smf_flutter_cli/issues/155)). ([9c239fe1](https://github.com/saymyframe/smf_flutter_cli/commit/9c239fe105f8adbc30ae9c98cab63b26e1c234ed))
+ - **FEAT**(contracts): add the auth role with the session, the mode and the service of a provider ([#153](https://github.com/saymyframe/smf_flutter_cli/issues/153)). ([3063e085](https://github.com/saymyframe/smf_flutter_cli/commit/3063e085e900eda5b8e9ed41b413165864d1cfeb))
+ - **FEAT**(contracts,pipeline): let a role option have modes, with a case of the harness for each ([#149](https://github.com/saymyframe/smf_flutter_cli/issues/149)). ([4fd6a70f](https://github.com/saymyframe/smf_flutter_cli/commit/4fd6a70fef36a8272c8565b8d0b2dea543b3d983))
+ - **FEAT**(contracts,pipeline): a post-generation step that continues another may ask its own question ([#147](https://github.com/saymyframe/smf_flutter_cli/issues/147)). ([434fbb27](https://github.com/saymyframe/smf_flutter_cli/commit/434fbb27562d9085ad1d1a33061d8d872c3dab17))
+ - **BREAKING** **FEAT**(contracts,go_router): open the flow of a condition over the screen the user is on ([#163](https://github.com/saymyframe/smf_flutter_cli/issues/163)). ([b7f7e655](https://github.com/saymyframe/smf_flutter_cli/commit/b7f7e655374c8109c1daf255cdb43c80a6dc4c67))
+ - **BREAKING** **FEAT**(contracts,onboarding): say when a guard is asked and whether it brings the user back ([#152](https://github.com/saymyframe/smf_flutter_cli/issues/152)). ([7b12df77](https://github.com/saymyframe/smf_flutter_cli/commit/7b12df77edbc4a785ae192b8c16bbca0523197ac))
+ - **BREAKING** **FEAT**(contracts,onboarding): close the flow of a guard that allows ([#150](https://github.com/saymyframe/smf_flutter_cli/issues/150)). ([731e53f9](https://github.com/saymyframe/smf_flutter_cli/commit/731e53f9bf3c7147f8fa8c6e781788b1ee67b47f))
+
+#### `smf_flutter_cli` - `v0.5.0`
+
+ - **FIX**(contracts,go_router): open a page of the flow of a condition over the start screen when a link asks for it ([#166](https://github.com/saymyframe/smf_flutter_cli/issues/166)). ([0c42e365](https://github.com/saymyframe/smf_flutter_cli/commit/0c42e36578dac19accdf3767c7a00a299f50fbf2))
+ - **FIX**(go_router): show what push() and replace() ask for when go_router shows its error screen alone ([#165](https://github.com/saymyframe/smf_flutter_cli/issues/165)). ([c55c01e2](https://github.com/saymyframe/smf_flutter_cli/commit/c55c01e2c74ec839e11cef3d5a1bf8a07a7cbc5e))
+ - **FIX**(go_router): keep the back button of the system from throwing on the error screen ([#161](https://github.com/saymyframe/smf_flutter_cli/issues/161)). ([5a933e9f](https://github.com/saymyframe/smf_flutter_cli/commit/5a933e9fd848545f747ea4c91749a7d8bcf7a6c7))
+ - **FIX**(go_router): drop the pages of every branch when a guard closes and opens in one turn ([#157](https://github.com/saymyframe/smf_flutter_cli/issues/157)). ([976dbad8](https://github.com/saymyframe/smf_flutter_cli/commit/976dbad8458eda9cbaf2dfdb8b48b5008294362b))
+ - **FEAT**(pipeline): list the steps left for later after the app is created, without a warning ([#176](https://github.com/saymyframe/smf_flutter_cli/issues/176)). ([571c0ace](https://github.com/saymyframe/smf_flutter_cli/commit/571c0acea10fc246ca3cb8dd81b2446d1ed9a00a))
+ - **FEAT**(contracts): warn of the destinations of an app without a main navigation ([#175](https://github.com/saymyframe/smf_flutter_cli/issues/175)). ([39a624ba](https://github.com/saymyframe/smf_flutter_cli/commit/39a624ba72cb4d4c878409f46bb8b266820d3ebd))
+ - **FEAT**(bloc,riverpod): tell in the agent note how a screen, shared state and an awaited call are written ([#172](https://github.com/saymyframe/smf_flutter_cli/issues/172)). ([6f819423](https://github.com/saymyframe/smf_flutter_cli/commit/6f8194238bcb957d19409d3acf867445e2b3989e))
+ - **FEAT**(sign_in): add the account screen and the entry of the settings screen that leads to it ([#171](https://github.com/saymyframe/smf_flutter_cli/issues/171)). ([4d7fac2b](https://github.com/saymyframe/smf_flutter_cli/commit/4d7fac2bf04907ce9c9474b5accbca1247d3fed3))
+ - **FEAT**(sign_in): add the module with the screens of sign-in, sign-up and password reset, in a bloc and a riverpod variant ([#170](https://github.com/saymyframe/smf_flutter_cli/issues/170)). ([bfcd9025](https://github.com/saymyframe/smf_flutter_cli/commit/bfcd9025f26b607315846995ed1a2006930a7a0f))
+ - **FEAT**(firebase_auth): enable the sign-in methods in Firebase after flutterfire configure ([#168](https://github.com/saymyframe/smf_flutter_cli/issues/168)). ([1d4a1c27](https://github.com/saymyframe/smf_flutter_cli/commit/1d4a1c27b1ea1f63ef866081dbdaa5e5f3e49275))
+ - **FEAT**(contracts): say how the auth role writes the mode of the app, for a tool that reads it ([#167](https://github.com/saymyframe/smf_flutter_cli/issues/167)). ([c61033c6](https://github.com/saymyframe/smf_flutter_cli/commit/c61033c65a401179eea8c5452e387b44a688047a))
+ - **FEAT**(firebase_auth): provide the auth role with Firebase Authentication ([#162](https://github.com/saymyframe/smf_flutter_cli/issues/162)). ([c541d0d4](https://github.com/saymyframe/smf_flutter_cli/commit/c541d0d4b3ae3a23a148d61293c41338a1bf27a1))
+ - **FEAT**(material_theme): give text fields the look of the theme ([#160](https://github.com/saymyframe/smf_flutter_cli/issues/160)). ([2d1d6a24](https://github.com/saymyframe/smf_flutter_cli/commit/2d1d6a2446b29a5a5486aba0a97d34909589186b))
+ - **FEAT**(contracts): a condition that only some routes ask for ([#155](https://github.com/saymyframe/smf_flutter_cli/issues/155)). ([9c239fe1](https://github.com/saymyframe/smf_flutter_cli/commit/9c239fe105f8adbc30ae9c98cab63b26e1c234ed))
+ - **FEAT**(cli): give the modes of a role option their apps with every module ([#154](https://github.com/saymyframe/smf_flutter_cli/issues/154)). ([19384819](https://github.com/saymyframe/smf_flutter_cli/commit/193848190a66b3301dfc20b4f430ae7e82a62519))
+ - **DOCS**(cli): name sign-in in the description of the package ([#177](https://github.com/saymyframe/smf_flutter_cli/issues/177)). ([b137f4dd](https://github.com/saymyframe/smf_flutter_cli/commit/b137f4dd35dfd4d646598b5d99540cc55e8a6913))
+ - **DOCS**(cli): show the run of smf create with sign-in and the screens of sign-in in the READMEs and on pub.dev ([#174](https://github.com/saymyframe/smf_flutter_cli/issues/174)). ([e6bbea1f](https://github.com/saymyframe/smf_flutter_cli/commit/e6bbea1fd52f61d6cc14215774e590ac7c01a011))
+ - **DOCS**(cli): show the run of smf create of 0.4 in the READMEs and in the screenshot ([#145](https://github.com/saymyframe/smf_flutter_cli/issues/145)). ([1da4e3ac](https://github.com/saymyframe/smf_flutter_cli/commit/1da4e3aca5bf70168aa41869d6ad8086d7edf594))
+ - **BREAKING** **FEAT**(contracts,go_router): open the flow of a condition over the screen the user is on ([#163](https://github.com/saymyframe/smf_flutter_cli/issues/163)). ([b7f7e655](https://github.com/saymyframe/smf_flutter_cli/commit/b7f7e655374c8109c1daf255cdb43c80a6dc4c67))
+ - **BREAKING** **FEAT**(contracts,onboarding): say when a guard is asked and whether it brings the user back ([#152](https://github.com/saymyframe/smf_flutter_cli/issues/152)). ([7b12df77](https://github.com/saymyframe/smf_flutter_cli/commit/7b12df77edbc4a785ae192b8c16bbca0523197ac))
+ - **BREAKING** **FEAT**(contracts,onboarding): close the flow of a guard that allows ([#150](https://github.com/saymyframe/smf_flutter_cli/issues/150)). ([731e53f9](https://github.com/saymyframe/smf_flutter_cli/commit/731e53f9bf3c7147f8fa8c6e781788b1ee67b47f))
+
+#### `smf_go_router` - `v0.5.0`
+
+ - **FIX**(contracts,go_router): open a page of the flow of a condition over the start screen when a link asks for it ([#166](https://github.com/saymyframe/smf_flutter_cli/issues/166)). ([0c42e365](https://github.com/saymyframe/smf_flutter_cli/commit/0c42e36578dac19accdf3767c7a00a299f50fbf2))
+ - **FIX**(go_router): show what push() and replace() ask for when go_router shows its error screen alone ([#165](https://github.com/saymyframe/smf_flutter_cli/issues/165)). ([c55c01e2](https://github.com/saymyframe/smf_flutter_cli/commit/c55c01e2c74ec839e11cef3d5a1bf8a07a7cbc5e))
+ - **FIX**(go_router): keep the back button of the system from throwing on the error screen ([#161](https://github.com/saymyframe/smf_flutter_cli/issues/161)). ([5a933e9f](https://github.com/saymyframe/smf_flutter_cli/commit/5a933e9fd848545f747ea4c91749a7d8bcf7a6c7))
+ - **FIX**(go_router): drop the pages of every branch when a guard closes and opens in one turn ([#157](https://github.com/saymyframe/smf_flutter_cli/issues/157)). ([976dbad8](https://github.com/saymyframe/smf_flutter_cli/commit/976dbad8458eda9cbaf2dfdb8b48b5008294362b))
+ - **FEAT**(contracts): a condition that only some routes ask for ([#155](https://github.com/saymyframe/smf_flutter_cli/issues/155)). ([9c239fe1](https://github.com/saymyframe/smf_flutter_cli/commit/9c239fe105f8adbc30ae9c98cab63b26e1c234ed))
+ - **BREAKING** **FEAT**(contracts,go_router): open the flow of a condition over the screen the user is on ([#163](https://github.com/saymyframe/smf_flutter_cli/issues/163)). ([b7f7e655](https://github.com/saymyframe/smf_flutter_cli/commit/b7f7e655374c8109c1daf255cdb43c80a6dc4c67))
+ - **BREAKING** **FEAT**(contracts,onboarding): say when a guard is asked and whether it brings the user back ([#152](https://github.com/saymyframe/smf_flutter_cli/issues/152)). ([7b12df77](https://github.com/saymyframe/smf_flutter_cli/commit/7b12df77edbc4a785ae192b8c16bbca0523197ac))
+ - **BREAKING** **FEAT**(contracts,onboarding): close the flow of a guard that allows ([#150](https://github.com/saymyframe/smf_flutter_cli/issues/150)). ([731e53f9](https://github.com/saymyframe/smf_flutter_cli/commit/731e53f9bf3c7147f8fa8c6e781788b1ee67b47f))
+
+#### `smf_onboarding` - `v0.5.0`
+
+ - **BREAKING** **FEAT**(contracts,onboarding): say when a guard is asked and whether it brings the user back ([#152](https://github.com/saymyframe/smf_flutter_cli/issues/152)). ([7b12df77](https://github.com/saymyframe/smf_flutter_cli/commit/7b12df77edbc4a785ae192b8c16bbca0523197ac))
+ - **BREAKING** **FEAT**(contracts,onboarding): close the flow of a guard that allows ([#150](https://github.com/saymyframe/smf_flutter_cli/issues/150)). ([731e53f9](https://github.com/saymyframe/smf_flutter_cli/commit/731e53f9bf3c7147f8fa8c6e781788b1ee67b47f))
+
+#### `smf_pipeline` - `v0.5.0`
+
+ - **FIX**(contracts,go_router): open a page of the flow of a condition over the start screen when a link asks for it ([#166](https://github.com/saymyframe/smf_flutter_cli/issues/166)). ([0c42e365](https://github.com/saymyframe/smf_flutter_cli/commit/0c42e36578dac19accdf3767c7a00a299f50fbf2))
+ - **FIX**(go_router): show what push() and replace() ask for when go_router shows its error screen alone ([#165](https://github.com/saymyframe/smf_flutter_cli/issues/165)). ([c55c01e2](https://github.com/saymyframe/smf_flutter_cli/commit/c55c01e2c74ec839e11cef3d5a1bf8a07a7cbc5e))
+ - **FIX**(go_router): keep the back button of the system from throwing on the error screen ([#161](https://github.com/saymyframe/smf_flutter_cli/issues/161)). ([5a933e9f](https://github.com/saymyframe/smf_flutter_cli/commit/5a933e9fd848545f747ea4c91749a7d8bcf7a6c7))
+ - **FIX**(go_router): drop the pages of every branch when a guard closes and opens in one turn ([#157](https://github.com/saymyframe/smf_flutter_cli/issues/157)). ([976dbad8](https://github.com/saymyframe/smf_flutter_cli/commit/976dbad8458eda9cbaf2dfdb8b48b5008294362b))
+ - **FIX**(pipeline): check the machine for a module after the modules it depends on ([#151](https://github.com/saymyframe/smf_flutter_cli/issues/151)). ([494c1eb0](https://github.com/saymyframe/smf_flutter_cli/commit/494c1eb0839d4fba35eac6dca80203d416cabd9d))
+ - **FEAT**(pipeline): list the steps left for later after the app is created, without a warning ([#176](https://github.com/saymyframe/smf_flutter_cli/issues/176)). ([571c0ace](https://github.com/saymyframe/smf_flutter_cli/commit/571c0acea10fc246ca3cb8dd81b2446d1ed9a00a))
+ - **FEAT**(bloc,riverpod): tell in the agent note how a screen, shared state and an awaited call are written ([#172](https://github.com/saymyframe/smf_flutter_cli/issues/172)). ([6f819423](https://github.com/saymyframe/smf_flutter_cli/commit/6f8194238bcb957d19409d3acf867445e2b3989e))
+ - **FEAT**(sign_in): add the account screen and the entry of the settings screen that leads to it ([#171](https://github.com/saymyframe/smf_flutter_cli/issues/171)). ([4d7fac2b](https://github.com/saymyframe/smf_flutter_cli/commit/4d7fac2bf04907ce9c9474b5accbca1247d3fed3))
+ - **FEAT**(sign_in): add the module with the screens of sign-in, sign-up and password reset, in a bloc and a riverpod variant ([#170](https://github.com/saymyframe/smf_flutter_cli/issues/170)). ([bfcd9025](https://github.com/saymyframe/smf_flutter_cli/commit/bfcd9025f26b607315846995ed1a2006930a7a0f))
+ - **FEAT**(firebase_auth): enable the sign-in methods in Firebase after flutterfire configure ([#168](https://github.com/saymyframe/smf_flutter_cli/issues/168)). ([1d4a1c27](https://github.com/saymyframe/smf_flutter_cli/commit/1d4a1c27b1ea1f63ef866081dbdaa5e5f3e49275))
+ - **FEAT**(contracts): say how the auth role writes the mode of the app, for a tool that reads it ([#167](https://github.com/saymyframe/smf_flutter_cli/issues/167)). ([c61033c6](https://github.com/saymyframe/smf_flutter_cli/commit/c61033c65a401179eea8c5452e387b44a688047a))
+ - **FEAT**(firebase_auth): provide the auth role with Firebase Authentication ([#162](https://github.com/saymyframe/smf_flutter_cli/issues/162)). ([c541d0d4](https://github.com/saymyframe/smf_flutter_cli/commit/c541d0d4b3ae3a23a148d61293c41338a1bf27a1))
+ - **FEAT**(material_theme): give text fields the look of the theme ([#160](https://github.com/saymyframe/smf_flutter_cli/issues/160)). ([2d1d6a24](https://github.com/saymyframe/smf_flutter_cli/commit/2d1d6a2446b29a5a5486aba0a97d34909589186b))
+ - **FEAT**(contracts): a condition that only some routes ask for ([#155](https://github.com/saymyframe/smf_flutter_cli/issues/155)). ([9c239fe1](https://github.com/saymyframe/smf_flutter_cli/commit/9c239fe105f8adbc30ae9c98cab63b26e1c234ed))
+ - **FEAT**(cli): give the modes of a role option their apps with every module ([#154](https://github.com/saymyframe/smf_flutter_cli/issues/154)). ([19384819](https://github.com/saymyframe/smf_flutter_cli/commit/193848190a66b3301dfc20b4f430ae7e82a62519))
+ - **FEAT**(contracts,pipeline): let a role option have modes, with a case of the harness for each ([#149](https://github.com/saymyframe/smf_flutter_cli/issues/149)). ([4fd6a70f](https://github.com/saymyframe/smf_flutter_cli/commit/4fd6a70fef36a8272c8565b8d0b2dea543b3d983))
+ - **FEAT**(contracts,pipeline): a post-generation step that continues another may ask its own question ([#147](https://github.com/saymyframe/smf_flutter_cli/issues/147)). ([434fbb27](https://github.com/saymyframe/smf_flutter_cli/commit/434fbb27562d9085ad1d1a33061d8d872c3dab17))
+ - **BREAKING** **FEAT**(contracts,go_router): open the flow of a condition over the screen the user is on ([#163](https://github.com/saymyframe/smf_flutter_cli/issues/163)). ([b7f7e655](https://github.com/saymyframe/smf_flutter_cli/commit/b7f7e655374c8109c1daf255cdb43c80a6dc4c67))
+ - **BREAKING** **FEAT**(contracts,onboarding): say when a guard is asked and whether it brings the user back ([#152](https://github.com/saymyframe/smf_flutter_cli/issues/152)). ([7b12df77](https://github.com/saymyframe/smf_flutter_cli/commit/7b12df77edbc4a785ae192b8c16bbca0523197ac))
+ - **BREAKING** **FEAT**(contracts,onboarding): close the flow of a guard that allows ([#150](https://github.com/saymyframe/smf_flutter_cli/issues/150)). ([731e53f9](https://github.com/saymyframe/smf_flutter_cli/commit/731e53f9bf3c7147f8fa8c6e781788b1ee67b47f))
+
+#### `smf_sign_in` - `v0.5.0`
+
+ - **FEAT**(contracts): warn of the destinations of an app without a main navigation ([#175](https://github.com/saymyframe/smf_flutter_cli/issues/175)). ([39a624ba](https://github.com/saymyframe/smf_flutter_cli/commit/39a624ba72cb4d4c878409f46bb8b266820d3ebd))
+ - **FEAT**(sign_in): add the account screen and the entry of the settings screen that leads to it ([#171](https://github.com/saymyframe/smf_flutter_cli/issues/171)). ([4d7fac2b](https://github.com/saymyframe/smf_flutter_cli/commit/4d7fac2bf04907ce9c9474b5accbca1247d3fed3))
+ - **FEAT**(sign_in): add the module with the screens of sign-in, sign-up and password reset, in a bloc and a riverpod variant ([#170](https://github.com/saymyframe/smf_flutter_cli/issues/170)). ([bfcd9025](https://github.com/saymyframe/smf_flutter_cli/commit/bfcd9025f26b607315846995ed1a2006930a7a0f))
+
+#### `smf_firebase_auth` - `v0.5.0`
+
+ - **FEAT**(pipeline): list the steps left for later after the app is created, without a warning ([#176](https://github.com/saymyframe/smf_flutter_cli/issues/176)). ([571c0ace](https://github.com/saymyframe/smf_flutter_cli/commit/571c0acea10fc246ca3cb8dd81b2446d1ed9a00a))
+ - **FEAT**(firebase_auth): enable the sign-in methods in Firebase after flutterfire configure ([#168](https://github.com/saymyframe/smf_flutter_cli/issues/168)). ([1d4a1c27](https://github.com/saymyframe/smf_flutter_cli/commit/1d4a1c27b1ea1f63ef866081dbdaa5e5f3e49275))
+ - **FEAT**(firebase_auth): provide the auth role with Firebase Authentication ([#162](https://github.com/saymyframe/smf_flutter_cli/issues/162)). ([c541d0d4](https://github.com/saymyframe/smf_flutter_cli/commit/c541d0d4b3ae3a23a148d61293c41338a1bf27a1))
+
+#### `smf_bloc` - `v0.3.2`
+
+ - **FEAT**(bloc,riverpod): tell in the agent note how a screen, shared state and an awaited call are written ([#172](https://github.com/saymyframe/smf_flutter_cli/issues/172)). ([6f819423](https://github.com/saymyframe/smf_flutter_cli/commit/6f8194238bcb957d19409d3acf867445e2b3989e))
+
+#### `smf_firebase_core` - `v0.4.1`
+
+ - **FIX**(pipeline): check the machine for a module after the modules it depends on ([#151](https://github.com/saymyframe/smf_flutter_cli/issues/151)). ([494c1eb0](https://github.com/saymyframe/smf_flutter_cli/commit/494c1eb0839d4fba35eac6dca80203d416cabd9d))
+ - **FEAT**(pipeline): list the steps left for later after the app is created, without a warning ([#176](https://github.com/saymyframe/smf_flutter_cli/issues/176)). ([571c0ace](https://github.com/saymyframe/smf_flutter_cli/commit/571c0acea10fc246ca3cb8dd81b2446d1ed9a00a))
+ - **FEAT**(firebase_core): a check of the version of the Firebase CLI for the modules that depend on it ([#146](https://github.com/saymyframe/smf_flutter_cli/issues/146)). ([b911fe46](https://github.com/saymyframe/smf_flutter_cli/commit/b911fe46304dabdc4460112d264e7e67191d17b4))
+
+#### `smf_material_theme` - `v0.4.1`
+
+ - **FEAT**(material_theme): give text fields the look of the theme ([#160](https://github.com/saymyframe/smf_flutter_cli/issues/160)). ([2d1d6a24](https://github.com/saymyframe/smf_flutter_cli/commit/2d1d6a2446b29a5a5486aba0a97d34909589186b))
+
+#### `smf_riverpod` - `v0.3.2`
+
+ - **FEAT**(bloc,riverpod): tell in the agent note how a screen, shared state and an awaited call are written ([#172](https://github.com/saymyframe/smf_flutter_cli/issues/172)). ([6f819423](https://github.com/saymyframe/smf_flutter_cli/commit/6f8194238bcb957d19409d3acf867445e2b3989e))
+
+#### `smf_settings` - `v0.4.1`
+
+ - **FEAT**(contracts): warn of the destinations of an app without a main navigation ([#175](https://github.com/saymyframe/smf_flutter_cli/issues/175)). ([39a624ba](https://github.com/saymyframe/smf_flutter_cli/commit/39a624ba72cb4d4c878409f46bb8b266820d3ebd))
+
+
 ## 2026-10-07
 
 ### Changes

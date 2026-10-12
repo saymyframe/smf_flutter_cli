@@ -1,3 +1,9 @@
+## 0.4.1
+
+ - **FIX**(pipeline): check the machine for a module after the modules it depends on ([#151](https://github.com/saymyframe/smf_flutter_cli/issues/151)). ([494c1eb0](https://github.com/saymyframe/smf_flutter_cli/commit/494c1eb0839d4fba35eac6dca80203d416cabd9d))
+ - **FEAT**(pipeline): list the steps left for later after the app is created, without a warning ([#176](https://github.com/saymyframe/smf_flutter_cli/issues/176)). ([571c0ace](https://github.com/saymyframe/smf_flutter_cli/commit/571c0acea10fc246ca3cb8dd81b2446d1ed9a00a))
+ - **FEAT**(firebase_core): a check of the version of the Firebase CLI for the modules that depend on it ([#146](https://github.com/saymyframe/smf_flutter_cli/issues/146)). ([b911fe46](https://github.com/saymyframe/smf_flutter_cli/commit/b911fe46304dabdc4460112d264e7e67191d17b4))
+
 ## 0.4.0
 
 > Note: This release has breaking changes.
