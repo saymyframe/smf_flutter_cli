@@ -1,5 +1,5 @@
 name: smf_flutter_cli
-description: "The smf command of Say My Frame: generates Flutter apps from independent modules, such as a router, tabs, dependency injection, state management and Firebase."
+description: "The smf command of Say My Frame: generates Flutter apps from independent modules, such as a router, tabs, sign-in, dependency injection, state management and Firebase."
 version: 0.4.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli
