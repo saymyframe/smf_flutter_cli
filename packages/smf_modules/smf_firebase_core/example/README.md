@@ -17,10 +17,12 @@ Future<void> bootstrap() async {
 }
 ```
 
-Until `flutterfire configure` runs, `lib/firebase_options.dart` is a placeholder: the app compiles but stops at start-up. A run that cannot ask or skips external setup, such as `smf create my_app -m firebase_core --no-input --skip-external-setup` in CI, prints the command to run in the app later instead:
+Until `flutterfire configure` runs, `lib/firebase_options.dart` is a placeholder: the app compiles but stops at start-up. A run that cannot ask or skips external setup, such as `smf create my_app -m firebase_core --no-input --skip-external-setup` in CI, leaves the command for later and prints it once the app is created:
 
 ```text
-[WARN] Configuring Firebase with flutterfire is not done, because the run skips external setup. Run it in the app: dart pub global run flutterfire_cli:flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=com.example.my-app --android-package-name=com.example.my_app
+One step is left for later. Run it in the app:
+  Configuring Firebase with flutterfire (the run skips external setup):
+    dart pub global run flutterfire_cli:flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=com.example.my-app --android-package-name=com.example.my_app
 ```
 
 The other Firebase modules depend on this module, so it comes with them.
