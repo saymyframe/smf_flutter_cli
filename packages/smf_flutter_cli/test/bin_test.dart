@@ -89,6 +89,11 @@ String _fakeSdk(Directory directory) {
   return bin;
 }
 
+/// The page of the Firebase console with the sign-in methods of a project
+/// that the user picks there.
+const _signInMethods =
+    'https://console.firebase.google.com/project/_/authentication/providers';
+
 /// The option of the platforms of `flutterfire configure` as the CLI prints
 /// a command for later: in double quotes on Windows, since PowerShell reads
 /// a comma as its own.
@@ -320,6 +325,62 @@ void main() {
                   r'^  flutter_riverpod \S+ \(riverpod\)$',
                   multiLine: true,
                 ),
+              ),
+            ),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
+        'the sign-in without a state manager is a usage error that says '
+        'which modules to choose from, and --explain shows the app with '
+        'the first of them and what else the sign-in brings',
+        () async {
+          const create = ['create', 'my_app', '-m', 'sign_in', '-o'];
+
+          final result = await _smf(
+            [...create, temporary.path, '--no-input'],
+            path: sdk,
+          );
+          final explained = await _smf(
+            [...create, temporary.path, '--explain'],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 64);
+          expect(
+            result.stderr,
+            contains(
+              'Several modules provide the state management role, which '
+              'sign_in requires: bloc, riverpod. Add one of them to -m.',
+            ),
+          );
+          expect(explained.exitCode, 0, reason: '${explained.stderr}');
+          expect(
+            explained.stdout,
+            allOf(
+              contains('  sign_in: requested, variant for bloc\n'),
+              contains(
+                '  bloc: the first provider of the state management role, '
+                'which sign_in requires; a run asks which one, also offering '
+                'riverpod\n',
+              ),
+              contains(
+                '  firebase_auth: the only provider of the authentication '
+                'role, which sign_in requires\n',
+              ),
+              contains(
+                '  settings: the only provider of the settings screen '
+                'role, which sign_in requires\n',
+              ),
+              contains(
+                '  go_router: the only provider of the router role, which '
+                'sign_in requires\n',
               ),
             ),
           );
@@ -735,6 +796,77 @@ void main() {
                 '$_platforms --overwrite-firebase-options '
                 '--ios-bundle-id=com.example.my-app '
                 '--android-package-name=com.example.my_app (firebase_core)\n',
+              ),
+            ]),
+          );
+          expect(
+            Directory(p.join(temporary.path, 'my_app')).existsSync(),
+            isFalse,
+          );
+        },
+        timeout: timeout,
+      );
+
+      test(
+        '--explain shows the module chosen for the sign-in, with Firebase, '
+        'which it depends on, the Firebase CLI that its step needs, and the '
+        'step, which runs after flutterfire configure once the user agreed',
+        () async {
+          final result = await _smf(
+            [
+              'create',
+              'my_app',
+              '--explain',
+              '-m',
+              'firebase_crashlytics,firebase_auth',
+              '-o',
+              temporary.path,
+            ],
+            path: sdk,
+          );
+
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+          expect(
+            result.stdout,
+            allOf([
+              contains('  firebase_auth: requested\n'),
+              contains('  Authentication: firebase_auth\n'),
+              matches(
+                RegExp(
+                  r'^  firebase_auth \S+ \(firebase_auth\)$',
+                  multiLine: true,
+                ),
+              ),
+              // The check of the Firebase CLI itself, of firebase_core, and
+              // the check of the version that has the command of the step.
+              contains(
+                '  ✗ Firebase CLI (for firebase_core): missing\n',
+              ),
+              contains(
+                '  ✗ Firebase CLI 15.6.0 or later (for firebase_auth): '
+                'missing\n',
+              ),
+              // The step continues flutterfire configure, and has what the
+              // user has to know before it runs. The step of the other
+              // module that continues flutterfire configure comes after
+              // it, by the names of the two modules, and runs whatever
+              // becomes of this one.
+              contains(
+                '--android-package-name=com.example.my_app (firebase_core)\n'
+                '    then dart tool/enable_firebase_sign_in.dart '
+                '(firebase_auth)\n'
+                '      The Firebase CLI adds a web app named "Default Web '
+                'App" to a project that has no web app, because it enables '
+                'the methods through one (firebase/firebase-tools#11250). '
+                'The page $_signInMethods of the Firebase console enables '
+                'them without it.\n'
+                '      A run asks before it runs this step, and leaves it '
+                'for later when it cannot ask.\n'
+                "    then ruby -e 'f = ARGV[0]; ",
+              ),
+              contains(
+                "' ios/Runner.xcodeproj/project.pbxproj "
+                '(firebase_crashlytics, on macOS)\n',
               ),
             ]),
           );

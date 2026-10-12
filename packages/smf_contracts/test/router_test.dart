@@ -750,6 +750,8 @@ void main() {
   });
 
   group('the router choice of the start route', () {
+    // The app has a layout, which shows its destinations, so the hook warns
+    // of none of them.
     Future<Object?> choose(
       List<RoleData<Object>> data, {
       String? start,
@@ -759,7 +761,7 @@ void main() {
           routerRole.choiceContext(
             RoleChoiceRequest(
               data: data,
-              presentRoles: {routerRole},
+              presentRoles: {routerRole, layoutRole},
               optionValues: {'start': start},
               environment: environment ?? FakeEnvironment(),
               context: testContext,
@@ -925,6 +927,254 @@ void main() {
         isNull,
       );
       expect(routerRole.startIn(inputOf(routerRole, data: _data)), isNull);
+    });
+  });
+
+  group('the warning of the destinations of an app without a layout', () {
+    // Routes of modules that no registry has, so that the warning can have
+    // nothing but what the data of the role give it.
+    final quarry = dataOf(
+      routerRole,
+      RoutesData([
+        Route(
+          '/',
+          name: 'pit',
+          screen: _screen('PitScreen', 'quarry'),
+          destination: _destination('Pit'),
+          startCandidate: true,
+          children: [
+            Route('ledge', name: 'ledge', screen: _screen('Ledge', 'quarry')),
+          ],
+        ),
+        Route(
+          '/crane',
+          name: 'crane',
+          screen: _screen('CraneScreen', 'quarry'),
+          destination: _destination('Crane'),
+        ),
+        Route('/gate', name: 'gate', screen: _screen('GateScreen', 'quarry')),
+      ]),
+      module: 'quarry',
+    );
+    final kiln = dataOf(
+      routerRole,
+      RoutesData([
+        Route(
+          '/',
+          name: 'fire',
+          screen: _screen('FireScreen', 'kiln'),
+          destination: _destination('Fire'),
+        ),
+      ]),
+      module: 'kiln',
+    );
+    // A module with one destination, which can start the app.
+    final well = dataOf(
+      routerRole,
+      RoutesData([
+        Route(
+          '/',
+          name: 'rope',
+          screen: _screen('RopeScreen', 'well'),
+          destination: _destination('Rope'),
+          startCandidate: true,
+        ),
+        Route('/lid', name: 'lid', screen: _screen('LidScreen', 'well')),
+      ]),
+      module: 'well',
+    );
+
+    // The warning of an app whose main navigation would lead to the one
+    // destination of the kiln.
+    const ofKiln = 'No module provides the layout role, so the app has no '
+        'main navigation to lead to the destination /kiln (kiln). Choose a '
+        'provider of the role, or open it from a screen of yours with '
+        'context.nav.';
+
+    /// What the hook warned of, and the path of the route that it chose,
+    /// for an app with [data] that has a layout only with [layout].
+    Future<({List<String> warnings, String? start})> choose(
+      List<RoleData<Object>> data, {
+      String? start,
+      bool layout = false,
+      int pick = 0,
+    }) async {
+      final environment = PromptingEnvironment(pick: pick);
+      final choice = await routerRole.template.choose(
+        routerRole.choiceContext(
+          RoleChoiceRequest(
+            data: data,
+            presentRoles: {routerRole, if (layout) layoutRole},
+            optionValues: {'start': start},
+            environment: environment,
+            context: testContext,
+          ),
+        ),
+      );
+      return (
+        warnings: environment.warnings,
+        start: (choice! as RouterChoice).startPath,
+      );
+    }
+
+    test('names each destination but that of the start by its path and module',
+        () async {
+      final run = await choose([quarry, kiln]);
+
+      expect(run.start, '/quarry');
+      expect(
+        run.warnings.single,
+        'No module provides the layout role, so the app has no main '
+        'navigation to lead to the destinations /quarry/crane (quarry), /kiln '
+        '(kiln). Choose a provider of the role, or open them from a screen of '
+        'yours with context.nav.',
+      );
+    });
+
+    test('names one destination as one', () async {
+      final run = await choose([well, kiln]);
+
+      expect(run.start, '/well');
+      expect(run.warnings.single, ofKiln);
+    });
+
+    test('names the role as the role names itself', () async {
+      final run = await choose([well, kiln]);
+
+      expect(run.warnings.single, contains('provides the $layoutRole,'));
+    });
+
+    test('is given only in an app without a layout', () async {
+      expect((await choose([quarry, kiln])).warnings, hasLength(1));
+
+      final run = await choose([quarry, kiln], layout: true);
+
+      expect(run.start, '/quarry');
+      expect(run.warnings, isEmpty);
+    });
+
+    test('is given only in an app with destinations', () async {
+      List<RoleData<Object>> mine({required bool withDestination}) => [
+            dataOf(
+              routerRole,
+              RoutesData([
+                Route(
+                  '/',
+                  name: 'shaft',
+                  screen: _screen('ShaftScreen', 'mine'),
+                  startCandidate: true,
+                ),
+                Route(
+                  '/cart',
+                  name: 'cart',
+                  screen: _screen('CartScreen', 'mine'),
+                  destination: withDestination ? _destination('Cart') : null,
+                ),
+              ]),
+              module: 'mine',
+            ),
+          ];
+      expect(
+        (await choose(mine(withDestination: true))).warnings.single,
+        contains('the destination /mine/cart (mine).'),
+      );
+
+      // Nothing leads to the route of the cart here either, but a route
+      // that is no destination is not one that a main navigation shows.
+      final run = await choose(mine(withDestination: false));
+
+      expect(run.start, '/mine');
+      expect(run.warnings, isEmpty);
+    });
+
+    test('is not given when the only destination starts the app', () async {
+      expect(
+        (await choose([well], start: '/well/lid')).warnings.single,
+        contains('the destination /well (well).'),
+      );
+
+      final run = await choose([well]);
+
+      expect(run.start, '/well');
+      expect(run.warnings, isEmpty);
+    });
+
+    test('names every destination of an app that starts on its fallback screen',
+        () async {
+      const ofStart = 'No route is marked as a start candidate, so the app '
+          'starts on its fallback screen. Choose a start route with --start.';
+      // No route of the module can start the app. The hook tells first
+      // where the app starts, and then of the destination: --start would
+      // show one destination, and a first screen that the developer writes
+      // in place of the fallback screen would lead to none.
+      final run = await choose([kiln]);
+
+      expect(run.start, isNull);
+      expect(run.warnings, hasLength(2));
+      expect(run.warnings.first, ofStart);
+      expect(run.warnings.last, ofKiln);
+
+      // An app with a layout gets the warning of its start alone.
+      expect((await choose([kiln], layout: true)).warnings, [ofStart]);
+    });
+
+    test('names every destination when --start is a route outside them',
+        () async {
+      final run = await choose([quarry], start: '/quarry/gate');
+
+      expect(run.start, '/quarry/gate');
+      expect(
+        run.warnings.single,
+        contains('the destinations /quarry (quarry), /quarry/crane (quarry).'),
+      );
+    });
+
+    test('leaves out the destination that --start is below', () async {
+      // The app starts on the stack of the route, whose first page is the
+      // destination, so back leads to it.
+      final run = await choose([quarry], start: '/quarry/ledge');
+
+      expect(run.start, '/quarry/ledge');
+      expect(
+        run.warnings.single,
+        contains('the destination /quarry/crane (quarry).'),
+      );
+    });
+
+    test('leaves out the destination that the user picks to start on',
+        () async {
+      final run = await choose([quarry, well], pick: 1);
+
+      expect(run.start, '/well');
+      expect(
+        run.warnings.single,
+        contains('the destinations /quarry (quarry), /quarry/crane (quarry).'),
+      );
+    });
+
+    test('is not given for a start that the hook refuses', () async {
+      Future<List<String>> warningsFor(String start) async {
+        final environment = PromptingEnvironment();
+        try {
+          await routerRole.template.choose(
+            routerRole.choiceContext(
+              RoleChoiceRequest(
+                data: [quarry, kiln],
+                presentRoles: {routerRole},
+                optionValues: {'start': start},
+                environment: environment,
+                context: testContext,
+              ),
+            ),
+          );
+        } on SmfUsageException {
+          // The run stops with the message of the exception alone.
+        }
+        return environment.warnings;
+      }
+
+      expect(await warningsFor('/quarry'), hasLength(1));
+      expect(await warningsFor('/nowhere'), isEmpty);
     });
   });
 

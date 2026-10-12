@@ -3,6 +3,7 @@
 library;
 
 import 'package:fake_infra/bundles/fake_analytics_bundle.dart';
+import 'package:fake_infra/bundles/fake_auth_bundle.dart';
 import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
@@ -687,6 +688,51 @@ final class FakeThemeModule extends SmfModule {
             'FixtureSeedScope(notifier: fixtureSeed, child: ',
             ')',
             imports: [ThemeRole.createLightTheme.importRef],
+          ),
+        ),
+      ];
+}
+
+/// A provider of the auth role, which has at most one provider, whose
+/// service opens asynchronously, as one does that reads the storage of the
+/// device. It keeps the accounts in memory, where they stand for the server
+/// of a provider, and the user who is signed in on the device, whom each
+/// start of the app reads anew.
+///
+/// A start of the app keeps the accounts and that user, and loses that the
+/// user signed in a short while ago: the fixture deletes the account of a
+/// user whom the start found on the device only once that user has signed
+/// in again, as the role lets a provider ask. An anonymous user has nothing
+/// to sign in with again, so the fixture deletes one whenever it is asked
+/// to.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: the session of the app, and the mode of the
+/// app, which the fixture has the same code for.
+final class FakeAuthModule extends SmfModule {
+  /// Creates the module.
+  const FakeAuthModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_auth');
+
+  static const _file = ImportRef.app('core/fixture_auth/fixture_auth.dart');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Sign-in with accounts in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(authRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeAuthBundle),
+        authRole.data(
+          const RoleImplementation.async(
+            type: TypeRef('FixtureAuth', import: _file),
+            init: FactoryRef('openFixtureAuth', import: _file),
           ),
         ),
       ];

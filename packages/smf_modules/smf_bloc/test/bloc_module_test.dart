@@ -39,6 +39,11 @@ Map<String, Object?> _pubspecOf(RenderedApp app) {
       as Map<String, Object?>;
 }
 
+/// The inline code of [markdown]: what stands between two backticks.
+Set<String> _codeOf(String markdown) => {
+      for (final match in RegExp('`([^`]+)`').allMatches(markdown)) match[1]!,
+    };
+
 void main() {
   const module = BlocModule();
 
@@ -140,6 +145,44 @@ void main() {
       // The package of the module, whose classes the note names.
       expect(agentNote, startsWith('With `flutter_bloc`:\n'));
       expect(_pubspecOf(withBloc)['dependencies'], contains('flutter_bloc'));
+    });
+
+    test(
+        'tells in its note how a screen with state, state that several '
+        'screens read and an awaited call are written, with these names of '
+        'the package and no other code', () {
+      // The paths of the note are for the rule of the app entry role,
+      // which finds each of them in every app that the harness renders.
+      final code = _codeOf(agentNote).where((span) => !span.contains('/'));
+
+      expect(code.toSet(), {
+        'flutter_bloc',
+        // What holds the state of a screen, what provides it, and what
+        // builds the view of the screen from it.
+        'Cubit',
+        'BlocProvider',
+        'BlocBuilder',
+        // Where the provider of state that several screens read goes, and
+        // how a widget reads that state.
+        'runApp()',
+        'context.watch',
+        // What a cubit minds after a call that it awaited.
+        'await',
+        'isClosed',
+        'emit()',
+      });
+      // No file of this app is written with the package, so none shows
+      // these names. A module with screens writes such code in its variant
+      // for this one, and the tests of a registry with such a module look
+      // up there each name that the note gives.
+      expect(
+        [
+          for (final file in withBloc.files.values)
+            if (file.isText && file.text.contains('package:flutter_bloc/'))
+              file.path,
+        ],
+        isEmpty,
+      );
     });
 
     test('depends on flutter_bloc 9', () {

@@ -3,15 +3,138 @@
 // only in its job with Flutter, which checks that they apply to some app
 // and that they check the contract of their roles with every provider
 // only at its end; these tests check the same without Flutter.
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:mason/mason.dart';
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
+import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_sign_in/smf_sign_in.dart';
 import 'package:test/test.dart';
+
+/// A provider of the auth role for the test of the app test of the role,
+/// which applies to the apps with the role whichever module provides it: a
+/// service that has nobody signed in and takes no call.
+final class _SignInOfTest extends SmfModule {
+  const _SignInOfTest();
+
+  /// The id of the module.
+  static const id = ModuleId('sign_in_of_test');
+
+  static const _path = 'core/sign_in_of_test/sign_in_of_test.dart';
+
+  static const _file = ImportRef.app(_path);
+
+  static const _source = '''
+import '../auth/auth_service.dart';
+
+AuthService createSignInOfTest() => const SignInOfTest();
+
+final class SignInOfTest implements AuthService {
+  const SignInOfTest();
+
+  @override
+  AuthUser? get currentUser => null;
+
+  @override
+  Stream<AuthUser?> get userChanges => const Stream.empty();
+
+  @override
+  Future<void> signIn({required String email, required String password}) =>
+      _refuse();
+
+  @override
+  Future<void> signUp({required String email, required String password}) =>
+      _refuse();
+
+  @override
+  Future<void> linkPassword({
+    required String email,
+    required String password,
+  }) =>
+      _refuse();
+
+  @override
+  Future<void> signInAnonymously() => _refuse();
+
+  @override
+  Future<void> sendPasswordReset(String email) => _refuse();
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<void> deleteAccount() => _refuse();
+
+  Future<void> _refuse() async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
+}
+''';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Sign-in that takes no call',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(authRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          MasonBundle(
+            name: id.value,
+            description: 'The service of the provider',
+            version: '0.1.0',
+            files: [
+              MasonBundledFile(
+                'lib/$_path',
+                base64.encode(utf8.encode(_source)),
+                'text',
+              ),
+            ],
+          ),
+        ),
+        authRole.data(
+          const RoleImplementation(
+            type: TypeRef('SignInOfTest', import: _file),
+            create: FactoryRef('createSignInOfTest', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// The apps with every module of the matrix of the CLI: one for each state
+/// manager, and each once more for each other mode of the auth role, which
+/// Firebase Authentication provides there.
+const _everyModule = [
+  'every module (bloc)',
+  'every module (riverpod)',
+  'every module (bloc) --auth-mode=guest',
+  'every module (bloc) --auth-mode=anonymous',
+  'every module (riverpod) --auth-mode=guest',
+  'every module (riverpod) --auth-mode=anonymous',
+];
+
+/// The apps of the sign-in of the matrix of the CLI: one for each state
+/// manager, with the localization and without. Each has a settings screen,
+/// which the module requires for the entry of the account.
+const List<String> _signIn = [
+  ..._localizedSignIn,
+  'sign_in (bloc)',
+  'sign_in (riverpod)',
+];
+
+/// Those of them with the localization.
+const _localizedSignIn = [
+  'sign_in (bloc) with localization',
+  'sign_in (riverpod) with localization',
+];
 
 /// The codes of the languages of the file of the texts of a module that
 /// the matrix writes for an app, [file], in the order of the file.
@@ -58,10 +181,10 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the DI role, '
-      'of the events role, of the preferences role, of the settings screen '
-      'role, of the theme role, of the localization role and of the app '
-      'entry role with every provider of each, which they tell apart by the '
-      'roles of the app only', () {
+      'of the events role, of the preferences role, of the auth role, of '
+      'the settings screen role, of the theme role, of the localization '
+      'role and of the app entry role with every provider of each, which '
+      'they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -69,6 +192,7 @@ void main() {
         diRole,
         eventsRole,
         preferencesRole,
+        authRole,
         settingsScreenRole,
         themeRole,
         appEntryRole,
@@ -77,9 +201,13 @@ void main() {
     );
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('onboarding').roles, {routerRole});
+    expect(named('sign_in').roles, {routerRole});
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('preferences_role').roles, {preferencesRole});
+    expect(named('auth_role').roles, {authRole});
+    // The test of the provider of the role checks what only it does.
+    expect(named('firebase_auth').roles, isEmpty);
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
     // The test of the theme role checks that the root of the app, which the
@@ -90,6 +218,13 @@ void main() {
     expect(named('language_setting').roles, {localizationRole});
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
+  });
+
+  test(
+      'no app test reads the name or the options of an app of the matrix: '
+      'each takes what a role chose for the app, such as the value of a '
+      'mode option, from the roles of the app', () {
+    expect(appTests.modeProblems(apps), isEmpty);
   });
 
   test(
@@ -123,7 +258,7 @@ void main() {
         for (final app in apps)
           if (everyModule.appliesTo(app)) app.name,
       ],
-      ['every module (bloc)', 'every module (riverpod)'],
+      _everyModule,
     );
 
     // The locations of an app with home, whose route starts the app.
@@ -144,7 +279,13 @@ void main() {
     );
     expect(
       index.declarations.map((declaration) => declaration.name),
-      ['WalkedLocation', 'walkedLocations', 'shownFor', 'closedGuards'],
+      [
+        'WalkedLocation',
+        'ShownScreen',
+        'walkedLocations',
+        'shownFor',
+        'closedGuards',
+      ],
     );
     expect(
       files[routerWalkFile],
@@ -156,20 +297,28 @@ void main() {
         '  ),\n',
       ),
     );
-    // No module of the app has a guard of the routes: the walk expects each
-    // location itself, and the file names nothing of what the role
-    // generates for guards, which the app does not have.
+    // No module of the app has a guard of the routes: the walk expects the
+    // page and the screen of each location itself, and the file names
+    // nothing of what the role generates for guards, which the app does not
+    // have, nor the screen that the app starts on, which only a flow that
+    // is over shows in place of a location.
     expect(
       files[routerWalkFile],
       contains(
-        'WalkedLocation shownFor(WalkedLocation walked) => walked;\n',
+        'ShownScreen shownFor(WalkedLocation walked) =>\n'
+        '    (route: walked.route, screen: walked.screen);\n',
       ),
     );
     expect(
       files[routerWalkFile],
       contains('List<String> closedGuards() => const [];\n'),
     );
-    for (final name in [RouterRole.redirectOf, RouterRole.routeGuards]) {
+    for (final name in [
+      RouterRole.redirectOf,
+      RouterRole.flowIsOver,
+      RouterRole.routeGuards,
+      'startOfApp',
+    ]) {
       expect(files[routerWalkFile], isNot(contains(name)));
     }
   });
@@ -177,8 +326,8 @@ void main() {
   test(
       'in an app with guards of the routes, the file of the walk has the '
       'target of each guard once, also one beyond the locations that the '
-      'walk goes to, the location that the router shows for another, and '
-      'the guards that do not allow', () {
+      'walk goes to, the screen that the app starts on, what the router '
+      'shows for a location, and the guards that do not allow', () {
     const screens = ImportRef.app('features/gate/gate_screens.dart');
     const status = ImportRef.app('features/gate/gate_status.dart');
     Route route(
@@ -192,46 +341,64 @@ void main() {
           screen: ScreenRef(screen, import: screens),
           children: children,
         );
-    RouteGuard guard(String name, String target) => RouteGuard(
+    RouteGuard guard(
+      String name,
+      String target, {
+      GuardStage stage = GuardStage.welcome,
+    }) =>
+        RouteGuard(
           name: name,
           allows: FunctionRef(name, import: status),
           redirectTo: target,
+          stage: stage,
         );
-    final app = MatrixApp(
-      'gate',
-      const [ModuleId('gate')],
-      hook: RoleHookRequest(
-        data: [
-          routerRole
-              .data(
-                RoutesData(
-                  [
-                    route(
-                      '/intro',
-                      'IntroScreen',
-                      children: [route('terms', 'TermsScreen')],
-                    ),
-                    // As many routes as fill the walk with the two above.
-                    for (var index = 2; index < routerWalkLimit; index++)
-                      route('/r$index', 'Screen$index'),
-                    route('/login', 'LoginScreen'),
-                  ],
-                  guards: [
-                    guard('firstRun', 'intro'),
-                    guard('consent', 'intro'),
-                    guard('signedIn', 'login'),
-                  ],
-                ),
-              )
-              .withOrigin(const ModuleOrigin(ModuleId('gate'))),
-        ],
-        presentRoles: {routerRole},
-        context: ContractHarness.defaultContext,
-      ),
-    );
+    // An app that starts on the route at [start], or on the fallback start
+    // screen of the app entry if no route starts it.
+    String fileOf({String? start}) => named('router_walk').generatedFiles!(
+          MatrixApp(
+            'gate',
+            const [ModuleId('gate')],
+            hook: RoleHookRequest(
+              data: [
+                routerRole
+                    .data(
+                      RoutesData(
+                        [
+                          route(
+                            '/intro',
+                            'IntroScreen',
+                            children: [route('terms', 'TermsScreen')],
+                          ),
+                          // As many routes as fill the walk with the two
+                          // above.
+                          for (var index = 2; index < routerWalkLimit; index++)
+                            route('/r$index', 'Screen$index'),
+                          route('/login', 'LoginScreen'),
+                        ],
+                        // The module declares its guard of the later
+                        // stage first: the app asks it last.
+                        guards: [
+                          guard(
+                            'signedIn',
+                            'login',
+                            stage: GuardStage.identity,
+                          ),
+                          guard('firstRun', 'intro'),
+                          guard('consent', 'intro'),
+                        ],
+                      ),
+                    )
+                    .withOrigin(const ModuleOrigin(ModuleId('gate'))),
+              ],
+              presentRoles: {routerRole},
+              context: ContractHarness.defaultContext,
+              choices: {routerRole: RouterChoice(startPath: start)},
+            ),
+          ),
+          'my_app',
+        )[routerWalkFile]!;
 
-    final text =
-        named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!;
+    final text = fileOf(start: '/gate/r2');
 
     final (:index, :errors) = DartFileIndexer.parse(routerWalkFile, text);
     expect(errors, isEmpty);
@@ -248,8 +415,10 @@ void main() {
       index.declarations.map((declaration) => declaration.name),
       [
         'WalkedLocation',
+        'ShownScreen',
         'walkedLocations',
         'guardTargets',
+        'startOfApp',
         'shownFor',
         'closedGuards',
       ],
@@ -262,10 +431,12 @@ void main() {
     final walked = text.substring(0, targetsAt);
     final targets = text.substring(
       targetsAt,
-      text.indexOf('WalkedLocation shownFor'),
+      text.indexOf('const ShownScreen startOfApp'),
     );
     // The walk does not go to the target of the last guard, which is past
     // its limit; the file has it all the same, for the walk to expect it.
+    // The targets are in the order the app asks the guards, by their
+    // stages, and not as the module declares them.
     expect(routesIn(walked), hasLength(routerWalkLimit));
     expect(routesIn(walked), isNot(contains('gate.login')));
     expect(routesIn(targets), ['gate.intro', 'gate.login']);
@@ -279,23 +450,180 @@ void main() {
         '  ),\n',
       ),
     );
-    // What the router shows for a location is what redirectOf() of the
-    // role says of its route, and the guards that do not allow are those of
+    // The screen that the app starts on: that of the route that the router
+    // role chose, with the name of that route.
+    expect(
+      text,
+      contains(
+        'const ShownScreen startOfApp = (\n'
+        "  route: 'gate.r2',\n"
+        '  screen: screen0.Screen2,\n'
+        ');\n',
+      ),
+    );
+    // What the router shows for a location is what the role says of its
+    // route: the target of the guard that keeps the user from it, as
+    // redirectOf() says, which decides first; else the screen that the app
+    // starts on if flowIsOver() says that its flow is over; else the
+    // location itself. And the guards that do not allow are those of
     // routeGuards of the role.
     expect(
       [
         for (final call in index.invocations)
           if (call.target == null) call.name,
       ],
-      contains(RouterRole.redirectOf),
+      containsAllInOrder([RouterRole.redirectOf, RouterRole.flowIsOver]),
     );
     expect(
       text,
       contains(
         '  final target = redirectOf(walked.route);\n'
-        '  if (target == null) return walked;\n',
+        '  if (target != null) {\n'
+        '    final shown = guardTargets.firstWhere(\n'
+        '      (shown) => shown.route == target.routeName,\n'
+        '    );\n'
+        '    return (route: shown.route, screen: shown.screen);\n'
+        '  }\n'
+        '  if (flowIsOver(walked.route)) return startOfApp;\n'
+        '  return (route: walked.route, screen: walked.screen);\n',
       ),
     );
+    expect(
+      text,
+      contains(
+        '  for (final guard in routeGuards)\n'
+        '    if (!guard.allows.value) guard.name,\n',
+      ),
+    );
+
+    // In an app that no route can start, the screen that it starts on is
+    // the fallback start screen of the app entry role, which is no route:
+    // the file imports it like the screens of the routes.
+    final withoutStart = fileOf();
+    final parsed = DartFileIndexer.parse(routerWalkFile, withoutStart);
+    expect(parsed.errors, isEmpty);
+    expect(
+      [
+        for (final import in parsed.index.imports)
+          '${import.uri} ${import.prefix}',
+      ],
+      contains('package:my_app/core/app/fallback_start_screen.dart screen1'),
+    );
+    expect(
+      withoutStart,
+      contains(
+        'const ShownScreen startOfApp = (\n'
+        '  route: null,\n'
+        '  screen: screen1.FallbackStartScreen,\n'
+        ');\n',
+      ),
+    );
+  });
+
+  test(
+      'in an app with a guard that stands for a condition, the file of the '
+      'walk has the routes that ask for the condition among its locations '
+      'like any other, and the targets of the gates before those of such '
+      'guards, a target that a gate and such a guard share once', () {
+    const screens = ImportRef.app('features/club/club_screens.dart');
+    const status = ImportRef.app('features/club/club_status.dart');
+    // Conditions of a role of the app, as a role with an account
+    // publishes them.
+    const member = RouteCondition(preferencesRole, 'member');
+    const paid = RouteCondition(preferencesRole, 'paid');
+    Route route(
+      String path,
+      String screen, {
+      List<RouteCondition> conditions = const [],
+      List<Route> children = const [],
+    }) =>
+        Route(
+          path,
+          name: path.replaceFirst('/', ''),
+          screen: ScreenRef(screen, import: screens),
+          conditions: conditions,
+          children: children,
+        );
+    RouteGuard guard(String name, String target, [RouteCondition? condition]) =>
+        RouteGuard(
+          name: name,
+          allows: FunctionRef(name, import: status),
+          redirectTo: target,
+          stage: condition == null ? GuardStage.identity : GuardStage.welcome,
+          condition: condition,
+        );
+    final text = named('router_walk').generatedFiles!(
+      MatrixApp(
+        'club',
+        const [ModuleId('club')],
+        hook: RoleHookRequest(
+          data: [
+            routerRole
+                .data(
+                  RoutesData(
+                    [
+                      route('/lobby', 'LobbyScreen'),
+                      route(
+                        '/members',
+                        'MembersScreen',
+                        conditions: const [member],
+                        children: [route('card', 'CardScreen')],
+                      ),
+                      route(
+                        '/lounge',
+                        'LoungeScreen',
+                        conditions: const [paid],
+                      ),
+                      route('/plans', 'PlansScreen'),
+                      route('/login', 'LoginScreen'),
+                    ],
+                    // The module declares its guards of conditions first,
+                    // with the earlier stage: the app asks them after its
+                    // gate all the same. One of them shows the target of
+                    // the gate.
+                    guards: [
+                      guard('hasPaid', 'plans', paid),
+                      guard('isMember', 'login', member),
+                      guard('signedIn', 'login'),
+                    ],
+                  ),
+                )
+                .withOrigin(const ModuleOrigin(ModuleId('club'))),
+          ],
+          presentRoles: {routerRole, preferencesRole},
+          context: ContractHarness.defaultContext,
+          choices: const {routerRole: RouterChoice(startPath: '/club/lobby')},
+        ),
+      ),
+      'my_app',
+    )[routerWalkFile]!;
+
+    expect(DartFileIndexer.parse(routerWalkFile, text).errors, isEmpty);
+    // The walk goes to a route that asks for a condition, and to the route
+    // below it, as to any other: what the router shows for it is up to
+    // redirectOf() of the app, which knows the routes of each guard.
+    expect(_walkedRoutesOf(text), [
+      'club.lobby',
+      'club.members',
+      'club.card',
+      'club.lounge',
+      'club.plans',
+      'club.login',
+    ]);
+    final targetsAt = text.indexOf('guardTargets = [');
+    expect(
+      [
+        for (final match in RegExp(r"route: '([\w.]+)'").allMatches(
+          text.substring(
+            targetsAt,
+            text.indexOf('const ShownScreen startOfApp'),
+          ),
+        ))
+          match[1],
+      ],
+      ['club.login', 'club.plans'],
+    );
+    expect(text, contains('  final target = redirectOf(walked.route);\n'));
     expect(
       text,
       contains(
@@ -307,8 +635,8 @@ void main() {
 
   test(
       'the walk of the routes goes to the locations in the flows of the '
-      'guards after every other location, in their order among themselves, '
-      'and leaves them out first in an app with more locations than it goes '
+      'guards like any other, in the order of the routes of the app, and '
+      'leaves out the last ones in an app with more locations than it goes '
       'to', () {
     const gate = ImportRef.app('features/gate/gate_screens.dart');
     const feed = ImportRef.app('features/feed/feed_screens.dart');
@@ -329,6 +657,7 @@ void main() {
           name: name,
           allows: FunctionRef(name, import: status),
           redirectTo: target,
+          stage: GuardStage.welcome,
         );
     // A module with two guards, listed before a module with [routes] routes
     // of its own. The flow of its first guard is the target and the route
@@ -374,36 +703,31 @@ void main() {
     String fileOf(MatrixApp app) =>
         named('router_walk').generatedFiles!(app, 'my_app')[routerWalkFile]!;
 
-    // A screen in the flow of a guard may change what its guard allows when
-    // it is shown. The router then shows the target of that guard for each
-    // location after it, so the walk would not see the screens of those.
+    // No screen of a flow changes what the walk sees after it: while its
+    // guard does not allow, the router shows the target for every location
+    // outside the flow anyway, and once the flow is over, its screens are
+    // not shown.
     final text = fileOf(appWith(routes: 2));
     expect(DartFileIndexer.parse(routerWalkFile, text).errors, isEmpty);
     expect(_walkedRoutesOf(text), [
-      'gate.help',
-      'feed.r0',
-      'feed.r1',
       'gate.intro',
       'gate.terms',
       'gate.login',
+      'gate.help',
+      'feed.r0',
+      'feed.r1',
     ]);
 
     // The locations of the flows count among those that the walk goes to,
-    // so they are the first that it leaves out.
-    expect(_walkedRoutesOf(fileOf(appWith(routes: routerWalkLimit - 2))), [
-      'gate.help',
-      for (var index = 0; index < routerWalkLimit - 2; index++) 'feed.r$index',
-      'gate.intro',
-    ]);
+    // and are left out no sooner than any other.
     final beyond = fileOf(appWith(routes: routerWalkLimit));
     expect(_walkedRoutesOf(beyond), [
+      'gate.intro',
+      'gate.terms',
+      'gate.login',
       'gate.help',
-      for (var index = 0; index < routerWalkLimit - 1; index++) 'feed.r$index',
+      for (var index = 0; index < routerWalkLimit - 4; index++) 'feed.r$index',
     ]);
-    // The file has the targets of the guards all the same, for the walk to
-    // expect them while a guard does not allow.
-    expect(beyond, contains("    route: 'gate.intro',\n"));
-    expect(beyond, contains("    route: 'gate.login',\n"));
   });
 
   test(
@@ -512,8 +836,7 @@ void main() {
       [
         'event_bus with di',
         'event_bus',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
 
@@ -526,7 +849,7 @@ void main() {
         for (final app in apps)
           if (everyModule.appliesTo(app)) app.name,
       ],
-      ['every module (bloc)', 'every module (riverpod)'],
+      _everyModule,
     );
   });
 
@@ -569,8 +892,13 @@ void main() {
         // The onboarding requires the preferences.
         'onboarding with localization',
         'onboarding',
-        'every module (bloc)',
-        'every module (riverpod)',
+        // Firebase Authentication with the localization, which requires
+        // the preferences, and the sign-in with it.
+        'firebase_auth with localization, router',
+        'firebase_auth with localization',
+        'sign_in (bloc) with localization',
+        'sign_in (riverpod) with localization',
+        ..._everyModule,
       ],
     );
 
@@ -583,7 +911,7 @@ void main() {
         for (final app in apps)
           if (everyModule.appliesTo(app)) app.name,
       ],
-      ['every module (bloc)', 'every module (riverpod)'],
+      _everyModule,
     );
   });
 
@@ -676,8 +1004,13 @@ void main() {
         'material_theme with settings_screen, localization',
         'material_theme with localization',
         'onboarding with localization',
-        'every module (bloc)',
-        'every module (riverpod)',
+        // Firebase Authentication, which asks for its messages in the
+        // language of the app, and the sign-in, whose screens have texts.
+        'firebase_auth with localization, router',
+        'firebase_auth with localization',
+        'sign_in (bloc) with localization',
+        'sign_in (riverpod) with localization',
+        ..._everyModule,
       ],
     );
     // What the test has to check there. Every app has the two texts of the
@@ -704,8 +1037,11 @@ void main() {
         'material_theme with settings_screen, localization': ['en', 'uk'],
         'material_theme with localization': ['en', 'uk'],
         'onboarding with localization': ['en', 'uk'],
-        'every module (bloc)': ['en', 'uk'],
-        'every module (riverpod)': ['en', 'uk'],
+        'firebase_auth with localization, router': ['en', 'uk'],
+        'firebase_auth with localization': ['en', 'uk'],
+        'sign_in (bloc) with localization': ['en', 'uk'],
+        'sign_in (riverpod) with localization': ['en', 'uk'],
+        for (final app in _everyModule) app: ['en', 'uk'],
       },
     );
     for (final app in apps) {
@@ -1034,8 +1370,8 @@ void main() {
       [
         'settings with localization',
         'material_theme with settings_screen, localization',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._localizedSignIn,
+        ..._everyModule,
       ],
     );
 
@@ -1148,8 +1484,7 @@ void main() {
         'firebase_crashlytics with di',
         'firebase_analytics with di, router',
         'firebase_analytics with di',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
     // The app of the container alone, whose modules register nothing.
@@ -1318,9 +1653,10 @@ void main() {
       'the start check runs the probes of the tests that go into an app '
       'with it, the walk of the routes, the services of the DI role, the '
       'preferences of the role, those of shared_preferences once they are '
-      'opened again, the onboarding of a first launch and the languages '
-      'of the localization role, each a function of a file of its tests '
-      'that takes the one that waits until the screen settles', () async {
+      'opened again, the user of Firebase Authentication, the onboarding '
+      'of a first launch and the languages of the localization role, each '
+      'a function of a file of its tests that takes the one that waits '
+      'until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -1329,6 +1665,8 @@ void main() {
             p.basename(test.directory): '${probe.path} ${probe.function}',
       },
       {
+        'firebase_auth':
+            'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
@@ -1364,13 +1702,15 @@ void main() {
     // all of them, which the list of the probes names. That of the
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
-    // the routes of the app past it.
+    // the routes of the app past it. That of Firebase Authentication only
+    // reads, so it holds wherever it comes.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
       [for (final test in tests) p.basename(test.directory)],
       [
         'start',
+        'firebase_auth',
         'onboarding',
         'shared_preferences',
         'di_role',
@@ -1408,23 +1748,25 @@ void main() {
     expect(
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
-        'probe0: onboarding/probe.dart',
-        'probe1: shared_preferences/probe.dart',
-        'probe2: di_role/probe.dart',
-        'probe3: preferences_role/probe.dart',
-        'probe4: router_walk/walk.dart',
-        'probe5: localization_role/probe.dart',
+        'probe0: firebase_auth/probe.dart',
+        'probe1: onboarding/probe.dart',
+        'probe2: shared_preferences/probe.dart',
+        'probe3: di_role/probe.dart',
+        'probe4: preferences_role/probe.dart',
+        'probe5: router_walk/walk.dart',
+        'probe6: localization_role/probe.dart',
       ],
     );
-    expect(list, contains("('onboarding', probe0.probeOnboarding),"));
+    expect(list, contains("('firebase_auth', probe0.probeFirebaseAuth),"));
+    expect(list, contains("('onboarding', probe1.probeOnboarding),"));
     expect(
       list,
-      contains("('shared_preferences', probe1.probeSharedPreferences),"),
+      contains("('shared_preferences', probe2.probeSharedPreferences),"),
     );
-    expect(list, contains("('di_role', probe2.probeServices),"));
-    expect(list, contains("('preferences_role', probe3.probePreferences),"));
-    expect(list, contains("('router_walk', probe4.probeRoutes),"));
-    expect(list, contains("('localization_role', probe5.probeLanguages),"));
+    expect(list, contains("('di_role', probe3.probeServices),"));
+    expect(list, contains("('preferences_role', probe4.probePreferences),"));
+    expect(list, contains("('router_walk', probe5.probeRoutes),"));
+    expect(list, contains("('localization_role', probe6.probeLanguages),"));
   });
 
   test(
@@ -1491,7 +1833,7 @@ void main() {
         name: 'package:my_app/core/app/fallback_start_screen.dart: '
             'screen.FallbackStartScreen',
       // The start screen of home.
-      for (final name in ['every module (bloc)', 'every module (riverpod)'])
+      for (final name in _everyModule)
         name: 'package:my_app/features/home/home_screen.dart: '
             'screen.HomeScreen',
     });
@@ -1500,8 +1842,7 @@ void main() {
     expect(languages, {
       'onboarding with localization': ['en', 'uk'],
       'onboarding': ['en'],
-      'every module (bloc)': ['en', 'uk'],
-      'every module (riverpod)': ['en', 'uk'],
+      for (final app in _everyModule) app: ['en', 'uk'],
     });
     for (final app in apps.where(test.appliesTo)) {
       expect(
@@ -1596,6 +1937,362 @@ void main() {
   });
 
   test(
+      'the test of the sign-in applies to the apps with the module, '
+      'whatever else they have, in every mode of the auth role, declares '
+      'the mocks that sign a test account up through the session of the '
+      'app for the tests of every module of those apps, has no probe, and '
+      'expects the screen that the router role chose for the app to start '
+      'on, or the fallback screen of the app entry, and the texts of the '
+      'module in each language of the app', () {
+    final test = named('sign_in');
+    final applies = apps.where(test.appliesTo).toList();
+
+    expect(
+      [for (final app in applies) app.name],
+      [
+        for (final app in apps)
+          if (app.modules.contains(const ModuleId('sign_in'))) app.name,
+      ],
+    );
+    expect(
+      [for (final app in applies) app.name],
+      [..._signIn, ..._everyModule],
+    );
+    // The files of the test are the same in every mode, which the app has
+    // as a constant, and the matrix has an app with the module in each:
+    // the mode is the choice of the auth role for the app.
+    expect(
+      {
+        for (final app in applies)
+          authRole.modeIn(authRole.hookInput(app.hook!)).name,
+      },
+      {'required', 'guest', 'anonymous'},
+    );
+    expect(test.devDependencies, isEmpty);
+    expect(test.values, isNull);
+    // Nobody can sign in on a device, and the walk of the routes shows the
+    // screens there.
+    expect(test.startProbe, isNull);
+    expect(test.mocks!.path, 'test/sign_in_mocks.dart');
+    expect(test.mocks!.function, 'signUpTestAccount');
+    final mocks = DartFileIndexer.index(
+      test.mocks!.path,
+      File(p.joinAll([test.directory, ...test.mocks!.path.split('/')]))
+          .readAsStringSync(),
+    );
+    final function = mocks.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.parameters, isEmpty);
+    // The account goes through the session of the app, so the mocks know
+    // no provider of the auth role: they call signUp() of the session, and
+    // import no other file of the app than that of the role.
+    expect(
+      [
+        for (final call in mocks.invocations)
+          if (call.enclosingDeclaration == test.mocks!.function) call.name,
+      ],
+      containsAll(['signUp', 'unawaited']),
+    );
+    final sessionFile = AuthRole.sessionFile.substring('lib/'.length);
+    expect(
+      [
+        for (final import in mocks.imports)
+          if (import.uri.startsWith('package:')) import.uri,
+      ],
+      ['package:{{app_name}}/$sessionFile'],
+    );
+
+    final screens = <String, String>{};
+    final others = <String, String>{};
+    final settings = <String>{};
+    final destinations = <String, String>{};
+    final languages = <String, List<String>>{};
+    for (final app in applies) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [signInOfAppFile], reason: app.name);
+      final text = files[signInOfAppFile]!;
+      languages[app.name] = _languagesOf(text);
+      final (:index, :errors) = DartFileIndexer.parse(signInOfAppFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        [
+          'startScreen',
+          'otherPages',
+          'settingsLocation',
+          'settingsScreen',
+          'settingsInMainNavigation',
+          'accountEntry',
+          'signInTexts',
+        ],
+        reason: app.name,
+      );
+      // The settings screen, as the settings screen role finds it in the
+      // app, and the entry that the module gave the role, each from its
+      // file with a prefix of its own.
+      final input = settingsScreenRole.hookInput(app.hook!);
+      final screen = settingsScreenRole.screenIn(input)!;
+      final entry = settingsScreenRole
+          .entriesIn(input)
+          .singleWhere((entry) => entry.widget.name == 'AccountSetting')
+          .widget;
+      expect(
+        {
+          for (final import in index.imports)
+            if (import.prefix case 'settings' || 'entry')
+              import.prefix: import.uri,
+        },
+        {
+          'entry': entry.import!.resolveUri('my_app'),
+          'settings': screen.route.screen.import.resolveUri('my_app'),
+        },
+        reason: app.name,
+      );
+      destinations[app.name] = RegExp(
+        r'^const bool settingsInMainNavigation = (\w+);$',
+        multiLine: true,
+      ).firstMatch(text)![1]!;
+      settings.add(
+        [
+          for (final name in [
+            'AppLocation settingsLocation',
+            'Type settingsScreen',
+            'Type accountEntry',
+          ])
+            RegExp('^const $name = (.+);\$', multiLine: true)
+                .firstMatch(text)![1],
+        ].join(', '),
+      );
+      final import =
+          index.imports.singleWhere((import) => import.prefix == 'screen');
+      screens[app.name] = '${import.uri}: '
+          '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
+      others[app.name] =
+          RegExp(r'\(location: (\w+)\(\), screen: other\.(\w+)\)')
+              .allMatches(text)
+              .map((match) => '${match[1]} ${match[2]}')
+              .join(', ');
+    }
+    // Another page of the app for a user to be on: the settings screen,
+    // which every app with the module has. The other routes are the screen
+    // that an app with every module starts on, those in the flows of the
+    // guards, and the screen of the account, which asks for an account.
+    expect(others, {
+      for (final name in [..._signIn, ..._everyModule])
+        name: 'SettingsSettingsLocation SettingsScreen',
+    });
+    // The settings screen and the entry of the account are the same in
+    // every app of the matrix, whose settings screen is that of one module.
+    const everywhere = 'SettingsSettingsLocation(), settings.SettingsScreen, '
+        'entry.AccountSetting';
+    expect(settings, {everywhere});
+    // The settings screen is a destination of the main navigation in the
+    // apps with every module, which have a layout, and in no app of the
+    // module alone: there the tests open it over another page.
+    expect(destinations, {
+      for (final name in _signIn) name: 'false',
+      for (final name in _everyModule) name: 'true',
+    });
+    expect(screens, {
+      // No route can start the app, since those of the sign-in cannot.
+      for (final name in _signIn)
+        name: 'package:my_app/core/app/fallback_start_screen.dart: '
+            'screen.FallbackStartScreen',
+      // The start screen of home.
+      for (final name in _everyModule)
+        name: 'package:my_app/features/home/home_screen.dart: '
+            'screen.HomeScreen',
+    });
+    expect(languages, {
+      for (final name in _signIn)
+        name: name.endsWith('with localization') ? ['en', 'uk'] : ['en'],
+      for (final app in _everyModule) app: ['en', 'uk'],
+    });
+  });
+
+  test(
+      'the test of the sign-in gets each text of the module by its name, '
+      'in each language of the app in the order of the localization role, '
+      'in English where the module has no translation, and in English alone '
+      'in an app without the role; its files look up only texts of the '
+      'module, and have a text for every reason of a failure', () {
+    final test = named('sign_in');
+    // The settings screen of a module of the test, and the entry that the
+    // sign-in module gives it.
+    const options = ModuleOrigin(ModuleId('options'));
+    final entry = settingsScreenRole
+        .data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'AccountSetting',
+              import: ImportRef.app('features/sign_in/account_setting.dart'),
+            ),
+          ),
+        )
+        .withOrigin(const ModuleOrigin(ModuleId('sign_in')));
+    final screen = [
+      routerRole
+          .data(
+            const RoutesData([
+              Route(
+                '/options',
+                name: 'options',
+                screen: ScreenRef(
+                  'OptionsScreen',
+                  import: ImportRef.app('features/options/options_screen.dart'),
+                ),
+              ),
+            ]),
+          )
+          .withOrigin(options),
+      settingsScreenRole
+          .data(const SettingsScreenRoute('options'))
+          .withOrigin(options),
+    ];
+    String textsOf({
+      List<String>? languages,
+      List<RoleData<Object>>? entries,
+    }) =>
+        test.generatedFiles!(
+          MatrixApp(
+            'texts',
+            const [ModuleId('sign_in')],
+            hook: RoleHookRequest(
+              data: [
+                ...screen,
+                ...entries ?? [entry],
+              ],
+              presentRoles: {
+                routerRole,
+                settingsScreenRole,
+                if (languages != null) localizationRole,
+              },
+              context: ContractHarness.defaultContext,
+              choices: {
+                if (languages != null)
+                  localizationRole: LocalizationChoice(languages),
+              },
+            ),
+          ),
+          'my_app',
+        )[signInOfAppFile]!;
+    // The texts of a language in the file, each by its name.
+    Map<String, String> textsIn(String file, String language) {
+      final start = file.indexOf("  '$language': {\n");
+      expect(start, isNonNegative, reason: language);
+      final entries = file.substring(start, file.indexOf('  },\n', start));
+      return {
+        for (final entry in RegExp(r"^    '(\w+)': (.+),$", multiLine: true)
+            .allMatches(entries))
+          entry[1]!: entry[2]!,
+      };
+    }
+
+    final names = [for (final text in SignInModule.texts.texts) text.name];
+    final localized = textsOf(languages: ['uk', 'en', 'de']);
+    expect(_languagesOf(localized), ['uk', 'en', 'de']);
+    expect(
+      localized,
+      contains('const Map<String, Map<String, String>> signInTexts = {\n'),
+    );
+    final english = textsIn(localized, 'en');
+    expect(english.keys, names);
+    expect(textsIn(localized, 'uk').keys, names);
+    expect(english['title'], "'Sign in'");
+    expect(textsIn(localized, 'uk')['title'], "'Вхід'");
+    expect(
+      english['failureCredentials'],
+      "'The email or the password is wrong.'",
+    );
+    // The module has no German texts.
+    expect(textsIn(localized, 'de'), english);
+    final plain = textsOf();
+    expect(_languagesOf(plain), ['en']);
+    expect(textsIn(plain, 'en'), english);
+    // The settings screen of the module of the test, and the entry of the
+    // account among those of other modules: the one that the sign-in module
+    // gave the role.
+    final other = settingsScreenRole
+        .data(
+          const SettingsEntry(
+            widget: TypeRef(
+              'FeedSetting',
+              import: ImportRef.app('features/options/feed_setting.dart'),
+            ),
+          ),
+        )
+        .withOrigin(options);
+    expect(
+      textsOf(entries: [other, entry, other]),
+      allOf(
+        contains(
+          "import 'package:my_app/features/sign_in/account_setting.dart' "
+          'as entry;\n',
+        ),
+        contains(
+          "import 'package:my_app/features/options/options_screen.dart' "
+          'as settings;\n',
+        ),
+        contains(
+          'const AppLocation settingsLocation = OptionsOptionsLocation();\n',
+        ),
+        contains('const Type settingsScreen = settings.OptionsScreen;\n'),
+        contains('const Type accountEntry = entry.AccountSetting;\n'),
+      ),
+    );
+    // The test needs that one entry.
+    for (final (entries, count) in [
+      (<RoleData<Object>>[other], 0),
+      ([entry, other, entry], 2),
+    ]) {
+      expect(
+        () => textsOf(entries: entries),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'The module sign_in gives the settings screen of texts $count '
+                'entries, rather than the entry of the account alone.',
+          ),
+        ),
+      );
+    }
+
+    // The files of the test look each text up by its name, texts['name']
+    // or text('name'), and failureTextOf() of app.dart names the text of
+    // each reason of a failure: a name that the module does not have would
+    // fail only in a running app.
+    final looked = <String>{};
+    final failures = <String>{};
+    for (final file in Directory(test.directory)
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))) {
+      final source = file.readAsStringSync();
+      looked.addAll([
+        for (final use
+            in RegExp(r"\btexts?[\[(]'(\w+)'[\])]").allMatches(source))
+          use[1]!,
+      ]);
+      failures.addAll([
+        for (final use
+            in RegExp(r"AuthFailureReason\.\w+ => '(\w+)',").allMatches(source))
+          use[1]!,
+      ]);
+    }
+    expect(looked, isNotEmpty);
+    expect(names, containsAll(looked));
+    expect(failures, {
+      for (final name in names)
+        if (name.startsWith('failure')) name,
+      // An address that is none has one text, in the form and from the
+      // provider.
+      'emailInvalid',
+    });
+  });
+
+  test(
       'the tests of the settings screen role apply to the apps with the '
       'role, and get the location and the type of the screen, and the types '
       'of the entries, from the data of the role', () {
@@ -1621,8 +2318,8 @@ void main() {
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._signIn,
+        ..._everyModule,
       ],
     );
     // They run in a test of the app only, so they have no probe for a
@@ -1630,11 +2327,13 @@ void main() {
     expect(settings.startProbe, isNull);
     // The entries of each app, as the role gives them: none in the app of
     // the settings module alone, whose modules have no setting; the entry
-    // of the theme mode, which the template of the theme role contributes,
-    // in the apps with the theme; and the setting of the language, which
-    // the template of the localization role contributes, in the apps with
-    // the localization, after that of the theme, as the modules that
-    // provide the two roles are in the list of the CLI.
+    // of the account, which the sign-in module gives the role, in the apps
+    // with that module, before the entries of the templates of the roles;
+    // the entry of the theme mode, which the template of the theme role
+    // contributes, in the apps with the theme; and the setting of the
+    // language, which the template of the localization role contributes, in
+    // the apps with the localization, after that of the theme, as the
+    // modules that provide the two roles are in the list of the CLI.
     List<SettingsEntry> entriesOf(MatrixApp app) =>
         settingsScreenRole.entriesIn(settingsScreenRole.hookInput(app.hook!));
     expect(
@@ -1650,8 +2349,12 @@ void main() {
           'LanguageSetting',
         ],
         'material_theme with settings_screen': ['ThemeModeSetting'],
-        'every module (bloc)': ['ThemeModeSetting', 'LanguageSetting'],
-        'every module (riverpod)': ['ThemeModeSetting', 'LanguageSetting'],
+        for (final app in _localizedSignIn)
+          app: ['AccountSetting', 'LanguageSetting'],
+        'sign_in (bloc)': ['AccountSetting'],
+        'sign_in (riverpod)': ['AccountSetting'],
+        for (final app in _everyModule)
+          app: ['AccountSetting', 'ThemeModeSetting', 'LanguageSetting'],
       },
     );
 
@@ -1841,8 +2544,7 @@ void main() {
         'material_theme with settings_screen',
         'material_theme with localization',
         'material_theme',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
     for (final app in apps.where(theme.appliesTo)) {
@@ -1866,7 +2568,7 @@ void main() {
         for (final app in apps)
           if (everyModule.appliesTo(app)) app.name,
       ],
-      ['every module (bloc)', 'every module (riverpod)'],
+      _everyModule,
     );
   });
 
@@ -1897,8 +2599,7 @@ void main() {
       [
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._everyModule,
       ],
     );
     // It opens the settings screen with the location that the matrix writes
@@ -2098,8 +2799,8 @@ void main() {
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
-        'every module (bloc)',
-        'every module (riverpod)',
+        ..._signIn,
+        ..._everyModule,
       ],
     );
   });
@@ -2115,7 +2816,12 @@ void main() {
 
     expect(
       withoutRole.map((app) => app.name),
-      ['settings', 'material_theme with settings_screen'],
+      [
+        'settings',
+        'material_theme with settings_screen',
+        'sign_in (bloc)',
+        'sign_in (riverpod)',
+      ],
     );
     for (final app in withoutRole) {
       final files = settings.generatedFiles!(app, 'my_app');
@@ -2170,8 +2876,8 @@ void main() {
         [
           'settings with localization',
           'material_theme with settings_screen, localization',
-          'every module (bloc)',
-          'every module (riverpod)',
+          ..._localizedSignIn,
+          ..._everyModule,
         ],
         reason: languages,
       );
@@ -2250,8 +2956,7 @@ void main() {
     expect(languages, {
       'home with localization': ['en', 'uk'],
       'home': ['en'],
-      'every module (bloc)': ['en', 'uk'],
-      'every module (riverpod)': ['en', 'uk'],
+      for (final app in _everyModule) app: ['en', 'uk'],
     });
     for (final app in apps.where(test.appliesTo)) {
       expect(
@@ -2310,8 +3015,11 @@ void main() {
         'settings': (0, false),
         'material_theme with settings_screen, localization': (2, false),
         'material_theme with settings_screen': (1, false),
-        'every module (bloc)': (2, true),
-        'every module (riverpod)': (2, true),
+        // The entry of the account, and the setting of the language.
+        for (final app in _localizedSignIn) app: (2, false),
+        'sign_in (bloc)': (1, false),
+        'sign_in (riverpod)': (1, false),
+        for (final app in _everyModule) app: (3, true),
       },
     );
     for (final app in apps.where(settings.appliesTo)) {
@@ -2451,9 +3159,222 @@ void main() {
         'firebase_analytics with di, router': '/',
         'firebase_analytics with router': '/',
         // The start screen of home.
-        'every module (bloc)': 'home.home',
-        'every module (riverpod)': 'home.home',
+        for (final app in _everyModule) app: 'home.home',
       },
+    );
+  });
+
+  test(
+      'the test of the auth role applies to the apps with the role, '
+      'whichever module provides it, in each mode of the role, and gets the '
+      'mode that the role chose for each: the first one in an app that got '
+      'no value of the option of the role', () async {
+    final authTest = await authRoleAppTest();
+    // No module of the CLI provides the role in the apps of its matrix, so
+    // the registry has a provider of the test.
+    const modules = <SmfModule>[FlutterCoreModule(), _SignInOfTest()];
+    final (apps: ofRole, :failed) = await matrixOf(modules);
+    expect(
+      [
+        for (final result in failed)
+          '${result.contractCase}: ${result.errors.join('; ')}',
+      ],
+      isEmpty,
+    );
+
+    expect(p.basename(authTest.directory), 'auth_role');
+    expect(Directory(authTest.directory).existsSync(), isTrue);
+    expect(authTest.roles, {authRole});
+    // The matrix writes no file for it, and it has neither mocks nor a
+    // probe for the start check.
+    expect(authTest.generatedFiles, isNull);
+    expect(authTest.mocks, isNull);
+    expect(authTest.startProbe, isNull);
+    expect(
+      {
+        for (final app in ofRole)
+          app.name: authTest.appliesTo(app) ? authTest.values!(app) : null,
+      },
+      {
+        // The app entry alone has no sign-in.
+        'flutter_core': null,
+        // The app of the provider is the app with every module of the
+        // registry too. It got no value of the option, so it is in the
+        // first mode.
+        'sign_in_of_test': {'auth_mode': 'required'},
+        'auth by sign_in_of_test --auth-mode=guest': {'auth_mode': 'guest'},
+        'auth by sign_in_of_test --auth-mode=anonymous': {
+          'auth_mode': 'anonymous',
+        },
+      },
+    );
+    for (final app in ofRole) {
+      expect(
+        app.createArguments('app_1', '/apps').where(
+              (argument) => argument.startsWith('--auth-mode'),
+            ),
+        [
+          if (app.modes['auth-mode'] case final mode?) '--auth-mode=$mode',
+        ],
+        reason: app.name,
+      );
+    }
+    // It selects its apps by the role, and reads the mode from the choice
+    // of the role, not from the name or the options of an app.
+    final tests = MatrixAppTests([authTest], testedRoles: {authRole});
+    expect(tests.roleProblems(modules, ofRole), isEmpty);
+    expect(tests.modeProblems(ofRole), isEmpty);
+    // In the matrix of the CLI, Firebase Authentication provides the role:
+    // the test applies to each of its apps, in the mode of the app.
+    expect(
+      {
+        for (final app in apps)
+          if (authTest.appliesTo(app))
+            app.name: authTest.values!(app)['auth_mode'],
+      },
+      {
+        for (final name in const [
+          'firebase_auth with localization, router',
+          'firebase_auth with localization',
+          'firebase_auth with router',
+          'firebase_auth',
+          // The sign-in requires the role.
+          ..._signIn,
+        ])
+          name: 'required',
+        'auth by firebase_auth with router --auth-mode=guest': 'guest',
+        'auth by firebase_auth with router --auth-mode=anonymous': 'anonymous',
+        for (final name in _everyModule)
+          name: switch (name.split('--auth-mode=')) {
+            [_, final mode] => mode,
+            _ => 'required',
+          },
+      },
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (authTest.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(authRole)) app.name,
+      ],
+    );
+  });
+
+  test(
+      'the test of Firebase Authentication applies to the apps with the '
+      'module, whatever else they have, in every mode of the auth role, '
+      'declares the mocks of its platform side for the tests of every '
+      'module of those apps, has a probe for the start check, and gets the '
+      'languages in which the app asks Firebase for its messages from the '
+      'localization role of the app', () async {
+    final test = named('firebase_auth');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        'firebase_auth with localization, router',
+        'firebase_auth with localization',
+        'firebase_auth with router',
+        'firebase_auth',
+        // The apps of the sign-in get the provider of the auth role.
+        ..._signIn,
+        'auth by firebase_auth with router --auth-mode=guest',
+        'auth by firebase_auth with router --auth-mode=anonymous',
+        ..._everyModule,
+      ],
+    );
+    // It tests what only this provider of the auth role does, so it names
+    // no role: the test of the role checks what every provider keeps to.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    // The mocks answer the messages of the plugin in the codec of its
+    // platform interface, which the app has only through the plugin.
+    expect(test.devDependencies, ['firebase_auth_platform_interface']);
+    expect(test.mocks!.path, 'test/firebase_auth_mocks.dart');
+    expect(test.mocks!.function, 'mockFirebaseAuth');
+    expect(test.startProbe!.path, 'integration_test/firebase_auth/probe.dart');
+    expect(test.startProbe!.function, 'probeFirebaseAuth');
+    for (final path in [test.mocks!.path, test.startProbe!.path]) {
+      expect(
+        File(p.joinAll([test.directory, ...path.split('/')])).existsSync(),
+        isTrue,
+        reason: path,
+      );
+    }
+
+    // The apps as they are, and with the one language that they are given.
+    final (apps: english, :failed) = await matrixOf(
+      smfModules,
+      roleOptions: const {'locales': 'en'},
+    );
+    expect(failed, isEmpty);
+    for (final (matrix, languages) in [
+      (apps, "['en', 'uk']"),
+      (english, "['en']"),
+    ]) {
+      for (final app in matrix.where(test.appliesTo)) {
+        final reason = '${app.name} in $languages';
+        final files = test.generatedFiles!(app, 'my_app');
+        expect(files.keys, [messageLanguagesFile], reason: reason);
+        final text = files[messageLanguagesFile]!;
+        final (:index, :errors) =
+            DartFileIndexer.parse(messageLanguagesFile, text);
+        expect(errors, isEmpty, reason: reason);
+        expect(
+          index.declarations.map((declaration) => declaration.name),
+          ['messageLanguages', 'chooseLanguage'],
+          reason: reason,
+        );
+        if (app.hook!.presentRoles.contains(localizationRole)) {
+          // The languages of the role, and a choice through the language
+          // that the role keeps for the app, also back to the languages of
+          // the device.
+          expect(
+            [for (final import in index.imports) import.uri],
+            ['dart:ui', 'package:my_app/core/l10n/app_locale.dart'],
+            reason: reason,
+          );
+          expect(
+            text,
+            allOf(
+              contains('const List<String> messageLanguages = $languages;'),
+              contains(
+                'Future<void> chooseLanguage(String? language) =>\n'
+                '    appLocale.choose(language == null ? null : '
+                'Locale(language));',
+              ),
+            ),
+            reason: reason,
+          );
+        } else {
+          // An app without the role asks Firebase for no language.
+          expect(index.imports, isEmpty, reason: reason);
+          expect(
+            text,
+            allOf(
+              contains('const List<String> messageLanguages = [];'),
+              contains(
+                'Future<void> chooseLanguage(String? language) async {}',
+              ),
+            ),
+            reason: reason,
+          );
+        }
+      }
+    }
+    // Both kinds of apps are among those of the module.
+    expect(
+      {
+        for (final app in apps.where(test.appliesTo))
+          app.hook!.presentRoles.contains(localizationRole),
+      },
+      {true, false},
     );
   });
 }

@@ -4,12 +4,13 @@
 // to the screen that it starts on, or to the fallback screen of the app
 // entry in an app that no route can start, and never builds the onboarding.
 //
-// The onboarding starts again in three cases:
-// - something shows its screen although it is finished, as a link to its
-//   route does, so that Skip and Get started, the button of the last page,
-//   leave the screen. push() counts too:
-//   it shows the screen over another, which the router then has to take
-//   out of its stack;
+// Once the onboarding is finished, its route shows the screen that the app
+// starts on, whether go(), push() or replace() asks for it, as a link to
+// the route does. The router does not build the onboarding then, such a
+// push() completes with null, and the onboarding stays finished: nothing
+// but its status starts it again.
+//
+// The onboarding starts again in two cases:
 // - the app asks for it, with restart() of its status, which shows the
 //   onboarding without a navigation;
 // - the preferences that the app opens have it saved as not finished.
@@ -72,9 +73,10 @@ void main() {
   // fails sooner.
   testWidgets(
     'an app that finds the onboarding finished goes straight to the screen '
-    'that it starts on, the onboarding starts again when its screen is '
-    'shown or the app asks for it, and the probe of the module holds '
-    'whether the onboarding is finished or not',
+    'that it starts on and shows it in place of the route of the '
+    'onboarding, the onboarding starts again only when the app asks for '
+    'it, and the probe of the module holds whether the onboarding is '
+    'finished or not',
     (tester) async {
       // The preferences as a launch opens them, before the app shows
       // anything.
@@ -132,76 +134,57 @@ void main() {
             'leaves the screen as it is.',
       );
 
-      // Something shows the screen of the onboarding although the
-      // onboarding is finished, as a link to its route does.
-      appRouter
-          .navigatorOf(tester.element(find.byType(startScreen)))
-          .go(const OnboardingOnboardingLocation());
-      await tester.pumpAndSettle();
+      // A navigation to the route of the onboarding once the onboarding is
+      // finished, as a link to it does: the flow of its guard is over, so
+      // the router shows the screen that the app starts on, whichever of
+      // go(), push() and replace() asks for the route.
+      AppNavigator navigator() =>
+          appRouter.navigatorOf(tester.element(find.byType(startScreen)));
+      Object? pushed = 'not completed';
+      final asks = <String, void Function()>{
+        'go()': () => navigator().go(const OnboardingOnboardingLocation()),
+        'push()': () => unawaited(
+              navigator()
+                  .push<Object?>(const OnboardingOnboardingLocation())
+                  .then((value) => pushed = value),
+            ),
+        'replace()': () =>
+            navigator().replace(const OnboardingOnboardingLocation()),
+      };
+      for (final MapEntry(key: how, value: ask) in asks.entries) {
+        ask();
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(OnboardingScreen, skipOffstage: false),
+          findsNothing,
+          reason: 'Once the onboarding is finished, $how to its route does '
+              'not show the onboarding.',
+        );
+        expect(
+          find.byType(startScreen),
+          findsOneWidget,
+          reason: 'Once the onboarding is finished, $how to its route shows '
+              'the screen that the app starts on.',
+        );
+        expect(
+          onboardingStatus.completed.value,
+          isTrue,
+          reason: 'A navigation to the route of the onboarding does not '
+              'start the onboarding again: after $how, it is still '
+              'finished.',
+        );
+      }
       expect(
-        onboarding,
-        findsOneWidget,
-        reason: 'The route of the onboarding shows its screen, also once '
-            'the onboarding is finished.',
-      );
-      expect(
-        onboardingStatus.completed.value,
-        isFalse,
-        reason: 'The screen of the onboarding starts the onboarding again '
-            'when it is shown although the onboarding is finished, so that '
-            'Skip and Get started leave the screen.',
-      );
-      expect(
-        await savedCompleted(tester, expected: false),
-        isFalse,
-        reason: 'An onboarding that started again is saved as not '
-            'finished: an app that is closed in the middle of it shows it '
-            'on its next launch.',
-      );
-      await tester.tap(skip);
-      await tester.pumpAndSettle();
-      await expectFinished(
-        tester,
-        'Skip on an onboarding whose screen was shown although it was '
-        'finished',
-      );
-
-      // The same over another screen, with push(). The guard keeps the user
-      // from the screen below once the onboarding starts again, so the
-      // router takes it out of its stack, which it cannot do while a frame
-      // is built: Flutter reports a navigation in a build as an error,
-      // which fails the test. So the screen starts the onboarding again
-      // only once its first frame is over.
-      unawaited(
-        appRouter
-            .navigatorOf(tester.element(find.byType(startScreen)))
-            .push<Object?>(const OnboardingOnboardingLocation()),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        onboarding,
-        findsOneWidget,
-        reason: 'push() of the route of the onboarding shows its screen, '
-            'also once the onboarding is finished.',
+        pushed,
+        isNull,
+        reason: 'push() of the route of the onboarding once it is finished '
+            'completes with null, since the router shows no page for it.',
       );
       expect(
-        onboardingStatus.completed.value,
-        isFalse,
-        reason: 'The screen of the onboarding starts the onboarding again '
-            'when push() shows it although the onboarding is finished.',
-      );
-      expect(
-        find.byType(startScreen, skipOffstage: false),
-        findsNothing,
-        reason: 'While the onboarding is not finished again, the app keeps '
-            'no other screen below the onboarding.',
-      );
-      await tester.tap(skip);
-      await tester.pumpAndSettle();
-      await expectFinished(
-        tester,
-        'Skip on an onboarding that push() showed over the screen that the '
-        'app starts on',
+        createAppPreferences().getBool(completedKey),
+        isTrue,
+        reason: 'A navigation to the route of the onboarding saves nothing: '
+            'the preferences still have the onboarding as finished.',
       );
 
       // The app starts the onboarding again, as for a user who asks to see

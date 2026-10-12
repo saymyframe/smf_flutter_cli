@@ -23,9 +23,11 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
+import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
+import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -34,8 +36,10 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
+import 'package:smf_sign_in/smf_sign_in.dart';
 
 /// Every fixture module, with a fake DI container of all capabilities, or
 /// of [diCapabilities] if set, and the real modules: flutter_core, which
@@ -54,6 +58,7 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeRiverpodModule(),
       const FakeFeatureModule(),
       const FakeSecondModule(),
+      const FakeLateGateModule(),
       const FakeGateModule(),
       const FakeSocketsModule(),
       const FakeOverlapModule(),
@@ -65,6 +70,7 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakePreferencesModule(),
       const FakePreferencesUserModule(),
       const FakeThemeModule(),
+      const FakeAuthModule(),
       const FakeRegistrationsModule(),
       const FakeParentModule(),
       const FakeChildModule(),
@@ -76,8 +82,10 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
 
 /// The modules to ask for so that an app has every fixture that fits, with
 /// the state manager [stateManager], the router [router] and the DI
-/// container [di]: the fixture gates, and so the guards of the routes, are
-/// only in an app with the state manager that they depend on.
+/// container [di]: the fixture late gate and the fixture gates, and so the
+/// guards of the routes, are only in an app with the state manager that
+/// they depend on. The late gate comes before the gates, as in
+/// [fixtureModules], though the app asks its guard after theirs.
 List<ModuleId> everyFixture({
   ModuleId stateManager = FakeBlocModule.id,
   ModuleId router = FakeRouterModule.id,
@@ -86,8 +94,12 @@ List<ModuleId> everyFixture({
     [
       FakeFeatureModule.id,
       FakeSecondModule.id,
-      // The fixture gates depend on one of the state managers.
-      if (stateManager == FakeGateModule.stateManager) FakeGateModule.id,
+      // The fixture late gate and the fixture gates depend on one of the
+      // state managers.
+      if (stateManager == FakeGateModule.stateManager) ...[
+        FakeLateGateModule.id,
+        FakeGateModule.id,
+      ],
       router,
       stateManager,
       di,
@@ -102,6 +114,7 @@ List<ModuleId> everyFixture({
       FakePreferencesModule.id,
       FakePreferencesUserModule.id,
       FakeThemeModule.id,
+      FakeAuthModule.id,
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
@@ -135,11 +148,27 @@ List<ModuleId> everyFixture({
 /// after the entry of the theme mode; the onboarding module of the CLI,
 /// for the app test that it keeps, whose guard of the routes keeps the user
 /// from every other screen of the app until the mocks of that test open it
-/// for the tests of the other modules; and the home module of the CLI, for
+/// for the tests of the other modules; the home module of the CLI, for
 /// the app test that it keeps for its screen. It comes after the fixture
 /// feature, on whose screen the app starts, so that test goes to its screen
 /// through the navigation of the router role, and reads its texts from the
-/// fixture texts.
+/// fixture texts; Firebase Authentication, the provider of the auth
+/// role that the CLI has, for the app test that it keeps and for the test
+/// of that role that the CLI keeps, which run there next to the other
+/// Firebase modules and with the fixture texts as the languages of the
+/// app; and the sign-in module of the CLI, for the app test that it keeps,
+/// with the two state managers of the CLI, bloc and riverpod, since a
+/// registry has every provider that one of its modules has a variant for.
+/// The app asks for an account, as an app in the first mode of the auth
+/// role does, so the guards of the sign-in keep the user from every other
+/// screen until the mocks of that test sign an account up for the tests of
+/// the other modules.
+///
+/// With two state managers, the registry has two apps with every module,
+/// one for each. Its tool checks the first one, in which the screens of the
+/// sign-in keep their state with bloc (see `severalProvidersApps` of
+/// `matrix_app_tests.dart`): the matrix of the CLI checks the sign-in with
+/// each state manager.
 ///
 /// Its app with every module is where the tests that the providers keep
 /// for the apps they are in run next to the other providers of their
@@ -167,4 +196,8 @@ List<SmfModule> severalProvidersModules() => const [
       FakeL10nModule(),
       OnboardingModule(),
       HomeModule(),
+      FirebaseAuthModule(),
+      BlocModule(),
+      RiverpodModule(),
+      SignInModule(),
     ];

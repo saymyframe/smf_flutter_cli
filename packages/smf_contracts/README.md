@@ -12,7 +12,7 @@ The generation pipeline, [smf_pipeline](https://pub.dev/packages/smf_pipeline), 
 
 The package has two libraries to import:
 
-- `package:smf_contracts/smf_contracts.dart`, the model with the roles of SMF: the app entry, the router, the layout, localization, state management, dependency injection, events, preferences, analytics, crash reporting, the settings screen and the theme;
+- `package:smf_contracts/smf_contracts.dart`, the model with the roles of SMF: the app entry, the router, the layout, localization, state management, dependency injection, events, preferences, analytics, crash reporting, sign-in, the settings screen and the theme;
 - `package:smf_contracts/core.dart`, the core of the model without concrete roles, which the pipeline uses.
 
 `lib/bundles/` holds the templates of these roles, bundled from `bricks/`, which the roles give the pipeline to render.

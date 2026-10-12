@@ -364,6 +364,81 @@ void main() {
         ]),
       );
     });
+
+    group('with modes', () {
+      /// The problems of a registry whose one role has a mode option with
+      /// [values].
+      List<String> problemsOf(List<String> values) => _problems([
+            TestModule(
+              'm',
+              uses: {
+                TestRole<NoDsl>(
+                  'a',
+                  options: [
+                    RoleOption.mode(name: 'access', help: '', values: values),
+                  ],
+                  template: TestTemplate(),
+                ),
+              },
+            ),
+          ]);
+
+      test('have at least two values, the first of them the default', () {
+        const least = 'a mode has at least two values, the first of them the '
+            'default.';
+
+        expect(problemsOf(const ['members', 'guests']), isEmpty);
+        // Digits alone are a value too, as in the hours of a clock.
+        expect(problemsOf(const ['24', '12', 'sign-in', 'v2']), isEmpty);
+        expect(
+          problemsOf(const []).single,
+          'The mode option --access of the a role has no value: $least',
+        );
+        expect(
+          problemsOf(const ['members']).single,
+          'The mode option --access of the a role has one value, members: '
+          '$least',
+        );
+      });
+
+      test('have each value once', () {
+        expect(problemsOf(const ['members', 'guests', 'members', 'guests']), [
+          'The mode option --access of the a role has the value members twice.',
+          'The mode option --access of the a role has the value guests twice.',
+        ]);
+      });
+
+      test(
+          'have values of lower-case letters and digits with single hyphens '
+          'between them, which name the apps of the tests', () {
+        for (final value in ['Guests', 'all_users', 'a b', '-a', 'a--b', '']) {
+          expect(
+            problemsOf(['members', value]).single,
+            'The value "$value" of the mode option --access of the a role is '
+            'not of lower-case letters and digits with single hyphens between '
+            'them.',
+            reason: value,
+          );
+        }
+      });
+
+      test('an option with allowed values that is no mode takes any', () {
+        final role = TestRole<NoDsl>(
+          'a',
+          options: const [
+            RoleOption(name: 'flavor', help: '', allowed: ['Dev']),
+          ],
+          template: TestTemplate(),
+        );
+
+        expect(
+          _problems([
+            TestModule('m', uses: {role}),
+          ]),
+          isEmpty,
+        );
+      });
+    });
   });
 
   test('role options need a template and must not start with no-', () {

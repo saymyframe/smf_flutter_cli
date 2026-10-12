@@ -99,6 +99,9 @@ void main() {
     final hasFixtureRouter = modules.any(
       (module) => module.descriptor.id == const ModuleId('fake_router'),
     );
+    final hasFixtureSignIn = modules.any(
+      (module) => module.descriptor.id == const ModuleId('fake_auth'),
+    );
     group('in the apps of the registry $name, the note of a role', () {
       late List<ContractResult> results;
 
@@ -173,6 +176,39 @@ void main() {
               '`FixtureScreen`',
               '`lib/core/router/fixture_annotations.dart`',
               'fake_router',
+            ],
+          );
+        });
+      }
+
+      // What only a registry with the fixture sign-in can tell: there the
+      // auth role has a provider, so the check holds its note against one.
+      if (hasFixtureSignIn) {
+        test(
+            'of the auth role may name Dart, and may not name the fixture '
+            'sign-in, its file or what it declares', () {
+          expect(
+            _namedWith(
+              results,
+              authRole,
+              '- Follow the user with a `StreamSubscription`, and wait for a '
+              'call with a `Completer`.',
+            ),
+            isEmpty,
+          );
+          expect(
+            _namedWith(
+              results,
+              authRole,
+              '- `openFixtureAuth()` of '
+              '`lib/core/fixture_auth/fixture_auth.dart` returns the '
+              '`FixtureAuth`, as fake_auth wants.',
+            ),
+            [
+              '`openFixtureAuth`',
+              '`lib/core/fixture_auth/fixture_auth.dart`',
+              '`FixtureAuth`',
+              'fake_auth',
             ],
           );
         });

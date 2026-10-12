@@ -14,15 +14,18 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// contract they check with every provider: the router role and the layout
 /// role, whose providers call the listeners of the screen, the DI role, the
 /// events role, the preferences role, the localization role, the theme
-/// role, and the app entry role, whose provider builds the root that
-/// follows the theme mode.
+/// role, the app entry role, whose provider builds the root that follows
+/// the theme mode, and the auth role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
-/// they use: the fixture features, the fixture analytics and the fixture
-/// screen log, whose listeners of the screen note what they hear, the
-/// fixture setting, whose restorers note what they read, and the fixture
-/// theme, whose colour a test changes.
+/// they use: the fixture features, the second of which has routes that ask
+/// for a condition, the fixture gates and the fixture late gate, whose
+/// guards of the routes a test closes and opens, the fixture analytics and
+/// the fixture screen log, whose listeners of the screen note what they
+/// hear, the fixture setting, whose restorers note what they read, the
+/// fixture theme, whose colour a test changes, and the module that uses the
+/// fixture clock, which shows an hour on a clock of 24 hours or of 12.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -36,13 +39,16 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // of every module of the apps with them.
       ...await _fixtureMocks(),
       // The listeners of the screen, the navigator observers, the back
-      // button of the system and the configuration of the router, which it
-      // creates once, whichever module provides the router: the tests start
-      // the app with main() and navigate through the navigation facade of
-      // the router role.
+      // button of the system, which the router handles when it closes a
+      // route and leaves to the system otherwise, on its error screen as
+      // on any other page, push() and replace() on that screen, and the
+      // configuration of the router, which it creates once, whichever
+      // module provides the router: the tests start the app with main()
+      // and navigate through the navigation facade of the router role.
       MatrixAppTest(
         '$appTests/router_screens',
         appliesTo: _hearsScreens,
+        generatedFiles: _locationsFromAnyPageOf,
         roles: {routerRole},
       ),
       // The listeners of the screen, which the router calls each on its
@@ -61,13 +67,47 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // before it shows it, and tells of its pages when one of them starts
       // or stops allowing, whichever module provides the router: the tests
       // close and open the gates of the fixture gates, whose guards then
-      // keep the user from the screens of the fixture feature. The apps it
+      // keep the user from the screens of the fixture feature, and the
+      // fixture late gate, whose guard is of a later stage, though its
+      // module comes first, and does not bring the user back. The apps it
       // applies to have the tests of router_screens, whose helpers it uses.
       MatrixAppTest(
         '$appTests/router_guards',
+        appliesTo: (app) => _hearsScreens(app) && _hasGates(app),
+        roles: {routerRole},
+      ),
+      // A guard that stands for a condition, which keeps the user only from
+      // the routes that ask for it, whichever module provides the router:
+      // three routes of the second fixture feature ask for the condition
+      // of the fixture badge role, one of them below a route that asks for
+      // nothing, and the third guard of the fixture gates stands for it,
+      // with the flow of the first, a gate. The tests take the badge away
+      // and give it back, next to the gates, also while a page that asks
+      // for the condition is on the stack. A request for such a route opens
+      // the flow of the guard over the page that the user is on: back
+      // returns to that page, and once the condition holds the router does
+      // what was asked. The apps it applies to have the tests of
+      // router_screens and of router_guards, whose helpers it uses.
+      MatrixAppTest(
+        '$appTests/router_conditions',
         appliesTo: (app) =>
             _hearsScreens(app) &&
-            app.modules.contains(const ModuleId('fake_gate')),
+            _hasGates(app) &&
+            app.modules.contains(const ModuleId('fake_second')),
+        roles: {routerRole},
+      ),
+      // A request for a route that asks for a condition, which opens the
+      // target of the guard of the condition once, and the router throws
+      // nothing, whichever module provides the router: in the apps with the
+      // two fixture features and the fixture gates. It needs fewer modules
+      // than the tests of router_conditions, so the app of a router with a
+      // known bug that fails it has few other tests.
+      MatrixAppTest(
+        '$appTests/router_flow_opens',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            app.modules.contains(const ModuleId('fake_gate')) &&
+            app.modules.contains(const ModuleId('fake_second')),
         roles: {routerRole},
       ),
       // The guards over the fallback screen of the app entry, the location
@@ -85,16 +125,23 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // The guards with a page shown over the main navigation, whichever
       // modules provide the router and the layout: once a guard allows
       // again, the user is back in the main navigation, on the destination
-      // that the page of the second fixture feature was pushed from. The
-      // apps it applies to have the tests of router_screens and of
-      // router_guards, whose helpers it uses.
+      // that the page of the second fixture feature was pushed from, or,
+      // after the guard of the fixture late gate, which does not bring the
+      // user back, on the screen that the app starts on. No branch keeps a
+      // page that the guard kept the user from, also when the guard allows
+      // again in the turn in which it stopped allowing, or while the
+      // transition to its target is on its way. And the flow of a guard
+      // that stands for a condition opens over the main navigation, which
+      // stays below it with its destination selected and the pages of its
+      // branches. The apps it applies to have the tests of router_screens
+      // and of router_guards, whose helpers it uses.
       MatrixAppTest(
         '$appTests/layout_guards',
         appliesTo: (app) =>
             _hearsScreens(app) &&
             app.hook!.presentRoles.contains(layoutRole) &&
             app.modules.contains(const ModuleId('fake_second')) &&
-            app.modules.contains(const ModuleId('fake_gate')),
+            _hasGates(app),
         roles: {routerRole},
       ),
       // The fallback screen of the app entry, which the router shows when
@@ -117,7 +164,9 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // screen log, and each navigator of a branch has observers of its
       // own. And the router refuses to push a location in the main
       // navigation from the page outside it of the second fixture feature,
-      // shown over it, or to replace that page with one. And the labels of
+      // shown over it, or to replace that page with one. And go() to that
+      // page and back to a destination throws nothing, in one turn and
+      // while the transition to the page is on its way. And the labels of
       // the destinations follow the language of the app: the matrix writes
       // them for the test in each language of the app, from the data of the
       // layout role and of the localization role, or in English alone for
@@ -135,8 +184,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
       ),
       // What only go_router does: notifications of its delegate that leave
       // the page on top as it is, such as a refresh of its routes, which
-      // the listeners of the screen do not hear of, and a push() that still
-      // completes with the value of its page after a refresh. It checks no
+      // the listeners of the screen do not hear of, a push() that still
+      // completes with the value of its page after a refresh, and the back
+      // button of the system on its error screen for a location that only
+      // GoRouter can be asked for, where its delegate has no page to close,
+      // and once the root of the app is mounted anew over the router. And
+      // push() and replace() while go_router has no page of a route to push
+      // over or to replace, on that error screen and before its first
+      // location, which it gets as go() gives it a location. It checks no
       // role, so it names its module, as `tools/app_tests_test.dart` lets
       // it. The apps it applies to have the tests of router_screens, whose
       // helpers it uses.
@@ -144,6 +199,47 @@ Future<MatrixAppTests> fixtureAppTests() async {
         '$appTests/go_router_screens',
         appliesTo: (app) =>
             _hearsScreens(app) &&
+            app.modules.contains(const ModuleId('go_router')),
+      ),
+      // What only go_router does with the branches of the main navigation:
+      // it keeps their pages with the route of the main navigation for as
+      // long as a page of that route is in the widget tree, so the router of
+      // the module gives it a new route each time the main navigation leaves
+      // its pages. After a go() out of the main navigation and back, in one
+      // turn and while the transition is on its way too, each branch is on
+      // its destination. And the error screen of a location that the
+      // redirect of a route refused stays when go_router gets its new
+      // routes. It checks no role, so it names its module, as
+      // `tools/app_tests_test.dart` lets it. The apps it applies to have a
+      // layout and both fixture features, whose destinations and page
+      // outside the main navigation it goes between, and the tests of
+      // router_screens, whose helpers it uses.
+      MatrixAppTest(
+        '$appTests/go_router_branches',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            app.hook!.presentRoles.contains(layoutRole) &&
+            app.modules.contains(const ModuleId('fake_second')) &&
+            app.modules.contains(const ModuleId('go_router')),
+      ),
+      // What only go_router does about the flow of a guard that stands for
+      // a condition: a refresh of its routes while the flow is open, after
+      // which the push that waits still completes with the value of its
+      // page, and the pages stay; a request on its error screen, which it
+      // gets as go() gives it a location and asks about in its redirect;
+      // two links in one turn, for which it opens the flow once, and a
+      // second link to the page on top, which keeps that page; and the
+      // calls of go_router that the router makes itself, within which its
+      // redirect does not ask the guards. It checks no role, so it names
+      // its module, as `tools/app_tests_test.dart` lets it. The apps it
+      // applies to have the tests of router_conditions, whose helpers it
+      // uses with those of router_screens and of router_guards.
+      MatrixAppTest(
+        '$appTests/go_router_conditions',
+        appliesTo: (app) =>
+            _hearsScreens(app) &&
+            _hasGates(app) &&
+            app.modules.contains(const ModuleId('fake_second')) &&
             app.modules.contains(const ModuleId('go_router')),
       ),
       // What only bottom_tabs does: its bar shows a tab with the label of
@@ -219,14 +315,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // device, where no test opens a guard: with a gate of the fixture
       // gates closed, the walk expects the target of its guard in place of
       // each location outside its flow, as the router role says, whichever
-      // module provides the router. The apps it applies to have the walk,
-      // and the tests of router_screens, whose helpers it uses.
+      // module provides the router. And once the gate opens, it expects the
+      // screen that the app starts on in place of each location of a flow,
+      // which is over. The apps it applies to have the walk, and the tests
+      // of router_screens, whose helpers it uses.
       MatrixAppTest(
         '$appTests/router_walk_guards',
         appliesTo: (app) =>
-            app.everyModuleWith != null &&
-            _hearsScreens(app) &&
-            app.modules.contains(const ModuleId('fake_gate')),
+            app.everyModuleWith != null && _hearsScreens(app) && _hasGates(app),
         roles: {routerRole},
       ),
       // The theme mode of the apps with the theme role, whichever module
@@ -250,6 +346,28 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(FakeThemeModule.id),
         roles: {appEntryRole},
       ),
+      // Sign-in in the apps with the auth role, whichever module provides
+      // it, the test that the CLI keeps: in every app with the role, since
+      // it must hold in each mode of the role. Those are the apps of the
+      // fixture sign-in alone, without a router and with each of the two in
+      // the default mode and with a router in each other mode, and the apps
+      // with every module, which the matrix has once more for the other
+      // modes.
+      await authRoleAppTest(),
+      // The module that uses the fixture clock, whose role has a mode
+      // option, --clock-hours: the clock of the app has the hours that the
+      // role chose, 24 or 12, and the module shows an hour as that clock
+      // has it. Only in the apps with every module, which run flutter test
+      // for other tests already, and which the matrix has once more for the
+      // other value of the option. It tests a module, so it names no role.
+      MatrixAppTest(
+        '$appTests/clock_hours',
+        appliesTo: (app) =>
+            _modeOf(app, _clockHours) != null &&
+            app.everyModuleWith != null &&
+            app.modules.contains(const ModuleId('fake_clock_user')),
+        values: (app) => {'clock_hours': _modeOf(app, _clockHours)!},
+      ),
     ],
     testedRoles: {
       routerRole,
@@ -260,8 +378,34 @@ Future<MatrixAppTests> fixtureAppTests() async {
       localizationRole,
       themeRole,
       appEntryRole,
+      authRole,
     },
   );
+}
+
+/// The name of the mode option of the clock role of the fixtures, which
+/// that role, of a package of its own, declares.
+const _clockHours = 'clock-hours';
+
+/// The value of the mode option [option] in [app], an app of the matrix,
+/// as the role with that option chose it, or `null` in an app without that
+/// role: the value that the template of the role gives the option for its
+/// choice ([RoleTemplate.optionsOf]), as the contract harness reads the
+/// mode of an app.
+///
+/// It comes from the choice of the role, which an app that got no value of
+/// the option has too, not from the options that the matrix gives
+/// `smf create` ([MatrixApp.roleOptions]). The test of a role of
+/// `smf_contracts` reads it with a function of that role instead; this
+/// library imports no package of a fixture module for a role of it.
+String? _modeOf(MatrixApp app, String option) {
+  final hook = app.hook!;
+  for (final role in hook.presentRoles) {
+    if (role.options.any((other) => other.isMode && other.name == option)) {
+      return role.template!.optionsOf(role.hookInput(hook).choice)[option];
+    }
+  }
+  return null;
 }
 
 /// The path in an app of what the matrix writes for the tests of the labels
@@ -364,6 +508,57 @@ Future<void> chooseLanguage(String language) async {}
 Future<void> followDevice() async {}
 ''';
 
+/// The file of the tests of the screens that the matrix writes for an app
+/// with a router from the routes of the app: `locationsFromAnyPage`, the
+/// locations that a router shows from any page, one of which the tests ask
+/// the router for from its error screen.
+const locationsFromAnyPageFile = 'test/locations_from_any_page.dart';
+
+/// The file at [locationsFromAnyPageFile] of [app], an app of the matrix
+/// with a router, whose package is [packageName].
+///
+/// The locations are those of the routes of the app that a router shows
+/// from any page while the gates of the app allow, in the order of the
+/// routes: such a route needs no values, no guard keeps the user from it,
+/// as it asks for no condition and is in no flow, and in an app with a
+/// main navigation it is outside it, since a router refuses to push a
+/// location in the main navigation from a page that is shown over it.
+Map<String, String> _locationsFromAnyPageOf(
+  MatrixApp app,
+  String packageName,
+) {
+  final hook = app.hook!;
+  final facade = routerRole.facadeOf(routerRole.hookInput(hook));
+  final inMainNavigation = hook.presentRoles.contains(layoutRole)
+      ? {...facade.destinations}
+      : const <FacadeRoute>{};
+  final inFlows = {for (final guard in facade.guards) ...guard.flow};
+  final locations = [
+    for (final route in facade.routes)
+      if (!route.hasRequiredParams &&
+          route.conditions.isEmpty &&
+          !inFlows.contains(route) &&
+          !inMainNavigation.contains(route.topLevel))
+        '  ${route.locationClass}(),\n',
+  ];
+  final navigation =
+      ImportRef.app(RouterRole.navigationFile.substring('lib/'.length))
+          .resolveUri(packageName);
+  return {
+    locationsFromAnyPageFile: '''
+// Locations of the app for the tests of the screens, router_screens_test.dart,
+// which the matrix of SMF writes from the routes of the app.
+import '$navigation';
+
+/// The locations that the router of the app shows from any page, in the
+/// order of the routes: each of a route that needs no values, that no guard
+/// keeps the user from while the gates of the app allow, and that is
+/// outside the main navigation of an app with one.
+const List<AppLocation> locationsFromAnyPage = [${locations.isEmpty ? '' : '\n${locations.join()}'}];
+''',
+  };
+}
+
 /// Whether the tests of the listeners of the screen can hear the screens of
 /// [app]: it has a router, whichever module provides it, the fixture
 /// feature, whose screens they navigate between, and the fixture
@@ -372,6 +567,27 @@ bool _hearsScreens(MatrixApp app) =>
     app.hook!.presentRoles.contains(routerRole) &&
     app.modules.contains(const ModuleId('fake_feature')) &&
     app.modules.contains(const ModuleId('fake_analytics'));
+
+/// Whether [app] has the guards of the routes that the tests of the guards
+/// close and open: those of the fixture gates, one of which stands for a
+/// condition, and that of the fixture late gate, of a later stage, which
+/// does not bring the user back.
+bool _hasGates(MatrixApp app) =>
+    app.modules.contains(const ModuleId('fake_gate')) &&
+    app.modules.contains(const ModuleId('fake_late_gate'));
+
+/// The apps of the registry of several providers
+/// (`severalProvidersModules`) that its tool generates and checks: one app
+/// with every module for each provider of the app entry. The registry has
+/// one such provider, so that is one app, the first, which has the first
+/// provider of each other role that takes one. So a module with a variant
+/// for each state manager, such as the sign-in of the CLI, brings the
+/// registry a second app with every module, and the tool no second app to
+/// check. It checks no app of another mode of a role either.
+const MatrixSelection severalProvidersApps = MatrixSelection(
+  everyModule: true,
+  everyModuleApps: EveryModuleAppPerProvider(appEntryRole),
+);
 
 /// The tests of the app with every module of the registry of several
 /// providers (`severalProvidersModules`): those that the modules of the CLI

@@ -277,6 +277,7 @@ void main() {
       ToolRef('ruby'),
       ['fix.rb'],
       followUpOf: configure,
+      notice: 'It also changes the project.',
       skippable: true,
       hosts: {HostOperatingSystem.macos},
     );
@@ -291,6 +292,7 @@ void main() {
     expect(step.id, configure);
     expect(step.followUpOf, isNull);
     expect(step.description, 'Configure');
+    expect(step.notice, isNull);
     expect(step.interactive, isTrue);
     expect(step.skippable, isTrue);
     expect(step.external, isTrue);
@@ -300,12 +302,14 @@ void main() {
     expect(followUp.arguments, ['fix.rb']);
     expect(followUp.id, isNull);
     expect(followUp.followUpOf, configure);
+    expect(followUp.notice, 'It also changes the project.');
     expect(followUp.skippable, isTrue);
     expect(followUp.hosts, {HostOperatingSystem.macos});
 
     const plain = PostGenStep(ToolRef('flutter'), ['pub', 'get']);
     expect(plain.id, isNull);
     expect(plain.followUpOf, isNull);
+    expect(plain.notice, isNull);
     expect(plain.interactive, isFalse);
     expect(plain.skippable, isFalse);
     expect(plain.external, isFalse);

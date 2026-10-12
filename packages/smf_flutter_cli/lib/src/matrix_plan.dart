@@ -16,10 +16,25 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// roles, so CI checks all of them only in memory, where the contract
 /// harness renders every one, and generates, builds and starts only a
 /// covering of them.
+///
+/// The apps with every module for the other values of the mode options of
+/// the roles ([modeAppsOf]) are no such combination: a selection takes some
+/// of them only next to a covering, for the runs that check the matrix (see
+/// [selectModes]).
 sealed class EveryModuleSelection {
   /// The apps of [apps], apps with every module of [modules] such as those
   /// of [everyModuleAppsOf], that the selection takes, in their order.
   List<MatrixApp> select(List<MatrixApp> apps, List<SmfModule> modules);
+
+  /// The apps of [modes], the apps with every module of [modules] for the
+  /// other values of the mode options of their roles ([modeAppsOf]), that
+  /// the selection takes next to [selected], the apps that [select] took,
+  /// in their order.
+  List<MatrixApp> selectModes(
+    List<MatrixApp> modes,
+    List<MatrixApp> selected,
+    List<SmfModule> modules,
+  );
 
   /// The problems of [selected], the apps that [select] took: for a name,
   /// that no app has it.
@@ -47,6 +62,18 @@ sealed class EveryModuleSelection {
 /// providers and modules are in the most of those not yet taken, then
 /// leaves out each app whose tuples and modules the others have too, and
 /// keeps the smaller of the two coverings, the first on a tie.
+///
+/// The value of a mode option of a role (see [RoleOption.mode]) is one
+/// more thing that an app has, as the provider of a role is: the first
+/// value in the apps of the covering, and another one in an app of
+/// [modeAppsOf]. So a covering takes, next to its apps, a few of those
+/// apps in the same way ([selectModes]): those that have, between them,
+/// every tuple of [strength] providers of different roles and values of
+/// different mode options that one of those apps has and no app of the
+/// covering has, which are the tuples with a value other than the first.
+/// A pairwise covering then has every value of a mode option with every
+/// provider of a role that has several, and with every value of another
+/// mode option. Without a [strength], it takes all of those apps.
 enum EveryModuleCombinations implements EveryModuleSelection {
   /// Every pair of providers of two different roles in one of the apps: a
   /// few apps, which grow with the square of the number of providers of a
@@ -67,8 +94,9 @@ enum EveryModuleCombinations implements EveryModuleSelection {
   /// selects these apps.
   final String option;
 
-  /// The number of providers of different roles of each tuple that one of
-  /// the apps must have, or `null` for every app.
+  /// The number of providers of different roles, and of values of
+  /// different mode options, of each tuple that one of the apps must have,
+  /// or `null` for every app.
   final int? strength;
 
   /// The combinations that the value [option] of `--combinations` selects,
@@ -91,12 +119,34 @@ enum EveryModuleCombinations implements EveryModuleSelection {
   }
 
   @override
+  List<MatrixApp> selectModes(
+    List<MatrixApp> modes,
+    List<MatrixApp> selected,
+    List<SmfModule> modules,
+  ) {
+    final strength = this.strength;
+    if (strength == null) return modes;
+    final apps = [...selected, ...modes];
+    final covering = _Covering.of(
+      apps,
+      modules,
+      strength,
+      taken: selected.length,
+    );
+    return [for (final index in covering.indices) apps[index]];
+  }
+
+  @override
   List<String> problemsOf(List<MatrixApp> selected) => const [];
 }
 
 /// The app with every module whose case of the contract harness is [name],
 /// such as `every module (riverpod)`, as a job of CI takes its app of the
 /// plan (see [matrixPlanOf]).
+///
+/// It is one of the apps of [everyModuleAppsOf], whose mode options have
+/// their first value: the name of an app of [modeAppsOf] selects no app,
+/// and the selection takes none of those apps next to its own.
 final class NamedEveryModuleApp implements EveryModuleSelection {
   /// Creates the selection of the app with every module named [name].
   const NamedEveryModuleApp(this.name);
@@ -111,6 +161,14 @@ final class NamedEveryModuleApp implements EveryModuleSelection {
       ];
 
   @override
+  List<MatrixApp> selectModes(
+    List<MatrixApp> modes,
+    List<MatrixApp> selected,
+    List<SmfModule> modules,
+  ) =>
+      const [];
+
+  @override
   List<String> problemsOf(List<MatrixApp> selected) => [
         if (selected.isEmpty) 'No app with every module is $name.',
       ];
@@ -123,7 +181,8 @@ final class NamedEveryModuleApp implements EveryModuleSelection {
 /// So CI configures an app with the external services of its modules and
 /// starts it once for each provider of the app entry role, which owns the
 /// native projects and their configuration, rather than for each
-/// combination of the providers.
+/// combination of the providers. It takes no app of [modeAppsOf]: those
+/// apps differ from its own in their Dart code only.
 final class EveryModuleAppPerProvider implements EveryModuleSelection {
   /// Creates the selection of one app for each provider of [role].
   const EveryModuleAppPerProvider(this.role);
@@ -149,20 +208,30 @@ final class EveryModuleAppPerProvider implements EveryModuleSelection {
   }
 
   @override
+  List<MatrixApp> selectModes(
+    List<MatrixApp> modes,
+    List<MatrixApp> selected,
+    List<SmfModule> modules,
+  ) =>
+      const [];
+
+  @override
   List<String> problemsOf(List<MatrixApp> selected) => const [];
 }
 
 /// A covering of apps with every module; see [EveryModuleCombinations].
 final class _Covering {
-  _Covering._(this.items);
+  _Covering._(this.items, this.taken);
 
   /// The covering of [apps], apps with every module of [modules], of
-  /// [strength].
+  /// [strength], which has the first [taken] of them already and takes of
+  /// the others.
   factory _Covering.of(
     List<MatrixApp> apps,
     List<SmfModule> modules,
-    int strength,
-  ) {
+    int strength, {
+    int taken = 0,
+  }) {
     final providersOf = _providersOf(modules);
     final providers = [
       for (final app in apps) _providersIn(app, providersOf),
@@ -173,11 +242,34 @@ final class _Covering {
         if ({for (final byRole in providers) byRole[role]}.nonNulls.length > 1)
           role,
     ];
-    final size = strength < roles.length ? strength : roles.length;
-    return _Covering._([
-      for (final (index, app) in apps.indexed)
-        _itemsOf(app, providers[index], roles, size),
-    ]);
+    final modesOf = _modesOf(modules);
+    final modes = [for (final app in apps) _modesIn(app, modesOf)];
+    // The mode options with several values among the apps.
+    final options = [
+      for (final option in modesOf.keys)
+        if ({for (final byOption in modes) byOption[option]}.nonNulls.length >
+            1)
+          option,
+    ];
+    final parts = roles.length + options.length;
+    final size = strength < parts ? strength : parts;
+    return _Covering._(
+      [
+        for (final (index, app) in apps.indexed)
+          _itemsOf(
+            app,
+            [
+              for (final role in roles)
+                if (providers[index][role] case final provider?)
+                  '${role.id}=$provider',
+              for (final option in options)
+                if (modes[index][option] case final value?) '--$option=$value',
+            ],
+            size,
+          ),
+      ],
+      taken,
+    );
   }
 
   /// The providers of each role that takes one, in the order in which
@@ -205,32 +297,69 @@ final class _Covering {
             role: id,
       };
 
-  /// What [app] has that a covering must have: the tuples of [size] of its
-  /// [providers] of [roles], and its modules.
-  static Set<String> _itemsOf(
-    MatrixApp app,
-    Map<Role, ModuleId> providers,
-    List<Role> roles,
-    int size,
-  ) {
-    final ofRoles = [
-      for (final role in roles)
-        if (providers[role] case final provider?) '${role.id}=$provider',
-    ];
-    return {
-      for (final tuple in _subsets(ofRoles, size))
-        if (tuple.isNotEmpty) tuple.join('+'),
-      for (final module in app.modules) 'module:$module',
-    };
+  /// The mode options of the roles that [modules] provide, by their names,
+  /// which no two roles of a registry share, in the order in which the
+  /// modules provide the roles: the first value of each, and the modules
+  /// that provide its role.
+  static Map<String, _Mode> _modesOf(List<SmfModule> modules) {
+    final modesOf = <String, _Mode>{};
+    for (final module in modules) {
+      for (final role in module.descriptor.provides) {
+        for (final option in role.options) {
+          if (!option.isMode) continue;
+          modesOf
+              .putIfAbsent(
+                option.name,
+                () => (first: option.allowed!.first, providers: {}),
+              )
+              .providers
+              .add(module.descriptor.id);
+        }
+      }
+    }
+    return modesOf;
   }
 
+  /// The value that [app] has of each mode option of [modesOf], by the name
+  /// of the option: the one of its [MatrixApp.modes], or the first value of
+  /// the option; none for an option whose role the app lacks.
+  static Map<String, String> _modesIn(
+    MatrixApp app,
+    Map<String, _Mode> modesOf,
+  ) =>
+      {
+        for (final MapEntry(key: name, value: (:first, :providers))
+            in modesOf.entries)
+          if (app.modules.any(providers.contains))
+            name: app.modes[name] ?? first,
+      };
+
+  /// What [app] has that a covering must have: the tuples of [size] of its
+  /// [parts], its providers of the roles that have several and its values
+  /// of the mode options that have several among the apps, and its modules.
+  ///
+  /// An app with fewer parts than [size] has one tuple, of all of them: an
+  /// app lacks the value of an option whose role it lacks, and what it has
+  /// with the others sets it apart all the same.
+  static Set<String> _itemsOf(MatrixApp app, List<String> parts, int size) => {
+        for (final tuple
+            in _subsets(parts, size < parts.length ? size : parts.length))
+          if (tuple.isNotEmpty) tuple.join('+'),
+        for (final module in app.modules) 'module:$module',
+      };
+
   /// What each app has that the covering must have: its tuples of
-  /// providers, such as `router=go_router+di=get_it`, and its modules, such
-  /// as `module:home`.
+  /// providers and of values of mode options, such as
+  /// `router=go_router+di=get_it` and `di=get_it+--clock-hours=12`, and its
+  /// modules, such as `module:home`.
   final List<Set<String>> items;
 
-  /// The positions of the apps of the covering, in their order. Every app
-  /// with every module has modules, so every app has items.
+  /// The number of the first apps that the covering has already: it takes
+  /// of the apps after them, for what none of them has.
+  final int taken;
+
+  /// The positions of the apps that the covering takes, in their order.
+  /// Every app with every module has modules, so every app has items.
   List<int> get indices {
     final byOrder = _prune(_greedy(byParts: false));
     final byParts = _prune(_greedy(byParts: true));
@@ -239,17 +368,20 @@ final class _Covering {
 
   /// The positions of the apps that the greedy covering takes, in the order
   /// it takes them: again and again the app with the most items that no
-  /// app it took has, on a tie the first, or, [byParts], the one whose
-  /// providers and modules are in the most such items, and then the first.
+  /// app it has or took has, on a tie the first, or, [byParts], the one
+  /// whose providers and modules are in the most such items, and then the
+  /// first. An app that the covering has already has no such item, so it
+  /// takes none of them again.
   List<int> _greedy({required bool byParts}) {
     final left = {for (final app in items) ...app};
-    final taken = <int>[];
+    items.take(taken).forEach(left.removeAll);
+    final added = <int>[];
     while (left.isNotEmpty) {
       final best = _bestOf(left, byParts ? _partsOf(left) : null);
-      taken.add(best);
+      added.add(best);
       left.removeAll(items[best]);
     }
-    return taken;
+    return added;
   }
 
   /// The number of the items of [left] that each of their parts, a provider
@@ -289,17 +421,21 @@ final class _Covering {
     return best;
   }
 
-  /// [taken] without each app whose items the others have too, the last
-  /// taken first, in the order of the apps.
-  List<int> _prune(List<int> taken) {
+  /// [added], the apps that the greedy covering took, without each app
+  /// whose items the others and the apps that the covering has already have
+  /// too, the last taken first, in the order of the apps.
+  List<int> _prune(List<int> added) {
     final counts = <String, int>{};
-    for (final index in taken) {
-      for (final item in items[index]) {
+    for (final app in [
+      ...items.take(taken),
+      for (final index in added) items[index],
+    ]) {
+      for (final item in app) {
         counts[item] = (counts[item] ?? 0) + 1;
       }
     }
-    final kept = [...taken];
-    for (final index in taken.reversed) {
+    final kept = [...added];
+    for (final index in added.reversed) {
       if (items[index].every((item) => counts[item]! > 1)) {
         kept.remove(index);
         for (final item in items[index]) {
@@ -310,6 +446,11 @@ final class _Covering {
     return kept..sort();
   }
 }
+
+/// A mode option of a role in a covering: its first value, which an app
+/// has unless its [MatrixApp.modes] say otherwise, and the modules that
+/// provide its role.
+typedef _Mode = ({String first, Set<ModuleId> providers});
 
 /// The subsets of [size] of [values], in their order.
 List<List<String>> _subsets(List<String> values, int size) {
@@ -371,7 +512,9 @@ final class MatrixShard {
 }
 
 /// The apps of a matrix that a run of [runMatrix] checks: every app of the
-/// matrix, with each of its apps with every module, unless told otherwise.
+/// matrix, with each of its apps with every module and each of those for
+/// the other values of the mode options of its roles ([modeAppsOf]), unless
+/// told otherwise.
 final class MatrixSelection {
   /// Creates the selection of the apps named in [only], of only the apps
   /// with every module with [everyModule], those of [everyModuleApps], and
@@ -393,11 +536,16 @@ final class MatrixSelection {
   /// [everyModuleAppsOf]), which CI selects so rather than by their names:
   /// the name of such an app names the provider of every role that has
   /// several, so it changes when another role gets a second provider.
+  ///
+  /// The apps with every module for the other values of the mode options
+  /// ([modeAppsOf], those with [MatrixApp.modes]) are not among them: a run
+  /// of the whole matrix checks them, once.
   final bool everyModule;
 
   /// The apps with every module of the matrix, such as a pairwise covering
-  /// of them, or one by the name of the plan of CI (see [matrixPlanOf]),
-  /// whose absence is a problem.
+  /// of them, with the apps for the other values of the mode options that
+  /// it takes next to them, or one by the name of the plan of CI (see
+  /// [matrixPlanOf]), whose absence is a problem.
   final EveryModuleSelection everyModuleApps;
 
   /// The share of the apps that the run would check otherwise, so that jobs
@@ -412,7 +560,8 @@ final class MatrixSelection {
     final selected = [
       for (final (index, app) in apps.indexed)
         if ((only == null || only.contains(app.name)) &&
-            (!everyModule || app.everyModuleWith != null))
+            (!everyModule ||
+                (app.everyModuleWith != null && app.modes.isEmpty)))
           (index, app),
     ];
     return shard?.of(selected) ?? selected;
@@ -596,8 +745,10 @@ final class MatrixToolOptions {
 const appsPerShard = 24;
 
 /// The number of the apps with every module, one for each combination of
-/// the providers of the roles that take one, that a plan with every
-/// combination checks all of, rather than a 3-wise covering of them.
+/// the providers of the roles that take one, and one more for each such
+/// combination and each combination of the other values of the mode
+/// options ([modeAppsOf]), that a plan with every combination checks all
+/// of, rather than a 3-wise covering of them.
 const maxEveryCombination = 100;
 
 /// The plan of the jobs of CI that check the matrix of [modules] with
@@ -606,13 +757,16 @@ const maxEveryCombination = 100;
 /// plan empty. The plan has, as JSON:
 /// - `combinations`: the apps with every module that the jobs of the
 ///   matrix check, as the value of `--combinations`: `pairwise`, or, with
-///   [everyCombination], `all` when there are at most [maxEveryCombination]
-///   and `3-wise` when there are more;
+///   [everyCombination], `all` when there are at most [maxEveryCombination],
+///   those for the other values of the mode options included, and `3-wise`
+///   when there are more;
 /// - `shards`: the shards of the matrix, `1/<count>` to
 ///   `<count>/<count>`, one for each job of the matrix: as many as it takes
 ///   for each to check at most [appsPerShard] apps, the apps of the matrix
 ///   and its apps with every module, which the jobs check once more in a
-///   directory whose name has letters beyond ASCII;
+///   directory whose name has letters beyond ASCII. The apps with every
+///   module for the other values of the mode options are apps of the
+///   matrix, and count once: the jobs do not check them a second time;
 /// and, with the role [native], the app entry role, whose provider owns the
 /// native projects of an app, the names of the apps with every module that
 /// CI generates one for each job:
@@ -624,6 +778,12 @@ const maxEveryCombination = 100;
 /// - `entries`: one app for each provider of [native] (see
 ///   [EveryModuleAppPerProvider]), which CI archives, and configures with
 ///   the external services of its modules to start it.
+///
+/// The apps of these three lists are apps of [everyModuleAppsOf]. None is
+/// an app for another value of a mode option, so a role that gets such an
+/// option, or such an option that gets another value, changes only the
+/// shards: what CI builds for a platform and starts on a device has the
+/// first value of every mode option, the one of an app that got none.
 ///
 /// So a new provider or module changes the plan, not the jobs of CI, and a
 /// job that takes its app or shard from the plan does not take longer as the
@@ -638,9 +798,10 @@ Future<({Map<String, Object> plan, List<String> problems})> matrixPlanOf(
   // In the order found, once each.
   final problems = <String>{};
   final every = await everyModuleAppsOf(modules, roleOptions: roleOptions);
+  final modes = await modeAppsOf(modules, roleOptions: roleOptions);
   final combinations = switch (everyCombination) {
     false => EveryModuleCombinations.pairwise,
-    true when every.apps.length > maxEveryCombination =>
+    true when every.apps.length + modes.apps.length > maxEveryCombination =>
       EveryModuleCombinations.threeWise,
     true => EveryModuleCombinations.all,
   };
@@ -667,6 +828,8 @@ Future<({Map<String, Object> plan, List<String> problems})> matrixPlanOf(
     return (plan: const <String, Object>{}, problems: [...problems]);
   }
 
+  // The apps with every module for the other values of the mode options
+  // are among the apps of the matrix; the second directory has none.
   final checked =
       matrix.apps.length + combinations.select(every.apps, modules).length;
   List<String> names(List<MatrixApp> apps) =>

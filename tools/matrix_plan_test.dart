@@ -4,7 +4,10 @@
 // the matrices cover, the shards of each matrix, and, of the tool of the
 // CLI, the apps that CI builds, archives and starts on devices, one for
 // each job. So a new provider or module changes the plan, not the
-// workflow.
+// workflow. None of those apps is the app of another value of a mode option
+// of a role, whose name ends with the option: what CI builds for a platform
+// and starts on a device has the first value of every such option, as an
+// app that a user generates without it.
 import 'dart:convert';
 import 'dart:io';
 
@@ -49,11 +52,16 @@ final Matcher _shards = predicate<Object?>(
   'the shards 1/n to n/n',
 );
 
-/// Matches a list of the names of apps with every module, one or more.
+/// Matches a list of the names of apps with every module, one or more,
+/// none of them with an option after its name, as the app of another value
+/// of a mode option has: in the fixtures,
+/// `every module (go_router, get_it, fake_riverpod) --clock-hours=12`.
 final Matcher _apps = allOf(
   isA<List<Object?>>(),
   isNotEmpty,
-  everyElement(allOf(isA<String>(), startsWith('every module'))),
+  everyElement(
+    allOf(isA<String>(), startsWith('every module'), isNot(contains(' --'))),
+  ),
 );
 
 void main() {
@@ -63,7 +71,8 @@ void main() {
   test(
     'the tool of the CLI plans a pairwise covering of the apps with every '
     'module in the shards of its matrix, and the apps that CI builds, '
-    'starts and configures with Firebase, one for each job',
+    'starts and configures with Firebase, one for each job, none of them '
+    'with a value of a mode option',
     () async {
       final plan = await _planOf(cli);
 
@@ -79,12 +88,15 @@ void main() {
 
   test(
     'with every combination, the tool of the CLI plans all of them, or a '
-    '3-wise covering of more than 100',
+    '3-wise covering of more than 100, and the same apps to build and start',
     () async {
       final plan = await _planOf(cli, ['--every-combination']);
 
       expect(plan['combinations'], anyOf('all', '3-wise'));
       expect(plan['shards'], _shards);
+      expect(plan['apps'], _apps);
+      expect(plan['start'], _apps);
+      expect(plan['entries'], _apps);
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );

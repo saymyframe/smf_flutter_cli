@@ -10,7 +10,8 @@ import 'package:smf_contracts/core.dart';
 /// [DartFileIndexer.parse] also returns the errors.
 ///
 /// Doc comments and annotations are not uses of names: the index keeps
-/// annotations as text and skips comments.
+/// annotations as text and skips comments. A type that the code names is
+/// no reference: the index lists it among [DartFileIndex.typeNames].
 abstract final class DartFileIndexer {
   /// The index of [content], the file at [path] relative to the project
   /// root.
@@ -56,6 +57,7 @@ abstract final class DartFileIndexer {
       invocations: List.unmodifiable(visitor.invocations),
       references: List.unmodifiable(visitor.references),
       memberAccesses: List.unmodifiable(visitor.memberAccesses),
+      typeNames: List.unmodifiable(visitor.typeNames),
     );
   }
 }
@@ -341,6 +343,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
   final List<IndexedInvocation> invocations = [];
   final List<IndexedReference> references = [];
   final List<IndexedMemberAccess> memberAccesses = [];
+  final List<IndexedTypeName> typeNames = [];
 
   /// Identifiers that name something invoked or accessed, which are not
   /// references of their own.
@@ -428,6 +431,23 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
       ),
     );
     super.visitPrefixedIdentifier(node);
+  }
+
+  // The class of a constructor that the code calls or tears off is no type
+  // that it names; its type arguments are.
+  @override
+  void visitNamedType(NamedType node) {
+    if (node.parent is! ConstructorName) {
+      typeNames.add(
+        IndexedTypeName(
+          node.name.lexeme,
+          prefix: node.importPrefix?.name.lexeme,
+          enclosingDeclaration: _enclosing(node),
+          offset: node.offset,
+        ),
+      );
+    }
+    super.visitNamedType(node);
   }
 
   @override

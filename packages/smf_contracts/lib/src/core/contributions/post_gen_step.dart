@@ -18,15 +18,17 @@ part of '../contributions.dart';
 /// apply to it. A step that applies runs unless:
 /// - it is [external] and the run skips external setup
 ///   (`--skip-external-setup`);
-/// - it is [interactive] and the run is not;
+/// - it is [interactive], or has a [notice], and the run cannot ask the
+///   user;
 /// - a check that it [needs] has not passed;
 /// - it continues a step that is not done.
 ///
 /// Then the pipeline prints the command for the user to run later, or fails
 /// generation if the step is not [skippable]; a step that continues a step
-/// that is not done is left for later with it either way. In an interactive
-/// run, the user may also skip a [skippable] step that continues no other
-/// step. A [skippable] step whose tool is missing, or that fails, is left
+/// that is not done is left for later with it either way. In a run that can
+/// ask, the user may also leave for later a [skippable] step that continues
+/// no other step, and a step with a [notice], whether it continues another
+/// or not. A [skippable] step whose tool is missing, or that fails, is left
 /// for later too; any other step that fails fails generation.
 ///
 /// The app is generated in a temporary directory and moved to its place
@@ -41,6 +43,7 @@ final class PostGenStep extends Contribution {
     this.id,
     this.followUpOf,
     this.description,
+    this.notice,
     this.interactive = false,
     this.skippable = false,
     this.external = false,
@@ -76,11 +79,12 @@ final class PostGenStep extends Contribution {
   /// the steps that continue it run right after it in turn.
   ///
   /// It is part of the step it continues, so the user is not asked about
-  /// it. When that step does not run or fails, it does not run either, and
-  /// it is left for later after that step, with that step as the reason,
-  /// whether it is [skippable] or not. Otherwise it runs as any step of its
-  /// contributor: by its own [needs], [interactive], [external] and
-  /// [skippable].
+  /// it, unless it has a [notice]. When that step does not run or fails, or
+  /// the user leaves that step for later, it does not run either, and it is
+  /// left for later after that step, with that step as the reason, whether
+  /// it is [skippable] or not, and without a question, whether it has a
+  /// [notice] or not. Otherwise it runs as any step of its contributor: by
+  /// its own [needs], [interactive], [external], [notice] and [skippable].
   ///
   /// It applies to the app whenever the step it continues does, so it has
   /// no [when] of its own. The pipeline reports as problems of its
@@ -90,6 +94,42 @@ final class PostGenStep extends Contribution {
 
   /// What the step does, for progress output and instructions.
   final String? description;
+
+  /// What the user has to know before the step runs and its [description]
+  /// does not tell, such as a side effect of the tool that it runs, or
+  /// `null` if there is nothing of the kind.
+  ///
+  /// A step with a notice runs only once the user agreed to it:
+  /// - a run that can ask asks about the step when the step can run, with
+  ///   the notice in the question, between what the step does and
+  ///   `Run it now?`. It asks about a step that continues another too
+  ///   ([followUpOf]), which would run without a question otherwise, once
+  ///   the step that it continues succeeded. The answer of a user who only
+  ///   presses Enter is yes, as for every step. It does not ask about a
+  ///   step that cannot run, which is left for later as any step: one that
+  ///   is [external] in a run that skips external setup, one that [needs]
+  ///   a check which has not passed, one whose tool is missing, and one
+  ///   that continues a step which is not done;
+  /// - a run that cannot ask leaves the step for later, where it would run
+  ///   a step without a notice unasked.
+  ///
+  /// So on a step that continues no other, which a run that can ask asks
+  /// about anyway when the step is [skippable], the notice adds its text to
+  /// that question and keeps the step out of the runs that cannot ask.
+  ///
+  /// The user may decline the step, so it is [skippable]: the pipeline
+  /// reports a step with a notice that is not as a problem of its
+  /// contributor. The steps that continue a step which the user declined
+  /// are left for later after it, as after any step that is not done.
+  ///
+  /// Whenever the step is left for later, whatever the reason, the notice
+  /// is printed after its command, and `--explain` shows it under the
+  /// command. So it is a sentence or two on one line that read on their own
+  /// in each of these places, and it does not refer to the question, such
+  /// as with "answer no". The pipeline reports a notice that is blank, or
+  /// that has a line break, as a problem of its contributor: the question
+  /// is one line.
+  final String? notice;
 
   /// Whether the step talks to the user, so the pipeline runs it with the
   /// terminal attached (see [SmfProcessRunner.runInteractive]).

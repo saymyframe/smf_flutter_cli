@@ -157,7 +157,10 @@ List<({String path, String importer})> _appFilesImportedBy(
 /// The files of the app of [provider], by their paths, as the contract
 /// harness renders it.
 Future<Set<String>> _filesOfAppOf(BrokenProvider provider) async {
-  final harness = ContractHarness(ModuleRegistry(provider.modules));
+  final harness = ContractHarness(
+    ModuleRegistry(provider.modules),
+    roleOptions: provider.roleOptions,
+  );
   final files = <Set<String>>[];
   for (final contractCase in harness.casesOfAll()) {
     final result = await harness.check(contractCase);
@@ -456,7 +459,54 @@ void main() {
       expect(app.name, '$id');
       expect(app.modules, provider.modules);
       expect(app.providers, provider.app);
+      expect(app.roleOptions, provider.roleOptions);
       expect(app.failures, provider.failures);
+    }
+  });
+
+  test(
+      'the app of a broken provider is generated without role options, so '
+      'that each role chooses as for an app that got none, but for the '
+      'sign-in that links as a new user, whose app is in the mode anonymous: '
+      'there the session gives an anonymous user the account on a sign-up, '
+      'and the test of the session fails on the bug too', () async {
+    const linking = ModuleId('broken_auth_links_as_new_user');
+
+    expect(
+      {
+        for (final provider in providers)
+          if (provider.roleOptions.isNotEmpty)
+            provider.module.descriptor.id: provider.roleOptions,
+      },
+      {
+        linking: {'auth-mode': 'anonymous'},
+      },
+    );
+    for (final provider in providers) {
+      if (!identical(provider.role, authRole)) continue;
+      final (:app, :problems) = await provider.failingApp.check();
+      expect(problems, isEmpty);
+      final mode = authRole.modeIn(authRole.hookInput(app!.hook!));
+      final ofLinking = provider.module.descriptor.id == linking;
+      expect(
+        mode,
+        ofLinking ? AuthMode.anonymous : AuthMode.required,
+        reason: '${provider.module.descriptor.id}',
+      );
+      expect(
+        app.createArguments('app_1', '/apps'),
+        ofLinking
+            ? contains('--auth-mode=anonymous')
+            : isNot(contains(startsWith('--auth-mode'))),
+        reason: '${provider.module.descriptor.id}',
+      );
+      // The matrix gives the test of the role the mode that the role
+      // chose, which the test expects the app to be in.
+      final authTest = (await brokenProviderAppTests()).singleWhere(
+        (test) => test.roles.contains(authRole),
+      );
+      expect(authTest.appliesTo(app), isTrue);
+      expect(authTest.values!(app), {'auth_mode': mode.name});
     }
   });
 
@@ -467,7 +517,10 @@ void main() {
       test(
           'the module keeps the rules of its role that the contract harness '
           'checks, so that only a running app shows its bug', () async {
-        final harness = ContractHarness(ModuleRegistry(provider.registry));
+        final harness = ContractHarness(
+          ModuleRegistry(provider.registry),
+          roleOptions: provider.roleOptions,
+        );
         final cases = harness.casesOfModule(id);
 
         expect(cases, isNotEmpty);

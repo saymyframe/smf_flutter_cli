@@ -11,7 +11,8 @@ import 'package:smf_pipeline/testing.dart';
 import 'package:yaml/yaml.dart';
 
 /// The colours of a colour scheme of Flutter 3.44 that the file of the
-/// themes sets or reads.
+/// themes sets or reads, but for the colour of an error, which it reads and
+/// leaves to `ColorScheme.fromSeed`.
 const schemeColors = [
   'primary',
   'onPrimary',
@@ -66,8 +67,8 @@ String _forEach(Iterable<String> names, String Function(String name) each) =>
 /// A stand-in for what the file of the themes uses of Flutter's painting
 /// and widgets libraries, which its material and its cupertino library
 /// both export, with the signatures of Flutter 3.44: colours, sizes,
-/// shapes, a text style, and a property that has a value for each state
-/// of a widget.
+/// shapes, a text style, and a property or a colour that has a value for
+/// each state of a widget.
 const _widgets = r'''
 enum Brightness { dark, light }
 
@@ -106,6 +107,11 @@ class Color {
   const Color(this.value);
 
   final int value;
+
+  /// This colour with the opacity [alpha], from 0 to 1.
+  Color withValues({double? alpha}) => alpha == null
+      ? this
+      : Color((value & 0x00FFFFFF) | ((alpha * 255).round() << 24));
 }
 
 class FontWeight {
@@ -123,6 +129,20 @@ class Size {
 
   final double width;
   final double height;
+}
+
+class BoxConstraints {
+  const BoxConstraints({
+    this.minWidth = 0.0,
+    this.maxWidth = double.infinity,
+    this.minHeight = 0.0,
+    this.maxHeight = double.infinity,
+  });
+
+  final double minWidth;
+  final double maxWidth;
+  final double minHeight;
+  final double maxHeight;
 }
 
 class Radius {
@@ -262,6 +282,11 @@ abstract class WidgetStateProperty<T> {
       WidgetStateMapper<T>;
 
   T resolve(Set<WidgetState> states);
+
+  /// What [value] is for [states]: itself, unless it has a value for each
+  /// state of a widget.
+  static T resolveAs<T>(T value, Set<WidgetState> states) =>
+      value is WidgetStateProperty<T> ? value.resolve(states) : value;
 }
 
 class WidgetStateMapper<T> implements WidgetStateProperty<T> {
@@ -276,6 +301,27 @@ class WidgetStateMapper<T> implements WidgetStateProperty<T> {
     }
     throw ArgumentError('No entry of the map is for $states.');
   }
+}
+
+abstract class WidgetStateColor extends Color
+    implements WidgetStateProperty<Color> {
+  const WidgetStateColor(super.value);
+
+  const factory WidgetStateColor.fromMap(WidgetStateMap<Color> map) =
+      _WidgetStateColorMapper;
+}
+
+/// As a colour, it is the colour of a widget in no state.
+class _WidgetStateColorMapper extends WidgetStateMapper<Color>
+    implements WidgetStateColor {
+  const _WidgetStateColorMapper(super.map);
+
+  @override
+  int get value => resolve(const {}).value;
+
+  @override
+  Color withValues({double? alpha}) =>
+      resolve(const {}).withValues(alpha: alpha);
 }
 
 abstract class PageTransitionsBuilder {
@@ -307,6 +353,8 @@ class CupertinoPageTransitionsBuilder extends PageTransitionsBuilder {
 /// not keep the seed. The one here keeps it, in `seed`, so that a test can
 /// tell which colour a theme was derived from, and has the seed for every
 /// colour that nothing set; `set` has the colours that a copy set, by name.
+/// The colour of an error is the one that Flutter gives a scheme of each
+/// brightness, whatever its seed.
 /// As in Flutter, a theme applies its font to its text styles, and what
 /// its text theme sets goes over them. What the themes look like is for
 /// the tests of a running app.
@@ -352,6 +400,13 @@ class ColorScheme {
   final Map<String, Color> set;
 
 ${_forEach(schemeColors, (name) => "  Color get $name => set['$name'] ?? seed;")}
+
+  /// The colour of an error, which the file of the themes reads and does
+  /// not set.
+  Color get error => switch (brightness) {
+    Brightness.light => const Color(0xFFBA1A1A),
+    Brightness.dark => const Color(0xFFFFB4AB),
+  };
 
   ColorScheme copyWith({
     Brightness? brightness,
@@ -500,6 +555,74 @@ class SegmentedButtonThemeData {
   final ButtonStyle? style;
 }
 
+abstract class InputBorder extends ShapeBorder {
+  const InputBorder({this.borderSide = BorderSide.none});
+
+  final BorderSide borderSide;
+
+  bool get isOutline;
+}
+
+class OutlineInputBorder extends InputBorder {
+  const OutlineInputBorder({
+    super.borderSide = const BorderSide(),
+    this.borderRadius = const BorderRadius.all(Radius.circular(4.0)),
+    this.gapPadding = 4.0,
+  });
+
+  final BorderRadius borderRadius;
+  final double gapPadding;
+
+  @override
+  bool get isOutline => true;
+
+  OutlineInputBorder copyWith({
+    BorderSide? borderSide,
+    BorderRadius? borderRadius,
+    double? gapPadding,
+  }) => OutlineInputBorder(
+    borderSide: borderSide ?? this.borderSide,
+    borderRadius: borderRadius ?? this.borderRadius,
+    gapPadding: gapPadding ?? this.gapPadding,
+  );
+}
+
+class InputDecorationThemeData {
+  const InputDecorationThemeData({
+    this.errorStyle,
+    this.errorMaxLines,
+    this.contentPadding,
+    this.prefixIconColor,
+    this.prefixIconConstraints,
+    this.suffixIconColor,
+    this.suffixIconConstraints,
+    this.filled = false,
+    this.fillColor,
+    this.errorBorder,
+    this.focusedBorder,
+    this.focusedErrorBorder,
+    this.disabledBorder,
+    this.enabledBorder,
+    this.border,
+  });
+
+  final TextStyle? errorStyle;
+  final int? errorMaxLines;
+  final EdgeInsetsGeometry? contentPadding;
+  final Color? prefixIconColor;
+  final BoxConstraints? prefixIconConstraints;
+  final Color? suffixIconColor;
+  final BoxConstraints? suffixIconConstraints;
+  final bool filled;
+  final Color? fillColor;
+  final InputBorder? errorBorder;
+  final InputBorder? focusedBorder;
+  final InputBorder? focusedErrorBorder;
+  final InputBorder? disabledBorder;
+  final InputBorder? enabledBorder;
+  final InputBorder? border;
+}
+
 class ListTileThemeData {
   const ListTileThemeData({
     this.iconColor,
@@ -569,6 +692,9 @@ class ThemeData {
     DialogThemeData? dialogTheme,
     DividerThemeData? dividerTheme,
     FilledButtonThemeData? filledButtonTheme,
+    // An `InputDecorationThemeData`, or the widget `InputDecorationTheme`
+    // of older code.
+    Object? inputDecorationTheme,
     ListTileThemeData? listTileTheme,
     NavigationBarThemeData? navigationBarTheme,
     SegmentedButtonThemeData? segmentedButtonTheme,
@@ -586,6 +712,9 @@ class ThemeData {
 ${_forEach(textStyles, (name) => '      $name: TextStyle(),')}
     ).apply(fontFamily: fontFamily).merge(textTheme),
     filledButtonTheme: filledButtonTheme ?? const FilledButtonThemeData(),
+    inputDecorationTheme:
+        inputDecorationTheme as InputDecorationThemeData? ??
+        const InputDecorationThemeData(),
     textButtonTheme: textButtonTheme ?? const TextButtonThemeData(),
     segmentedButtonTheme:
         segmentedButtonTheme ?? const SegmentedButtonThemeData(),
@@ -596,6 +725,7 @@ ${_forEach(textStyles, (name) => '      $name: TextStyle(),')}
     required this.useMaterial3,
     required this.textTheme,
     required this.filledButtonTheme,
+    required this.inputDecorationTheme,
     required this.textButtonTheme,
     required this.segmentedButtonTheme,
   });
@@ -607,6 +737,8 @@ ${_forEach(textStyles, (name) => '      $name: TextStyle(),')}
   final TextTheme textTheme;
 
   final FilledButtonThemeData filledButtonTheme;
+
+  final InputDecorationThemeData inputDecorationTheme;
 
   final TextButtonThemeData textButtonTheme;
 

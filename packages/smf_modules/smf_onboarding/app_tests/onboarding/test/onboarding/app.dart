@@ -95,9 +95,8 @@ Future<void> restartOnboarding(WidgetTester tester) async {
 
 /// What the preferences have saved under the key of the module, once the
 /// write that saves [expected] had a moment: a tap that finishes the
-/// onboarding, and a screen that starts it again, do not wait for their
-/// write, which the platform side of the preferences may complete in real
-/// time.
+/// onboarding does not wait for its write, which the platform side of the
+/// preferences may complete in real time.
 Future<bool?> savedCompleted(
   WidgetTester tester, {
   required bool expected,

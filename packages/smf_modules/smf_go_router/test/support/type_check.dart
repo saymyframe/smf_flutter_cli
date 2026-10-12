@@ -58,9 +58,43 @@ abstract class StatefulWidget extends Widget {
   const StatefulWidget({super.key});
 }
 
-class RouterConfig<T> {}
+abstract class State<T extends StatefulWidget> {}
+
+class GlobalKey<T extends State<StatefulWidget>> extends Key {
+  const GlobalKey();
+
+  T? get currentState => null;
+}
+
+class Navigator extends StatefulWidget {
+  const Navigator({super.key});
+}
+
+class NavigatorState extends State<Navigator> {
+  Future<bool> maybePop<T extends Object?>([T? result]) async => false;
+}
+
+abstract class BackButtonDispatcher {
+  void addCallback(ValueGetter<Future<bool>> callback) {}
+
+  void removeCallback(ValueGetter<Future<bool>> callback) {}
+}
+
+class RootBackButtonDispatcher extends BackButtonDispatcher {}
+
+class RouterConfig<T> {
+  const RouterConfig({this.backButtonDispatcher});
+
+  final BackButtonDispatcher? backButtonDispatcher;
+}
 
 class NavigatorObserver {}
+
+class WidgetsBinding {
+  static WidgetsBinding get instance => WidgetsBinding();
+
+  void addPostFrameCallback(void Function(Duration timeStamp) callback) {}
+}
 
 typedef ValueChanged<T> = void Function(T value);
 
@@ -81,6 +115,8 @@ const bool kDebugMode = true;
 void debugPrint(String? message, {int? wrapWidth}) {}
 
 typedef VoidCallback = void Function();
+
+typedef ValueGetter<T> = T Function();
 
 abstract class Listenable {
   const Listenable();
@@ -137,6 +173,7 @@ abstract final class Icons {
 const _goRouter = '''
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 abstract class GoRouterState {
@@ -202,11 +239,14 @@ class StatefulShellRoute extends RouteBase {
   });
 }
 
-abstract class RouteMatchBase {}
+abstract class RouteMatchBase {
+  RouteBase get route;
+}
 
 class RouteMatch extends RouteMatchBase {
   RouteMatch(this.route, this.pageKey);
 
+  @override
   final GoRoute route;
 
   final ValueKey<String> pageKey;
@@ -226,6 +266,11 @@ class ImperativeRouteMatch extends RouteMatch {
 }
 
 class ShellRouteMatch extends RouteMatchBase {
+  ShellRouteMatch(this.route);
+
+  @override
+  final RouteBase route;
+
   final List<RouteMatchBase> matches = const [];
 }
 
@@ -239,10 +284,16 @@ class RouteMatchList {
   bool get isError => false;
 
   RouteMatch? get lastOrNull => null;
+
+  RouteMatchList remove(RouteMatchBase match) => this;
+
+  RouteMatchList push(ImperativeRouteMatch match) => this;
 }
 
 class GoRouterDelegate implements Listenable {
   RouteMatchList currentConfiguration = RouteMatchList();
+
+  GlobalKey<NavigatorState> get navigatorKey => const GlobalKey();
 
   @override
   void addListener(VoidCallback listener) {}
@@ -250,6 +301,36 @@ class GoRouterDelegate implements Listenable {
 
 class RouteConfiguration {
   RouteMatchList findMatch(Uri uri, {Object? extra}) => RouteMatchList();
+}
+
+typedef OnEnter = FutureOr<Object> Function(
+  BuildContext context,
+  GoRouterState currentState,
+  GoRouterState nextState,
+  GoRouter goRouter,
+);
+
+class RoutingConfig {
+  const RoutingConfig({
+    required this.routes,
+    this.onEnter,
+    this.redirect = _defaultRedirect,
+    this.redirectLimit = 5,
+  });
+
+  static FutureOr<String?> _defaultRedirect(
+    BuildContext context,
+    GoRouterState state,
+  ) =>
+      null;
+
+  final List<RouteBase> routes;
+
+  final OnEnter? onEnter;
+
+  final GoRouterRedirect redirect;
+
+  final int redirectLimit;
 }
 
 class GoRouter implements RouterConfig<RouteMatchList> {
@@ -261,11 +342,24 @@ class GoRouter implements RouterConfig<RouteMatchList> {
   }) =>
       throw UnimplementedError();
 
+  GoRouter.routingConfig({
+    required ValueListenable<RoutingConfig> routingConfig,
+    String? initialLocation,
+    List<NavigatorObserver>? observers,
+  }) : backButtonDispatcher = RootBackButtonDispatcher();
+
   late final RouteConfiguration configuration;
+
+  @override
+  final BackButtonDispatcher backButtonDispatcher;
 
   late final GoRouterDelegate routerDelegate;
 
   void go(String location, {Object? extra}) {}
+
+  void restore(RouteMatchList matchList) {}
+
+  void refresh() {}
 
   Future<T?> push<T extends Object?>(String location, {Object? extra}) async =>
       null;

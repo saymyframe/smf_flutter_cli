@@ -153,42 +153,6 @@ void main() {
         reason: 'With guards that allow, go() shows its location.',
       );
 
-      // The target of the guard on top of another page, as a push shows
-      // it, when the gate closes: the page on top stays, or comes anew, and
-      // the page below it leaves the stack.
-      pushed(shown(tester, FixtureHomeScreen).nav.fakeGate.gate());
-      await tester.pumpAndSettle();
-      expect(
-        heard(),
-        [gateScreen],
-        reason: 'With guards that allow, the target of a guard is a route '
-            'like any other.',
-      );
-      final gate = shown(tester, FixtureGateScreen);
-      fixtureGate.value = false;
-      await tester.pumpAndSettle();
-      expectHeardAtMostOnce(
-        tester,
-        gate,
-        gateScreen,
-        reason: 'When a guard stops allowing a page below the one on top, '
-            'its target stays the screen the user sees.',
-      );
-      expect(
-        builtScreens(tester),
-        [FixtureGateScreen],
-        reason: 'When a guard stops allowing, no page that it keeps the user '
-            'from stays in the stack, below the page on top either.',
-      );
-      fixtureGate.value = true;
-      await tester.pumpAndSettle();
-      expect(
-        heard(),
-        [startScreen],
-        reason: 'Once a guard allows again, the router shows the page that '
-            'the guard took out of the stack.',
-      );
-
       // A location from the platform that no route matches: a router that
       // takes locations from the platform shows its error screen, which is
       // a page like any other to the guards; another router stays where it

@@ -9,6 +9,9 @@ environment:
 resolution: workspace
 
 dependencies:
+  # The fixture role whose condition a route of the second feature asks
+  # for, and a guard of the fixture gates stands for.
+  fake_roles: any
   mason: ^0.1.1
   smf_contracts: ^0.4.0
 

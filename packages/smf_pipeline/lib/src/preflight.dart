@@ -6,6 +6,7 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/environment.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
+import 'package:smf_pipeline/src/resolver.dart';
 
 /// The check of the Flutter SDK that every app needs, which the pipeline
 /// runs before the checks of the modules.
@@ -283,17 +284,34 @@ final class PreflightReport {
 }
 
 /// The checks of the machine that the app needs: the Flutter SDK, then the
-/// checks of every [Preflight] among [collection]'s contributions that
-/// applies, in the order of the modules.
+/// checks of every [Preflight] that applies among [collection]'s
+/// contributions, which are those of the modules of [resolution] and of the
+/// templates of its roles.
+///
+/// The checks of a module come after those of the modules it depends on,
+/// directly or not, wherever the user named those: a module that comes
+/// after one that depends on it has its checks right before those of the
+/// first such module, and the other modules keep their order; see
+/// [Resolution.dependenciesFirst]. A check may need what a check of such a
+/// module installs, as a check of the version of a tool needs the tool, and
+/// [runPreflight] runs again only the checks after an installation. The
+/// checks of the templates of the roles come last, in the order of the
+/// roles.
 List<PlannedCheck> plannedChecks(
   Collection collection,
   FlutterSdkCheck sdkCheck,
+  Resolution resolution,
 ) =>
     [
       PlannedCheck(sdkCheck, const PipelineOrigin()),
-      for (final collected in collection.applyingOf<Preflight>())
-        for (final check in (collected.contribution as Preflight).checks)
-          PlannedCheck(check, collected.origin),
+      for (final collected in [
+        for (final module in resolution.dependenciesFirst)
+          ...collection.ofModule(module.id),
+        ...collection.all.where((c) => c.origin is! ModuleOrigin),
+      ])
+        if (collected.applies)
+          if (collected.contribution case Preflight(:final checks))
+            for (final check in checks) PlannedCheck(check, collected.origin),
     ];
 
 /// Stage 6 of the pipeline: runs [checks] on the machine.
@@ -307,15 +325,24 @@ List<PlannedCheck> plannedChecks(
 /// going through the checks in order: the directories of the installed
 /// tools go into the environment's `PATH`, and the checks after an
 /// installation run again, since they may need what it installed, each
-/// with a progress that names it.
+/// with a progress that names it. A check before an installation does not
+/// run again, so [checks] has each check after the checks that may install
+/// what it needs, as [plannedChecks] orders them.
 ///
 /// Nothing is installed when generation cannot go on anyway: when a
 /// required check that nothing can fix fails for the pipeline itself, or
 /// for any module with [strict], or for modules that [canDoWithout] says
 /// no app can be made without, which lenient mode does not leave out
 /// either. Nor for a module that lenient mode will leave out for such a
-/// check. Anything still missing gets instructions: an error for a
-/// [PreflightCheck.required] check, a warning otherwise.
+/// check. The pipeline does not know which installation a check needs, so
+/// a failing required check is one that nothing can fix only when it can
+/// install nothing itself and no check before it, of any contributor,
+/// found something missing that it can install. When one did, a run that
+/// may install offers the installations first, and the required check
+/// stops the run, or has its module left out, only once it failed again
+/// after them, also when none of them could have fixed it. Anything still
+/// missing gets instructions: an error for a [PreflightCheck.required]
+/// check, a warning otherwise.
 ///
 /// The versions of the SDK are compared with the SDK constraints of
 /// [pubspec] right after the checks, before anything is installed; see
@@ -404,7 +431,17 @@ Future<List<CheckResult>> _checkAll(
 }
 
 /// The contributors that a failing required check among [results] dooms:
-/// one that no installation before it can fix.
+/// one that can install nothing itself, with no installable check before
+/// it.
+///
+/// The rule is coarse. Any installable check before a failing required
+/// check counts as one whose installation may fix it, whoever contributes
+/// it. The checks that can fix it are among them, since they are those of
+/// its own module and of the modules that its module depends on (see
+/// [plannedChecks]), but so are the checks of modules that have nothing to
+/// do with it. So a required check that no installation can fix does not
+/// doom its contributor when such a check comes before it: the run offers
+/// that installation before it stops, or leaves the module out.
 Set<ContributionOrigin> _doomedBy(List<CheckResult> results) {
   final doomed = <ContributionOrigin>{};
   var installableBefore = false;

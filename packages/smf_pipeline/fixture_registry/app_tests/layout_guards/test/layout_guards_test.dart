@@ -8,8 +8,16 @@
 // (RouterRole.guardedNavigation). While the guard does not allow, the main
 // navigation is not shown, and the target of the guard takes the stacks of
 // every branch: a branch that was not selected is back on its destination
-// when the user selects it. It selects a destination as the layout does
-// when the user selects it, with onSelect of AppShell, so it depends
+// when the user selects it. A location in a flow that is over is another
+// matter: asked for from the main navigation, it shows the screen that the
+// app starts on, as go() to that screen does, and hides nothing from the
+// user. So whether a branch that is not selected keeps its pages then is
+// up to the router, and the test does not look at it. Last, the guard
+// stops allowing and allows again in one turn, with a page in each branch,
+// so that the router shows its target for no frame: the user comes back to
+// the destination that was selected, and the other branch is back on its
+// destination all the same. The test selects a destination as the layout
+// does when the user selects it, with onSelect of AppShell, so it depends
 // neither on the router nor on how the layout shows the destinations. It
 // uses what the tests of router_screens and of router_guards share, which
 // every app that it applies to has. Each expectation gives its reason,
@@ -171,6 +179,151 @@ void main() {
         reason: 'The target of a guard takes the stacks of every branch of '
             'the main navigation: a branch that was not selected is back on '
             'its destination.',
+      );
+
+      // A location in a flow that is over, asked for from the main
+      // navigation while the branch that is not selected has a pushed
+      // page: the second destination, a page that a push shows in its
+      // branch, the first destination again, and there push() of the
+      // target of the guard, which allows.
+      tester.widget<AppShell>(_shells()).onSelect(second);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [_secondScreen],
+        reason: 'A switch to another destination is heard of once.',
+      );
+      pushed(shown(tester, FixtureSecondScreen).nav.fakeFeature.details(id: 5));
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [('fake_feature.details', '/fake_feature/details/5')],
+        reason: 'The page that push() shows in a branch is heard of once.',
+      );
+      tester.widget<AppShell>(_shells()).onSelect(first);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [startScreen],
+        reason: 'A switch to another destination is heard of once.',
+      );
+      final home = shown(tester, FixtureHomeScreen);
+      final result = pushed(home.nav.fakeGate.gate());
+      await tester.pumpAndSettle();
+      expectHeardAtMostOnce(
+        tester,
+        home,
+        startScreen,
+        reason: 'push() of a location in a flow that is over shows the '
+            'screen that the app starts on, from the main navigation too.',
+      );
+      expect(
+        result(),
+        isNull,
+        reason: 'push() of a location in a flow that is over completes with '
+            'null, from the main navigation too.',
+      );
+      expect(
+        find.byType(FixtureGateScreen, skipOffstage: false),
+        findsNothing,
+        reason: 'The router shows no page of a location in a flow that is '
+            'over, on the main navigation either.',
+      );
+      expect(
+        find.byType(FixtureHomeScreen),
+        findsOneWidget,
+        reason: 'push() of a location in a flow that is over shows the '
+            'screen that the app starts on, from the main navigation too.',
+      );
+      expect(
+        _shells(),
+        findsOneWidget,
+        reason: 'The screen that the app starts on is a destination, so the '
+            'user stays in the main navigation.',
+      );
+      expect(
+        tester.widget<AppShell>(_shells()).currentIndex,
+        first,
+        reason: 'The destination of the screen that the app starts on is '
+            'selected.',
+      );
+
+      // The gate closes and opens in one turn, with a page in each branch,
+      // as a push shows it: the second destination, whose branch go() puts
+      // on its destination, a page there, and the first destination with a
+      // page too. The router shows the target of the guard for no frame.
+      tester.element(_shells()).nav.fakeSecond.second().go();
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [_secondScreen],
+        reason: 'go() to a destination shows it, with no page over it.',
+      );
+      pushed(shown(tester, FixtureSecondScreen).nav.fakeFeature.details(id: 7));
+      await tester.pumpAndSettle();
+      tester.widget<AppShell>(_shells()).onSelect(first);
+      await tester.pumpAndSettle();
+      pushed(shown(tester, FixtureHomeScreen).nav.fakeFeature.details(id: 3));
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [
+          ('fake_feature.details', '/fake_feature/details/7'),
+          startScreen,
+          ('fake_feature.details', '/fake_feature/details/3'),
+        ],
+        reason: 'The pages that push() shows in the branches, and a switch '
+            'to another destination, are heard of once each.',
+      );
+      fixtureGate.value = false;
+      fixtureGate.value = true;
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'A guard that stops allowing and allows again in one turn '
+            'leaves the router with one main navigation, which it shows '
+            'without an error.',
+      );
+      // Whether the listeners hear of the target, which no frame showed,
+      // is up to the router.
+      expect(
+        heard(),
+        anyOf(equals([startScreen]), equals([gateScreen, startScreen])),
+        reason: 'Once a guard allows again, in the turn in which it stopped '
+            'allowing, the user comes back to the destination that the '
+            'pushed page was opened from.',
+      );
+      expect(
+        tester.widget<AppShell>(_shells()).currentIndex,
+        first,
+        reason: 'Once a guard allows again, in the turn in which it stopped '
+            'allowing, the destination that the pushed page was opened '
+            'from is selected.',
+      );
+      expect(
+        find.byType(FixtureDetailsScreen),
+        findsNothing,
+        reason: 'Once a guard allows again, in the turn in which it stopped '
+            'allowing, the page that the push showed is not shown.',
+      );
+      tester.widget<AppShell>(_shells()).onSelect(second);
+      await tester.pumpAndSettle();
+      expect(
+        heard(),
+        [_secondScreen],
+        reason: 'A guard stopped allowing and allowed again in one turn. '
+            'The target of the guard took the stacks of every branch of '
+            'the main navigation all the same: a branch that was not '
+            'selected is back on its destination.',
+      );
+      expect(
+        find.byType(FixtureDetailsScreen, skipOffstage: false),
+        findsNothing,
+        reason: 'A guard stopped allowing and allowed again in one turn. '
+            'The target of the guard took the stacks of every branch of '
+            'the main navigation all the same: no page that the guard kept '
+            'the user from is left in a branch.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

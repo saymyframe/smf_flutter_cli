@@ -33,6 +33,14 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - The service never fails, and you need not await a call: in debug mode it prints the failure of a provider.
 - A new provider implements `AnalyticsService`. The function that creates it gets an entry in `_analyticsServices` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initAnalytics()`, which the file has once a provider needs it.
 
+## Authentication
+
+- `appSession` in `lib/core/auth/app_session.dart` tells who uses the app, and knows it before the first frame. Its `value` is a `SignedOutSession`, an `AnonymousSession` or an `AccountSession`, and `appSession.value.uid` is the id of the user. Sign in, sign up, sign out and delete the account only through `appSession`. The app has one, so create no other `AppSessionController`.
+- A call of `appSession` fails only with an `AuthFailure`. Catch it and show a text of the app for its `reason`. Show its `developerHint` in debug mode only. After `recentSignInRequired`, tell the user to sign out and sign in again.
+- `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes. One that reads `appSession.allowsApp` stands before the whole app, and one that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. In an app without such a guard every screen is open, whatever the mode, and that includes a screen that needs an account. A screen does not redirect itself.
+- When an anonymous user signs in to an account that exists already, `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user. Call no method of `appSession` in it, since the sign-in that calls it would wait for that call.
+- A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure` and `AuthFailureReason`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
+
 ## Crash reporting
 
 - `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
@@ -80,9 +88,12 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
 - `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
 
-- `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`.
-- To keep the user from the rest of the app, add a `RouteGuard` to that list, never a redirect to the files of the router. Make its `redirectTo` a top-level route outside the main navigation.
-- A feature changes the value of `allows` of its guard, and the router navigates when it does. The router brings the user back to where they were unless the code calls `go()` to the `redirectTo` before the value turns `false`.
+- `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`, in the order the router asks them. A guard without `routes` is a gate over the whole app. The gates come first, and the first one whose `allows` is `false` decides: the router asks no guard after it. A guard with `routes` keeps the user only from the routes that it names there, each as `<feature>.<route>`, and comes after the gates.
+- To keep the user from the rest of the app, add a gate to that list, never a redirect to the files of the router. Put it at the place among the gates where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation. To keep the user from some routes only, add their names to the `routes` of the guard that stands for what they need, or add such a guard after the gates. Add the name of each route below such a route too: a route does not ask because the route above it does. The `routes` are outside the main navigation and outside every `flow`, and the screen that the app starts on is none of them.
+- A feature changes the value of `allows` of its guard, and the router navigates when it does. While the `allows` of a gate is `false`, the router shows its `redirectTo` in place of the whole stack, whichever location was asked for. Once the gates allow, the router shows the location that was asked for in the meantime, such as a link, or else brings the user back to where they were. A gate with `resumes: false` does not bring the user back. When the `allows` of a guard with `resumes: false` turns `false`, the router forgets where the user was and what was asked for before, even while the `redirectTo` of another guard is shown. Once the gates allow, the user comes to a location that was asked for since then, or else to the screen that the app starts on. So after a sign-out the next user does not come to the screen of the last one.
+- While the `allows` of a guard with `routes` is `false`, `go()`, `push()` or `replace()` of one of those routes opens its `redirectTo` over the page that the user is on, and the request waits. Back returns to that page, and a `push()` that waited completes with `null`. Once the value is `true`, the router closes the pages of the `flow` and does what was asked: `push()` shows the route over the page that the user was on and completes with the value of its page, `go()` shows it in place of the stack, and `replace()` in place of that page. When the value turns `false`, the router closes the pages of the `routes` with the pages over them. The user is then on the page below them, or on the screen that the app starts on when no page is below, as after `go()` to one of the `routes`.
+- A screen neither closes itself nor navigates after it changed the value of `allows` of a guard: the router has done both by then. This goes for a screen of a `flow` that turned the value `true`, as after a sign-in, and for a screen of the `routes` that turned it `false`, as a screen with a sign-out button. A `pop()` after the change closes the page that is on top by then: the page that the user asked for, or the page below the one that the router closed, which may be the main navigation of the app.
+- The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of a gate whose `allows` is `false`. So no code navigates into the `flow` of a gate, and no screen of a `flow` navigates out of it once its guard allows: the router does. The first does not hold for a guard with `routes`. While it does not allow and every gate does, its `redirectTo` shows like any route, so a screen may open it with `push()`. `go()` to it from a screen takes the place of the stack, with no way back. A link to a route of its `flow` opens that route over the screen that the app starts on, so back leads into the app. Such a link is lost while a gate with another `flow` does not allow: once the gate allows, the user is on the screen that the app starts on. Inside a `flow`, navigate with `push()` or `replace()`. `go()` takes the place of the pages below the `flow`, and the request that waits is lost with them.
 
 ## Theme
 
@@ -99,6 +110,20 @@ A new Flutter project.
 ## Fixture
 
 The app has something in every socket of its entry, with `code` and a [link](https://example.com).
+
+## Sign-in
+
+The sign-in mode of the app says who may use it without an account. This app was generated in the mode `required`: `authMode` in `lib/core/auth/app_session.dart` is `AuthMode.required`.
+
+- In `required`, nobody may. `appSession.allowsApp` is true only for a user who signed in to an account.
+- In `guest`, everyone may. The app has no user until someone signs in, and `appSession.allowsApp` is always true.
+- In `anonymous`, everyone may, as an anonymous user that the app signs in itself when it starts. Code then has the id of a user, `appSession.value.uid`, before anyone has an account, and signing up gives that same user the account. The app waits up to 3 seconds for that sign-in. When it fails or takes longer, the app starts without a user and tries again each time the user comes back to it. `appSession.allowsApp` is always true.
+
+The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `required` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
+
+To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
+
+When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
 ## Languages
 
@@ -387,6 +412,7 @@ class App extends StatelessWidget {
 }
 === lib/bootstrap.dart (flutter_core) ===
 import 'package:fixture_app/core/analytics/analytics_service.dart';
+import 'package:fixture_app/core/auth/app_session.dart';
 import 'package:fixture_app/core/badge/badge_factory.dart';
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart';
 import 'package:fixture_app/core/di/dependencies.dart';
@@ -405,6 +431,7 @@ Future<void> bootstrap() async {
   debugPrint('early');
   debugPrint('platform');
   await initAnalytics();
+  await initAuth();
   await initCrashReporting();
   installCrashReporting();
   await initEvents();
@@ -811,6 +838,723 @@ class FallbackStartView extends StatelessWidget {
     );
   }
 }
+=== lib/core/auth/app_session.dart (role:auth) ===
+import 'dart:async';
+
+import 'package:fixture_app/core/fixture_auth/fixture_auth.dart' as impl0;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'auth_service.dart';
+import 'guest_data.dart';
+
+export 'auth_service.dart' show AuthFailure, AuthFailureReason;
+
+/// Who may use the app without an account.
+enum AuthMode {
+  /// Nobody: the user signs in first.
+  required,
+
+  /// Everyone. The app has no user until someone signs in, and asks for an
+  /// account only where a screen needs one.
+  guest,
+
+  /// Everyone, as an anonymous user that the app signs in itself when it
+  /// starts, so that code has the id of a user from the first frame. An
+  /// account is asked for only where a screen needs one, and signing up
+  /// gives it to that same user.
+  anonymous,
+}
+
+/// The mode of this app, which was chosen when the app was generated.
+///
+/// The mode gates nothing on its own. It decides what [appSession] does when
+/// it starts and what [AppSessionController.allowsApp] says, which a guard
+/// of the routes reads.
+///
+/// To change the mode, change its value and keep the declaration as it is,
+/// on a line that it starts: a tool of the app that cannot import this
+/// file, which imports Flutter, reads the mode from this line.
+const AuthMode authMode = AuthMode.required;
+
+/// Who uses the app: nobody that the app knows, an anonymous user, or the
+/// user of an account.
+@immutable
+sealed class AppSession {
+  const AppSession();
+
+  /// The id of the user, or `null` when nobody is signed in.
+  String? get uid;
+}
+
+/// Nobody is signed in.
+final class SignedOutSession extends AppSession {
+  /// Creates the session of an app without a user.
+  const SignedOutSession();
+
+  @override
+  String? get uid => null;
+
+  @override
+  bool operator ==(Object other) => other is SignedOutSession;
+
+  @override
+  int get hashCode => (SignedOutSession).hashCode;
+}
+
+/// An anonymous user is signed in: one without an account, whom the app
+/// signed in itself.
+final class AnonymousSession extends AppSession {
+  /// Creates the session of the anonymous user [uid].
+  const AnonymousSession(this.uid);
+
+  @override
+  final String uid;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AnonymousSession && other.uid == uid;
+
+  @override
+  int get hashCode => uid.hashCode;
+}
+
+/// The user of an account is signed in.
+final class AccountSession extends AppSession {
+  /// Creates the session of the account [uid].
+  const AccountSession(this.uid, {this.email});
+
+  @override
+  final String uid;
+
+  /// The email address of the account, or `null` if it has none.
+  final String? email;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountSession && other.uid == uid && other.email == email;
+
+  @override
+  int get hashCode => Object.hash(uid, email);
+}
+
+/// The session of the app: who uses it, known before the first frame, and
+/// the way to sign in, up and out.
+///
+/// Its `value` is the [AppSession], and it tells its listeners when that
+/// changes. A widget follows it with a `ValueListenableBuilder`.
+final appSession = AppSessionController(
+  mode: authMode,
+  takeGuestData: takeGuestData,
+);
+
+/// Keeps the session of the app up to date with the service of the provider
+/// of sign-in, and signs in, up and out through that service. The app has
+/// one, [appSession].
+///
+/// Every call here fails only with an [AuthFailure], whose reason the app
+/// shows in a text of its own. An error of another kind becomes a failure
+/// with the reason [AuthFailureReason.unknown] and the error as its
+/// [AuthFailure.developerHint].
+///
+/// The calls run one after another, in the order they were made, and none
+/// runs next to an anonymous sign-in that is on its way. So the user of the
+/// app is the result of the call that was made last. In the mode
+/// [AuthMode.anonymous], a call that leaves nobody signed in is followed by
+/// an anonymous sign-in.
+final class AppSessionController extends ChangeNotifier
+    implements ValueListenable<AppSession> {
+  /// Creates a controller for an app in [mode]. The app creates
+  /// [appSession] and no other. A test creates one to see another mode, or
+  /// a shorter [anonymousWait], and disposes of it.
+  AppSessionController({
+    required this.mode,
+    required this.takeGuestData,
+    this.anonymousWait = const Duration(seconds: 3),
+  });
+
+  /// Who may use the app without an account.
+  final AuthMode mode;
+
+  /// Takes what an anonymous user has before that user signs in to an
+  /// account: `takeGuestData` of `guest_data.dart`.
+  final Future<GiveGuestData?> Function(String guestUid) takeGuestData;
+
+  /// How long the app waits for its anonymous user when it starts, and
+  /// after a sign-out or the deletion of an account, in the mode
+  /// [AuthMode.anonymous].
+  final Duration anonymousWait;
+
+  AuthService? _service;
+  StreamSubscription<AuthUser?>? _userChanges;
+  AppSession _session = const SignedOutSession();
+  bool _disposed = false;
+
+  /// Completes when the app has started for the first time.
+  final Completer<void> _started = Completer<void>();
+
+  /// The call that was made last, while a call is on its way: the next one
+  /// waits for it. It is `null` when none is, and a call then awaits
+  /// nothing. A future that completed in another zone would hold the call
+  /// back in a widget test, where the app starts in real time and the test
+  /// goes on in fake time.
+  Future<void>? _lastCall;
+
+  /// The anonymous sign-ins that are on their way, each by its service, so
+  /// that the app starts no second one next to it.
+  final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
+
+  /// Tells when the user comes back to the app, in the mode
+  /// [AuthMode.anonymous].
+  _ResumeObserver? _observer;
+
+  /// Who uses the app.
+  @override
+  AppSession get value => _session;
+
+  /// Whether the user may see the app: always in the modes [AuthMode.guest]
+  /// and [AuthMode.anonymous], and with an account in the mode
+  /// [AuthMode.required].
+  ///
+  /// It is computed from the session each time it is read, and its
+  /// listeners are those of the session. So when the session changes, a
+  /// listener finds this value and [hasAccount] both up to date, whichever
+  /// of the two it listens to. A listener is also called for a change of
+  /// the session that leaves this value as it was.
+  late final ValueListenable<bool> allowsApp = _SessionFlag(
+    this,
+    (session) => mode != AuthMode.required || session is AccountSession,
+  );
+
+  /// Whether the user of an account is signed in, which an anonymous user
+  /// is not. It follows the session as [allowsApp] does.
+  late final ValueListenable<bool> hasAccount = _SessionFlag(
+    this,
+    (session) => session is AccountSession,
+  );
+
+  /// Starts the session with [service]: takes the user who is signed in on
+  /// this device, and follows the changes that the service tells of.
+  ///
+  /// `initAuth()` calls it in `bootstrap()`, so the session is known before
+  /// the first frame. In the mode [AuthMode.anonymous], an app without a
+  /// user signs in anonymously here and waits for that for at most
+  /// [anonymousWait]. When the sign-in fails or takes longer, the app
+  /// starts without a user. A sign-in that takes longer still becomes the
+  /// session when it comes, and the app tries again each time the user
+  /// comes back to it.
+  ///
+  /// A call made before the first start waits for it: [signIn], [signUp],
+  /// [sendPasswordReset], [signOut] and [deleteAccount]. Such calls run in
+  /// their order once the start has the user, and the future of this start
+  /// completes after them, but waits for no call that is made while it
+  /// runs. The mocks of the tests of an app use this: a call of [signUp]
+  /// made before `bootstrap()`, which nothing awaits, gives the app an
+  /// account before its first frame. A test makes such a call outside the
+  /// body of a test, as in a `setUpAll`: made in the body of a widget
+  /// test, it waits in the fake time of that body, and a start that runs in
+  /// real time never completes.
+  ///
+  /// It may be called again, with the service that the session has from
+  /// then on: `initAuth()` does so in a test of the next launch of the app,
+  /// and a test gives it a service of its own. Such a start takes its turn
+  /// after the calls that are on their way.
+  Future<void> start(AuthService service) async {
+    // The calls that were made before this start. The first start lets
+    // them run once it has the user, and a later one waits for them.
+    final earlier = _lastCall;
+    final first = !_started.isCompleted;
+    if (!first) await earlier;
+    unawaited(_userChanges?.cancel());
+    _service = service;
+    _userChanges = service.userChanges.listen(
+      (_) => _sync(),
+      onError: (Object error, StackTrace stackTrace) => _report(
+        error,
+        stackTrace,
+        'while following the user of the provider of sign-in',
+      ),
+    );
+    _sync();
+    if (mode == AuthMode.anonymous) {
+      if (_observer == null) {
+        final observer = _observer = _ResumeObserver(_retry);
+        WidgetsBinding.instance.addObserver(observer);
+      }
+      await _signInAnonymously();
+    }
+    if (!_started.isCompleted) _started.complete();
+    if (first) await earlier;
+  }
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// An anonymous user becomes the user of that account, and what the
+  /// anonymous user had moves to the account as `takeGuestData` says.
+  Future<void> signIn({required String email, required String password}) =>
+      _call(
+        (service) =>
+            _toAccount(() => service.signIn(email: email, password: password)),
+      );
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// An anonymous user gets the account and keeps the id, so everything
+  /// that the user had stays.
+  Future<void> signUp({required String email, required String password}) =>
+      _call(
+        (service) => _session is AnonymousSession
+            ? service.linkPassword(email: email, password: password)
+            : service.signUp(email: email, password: password),
+      );
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password. It completes whether [email] has an account or not.
+  Future<void> sendPasswordReset(String email) =>
+      _call((service) => service.sendPasswordReset(email));
+
+  /// Signs the user out. In the mode [AuthMode.anonymous], the app then
+  /// signs in anonymously again, as when it starts.
+  Future<void> signOut() =>
+      _call((service) => service.signOut(), waitsForAnonymousUser: true);
+
+  /// Deletes the user who is signed in. The app is then without a user, as
+  /// after [signOut], and in the mode [AuthMode.anonymous] it signs in
+  /// anonymously again.
+  ///
+  /// It may fail with [AuthFailureReason.recentSignInRequired]: the user
+  /// then signs out, signs in again and repeats it.
+  Future<void> deleteAccount() =>
+      _call((service) => service.deleteAccount(), waitsForAnonymousUser: true);
+
+  /// Stops following the service and the lifecycle of the app. A call that
+  /// is on its way still ends as it would have, but tells no listener, and
+  /// no anonymous sign-in follows it.
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_userChanges?.cancel());
+    if (_observer case final observer?) {
+      WidgetsBinding.instance.removeObserver(observer);
+    }
+    super.dispose();
+  }
+
+  /// The user came back to the app. In the mode [AuthMode.anonymous], an
+  /// app without a user then signs in anonymously again: as what follows
+  /// every call, so this takes a turn among the calls with nothing else to
+  /// do, and starts no anonymous sign-in next to a sign-in.
+  void _retry() => unawaited(_call((service) async {}));
+
+  /// Runs [call] with the service once the calls made before it are over,
+  /// and not before the app has started for the first time.
+  ///
+  /// In the mode [AuthMode.anonymous], a call that leaves nobody signed in
+  /// is followed by an anonymous sign-in. A call that
+  /// [waitsForAnonymousUser], as a sign-out, completes once that sign-in is
+  /// over or took too long, as the start does.
+  Future<void> _call(
+    Future<void> Function(AuthService service) call, {
+    bool waitsForAnonymousUser = false,
+  }) async {
+    final earlier =
+        _lastCall ?? (_started.isCompleted ? null : _started.future);
+    final done = Completer<void>();
+    final own = _lastCall = done.future;
+    if (earlier != null) await earlier;
+    try {
+      await _guarded(call);
+      final signIn = _signInAnonymously();
+      if (waitsForAnonymousUser) await signIn;
+    } finally {
+      if (identical(_lastCall, own)) _lastCall = null;
+      done.complete();
+    }
+  }
+
+  /// Runs [call] with the service, once an anonymous sign-in that is on its
+  /// way is over: of a call and a sign-in that run at the same time, the
+  /// one that ended last would decide who the user is.
+  ///
+  /// Whatever [call] throws that is no [AuthFailure] becomes one, and the
+  /// session has the user of the service when it is over, also when it
+  /// failed. A call that failed does not wait for the anonymous sign-in
+  /// that follows it, so that its failure is not late.
+  Future<void> _guarded(Future<void> Function(AuthService service) call) async {
+    final service = _service!;
+    try {
+      await _anonymousSignIns[service];
+      await call(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      unawaited(_signInAnonymously());
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+    _sync();
+  }
+
+  /// Signs in to an account with [signIn], in whichever way, and moves what
+  /// an anonymous user had to that account.
+  ///
+  /// It takes the data before the sign-in, while the anonymous user is
+  /// still signed in, and gives it once the user of another id has an
+  /// account. If taking fails, the call fails and nothing has changed. If
+  /// giving fails, the user is signed in already, so the call completes and
+  /// the error is reported as an error of the app.
+  Future<void> _toAccount(Future<void> Function() signIn) async {
+    final guest = _session;
+    final give = guest is AnonymousSession
+        ? await takeGuestData(guest.uid)
+        : null;
+    await signIn();
+    _sync();
+    final account = _session;
+    if (give == null ||
+        account is! AccountSession ||
+        account.uid == guest.uid) {
+      return;
+    }
+    try {
+      await give(account.uid);
+    } on Object catch (error, stackTrace) {
+      _report(
+        error,
+        stackTrace,
+        'while giving the data of a guest to the account',
+      );
+    }
+  }
+
+  /// Reports [error], which no call can fail with, as an error of the app.
+  void _report(Object error, StackTrace stackTrace, String during) =>
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'app session',
+          context: ErrorDescription(during),
+        ),
+      );
+
+  /// In the mode [AuthMode.anonymous], signs in anonymously when nobody is
+  /// signed in, and waits for that for at most [anonymousWait].
+  ///
+  /// It never fails. A sign-in that takes longer goes on and becomes the
+  /// session when it comes. One that fails leaves the app without a user
+  /// until the next try, and in debug mode its error is printed.
+  Future<void> _signInAnonymously() async {
+    final service = _service!;
+    if (_disposed ||
+        mode != AuthMode.anonymous ||
+        service.currentUser != null) {
+      return;
+    }
+    final signIn = _anonymousSignIns[service] ??= _tryAnonymously(service)
+        .whenComplete(() {
+          _anonymousSignIns.remove(service);
+          _sync();
+        });
+    await signIn.timeout(anonymousWait, onTimeout: () {});
+  }
+
+  Future<void> _tryAnonymously(AuthService service) async {
+    try {
+      await service.signInAnonymously();
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          'The anonymous sign-in failed, so the app has no user: $error',
+        );
+      }
+    }
+  }
+
+  /// Takes the user of the service as the session, and tells the listeners
+  /// when that changes it, unless the session was disposed of.
+  void _sync() {
+    if (_disposed) return;
+    final session = switch (_service!.currentUser) {
+      null => const SignedOutSession(),
+      AuthUser(isAnonymous: true, :final uid) => AnonymousSession(uid),
+      AuthUser(:final uid, :final email) => AccountSession(uid, email: email),
+    };
+    if (session == _session) return;
+    _session = session;
+    notifyListeners();
+  }
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// A flag of the session of a controller: its value is computed from the
+/// session each time it is read, and its listeners are those of the
+/// session.
+final class _SessionFlag implements ValueListenable<bool> {
+  const _SessionFlag(this._controller, this._of);
+
+  final AppSessionController _controller;
+  final bool Function(AppSession session) _of;
+
+  @override
+  bool get value => _of(_controller.value);
+
+  @override
+  void addListener(VoidCallback listener) => _controller.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _controller.removeListener(listener);
+}
+
+/// Returns the service of the provider of sign-in, which [initAuth] created:
+/// `bootstrap()` awaits it before the first frame, and there is none to
+/// return before that.
+///
+/// The code of the app does not call it: it signs in through [appSession].
+AuthService createAuthService() => _authService;
+
+late AuthService _authService;
+
+/// Creates the service of the provider of sign-in and starts the session of
+/// the app with it; `bootstrap()` awaits it before the first frame, and
+/// nothing else in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with the user who is signed in, and
+/// starts the session with it.
+Future<void> initAuth() async {
+  _authService = await impl0.openFixtureAuth();
+  await appSession.start(_authService);
+}
+=== lib/core/auth/auth_service.dart (role:auth) ===
+/// A user as the provider of sign-in knows them.
+final class AuthUser {
+  /// Creates the user [uid].
+  const AuthUser({required this.uid, required this.isAnonymous, this.email});
+
+  /// The id of the user. It stays the same for as long as the user exists,
+  /// also when an anonymous user gets an account.
+  final String uid;
+
+  /// Whether the user is anonymous: a user that the app signed in itself,
+  /// who has no account and nothing to sign in with again.
+  final bool isAnonymous;
+
+  /// The email address of the user, or `null` for a user without one, such
+  /// as an anonymous user.
+  final String? email;
+}
+
+/// Why a call of sign-in failed.
+enum AuthFailureReason {
+  /// The email address and the password match no account. A wrong password
+  /// and an address without an account are this one reason, so that nobody
+  /// learns from the app which addresses have an account.
+  invalidCredentials,
+
+  /// The email address has an account already.
+  emailInUse,
+
+  /// The provider takes no password as weak as this one.
+  weakPassword,
+
+  /// The text is no email address.
+  invalidEmail,
+
+  /// The account is disabled.
+  userDisabled,
+
+  /// Too many attempts: the provider takes no more for a while.
+  tooManyAttempts,
+
+  /// The device did not reach the provider.
+  network,
+
+  /// The call needs a user who signed in a short while ago, as the deletion
+  /// of an account does: the user signs in again and repeats it.
+  ///
+  /// It is also the reason of a call for a user whose session has ended on
+  /// the server. The service signs that user out on the device before it
+  /// fails.
+  recentSignInRequired,
+
+  /// Sign-in is not set up at the provider, such as a way to sign in that
+  /// is not enabled there. This is a mistake in the setup of the app, which
+  /// [AuthFailure.developerHint] explains.
+  notConfigured,
+
+  /// Anything else. [AuthFailure.developerHint] has the error.
+  unknown,
+}
+
+/// The failure of a call of sign-in: the only thing that such a call throws.
+final class AuthFailure implements Exception {
+  /// Creates the failure for [reason].
+  const AuthFailure(this.reason, {this.developerHint});
+
+  /// Why the call failed. The app shows a text of its own for each reason.
+  final AuthFailureReason reason;
+
+  /// What went wrong in the words of the provider, for the developer of the
+  /// app, or `null`. It is no text for the user: show it in debug mode
+  /// only.
+  final String? developerHint;
+
+  @override
+  String toString() => developerHint == null
+      ? 'AuthFailure: ${reason.name}'
+      : 'AuthFailure: ${reason.name} ($developerHint)';
+}
+
+/// The accounts of the users of the app and the user of this device, as the
+/// provider of sign-in keeps them.
+///
+/// The provider implements it. The code of the app does not call it: it
+/// signs in through `appSession` of `app_session.dart`, which calls this
+/// service and does what is the same with every provider.
+///
+/// Every implementation keeps to this, in every mode of the app, whatever
+/// the provider generates for the mode:
+/// - The service has [currentUser] from the moment it is created: the user
+///   who was signed in on this device when the app last ran, without a
+///   request to the server. The function that creates the service may be
+///   called again, and the service that it returns then has the user who is
+///   signed in now.
+/// - When the future of a call completes, [currentUser] is the result of
+///   the call. [userChanges] tells of every change of [currentUser], also
+///   of one that no call here made, and when it tells of a user,
+///   [currentUser] is that user.
+/// - A call fails only with an [AuthFailure], and every call ends: when the
+///   server does not answer, its future completes with
+///   [AuthFailureReason.network].
+/// - A call that fails leaves the user who is signed in as that user was:
+///   an anonymous user stays signed in when [linkPassword] fails, and so
+///   does whoever is signed in when [signIn] or [signUp] fails. The one
+///   exception is a call for a user whose session has ended on the server.
+/// - [linkPassword] and [deleteAccount] are calls for the user who is
+///   signed in. Made when nobody is signed in, or when the session of that
+///   user has ended on the server, such a call fails with
+///   [AuthFailureReason.recentSignInRequired], and in the second case it
+///   signs the user out on the device first.
+abstract interface class AuthService {
+  /// The user who is signed in on this device, or `null`.
+  AuthUser? get currentUser;
+
+  /// Tells of each change of [currentUser], once [currentUser] has changed:
+  /// a broadcast stream. When it tells of a user, [currentUser] is that
+  /// user. It may also tell of a user who has not changed.
+  ///
+  /// An error that it sends changes nothing: the session reports it as an
+  /// error of the app and goes on listening.
+  Stream<AuthUser?> get userChanges;
+
+  /// Signs in to the account of [email] with [password].
+  ///
+  /// A wrong password and an address without an account both fail with
+  /// [AuthFailureReason.invalidCredentials].
+  ///
+  /// It is also called while a user is signed in, an anonymous one or the
+  /// user of another account: the user of this account then replaces that
+  /// user on the device. When it fails, that user stays signed in.
+  Future<void> signIn({required String email, required String password});
+
+  /// Creates an account for [email] with [password] and signs in to it.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: that account keeps
+  /// its password, and whoever is signed in stays signed in.
+  ///
+  /// It is also called while the user of another account is signed in, and
+  /// the user of the new account then replaces that user on the device.
+  /// For an anonymous user, the session calls [linkPassword] instead.
+  Future<void> signUp({required String email, required String password});
+
+  /// Gives the anonymous user who is signed in an account for [email] with
+  /// [password]. The user keeps the [AuthUser.uid] and is no longer
+  /// anonymous.
+  ///
+  /// For an address that has an account already, it fails with
+  /// [AuthFailureReason.emailInUse] and changes nothing: the anonymous user
+  /// stays signed in, with the same id.
+  Future<void> linkPassword({required String email, required String password});
+
+  /// Creates an anonymous user, with an id of its own, and signs in as that
+  /// user.
+  Future<void> signInAnonymously();
+
+  /// Sends the message with which the owner of the account of [email] sets
+  /// a new password.
+  ///
+  /// It completes whether [email] has an account or not, so that nobody
+  /// learns from the app which addresses have one.
+  Future<void> sendPasswordReset(String email);
+
+  /// Signs the user out on this device. It completes when nobody is signed
+  /// in too.
+  Future<void> signOut();
+
+  /// Deletes the user who is signed in, an anonymous one too, and signs
+  /// out.
+  ///
+  /// It succeeds for a user who has just signed in, in whichever way, and
+  /// for an anonymous user who was just created. For a user who signed in
+  /// longer ago, such as one whom the service found on the device when it
+  /// was created, it may fail with
+  /// [AuthFailureReason.recentSignInRequired]. It then succeeds once the
+  /// user has signed in again, in whichever way the account allows.
+  Future<void> deleteAccount();
+}
+=== lib/core/auth/guest_data.dart (role:auth) ===
+/// Gives the account [accountUid] what a guest had: the function that
+/// [takeGuestData] returns.
+typedef GiveGuestData = Future<void> Function(String accountUid);
+
+/// Takes what the guest [guestUid] has in the app, and returns the function
+/// that gives it to an account, or `null` when there is nothing to move.
+///
+/// A guest is an anonymous user. When a guest signs in to an account that
+/// exists already, the user of the app changes from the guest to that
+/// account, and what was kept under the id of the guest, such as a cart on
+/// a server, would be left behind. So the session of the app calls this
+/// function before the sign-in, while the guest is still signed in and may
+/// read that data, and calls the function that it returns once the user of
+/// the account is signed in:
+///
+/// ```dart
+/// Future<GiveGuestData?> takeGuestData(String guestUid) async {
+///   final cart = await carts.read(guestUid);
+///   if (cart.isEmpty) return null;
+///   return (accountUid) => carts.add(accountUid, cart);
+/// }
+/// ```
+///
+/// Only read here: the sign-in may still fail, and then the guest stays. An
+/// error thrown here fails the sign-in before it starts. An error of the
+/// function that this one returns is reported as an error of the app, and
+/// the user stays signed in.
+///
+/// Call no method of `appSession` here, nor in the function that this one
+/// returns. The sign-in is one of its calls, which run one after another,
+/// so such a call would wait for the sign-in, and the sign-in for it.
+///
+/// It is not called when a guest signs up, since the guest then keeps the
+/// id and everything under it, nor in an app without anonymous users.
+Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
 === lib/core/badge/badge.dart (role:badge) ===
 /// A badge of the app, a role of a third-party package (fixture).
 abstract interface class Badge {
@@ -839,10 +1583,18 @@ import 'package:flutter/foundation.dart';
 abstract interface class Clock {
   /// The time zones the modules of the app asked for.
   List<String> get zones;
+
+  /// The hour of [time] on the clock: from 0 to 23, or from 1 to 12 on a
+  /// clock of 12 hours (see [clockHours]).
+  int hourOf(DateTime time);
 }
 
 /// The time zones the modules of the app asked for.
 const clockZones = <String>['Europe/Kyiv\'s zone'];
+
+/// How many hours the clock of the app shows, 24 or 12: the value of
+/// `--clock-hours` that the app was generated with.
+const clockHours = 24;
 
 /// Runs the ticks of the modules of the app.
 void tick() {
@@ -862,11 +1614,16 @@ final class _FixedClock implements Clock {
   // Each zone is a constant of a file of its own.
   @override
   List<String> get zones => const [clockZone1];
+
+  // The code for the hours of the clock of this app.
+  @override
+  int hourOf(DateTime time) => time.hour;
 }
 === lib/core/clock/zones/zone_1.dart (fake_clock_badge) ===
 /// A time zone that a module of the app asked for (fixture).
 const clockZone1 = 'Europe/Kyiv\'s zone';
 === lib/core/clock_user/clock_user.dart (fake_clock_user) ===
+import 'package:fixture_app/core/clock/clock.dart';
 import 'package:fixture_app/core/clock/clock_factory.dart';
 
 import '../badge/badge_factory.dart';
@@ -880,6 +1637,13 @@ String clockUserText() {
 /// The time zones that the clock user shows: those of the clock when the
 /// app has one.
 List<String> clockUserZones() => createClock().zones;
+
+/// The hour of [time] as the clock user shows it: the hour on the clock of
+/// the app, with AM or PM after it on a clock of 12 hours. Without a clock,
+/// the hour of [time] itself.
+String clockUserHour(DateTime time) => clockHours == 12
+    ? '${createClock().hourOf(time)} ${time.hour < 12 ? 'AM' : 'PM'}'
+    : '${createClock().hourOf(time)}:00';
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 
@@ -1309,6 +2073,175 @@ final class FixtureAnalytics implements AnalyticsService {
 
   Future<void> _record(String method, Map<String, Object?> arguments) =>
       fixtureAnalyticsChannel.invokeMethod<void>(method, arguments);
+}
+=== lib/core/fixture_auth/fixture_auth.dart (fake_auth) ===
+import 'dart:async';
+
+import '../auth/auth_service.dart';
+
+/// The accounts of the fixture by their email addresses, each with the id
+/// of its user and its password. They stand for the server of a provider of
+/// sign-in, which every start of the app finds as the last one left it.
+final Map<String, ({String uid, String password})> _accounts = {};
+
+/// The user who is signed in on this device, or `null`. It stands for the
+/// storage of a device, which a start of the app reads.
+AuthUser? _onDevice;
+
+/// How many users the fixture created, anonymous ones too.
+int _users = 0;
+
+/// The id of a new user.
+String _newUid() => 'fixture-user-${++_users}';
+
+/// Waits for the answer of the server or of the storage of the device,
+/// which takes a moment, as with a provider that has them: a turn of the
+/// event loop. So a test makes the calls of sign-in in real time, as it
+/// runs the start-up of the app.
+Future<void> _answer() => Future<void>.delayed(Duration.zero);
+
+/// Opens the sign-in of the fixture, as a start of the app does: it reads
+/// from the storage of the device who is signed in, which takes a moment,
+/// and returns the service with that user.
+///
+/// A start keeps the accounts, and the user who was signed in on the
+/// device, an anonymous one too. It loses that the user signed in a short
+/// while ago: the service deletes the account of a user whom it found on
+/// the device only once that user has signed in again. Nothing outlives the
+/// process of the app, so each run of the tests of a file starts without
+/// an account and with nobody signed in.
+Future<AuthService> openFixtureAuth() async {
+  final service = FixtureAuth._();
+  await service._restore();
+  return service;
+}
+
+/// Sign-in with accounts in memory. It takes any text for an email address
+/// and any password, and sends no message to reset one. Each of its calls
+/// takes a moment, as one that asks a server does.
+final class FixtureAuth implements AuthService {
+  FixtureAuth._();
+
+  final StreamController<AuthUser?> _changes = StreamController.broadcast();
+
+  AuthUser? _user;
+
+  /// Whether the user signed in through this service, and so since the app
+  /// started: a short while ago.
+  bool _signedInHere = false;
+
+  /// Takes the user who is signed in on the device, once its storage
+  /// answered.
+  Future<void> _restore() async {
+    await _answer();
+    _user = _onDevice;
+    // No listener hears this: nothing has the service before
+    // [openFixtureAuth] returns it, which waits for this. It is here so
+    // that the fixture with a known bug that returns the service first
+    // differs in one line, and tells of the user that it finds late.
+    _changes.add(_user);
+  }
+
+  /// Signs [user] in on the device, or nobody, and tells of the change once
+  /// [currentUser] has changed.
+  void _set(AuthUser? user) {
+    _signedInHere = user != null;
+    _user = user;
+    _onDevice = user;
+    _changes.add(user);
+  }
+
+  /// The user who is signed in, for a call that is about that user; it
+  /// fails when nobody is.
+  AuthUser _signedIn() {
+    final user = _user;
+    if (user == null) {
+      throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+    }
+    return user;
+  }
+
+  /// Fails when [email] has an account already.
+  void _checkFree(String email) {
+    if (_accounts.containsKey(email)) {
+      throw const AuthFailure(AuthFailureReason.emailInUse);
+    }
+  }
+
+  @override
+  AuthUser? get currentUser => _user;
+
+  @override
+  Stream<AuthUser?> get userChanges => _changes.stream;
+
+  @override
+  Future<void> signIn({required String email, required String password}) async {
+    await _answer();
+    final account = _accounts[email];
+    if (account == null || account.password != password) {
+      throw const AuthFailure(AuthFailureReason.invalidCredentials);
+    }
+    _set(AuthUser(uid: account.uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> signUp({required String email, required String password}) async {
+    await _answer();
+    _checkFree(email);
+    final uid = _newUid();
+    _accounts[email] = (uid: uid, password: password);
+    _set(AuthUser(uid: uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> linkPassword({
+    required String email,
+    required String password,
+  }) async {
+    await _answer();
+    final user = _signedIn();
+    if (!user.isAnonymous) {
+      throw const AuthFailure(
+        AuthFailureReason.unknown,
+        developerHint: 'The user who is signed in has an account already.',
+      );
+    }
+    _checkFree(email);
+    // The anonymous user keeps the id.
+    final uid = user.uid;
+    _accounts[email] = (uid: uid, password: password);
+    _set(AuthUser(uid: uid, isAnonymous: false, email: email));
+  }
+
+  @override
+  Future<void> signInAnonymously() async {
+    await _answer();
+    _set(AuthUser(uid: _newUid(), isAnonymous: true));
+  }
+
+  @override
+  Future<void> sendPasswordReset(String email) => _answer();
+
+  @override
+  Future<void> signOut() async {
+    await _answer();
+    _set(null);
+  }
+
+  /// An anonymous user has nothing to sign in with again, so the service
+  /// deletes one whenever it is asked to. It deletes the user of an account
+  /// only if that user signed in through this service, since the app
+  /// started.
+  @override
+  Future<void> deleteAccount() async {
+    await _answer();
+    final user = _signedIn();
+    if (!user.isAnonymous && !_signedInHere) {
+      throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+    }
+    _accounts.removeWhere((email, account) => account.uid == user.uid);
+    _set(null);
+  }
 }
 === lib/core/fixture_codegen/fixture_model.dart (fake_codegen) ===
 import 'package:json_annotation/json_annotation.dart';
@@ -2042,6 +2975,8 @@ void _restore(AppPreferences preferences) {
 }
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:fixture_app/features/fake_gate/fixture_gates.dart' as guard0;
+import 'package:fixture_app/features/fake_late_gate/fixture_late_gate.dart'
+    as guard1;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -2091,14 +3026,37 @@ abstract interface class AppNavigator {
   void replace(AppLocation location);
 }
 
-/// A guard of the routes of the app: while it does not allow, the router
-/// shows its target in place of every location outside its flow.
+/// A guard of the routes of the app. Without [routes] it is a gate: while
+/// it does not allow, the router shows its target in place of every
+/// location outside its flow. With [routes] it keeps the user only from
+/// those routes, and the router shows every other route as it is.
 ///
-/// `go()`, `push()` and `replace()` of such a location show the target
-/// too, and `push()` completes with `null`. Once the guard allows, the
+/// While a gate does not allow, `go()`, `push()` and `replace()` of a
+/// location that it keeps the user from show its target in place of the
+/// whole stack, and `push()` completes with `null`. Once it allows, the
 /// router shows the location that the user last asked for, or the one that
-/// the guard took the user from, or else the screen that the app starts
-/// on.
+/// the gate took the user from if it [resumes], or else the screen that
+/// the app starts on.
+///
+/// While a guard with [routes] does not allow, a request for one of them
+/// opens its target over the page that the user is on, and the request
+/// waits. Back returns to that page and drops the request. Once the guard
+/// allows, the router closes the pages of the flow and does what was asked:
+/// `push()` shows the location over the page that the user was on, and
+/// completes with the value of its page, `go()` shows it in place of the
+/// stack, and `replace()` in place of that page. A further request for one
+/// of the [routes] does nothing while the flow is open. A location from
+/// the platform opens the target over the screen that the app starts on.
+/// When the guard stops allowing, the router closes each page of its
+/// [routes] and the pages over it.
+///
+/// The routes of its flow show only while it does not allow, or while
+/// another guard with the same flow does not. At any other time the router
+/// shows the screen that the app starts on in place of a location of the
+/// flow (see [flowIsOver]), or the target of a gate while that one does
+/// not allow. So the code of the app changes what [allows] reads. It
+/// navigates into a flow only while a guard with [routes] and that flow
+/// does not allow and every gate does, as to a sign-in that a guest opens.
 final class RouteGuard {
   /// Creates the guard [name].
   const RouteGuard(
@@ -2106,13 +3064,15 @@ final class RouteGuard {
     required this.allows,
     required this.redirectTo,
     required this.flow,
+    this.resumes = true,
+    this.routes,
   });
 
   /// The full name of the guard: its module and its name there.
   final String name;
 
-  /// Whether the guard lets the user see the locations outside its [flow];
-  /// it notifies its listeners when that changes.
+  /// Whether the guard lets the user see the locations that it keeps them
+  /// from otherwise; it notifies its listeners when that changes.
   final ValueListenable<bool> allows;
 
   /// The target of the guard: the location that the router shows while the
@@ -2121,10 +3081,39 @@ final class RouteGuard {
 
   /// The full names of the routes that the user may see while the guard
   /// does not allow: the route of [redirectTo] and the routes below it.
+  /// Once every guard with this flow allows, the router shows none of them.
   final Set<String> flow;
+
+  /// Whether the router brings the user back to the location that the
+  /// guard takes them from when it stops allowing, once it allows again.
+  ///
+  /// With `false`, the router forgets what it remembers when the guard
+  /// stops allowing: where the user was, whichever gate took them from
+  /// it, and a location that was asked for before. So once the gates
+  /// allow, the user comes to the screen that the app starts on, as the
+  /// next user does after a sign-out, unless a location was asked for
+  /// since the guard stopped, such as a link.
+  ///
+  /// The router remembers a location only for a gate. A guard with
+  /// [routes] closes its pages when it stops allowing, so the user is on
+  /// the page below them, whatever this says. With `false`, such a guard
+  /// still makes the router forget what a gate made it remember.
+  final bool resumes;
+
+  /// The full names of the routes that the guard keeps the user from while
+  /// it does not allow, or `null` for a gate, which keeps the user from
+  /// every route outside its [flow].
+  ///
+  /// A guard with routes stands for something that only those routes need,
+  /// such as an account: every other route shows whatever the guard says.
+  /// None of its routes is in the [flow] of a guard. To ask for it on one
+  /// more route, add the full name of the route here, and that of each
+  /// route below it: a route does not ask because the route above it does.
+  final Set<String>? routes;
 }
 
-/// The guards of the routes of the app, in the order the app asks them.
+/// The guards of the routes of the app, in the order the app asks them:
+/// the gates first, and then the guards with [RouteGuard.routes].
 final List<RouteGuard> routeGuards = [
   RouteGuard(
     'fake_gate.first',
@@ -2138,21 +3127,79 @@ final List<RouteGuard> routeGuards = [
     redirectTo: const FakeGateSecondLocation(),
     flow: const {'fake_gate.second'},
   ),
+  RouteGuard(
+    'fake_late_gate.late',
+    allows: guard1.fixtureLateGateOpen(),
+    redirectTo: const FakeLateGateGateLocation(),
+    flow: const {'fake_late_gate.gate'},
+    resumes: false,
+  ),
+  RouteGuard(
+    'fake_gate.holder',
+    allows: guard0.fixtureHolds(),
+    redirectTo: const FakeGateGateLocation(),
+    flow: const {'fake_gate.gate', 'fake_gate.step'},
+    resumes: false,
+    routes: const {
+      'fake_second.vault',
+      'fake_second.members',
+      'fake_second.memberCard',
+      'fake_second.loungeSeat',
+    },
+  ),
+  RouteGuard(
+    'fake_gate.senior',
+    allows: guard0.fixtureIsSenior(),
+    redirectTo: const FakeGateSecondLocation(),
+    flow: const {'fake_gate.second'},
+    routes: const {'fake_second.lounge', 'fake_second.loungeSeat'},
+  ),
 ];
 
-/// The location that the router shows in place of the route [routeName],
-/// or `null` if the guards let the user see it.
+/// The location that the router shows when it is asked for the route
+/// [routeName] and a guard keeps the user from it, or `null` if the guards
+/// let the user see the route.
 ///
 /// [routeName] is the full name of a route, or `null` for a screen that is
 /// no route of a module, such as the error screen of the router. The first
-/// guard that does not allow decides, and no guard after it is asked: it
-/// shows its target in place of every route outside its flow.
-AppLocation? redirectOf(String? routeName) {
+/// gate that does not allow decides, and no guard after it is asked: it
+/// shows its target in place of every route outside its flow. When every
+/// gate allows, the first guard that has the route among its
+/// [RouteGuard.routes] and does not allow shows its target: over the page
+/// that the user is on, not in place of it.
+///
+/// A route that the guards let the user see may still be in a flow that is
+/// over, in place of which the router shows the screen that the app starts
+/// on; see [flowIsOver].
+AppLocation? redirectOf(String? routeName) =>
+    _guardKeepingFrom(routeName)?.redirectTo;
+
+/// The guard that keeps the user from the route [routeName], or `null` if
+/// the guards let the user see it: the first gate that does not allow,
+/// unless the route is in its flow, or else the first guard with
+/// [RouteGuard.routes] that does not allow and has the route among them.
+RouteGuard? _guardKeepingFrom(String? routeName) {
   for (final guard in routeGuards) {
     if (guard.allows.value) continue;
-    return guard.flow.contains(routeName) ? null : guard.redirectTo;
+    final routes = guard.routes;
+    if (routes == null) return guard.flow.contains(routeName) ? null : guard;
+    if (routes.contains(routeName)) return guard;
   }
   return null;
+}
+
+/// Whether the route [routeName] is in the flow of a guard and every guard
+/// with that flow allows: the flow is over. The router then shows the
+/// screen that the app starts on in place of the route, unless another
+/// guard does not allow and shows its target instead (see
+/// [redirectOf]).
+///
+/// [routeName] is the full name of a route, or `null` for a screen that is
+/// no route of a module, which is in no flow. Two guards with one target
+/// have one flow, which is over once both allow.
+bool flowIsOver(String? routeName) {
+  final guards = routeGuards.where((guard) => guard.flow.contains(routeName));
+  return guards.isNotEmpty && guards.every((guard) => guard.allows.value);
 }
 
 /// Notifies its listeners when a guard starts or stops allowing, so that
@@ -2161,16 +3208,91 @@ final Listenable guardChanges = Listenable.merge([
   for (final guard in routeGuards) guard.allows,
 ]);
 
+/// What [GuardedNavigation.asked] answers a router that is not to show the
+/// location that it asked about: [ShowInstead], [ShowOver] or [ShowNothing].
+sealed class WhenAsked<L> {}
+
+/// What [GuardedNavigation.changed] answers a router that is to change its
+/// pages: [ShowInstead] or [ClosePages].
+sealed class WhenChanged<L> {}
+
+/// The router shows [location] in place of its whole stack, as `go()` to
+/// it does. A `push()` that it asked about completes with `null`.
+final class ShowInstead<L> implements WhenAsked<L>, WhenChanged<L> {
+  /// Creates the answer.
+  const ShowInstead(this.location);
+
+  /// The location to show: the target of a gate, the location that the
+  /// user comes back to, or the screen that the app starts on.
+  final L location;
+}
+
+/// The router shows [location] over the page on top, as `push()` of it
+/// does, and keeps the request that it asked about waiting while a page of
+/// a route of [flow] is among its pages.
+///
+/// The router makes the request again once [GuardedNavigation.changed] closes
+/// the last of those pages, unless that answer drops the request. And it
+/// drops the request when the last of them leaves in another way, as when
+/// the user goes back. It keeps one request: a request that waited before
+/// is dropped.
+final class ShowOver<L> implements WhenAsked<L> {
+  /// Creates the answer.
+  const ShowOver(this.location, {required this.flow});
+
+  /// The location to show on top: the target of a guard with
+  /// [RouteGuard.routes], or a page of its flow that was asked for with no
+  /// pages.
+  final L location;
+
+  /// The full names of the routes of the flow of that guard.
+  final Set<String> flow;
+}
+
+/// The router shows nothing and leaves its pages as they are: the flow of
+/// the guard is open already. A `push()` that it asked about completes
+/// with `null`.
+final class ShowNothing<L> implements WhenAsked<L> {
+  /// Creates the answer.
+  const ShowNothing();
+}
+
+/// The router closes the [pages] pages on top, at once and whatever its
+/// navigator shows over them, such as a dialog. Each `push()` that showed
+/// one of them completes with `null`, at once or when the frame is over.
+///
+/// Then, if a request waits: with [dropsRequest] the router drops it. And
+/// else it makes the request again, if no page of the flow of that request
+/// is left.
+final class ClosePages<L> implements WhenChanged<L> {
+  /// Creates the answer.
+  const ClosePages(this.pages, {required this.dropsRequest});
+
+  /// How many pages to close, from the one on top down. The router said of
+  /// each that it can close it on its own, and a page stays below them.
+  final int pages;
+
+  /// Whether the page that the last flow was opened over is among those
+  /// that close: the request that waits for that flow was made on that
+  /// page, so it is not made again on the page below.
+  final bool dropsRequest;
+}
+
 /// The guards of the routes as the router of the app asks them, with what
-/// they make it remember: the location that the user comes back to once
-/// the guards allow it.
+/// the gates make it remember: the location that the user comes back to
+/// once the gates allow it.
 ///
 /// [L] is how the router knows a location that it can show as `go()`
-/// does, such as its URI. The router asks [asked] before it shows a
-/// location, and [changed] when [guardChanges] notifies. It shows the
-/// location that either answers in place of its whole stack, as `go()` to
-/// it does. An answer is a record with the location, so that `null` is no
-/// answer also for a router whose [L] is nullable.
+/// does, such as its URI. The router asks [asked] once for each request to
+/// show a location, before it shows it, and tells [changed] of its pages
+/// each time [guardChanges] notifies. It does what either answers, and shows
+/// the location, or leaves its pages as they are, when the answer is
+/// `null`.
+///
+/// A gate answers with a location that takes the place of the whole stack.
+/// A guard with [RouteGuard.routes] opens its target over the page that
+/// the user is on and closes it again, so the user can go back from it,
+/// and the request that opened it waits with the router, not here.
 final class GuardedNavigation<L> {
   /// Creates the guards for a router whose location `/`, the screen that
   /// the app starts on, is [start], and which knows a location of the
@@ -2183,86 +3305,221 @@ final class GuardedNavigation<L> {
   /// The location of the router for a location of the navigation.
   final L Function(AppLocation location) locationOf;
 
-  /// The location that the user comes back to once the guards allow it,
+  /// The location that the user comes back to once the gates allow it,
   /// with the full name of its route, or `null` if there is none.
   ({String? route, L location})? _remembered;
 
-  /// Whether each guard allowed when the router last told of its pages.
-  List<bool> _allowed = _allowedNow();
+  /// The guards that do not bring the user back (see [RouteGuard.resumes])
+  /// and that allowed when the class last looked at the guards, which it
+  /// does each time it is asked or told. One of them that does not allow
+  /// at the next look has stopped allowing. The class first looks when it
+  /// is first asked or told, so a guard that does not allow then has not
+  /// stopped.
+  late final Set<RouteGuard> _allowed = {
+    for (final guard in routeGuards)
+      if (!guard.resumes && guard.allows.value) guard,
+  };
 
-  /// What the router shows in place of [location], whose route has the
-  /// full name [route], or `null` to show it; see [redirectOf].
+  /// How many pages the flow that [asked] opened last was opened over: the
+  /// request that waits for that flow was made on the one on top of them.
+  int _below = 0;
+
+  /// What the router does in place of showing [location], whose route has
+  /// the full name [route], or `null` to show it.
   ///
-  /// The router asks before it shows a location: the one the app starts
-  /// on, each one that `go()`, `push()` or `replace()` is asked to show,
-  /// and each one from the platform. A location that a guard keeps the
-  /// user from is remembered in place of the one before it, so the user
-  /// comes back to the latest one that they or the platform asked for. A
-  /// location in the flow of a guard is never remembered: once that guard
-  /// allows, its flow is over.
-  ({L location})? asked(String? route, L location) {
-    final target = redirectOf(route);
-    if (target == null) return null;
-    if (!_inAFlow(route)) _remembered = (route: route, location: location);
-    return (location: locationOf(target));
+  /// The router asks about a location before it shows it: the one the app
+  /// starts on, each one that `go()`, `push()` or `replace()` is asked to
+  /// show, and each one from the platform.
+  /// [onTopOf] are the full names of the routes of the pages that the user
+  /// can get back to then, as the router tells [changed] of them. The
+  /// router gives none when it has no page yet, and none for a location
+  /// from the platform, which takes the place of the stack.
+  ///
+  /// The answer is the first of these:
+  /// - [ShowInstead] of the target of the gate that keeps the user from the
+  ///   location (see [redirectOf]). The location is then remembered in place of
+  ///   the one before it, so the user comes back to the latest one that
+  ///   they or the platform asked for, whether or not that gate brings the
+  ///   user back (see [RouteGuard.resumes]). A location in the flow of a
+  ///   guard is never remembered: once that guard allows, its flow is over.
+  /// - [ShowInstead] of [start] for a location in a flow that is over (see
+  ///   [flowIsOver]).
+  /// - for a location that a guard with [RouteGuard.routes] keeps the user
+  ///   from: [ShowNothing] while a page of the flow of that guard is among
+  ///   [onTopOf], on top or below another page, since the flow is open
+  ///   already; and else [ShowOver] of the target of the guard, with its
+  ///   flow.
+  /// - for a location that no guard keeps the user from and that is asked
+  ///   for with no pages, in a flow that only guards with
+  ///   [RouteGuard.routes] keep open: [ShowOver] of the location itself,
+  ///   with that flow. So a page of such a flow never stands alone when a
+  ///   link asks for it: the router shows it over [start], and back leads
+  ///   into the app. The request that waits is the page itself: asked
+  ///   about again once the flow closes, it is answered with [start],
+  ///   where the user is then. A flow that a gate keeps open too is the
+  ///   gate's, and takes the place of the stack.
+  ///
+  /// For a guard with routes the class remembers no location, only over
+  /// how many pages its flow was opened, for [changed]. So the answer
+  /// depends on [onTopOf] and not on what the class answered before. Asked
+  /// again about a location that it answered [ShowOver] for, with a page of
+  /// the flow among [onTopOf], it answers [ShowNothing] for a location that
+  /// the guard keeps the user from and `null` for a page of the flow. With
+  /// no pages it answers [ShowOver] again, so a router never asks with none
+  /// about a location that it shows over a page.
+  ///
+  /// What a gate made the class remember is forgotten when no gate keeps
+  /// the user from the location and it is outside every flow, or in one
+  /// that is over: the user has moved on, as when the code of the app
+  /// navigates right when a gate starts allowing. Before that, it is
+  /// forgotten if a guard that does not bring the user back stopped
+  /// allowing, as [changed] says.
+  WhenAsked<L>? asked(
+    String? route,
+    L location, {
+    required Iterable<String?> onTopOf,
+  }) {
+    _forgetAfterStop();
+    final guard = _guardKeepingFrom(route);
+    if (guard != null && guard.routes == null) {
+      if (!_inAFlow(route)) _remembered = (route: route, location: location);
+      return ShowInstead(locationOf(guard.redirectTo));
+    }
+    final over = flowIsOver(route);
+    if (over || !_inAFlow(route)) _remembered = null;
+    if (over) return ShowInstead(start);
+    if (guard == null) {
+      final flow = onTopOf.isEmpty ? _openFlowOf(route) : null;
+      if (flow == null) return null;
+      _below = 0;
+      return ShowOver(location, flow: flow);
+    }
+    if (onTopOf.any(guard.flow.contains)) return const ShowNothing();
+    _below = onTopOf.length;
+    return ShowOver(locationOf(guard.redirectTo), flow: guard.flow);
   }
 
-  /// What the router shows in place of its stack now that a guard started
-  /// or stopped allowing, or `null` to leave the stack as it is.
+  /// What the router does now that a guard started or stopped allowing, or
+  /// `null` to leave its pages as they are.
   ///
   /// [pages] are the pages that the user can get back to, the one on top
   /// first: those of the root navigator and of the selected branch of the
   /// main navigation, each with the full name of its route, its location,
-  /// and whether `push()` showed it; none for a router that has no page
-  /// yet. The answer is the first of these:
-  /// - the target of the guard that keeps the user from one of the pages.
-  ///   The location below the pages that pushes showed is then remembered,
-  ///   or [start] if pushes showed them all, unless one is remembered
-  ///   already or it is in the flow of a guard;
-  /// - the remembered location, once the guards allow it, which is then
-  ///   forgotten;
-  /// - [start], when a guard started allowing while a page of its flow is
-  ///   on top, every guard allows and nothing is remembered: its flow is
-  ///   over.
-  ({L location})? changed(
+  /// and whether the router can close it on its own and leave the pages
+  /// below it as they are. That holds for a page that `push()` showed, and
+  /// for one that `replace()` showed in place of such a page. There are
+  /// none for a router that has no page yet.
+  ///
+  /// First, the remembered location is forgotten if a guard that does not
+  /// bring the user back (see [RouteGuard.resumes]) stopped allowing: it
+  /// allowed when the class was last asked or told, and does not now. That
+  /// holds whichever guard decides and whatever the pages are, and for
+  /// whichever gate the location was remembered, so that the next user
+  /// does not come to a location of the last one. A guard that stops and
+  /// allows again without the class being asked or told in between is not
+  /// seen to stop.
+  ///
+  /// The answer is then the first of these:
+  /// - [ShowInstead] of the target of the gate that keeps the user from one
+  ///   of the pages. If that gate brings the user back, the location below
+  ///   the pages that the router can close is then remembered, or [start]
+  ///   if it can close them all, unless one is remembered already or it is
+  ///   in the flow of a guard.
+  /// - with a location remembered: `null` while a gate keeps the user from
+  ///   it. Otherwise the location is forgotten, and the answer is
+  ///   [ShowInstead] of it, or of [start] if a guard with
+  ///   [RouteGuard.routes] keeps the user from it: the class cannot keep a
+  ///   request waiting, so the user moves on to [start].
+  /// - for the lowest page that has to leave, which is in a flow that is
+  ///   over (see [flowIsOver]) or which a guard with [RouteGuard.routes] keeps
+  ///   the user from: [ClosePages] of that page and the pages over it, if the
+  ///   router can close each of them and a page stays below; and else
+  ///   [ShowInstead] of [start]. The request that waits is dropped when the
+  ///   pages that close reach below the flow that [asked] opened last: the
+  ///   page that the request was made on closes then, as when it asks for
+  ///   a condition that stopped holding while the flow of another one was
+  ///   open over it.
+  ///
+  /// So the pages of a flow close once its guards allow, also below a page
+  /// that was pushed from them, and a page that asks for a condition
+  /// closes when the condition stops holding. A page that took the place
+  /// of the stack, as after `go()` to it, has nothing below it: the user
+  /// then comes to [start].
+  ///
+  /// A known limit of the second answer: a location that a guard with
+  /// [RouteGuard.routes] keeps the user from, and that was asked for
+  /// behind a gate, is lost once the gate allows. A link to such a route
+  /// that opens the app on a first launch, behind an onboarding, leaves
+  /// the user on [start], though [asked] opens the flow of the guard over
+  /// [start] for the same link when no gate is in its way.
+  WhenChanged<L>? changed(
     Iterable<({String? route, L location, bool pushed})> pages,
   ) {
-    final before = _allowed;
-    _allowed = _allowedNow();
-    for (final page in pages) {
-      final target = redirectOf(page.route);
-      if (target == null) continue;
-      final below = pages.where((other) => !other.pushed).firstOrNull;
-      if (_remembered == null && !_inAFlow(below?.route)) {
+    _forgetAfterStop();
+    final all = pages.toList();
+    for (final page in all) {
+      final gate = _guardKeepingFrom(page.route);
+      if (gate == null || gate.routes != null) continue;
+      final below = all.where((other) => !other.pushed).firstOrNull;
+      if (gate.resumes && _remembered == null && !_inAFlow(below?.route)) {
         _remembered = (
           route: below?.route,
           location: below == null ? start : below.location,
         );
       }
-      return (location: locationOf(target));
+      return ShowInstead(locationOf(gate.redirectTo));
     }
     if (_remembered case final remembered?) {
-      if (redirectOf(remembered.route) != null) return null;
+      final guard = _guardKeepingFrom(remembered.route);
+      // The pages are those of the flow of the gate, which is not over.
+      if (guard != null && guard.routes == null) return null;
       _remembered = null;
-      return (location: remembered.location);
+      return ShowInstead(guard == null ? remembered.location : start);
     }
-    final top = pages.firstOrNull?.route;
-    for (final (index, guard) in routeGuards.indexed) {
-      if (!before[index] && _allowed[index] && guard.flow.contains(top)) {
-        return _allowed.contains(false) ? null : (location: start);
-      }
-    }
-    return null;
+    // No gate keeps the user from a page, so a guard that does is one with
+    // routes.
+    final lowest = all.lastIndexWhere(
+      (page) => flowIsOver(page.route) || _guardKeepingFrom(page.route) != null,
+    );
+    if (lowest < 0) return null;
+    final closed = lowest + 1;
+    return all.take(closed).every((page) => page.pushed) && closed < all.length
+        ? ClosePages(closed, dropsRequest: all.length - closed < _below)
+        : ShowInstead(start);
   }
 
-  /// Whether each guard allows now, in the order of [routeGuards].
-  static List<bool> _allowedNow() => [
-    for (final guard in routeGuards) guard.allows.value,
-  ];
+  /// Forgets the remembered location if a guard that does not bring the
+  /// user back stopped allowing since the class last looked at the guards,
+  /// and notes which of those guards allow now.
+  void _forgetAfterStop() {
+    for (final guard in routeGuards) {
+      if (guard.resumes) continue;
+      if (guard.allows.value) {
+        _allowed.add(guard);
+      } else if (_allowed.remove(guard)) {
+        _remembered = null;
+      }
+    }
+  }
 
   /// Whether [route] is in the flow of a guard, of whichever guard.
   static bool _inAFlow(String? route) =>
       routeGuards.any((guard) => guard.flow.contains(route));
+
+  /// The flow that [route] is a page of and that only guards with
+  /// [RouteGuard.routes] keep open: that of the first guard that does not
+  /// allow and has the route in its flow; or `null` if there is none, or if
+  /// a gate that does not allow has the route in its flow too, since the
+  /// flow of a gate takes the place of the stack.
+  static Set<String>? _openFlowOf(String? route) {
+    Set<String>? flow;
+    for (final guard in routeGuards) {
+      if (guard.allows.value || !guard.flow.contains(route)) continue;
+      if (guard.routes == null) return null;
+      flow ??= guard.flow;
+    }
+    return flow;
+  }
 }
 === lib/core/router/app_router_factory.dart (fake_router) ===
 import 'dart:async';
@@ -2274,6 +3531,10 @@ import 'package:fixture_app/features/fake_feature/fixture_details_screen.dart'
 import 'package:fixture_app/features/fake_feature/fixture_home_screen.dart'
     as screen0;
 import 'package:fixture_app/features/fake_gate/fixture_gate_screens.dart'
+    as screen6;
+import 'package:fixture_app/features/fake_late_gate/fixture_late_gate_screen.dart'
+    as screen5;
+import 'package:fixture_app/features/fake_second/fixture_members_screens.dart'
     as screen4;
 import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
     as screen3;
@@ -2327,9 +3588,11 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     }
     // The guards are asked about the screen that the app starts on before
     // the router builds it, and told of its pages when one of them changes.
+    // That screen asks for no condition, so they let the user see it or
+    // answer the location to show in its place.
     final start = _guards.start;
-    final guarded = _guards.asked(start?.routeName, start);
-    if (guarded != null) _go(guarded.location);
+    final guarded = _guards.asked(start?.routeName, start, onTopOf: const []);
+    if (guarded case ShowInstead(:final location)) _go(location);
     guardChanges.addListener(_guardsChanged);
   }
 
@@ -2375,12 +3638,18 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     locationOf: (location) => location,
   );
 
+  /// The request that waits for a flow that the guards opened over the page
+  /// on top, if there is one: the routes of the flow, how to make the
+  /// request again, and how to end it without showing its location.
+  ({Set<String> flow, void Function() again, void Function()? drop})? _waiting;
+
   /// The pages that the user can get back to, the one on top first: those
   /// of the root navigator and, in place of the main navigation, those of
-  /// its selected branch, or the fallback screen alone. A page is one that
-  /// a push showed while its push waits for the value that it closes with.
+  /// its selected branch, and the fallback screen where it is at the bottom.
+  /// A page is one that a push showed while its push waits for the value
+  /// that it closes with: the router can close it on its own. A page that
+  /// [replace] shows in place of such a page is one too.
   List<({String? route, AppLocation? location, bool pushed})> get _pages => [
-    if (_stack.isEmpty) (route: null, location: null, pushed: false),
     for (final entry in _stack.reversed)
       for (final location
           in entry is AppLocation ? [entry] : _branches[_selected].reversed)
@@ -2389,12 +3658,19 @@ final class _FixtureDelegate extends RouterDelegate<Object>
           location: location,
           pushed: _results.containsKey(location),
         ),
+    if (_overFallback) (route: null, location: null, pushed: false),
   ];
 
   /// Shows [location] in place of the whole stack and of the stacks of
   /// every branch of the main navigation, each of which is back on its
-  /// destination; `null` is the fallback screen.
+  /// destination; `null` is the fallback screen. The push of each page that
+  /// leaves completes with `null`, so [location] is no page that a push
+  /// showed, as the target of a guard is that was open over a page.
   void _go(AppLocation? location) {
+    for (final result in _results.values) {
+      result.complete(null);
+    }
+    _results.clear();
     _stack.clear();
     for (final (index, branch) in _branches.indexed) {
       branch
@@ -2405,20 +3681,91 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     notifyListeners();
   }
 
-  /// Shows what the guards show in place of [location], as [go] to it
-  /// does; `false` if the guards let the user see [location].
-  bool _redirected(AppLocation location) {
-    final guarded = _guards.asked(location.routeName, location);
-    if (guarded == null) return false;
-    _go(guarded.location);
+  /// What the guards answer for [location], which [go], [push] or [replace]
+  /// is asked to show on top of the pages of the router.
+  WhenAsked<AppLocation?>? _asked(AppLocation location) => _guards.asked(
+    location.routeName,
+    location,
+    onTopOf: [for (final page in _pages) page.route],
+  );
+
+  /// Does what the guards answer for [location], which [go], [push] or
+  /// [replace] is asked to show; `false` if they let the user see it.
+  ///
+  /// [again] makes the request again, and [drop] ends it without showing
+  /// its location, as a push does that completes with `null`. For the flow
+  /// of a guard that the guards open over the page on top, the request
+  /// waits while a page of the flow is among the pages: [_close] makes it
+  /// again, and [notifyListeners] drops it. The target of such a guard is
+  /// outside the main navigation, so its page goes on the root navigator,
+  /// as a page that a push showed.
+  bool _redirected(
+    AppLocation location, {
+    required void Function() again,
+    void Function()? drop,
+  }) {
+    switch (_asked(location)) {
+      case null:
+        return false;
+      case ShowInstead(location: final shown):
+        _go(shown);
+        drop?.call();
+      case ShowNothing():
+        drop?.call();
+      case ShowOver(location: final target, :final flow):
+        _drop();
+        _stack.add(target!);
+        _results[target] = Completer<Object?>();
+        _waiting = (flow: flow, again: again, drop: drop);
+        notifyListeners();
+    }
     return true;
   }
 
+  /// Drops the request that waits, if there is one.
+  void _drop() {
+    final waiting = _waiting;
+    _waiting = null;
+    waiting?.drop?.call();
+  }
+
   /// Tells the guards of the pages of the router, as when one of them
-  /// starts or stops allowing, and shows the location that they answer.
+  /// starts or stops allowing, and does what they answer: shows a location
+  /// in place of the stack, or closes the pages on top.
   void _guardsChanged() {
-    final shown = _guards.changed(_pages);
-    if (shown != null) _go(shown.location);
+    switch (_guards.changed(_pages)) {
+      case null:
+        break;
+      case ShowInstead(:final location):
+        _go(location);
+      case ClosePages(:final pages, :final dropsRequest):
+        _close(pages, dropsRequest: dropsRequest);
+    }
+  }
+
+  /// Closes the [count] pages on top, each of which a push showed, whatever
+  /// the navigator shows over them, and completes their pushes with `null`.
+  /// Then it drops the request that waits, with [dropsRequest], or else
+  /// makes it again, if no page of its flow is left. The listeners of the
+  /// screen hear of the page that the user ends on when the router next
+  /// builds its pages.
+  void _close(int count, {required bool dropsRequest}) {
+    final waiting = _waiting;
+    _waiting = null;
+    for (var closed = 0; closed < count; closed++) {
+      final stack = _onMainNavigation ? _branches[_selected] : _stack;
+      _results.remove(stack.removeLast())?.complete(null);
+    }
+    if (waiting != null) {
+      if (dropsRequest) {
+        waiting.drop?.call();
+      } else if (_pages.any((page) => waiting.flow.contains(page.route))) {
+        _waiting = waiting;
+      } else {
+        waiting.again();
+      }
+    }
+    notifyListeners();
   }
 
   /// The page on top: the branch it is in, or -1 for the root navigator,
@@ -2434,6 +3781,36 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   bool get _onMainNavigation =>
       _stack.isNotEmpty && identical(_stack.last, _mainNavigation);
 
+  /// Whether the fallback screen is at the bottom of the root navigator:
+  /// when the stack is empty, and below the pages that pushes showed over
+  /// the fallback screen.
+  bool get _overFallback => _stack.every(_results.containsKey);
+
+  /// Tells the router of a change of the stacks, as each navigation does.
+  ///
+  /// When the main navigation has left the stack, the branches get new
+  /// navigators, with observers of their own, when they are selected next.
+  /// The page of the main navigation that left stays in the tree until the
+  /// transition to the page that took its place is over, with the
+  /// navigators that it had: a main navigation that comes back sooner
+  /// would have their keys in the tree twice.
+  ///
+  /// Before that, the request that waits for a flow is dropped once no
+  /// page of the flow is among the pages, as when the user went back from
+  /// it or another location took the place of the stack.
+  @override
+  void notifyListeners() {
+    if (_waiting case final waiting?
+        when !_pages.any((page) => waiting.flow.contains(page.route))) {
+      _drop();
+    }
+    if (!_stack.contains(_mainNavigation)) {
+      _branchNavigators.clear();
+      _branchObservers.clear();
+    }
+    super.notifyListeners();
+  }
+
   @override
   Widget build(BuildContext context) {
     _showScreen();
@@ -2441,7 +3818,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       key: _navigatorKey,
       observers: _observers,
       pages: [
-        if (_stack.isEmpty)
+        if (_overFallback)
           const MaterialPage<Object?>(child: FallbackStartScreen()),
         for (final entry in _stack)
           if (entry case final AppLocation location)
@@ -2458,7 +3835,8 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   /// The navigators of the branches of the main navigation, of which the
   /// selected one shows: a branch gets its navigator when it is first
-  /// selected, and keeps it.
+  /// selected, and keeps it until the main navigation leaves the stack; see
+  /// [notifyListeners].
   Widget _branchesWidget() => IndexedStack(
     index: _selected,
     children: [
@@ -2594,14 +3972,23 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void go(AppLocation location) {
-    if (_redirected(location)) return;
+    if (_redirected(location, again: () => go(location))) return;
     _show(location);
     notifyListeners();
   }
 
   @override
   Future<T?> push<T extends Object?>(AppLocation location) {
-    if (_redirected(location)) return Future.value();
+    // A push that waits for a flow completes with what the request
+    // completes with when the router makes it again, or with `null`.
+    final waiting = Completer<T?>();
+    if (_redirected(
+      location,
+      again: () => waiting.complete(push<T>(location)),
+      drop: waiting.complete,
+    )) {
+      return waiting.future;
+    }
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'push');
     if (branch == null) {
@@ -2619,9 +4006,12 @@ final class _FixtureDelegate extends RouterDelegate<Object>
 
   @override
   void replace(AppLocation location) {
-    if (_redirected(location)) return;
+    if (_redirected(location, again: () => replace(location))) return;
     final branch = _branchOf(location);
     _checkMainNavigation(location, branch, 'replace');
+    // A page that takes the place of one that a push showed closes without
+    // the pages below it too, so it is one that a push showed.
+    final (_, replaced) = _top;
     if (branch != null && _onMainNavigation) {
       _branches[_selected]
         ..removeLast()
@@ -2633,6 +4023,9 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       } else {
         _showMainNavigation(branch, location);
       }
+    }
+    if (_results.containsKey(replaced)) {
+      _results[location] = Completer<Object?>();
     }
     notifyListeners();
   }
@@ -2676,9 +4069,15 @@ Widget _screen(AppLocation location) => switch (location) {
     screen1.FixtureDetailsScreen(id: id, tab: tab),
   FakeSecondSecondLocation() => const screen2.FixtureSecondScreen(),
   FakeSecondOutsideLocation() => const screen3.FixtureOutsideScreen(),
-  FakeGateGateLocation() => const screen4.FixtureGateScreen(),
-  FakeGateStepLocation() => const screen4.FixtureGateStepScreen(),
-  FakeGateSecondLocation() => const screen4.FixtureSecondGateScreen(),
+  FakeSecondVaultLocation() => const screen4.FixtureVaultScreen(),
+  FakeSecondMembersLocation() => const screen4.FixtureMembersScreen(),
+  FakeSecondMemberCardLocation() => const screen4.FixtureMemberCardScreen(),
+  FakeSecondLoungeLocation() => const screen4.FixtureLoungeScreen(),
+  FakeSecondLoungeSeatLocation() => const screen4.FixtureLoungeSeatScreen(),
+  FakeLateGateGateLocation() => const screen5.FixtureLateGateScreen(),
+  FakeGateGateLocation() => const screen6.FixtureGateScreen(),
+  FakeGateStepLocation() => const screen6.FixtureGateStepScreen(),
+  FakeGateSecondLocation() => const screen6.FixtureSecondGateScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -2811,6 +4210,87 @@ final class FakeSecondOutsideLocation extends AppLocation {
   String get path => '/fake_second/outside';
 }
 
+/// The location of `fake_second.vault`: `/fake_second/outside/vault`.
+final class FakeSecondVaultLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondVaultLocation();
+
+  @override
+  String get routeName => 'fake_second.vault';
+
+  @override
+  String get path => '/fake_second/outside/vault';
+
+  @override
+  AppLocation get parent => const FakeSecondOutsideLocation();
+}
+
+/// The location of `fake_second.members`: `/fake_second/members`.
+final class FakeSecondMembersLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondMembersLocation();
+
+  @override
+  String get routeName => 'fake_second.members';
+
+  @override
+  String get path => '/fake_second/members';
+}
+
+/// The location of `fake_second.memberCard`: `/fake_second/members/card`.
+final class FakeSecondMemberCardLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondMemberCardLocation();
+
+  @override
+  String get routeName => 'fake_second.memberCard';
+
+  @override
+  String get path => '/fake_second/members/card';
+
+  @override
+  AppLocation get parent => const FakeSecondMembersLocation();
+}
+
+/// The location of `fake_second.lounge`: `/fake_second/lounge`.
+final class FakeSecondLoungeLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondLoungeLocation();
+
+  @override
+  String get routeName => 'fake_second.lounge';
+
+  @override
+  String get path => '/fake_second/lounge';
+}
+
+/// The location of `fake_second.loungeSeat`: `/fake_second/lounge/seat`.
+final class FakeSecondLoungeSeatLocation extends AppLocation {
+  /// Creates the location.
+  const FakeSecondLoungeSeatLocation();
+
+  @override
+  String get routeName => 'fake_second.loungeSeat';
+
+  @override
+  String get path => '/fake_second/lounge/seat';
+
+  @override
+  AppLocation get parent => const FakeSecondLoungeLocation();
+}
+
+/// The location of `fake_late_gate.gate`: `/fake_late_gate`.
+final class FakeLateGateGateLocation extends AppLocation {
+  /// Creates the location.
+  const FakeLateGateGateLocation();
+
+  @override
+  String get routeName => 'fake_late_gate.gate';
+
+  @override
+  String get path => '/fake_late_gate';
+}
+
 /// The location of `fake_gate.gate`: `/fake_gate`.
 final class FakeGateGateLocation extends AppLocation {
   /// Creates the location.
@@ -2873,6 +4353,9 @@ final class AppNav {
   /// The routes of the module `fake_second`.
   FakeSecondRoutes get fakeSecond => FakeSecondRoutes._(_context);
 
+  /// The routes of the module `fake_late_gate`.
+  FakeLateGateRoutes get fakeLateGate => FakeLateGateRoutes._(_context);
+
   /// The routes of the module `fake_gate`.
   FakeGateRoutes get fakeGate => FakeGateRoutes._(_context);
 }
@@ -2902,6 +4385,33 @@ final class FakeSecondRoutes {
 
   /// The route `fake_second.outside`: `/fake_second/outside`.
   NavLink outside() => NavLink(_context, const FakeSecondOutsideLocation());
+
+  /// The route `fake_second.vault`: `/fake_second/outside/vault`.
+  NavLink vault() => NavLink(_context, const FakeSecondVaultLocation());
+
+  /// The route `fake_second.members`: `/fake_second/members`.
+  NavLink members() => NavLink(_context, const FakeSecondMembersLocation());
+
+  /// The route `fake_second.memberCard`: `/fake_second/members/card`.
+  NavLink memberCard() =>
+      NavLink(_context, const FakeSecondMemberCardLocation());
+
+  /// The route `fake_second.lounge`: `/fake_second/lounge`.
+  NavLink lounge() => NavLink(_context, const FakeSecondLoungeLocation());
+
+  /// The route `fake_second.loungeSeat`: `/fake_second/lounge/seat`.
+  NavLink loungeSeat() =>
+      NavLink(_context, const FakeSecondLoungeSeatLocation());
+}
+
+/// The routes of the module `fake_late_gate`.
+final class FakeLateGateRoutes {
+  const FakeLateGateRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `fake_late_gate.gate`: `/fake_late_gate`.
+  NavLink gate() => NavLink(_context, const FakeLateGateGateLocation());
 }
 
 /// The routes of the module `fake_gate`.
@@ -3198,11 +4708,170 @@ final FixtureGate fixtureGate = FixtureGate();
 /// shows the second gate screen.
 final FixtureGate fixtureSecondGate = FixtureGate();
 
-/// Whether the first guard of the fixture allows: while its gate is open.
-ValueListenable<bool> fixtureGateOpen() => fixtureGate;
+/// Whether the user holds the badge of the fixture: while this gate is
+/// open, which it is until a test closes it, also in an app whose gates
+/// start closed. The third guard of the fixture reads it. That guard keeps
+/// the user only from the routes of the app that ask for a holder of a
+/// badge, and opens the gate screen of the first guard over the page that
+/// the user is on.
+final FixtureGate fixtureHolder = FixtureGate()..value = true;
+
+/// Whether the user holds the senior badge of the fixture: while this gate
+/// is open, which it is until a test closes it, also in an app whose gates
+/// start closed. The fourth guard of the fixture reads it. That guard
+/// keeps the user only from the routes of the app that ask for a holder of
+/// a senior badge, and opens the second gate screen over the page that the
+/// user is on.
+final FixtureGate fixtureSenior = FixtureGate()..value = true;
+
+/// One notifier for what the first guard and the third guard of the
+/// fixture read besides their gates, as the session of a sign-in has
+/// whether it lets the user into the app and whether the user has an
+/// account: the two guards have one flow, and a test changes both values
+/// with one assignment, in one turn. Both are `true` until a test says
+/// otherwise.
+final ValueNotifier<({bool app, bool holder})> fixtureSession = ValueNotifier((
+  app: true,
+  holder: true,
+));
+
+/// A value that is computed from [_sources] when it is read, and whose
+/// listeners are theirs: two such values over one notifier never show one
+/// changed and the other not.
+final class _Computed implements ValueListenable<bool> {
+  _Computed(this._sources, this._compute);
+
+  final List<Listenable> _sources;
+
+  final bool Function() _compute;
+
+  @override
+  bool get value => _compute();
+
+  @override
+  void addListener(VoidCallback listener) {
+    for (final source in _sources) {
+      source.addListener(listener);
+    }
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    for (final source in _sources) {
+      source.removeListener(listener);
+    }
+  }
+}
+
+final ValueListenable<bool> _gateOpen = _Computed([
+  fixtureGate,
+  fixtureSession,
+], () => fixtureGate.value && fixtureSession.value.app);
+
+final ValueListenable<bool> _holds = _Computed([
+  fixtureHolder,
+  fixtureSession,
+], () => fixtureHolder.value && fixtureSession.value.holder);
+
+/// Whether the first guard of the fixture allows: while its gate is open
+/// and the session of the fixture lets the user into the app.
+ValueListenable<bool> fixtureGateOpen() => _gateOpen;
 
 /// Whether the second guard of the fixture allows: while its gate is open.
 ValueListenable<bool> fixtureSecondGateOpen() => fixtureSecondGate;
+
+/// Whether the third guard of the fixture allows: while the user holds the
+/// badge of the fixture, by its gate and by the session of the fixture.
+ValueListenable<bool> fixtureHolds() => _holds;
+
+/// Whether the fourth guard of the fixture allows: while the user holds
+/// the senior badge of the fixture.
+ValueListenable<bool> fixtureIsSenior() => fixtureSenior;
+=== lib/features/fake_late_gate/fixture_late_gate.dart (fake_late_gate) ===
+import 'package:flutter/foundation.dart';
+
+/// The late gate of the fixture: whether it is open, which a test sets. It
+/// is open unless a test closes it, and the guard of the fixture allows
+/// while it is open.
+final ValueNotifier<bool> fixtureLateGate = ValueNotifier(true);
+
+/// Whether the guard of the fixture allows: while its gate is open.
+ValueListenable<bool> fixtureLateGateOpen() => fixtureLateGate;
+=== lib/features/fake_late_gate/fixture_late_gate_screen.dart (fake_late_gate) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+/// The screen that the guard of the fixture shows in place of the other
+/// screens of the app while its gate is closed.
+@FixtureScreen('fake_late_gate.gate')
+class FixtureLateGateScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureLateGateScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+=== lib/features/fake_second/fixture_members_screens.dart (fake_second) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+/// A screen of the second fixture feature for the holders of a badge: its
+/// route asks for the condition of the fixture badge role, which a guard
+/// of another module stands for in an app that has one.
+@FixtureScreen('fake_second.members')
+class FixtureMembersScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureMembersScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen below the screen for the holders of a badge, whose route asks
+/// for the same condition by being below that route.
+@FixtureScreen('fake_second.memberCard')
+class FixtureMemberCardScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureMemberCardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen for the holders of a badge below the screen outside the main
+/// navigation, which is for everyone: its route asks for the condition by
+/// itself.
+@FixtureScreen('fake_second.vault')
+class FixtureVaultScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureVaultScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen for the holders of a senior badge: its route asks for the
+/// second condition of the fixture badge role.
+@FixtureScreen('fake_second.lounge')
+class FixtureLoungeScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureLoungeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+
+/// A screen below the screen for the holders of a senior badge, for those
+/// who hold both badges: its route asks for the first condition itself,
+/// and for the second by being below that route.
+@FixtureScreen('fake_second.loungeSeat')
+class FixtureLoungeSeatScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureLoungeSeatScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';

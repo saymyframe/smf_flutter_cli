@@ -12,8 +12,10 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// so the version is the one of this module.
 ///
 /// The section of the state management in the guide for coding agents of
-/// the app is the note of the module: where the state of a screen lives,
-/// and that a widget talks only to it.
+/// the app is the note of the module: how a screen with state is written
+/// with a cubit, where the state that several screens read is provided,
+/// what a cubit minds after a call that it awaited, and that a widget
+/// talks only to a cubit.
 final class BlocModule extends SmfModule {
   /// Creates the module.
   const BlocModule();

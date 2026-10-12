@@ -12,8 +12,8 @@
 // started, and the probe is done. If it is not, the probe goes to the route
 // of the onboarding, which must show its screen, and finishes the
 // onboarding as the button of its last page does: the preferences must
-// have that saved, and the router must leave the screen. So it leaves the app with the onboarding
-// finished, as a user does.
+// have that saved, and the router must leave the screen. So it leaves the
+// app with the onboarding finished, as a user does.
 //
 // The app may have a guard of the routes before that of the onboarding
 // that does not allow on a device, such as one that asks for a signed-in
@@ -23,11 +23,12 @@
 // the router does, and expects what it says: the screen of the onboarding,
 // or none of it.
 //
-// The start check as a whole does not end that way. The walk of the
-// routes, whose probe runs after this one, goes to the route of the
-// onboarding last, as it does to every route in the flow of a guard. The
-// screen is then shown although the onboarding is finished, so it starts
-// the onboarding again, and the app has that saved when the check is over.
+// The start check as a whole ends that way too. The walk of the routes,
+// whose probe runs after this one, goes to the route of the onboarding as
+// to every other. The onboarding is finished by then, so its flow is over:
+// in place of the route, the router shows the screen that the app starts
+// on, or the target of a guard that does not allow on the device. Nothing
+// starts the onboarding again.
 //
 // The tests of the module run it too (onboarding/later_launch_test.dart).
 import 'package:flutter/widgets.dart';

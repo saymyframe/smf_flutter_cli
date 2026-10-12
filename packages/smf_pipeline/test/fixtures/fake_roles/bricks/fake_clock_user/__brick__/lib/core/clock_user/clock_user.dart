@@ -16,3 +16,8 @@ String clockUserText() {
 /// The time zones that the clock user shows: those of the clock when the
 /// app has one.
 List<String> clockUserZones() => {{{clock_zones}}};
+
+/// The hour of [time] as the clock user shows it: the hour on the clock of
+/// the app, with AM or PM after it on a clock of 12 hours. Without a clock,
+/// the hour of [time] itself.
+String clockUserHour(DateTime time) => {{{clock_hour}}};

@@ -59,7 +59,8 @@ With `shared_preferences`:
 - The theme mode is in `lib/core/theme/theme_mode.dart`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `theme.mode` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
 - Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
 
-- `_themeOf` in `lib/core/theme/app_theme.dart` creates both themes: a Material 3 `ThemeData` with the colours of `_schemeOf`, the text styles of `_textThemeOf` and the themes of the components, such as `cardTheme`. Give that `ThemeData` what both themes share. For what differs between the two, use the `brightness` that `_themeOf` gets.
+- `_themeOf` in `lib/core/theme/app_theme.dart` creates both themes: a Material 3 `ThemeData` with the colours of `_schemeOf`, the text styles of `_textThemeOf` and the themes of the components, such as `cardTheme` and `inputDecorationTheme`. Give that `ThemeData` what both themes share. For what differs between the two, use the `brightness` that `_themeOf` gets.
+- A text field takes its border, its fill and its padding from `inputDecorationTheme`, in both themes. Give a field of a screen a decoration only for what that field alone has, such as its hint or an icon.
 - `_schemeOf` has the colours of each theme. It sets most of them itself, and `ColorScheme.fromSeed` derives the others from `seedColor`. For another look, change the colours there. Keep the colour of what stands on a colour readable on it, such as `onPrimary` on `primary`.
 - The font of the themes is the family `_fontFamily`, which `pubspec.yaml` declares with the files in `assets/fonts/geist/`, in the weights 400, 500 and 600. For another font, add its files, declare its family in `pubspec.yaml` and name it in `_fontFamily`. `assets/fonts/geist/OFL.txt` is the licence of the font, which the app bundles as an asset: keep it while the app has the font.
 - Keep `brightness: brightness` in the colour scheme: `createLightTheme(context)` must return a light theme and `createDarkTheme(context)` a dark one.
@@ -1201,6 +1202,19 @@ ThemeData _themeOf(Brightness brightness) {
   final scheme = _schemeOf(brightness);
   final text = _textThemeOf(scheme);
   final hairline = BorderSide(color: scheme.outlineVariant);
+  // The box of a text field, with the hairline around it.
+  final field = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(16),
+    borderSide: hairline,
+  );
+  // An icon in a field keeps its colour when the field has a mistake, and
+  // is as dim as the text of a field that is disabled.
+  final fieldIcon = WidgetStateColor.fromMap({
+    WidgetState.disabled: scheme.onSurface.withValues(alpha: 0.38),
+    WidgetState.any: scheme.onSurfaceVariant,
+  });
+  // A box of 56 leaves 16 on each side of an icon, the padding of a field.
+  const fieldIconBox = BoxConstraints(minWidth: 56, minHeight: 48);
   return ThemeData(
     colorScheme: scheme,
     fontFamily: _fontFamily,
@@ -1285,6 +1299,31 @@ ThemeData _themeOf(Brightness brightness) {
         textStyle: text.labelLarge,
         minimumSize: const Size(0, 44),
       ),
+    ),
+    // The line around a field tells of the focus and of a mistake. The text
+    // of a field, its hint and its label are `bodyLarge` in the colours that
+    // Material takes from the scheme.
+    inputDecorationTheme: InputDecorationThemeData(
+      filled: true,
+      fillColor: scheme.surfaceContainerLow,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      border: field,
+      enabledBorder: field,
+      disabledBorder: field,
+      focusedBorder: field.copyWith(
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+      ),
+      errorBorder: field.copyWith(borderSide: BorderSide(color: scheme.error)),
+      focusedErrorBorder: field.copyWith(
+        borderSide: BorderSide(color: scheme.error, width: 1.5),
+      ),
+      errorStyle: text.bodySmall?.copyWith(color: scheme.error),
+      // The text of a mistake takes the lines that it needs.
+      errorMaxLines: 5,
+      prefixIconColor: fieldIcon,
+      suffixIconColor: fieldIcon,
+      prefixIconConstraints: fieldIconBox,
+      suffixIconConstraints: fieldIconBox,
     ),
     listTileTheme: ListTileThemeData(
       iconColor: scheme.onSurfaceVariant,

@@ -5,9 +5,12 @@ import 'package:fake_broken/fake_broken.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
+import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
 import 'package:fixture_registry/fixture_registry.dart';
+import 'package:fixture_registry/matrix_app_tests.dart';
+import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
@@ -15,6 +18,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
 
 import 'host.dart';
@@ -154,18 +158,29 @@ void main() {
       }
     });
 
-    test('builds one app with every module, whose cases have no errors',
-        () async {
+    test(
+        'builds an app with every module for each of the two state managers '
+        'that the sign-in has a variant for, whose cases have no errors, and '
+        'its tool checks the first of them', () async {
       final (:apps, :failed) = await everyModuleAppsOf(
         severalProvidersModules(),
       );
 
       expect(failed, isEmpty);
+      // A registry has every provider that one of its modules has a variant
+      // for, and an app has one state manager.
+      final ids = [
+        for (final module in severalProvidersModules()) module.descriptor.id,
+      ];
       expect(apps.map((app) => app.modules), [
-        unorderedEquals([
-          for (final module in severalProvidersModules()) module.descriptor.id,
-        ]),
+        unorderedEquals(ids.where((id) => id != RiverpodModule.id)),
+        unorderedEquals(ids.where((id) => id != BlocModule.id)),
       ]);
+      expect(
+        severalProvidersApps.everyModuleApps
+            .select(apps, severalProvidersModules()),
+        [apps.first],
+      );
     });
 
     test(
@@ -178,7 +193,8 @@ void main() {
       );
 
       expect(failed, isEmpty);
-      final hook = apps.single.hook!;
+      // The app that the tool of the registry checks.
+      final hook = apps.first.hook!;
       expect(hook.presentRoles, contains(settingsScreenRole));
       final entries = settingsScreenRole.entriesIn(
         settingsScreenRole.hookInput(hook),
@@ -275,8 +291,9 @@ void main() {
         );
         // Both features can start the app, so the harness answers the
         // question of the router with the first, as the user who presses
-        // Enter would.
-        expect(result.answers, {'start': '/fake_feature'});
+        // Enter would, and those of the auth role and of the clock with
+        // the first value of their options.
+        expect(result.answers, _answers);
       }
     });
 
@@ -335,7 +352,7 @@ void main() {
         (result.choices![routerRole]! as RouterChoice).startPath,
         '/fake_feature',
       );
-      expect(result.answers, {'start': '/fake_feature'});
+      expect(result.answers, _answers);
       expect(
         result.validation!.socketOrders[AppEntryRole.bootstrapPlatform]!
             .contributions
@@ -499,7 +516,7 @@ void main() {
       );
 
       expect(result.errors.map((issue) => '$issue'), isEmpty);
-      expect(result.answers, {'start': '/fake_feature'});
+      expect(result.answers, _answers);
       expect(
         initialLocationsOf(result),
         ['/fake_feature', '/fake_feature', '/fake_second'],
@@ -528,7 +545,9 @@ void main() {
       );
 
       expect(result.errors.map((issue) => '$issue'), isEmpty);
-      expect(result.answers, isEmpty);
+      // The option answers the question of the router, not those of the
+      // auth role and of the clock.
+      expect(result.answers, {'auth-mode': 'required', 'clock-hours': '24'});
       expect(
         initialLocationsOf(result),
         ['/fake_second', '/fake_feature', '/fake_second'],
@@ -540,9 +559,13 @@ void main() {
       final (:apps, :failed) = await matrixOf(fixtureModules());
 
       expect(failed, isEmpty);
+      // The apps with every module whose mode options have their first
+      // values, a clock of 24 hours and the mode required of the auth role;
+      // each is in the matrix once more for each other combination of the
+      // values.
       final every = [
         for (final app in apps)
-          if (app.everyModuleWith != null) app,
+          if (app.everyModuleWith != null && app.modes.isEmpty) app,
       ];
       // Each combination of a router, a DI container and a state manager,
       // named after the providers other than the first of their roles:
@@ -563,15 +586,36 @@ void main() {
         'app_go_router_get_it',
         'app_go_router_get_it_fake_riverpod',
       ]);
+      // The harness answered three questions for each: that of the router,
+      // that of the auth role, which chose the mode required, and that of
+      // the clock, whose role chose 24 hours. The app gets the start, which
+      // a run without a terminal needs, and no value of a mode option: each
+      // role chooses the first value of its option without it, so the app
+      // is generated as a user without the options does it.
       for (final app in every) {
         expect(app.roleOptions, {'start': '/fake_feature'}, reason: '$app');
         expect(
           app.createArguments('app_1', '/apps'),
-          contains('--start=/fake_feature'),
+          allOf(
+            contains('--start=/fake_feature'),
+            isNot(contains(startsWith('--clock-hours'))),
+            isNot(contains(startsWith('--auth-mode'))),
+          ),
+          reason: '$app',
+        );
+        expect(
+          clockRole.hoursIn(clockRole.hookInput(app.hook!)),
+          24,
+          reason: '$app',
+        );
+        expect(
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+          AuthMode.required,
           reason: '$app',
         );
       }
-      // An app with one screen that can start it needs no answer.
+      // An app with one screen that can start it, and without the clock,
+      // needs no answer.
       expect(
         apps
             .singleWhere((app) => app.name == 'fake_second (go_router)')
@@ -758,12 +802,164 @@ void main() {
         RouterRole.guardChanges,
       };
 
-      // The fixture gates are among the fixtures, and have two guards.
+      // The fixture gates and the fixture late gate are among the
+      // fixtures, with four guards between them.
       expect(await namesIn(everyFixture()), containsAll(ofGuards));
       expect(
         (await namesIn(const [FakeRouterModule.id, ModuleId('fake_second')]))
             .intersection(ofGuards),
         isEmpty,
+      );
+    });
+
+    test(
+        'gets the gates of the app by their stages, whatever the order of '
+        'the modules: those of the fixture gates before that of the fixture '
+        'late gate, a later stage, whose module the fixtures list first; '
+        'then the guard of the fixture gates that stands for a condition, '
+        'with the routes that ask for it; and only the guards that do not '
+        'bring the user back say so', () async {
+      /// The guards of `routeGuards` in the app of [modules], each as its
+      /// full name and the arguments that it has besides its function, its
+      /// target and its flow.
+      Future<List<String>> guardsOf(List<ModuleId> modules) async {
+        final result = await harness.check(
+          ContractCase('fixture guards', requested: modules),
+        );
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        final guards = parseString(
+          content: result.app!.files[RouterRole.appRouterFile]!.text,
+        )
+            .unit
+            .declarations
+            .whereType<TopLevelVariableDeclaration>()
+            .map((declaration) => declaration.variables.variables.single)
+            .singleWhere(
+              (variable) => variable.name.lexeme == RouterRole.routeGuards,
+            );
+        String code(NamedArgument argument) => [
+              argument.name.lexeme,
+              argument.argumentExpression.toSource(),
+            ].join(': ');
+        return [
+          for (final guard in (guards.initializer! as ListLiteral)
+              .elements
+              .cast<MethodInvocation>())
+            [
+              (guard.argumentList.arguments.first as StringLiteral).stringValue,
+              for (final argument
+                  in guard.argumentList.arguments.whereType<NamedArgument>())
+                if (!const {'allows', 'redirectTo', 'flow'}
+                    .contains(argument.name.lexeme))
+                  code(argument),
+            ].join(' '),
+        ];
+      }
+
+      // The fixture gates declare their first guard of a condition between
+      // their two gates, with the stage of both: the app asks it after
+      // every gate, that of the late gate too, and then the second one, as
+      // the module declares them. The routes of the first are those of the
+      // second fixture feature that ask for the first condition of the
+      // fixture badge role: one below a route that asks for nothing, two
+      // more, one of them by being below the other, and one that asks for
+      // both conditions. The routes of the second guard are the two that
+      // ask for the second condition.
+      const routes = "{'fake_second.vault', 'fake_second.members', "
+          "'fake_second.memberCard', 'fake_second.loungeSeat'}";
+      const ofSecond = "{'fake_second.lounge', 'fake_second.loungeSeat'}";
+      const expected = [
+        'fake_gate.first',
+        'fake_gate.second',
+        'fake_late_gate.late resumes: false',
+        'fake_gate.holder resumes: false routes: const $routes',
+        'fake_gate.senior routes: const $ofSecond',
+      ];
+      // The apps with every fixture ask for the late gate first.
+      final requested = everyFixture();
+      expect(
+        requested.indexOf(FakeLateGateModule.id),
+        lessThan(requested.indexOf(FakeGateModule.id)),
+      );
+      expect(await guardsOf(requested), expected);
+      // And the other way round.
+      expect(
+        await guardsOf([
+          for (final id in requested)
+            if (id == FakeLateGateModule.id)
+              FakeGateModule.id
+            else if (id == FakeGateModule.id)
+              FakeLateGateModule.id
+            else
+              id,
+        ]),
+        expected,
+      );
+      // An app with the guards and without the feature whose routes ask
+      // for their conditions: such a guard keeps the user from no route,
+      // and is no gate for that.
+      expect(
+        await guardsOf(const [FakeRouterModule.id, FakeGateModule.id]),
+        [
+          'fake_gate.first',
+          'fake_gate.second',
+          'fake_gate.holder resumes: false routes: const {}',
+          'fake_gate.senior routes: const {}',
+        ],
+      );
+    });
+
+    test(
+        'has the routes of the second fixture feature that ask for the '
+        'condition of the fixture badge role in every app with the feature, '
+        'and a guard that stands for it only in an app with the fixture '
+        'gates: without them, and without the role, the routes show like '
+        'any other', () async {
+      /// The full names of the routes of the app of [modules] that ask for
+      /// the condition, joined, then the guard that stands for it, and
+      /// whether the app has the role of the condition.
+      Future<(String, String?, bool)> conditionIn(
+        List<ModuleId> modules,
+      ) async {
+        final result = await harness.check(
+          ContractCase('fixture condition', requested: modules),
+        );
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        final hook = result.hook!;
+        final facade = routerRole.facadeOf(routerRole.hookInput(hook));
+        return (
+          [
+            for (final route in facade.routesAsking(BadgeRole.holder))
+              route.fullName,
+          ].join(', '),
+          facade.guardFor(BadgeRole.holder)?.fullName,
+          hook.presentRoles.contains(badgeRole),
+        );
+      }
+
+      const routes = 'fake_second.vault, fake_second.members, '
+          'fake_second.memberCard, fake_second.loungeSeat';
+      // The fixture gates depend on one of the two fixture state managers.
+      expect(
+        await conditionIn(everyFixture()),
+        (routes, 'fake_gate.holder', true),
+      );
+      // With the other one, the app has the role and no guard for its
+      // condition.
+      expect(
+        await conditionIn(everyFixture(stateManager: FakeRiverpodModule.id)),
+        (routes, null, true),
+      );
+      // The feature only uses the role: an app without it.
+      expect(
+        await conditionIn(const [FakeRouterModule.id, FakeSecondModule.id]),
+        (routes, null, false),
+      );
+      // The feature that has the guard requires the role, and knows no
+      // route that asks for the condition.
+      expect(
+        await conditionIn(const [FakeRouterModule.id, FakeGateModule.id]),
+        ('', 'fake_gate.holder', true),
       );
     });
 
@@ -796,7 +992,8 @@ void main() {
         ];
       }
 
-      // The fixture gates depend on one of the two fixture state managers.
+      // The fixture gates and the fixture late gate depend on one of the
+      // two fixture state managers.
       expect(await tellsOfGuards(everyFixture()), [false, true]);
       expect(
         await tellsOfGuards(everyFixture(stateManager: FakeRiverpodModule.id)),
@@ -1285,6 +1482,533 @@ void main() {
     });
   });
 
+  group('the fixture clock, whose role has a mode option', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+    const clockFile = 'lib/core/clock/clock.dart';
+    const factoryFile = 'lib/core/clock/clock_factory.dart';
+    const userFile = 'lib/core/clock_user/clock_user.dart';
+
+    /// The app of the provider of the clock and of the module that uses it,
+    /// with [options].
+    Future<ContractResult> clockApp([
+      Map<String, String?> options = const {},
+    ]) async {
+      final result = await harness.check(
+        ContractCase(
+          'clock',
+          requested: const [FakeClockBadgeModule.id, FakeClockUserModule.id],
+          roleOptions: options,
+        ),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      return result;
+    }
+
+    /// The source of what [name] is in [path] of the app of [result]: the
+    /// value of a top-level constant, or the body of a function or of a
+    /// method of a class.
+    String codeOf(ContractResult result, String path, String name) {
+      final unit = parseString(content: result.app!.files[path]!.text).unit;
+      final finder = _Code(name);
+      unit.accept(finder);
+      return finder.code.single;
+    }
+
+    test(
+        'has the hours of --clock-hours as a constant of the role, and 24, '
+        'the first value, without the option', () async {
+      final byDefault = await clockApp();
+      final twelve = await clockApp(const {'clock-hours': '12'});
+
+      // The role asks, and the harness answers as a user who presses
+      // Enter: with the first value.
+      expect(byDefault.answers, {'clock-hours': '24'});
+      expect(twelve.answers, isEmpty);
+      expect(clockRole.hoursIn(clockRole.hookInput(byDefault.hook!)), 24);
+      expect(clockRole.hoursIn(clockRole.hookInput(twelve.hook!)), 12);
+      expect(codeOf(byDefault, clockFile, 'clockHours'), '24');
+      expect(codeOf(twelve, clockFile, 'clockHours'), '12');
+    });
+
+    test('its provider renders the code of the hours of the app', () async {
+      expect(codeOf(await clockApp(), factoryFile, 'hourOf'), '=> time.hour;');
+      expect(
+        codeOf(
+          await clockApp(const {'clock-hours': '12'}),
+          factoryFile,
+          'hourOf',
+        ),
+        '=> (time.hour + 11) % 12 + 1;',
+      );
+    });
+
+    test(
+        'a module that only uses the role has the same code for every value, '
+        'which reads the constant when the app runs', () async {
+      final byDefault = await clockApp();
+      final twelve = await clockApp(const {'clock-hours': '12'});
+
+      expect(
+        twelve.app!.files[userFile]!.text,
+        byDefault.app!.files[userFile]!.text,
+      );
+      expect(
+        codeOf(twelve, userFile, 'clockUserHour'),
+        startsWith('=> clockHours == 12 ? '),
+      );
+      // Without the clock, the module has no constant to read.
+      final without = await harness.check(
+        const ContractCase('user', requested: [FakeClockUserModule.id]),
+      );
+      expect(without.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        codeOf(without, userFile, 'clockUserHour'),
+        r"=> '${time.hour}:00';",
+      );
+    });
+
+    test(
+        'the harness builds an app of its provider for the other value, '
+        'which the matrix generates with the option', () async {
+      expect(harness.casesOfRole(clockRole).map((c) => '$c'), [
+        'clock by fake_clock_badge',
+        'clock by fake_clock_badge --clock-hours=12',
+      ]);
+
+      final (:apps, :failed) = await matrixOf(fixtureModules());
+      expect(failed, isEmpty);
+      MatrixApp named(String name) =>
+          apps.singleWhere((app) => app.name == name);
+      final twelve = named('clock by fake_clock_badge --clock-hours=12');
+      final byDefault = named('fake_clock_badge');
+      expect(twelve.modules, byDefault.modules);
+      expect(
+        twelve.createArguments('app_1', '/apps'),
+        contains('--clock-hours=12'),
+      );
+      expect(clockRole.hoursIn(clockRole.hookInput(twelve.hook!)), 12);
+      // The other apps with the clock get no value of the option, though
+      // the role asked the harness for one: the role chooses 24 hours
+      // without it, so `smf create` generates each as for a user who does
+      // not give the option.
+      final withClock = [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(clockRole) && app.modes.isEmpty)
+            app,
+      ];
+      expect(withClock, contains(byDefault));
+      expect(withClock, hasLength(greaterThan(8)));
+      for (final app in withClock) {
+        expect(
+          app.createArguments('app_1', '/apps'),
+          isNot(contains(startsWith('--clock-hours'))),
+          reason: app.name,
+        );
+        expect(
+          clockRole.hoursIn(clockRole.hookInput(app.hook!)),
+          24,
+          reason: app.name,
+        );
+      }
+    });
+
+    test(
+        'the matrix has each app with every module once more for a clock of '
+        '12 hours, in each mode of the auth role, after its other apps, and '
+        'a run takes those that have 12 hours with each router, each DI '
+        'container, each state manager and each mode of the auth role',
+        () async {
+      /// The names of the apps of [apps] whose clock has 12 hours, as the
+      /// clock role chose.
+      List<String> ofTwelve(List<MatrixApp> apps) => [
+            for (final app in apps)
+              if (app.hook!.presentRoles.contains(clockRole) &&
+                  clockRole.hoursIn(clockRole.hookInput(app.hook!)) == 12)
+                app.name,
+          ];
+      const providers = [
+        ['fake_router', 'go_router'],
+        ['fake_di', 'get_it'],
+        ['fake_bloc', 'fake_riverpod'],
+      ];
+      const twelveHours = '--clock-hours=12';
+      // The other mode option of the fixtures, that of the auth role, whose
+      // role comes before the clock in the registry: an app with every
+      // module has a clock of 12 hours in each of its three modes.
+      const authModes = ['', ' --auth-mode=guest', ' --auth-mode=anonymous'];
+
+      final all = await matrixOf(fixtureModules());
+      expect(all.failed, isEmpty);
+      expect(ofTwelve(all.apps), [
+        'clock by fake_clock_badge $twelveHours',
+        for (final router in providers[0])
+          for (final container in providers[1])
+            for (final stateManager in providers[2])
+              for (final authMode in authModes)
+                [
+                  'every module ($router, $container, $stateManager)$authMode',
+                  twelveHours,
+                ].join(' '),
+      ]);
+      // The apps with every module for the other values of the two options
+      // are the last apps of the matrix: five for each of the eight apps
+      // with every module.
+      final last = all.apps.sublist(all.apps.length - 40);
+      expect(
+        [
+          for (final app in all.apps)
+            if (app.everyModuleWith != null && app.modes.isNotEmpty) app,
+        ],
+        last,
+      );
+      expect(
+        last.map((app) => app.name),
+        containsAll(ofTwelve(all.apps).skip(1)),
+      );
+      for (final app in last) {
+        if (!app.name.endsWith(' $twelveHours')) continue;
+        expect(app.modes['clock-hours'], '12', reason: app.name);
+        expect(app.everyModuleWith, isNotNull, reason: app.name);
+        expect(
+          app.roleOptions,
+          {'start': '/fake_feature', ...app.modes},
+          reason: app.name,
+        );
+      }
+
+      // The matrix that CI checks, with a pairwise covering.
+      final (:apps, :failed) = await matrixOf(
+        fixtureModules(),
+        everyModuleApps: EveryModuleCombinations.pairwise,
+      );
+      expect(failed, isEmpty);
+      final ofModes = [
+        for (final app in apps)
+          if (app.everyModuleWith != null && app.modes.isNotEmpty) app,
+      ];
+      final twelve = [
+        for (final app in ofModes)
+          if (app.modes['clock-hours'] == '12') app,
+      ];
+      const ofFirst = 'every module (fake_router, fake_di, fake_bloc)';
+      const ofLast = 'every module (go_router, get_it, fake_riverpod)';
+      expect(twelve.map((app) => app.name), [
+        '$ofFirst --clock-hours=12',
+        '$ofFirst --auth-mode=guest --clock-hours=12',
+        '$ofLast --auth-mode=anonymous --clock-hours=12',
+      ]);
+      for (final ofRole in providers) {
+        for (final provider in ofRole) {
+          expect(
+            twelve.where((app) => app.modules.contains(ModuleId(provider))),
+            isNotEmpty,
+            reason: 'No app with $provider has a clock of 12 hours.',
+          );
+        }
+      }
+      // A clock of 12 hours is in an app of each mode of the auth role.
+      expect(
+        {
+          for (final app in twelve)
+            authRole.modeIn(authRole.hookInput(app.hook!)),
+        },
+        AuthMode.values.toSet(),
+      );
+      expect(apps.sublist(apps.length - ofModes.length), ofModes);
+      // The covering of the apps with a clock of 24 hours and the first
+      // mode of the auth role is the one of a matrix without the others.
+      expect(
+        [
+          for (final app in apps)
+            if (app.everyModuleWith != null && app.modes.isEmpty) app.name,
+        ],
+        hasLength(4),
+      );
+    });
+
+    test(
+        'smf create without a terminal generates the clock of 24 hours '
+        'without the option, and takes no value but those of the option',
+        () async {
+      /// Runs `smf create` for the clock with [options], and returns its
+      /// exit code and the hours of the clock of the app, if it has one.
+      Future<(int, String?)> create(List<String> options) async {
+        final host = testHost(processRunner: RecordingRunner());
+        final code = await runSmf(
+          [
+            'create',
+            'fixture_app',
+            '-m',
+            '${FakeClockBadgeModule.id},${FakeClockUserModule.id}',
+            ...options,
+            '--no-input',
+            '--skip-external-setup',
+            '--strict',
+          ],
+          modules: fixtureModules(),
+          hostFor: ({required verbose}) => host,
+        );
+        final file = host.fileSystem.file('/work/fixture_app/$clockFile');
+        if (!file.existsSync()) return (code, null);
+        final unit = parseString(content: file.readAsStringSync()).unit;
+        final finder = _Code('clockHours');
+        unit.accept(finder);
+        return (code, finder.code.single);
+      }
+
+      expect(await create(const []), (SmfExitCodes.success, '24'));
+      expect(
+        await create(const ['--clock-hours', '12']),
+        (SmfExitCodes.success, '12'),
+      );
+      expect(
+        await create(const ['--clock-hours', '13']),
+        (SmfExitCodes.usage, null),
+      );
+    });
+  });
+
+  group('the fixture sign-in, which provides the auth role', () {
+    final harness = ContractHarness(ModuleRegistry(fixtureModules()));
+    const fixtureFile = 'lib/core/fixture_auth/fixture_auth.dart';
+
+    /// The app of the fixture sign-in alone, with [options].
+    Future<ContractResult> authApp([
+      Map<String, String?> options = const {},
+    ]) async {
+      final result = await harness.check(
+        ContractCase(
+          'sign-in',
+          requested: const [FakeAuthModule.id],
+          roleOptions: options,
+        ),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      return result;
+    }
+
+    /// The source of the value of the constant `authMode` in [text], the
+    /// file of the session of an app.
+    String modeIn(String text) {
+      final finder = _Code('authMode');
+      parseString(content: text).unit.accept(finder);
+      return finder.code.single;
+    }
+
+    test(
+        'opens its service asynchronously, so the start of the session waits '
+        'for it, and has the same code in every mode of the app', () async {
+      final byDefault = await authApp();
+
+      expect(
+        _implementationOf(const FakeAuthModule(), authRole)?.isAsync,
+        isTrue,
+      );
+      final initAuth = _Code('initAuth');
+      parseString(content: byDefault.app!.files[AuthRole.sessionFile]!.text)
+          .unit
+          .accept(initAuth);
+      expect(
+        initAuth.code.single,
+        allOf(
+          matches(RegExp(r'_authService = await \w+\.openFixtureAuth\(\);')),
+          contains('await appSession.start(_authService);'),
+        ),
+      );
+      expect(
+        byDefault.app!.files[AppEntryRole.bootstrapFile]!.text,
+        contains('await initAuth();'),
+      );
+      for (final mode in AuthMode.values) {
+        final ofMode = await authApp({'auth-mode': mode.name});
+        expect(
+          modeIn(ofMode.app!.files[AuthRole.sessionFile]!.text),
+          'AuthMode.${mode.name}',
+        );
+        expect(
+          ofMode.app!.files[fixtureFile]!.text,
+          byDefault.app!.files[fixtureFile]!.text,
+          reason: mode.name,
+        );
+      }
+    });
+
+    test(
+        'the harness builds an app of it with each router and without one, '
+        'since the role uses the router role, and one for each other mode, '
+        'which the matrix generates with the option, and the other apps with '
+        'the role get no value of the option and the mode required', () async {
+      // The auth role uses the router role, for the routes that ask for an
+      // account, so its provider is checked with each router and without
+      // one.
+      const withRouter = 'fake_auth (fake_router) with router';
+      expect(harness.casesOfModule(FakeAuthModule.id).map((c) => '$c'), [
+        withRouter,
+        'fake_auth (go_router) with router',
+        'fake_auth',
+      ]);
+      // The case of another mode is the first case of the provider, which
+      // has every role that the role uses: the app of such a mode has a
+      // router, the first one of the registry.
+      expect(harness.casesOfRole(authRole).map((c) => '$c'), [
+        'auth by $withRouter',
+        'auth by fake_auth (go_router) with router',
+        'auth by fake_auth',
+        'auth by $withRouter --auth-mode=guest',
+        'auth by $withRouter --auth-mode=anonymous',
+      ]);
+      // The role asks, and the harness answers as a user who presses Enter:
+      // with the first value.
+      final byDefault = await authApp();
+      expect(byDefault.answers, {'auth-mode': 'required'});
+      expect(
+        authRole.modeIn(authRole.hookInput(byDefault.hook!)),
+        AuthMode.required,
+      );
+
+      final (:apps, :failed) = await matrixOf(fixtureModules());
+      expect(failed, isEmpty);
+      MatrixApp named(String name) =>
+          apps.singleWhere((app) => app.name == name);
+      for (final mode in AuthMode.values.skip(1)) {
+        final ofMode = named('auth by $withRouter --auth-mode=${mode.name}');
+        expect(ofMode.modules, named(withRouter).modules);
+        expect(ofMode.hook!.presentRoles, contains(routerRole));
+        expect(ofMode.modes, {'auth-mode': mode.name});
+        expect(
+          ofMode.createArguments('app_1', '/apps'),
+          contains('--auth-mode=${mode.name}'),
+        );
+        expect(authRole.modeIn(authRole.hookInput(ofMode.hook!)), mode);
+      }
+      final withoutMode = [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(authRole) &&
+              !app.modes.containsKey('auth-mode'))
+            app,
+      ];
+      // The apps of the fixture alone, without a router and with each of
+      // the two, and each app with every module, with a clock of 24 hours
+      // and with one of 12.
+      expect(withoutMode, contains(named('fake_auth')));
+      expect(
+        named('fake_auth').hook!.presentRoles,
+        isNot(contains(routerRole)),
+      );
+      expect(withoutMode, hasLength(19));
+      for (final app in withoutMode) {
+        expect(
+          app.createArguments('app_1', '/apps'),
+          isNot(contains(startsWith('--auth-mode'))),
+          reason: app.name,
+        );
+        expect(
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+          AuthMode.required,
+          reason: app.name,
+        );
+      }
+    });
+
+    test(
+        'a run of the matrix takes apps with every module that have each '
+        'other mode with each router, each DI container and each state '
+        'manager, and with a clock of 24 hours and of 12', () async {
+      final (:apps, :failed) = await matrixOf(
+        fixtureModules(),
+        everyModuleApps: EveryModuleCombinations.pairwise,
+      );
+      expect(failed, isEmpty);
+      final ofModes = [
+        for (final app in apps)
+          if (app.everyModuleWith != null && app.modes.containsKey('auth-mode'))
+            app,
+      ];
+
+      const first = 'every module (fake_router, fake_di, fake_bloc)';
+      const last = 'every module (go_router, get_it, fake_riverpod)';
+      expect(ofModes.map((app) => app.name), [
+        '$first --auth-mode=guest --clock-hours=12',
+        '$first --auth-mode=anonymous',
+        '$last --auth-mode=guest',
+        '$last --auth-mode=anonymous --clock-hours=12',
+      ]);
+      for (final mode in AuthMode.values.skip(1)) {
+        final ofMode = [
+          for (final app in ofModes)
+            if (authRole.modeIn(authRole.hookInput(app.hook!)) == mode) app,
+        ];
+        for (final provider in const [
+          'fake_router',
+          'go_router',
+          'fake_di',
+          'get_it',
+          'fake_bloc',
+          'fake_riverpod',
+        ]) {
+          expect(
+            ofMode.where((app) => app.modules.contains(ModuleId(provider))),
+            isNotEmpty,
+            reason: 'No app with $provider is in the mode ${mode.name}.',
+          );
+        }
+        expect(
+          {
+            for (final app in ofMode)
+              clockRole.hoursIn(clockRole.hookInput(app.hook!)),
+          },
+          {24, 12},
+          reason: mode.name,
+        );
+      }
+    });
+
+    test(
+        'smf create without a terminal generates the app in the mode '
+        'required without the option, and takes no value but those of the '
+        'option', () async {
+      /// Runs `smf create` for the fixture sign-in with [options], and
+      /// returns its exit code and the mode of the app, if it has one.
+      Future<(int, String?)> create(List<String> options) async {
+        final host = testHost(processRunner: RecordingRunner());
+        final code = await runSmf(
+          [
+            'create',
+            'fixture_app',
+            '-m',
+            '${FakeAuthModule.id}',
+            ...options,
+            '--no-input',
+            '--skip-external-setup',
+            '--strict',
+          ],
+          modules: fixtureModules(),
+          hostFor: ({required verbose}) => host,
+        );
+        final file = host.fileSystem.file(
+          '/work/fixture_app/${AuthRole.sessionFile}',
+        );
+        if (!file.existsSync()) return (code, null);
+        return (code, modeIn(file.readAsStringSync()));
+      }
+
+      expect(
+        await create(const []),
+        (SmfExitCodes.success, 'AuthMode.required'),
+      );
+      for (final mode in AuthMode.values) {
+        expect(
+          await create(['--auth-mode', mode.name]),
+          (SmfExitCodes.success, 'AuthMode.${mode.name}'),
+        );
+      }
+      expect(
+        await create(const ['--auth-mode', 'members']),
+        (SmfExitCodes.usage, null),
+      );
+    });
+  });
+
   group('smf create', () {
     test('generates an app of every fixture', () async {
       final runner = RecordingRunner();
@@ -1484,6 +2208,16 @@ void main() {
   });
 }
 
+/// The answers of the harness to the questions of the roles of an app with
+/// every fixture: the first of the two screens that can start it, and the
+/// first value of each mode option, that of the auth role, which the
+/// fixture sign-in provides, and that of the fixture clock.
+const _answers = {
+  'start': '/fake_feature',
+  'auth-mode': 'required',
+  'clock-hours': '24',
+};
+
 /// The one of the two modules [both] that is not [one].
 String _other(List<String> both, String one) =>
     both.singleWhere((module) => module != one);
@@ -1593,10 +2327,18 @@ const _cases = [
   'fake_feature (fake_riverpod, fake_di, go_router)',
   'fake_feature (fake_riverpod, get_it, fake_router)',
   'fake_feature (fake_riverpod, get_it, go_router)',
+  // The second feature uses the fixture badge role too, for the condition
+  // that two of its routes ask for.
+  'fake_second (fake_router) with localization, badge',
+  'fake_second (go_router) with localization, badge',
   'fake_second (fake_router) with localization',
   'fake_second (go_router) with localization',
+  'fake_second (fake_router) with badge',
+  'fake_second (go_router) with badge',
   'fake_second (fake_router)',
   'fake_second (go_router)',
+  'fake_late_gate (fake_router)',
+  'fake_late_gate (go_router)',
   'fake_gate (fake_router)',
   'fake_gate (go_router)',
   'fake_sockets',
@@ -1625,6 +2367,11 @@ const _cases = [
   'fake_preferences_user',
   'fake_theme with localization',
   'fake_theme',
+  // The fixture sign-in with each router and without one: the auth role
+  // uses the router role.
+  'fake_auth (fake_router) with router',
+  'fake_auth (go_router) with router',
+  'fake_auth',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',
@@ -1635,6 +2382,14 @@ const _cases = [
   'fake_clock_user',
   'bottom_tabs (fake_router) with localization',
   'bottom_tabs (go_router) with localization',
+  // The other values of the mode option of the auth role, with the
+  // fixture sign-in, which provides it, and the first router, since the
+  // role uses the router role.
+  'auth by fake_auth (fake_router) with router --auth-mode=guest',
+  'auth by fake_auth (fake_router) with router --auth-mode=anonymous',
+  // The other value of the mode option of the fixture clock, with its
+  // provider.
+  'clock by fake_clock_badge --clock-hours=12',
 ];
 
 /// Whether [text] is a text of the app entry of the fixtures, which every
@@ -1652,6 +2407,36 @@ final class _TextArguments extends RecursiveAstVisitor<void> {
       arguments.add(node.argumentList.arguments.first.toSource());
     }
     super.visitMethodInvocation(node);
+  }
+}
+
+/// Collects the source of what is named [name]: the value of a top-level
+/// constant, and the body of a function or of a method.
+final class _Code extends RecursiveAstVisitor<void> {
+  _Code(this.name);
+
+  final String name;
+
+  final List<String> code = [];
+
+  @override
+  void visitVariableDeclaration(VariableDeclaration node) {
+    if (node.name.lexeme == name) code.add(node.initializer!.toSource());
+    super.visitVariableDeclaration(node);
+  }
+
+  @override
+  void visitFunctionDeclaration(FunctionDeclaration node) {
+    if (node.name.lexeme == name) {
+      code.add(node.functionExpression.body.toSource());
+    }
+    super.visitFunctionDeclaration(node);
+  }
+
+  @override
+  void visitMethodDeclaration(MethodDeclaration node) {
+    if (node.name.lexeme == name) code.add(node.body.toSource());
+    super.visitMethodDeclaration(node);
   }
 }
 

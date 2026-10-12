@@ -1,12 +1,14 @@
 # SMF Flutter CLI
 
-`smf` generates Flutter apps from independent modules. You pick what the app needs, such as a router, tabs at the bottom, dependency injection, a state manager, Firebase or a start screen, and `smf create` generates a Flutter project in which these parts already work together. The project does not depend on SMF at run time, so its code is yours from the first commit.
+`smf` generates Flutter apps from independent modules. You pick what the app needs, such as a router, tabs at the bottom, sign-in, dependency injection, a state manager, Firebase or a start screen, and `smf create` generates a Flutter project in which these parts already work together. The project does not depend on SMF at run time, so its code is yours from the first commit.
 
-![smf create in a terminal: it asks for the app name and the modules, adds go_router and shared_preferences, which the chosen modules need, and generates a Flutter app with an onboarding, a start screen, a settings screen, tabs at the bottom, a theme, two languages, get_it and BLoC](https://doc.saymyframe.com/demo/0.4/smf_create.gif)
+![smf create in a terminal: it asks for the app name and the modules, adds the modules that the chosen ones need, such as go_router, the settings screen and Firebase Authentication, asks who may use the app without an account, and generates a Flutter app with an onboarding, a start screen, sign-in, tabs at the bottom, a theme, two languages, get_it and BLoC](https://doc.saymyframe.com/demo/0.5/smf_create.gif)
 
-With the modules `onboarding`, `home`, `settings`, `bottom_tabs`, `material_theme` and `gen_l10n`, the app opens on an onboarding and has a start screen, a settings screen with a theme mode and a language, and a light and a dark theme:
+With the modules `onboarding`, `sign_in`, `home`, `bottom_tabs`, `material_theme` and `gen_l10n`, the app opens on an onboarding and then asks the user to sign in. It has a start screen, an account screen, a settings screen with a theme mode and a language, and a light and a dark theme:
 
-![The app that smf create generates, on a phone: the onboarding, the start screen, the settings screen, and the start screen in the dark theme and in Ukrainian](https://doc.saymyframe.com/demo/app_look.png)
+![The app that smf create generates, on a phone: the onboarding, the sign-in, the start screen, and the account screen in the dark theme and in Ukrainian](https://doc.saymyframe.com/demo/0.5/app_look.png)
+
+`sign_in` needs a Firebase project for its accounts. The other modules of this app need none.
 
 SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS, Linux and Windows.
 
@@ -49,6 +51,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | `--on-conflict` | What to do when the app's directory exists and is not empty: `prompt`, `replace`, `copy` or `cancel`. |
 | `--start` | The full path of the screen the app starts on, such as `/home`. |
 | `--locales` | The languages of the app among those that the texts of its modules are in, such as `en,uk`. All of them by default. |
+| `--auth-mode` | Who may use the app without an account: nobody (`required`, the default), everyone (`guest`), or everyone as an anonymous user (`anonymous`). |
 
 `smf create` exits with 0 on success, 1 when generation failed, 64 for a wrong command line, 70 for an unexpected error and 130 when you cancel it. The [reference of `smf create`](https://doc.saymyframe.com/guides/smf-create) has the details.
 
@@ -72,6 +75,8 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`firebase_core`](https://doc.saymyframe.com/modules/firebase-core) | Firebase, set up with `flutterfire configure` after generation. |
 | [`firebase_crashlytics`](https://doc.saymyframe.com/modules/firebase-crashlytics) | Crash reporting with Firebase Crashlytics. |
 | [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |
+| [`firebase_auth`](https://doc.saymyframe.com/modules/firebase-auth) | Sign-in with Firebase Authentication: an email address and a password, or an anonymous user. The sign-in methods are enabled in the Firebase project after generation. |
+| [`sign_in`](https://doc.saymyframe.com/modules/sign-in) | Screens of sign-in, sign-up and password reset with an email address and a password, and the screen of the account with its entry on the settings screen, with BLoC or with Riverpod. |
 
 A module knows only the modules it depends on. A screen needs *a* router, not go_router, and analytics follows the screens of whichever router the app has. SMF calls these shared parts roles: a module that needs a role works with every module that provides it. You can also write modules of your own, and a command of your own with them; see [Extending SMF](https://doc.saymyframe.com/extending).
 

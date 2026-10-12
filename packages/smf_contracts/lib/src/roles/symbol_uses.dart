@@ -20,6 +20,38 @@ bool usesImported(DartFileIndex file, String name, ImportRef import) =>
         ? usesSymbols(file, {name}, 'lib/${import.uri}')
         : _uses(file, {name}, (uri) => uri == import.uri);
 
+/// Whether [file] imports or exports the library at [libraryPath], a path
+/// relative to the project root such as `lib/core/auth/auth_service.dart`,
+/// by a relative or a `package:` URI, with a prefix or without one.
+bool importsLibrary(DartFileIndex file, String libraryPath) =>
+    [...file.imports, ...file.exports].any(
+      (directive) => _pathOf(directive.uri, file.path) == libraryPath,
+    );
+
+/// Whether [file] invokes [method] on [object], a top-level name of the
+/// library at [libraryPath], a path relative to the project root, as in
+/// `appSession.start(service)`: on the name as it is if [file] imports the
+/// library without a prefix, and after the prefix of an import of the
+/// library otherwise, as in `session.appSession.start(service)`.
+///
+/// The object under another name is not seen, such as a variable that it
+/// was assigned to.
+bool invokesOn(
+  DartFileIndex file,
+  String object,
+  String method,
+  String libraryPath,
+) {
+  final targets = {
+    for (final IndexedImport(:uri, :prefix) in file.imports)
+      if (_pathOf(uri, file.path) == libraryPath)
+        prefix == null ? object : '$prefix.$object',
+  };
+  return file.invocations.any(
+    (call) => call.name == method && targets.contains(call.target),
+  );
+}
+
 /// Whether [file] invokes [name] of the library at [libraryPath], a path
 /// relative to the project root, through a prefix of its own: one that an
 /// import of the library has and no import of another library, as in
@@ -50,6 +82,28 @@ bool invokesThroughOwnPrefix(
   );
 }
 
+/// Whether [file] names one of the types [names] of the library at
+/// [libraryPath], a path relative to the project root: as the type of a
+/// pattern, of a type test or of a cast, of a variable, a parameter or a
+/// return value, as a type argument or as a supertype (see
+/// [DartFileIndex.typeNames]).
+///
+/// As in [usesSymbols], a name counts without a prefix only if [file]
+/// imports the library without one, and after a prefix only if it is the
+/// prefix of an import of the library. A call of a constructor of a type
+/// names no type: [usesSymbols] finds it.
+bool namesTypes(DartFileIndex file, Set<String> names, String libraryPath) {
+  final (:unprefixed, :prefixes) = _importsOf(
+    file,
+    (uri) => _pathOf(uri, file.path) == libraryPath,
+  );
+  return file.typeNames.any(
+    (type) =>
+        names.contains(type.name) &&
+        (type.prefix == null ? unprefixed : prefixes.contains(type.prefix)),
+  );
+}
+
 /// Whether [file] uses one of [names] from the libraries whose URIs
 /// [isLibrary] accepts; see [usesSymbols].
 bool _uses(
@@ -57,16 +111,7 @@ bool _uses(
   Set<String> names,
   bool Function(String uri) isLibrary,
 ) {
-  var unprefixed = false;
-  final prefixes = <String>{};
-  for (final import in file.imports) {
-    if (!isLibrary(import.uri)) continue;
-    if (import.prefix case final prefix?) {
-      prefixes.add(prefix);
-    } else {
-      unprefixed = true;
-    }
-  }
+  final (:unprefixed, :prefixes) = _importsOf(file, isLibrary);
   if (!unprefixed && prefixes.isEmpty) return false;
   bool through(String? target) =>
       target == null ? unprefixed : prefixes.contains(target);
@@ -79,6 +124,26 @@ bool _uses(
         (access) =>
             names.contains(access.name) && prefixes.contains(access.target),
       );
+}
+
+/// How [file] imports the libraries whose URIs [isLibrary] accepts: whether
+/// it imports one of them without a prefix, and the prefixes of its imports
+/// of them.
+({bool unprefixed, Set<String> prefixes}) _importsOf(
+  DartFileIndex file,
+  bool Function(String uri) isLibrary,
+) {
+  var unprefixed = false;
+  final prefixes = <String>{};
+  for (final import in file.imports) {
+    if (!isLibrary(import.uri)) continue;
+    if (import.prefix case final prefix?) {
+      prefixes.add(prefix);
+    } else {
+      unprefixed = true;
+    }
+  }
+  return (unprefixed: unprefixed, prefixes: prefixes);
 }
 
 /// The path relative to the project root of the library that [uri] imports

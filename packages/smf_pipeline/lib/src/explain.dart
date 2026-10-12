@@ -23,8 +23,9 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   post-generation steps;
 /// - the dependencies of the merged pubspec, and the commands that run
 ///   after generation, quoted for a shell of [operatingSystem], each step
-///   that continues another under it, and with the systems of a step that
-///   runs only on some;
+///   that continues another under it, with the systems of a step that runs
+///   only on some, and with the notice of a step that has one (see
+///   [PostGenStep.notice]), which a run asks the user about;
 /// - the state of every preflight check, with instructions for what is
 ///   missing and what a missing required check would do, and the versions
 ///   of the Flutter SDK outside the constraints of the app, with what to do
@@ -275,8 +276,9 @@ List<String> _contributors(ContributionOrder order) => {
 /// The lines of [bound] under `After generation`: its command, quoted for a
 /// shell of [system], or of a system it runs on if it runs only on others,
 /// with its contributor and the systems it runs on if it runs only on some,
-/// then, a level deeper each, those of the steps that continue it, which
-/// run once it succeeded; [depth] is the level of [bound].
+/// then, a level deeper each, its notice with what a run does about it, if
+/// it has one, and those of the steps that continue it, which run once it
+/// succeeded; [depth] is the level of [bound].
 Iterable<String> _stepLines(
   BoundStep bound,
   HostOperatingSystem system, {
@@ -292,8 +294,13 @@ Iterable<String> _stepLines(
   ].map((argument) => shellQuoted(argument, shell)).join(' ');
   final systems = [for (final host in step.hosts) _systemNames[host]];
   final where = systems.isEmpty ? '' : ', on ${systems.join(', ')}';
-  yield '  ${'  ' * depth}${depth == 0 ? '' : 'then '}$command '
-      '($origin$where)';
+  final indent = '  ' * (depth + 1);
+  yield '$indent${depth == 0 ? '' : 'then '}$command ($origin$where)';
+  if (step.notice case final notice?) {
+    yield '$indent  $notice';
+    yield '$indent  A run asks before it runs this step, and leaves it for '
+        'later when it cannot ask.';
+  }
   for (final next in bound.followUps) {
     yield* _stepLines(next, system, depth: depth + 1);
   }
