@@ -194,7 +194,8 @@ jobs:
       - name: Check the results of the jobs
         env:
           # Each job by its id, with its result: success, failure, cancelled
-          # or skipped.
+          # or skipped, or another one, such as abandoned for the jobs of a
+          # called workflow when no runner took one of them.
           NEEDS: ${{ toJSON(needs) }}
           # Whether this run runs every job. Written out rather than taken
           # from the anchor of the jobs with Flutter, so that a mistake in
@@ -202,9 +203,9 @@ jobs:
           EVERY_JOB: ${{ github.event_name != 'pull_request' || github.base_ref == 'main' }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
-          failed="$(jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key' <<< "$NEEDS")"
+          failed="$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key) (\(.value.result))"' <<< "$NEEDS")"
           if [ -n "$failed" ]; then
-            echo "::error::These jobs failed or were cancelled: ${failed//$'\n'/, }."
+            echo "::error::These jobs did not succeed: ${failed//$'\n'/, }."
             exit 1
           fi
           skipped="$(jq -r 'to_entries[] | select(.value.result == "skipped") | .key' <<< "$NEEDS")"
