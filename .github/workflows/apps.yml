@@ -482,7 +482,7 @@ jobs:
     runs-on: ubuntu-latest
     # About 12 minutes: the emulator boots while the app is generated, then
     # the app is built and starts, which start_app.sh gives 240 s once the
-    # app is built.
+    # emulator has the app.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -585,8 +585,10 @@ jobs:
       # starts the app with adb and reads the result that the check writes,
       # in one try: unlike flutter test, it does not connect to the app. It
       # gives up on the app when the app has not started in the seconds it
-      # is given once it is built, and the timeout of the step limits the
-      # build, so that a slow build does not leave the start without time.
+      # is given once the emulator has the app. The timeout of the step
+      # limits the build, and the script gives the emulator a time of its
+      # own to install the app, so that neither a slow build nor a slow
+      # install leaves the start without time.
       - name: Start the app without external services on the Android emulator
         timeout-minutes: 12
         run: |
@@ -626,8 +628,8 @@ jobs:
     if: needs.firebase-key.outputs.key == 'true'
     runs-on: ubuntu-latest
     # About 14 minutes: the app, its configuration, its sign-in methods, its
-    # build and its start, which start_app.sh gives 240 s once the app is
-    # built.
+    # build and its start, which start_app.sh gives 240 s once the emulator
+    # has the app.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -1041,9 +1043,10 @@ jobs:
     if: inputs.macos_and_windows
     runs-on: macos-26
     # About 15 minutes: the app, the simulator, the build of the app, which
-    # takes up to 10 minutes on a busy runner, and its start, which
-    # start_app.sh gives 240 s once the app is built.
-    timeout-minutes: 30
+    # takes up to 10 minutes on a busy runner, its install, which
+    # start_app.sh gives the simulator up to 8 minutes for, and its start,
+    # which the script gives 240 s once the simulator has the app.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -1103,11 +1106,12 @@ jobs:
       # starts the app with simctl and reads the result that the check
       # writes, in one try: unlike flutter test, it does not connect to the
       # app. It gives up on the app when the app has not started in the
-      # seconds it is given once it is built, and the timeout of the step
-      # limits the build, so that a slow build does not leave the start
-      # without time.
+      # seconds it is given once the simulator has the app. The timeout of
+      # the step limits the build, and the script gives the simulator a time
+      # of its own to install the app, so that neither a slow build nor a
+      # slow install leaves the start without time.
       - name: Start the app without external services on the iOS simulator
-        timeout-minutes: 18
+        timeout-minutes: 24
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 240
@@ -1178,9 +1182,10 @@ jobs:
     runs-on: macos-26
     # About 18 minutes: the app, its configuration, its sign-in methods, the
     # simulator, the build of the app, which takes up to 10 minutes on a
-    # busy runner, and its start, which start_app.sh gives 240 s once the
-    # app is built.
-    timeout-minutes: 30
+    # busy runner, its install, which start_app.sh gives the simulator up
+    # to 8 minutes for, and its start, which the script gives 240 s once
+    # the simulator has the app.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -1263,7 +1268,7 @@ jobs:
       - *boot_simulator
 
       - name: Start the app with every module on the iOS simulator
-        timeout-minutes: 18
+        timeout-minutes: 24
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/firebase" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 240

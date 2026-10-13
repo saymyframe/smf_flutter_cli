@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Checks that the app in the current directory starts: on the Android
 # emulator or device $2 with $1 android, or on the booted iOS simulator
-# with the UDID $2 with $1 ios, in at most $3 seconds once the app is
-# built. The build has no limit here: on a busy runner, the build of the
-# Firebase SDK for iOS takes minutes longer than on another, which would
-# leave the start no time. The step of CI that runs the script limits it.
+# with the UDID $2 with $1 ios, in at most $3 seconds once the device has
+# the app. Neither the build nor the install counts: on a busy runner, the
+# build of the Firebase SDK for iOS takes minutes longer than on another,
+# and a new iOS simulator takes minutes to install an app that it mostly
+# installs in half a minute, which would leave the start no time. The step
+# of CI that runs the script limits the build, and the script gives the
+# device a time of its own to install the app.
 #
 # The app has the start check that the CLI keeps in app_tests/start,
 # integration_test/start_check.dart, which its matrix tool adds with
@@ -29,9 +32,13 @@ fi
 platform="$1"
 device="$2"
 seconds="$3"
-deadline=
 check=integration_test/start_check.dart
 result=smf_start_check
+# The seconds that the commands of `step` have since the last `allow`, what
+# they have them for, and when they end by SECONDS.
+limit=
+purpose=
+deadline=
 
 if [ ! -f "$check" ]; then
   echo "::error::$PWD has no $check: add it with the --add-app-tests of packages/smf_flutter_cli/tool/matrix.dart."
@@ -48,7 +55,7 @@ within() {
 }
 
 # Builds the app with the command after $1, which names it, and fails when
-# it fails. Once the app is built, the start has the seconds it is given.
+# it fails.
 build() {
   local name="$1" code=0
   shift
@@ -57,13 +64,21 @@ build() {
     echo "::error::$name failed with the exit code $code."
     exit 1
   fi
-  deadline=$((SECONDS + seconds))
 }
 
-# Runs the command after $1, which names it, in the time that is left of
-# the start, and fails when it fails.
+# Gives the commands of `step` from here on $1 seconds in all, and $2 says
+# what for in the error of the one that runs out of them.
+allow() {
+  limit="$1"
+  purpose="$2"
+  deadline=$((SECONDS + limit))
+}
+
+# Runs the command after $1, which names it, in the seconds that are left,
+# and fails when it fails. Prints how long the command took, so that the
+# log of a run that ran out of time shows what the device was slow with.
 step() {
-  local name="$1" left=$((deadline - SECONDS)) code=0
+  local name="$1" left=$((deadline - SECONDS)) began=$SECONDS code=0
   shift
   if [ "$left" -gt 0 ]; then
     within "$left" "$@" || code=$?
@@ -71,12 +86,23 @@ step() {
     code=142
   fi
   if [ "$code" -eq 142 ]; then
-    echo "::error::$name did not finish in the $seconds s of the start of the app."
+    echo "::error::$name did not finish in the $limit s $purpose."
     exit 1
   elif [ "$code" -ne 0 ]; then
     echo "::error::$name failed with the exit code $code."
     exit 1
   fi
+  echo "$name took $((SECONDS - began)) s."
+}
+
+# Runs the command after $1, which names it, for at most 60 s, whether it
+# fails or not, as when the device has no app to stop or to remove, and
+# prints how long it took.
+attempt() {
+  local name="$1" began=$SECONDS
+  shift
+  within 60 "$@" 2> /dev/null || true
+  echo "$name took $((SECONDS - began)) s."
 }
 
 # Waits for the result of the check, which the command in the arguments
@@ -139,12 +165,15 @@ android() {
     exit 1
   fi
   echo "Starting $id/$activity on $device."
+  # An emulator of CI installs the app in less than 10 s.
+  allow 120 'that the device has to install the app'
   step 'adb install' "${adb[@]}" install -r "$apk"
   trap 'within 30 "${adb[@]}" shell am force-stop "$id" || true' EXIT
   # pm clear stops the app and deletes its data, with the result of an
   # earlier run.
   step 'adb shell pm clear' "${adb[@]}" shell pm clear "$id"
   within 30 "${adb[@]}" logcat -c || true
+  allow "$seconds" 'of the start of the app'
   step 'adb shell am start' "${adb[@]}" shell am start -W -n "$id/$activity"
   # The files of a debug app can be read with run-as, which starts in the
   # directory of its data. The temporary directory of Dart is code_cache/
@@ -184,15 +213,19 @@ ios() {
   id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
   executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
   echo "Starting $id on $device."
+  # A new simulator on a macOS runner of CI mostly has the app in 20 to
+  # 70 s, but one took over 200 s, and another was not done after 240 s.
+  allow 480 'that the device has to install the app'
   # A new install, without the data of an earlier run and its result.
-  within 60 xcrun simctl terminate "$device" "$id" 2> /dev/null || true
-  within 60 xcrun simctl uninstall "$device" "$id" 2> /dev/null || true
+  attempt 'xcrun simctl terminate' xcrun simctl terminate "$device" "$id"
+  attempt 'xcrun simctl uninstall' xcrun simctl uninstall "$device" "$id"
   step 'xcrun simctl install' xcrun simctl install "$device" "$app"
   trap 'within 60 xcrun simctl terminate "$device" "$id" 2> /dev/null || true' EXIT
   # The container of the data of the app, whose tmp/ is the temporary
   # directory of the app.
   data="$(within 60 xcrun simctl get_app_container "$device" "$id" data)"
   since="$(date '+%Y-%m-%d %H:%M:%S')"
+  allow "$seconds" 'of the start of the app'
   launched="$(within 60 xcrun simctl launch "$device" "$id")" || {
     echo "::error::xcrun simctl launch failed: $launched"
     exit 1
