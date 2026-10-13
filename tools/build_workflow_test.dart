@@ -6,12 +6,19 @@
 // CI would be skipped when a job it needs failed, and a ruleset takes a
 // skipped check as passed.
 //
+// It runs the step of CI that sums up the results too: CI passes only when
+// every job it needs succeeded, or was skipped in a run that does not run
+// every job. GitHub has more results than failure and cancelled, such as
+// abandoned for the jobs of a called workflow when no runner took one of
+// them, and CI fails on each.
+//
 // It also checks that a run of Build of a pull request that is merged or
 // closed stops, as nobody needs its checks any more: a workflow that runs
 // when a pull request is closed joins the concurrency group of the runs of
 // Build of the pull request with cancel-in-progress, and GitHub cancels a
 // run in the group that is still in progress. Concurrency groups are shared
 // by the workflows of a repository.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -186,6 +193,90 @@ jobs:
 
     expect(problemsOf(workflow.readAsStringSync()), isEmpty);
   });
+
+  group(
+    'the job CI of build.yml',
+    () {
+      /// Runs the step of the job CI that sums up the [results] of the jobs it
+      /// needs, each by the id of its job, as GitHub runs it, in a run that
+      /// runs every job or not ([everyJob]).
+      ProcessResult sumUp(Map<String, String> results, {bool everyJob = true}) {
+        final top = Process.runSync('git', ['rev-parse', '--show-toplevel']);
+        expect(top.exitCode, 0, reason: '${top.stderr}');
+        final workflow = File(
+          '${'${top.stdout}'.trim()}/.github/workflows/build.yml',
+        );
+        final jobs = (loadYaml(workflow.readAsStringSync()) as YamlMap)['jobs']
+            as YamlMap;
+        final ci = jobs.values
+            .cast<YamlMap>()
+            .singleWhere((job) => job['name'] == 'CI');
+        final step = (ci['steps'] as YamlList).cast<YamlMap>().singleWhere(
+              (step) =>
+                  (step['env'] as YamlMap?)?.containsKey('NEEDS') ?? false,
+            );
+        return Process.runSync(
+          'bash',
+          ['-e', '-c', step['run'] as String],
+          environment: {
+            'NEEDS': jsonEncode({
+              for (final MapEntry(:key, :value) in results.entries)
+                key: {'result': value, 'outputs': <String, String>{}},
+            }),
+            'EVERY_JOB': '$everyJob',
+          },
+        );
+      }
+
+      test('passes when every job it needs succeeded', () {
+        final result = sumUp({'checks': 'success', 'apps': 'success'});
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+        expect('${result.stdout}', 'checks: success\napps: success\n');
+      });
+
+      test('fails on a job that failed or was cancelled', () {
+        for (final bad in ['failure', 'cancelled']) {
+          final result = sumUp({'checks': 'success', 'apps': bad});
+
+          expect(result.exitCode, 1, reason: bad);
+          expect(
+            '${result.stdout}',
+            endsWith('::error::These jobs did not succeed: apps ($bad).\n'),
+          );
+        }
+      });
+
+      test(
+          'fails on a job with a result that it does not know, as when no '
+          'runner took a job of a called workflow', () {
+        final result = sumUp({
+          'checks': 'success',
+          'apps': 'abandoned',
+          'windows-install': 'success',
+        });
+
+        expect(result.exitCode, 1, reason: '${result.stdout}${result.stderr}');
+        expect(
+          '${result.stdout}',
+          endsWith('::error::These jobs did not succeed: apps (abandoned).\n'),
+        );
+      });
+
+      test('fails on a skipped job only in a run that runs every job', () {
+        final results = {'checks': 'success', 'apps': 'skipped'};
+
+        expect(sumUp(results, everyJob: false).exitCode, 0);
+        final result = sumUp(results);
+        expect(result.exitCode, 1);
+        expect(
+          '${result.stdout}',
+          contains('::error::These jobs were skipped, though '),
+        );
+      });
+    },
+    testOn: '!windows',
+  );
 
   test(
       'finds that no workflow cancels the run of Build of a closed pull '
