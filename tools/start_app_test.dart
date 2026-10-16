@@ -75,18 +75,25 @@ perl() {
   /// [platform] `ios`, with [seconds] in the directory of the app, with a
   /// build that takes [buildSeconds] by the clock of the script and ends
   /// with [buildCode], and a start check that writes [result], or nothing.
-  /// The command of the device that has the word [slow] takes [slowSeconds]
-  /// by that clock.
+  /// The first [brokenDownloads] builds fail as one of Gradle does when a
+  /// package of the Android SDK did not download. The command of the device
+  /// that has the word [slow] takes [slowSeconds] by that clock.
   ProcessResult run({
     required int seconds,
     String platform = 'android',
     int buildSeconds = 0,
     int buildCode = 0,
+    int brokenDownloads = 0,
     String? slow,
     int slowSeconds = 0,
     String? result,
   }) {
     command('bin/flutter', '''
+echo build >> "${temp.path}/builds"
+if [ "\$(wc -l < "${temp.path}/builds" | tr -d " ")" -le $brokenDownloads ]; then
+  echo 'Warning: An error occurred while preparing SDK package NDK (Side by side) 28.2.13676358: Error on ZipFile unknown archive.'
+  exit 1
+fi
 [ $buildCode -eq 0 ] || exit $buildCode
 mkdir -p build/app/outputs/flutter-apk build/ios/iphonesimulator/Runner.app
 : > build/app/outputs/flutter-apk/app-debug.apk
@@ -264,6 +271,25 @@ esac''');
     },
     testOn: 'mac-os',
   );
+
+  test(
+      'builds the app for Android again when a package of the Android SDK '
+      'did not download', () {
+    final result = run(seconds: 30, brokenDownloads: 1, result: 'passed');
+
+    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    expect(File('${temp.path}/builds').readAsLinesSync(), hasLength(2));
+    expect(
+      '${result.stdout}',
+      allOf(
+        contains(
+          '::warning::A package of the Android SDK did not download in '
+          'flutter build apk, attempt 1 of 3; trying again.\n',
+        ),
+        contains('The start check of the app passed '),
+      ),
+    );
+  });
 
   test('fails with the problems that the start check found', () {
     final result = run(seconds: 30, result: 'failed: main() threw a bug');

@@ -965,8 +965,9 @@ const mavenCentralMirror = '.github/gradle/maven_central_mirror.gradle';
 /// The problems of the downloads from Maven Central in [workflow], the text
 /// of the workflow [file] of GitHub Actions: a job on Linux that builds for
 /// Android, from the step that restores the cache of Gradle, builds an app
-/// with `flutter build apk` or starts one with .github/scripts/start_app.sh,
-/// whichever comes first, without a step before it that puts
+/// with [buildApk] or `flutter build apk`, or starts one with
+/// .github/scripts/start_app.sh, whichever comes first, without a step
+/// before it that puts
 /// [mavenCentralMirror] into ~/.gradle/init.d. Maven Central answers 403 to
 /// a runner that downloads too much, and a job downloads what the cache
 /// that it restored lacks, such as what its app needs beyond the cache of
@@ -995,17 +996,15 @@ List<String> mavenCentralProblemsOf(String workflow, {required String file}) {
   return problems;
 }
 
-/// Whether [step] runs Gradle for Android: builds an app with `flutter
-/// build apk` or `flutter build appbundle`, or starts one on Android with
-/// .github/scripts/start_app.sh, which builds it.
+/// Whether [step] runs Gradle for Android: builds an app with [buildApk],
+/// `flutter build apk` or `flutter build appbundle`, or starts one on
+/// Android with .github/scripts/start_app.sh, which builds it.
 bool _buildsForAndroid(YamlMap step) =>
     commandsOf('${step['run'] ?? ''}').any((words) {
       for (final (index, word) in words.indexed) {
         final rest = words.skip(index + 1).take(2).toList();
-        if (word == 'flutter' &&
-            rest.length == 2 &&
-            rest[0] == 'build' &&
-            (rest[1] == 'apk' || rest[1] == 'appbundle')) {
+        if (_flutterBuilds(words, index, const {'apk', 'appbundle'}) ||
+            word.endsWith(buildApk.split('/').last)) {
           return true;
         }
         if (word.endsWith('start_app.sh') &&
@@ -1016,6 +1015,51 @@ bool _buildsForAndroid(YamlMap step) =>
       }
       return false;
     });
+
+/// Whether the word at [index] of [words] is `flutter`, followed by `build`
+/// and one of [targets].
+bool _flutterBuilds(List<String> words, int index, Set<String> targets) {
+  final rest = words.skip(index + 1).take(2).toList();
+  return words[index] == 'flutter' &&
+      rest.length == 2 &&
+      rest[0] == 'build' &&
+      targets.contains(rest[1]);
+}
+
+/// The script with which every step of a workflow builds an app for
+/// Android. It runs `flutter build apk`, and builds the app again when the
+/// build failed because a package of the Android SDK did not download.
+const buildApk = '.github/scripts/build_apk.sh';
+
+/// The problems of the builds for Android in [workflow], the text of the
+/// workflow [file] of GitHub Actions: a step that runs `flutter build apk`
+/// itself rather than with [buildApk]. The Gradle plugin of Android
+/// downloads the NDK of Flutter in each build of CI, which the SDK of the
+/// runner lacks, and a download that breaks off fails the build, which
+/// only [buildApk] tries again.
+List<String> apkBuildProblemsOf(String workflow, {required String file}) {
+  final problems = <String>[];
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
+  for (final MapEntry(key: job, :value) in jobs.entries) {
+    for (final step in (value as YamlMap)['steps'] as YamlList? ?? YamlList()) {
+      final runsItself = commandsOf('${(step as YamlMap)['run'] ?? ''}').any(
+        (words) => words.indexed.any(
+          (word) => _flutterBuilds(words, word.$1, const {'apk'}),
+        ),
+      );
+      if (runsItself) {
+        problems.add(
+          '$file, job $job, step "${_nameOf(step)}" runs flutter build apk '
+          'itself. Build with $buildApk, which builds the app again when a '
+          'package of the Android SDK did not download: the Gradle plugin '
+          'of Android downloads the NDK of Flutter in each build of CI, and '
+          'a download that breaks off fails the build.',
+        );
+      }
+    }
+  }
+  return problems;
+}
 
 /// Whether [step] puts [mavenCentralMirror] into ~/.gradle/init.d, where
 /// every build of Gradle of the user runs it.
@@ -3043,6 +3087,61 @@ jobs:
     });
   });
 
+  group('the builds for Android', () {
+    test(
+        'finds a step that runs flutter build apk itself, also for each app '
+        'of a directory', () {
+      const workflow = r'''
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build the app for Android
+        run: cd "$RUNNER_TEMP/apps/android_app" && flutter build apk --debug
+      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build apk --debug
+''';
+      expect(apkBuildProblemsOf(workflow, file: 'apps.yml'), [
+        equals(
+          'apps.yml, job android, step "Build the app for Android" runs '
+          'flutter build apk itself. Build with .github/scripts/build_apk.sh, '
+          'which builds the app again when a package of the Android SDK did '
+          'not download: the Gradle plugin of Android downloads the NDK of '
+          'Flutter in each build of CI, and a download that breaks off fails '
+          'the build.',
+        ),
+        startsWith(
+          'apps.yml, job android, step ".github/scripts/each_app.sh '
+          r'"$RUNNER_TEMP/apps" flutter build apk --debug" runs flutter '
+          'build apk itself.',
+        ),
+      ]);
+    });
+
+    test(
+        'passes the builds with the script, the other builds of flutter and '
+        'the starts on Android, and takes a build with the script for one '
+        'that needs the mirror of Maven Central', () {
+      const workflow = r'''
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build the app for Android
+        run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --debug
+      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
+      - run: flutter build ios --simulator --debug
+      - run: flutter analyze
+''';
+      expect(apkBuildProblemsOf(workflow, file: 'apps.yml'), isEmpty);
+      expect(mavenCentralProblemsOf(workflow, file: 'apps.yml'), [
+        startsWith(
+          'apps.yml, job android runs Gradle for Android from the step '
+          '"Build the app for Android" on, but no step before it puts ',
+        ),
+      ]);
+    });
+  });
+
   test(
       'the workflows and the scripts of the repository choose their apps by '
       'role and take them from the plan, and each exception applies to one '
@@ -3071,12 +3170,14 @@ jobs:
           ...planProblemsOf(file.readAsStringSync(), file: name),
           ...nativeCacheProblemsOf(file.readAsStringSync(), file: name),
           ...mavenCentralProblemsOf(file.readAsStringSync(), file: name),
+          ...apkBuildProblemsOf(file.readAsStringSync(), file: name),
         ],
         isEmpty,
         reason: name,
       );
     }
     expect(File('$root/$mavenCentralMirror').existsSync(), isTrue);
+    expect(File('$root/$buildApk').existsSync(), isTrue);
     expect(
       nativeCacheSaveProblemsOf({
         for (final file in workflows)

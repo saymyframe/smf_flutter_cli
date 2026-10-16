@@ -437,7 +437,7 @@ jobs:
           echo "megabytes=$(du -smc ~/.gradle/caches/modules-2 ~/.gradle/wrapper/dists | tail -n 1 | cut -f 1)" >> "$GITHUB_OUTPUT"
 
       - name: Build the app with every module for Android
-        run: .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/android" flutter build apk --debug
+        run: .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/android" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --debug
 
       # Only after a build that succeeded: a build that failed may have
       # downloaded part of what the app needs, and a later job would find
@@ -855,7 +855,7 @@ jobs:
           apps="$RUNNER_TEMP/SMF apps from pub.dev"
           .github/scripts/each_app.sh "$apps" flutter analyze
           .github/scripts/each_app.sh "$apps" flutter test
-          .github/scripts/each_app.sh "$apps" flutter build apk --debug
+          .github/scripts/each_app.sh "$apps" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --debug
 
       - *gradle_added
       - *save_gradle

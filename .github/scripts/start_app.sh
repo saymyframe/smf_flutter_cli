@@ -12,9 +12,11 @@
 # The app has the start check that the CLI keeps in app_tests/start,
 # integration_test/start_check.dart, which its matrix tool adds with
 # --add-app-tests. The script builds a debug app with the check as its
-# entry, installs it anew and launches it with adb or simctl, and waits for
-# the line that the check writes to the file smf_start_check in the
-# temporary directory of the app: `passed`, or `failed: ` and the problems.
+# entry, for Android with build_apk.sh, which builds it again when a
+# package of the Android SDK did not download. It installs the app anew,
+# launches it with adb or simctl, and waits for the line that the check
+# writes to the file smf_start_check in the temporary directory of the
+# app: `passed`, or `failed: ` and the problems.
 # Nothing connects to the app, unlike flutter test, which must reach the VM
 # service of the app and sometimes never does on the emulators and
 # simulators of CI (on an iOS simulator, a race of flutter_tools:
@@ -24,6 +26,8 @@
 # and when the result does not come in time, and then prints the log of
 # the app.
 set -euo pipefail
+# shellcheck source=build_apk.sh
+source "$(dirname "${BASH_SOURCE[0]}")/build_apk.sh"
 
 if [ $# -ne 3 ] || [[ ! "$1" =~ ^(android|ios)$ ]] || [[ ! "$3" =~ ^[0-9]+$ ]]; then
   echo "Usage: $0 <android|ios> <device> <seconds>" >&2
@@ -151,7 +155,7 @@ android() {
     fi
   fi
   adb=("$sdk/platform-tools/adb" -s "$device")
-  build 'flutter build apk' flutter build apk --debug -t "$check"
+  build 'flutter build apk' build_apk --debug -t "$check"
   # The application id and the activity that starts the app, from the APK,
   # with aapt2 of the newest build tools of the Android SDK.
   local apk=build/app/outputs/flutter-apk/app-debug.apk build_tools badging activity
