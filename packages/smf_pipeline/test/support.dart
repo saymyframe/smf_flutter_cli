@@ -270,6 +270,7 @@ class App extends StatelessWidget {
 {{{smf_app_entry__main_activity_intent_filters}}}
         </activity>
 {{{smf_app_entry__android_manifest_application_meta}}}
+{{{smf_app_entry__android_manifest_application_components}}}
     </application>
 </manifest>
 ''',
