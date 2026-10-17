@@ -45,7 +45,10 @@
 //   client of Google, into `ios/Runner/Info.plist`. It adds the scheme and
 //   removes none, and a file that has it already stays as it is.
 // These are the only files of the app that the script changes. Of the
-// other arguments, those calls of the Firebase CLI get only the account.{{/setup}}
+// other arguments, those calls of the Firebase CLI get only the account.{{/setup}}{{#apple}}
+//
+// Apple is enabled in the Firebase console, which no command of the
+// Firebase CLI does, so the script tells what to set there.{{/apple}}
 
 import 'dart:async';
 import 'dart:convert';
@@ -261,7 +264,8 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     final code = await deploy.exitCode;
     if (interrupted) return 130;
     if (code != 0) stderr.writeln(_afterFailure(code, project, passedOn));{{#google}}
-    if (code != 0) return code;{{/google}}{{#setup}}
+    if (code != 0) return code;{{/google}}{{#apple}}
+    if (code == 0) stdout.writeln(_appleInConsole(project));{{/apple}}{{#setup}}
     try {
       await _setUp(
         app,
@@ -397,7 +401,16 @@ String _inConsole([String project = '_']) =>
 /// [why].
 String _notRunning(String why, String project) =>
     'The Firebase CLI did not run ($why). Install it, or put it on the '
-    'PATH: https://firebase.google.com/docs/cli\n${_inConsole(project)}';{{#google}}
+    'PATH: https://firebase.google.com/docs/cli\n${_inConsole(project)}';{{#apple}}
+
+/// What the script tells of Apple, which only the Firebase console of
+/// [project] enables.
+String _appleInConsole(String project) =>
+    'Apple is enabled in the Firebase console, which the Firebase CLI '
+    'cannot do: https://console.firebase.google.com/project/$project/'
+    'authentication/providers The deletion of an account of Apple also '
+    'needs the Services ID and the OAuth code flow configuration of Apple '
+    'there; see the section Firebase Authentication of README.md.';{{/apple}}{{#google}}
 
 /// [items] as a sentence lists them, such as `A, B and C`.
 String _listed(List<String> items) => items.length < 2

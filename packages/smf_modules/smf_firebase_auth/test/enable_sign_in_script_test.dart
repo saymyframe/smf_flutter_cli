@@ -2403,9 +2403,9 @@ void main() {
     });
 
     test(
-        'runs in an app with Apple alone as in an app without ways to sign '
-        'in: the Firebase console enables Apple, as the README of the app '
-        'tells', () async {
+        'tells in an app with Apple how to enable it in the Firebase console, '
+        'which the Firebase CLI cannot do, and asks it for no account',
+        () async {
       useAppWith('apple');
 
       final result = await run();
@@ -2418,19 +2418,33 @@ void main() {
       expect(result.calls.last.files['firebase.json'], _emailPassword);
       expect(
         result.output,
-        '${_enabling('smf-app', AuthMode.required)}\nstand-in: deploying\n',
+        '${_enabling('smf-app', AuthMode.required)}\n'
+        'stand-in: deploying\n'
+        'Apple is enabled in the Firebase console, which the Firebase CLI '
+        'cannot do: ${_consoleOf('smf-app')} The deletion of an account of '
+        'Apple also needs the Services ID and the OAuth code flow '
+        'configuration of Apple there; see the section Firebase '
+        'Authentication of README.md.\n',
       );
+
+      // Nothing of Apple after the Firebase CLI failed.
+      final failed = await run(standIn: {'STAND_IN_DEPLOY_CODE': '2'});
+
+      expect(failed.code, 2);
+      expect(failed.output, isNot(contains('Apple')));
     });
 
     test(
         'has the code that enables Google only in an app with a way to sign '
-        'in of Google, and the code that sets up what the ways to sign in '
-        'need only in an app with one that needs something, on lines of '
-        'their own between those of the script of an app without them', () {
+        'in of Google, the line for Apple only in one with a way to sign in '
+        'of Apple, and the code that sets up what the ways to sign in need '
+        'only in an app with one that needs something, on lines of their own '
+        'between those of the script of an app without them', () {
       String scriptOf(RenderedApp app) => app.files[enableSignInScript]!.text;
       final without = scriptOf(rendered[AuthMode.required]!);
       const marks = {
         'Google': "'googleSignIn': {",
+        'Apple': 'String _appleInConsole(',
         'the setup': 'const _needs = ',
         'the debug key': "'-genkeypair',",
         'the URL scheme': '<key>CFBundleURLTypes</key>',
@@ -2441,12 +2455,15 @@ void main() {
           };
 
       expect(marksOf(without), isEmpty);
-      expect(scriptOf(withWays['apple']!), without);
+      expect(marksOf(scriptOf(withWays['apple']!)), {'Apple'});
       expect(marksOf(scriptOf(withWays['google alone']!)), {'Google'});
-      expect(marksOf(scriptOf(withWays['google']!)), marks.keys.toSet());
       expect(
-        scriptOf(withWays['google and apple']!),
-        scriptOf(withWays['google']!),
+        marksOf(scriptOf(withWays['google']!)),
+        marks.keys.toSet().difference({'Apple'}),
+      );
+      expect(
+        marksOf(scriptOf(withWays['google and apple']!)),
+        marks.keys.toSet(),
       );
       // Each line of the script of an app without ways to sign in is in the
       // script of one with them, in its order, but for the line that tells

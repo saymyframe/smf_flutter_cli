@@ -89,8 +89,8 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   and leaves a file that has it as it is. It stops at a file in any
 ///   other form, with what to add there by hand.
 /// - Apple is enabled in the Firebase console, which no command of the
-///   Firebase CLI does, as the README of the app tells; the script has no
-///   code for it.
+///   Firebase CLI does, so in an app with a way to sign in of Apple the
+///   script tells what to set there, with the code for that alone.
 /// - It runs the Firebase CLI with `NO_UPDATE_NOTIFIER`, without its check
 ///   for a newer version: that check runs on as a process of its own in
 ///   the same directory (`update-notifier-cjs` of firebase-tools 15.14.0),
@@ -187,6 +187,8 @@ Map<String, Set<SignInNeed>> firebaseMethodsOf(
 /// sign in [methods], by [firebaseMethodsOf]:
 /// - `google`, whether the app has a way to sign in of Google, which gives
 ///   the script the code that enables Google;
+/// - `apple`, whether the app has a way to sign in of Apple, which gives
+///   the script the line that tells what to set in the Firebase console;
 /// - `setup`, whether a way to sign in needs something of the project,
 ///   which gives the script the code that sets it up and the needs,
 ///   `needs`, the value of its constant `_needs`: the values of its enum
@@ -204,6 +206,7 @@ Map<String, Object> scriptVarsOf(Map<String, Set<SignInNeed>> methods) {
   ];
   return {
     'google': methods.containsKey('google.com'),
+    'apple': methods.containsKey('apple.com'),
     'setup': needs.isNotEmpty,
     'needs': '{${needs.join(', ')}}',
   };

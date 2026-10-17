@@ -2374,13 +2374,20 @@ void main() {
       // A way to sign in of Google that needs nothing of the project: the
       // script enables Google and sets up nothing.
       expect(declarationsOf(googleAlone.app!), {'_appName': "'Contract App'"});
-      // Apple is enabled in the Firebase console, and the script has no code
-      // for it.
+      // Apple is enabled in the Firebase console, and the script only tells
+      // what to set there.
       expect(declarationsOf(apple.app!), isEmpty);
       expect(declarationsOf(without.app!), isEmpty);
       expect(
         apple.app!.files[enableSignInScript]!.text,
+        allOf(
+          contains('String _appleInConsole(String project) =>'),
+          contains('stdout.writeln(_appleInConsole(project));'),
+        ),
+      );
+      expect(
         without.app!.files[enableSignInScript]!.text,
+        isNot(contains('_appleInConsole')),
       );
       // As the test that CI runs against its Firebase project reads them.
       final ofBoth = scriptWaysOf(withBoth.files[enableSignInScript]!.text);
@@ -2441,6 +2448,7 @@ void main() {
         () {
       expect(scriptVarsOf(const {}), {
         'google': false,
+        'apple': false,
         'setup': false,
         'needs': '{}',
       });
@@ -2454,17 +2462,20 @@ void main() {
         }),
         {
           'google': true,
+          'apple': true,
           'setup': true,
           'needs': '{_Need.androidCertificate, _Need.serverClient}',
         },
       );
       expect(scriptVarsOf(const {'apple.com': {}}), {
         'google': false,
+        'apple': true,
         'setup': false,
         'needs': '{}',
       });
       expect(scriptVarsOf(const {'google.com': {}}), {
         'google': true,
+        'apple': false,
         'setup': false,
         'needs': '{}',
       });

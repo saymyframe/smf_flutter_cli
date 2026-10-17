@@ -57,6 +57,8 @@ With `firebase_auth`:
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section Firebase Authentication of `README.md`.
 - `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
 
+- Apple is enabled in the Firebase console by hand, with the private key of Apple that deleting an account needs. That key is a secret: never put it into the app or its repository.
+
 ## Crash reporting
 
 - `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
@@ -259,7 +261,7 @@ Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global
 
 The app signs in with [Firebase Authentication](https://firebase.google.com/docs/auth) through `firebase_auth`: `lib/core/auth/firebase_auth_service.dart` implements the sign-in service of the app on it.
 
-The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, and Anonymous when the mode of the app is `anonymous` (see the section Sign-in). Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
+The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, Anonymous when the mode of the app is `anonymous` (see the section Sign-in), and Apple for the ways to sign in of the app. Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
 
 `smf create` asks to enable them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
 
@@ -272,6 +274,8 @@ The script reads the project from `firebase.json`, where `flutterfire configure`
 ```bash
 dart tool/enable_firebase_sign_in.dart --account <email>
 ```
+
+Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays.
 
 You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in the project that the app is configured for.
 
@@ -9685,6 +9689,9 @@ void main() {
 // The other arguments go to the Firebase CLI as they are. An account that
 // `firebase login:use` chose for the directory of the app does not apply in
 // the temporary directory: `--account <email>` names the account.
+//
+// Apple is enabled in the Firebase console, which no command of the
+// Firebase CLI does, so the script tells what to set there.
 
 import 'dart:async';
 import 'dart:convert';
@@ -9834,6 +9841,7 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     final code = await deploy.exitCode;
     if (interrupted) return 130;
     if (code != 0) stderr.writeln(_afterFailure(code, project, passedOn));
+    if (code == 0) stdout.writeln(_appleInConsole(project));
     return code;
   } finally {
     await interrupts.cancel();
@@ -9872,6 +9880,15 @@ String _inConsole([String project = '_']) =>
 String _notRunning(String why, String project) =>
     'The Firebase CLI did not run ($why). Install it, or put it on the '
     'PATH: https://firebase.google.com/docs/cli\n${_inConsole(project)}';
+
+/// What the script tells of Apple, which only the Firebase console of
+/// [project] enables.
+String _appleInConsole(String project) =>
+    'Apple is enabled in the Firebase console, which the Firebase CLI '
+    'cannot do: https://console.firebase.google.com/project/$project/'
+    'authentication/providers The deletion of an account of Apple also '
+    'needs the Services ID and the OAuth code flow configuration of Apple '
+    'there; see the section Firebase Authentication of README.md.';
 
 /// What the script tells after the Firebase CLI failed with the exit code
 /// [code] for [project], with the arguments [passedOn]: which account it
