@@ -7,7 +7,9 @@
 // address, as on an iOS device without the token of the Apple Push
 // Notification service. It tells when Firebase has another token, or none,
 // for an app with an address, or gives none in time, and never writes a
-// token into a problem.
+// token into a problem. The test asks problemsOfAddress, whose problems the
+// probe returns, since the probe also starts the check of a push message
+// once in a run of the app, which delivery_test.dart checks.
 //
 // The probe reads appPush, so the start-up of the app runs first, as on a
 // device, with the mocks of the platform side of every module of the app,
@@ -49,15 +51,15 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
         addressOfApp = appPush.address.value;
-        withAddress = await probeFirebaseMessaging(() async {});
+        withAddress = await problemsOfAddress();
         device.token = 'a token that the app was not told of';
-        behindTheApp = await probeFirebaseMessaging(() async {});
+        behindTheApp = await problemsOfAddress();
         device.failNext(
           'getToken',
           code: 'unknown',
           message: 'java.io.IOException: SERVICE_NOT_AVAILABLE',
         );
-        failing = await probeFirebaseMessaging(() async {});
+        failing = await problemsOfAddress();
         device.holdNext('getToken');
         hanging = await problemsOfAddress(
           timeout: const Duration(milliseconds: 200),
@@ -66,7 +68,7 @@ void main() {
         device.token = null;
         await initPush();
         await aMoment();
-        withoutAddress = await probeFirebaseMessaging(() async {});
+        withoutAddress = await problemsOfAddress();
         // And on iOS without the token of the Apple Push Notification
         // service, as a simulator on a macOS virtual machine. A widget test
         // ends with the platform of the tests.
@@ -77,7 +79,7 @@ void main() {
             ..apnsToken = null;
           await initPush();
           await aMoment();
-          withoutApnsToken = await probeFirebaseMessaging(() async {});
+          withoutApnsToken = await problemsOfAddress();
         } finally {
           onAndroid();
           // The next start on Android ends the wait of the service of iOS
