@@ -2051,8 +2051,10 @@ See `lib/missing.dart`.
       });
 
       expect(messages(issues), [
-        'ios/Runner/Runner.entitlements has the key aps-environment more '
-            'than once.',
+        equals(
+          'ios/Runner/Runner.entitlements has the key aps-environment more '
+          'than once.',
+        ),
       ]);
       expect(issues.single.path, path);
     });
@@ -2091,6 +2093,8 @@ See `lib/missing.dart`.
           'reports a build configuration of the app that does not sign with '
           'them', () {
         const signs = 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;';
+        const forDevices = '"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = '
+            'Runner/Runner.entitlements;';
         final configurations = _xcodeProject.split(signs);
         expect(configurations, hasLength(4));
         // Profile without the setting, Debug with other entitlements, and
@@ -2100,17 +2104,18 @@ See `lib/missing.dart`.
           configurations[1],
           'CODE_SIGN_ENTITLEMENTS = Runner/Other.entitlements;',
           configurations[2],
-          '"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = '
-              'Runner/Runner.entitlements;',
+          forDevices,
           configurations[3],
         ].join();
         final issues = checkProject(text);
 
         expect(messages(issues), [
           for (final name in ['Profile', 'Debug', 'Release'])
-            'The build configuration $name of the app target in '
-                'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
-                'with ios/Runner/Runner.entitlements.',
+            equals(
+              'The build configuration $name of the app target in '
+              'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
+              'with ios/Runner/Runner.entitlements.',
+            ),
         ]);
         for (final issue in issues) {
           expect(issue.path, project);
@@ -2129,14 +2134,17 @@ See `lib/missing.dart`.
           messages(
             checkProject(
               _xcodeProject.replaceFirst(signs, '').replaceFirst(
-                  '\t\t\tname = Profile;\n\t\t};\n\t\t331C',
-                  '\t\t};\n\t\t331C'),
+                    '\t\t\tname = Profile;\n\t\t};\n\t\t331C',
+                    '\t\t};\n\t\t331C',
+                  ),
             ),
           ),
           [
-            'A build configuration of the app target in '
-                'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
-                'with ios/Runner/Runner.entitlements.',
+            equals(
+              'A build configuration of the app target in '
+              'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
+              'with ios/Runner/Runner.entitlements.',
+            ),
           ],
         );
 
@@ -2144,17 +2152,15 @@ See `lib/missing.dart`.
         expect(
           messages(
             checkProject(
-              _xcodeProject.replaceFirst(
-                signs,
-                '$signs\n\t\t\t\t"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = '
-                'Runner/Runner.entitlements;',
-              ),
+              _xcodeProject.replaceFirst(signs, '$signs\n\t\t\t\t$forDevices'),
             ),
           ),
           [
-            'The build configuration Profile of the app target in '
-                'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
-                'with ios/Runner/Runner.entitlements.',
+            equals(
+              'The build configuration Profile of the app target in '
+              'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
+              'with ios/Runner/Runner.entitlements.',
+            ),
           ],
         );
       });
@@ -2179,10 +2185,11 @@ See `lib/missing.dart`.
 
         expect(messages(issues), [
           for (final name in ['Profile', 'Debug'])
-            'The build configuration $name in '
-                'ios/Runner.xcodeproj/project.pbxproj, which is not one of '
-                'the app target, names entitlements in '
-                'CODE_SIGN_ENTITLEMENTS.',
+            equals(
+              'The build configuration $name in '
+              'ios/Runner.xcodeproj/project.pbxproj, which is not one of the '
+              'app target, names entitlements in CODE_SIGN_ENTITLEMENTS.',
+            ),
         ]);
         expect(
           issues.first.hint,
@@ -2206,9 +2213,11 @@ See `lib/missing.dart`.
         );
 
         expect(messages(issues), [
-          'ios/Runner.xcodeproj/project.pbxproj has no build configuration '
-              'of the app target, with INFOPLIST_FILE = Runner/Info.plist, '
-              'that signs the app with ios/Runner/Runner.entitlements.',
+          equals(
+            'ios/Runner.xcodeproj/project.pbxproj has no build configuration '
+            'of the app target, with INFOPLIST_FILE = Runner/Info.plist, '
+            'that signs the app with ios/Runner/Runner.entitlements.',
+          ),
         ]);
       });
 
