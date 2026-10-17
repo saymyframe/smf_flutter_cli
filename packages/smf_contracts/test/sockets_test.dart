@@ -11,6 +11,10 @@ String _renderKeys(List<MapEntry<String, NoValue>> entries) =>
 
 String _renderValue(String value) => 'v$value';
 
+String _renderSwitch(String value) => 'on';
+
+String _renderLibrary(String value) => 'library:$value';
+
 /// A policy that takes a value only from the module `home`.
 final class _OnlyFromHome extends MergePolicy<String> {
   const _OnlyFromHome();
@@ -72,6 +76,14 @@ void main() {
       required: true,
     ),
   );
+  final desugaring = SocketRef<ValueSocket<String>>.role(
+    role,
+    'desugaring',
+    const ValueSocket.places(
+      policy: MaxPolicy(),
+      places: {'enabled': _renderSwitch, 'library': _renderLibrary},
+    ),
+  );
 
   group('SocketRef', () {
     test('names tags after the owner and the socket', () {
@@ -92,6 +104,14 @@ void main() {
       expect(
         wrapper.tags,
         ['smf_router__wrappers_open', 'smf_router__wrappers_close'],
+      );
+    });
+
+    test('a socket for one value at several places has a tag for each', () {
+      expect(desugaring.tag, 'smf_router__desugaring');
+      expect(
+        desugaring.tags,
+        ['smf_router__desugaring_enabled', 'smf_router__desugaring_library'],
       );
     });
 
@@ -146,6 +166,39 @@ void main() {
       expect(code.problems(), isEmpty);
       final bad = SocketRef<CodeSocket>.role(role, 'Setup', const CodeSocket());
       expect(bad.problems().single, contains('"Setup"'));
+    });
+
+    test(
+        'reports the places of a value that are not lower snake_case, and a '
+        'socket without places', () {
+      expect(desugaring.problems(), isEmpty);
+      final bad = SocketRef<ValueSocket<String>>.role(
+        role,
+        'flag',
+        const ValueSocket.places(
+          policy: MaxPolicy(),
+          places: {'On': _renderSwitch, 'the_library': _renderLibrary},
+        ),
+      );
+      final none = SocketRef<ValueSocket<String>>.role(
+        role,
+        'nowhere',
+        const ValueSocket.places(policy: MaxPolicy(), places: {}),
+      );
+
+      expect(bad.problems(), [
+        equals(
+          'The place "On" of the value of the socket router.flag is not '
+          'lower snake_case.',
+        ),
+      ]);
+      expect(none.problems(), [
+        equals(
+          'The socket router.nowhere has no place for its value, so it has '
+          'no tag.',
+        ),
+      ]);
+      expect(none.tags, isEmpty);
     });
 
     test('describes itself', () {
@@ -205,6 +258,31 @@ void main() {
       expect(wrappers('home').tags, [
         'smf_router__screen_wrappers__home_open',
         'smf_router__screen_wrappers__home_close',
+      ]);
+    });
+
+    test('recognizes the tag of each place of a member for one value', () {
+      // The name of one place ends like that of the other.
+      final versions = SocketFamily<String, ValueSocket<String>>.role(
+        role,
+        'versions',
+        const ValueSocket.places(
+          policy: MaxPolicy(),
+          places: {'library': _renderLibrary, 'test_library': _renderLibrary},
+        ),
+        keyOf: (module) => [module],
+      );
+
+      for (final place in ['library', 'test_library']) {
+        expect(
+          versions.memberOfTag('smf_router__versions__home_$place'),
+          versions('home'),
+          reason: place,
+        );
+      }
+      expect(versions('home').tags, [
+        'smf_router__versions__home_library',
+        'smf_router__versions__home_test_library',
       ]);
     });
 
@@ -311,6 +389,7 @@ void main() {
         (keyed, keyed.entry('a', '1.0')),
         (keysOnly, keysOnly.key('INTERNET')),
         (minIos, minIos.value('15.0')),
+        (desugaring, desugaring.value('2.1.4')),
       ];
       for (final (socket, contribution) in valid) {
         expect(socket.problemsWith(contribution), isEmpty, reason: '$socket');
@@ -409,6 +488,10 @@ void main() {
       expect(
         minIos.problemsWith(minIos.value('x')).single,
         contains('"x" of "smf_router__min_ios" cannot be compared'),
+      );
+      expect(
+        desugaring.problemsWith(desugaring.value('two')).single,
+        contains('"two" of "smf_router__desugaring" cannot be compared'),
       );
     });
 
@@ -603,6 +686,42 @@ void main() {
       expect(minIos.render(const []), {'smf_router__min_ios': ''});
     });
 
+    test('renders the merged value at each of its places, or nothing', () {
+      expect(
+        desugaring.render([
+          desugaring.value('2.1.3'),
+          desugaring.value('2.1.4'),
+          desugaring.value('2.0'),
+        ]),
+        {
+          'smf_router__desugaring_enabled': 'on',
+          'smf_router__desugaring_library': 'library:2.1.4',
+        },
+      );
+      expect(desugaring.render(const []), {
+        'smf_router__desugaring_enabled': '',
+        'smf_router__desugaring_library': '',
+      });
+      final required = SocketRef<ValueSocket<String>>.role(
+        role,
+        'required_places',
+        const ValueSocket.places(
+          policy: MaxPolicy(),
+          places: {'a': _renderValue, 'b': _renderValue},
+          required: true,
+        ),
+      );
+      expect(required.kind.required, isTrue);
+      expect(() => required.render(const []), throwsStateError);
+      expect(
+        required.render([required.value('1')]),
+        {
+          'smf_router__required_places_a': 'v1',
+          'smf_router__required_places_b': 'v1',
+        },
+      );
+    });
+
     test('a required value socket needs a contribution', () {
       expect(
         requiredIos.render([requiredIos.value('13.0')]),
@@ -639,6 +758,7 @@ void main() {
       expect(const ArgsSocket({}).carriesImports, isTrue);
       expect(keyed.kind.carriesImports, isFalse);
       expect(minIos.kind.carriesImports, isFalse);
+      expect(desugaring.kind.carriesImports, isFalse);
     });
 
     test(

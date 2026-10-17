@@ -37,6 +37,14 @@ sealed class SocketKind {
   /// condition of a contribution can make them impossible to order.
   bool get followsOrderEdges => true;
 
+  /// What follows the [SocketRef.tag] of a socket of this kind in each of
+  /// its tags: nothing for a socket with one tag.
+  List<String> get _tagSuffixes => const [''];
+
+  /// Describes what is wrong with the declaration of [socket], a socket of
+  /// this kind, other than its name.
+  List<String> _problems(SocketRef socket) => const [];
+
   /// Describes what is wrong with the payload of [c], a contribution to
   /// [socket], a socket of this kind.
   List<String> _payloadProblems(SocketRef socket, SocketContribution c);
@@ -214,6 +222,9 @@ final class WrapperSocket extends SocketKind {
   bool get carriesImports => true;
 
   @override
+  List<String> get _tagSuffixes => const ['_open', '_close'];
+
+  @override
   List<String> _payloadProblems(SocketRef socket, SocketContribution c) =>
       _onlyFragment(socket, c, wrapper: true);
 
@@ -346,7 +357,9 @@ final class KeyedSocket<V extends Object> extends SocketKind {
 /// A socket for one value merged from all contributions, such as the
 /// minimum iOS version of the app.
 ///
-/// Values carry no imports.
+/// The value renders at the one tag of the socket, or, for a socket created
+/// with [ValueSocket.places], at the tag of each of its places, each in a
+/// text of its own. Values carry no imports.
 final class ValueSocket<V extends Object> extends SocketKind {
   /// Creates the kind with a merge [policy] and a [renderer] of the merged
   /// value; set [required] if the socket cannot render without a value.
@@ -354,7 +367,26 @@ final class ValueSocket<V extends Object> extends SocketKind {
     required this.policy,
     required String Function(V value) renderer,
     this.required = false,
-  }) : _renderer = renderer;
+  })  : _renderer = renderer,
+        _places = const {};
+
+  /// Creates the kind with a merge [policy] for a value that renders at
+  /// several places: each of [places] has a renderer of the merged value
+  /// and a tag of its own, `<tag>_<place>`, so one contribution sets every
+  /// place at once. Set [required] if the socket cannot render without a
+  /// value.
+  ///
+  /// The names of the places are lower snake_case. The templates that hold
+  /// the socket hold every tag of it, since each place gets a part of what
+  /// the value stands for, such as a setting and a dependency of a build
+  /// script that each fail the build without the other. Without a value,
+  /// every place renders nothing.
+  const ValueSocket.places({
+    required this.policy,
+    required Map<String, String Function(V value)> places,
+    this.required = false,
+  })  : _renderer = null,
+        _places = places;
 
   /// How two contributed values merge.
   final MergePolicy<V> policy;
@@ -365,10 +397,37 @@ final class ValueSocket<V extends Object> extends SocketKind {
   /// The owner of the socket's template contributes the base value.
   final bool required;
 
-  final String Function(V value) _renderer;
+  /// The renderer of the value at the one tag of the socket, or `null` for
+  /// a socket of several places.
+  final String Function(V value)? _renderer;
+
+  /// The renderer of the value at each place, by the name of the place;
+  /// empty for a socket with one tag.
+  final Map<String, String Function(V value)> _places;
 
   @override
   bool get carriesImports => false;
+
+  @override
+  List<String> get _tagSuffixes => _renderer == null
+      ? [for (final place in _places.keys) '_$place']
+      : const [''];
+
+  @override
+  List<String> _problems(SocketRef socket) {
+    final problems = <String>[
+      if (_renderer == null && _places.isEmpty)
+        'The $socket has no place for its value, so it has no tag.',
+    ];
+    for (final place in _places.keys) {
+      if (SmfNames.isSnakeCase(place)) continue;
+      problems.add(
+        'The place "$place" of the value of the $socket is not lower '
+        'snake_case.',
+      );
+    }
+    return problems;
+  }
 
   /// Whether [value] can be contributed to the socket.
   bool accepts(Object? value) => value is V;
@@ -425,7 +484,15 @@ final class ValueSocket<V extends Object> extends SocketKind {
         'one.',
       );
     }
-    return {tag: merged == null ? '' : _renderer(merged)};
+    String text(String Function(V value) renderer) =>
+        merged == null ? '' : renderer(merged);
+    return switch (_renderer) {
+      final renderer? => {tag: text(renderer)},
+      null => {
+          for (final MapEntry(key: place, value: renderer) in _places.entries)
+            '${tag}_$place': text(renderer),
+        },
+    };
   }
 }
 
@@ -574,18 +641,20 @@ final class SocketRef<K extends SocketKind> {
       : 'smf_${[ownerName, name, ...familyKey].join('__')}';
 
   /// The tags of the socket: [tag], or `<tag>_open` and `<tag>_close` for a
-  /// [WrapperSocket].
+  /// [WrapperSocket], or `<tag>_<place>` for each place of a
+  /// [ValueSocket.places].
   List<String> get tags =>
-      kind is WrapperSocket ? ['${tag}_open', '${tag}_close'] : [tag];
+      [for (final suffix in kind._tagSuffixes) '$tag$suffix'];
 
-  /// Describes what is wrong with the name of this socket, or returns an
-  /// empty list.
+  /// Describes what is wrong with the name of this socket, or with the
+  /// places of a [ValueSocket.places], or returns an empty list.
   ///
   /// The key of a member of a [SocketFamily] is checked when the member is
   /// created.
   List<String> problems() => [
         if (!SmfNames.isSnakeCase(name))
           'The socket name "$name" of $ownerName is not lower snake_case.',
+        ...kind._problems(this),
       ];
 
   /// Describes what is wrong with [contribution] to this socket, or returns
@@ -744,15 +813,18 @@ final class SocketFamily<Key, K extends SocketKind> {
   /// Returns the member whose tag is [tag], such as a tag found in a
   /// template, or `null` if [tag] is not the tag of a member.
   ///
-  /// For a [WrapperSocket], [tag] may be either of the member's tags.
+  /// For a kind with several tags, such as a [WrapperSocket], [tag] may be
+  /// any of the member's tags.
   SocketRef<K>? memberOfTag(String tag) {
     var base = tag;
-    if (kind is WrapperSocket) {
-      for (final suffix in const ['_open', '_close']) {
-        if (base.endsWith(suffix)) {
-          base = base.substring(0, base.length - suffix.length);
-          break;
-        }
+    // The longest suffix first, so that a place whose name ends like that
+    // of another is not cut short.
+    final suffixes = [...kind._tagSuffixes]
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final suffix in suffixes) {
+      if (suffix.isNotEmpty && base.endsWith(suffix)) {
+        base = base.substring(0, base.length - suffix.length);
+        break;
       }
     }
     if (!base.startsWith(tagPrefix)) return null;
