@@ -4024,7 +4024,8 @@ final class PushMessage {
 /// - [address] completes with the address of the device, or with `null`
 ///   while the platform gives none, and does not throw. It needs no
 ///   permission. The address stays the same from one launch of the app to
-///   the next, unless [addressChanges] tells of another.
+///   the next, unless the platform gives the device another, which
+///   [addressChanges] tells of.
 /// - [addressChanges] tells of each new address, and of the first address
 ///   that the device gets after [address] completed with `null`, such as
 ///   one that comes late on iOS.
