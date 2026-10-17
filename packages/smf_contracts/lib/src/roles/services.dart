@@ -8,6 +8,7 @@ import 'package:smf_contracts/bundles/notifications_role_bundle.dart';
 import 'package:smf_contracts/bundles/notifications_role_setting_bundle.dart';
 import 'package:smf_contracts/bundles/notifications_role_step_bundle.dart';
 import 'package:smf_contracts/bundles/preferences_role_bundle.dart';
+import 'package:smf_contracts/bundles/push_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
@@ -17,14 +18,15 @@ part 'services/crash_reporting.dart';
 part 'services/events.dart';
 part 'services/notifications.dart';
 part 'services/preferences.dart';
+part 'services/push.dart';
 
 /// The implementation of a service role that a provider contributes as its
 /// data, such as the Firebase implementation of `AnalyticsService`.
 ///
 /// The service roles are [eventsRole], [preferencesRole], [analyticsRole],
-/// [crashReportingRole], [authRole] and [notificationsRole]. Each generates
-/// the interface of its service and a factory that returns the
-/// implementation, or, for a role with many providers, one service that
+/// [crashReportingRole], [authRole], [notificationsRole] and [pushRole].
+/// Each generates the interface of its service and a factory that returns
+/// the implementation, or, for a role with many providers, one service that
 /// forwards every call to all of them. Every provider contributes exactly
 /// one implementation:
 ///
@@ -39,10 +41,11 @@ part 'services/preferences.dart';
 ///
 /// The factory takes no services: the services work without a DI
 /// container. The role registers its service in the DI container when one
-/// is present, but for the [authRole] and the [notificationsRole], which
-/// register nothing: the code of an app does not use the service of their
-/// provider, only the controller that the role generates over it, the
-/// session of [AuthRole] and the notifications of [NotificationsRole].
+/// is present, but for the [authRole], the [notificationsRole] and the
+/// [pushRole], which register nothing: the code of an app does not use the
+/// service of their provider, only the controller that the role generates
+/// over it, the session of [AuthRole], the notifications of
+/// [NotificationsRole] and the push messages of [PushRole].
 ///
 /// A role that an app can have several providers of creates each
 /// implementation on its own: one whose factory throws, or whose

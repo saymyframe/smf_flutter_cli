@@ -18,6 +18,7 @@ const List<Role> _roles = [
   crashReportingRole,
   authRole,
   notificationsRole,
+  pushRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -53,6 +54,7 @@ void main() {
       'crash reporting role',
       'authentication role',
       'notifications role',
+      'push messages role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -127,6 +129,13 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'preferences'},
       'uses': {'settings_screen', 'onboarding_screen', 'localization'},
+    });
+    // The push role shows a message that arrives in the foreground through
+    // the notifications, whose permission lets the app show messages.
+    expect(shape(pushRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'notifications'},
+      'uses': <String>{},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -241,6 +250,7 @@ void main() {
           'crash_reporting',
           'auth',
           'notifications',
+          'push',
           'settings_screen',
           'onboarding_screen',
           'theme',
@@ -440,6 +450,8 @@ void main() {
         'icon',
         'text_on',
         'text_off',
+        'push_owner',
+        'message_key',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
