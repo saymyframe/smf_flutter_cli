@@ -1390,6 +1390,26 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.pushRegisteringAtEachStart,
+        role: pushRole,
+        bug: 'Its function registers the device anew each time it opens the '
+            'push messages, so the device gets a new address a while after '
+            'each start, and the next start of the app does not have the '
+            'address that the backend kept.',
+        // The fixture notifications, which the push role requires, and the
+        // fixture preferences, which those require.
+        app: [FakeNotificationsModule.id, FakePreferencesModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/push_role/next_start_test.dart',
+            'the next start has the address that the device had, unless the '
+                'provider tells of a new one',
+            'A backend keeps the address of a device, so the next start has '
+                'the same one, unless the provider tells of a new one.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '

@@ -15,8 +15,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, whose providers call the listeners of the screen, the DI role, the
 /// events role, the preferences role, the localization role, the theme
 /// role, the app entry role, whose provider builds the root that follows
-/// the theme mode, the auth role, the onboarding screen role and the
-/// notifications role.
+/// the theme mode, the auth role, the onboarding screen role, the
+/// notifications role and the push role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -383,6 +383,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
       await notificationsRoleAppTest(
         among: (app) => app.everyModuleWith != null,
       ),
+      // The push messages of the apps with the push role, whichever module
+      // provides it, the test that the CLI keeps: only in the apps with
+      // every module, which run flutter test for other tests already. There
+      // the fixture push messages provide the role, whose device gets its
+      // address a while after the first start, and the fixture
+      // notifications the notifications role, which the push role
+      // requires.
+      await pushRoleAppTest(among: (app) => app.everyModuleWith != null),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -410,6 +418,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       authRole,
       onboardingScreenRole,
       notificationsRole,
+      pushRole,
     },
   );
 }

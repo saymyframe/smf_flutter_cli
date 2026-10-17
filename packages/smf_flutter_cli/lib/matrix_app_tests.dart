@@ -748,6 +748,58 @@ Future<MatrixAppTest> notificationsRoleAppTest({
 Map<String, String> _notificationsValuesOf(MatrixApp app) =>
     const {'asked_key': NotificationsRole.askedKey};
 
+/// The test of the push role that the CLI keeps in its `app_tests/push_role`,
+/// for the apps with the role, whichever module provides it, that [among]
+/// accepts, or all of them:
+/// - `appPush`, over a service of push messages of the test that scripts
+///   what a provider answers: the address is `null` until the service gives
+///   one, follows each address that the service tells of, the first one
+///   after none too, and is asked for again when the user comes back while
+///   the app has none; each message in the foreground reaches every
+///   listener of the messages once; where the platform does not show a
+///   message, the app shows each one with a title or a body as one
+///   notification whose owner is the role, through a service of
+///   notifications of the test, and a tap on it reaches `appPush.taps` and
+///   not `appNotifications.taps`; where the platform shows it, the app
+///   shows none, and the taps of the service reach `appPush.taps`; and the
+///   message whose tap launched the app is the launch message, whether the
+///   platform or the app showed it;
+/// - `appPush` over the service of the provider: the app gets the address
+///   that the provider gives, which the mocks of a provider give the device
+///   as the role asks, an app that the test launched has no launch message,
+///   the service tells of the messages, the taps and the addresses on
+///   broadcast streams, and the provider never asks for the permission to
+///   show notifications;
+/// - the next start, `initPush()` again, has the address that the device
+///   had.
+///
+/// The test knows only the role, and the notifications role that it
+/// requires. The matrix fills in the owner of the notifications that show
+/// messages, the id of the role. Its probe, `probePush()` of
+/// `integration_test/push_role/probe.dart`, only reads, for the start check
+/// on a device: the app has no launch message, and once it has an address,
+/// the service gives the same one. The test runs the probe too.
+Future<MatrixAppTest> pushRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/push_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(pushRole) &&
+          (among?.call(app) ?? true),
+      values: _pushValuesOf,
+      roles: {pushRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/push_role/probe.dart',
+        'probePush',
+      ),
+    );
+
+/// The values of the files of the test of the push role, the same in every
+/// app: `push_owner`, the owner of the notifications through which the app
+/// shows a message, which is the id of the role.
+Map<String, String> _pushValuesOf(MatrixApp app) => {'push_owner': pushRole.id};
+
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them. Once the app started
