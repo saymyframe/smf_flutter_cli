@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:fake_broken/fake_broken.dart';
 import 'package:fixture_registry/broken_providers.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
@@ -649,6 +650,41 @@ void main() {
       });
     });
   }
+
+  test(
+      'a broken module keeps the conditions of each brick of the module '
+      'that it changes, such as the fallback start screen of the broken '
+      'app entry, which only an app that no route starts has', () {
+    /// The conditions of each brick of [module], in their order: the roles
+    /// of its `when`, and its conditions on what roles chose. A broken
+    /// module gives the brick that it changes another name.
+    List<List<Set<Object>>> bricksOf(SmfModule module) => [
+          for (final brick in module
+              .contribute(ContractHarness.defaultContext)
+              .whereType<BrickContribution>())
+            [brick.when, brick.whenChosen],
+        ];
+
+    final broken = [
+      for (final provider in providers)
+        if (provider.module case final BrokenModule module) module,
+    ];
+    expect(broken, isNotEmpty);
+    for (final module in broken) {
+      expect(
+        bricksOf(module),
+        bricksOf(module.of),
+        reason: '${module.descriptor.id}',
+      );
+    }
+    final appEntry = broken.singleWhere(
+      (module) => module.descriptor.provides.contains(appEntryRole),
+    );
+    expect(
+      [for (final [_, chosen] in bricksOf(appEntry)) ...chosen],
+      [RouterRole.noStartRoute],
+    );
+  });
 
   test(
       'the app of the fixture gates that start closed has guards that do '

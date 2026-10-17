@@ -51,9 +51,11 @@ RoutesData _routes(String name) => RoutesData([
     ]);
 
 void main() {
+  // Its option is not --start, which is the router's: the app entry uses
+  // the router, so every registry has it.
   final nav = TestRole<String>(
     'nav',
-    options: const [RoleOption(name: 'start', help: 'Start')],
+    options: const [RoleOption(name: 'entry', help: 'Entry')],
     template: TestTemplate(choice: 'the start'),
   );
 
@@ -70,7 +72,7 @@ void main() {
         modules: [for (final id in modules) ModuleId(id)],
         strict: strict,
         explain: explain,
-        roleOptions: const {'start': '/home'},
+        roleOptions: const {'entry': '/home'},
       );
 
   test('plans an app', () async {
@@ -219,6 +221,7 @@ void main() {
             providers: [const RoleProvider.plain(appEntryRole)],
             contributions: [
               entryBrick(),
+              fallbackBrick(),
               AppEntryRole.iosDeploymentTarget.value('13.0'),
               const PubspecContribution.environment(sdk: '^3.8.1'),
               const PubspecContribution.sdk('flutter'),

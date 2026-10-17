@@ -20,7 +20,19 @@ void main() {
     ]);
 
     expect(registry.modules, hasLength(3));
-    expect(registry.roles, [appEntryRole, layout, router]);
+    // The app entry uses the router, which brings the roles that it uses,
+    // and those bring theirs.
+    expect(registry.roles, [
+      appEntryRole,
+      routerRole,
+      layoutRole,
+      localizationRole,
+      preferencesRole,
+      diRole,
+      settingsScreenRole,
+      layout,
+      router,
+    ]);
     expect(registry[const ModuleId('home')], isNotNull);
     expect(registry[const ModuleId('nope')], isNull);
     expect(registry.ids.map((id) => id.value), ['scaffold', 'tabs', 'home']);

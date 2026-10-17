@@ -189,7 +189,7 @@ const plainKind = ModuleKind(id: 'plain', label: 'Plain modules');
 /// The module that provides the app entry in tests, with the base value of
 /// the minimum iOS version, the Dart SDK constraint and the dependency on
 /// Flutter, as flutter_core contributes them, and the files of
-/// [entryBrick] unless [bricks] is `false`.
+/// [entryBrick] and [fallbackBrick] unless [bricks] is `false`.
 TestModule scaffold({
   List<Contribution> contributions = const [],
   bool bricks = true,
@@ -199,7 +199,7 @@ TestModule scaffold({
       kind: ModuleKinds.scaffold,
       providers: [const RoleProvider.plain(appEntryRole)],
       contributions: [
-        if (bricks) entryBrick(),
+        if (bricks) ...[entryBrick(), fallbackBrick()],
         AppEntryRole.iosDeploymentTarget.value('13.0'),
         const PubspecContribution.environment(sdk: '^3.8.1'),
         const PubspecContribution.sdk('flutter'),
@@ -248,7 +248,7 @@ Future<void> bootstrap() async {
   'lib/app.dart': '''
 import 'package:flutter/material.dart';
 
-import 'core/app/fallback_start_screen.dart';
+{{^has_router}}import 'core/app/fallback_start_screen.dart';{{/has_router}}
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -258,18 +258,8 @@ class App extends StatelessWidget {
 {{{smf_app_entry__app_args}}}
         builder: (context, child) =>
             {{{smf_app_entry__app_builder_open}}}child!{{{smf_app_entry__app_builder_close}}},
-        home: const FallbackStartScreen(),
+        {{^has_router}}home: const FallbackStartScreen(),{{/has_router}}
       );
-}
-''',
-  'lib/core/app/fallback_start_screen.dart': '''
-import 'package:flutter/widgets.dart';
-
-class FallbackStartScreen extends StatelessWidget {
-  const FallbackStartScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox();
 }
 ''',
   'android/app/src/main/AndroidManifest.xml': '''
@@ -320,8 +310,33 @@ dependencies {
 /// that a provider of the role holds, and of the pipeline in its pubspec;
 /// see [entryFiles]. The template of the role has the tag of the sections
 /// of the guide for coding agents.
+///
+/// Its root shows the fallback start screen of [fallbackBrick] in an app
+/// without a router.
 BrickContribution entryBrick() =>
     BrickContribution(bundle('entry', files: entryFiles));
+
+/// The file of the fallback start screen, which only an app that no route
+/// starts has, as [AppEntryRole.fallbackStartScreen] requires.
+const Map<String, String> fallbackFiles = {
+  AppEntryRole.fallbackStartScreenFile: '''
+import 'package:flutter/widgets.dart';
+
+class FallbackStartScreen extends StatelessWidget {
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+''',
+};
+
+/// The brick of [fallbackFiles], under the condition of the fallback start
+/// screen.
+BrickContribution fallbackBrick() => BrickContribution(
+      bundle('fallback', files: fallbackFiles),
+      whenChosen: const {RouterRole.noStartRoute},
+    );
 
 /// The context of a test app.
 const testContext = ModuleContext(
