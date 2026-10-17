@@ -30,9 +30,10 @@ const onboardingScreenRole = OnboardingScreenRole._();
 /// language, so the role uses the [LocalizationRole], and the template
 /// reads the label as the layout role reads the label of a destination
 /// (see [LocalizationRole.expressionOf]). In the app the label is a
-/// function of a `BuildContext`, and the template imports the file of the
-/// functions of a step with a prefix of its own, such as `step0`, so the
-/// list is a constant.
+/// top-level function of a `BuildContext`, so the list is a constant. The
+/// template imports the file of the functions of a step with a prefix of its
+/// own, such as `step0`, so that functions of the same name in the files of
+/// two contributors do not clash.
 ///
 /// A provider is a module with a route that shows the screen, which it
 /// names with an [OnboardingScreenRoute]; the role requires the router. A
