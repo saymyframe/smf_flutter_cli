@@ -135,6 +135,7 @@ import 'dart:isolate';
 
 import 'package:contract_app/core/push/firebase_push_service.dart';
 import 'package:contract_app/core/push/push_service.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
@@ -187,6 +188,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   ];
   result['address'] = await step(service.address);
   failNext['getToken'] = FirebaseException(
+    plugin: 'firebase_messaging',
     code: 'unknown',
     message: 'java.io.IOException: SERVICE_NOT_AVAILABLE',
   );
@@ -263,6 +265,39 @@ Future<void> main(List<String> arguments, SendPort port) async {
   });
   result['launch message on iOS'] =
       await step(() async => describe(await service.launchMessage()));
+
+  // The token of the Apple Push Notification service comes after the app
+  // asked for the address, and the plugin tells of no registration token.
+  service = createFirebasePushService();
+  final cameLate = <String>[];
+  final watching = service.addressChanges.listen(cameLate.add);
+  result['address before the APNs token'] = await step(service.address);
+  firebaseCalls.clear();
+  apnsToken = 'an APNs token that came late';
+  final until = DateTime.now().add(const Duration(seconds: 5));
+  while (cameLate.isEmpty && DateTime.now().isBefore(until)) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  result['calls until the APNs token came'] = [...firebaseCalls];
+  result['addresses once the APNs token came'] = cameLate;
+  await watching.cancel();
+
+  // No timer outlives the last listener.
+  apnsToken = null;
+  service = createFirebasePushService();
+  final listening = service.addressChanges.listen((_) {});
+  await service.address();
+  await Future<void>.delayed(const Duration(milliseconds: 700));
+  firebaseCalls.clear();
+  await listening.cancel();
+  await Future<void>.delayed(const Duration(milliseconds: 1200));
+  result['calls once nothing listens'] = [...firebaseCalls];
+  // Nor does a service whose address failed before anyone listened ask.
+  service = createFirebasePushService();
+  await service.address();
+  firebaseCalls.clear();
+  await Future<void>.delayed(const Duration(milliseconds: 700));
+  result['calls without a listener'] = [...firebaseCalls];
 
   result['every call'] = everyCall;
   port.send(result);
@@ -623,6 +658,10 @@ void main() {
           [
             "import 'dart:async';",
             "import 'dart:convert';",
+            equals(
+              "import 'package:firebase_core/firebase_core.dart' "
+              'show FirebaseException;',
+            ),
             "import 'package:firebase_messaging/firebase_messaging.dart';",
             "import 'package:flutter/foundation.dart';",
             "import 'push_service.dart';",
@@ -717,6 +756,30 @@ void main() {
             'been received on the device yet.',
           ),
         ]);
+      });
+
+      test(
+          'on iOS tells of the first registration token once iOS has the '
+          'token of the Apple Push Notification service, which the plugin '
+          'tells of no token for, and asks iOS for it only while something '
+          'listens to the address changes', () {
+        expect(sent['address before the APNs token'], ['getAPNSToken()']);
+        expect(
+          sent['calls until the APNs token came'],
+          [
+            // The look half a second later finds the token, and the plugin
+            // reads it again before it asks for the registration token.
+            'getAPNSToken()',
+            'getAPNSToken()',
+            'getToken()',
+          ],
+        );
+        expect(
+          sent['addresses once the APNs token came'],
+          ['a new token'],
+        );
+        expect(sent['calls once nothing listens'], isEmpty);
+        expect(sent['calls without a listener'], isEmpty);
       });
 
       test(
@@ -880,6 +943,8 @@ void main() {
             'appPush',
             'getToken()',
             'onTokenRefresh',
+            'getAPNSToken()',
+            'addressChanges',
             'createFirebasePushService()',
             'setForegroundNotificationPresentationOptions()',
             'requestPermission()',
@@ -909,6 +974,8 @@ void main() {
         for (final call in [
           'getToken(',
           'onTokenRefresh',
+          'getAPNSToken(',
+          'addressChanges',
           'setForegroundNotificationPresentationOptions(',
         ]) {
           expect(app.files[serviceFile]!.text, contains(call), reason: call);

@@ -24,7 +24,10 @@
 // before the registration token, and fails without it; a message whose tap
 // launched the app is given once; and the platform tells of a new token,
 // of a message in the foreground and of a tap on a message that it showed
-// only when a test makes it do so.
+// only when a test makes it do so. A token of the Apple Push Notification
+// service that a test gives the device later reaches the plugin only when
+// it asks for one: the iOS plugin of firebase_messaging 16.7 tells the app
+// of no registration token when iOS registers the device.
 //
 // It differs from a device in this: it shows nothing, sends nothing to a
 // server, and needs no network.
@@ -55,7 +58,9 @@ final class MockFirebaseMessaging {
   /// The token of the Apple Push Notification service of the device on iOS,
   /// or `null` while iOS gave none, as on a build that is not signed for
   /// push messages: without it the plugin gives no registration token on
-  /// iOS.
+  /// iOS. A test gives it later as iOS does once it registered the device,
+  /// a while after the app started: the platform tells the app nothing
+  /// then.
   String? apnsToken = 'apns-token-of-the-tests';
 
   /// The calls that reached the platform side, in their order.

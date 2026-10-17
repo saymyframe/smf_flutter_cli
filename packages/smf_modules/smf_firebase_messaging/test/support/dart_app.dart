@@ -27,12 +27,31 @@ enum TargetPlatform { android, fuchsia, iOS, linux, macOS, windows }
 TargetPlatform defaultTargetPlatform = TargetPlatform.android;
 ''';
 
+/// A stand-in for the part of firebase_core that the module uses, with the
+/// signatures of firebase_core 4: what the plugins of Firebase throw.
+const _firebaseCore = r'''
+class FirebaseException implements Exception {
+  FirebaseException({required this.plugin, this.message, String? code})
+      : code = code ?? 'unknown';
+
+  final String plugin;
+  final String code;
+  final String? message;
+
+  @override
+  String toString() => '[$plugin/$code] $message';
+}
+''';
+
 /// A stand-in for the part of firebase_messaging that the module uses, with
 /// the signatures of firebase_messaging 16.7 and what its plugin does where
 /// the service relies on it or works around it:
 /// - `getToken()` on iOS fails with the code `apns-token-not-set` while the
 ///   device has no token of the Apple Push Notification service, before it
-///   asks the platform;
+///   asks the platform, and `getAPNSToken()` reads that token, which is
+///   `null` on Android;
+/// - the stream of the new tokens tells of none when the device gets the
+///   token of the Apple Push Notification service, as the iOS plugin does;
 /// - `setForegroundNotificationPresentationOptions()` reaches the platform
 ///   only on iOS and macOS;
 /// - the streams of the messages, the taps and the tokens are broadcast
@@ -47,6 +66,7 @@ TargetPlatform defaultTargetPlatform = TargetPlatform.android;
 const _firebaseMessaging = r'''
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 /// The registration token of the device, or `null`.
@@ -86,17 +106,6 @@ void _called(String method, [List<Object?> arguments = const []]) {
   if (failure != null) throw failure;
 }
 
-/// What the plugin throws, a FirebaseException of firebase_core.
-class FirebaseException implements Exception {
-  FirebaseException({required this.code, this.message});
-
-  final String code;
-  final String? message;
-
-  @override
-  String toString() => '[firebase_messaging/$code] $message';
-}
-
 class RemoteNotification {
   const RemoteNotification({this.title, this.body});
 
@@ -134,17 +143,23 @@ class FirebaseMessaging {
     String? serviceWorkerScriptPath,
   }) async {
     await null;
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      _called('getAPNSToken');
-      if (apnsToken == null) {
-        throw FirebaseException(
-          code: 'apns-token-not-set',
-          message: 'APNS token has not been received on the device yet.',
-        );
-      }
+    if (defaultTargetPlatform == TargetPlatform.iOS &&
+        await getAPNSToken() == null) {
+      throw FirebaseException(
+        plugin: 'firebase_messaging',
+        code: 'apns-token-not-set',
+        message: 'APNS token has not been received on the device yet.',
+      );
     }
     _called('getToken');
     return token;
+  }
+
+  Future<String?> getAPNSToken() async {
+    await null;
+    if (defaultTargetPlatform != TargetPlatform.iOS) return null;
+    _called('getAPNSToken');
+    return apnsToken;
   }
 
   Future<RemoteMessage?> getInitialMessage() async {
@@ -209,6 +224,7 @@ final class DartApp {
       write('app/${file.path}', file.text);
     }
     write('flutter/lib/foundation.dart', _foundation);
+    write('firebase_core/lib/firebase_core.dart', _firebaseCore);
     write('firebase_messaging/lib/firebase_messaging.dart', _firebaseMessaging);
     write('app/pubspec.yaml', 'name: contract_app\n');
     // The stand-ins are in the language of the app too.
@@ -221,6 +237,7 @@ final class DartApp {
           for (final (name, rootUri) in [
             ('contract_app', '../'),
             ('flutter', '../../flutter/'),
+            ('firebase_core', '../../firebase_core/'),
             ('firebase_messaging', '../../firebase_messaging/'),
           ])
             {

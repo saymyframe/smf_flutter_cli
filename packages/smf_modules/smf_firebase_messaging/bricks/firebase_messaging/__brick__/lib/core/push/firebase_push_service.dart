@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_core/firebase_core.dart' show FirebaseException;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
@@ -41,6 +42,13 @@ PushMessage _messageOf(RemoteMessage message) => PushMessage(
       },
     );
 
+/// How long the service waits before it asks iOS for the token of the Apple
+/// Push Notification service the first time: twice as long each next time,
+/// up to [_longestWait], until it has waited [_longestWatch] in all.
+const _firstWait = Duration(milliseconds: 500);
+const _longestWait = Duration(seconds: 8);
+const _longestWatch = Duration(minutes: 2);
+
 /// The push messages of the app on
 /// [Firebase Cloud Messaging](https://firebase.google.com/docs/cloud-messaging).
 ///
@@ -51,7 +59,12 @@ PushMessage _messageOf(RemoteMessage message) => PushMessage(
 /// Messaging. On iOS it needs the token of the Apple Push Notification
 /// service, which may come a while after the app started, or never, as on a
 /// build that is not signed for push messages: [address] is `null` until
-/// then, and [addressChanges] tells of the token once Firebase has it.
+/// then. When that token comes, firebase_messaging tells the app of no
+/// registration token. So while something listens to [addressChanges], the
+/// service asks iOS for the token now and then, which needs no network,
+/// for at most two minutes, and tells of the registration token once iOS
+/// has the token. [addressChanges] also tells of each new token that
+/// Firebase gives the device.
 ///
 /// On Android, the system shows a message that arrives in the background,
 /// in the channel and with the icon that the manifest of the app names, and
@@ -64,17 +77,39 @@ final class FirebasePushService implements PushService {
   /// It reads the stream of the new tokens at once, which sets up the
   /// plugin, so that the messages and the taps that the platform tells of
   /// from then on reach the streams of the service.
-  FirebasePushService(this._messaging)
-      : addressChanges = _messaging.onTokenRefresh;
+  FirebasePushService(this._messaging) : _tokens = _messaging.onTokenRefresh;
 
   final FirebaseMessaging _messaging;
+
+  /// The new tokens that Firebase tells of.
+  final Stream<String> _tokens;
+
+  late final StreamController<String> _addresses =
+      StreamController<String>.broadcast(
+    onListen: _startListening,
+    onCancel: _stopListening,
+  );
+
+  StreamSubscription<String>? _tokenSubscription;
+
+  /// Whether the service waits for the token of the Apple Push Notification
+  /// service, since [address] failed for want of it.
+  bool _awaitingApnsToken = false;
+
+  /// The timer of the next time the service asks iOS for that token.
+  Timer? _nextCheck;
+
+  /// How long the service waits before it asks next time, and how long it
+  /// has waited for that token so far.
+  Duration _wait = _firstWait;
+  Duration _waited = Duration.zero;
 
   @override
   bool get platformShowsInForeground =>
       defaultTargetPlatform == TargetPlatform.iOS;
 
   @override
-  final Stream<String> addressChanges;
+  Stream<String> get addressChanges => _addresses.stream;
 
   @override
   final Stream<PushMessage> messages =
@@ -88,13 +123,15 @@ final class FirebasePushService implements PushService {
   Future<String?> address() async {
     try {
       return await _messaging.getToken();
+    } on FirebaseException catch (error) {
+      _printWithoutAddress(error);
+      // The plugin gives no token on iOS before the device has the token of
+      // the Apple Push Notification service.
+      if (error.code == 'apns-token-not-set') _awaitApnsToken();
+      return null;
     } on Object catch (error) {
-      // iOS has no token before the one of the Apple Push Notification
-      // service comes, and Android none without Google Play services or a
-      // network. The token comes on addressChanges once Firebase has it.
-      if (kDebugMode) {
-        debugPrint('Firebase Cloud Messaging has no address yet: $error');
-      }
+      // Android has no token without Google Play services or a network.
+      _printWithoutAddress(error);
       return null;
     }
   }
@@ -109,6 +146,74 @@ final class FirebasePushService implements PushService {
         debugPrint('Firebase Cloud Messaging has no launch message: $error');
       }
       return null;
+    }
+  }
+
+  static void _printWithoutAddress(Object error) {
+    if (kDebugMode) {
+      debugPrint('Firebase Cloud Messaging has no address yet: $error');
+    }
+  }
+
+  void _startListening() {
+    _tokenSubscription = _tokens.listen(_tellAddress);
+    if (_awaitingApnsToken) _scheduleCheck();
+  }
+
+  /// No timer of the service outlives the last listener.
+  Future<void> _stopListening() async {
+    _nextCheck?.cancel();
+    _nextCheck = null;
+    await _tokenSubscription?.cancel();
+    _tokenSubscription = null;
+  }
+
+  void _tellAddress(String address) {
+    _awaitingApnsToken = false;
+    _nextCheck?.cancel();
+    _nextCheck = null;
+    _addresses.add(address);
+  }
+
+  void _awaitApnsToken() {
+    if (_awaitingApnsToken) return;
+    _awaitingApnsToken = true;
+    _wait = _firstWait;
+    _waited = Duration.zero;
+    if (_addresses.hasListener) _scheduleCheck();
+  }
+
+  void _scheduleCheck() {
+    if (_nextCheck != null) return;
+    if (_waited >= _longestWatch) {
+      _awaitingApnsToken = false;
+      return;
+    }
+    final wait = _wait;
+    _waited += wait;
+    _wait = wait * 2 > _longestWait ? _longestWait : wait * 2;
+    _nextCheck = Timer(wait, () => unawaited(_checkApnsToken()));
+  }
+
+  /// Asks iOS for the token of the Apple Push Notification service, and
+  /// once it has one, Firebase for the registration token, which it tells
+  /// of.
+  Future<void> _checkApnsToken() async {
+    _nextCheck = null;
+    String? apnsToken;
+    try {
+      apnsToken = await _messaging.getAPNSToken();
+    } on Object {
+      apnsToken = null;
+    }
+    if (!_awaitingApnsToken || !_addresses.hasListener) return;
+    if (apnsToken == null) return _scheduleCheck();
+    _awaitingApnsToken = false;
+    try {
+      final address = await _messaging.getToken();
+      if (address != null && _addresses.hasListener) _addresses.add(address);
+    } on Object catch (error) {
+      _printWithoutAddress(error);
     }
   }
 }

@@ -236,11 +236,69 @@ void main() {
     expect(
       changes,
       ['another token of the tests'],
-      reason: 'Firebase tells of a new token, and of the first one on iOS '
-          'once the token of the Apple Push Notification service came: the '
-          'push role says that the address changes tell of both.',
+      reason: 'Firebase tells of a new token on the stream of the plugin, '
+          'which the address changes forward.',
     );
     expect(await service.address(), 'another token of the tests');
+  });
+
+  test(
+      'on iOS, the first registration token reaches the address changes once '
+      'the token of the Apple Push Notification service comes after the '
+      'address was asked for, though the plugin tells of none then', () async {
+    onIOS();
+    device.apnsToken = null;
+    final service = createFirebasePushService();
+    final changes = <String>[];
+    final subscription = service.addressChanges.listen(changes.add);
+    addTearDown(subscription.cancel);
+
+    final before = await service.address();
+    // iOS registers the device a while after the app started, and the
+    // plugin of firebase_messaging tells the app nothing then.
+    device.apnsToken = 'an APNs token that came late';
+    final until = DateTime.now().add(const Duration(seconds: 5));
+    while (changes.isEmpty && DateTime.now().isBefore(until)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+
+    expect(before, isNull);
+    expect(
+      changes,
+      [tokenOfTests],
+      reason: 'The push role says that the address changes tell of the first '
+          'address that the device gets after the address was none, such as '
+          'one that comes late on iOS: else the app has no address until the '
+          'user comes back to it.',
+    );
+  });
+
+  test(
+      'the service stops asking iOS for the token of the Apple Push '
+      'Notification service once nothing listens to the address changes',
+      () async {
+    onIOS();
+    device.apnsToken = null;
+    final service = createFirebasePushService();
+    final subscription = service.addressChanges.listen((_) {});
+    await service.address();
+    await Future<void>.delayed(const Duration(milliseconds: 1600));
+    final whileListened = device.methods.length;
+    await subscription.cancel();
+    await Future<void>.delayed(const Duration(milliseconds: 1600));
+
+    expect(
+      whileListened,
+      greaterThan(2),
+      reason: 'While the app listens, the service asks for the token now '
+          'and then.',
+    );
+    expect(
+      device.methods.length,
+      whileListened,
+      reason: 'No timer of the service outlives the listener, so the next '
+          'start of the push messages leaves the service before it alone.',
+    );
   });
 
   test(

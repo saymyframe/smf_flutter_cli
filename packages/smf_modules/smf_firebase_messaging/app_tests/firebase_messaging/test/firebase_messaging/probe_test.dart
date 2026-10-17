@@ -74,6 +74,11 @@ void main() {
           withoutApnsToken = await probeFirebaseMessaging(() async {});
         } finally {
           onAndroid();
+          // The next start on Android ends the wait of the service of iOS
+          // for the token of the Apple Push Notification service, so no
+          // timer outlives the test.
+          device.apnsToken = 'apns-token-of-the-tests';
+          await initPush();
         }
       });
 

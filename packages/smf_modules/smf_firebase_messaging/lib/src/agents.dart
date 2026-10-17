@@ -11,7 +11,7 @@ final String agentNote = '''
 With `firebase_messaging`:
 
 - `FirebasePushService` in `$serviceFile` implements `PushService` on `FirebaseMessaging`. In `lib/`, only that file imports the package: other code receives push messages through `appPush`.
-- The address of the device is its registration token of Firebase Cloud Messaging, from `getToken()`, and a new token comes on `onTokenRefresh`. On iOS there is none until the token of the Apple Push Notification service comes.
+- The address of the device is its registration token of Firebase Cloud Messaging, from `getToken()`, and a new token comes on `onTokenRefresh`. On iOS there is none until the token of the Apple Push Notification service comes, and the package tells the app nothing when it comes. So while something listens to `addressChanges`, the service reads that token with `getAPNSToken()` now and then, for at most two minutes, and then tells of the registration token. Keep that wait.
 - On iOS, `createFirebasePushService()` calls `setForegroundNotificationPresentationOptions()` with an alert, a badge and a sound. Keep it: the package answers iOS for every notification in the foreground, those of `appNotifications` too, and without these options iOS shows none of them.
 - Never call `requestPermission()` of the package: the permission to show notifications belongs to `appNotifications.request()`.
 - `${AppEntryRole.androidManifestFile}` names the channel and the icon with which Android shows a message that arrives in the background, those of the notifications of the app. Change them together.
