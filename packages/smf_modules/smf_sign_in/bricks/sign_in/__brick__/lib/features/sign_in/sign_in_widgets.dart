@@ -543,6 +543,10 @@ String authFailureText(BuildContext context, AuthFailureReason reason) =>
     switch (reason) {
       AuthFailureReason.invalidCredentials => {{{text_failure_credentials}}},
       AuthFailureReason.emailInUse => {{{text_failure_email_in_use}}},
+      AuthFailureReason.credentialInUse =>
+        {{{text_failure_credential_in_use}}},
+      AuthFailureReason.accountExistsWithOtherMethod =>
+        {{{text_failure_other_method}}},
       AuthFailureReason.weakPassword => {{{text_failure_weak_password}}},
       AuthFailureReason.invalidEmail => {{{text_email_invalid}}},
       AuthFailureReason.userDisabled => {{{text_failure_disabled}}},

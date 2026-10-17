@@ -42,6 +42,10 @@ const _endedSession = {
 /// [AuthFailureReason.invalidEmail], and an empty password with
 /// [AuthFailureReason.invalidCredentials] in [signIn] and with
 /// [AuthFailureReason.weakPassword] in [signUp] and [linkPassword].
+///
+/// It takes no credential of an identity provider: [signInWith], [linkWith]
+/// and a deletion with a fresh credential fail with
+/// [AuthFailureReason.notConfigured] before Firebase is asked.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
@@ -113,6 +117,24 @@ final class FirebaseAuthService implements AuthService {
         );
       });
 
+  @override
+  Future<void> signInWith(SignInCredential credential) =>
+      _run(() async => throw _refused(credential));
+
+  @override
+  Future<void> linkWith(SignInCredential credential) =>
+      _runForUser((user) async => throw _refused(credential));
+
+  /// The failure of a call with [credential], which the service does not
+  /// take.
+  AuthFailure _refused(SignInCredential credential) => AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint: 'The app signs in to Firebase Authentication with an '
+            'email address and a password, and as an anonymous user, and '
+            'takes no credential of an identity provider, such as '
+            '$credential.',
+      );
+
   /// While an anonymous user is signed in, Firebase answers with that user
   /// and creates no other.
   @override
@@ -137,7 +159,9 @@ final class FirebaseAuthService implements AuthService {
   Future<void> signOut() => _run(_auth.signOut);
 
   @override
-  Future<void> deleteAccount() => _runForUser((user) async {
+  Future<void> deleteAccount({SignInCredential? fresh}) =>
+      _runForUser((user) async {
+        if (fresh != null) throw _refused(fresh);
         await user.delete();
         // Firebase signs a deleted user out, but the plugin keeps that user
         // as the current one until the platform tells it of the sign-out,

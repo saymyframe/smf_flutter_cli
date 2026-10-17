@@ -859,7 +859,7 @@ final class FakeAuthModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(fakeAuthBundle),
         authRole.data(
-          const RoleImplementation.async(
+          const AuthImplementation.async(
             type: TypeRef('FixtureAuth', import: _file),
             init: FactoryRef('openFixtureAuth', import: _file),
           ),

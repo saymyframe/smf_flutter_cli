@@ -60,6 +60,12 @@ final class SignInOfTest implements AuthService {
       _refuse();
 
   @override
+  Future<void> signInWith(SignInCredential credential) => _refuse();
+
+  @override
+  Future<void> linkWith(SignInCredential credential) => _refuse();
+
+  @override
   Future<void> signInAnonymously() => _refuse();
 
   @override
@@ -69,7 +75,7 @@ final class SignInOfTest implements AuthService {
   Future<void> signOut() async {}
 
   @override
-  Future<void> deleteAccount() => _refuse();
+  Future<void> deleteAccount({SignInCredential? fresh}) => _refuse();
 
   Future<void> _refuse() async =>
       throw const AuthFailure(AuthFailureReason.notConfigured);
@@ -101,7 +107,7 @@ final class SignInOfTest implements AuthService {
           ),
         ),
         authRole.data(
-          const RoleImplementation(
+          const AuthImplementation(
             type: TypeRef('SignInOfTest', import: _file),
             create: FactoryRef('createSignInOfTest', import: _file),
           ),
@@ -119,6 +125,13 @@ const _everyModule = [
   'every module (bloc) --auth-mode=anonymous',
   'every module (riverpod) --auth-mode=guest',
   'every module (riverpod) --auth-mode=anonymous',
+];
+
+/// The apps of Firebase Authentication in the other modes of the auth role,
+/// with the router and the localization, since the role uses both.
+const _authModes = [
+  'auth by firebase_auth with router, localization --auth-mode=guest',
+  'auth by firebase_auth with router, localization --auth-mode=anonymous',
 ];
 
 /// The apps of the sign-in of the matrix of the CLI: one for each state
@@ -898,6 +911,7 @@ void main() {
         'firebase_auth with localization',
         'sign_in (bloc) with localization',
         'sign_in (riverpod) with localization',
+        ..._authModes,
         ..._everyModule,
       ],
     );
@@ -1010,6 +1024,7 @@ void main() {
         'firebase_auth with localization',
         'sign_in (bloc) with localization',
         'sign_in (riverpod) with localization',
+        ..._authModes,
         ..._everyModule,
       ],
     );
@@ -1041,6 +1056,7 @@ void main() {
         'firebase_auth with localization': ['en', 'uk'],
         'sign_in (bloc) with localization': ['en', 'uk'],
         'sign_in (riverpod) with localization': ['en', 'uk'],
+        for (final app in _authModes) app: ['en', 'uk'],
         for (final app in _everyModule) app: ['en', 'uk'],
       },
     );
@@ -3242,8 +3258,7 @@ void main() {
           ..._signIn,
         ])
           name: 'required',
-        'auth by firebase_auth with router --auth-mode=guest': 'guest',
-        'auth by firebase_auth with router --auth-mode=anonymous': 'anonymous',
+        for (final name in _authModes) name: name.split('--auth-mode=').last,
         for (final name in _everyModule)
           name: switch (name.split('--auth-mode=')) {
             [_, final mode] => mode,
@@ -3284,8 +3299,7 @@ void main() {
         'firebase_auth',
         // The apps of the sign-in get the provider of the auth role.
         ..._signIn,
-        'auth by firebase_auth with router --auth-mode=guest',
-        'auth by firebase_auth with router --auth-mode=anonymous',
+        ..._authModes,
         ..._everyModule,
       ],
     );

@@ -44,7 +44,11 @@ With `firebase_analytics`:
 - A call of `appSession` fails only with an `AuthFailure`. Catch it and show a text of the app for its `reason`. Show its `developerHint` in debug mode only. After `recentSignInRequired`, tell the user to sign out and sign in again.
 - `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes. One that reads `appSession.allowsApp` stands before the whole app, and one that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. In an app without such a guard every screen is open, whatever the mode, and that includes a screen that needs an account. A screen does not redirect itself.
 - When an anonymous user signs in to an account that exists already, `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user. Call no method of `appSession` in it, since the sign-in that calls it would wait for that call.
-- A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure` and `AuthFailureReason`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
+- `appSignInMethods` in `lib/core/auth/sign_in_methods.dart` lists the ways to sign in with an identity provider that the modules of the app add, and is empty without them. A screen of sign-in shows a button for each `SignInMethod` whose `isAvailable` is true, with its `label(context)` and its `icon`.
+- On a tap, the state of the screen awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. `credential()` returns `null` when the user closed the sheet of the identity provider, which is no failure: the screen goes back to how it was. Call `credential()` from the state of a screen, never within a call of `appSession`.
+- `appSession.signInWith` gives an anonymous user the identity with the same id, or signs in to the account that has the identity already, and `takeGuestData()` moves what the anonymous user had. `appSession.deleteAccount()` asks a way to sign in with `revokesOnDeletion` for a credential again itself, and deletes nothing when the user closes its sheet.
+- `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`. Where an account has no `email`, show the `label` of its way to sign in instead.
+- A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
 
 With `firebase_auth`:
 
@@ -262,6 +266,8 @@ The mode keeps nobody from a screen on its own. A guard of the routes does. One 
 To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
+
+Besides an email address and a password, the app signs in with no identity provider, such as the account of a user at another service. Such a way to sign in is a `SignInMethod` of `appSignInMethods` in `lib/core/auth/sign_in_methods.dart`, which the module of the way to sign in adds.
 
 ## Languages
 
@@ -936,8 +942,10 @@ import 'package:flutter/widgets.dart';
 
 import 'auth_service.dart';
 import 'guest_data.dart';
+import 'sign_in_methods.dart';
 
-export 'auth_service.dart' show AuthFailure, AuthFailureReason;
+export 'auth_service.dart'
+    show AuthFailure, AuthFailureReason, IdTokenCredential, SignInCredential;
 
 /// Who may use the app without an account.
 enum AuthMode {
@@ -1011,20 +1019,31 @@ final class AnonymousSession extends AppSession {
 /// The user of an account is signed in.
 final class AccountSession extends AppSession {
   /// Creates the session of the account [uid].
-  const AccountSession(this.uid, {this.email});
+  const AccountSession(this.uid, {this.email, this.issuers = const {}});
 
   @override
   final String uid;
 
-  /// The email address of the account, or `null` if it has none.
+  /// The email address of the account, or `null` if it has none, as an
+  /// account of a way to sign in may not.
   final String? email;
+
+  /// The identity providers that the account signs in with, each by the
+  /// `issuer` of its `SignInMethod` in `appSignInMethods` of
+  /// `sign_in_methods.dart`. It is empty for an account that signs in with
+  /// a password alone.
+  final Set<String> issuers;
 
   @override
   bool operator ==(Object other) =>
-      other is AccountSession && other.uid == uid && other.email == email;
+      other is AccountSession &&
+      other.uid == uid &&
+      other.email == email &&
+      other.issuers.length == issuers.length &&
+      other.issuers.containsAll(issuers);
 
   @override
-  int get hashCode => Object.hash(uid, email);
+  int get hashCode => Object.hash(uid, email, Object.hashAllUnordered(issuers));
 }
 
 /// The session of the app: who uses it, known before the first frame, and
@@ -1134,7 +1153,8 @@ final class AppSessionController extends ChangeNotifier
   /// comes back to it.
   ///
   /// A call made before the first start waits for it: [signIn], [signUp],
-  /// [sendPasswordReset], [signOut] and [deleteAccount]. Such calls run in
+  /// [signInWith], [sendPasswordReset], [signOut] and [deleteAccount]. Such
+  /// calls run in
   /// their order once the start has the user, and the future of this start
   /// completes after them, but waits for no call that is made while it
   /// runs. The mocks of the tests of an app use this: a call of [signUp]
@@ -1197,6 +1217,34 @@ final class AppSessionController extends ChangeNotifier
             : service.signUp(email: email, password: password),
       );
 
+  /// Signs in with [credential], which a way to sign in of
+  /// `appSignInMethods` got from an identity provider.
+  ///
+  /// An anonymous user gets the identity of the credential and keeps the id,
+  /// so everything that the user had stays. When that identity belongs to
+  /// another user already, or its email address has an account that signs
+  /// in in another way, the anonymous user signs in to that account
+  /// instead, or the call fails with
+  /// [AuthFailureReason.accountExistsWithOtherMethod], as the backend of the
+  /// provider decides. What the anonymous user had moves to the account as
+  /// `takeGuestData` says, as with [signIn].
+  Future<void> signInWith(SignInCredential credential) => _call((
+    service,
+  ) async {
+    if (_session is AnonymousSession) {
+      try {
+        await service.linkWith(credential);
+        return;
+      } on AuthFailure catch (failure) {
+        if (failure.reason != AuthFailureReason.credentialInUse &&
+            failure.reason != AuthFailureReason.accountExistsWithOtherMethod) {
+          rethrow;
+        }
+      }
+    }
+    await _toAccount(() => service.signInWith(credential));
+  });
+
   /// Sends the message with which the owner of the account of [email] sets
   /// a new password. It completes whether [email] has an account or not.
   Future<void> sendPasswordReset(String email) =>
@@ -1211,10 +1259,24 @@ final class AppSessionController extends ChangeNotifier
   /// after [signOut], and in the mode [AuthMode.anonymous] it signs in
   /// anonymously again.
   ///
+  /// For an account that signs in with a way to sign in that
+  /// `revokesOnDeletion` and is available on this platform, it first asks
+  /// that way for a credential again, such as with the sheet of its
+  /// identity provider, so that the provider of sign-in can revoke the
+  /// tokens of the app. When the user closes the sheet, the call completes
+  /// and deletes nothing, which is no failure.
+  ///
   /// It may fail with [AuthFailureReason.recentSignInRequired]: the user
   /// then signs out, signs in again and repeats it.
-  Future<void> deleteAccount() =>
-      _call((service) => service.deleteAccount(), waitsForAnonymousUser: true);
+  Future<void> deleteAccount() => _call((service) async {
+    final revoking = _revokingMethod();
+    if (revoking == null) {
+      await service.deleteAccount();
+      return;
+    }
+    final fresh = await revoking.credential();
+    if (fresh != null) await service.deleteAccount(fresh: fresh);
+  }, waitsForAnonymousUser: true);
 
   /// Stops following the service and the lifecycle of the app. A call that
   /// is on its way still ends as it would have, but tells no listener, and
@@ -1228,6 +1290,23 @@ final class AppSessionController extends ChangeNotifier
     }
     super.dispose();
   }
+
+  /// The way to sign in of the account of the session that asks for a
+  /// credential again before the account is deleted and is available on
+  /// this platform, or `null` if it has none: the first of
+  /// `appSignInMethods` that does.
+  SignInMethod? _revokingMethod() => switch (_session) {
+    AccountSession(:final issuers) =>
+      appSignInMethods
+          .where(
+            (method) =>
+                method.revokesOnDeletion &&
+                method.isAvailable &&
+                issuers.contains(method.issuer),
+          )
+          .firstOrNull,
+    _ => null,
+  };
 
   /// The user came back to the app. In the mode [AuthMode.anonymous], an
   /// app without a user then signs in anonymously again: as what follows
@@ -1287,7 +1366,7 @@ final class AppSessionController extends ChangeNotifier
   }
 
   /// Signs in to an account with [signIn], in whichever way, and moves what
-  /// an anonymous user had to that account.
+  /// an anonymous user had to that account, when it has another id.
   ///
   /// It takes the data before the sign-in, while the anonymous user is
   /// still signed in, and gives it once the user of another id has an
@@ -1369,7 +1448,11 @@ final class AppSessionController extends ChangeNotifier
     final session = switch (_service!.currentUser) {
       null => const SignedOutSession(),
       AuthUser(isAnonymous: true, :final uid) => AnonymousSession(uid),
-      AuthUser(:final uid, :final email) => AccountSession(uid, email: email),
+      AuthUser(:final uid, :final email, :final issuers) => AccountSession(
+        uid,
+        email: email,
+        issuers: Set.unmodifiable(issuers),
+      ),
     };
     if (session == _session) return;
     _session = session;
@@ -1434,7 +1517,12 @@ Future<void> initAuth() async {
 /// A user as the provider of sign-in knows them.
 final class AuthUser {
   /// Creates the user [uid].
-  const AuthUser({required this.uid, required this.isAnonymous, this.email});
+  const AuthUser({
+    required this.uid,
+    required this.isAnonymous,
+    this.email,
+    this.issuers = const {},
+  });
 
   /// The id of the user. It stays the same for as long as the user exists,
   /// also when an anonymous user gets an account.
@@ -1447,6 +1535,64 @@ final class AuthUser {
   /// The email address of the user, or `null` for a user without one, such
   /// as an anonymous user.
   final String? email;
+
+  /// The identity providers whose identities the user signs in with, each
+  /// by the issuer of its tokens, such as `https://accounts.example.com`:
+  /// the [IdTokenCredential.issuer] of a credential that the user signed in
+  /// or linked with. It is empty for a user who signs in with a password
+  /// alone, and for an anonymous user.
+  final Set<String> issuers;
+}
+
+/// What a way to sign in got from an identity provider, such as the token
+/// of an account of the user at another service, with which the provider
+/// of sign-in signs the user in: [AuthService.signInWith] and
+/// [AuthService.linkWith] take it.
+sealed class SignInCredential {
+  const SignInCredential();
+}
+
+/// An OpenID Connect ID token that an identity provider issued, with what
+/// came with it.
+final class IdTokenCredential extends SignInCredential {
+  /// Creates the credential of [idToken], which [issuer] issued.
+  const IdTokenCredential({
+    required this.issuer,
+    required this.idToken,
+    this.rawNonce,
+    this.authorizationCode,
+    this.givenName,
+    this.familyName,
+  });
+
+  /// The identity provider that issued the token: the `iss` of the token,
+  /// an https URL such as `https://accounts.example.com`.
+  final String issuer;
+
+  /// The ID token, a JSON Web Token.
+  final String idToken;
+
+  /// The nonce whose hash the request for the token had, which the
+  /// identity provider wrote into the token, or `null` if the request had
+  /// none. The provider of sign-in passes it on, so that its backend checks
+  /// the token against it.
+  final String? rawNonce;
+
+  /// The authorization code that came with the token, or `null`. With it, a
+  /// provider of sign-in revokes the tokens that the identity provider gave
+  /// the app when the account is deleted.
+  final String? authorizationCode;
+
+  /// The given name of the user, or `null`, for an identity provider that
+  /// tells it apart from the token, and maybe only at the first sign-in.
+  final String? givenName;
+
+  /// The family name of the user, as [givenName].
+  final String? familyName;
+
+  /// Names the issuer, and no token, so that a token never reaches a log.
+  @override
+  String toString() => 'IdTokenCredential($issuer)';
 }
 
 /// Why a call of sign-in failed.
@@ -1454,10 +1600,24 @@ enum AuthFailureReason {
   /// The email address and the password match no account. A wrong password
   /// and an address without an account are this one reason, so that nobody
   /// learns from the app which addresses have an account.
+  ///
+  /// It is also the reason of a [SignInCredential] that the provider
+  /// refuses, such as one that expired or that was issued for another app,
+  /// and of one of another user than the one whose account is deleted.
   invalidCredentials,
 
   /// The email address has an account already.
   emailInUse,
+
+  /// The identity of a [SignInCredential] belongs to another user already,
+  /// so [AuthService.linkWith] gives it to nobody else. The session then
+  /// signs in to that user.
+  credentialInUse,
+
+  /// The email address of the identity of a [SignInCredential] has an
+  /// account that signs in in another way, such as with a password. The
+  /// user signs in that way.
+  accountExistsWithOtherMethod,
 
   /// The provider takes no password as weak as this one.
   weakPassword,
@@ -1532,14 +1692,18 @@ final class AuthFailure implements Exception {
 ///   server does not answer, its future completes with
 ///   [AuthFailureReason.network].
 /// - A call that fails leaves the user who is signed in as that user was:
-///   an anonymous user stays signed in when [linkPassword] fails, and so
-///   does whoever is signed in when [signIn] or [signUp] fails. The one
-///   exception is a call for a user whose session has ended on the server.
-/// - [linkPassword] and [deleteAccount] are calls for the user who is
-///   signed in. Made when nobody is signed in, or when the session of that
-///   user has ended on the server, such a call fails with
+///   an anonymous user stays signed in when [linkPassword] or [linkWith]
+///   fails, and so does whoever is signed in when [signIn], [signUp] or
+///   [signInWith] fails. The one exception is a call for a user whose
+///   session has ended on the server.
+/// - [linkPassword], [linkWith] and [deleteAccount] are calls for the user
+///   who is signed in. Made when nobody is signed in, or when the session of
+///   that user has ended on the server, such a call fails with
 ///   [AuthFailureReason.recentSignInRequired], and in the second case it
 ///   signs the user out on the device first.
+/// - A [SignInCredential] whose identity provider the provider does not
+///   take fails with [AuthFailureReason.notConfigured], with the issuer in
+///   the [AuthFailure.developerHint].
 abstract interface class AuthService {
   /// The user who is signed in on this device, or `null`.
   AuthUser? get currentUser;
@@ -1582,6 +1746,44 @@ abstract interface class AuthService {
   /// stays signed in, with the same id.
   Future<void> linkPassword({required String email, required String password});
 
+  /// Signs in with [credential], which a way to sign in got from an
+  /// identity provider: to the user of its identity, whom it creates when
+  /// the identity is new.
+  ///
+  /// It is also called while a user is signed in, an anonymous one or the
+  /// user of another account: the user of the identity then replaces that
+  /// user on the device. When it fails, that user stays signed in.
+  ///
+  /// It takes a credential that [linkWith] refused just before, with
+  /// [AuthFailureReason.credentialInUse] or
+  /// [AuthFailureReason.accountExistsWithOtherMethod]: the session passes
+  /// the identical object. An identity provider may take a credential only
+  /// once, so the service signs in with what its backend answered the
+  /// refused link for that object, or with the credential itself when the
+  /// backend gave nothing. For an identity whose email address has an
+  /// account that signs in in another way, it fails with
+  /// [AuthFailureReason.accountExistsWithOtherMethod] or signs in to that
+  /// account, as the backend of the provider decides.
+  Future<void> signInWith(SignInCredential credential);
+
+  /// Gives the user who is signed in the identity of [credential]: the user
+  /// keeps the [AuthUser.uid], is no longer anonymous, and signs in with
+  /// that identity from then on. The session calls it for an anonymous
+  /// user.
+  ///
+  /// When the identity belongs to another user, it fails with
+  /// [AuthFailureReason.credentialInUse], and when its email address has an
+  /// account of another user, with
+  /// [AuthFailureReason.accountExistsWithOtherMethod]. Either way it changes
+  /// nothing: the user stays signed in, with the same id.
+  ///
+  /// When it fails with either reason, it keeps what its backend answered
+  /// for this credential object, such as a credential to sign in with,
+  /// without holding the token longer than needed. The session passes the
+  /// identical object to [signInWith], which uses that answer, or the
+  /// credential itself when the backend gave nothing.
+  Future<void> linkWith(SignInCredential credential);
+
   /// Creates an anonymous user, with an id of its own, and signs in as that
   /// user.
   Future<void> signInAnonymously();
@@ -1606,7 +1808,16 @@ abstract interface class AuthService {
   /// was created, it may fail with
   /// [AuthFailureReason.recentSignInRequired]. It then succeeds once the
   /// user has signed in again, in whichever way the account allows.
-  Future<void> deleteAccount();
+  ///
+  /// With [fresh], a credential that a way to sign in of the user got just
+  /// before, the service first signs the user in again with it, so the
+  /// deletion needs no recent sign-in, and revokes the tokens that the
+  /// identity provider gave the app where its backend can, such as with
+  /// [IdTokenCredential.authorizationCode]. A credential of another user
+  /// fails with [AuthFailureReason.invalidCredentials], and a revocation
+  /// that fails, such as one that the backend is not set up for, with
+  /// [AuthFailureReason.notConfigured]. Either way nothing is deleted.
+  Future<void> deleteAccount({SignInCredential? fresh});
 }
 === lib/core/auth/firebase_auth_service.dart (firebase_auth) ===
 import 'dart:async';
@@ -1656,6 +1867,10 @@ const _endedSession = {
 /// [AuthFailureReason.invalidEmail], and an empty password with
 /// [AuthFailureReason.invalidCredentials] in [signIn] and with
 /// [AuthFailureReason.weakPassword] in [signUp] and [linkPassword].
+///
+/// It takes no credential of an identity provider: [signInWith], [linkWith]
+/// and a deletion with a fresh credential fail with
+/// [AuthFailureReason.notConfigured] before Firebase is asked.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
@@ -1726,6 +1941,25 @@ final class FirebaseAuthService implements AuthService {
     );
   });
 
+  @override
+  Future<void> signInWith(SignInCredential credential) =>
+      _run(() async => throw _refused(credential));
+
+  @override
+  Future<void> linkWith(SignInCredential credential) =>
+      _runForUser((user) async => throw _refused(credential));
+
+  /// The failure of a call with [credential], which the service does not
+  /// take.
+  AuthFailure _refused(SignInCredential credential) => AuthFailure(
+    AuthFailureReason.notConfigured,
+    developerHint:
+        'The app signs in to Firebase Authentication with an '
+        'email address and a password, and as an anonymous user, and '
+        'takes no credential of an identity provider, such as '
+        '$credential.',
+  );
+
   /// While an anonymous user is signed in, Firebase answers with that user
   /// and creates no other.
   @override
@@ -1758,13 +1992,15 @@ final class FirebaseAuthService implements AuthService {
   Future<void> signOut() => _run(_auth.signOut);
 
   @override
-  Future<void> deleteAccount() => _runForUser((user) async {
-    await user.delete();
-    // Firebase signs a deleted user out, but the plugin keeps that user
-    // as the current one until the platform tells it of the sign-out,
-    // which may come after this call is over.
-    await _auth.signOut();
-  });
+  Future<void> deleteAccount({SignInCredential? fresh}) =>
+      _runForUser((user) async {
+        if (fresh != null) throw _refused(fresh);
+        await user.delete();
+        // Firebase signs a deleted user out, but the plugin keeps that user
+        // as the current one until the platform tells it of the sign-out,
+        // which may come after this call is over.
+        await _auth.signOut();
+      });
 
   /// Runs [call] for the user who is signed in.
   ///
@@ -1927,8 +2163,77 @@ typedef GiveGuestData = Future<void> Function(String accountUid);
 /// so such a call would wait for the sign-in, and the sign-in for it.
 ///
 /// It is not called when a guest signs up, since the guest then keeps the
-/// id and everything under it, nor in an app without anonymous users.
+/// id and everything under it, nor when a guest signs in with a way to sign
+/// in whose identity no user has yet, which the guest then gets with the
+/// id, nor in an app without anonymous users.
 Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
+=== lib/core/auth/sign_in_methods.dart (role:auth) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'auth_service.dart' show SignInCredential;
+
+/// A way to sign in with an identity provider, such as the account of the
+/// user at another service: the label and the icon of its button, the
+/// platforms that it works on, and the function that asks the identity
+/// provider for a credential.
+///
+/// A screen of sign-in shows a button for each method of
+/// [appSignInMethods] that [isAvailable]. On a tap, the state of the screen
+/// calls [credential] and gives what it returns to `appSession.signInWith`
+/// of `app_session.dart`.
+final class SignInMethod {
+  /// Creates a way to sign in with the identity provider [issuer].
+  const SignInMethod({
+    required this.label,
+    required this.icon,
+    required this.platforms,
+    required this.credential,
+    required this.issuer,
+    this.revokesOnDeletion = false,
+  });
+
+  /// Returns the label of the button in the language of the app, for the
+  /// context of the widget that shows it. That widget calls it each time it
+  /// builds, so the text follows the language of the app.
+  final String Function(BuildContext context) label;
+
+  /// The icon of the button, a constant widget: an `Icon` takes the colour
+  /// of the label, and an `Image` keeps its own colours.
+  final Widget icon;
+
+  /// The platforms that the way to sign in works on. On any other,
+  /// [isAvailable] is false.
+  final Set<TargetPlatform> platforms;
+
+  /// Asks the identity provider for a credential, such as with a sheet of
+  /// its own, and returns it, or `null` when the user closed the sheet,
+  /// which is no failure. It fails only with an `AuthFailure`.
+  ///
+  /// The state of a screen calls it, and no code within a call of
+  /// `appSession`: `appSession.deleteAccount()` calls it itself, for a
+  /// method that [revokesOnDeletion].
+  final Future<SignInCredential?> Function() credential;
+
+  /// The identity provider: the issuer of its tokens, an https URL such as
+  /// `https://accounts.example.com`. `AccountSession.issuers` of
+  /// `app_session.dart` lists those of the user of an account.
+  final String issuer;
+
+  /// Whether the deletion of an account that signs in this way asks the
+  /// identity provider for a credential again first, so that the provider
+  /// of sign-in can revoke the tokens that the identity provider gave the
+  /// app. `appSession.deleteAccount()` does it.
+  final bool revokesOnDeletion;
+
+  /// Whether the way to sign in works on the platform that the app runs on.
+  bool get isAvailable => platforms.contains(defaultTargetPlatform);
+}
+
+/// The ways to sign in with an identity provider of the app, in the order
+/// of their modules. An email address and a password are no such way:
+/// `appSession.signIn` and `appSession.signUp` take them.
+const List<SignInMethod> appSignInMethods = [];
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 
@@ -3107,6 +3412,19 @@ class FixtureTexts {
   String get signInFailureEmailInUse => switch (language) {
     'uk' => 'Для цієї пошти вже є акаунт. Увійдіть у нього.',
     _ => 'This email already has an account. Sign in instead.',
+  };
+
+  /// The text failureCredentialInUse of the module sign_in.
+  String get signInFailureCredentialInUse => switch (language) {
+    'uk' => 'Цей спосіб входу вже прив’язано до іншого акаунта.',
+    _ => 'This way to sign in is linked to another account already.',
+  };
+
+  /// The text failureOtherMethod of the module sign_in.
+  String get signInFailureOtherMethod => switch (language) {
+    'uk' => 'Акаунт із цією поштою вже є. Увійдіть так, як входили раніше.',
+    _ =>
+      'An account with this email exists already. Sign in the way you did before.',
   };
 
   /// The text failureWeakPassword of the module sign_in.
@@ -9079,6 +9397,10 @@ String authFailureText(BuildContext context, AuthFailureReason reason) =>
       AuthFailureReason.invalidCredentials =>
         context.l10n.signInFailureCredentials,
       AuthFailureReason.emailInUse => context.l10n.signInFailureEmailInUse,
+      AuthFailureReason.credentialInUse =>
+        context.l10n.signInFailureCredentialInUse,
+      AuthFailureReason.accountExistsWithOtherMethod =>
+        context.l10n.signInFailureOtherMethod,
       AuthFailureReason.weakPassword => context.l10n.signInFailureWeakPassword,
       AuthFailureReason.invalidEmail => context.l10n.signInEmailInvalid,
       AuthFailureReason.userDisabled => context.l10n.signInFailureDisabled,

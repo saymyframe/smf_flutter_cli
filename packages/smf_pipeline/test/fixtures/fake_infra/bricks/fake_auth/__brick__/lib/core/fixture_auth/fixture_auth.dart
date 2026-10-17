@@ -42,6 +42,11 @@ Future<AuthService> openFixtureAuth() async {
 /// Sign-in with accounts in memory. It takes any text for an email address
 /// and any password, and sends no message to reset one. Each of its calls
 /// takes a moment, as one that asks a server does.
+///
+/// It takes no credential of an identity provider: [signInWith],
+/// [linkWith] and a deletion with a fresh credential fail with
+/// [AuthFailureReason.notConfigured], as the role asks of a provider whose
+/// backend does not take the identity provider.
 final class FixtureAuth implements AuthService {
   FixtureAuth._();
 
@@ -137,6 +142,27 @@ final class FixtureAuth implements AuthService {
   }
 
   @override
+  Future<void> signInWith(SignInCredential credential) async {
+    await _answer();
+    throw _refused(credential);
+  }
+
+  @override
+  Future<void> linkWith(SignInCredential credential) async {
+    await _answer();
+    _signedIn();
+    throw _refused(credential);
+  }
+
+  /// The failure of a call with [credential], which the fixture does not
+  /// take.
+  AuthFailure _refused(SignInCredential credential) => AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint: 'The fixture sign-in takes no credential of an '
+            'identity provider, such as $credential.',
+      );
+
+  @override
   Future<void> signInAnonymously() async {
     await _answer();
     _set(AuthUser(uid: _newUid(), isAnonymous: true));
@@ -156,9 +182,10 @@ final class FixtureAuth implements AuthService {
   /// only if that user signed in through this service, since the app
   /// started.
   @override
-  Future<void> deleteAccount() async {
+  Future<void> deleteAccount({SignInCredential? fresh}) async {
     await _answer();
     final user = _signedIn();
+    if (fresh != null) throw _refused(fresh);
     if (!user.isAnonymous && !_signedInHere) {
       throw const AuthFailure(AuthFailureReason.recentSignInRequired);
     }
