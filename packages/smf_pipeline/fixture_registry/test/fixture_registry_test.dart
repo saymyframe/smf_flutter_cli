@@ -2386,6 +2386,12 @@ const _cases = [
   'fake_late_gate (go_router)',
   'fake_gate (fake_router)',
   'fake_gate (go_router)',
+  // The fixture onboarding with each router, which the onboarding screen
+  // role requires, with the localization role, which it uses, and without.
+  'fake_onboarding (fake_router) with localization',
+  'fake_onboarding (go_router) with localization',
+  'fake_onboarding (fake_router)',
+  'fake_onboarding (go_router)',
   'fake_sockets',
   'fake_overlap',
   'fake_analytics (fake_di, fake_router) with di, router',
@@ -2410,6 +2416,12 @@ const _cases = [
   'fake_preferences',
   'fake_preferences_user with preferences',
   'fake_preferences_user',
+  // The fixture steps of the onboarding, with the fixture onboarding and
+  // the first router, which its role requires, and without them.
+  'fake_steps with onboarding_screen, localization',
+  'fake_steps with onboarding_screen',
+  'fake_steps with localization',
+  'fake_steps',
   'fake_theme with localization',
   'fake_theme',
   // The fixture sign-in with each router and without one: the auth role

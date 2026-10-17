@@ -17,6 +17,7 @@ import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
+import 'package:fake_infra/bundles/fake_steps_bundle.dart';
 import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
@@ -662,6 +663,117 @@ final class FakePreferencesUserModule extends SmfModule {
           PreferencesRole.restorers,
           Fragment('restoreFixtureSetting', imports: [_file]),
           when: {preferencesRole},
+        ),
+      ];
+}
+
+/// A module with two steps of the onboarding, which it gives the onboarding
+/// screen role in an app with that role: `ask`, with the button `later`
+/// and a function that says whether the onboarding shows it, and then
+/// `confirm`, without either. Their actions note each call, and that of
+/// `ask` waits for what a test holds it back with and fails when a test
+/// says so. A test also says whether the onboarding shows `ask`.
+///
+/// It uses the localization role: the texts of the steps are texts of the
+/// module, in English and in Ukrainian, but for the text of `confirm`,
+/// which has no translation and reads in English in every language.
+final class FakeStepsModule extends SmfModule {
+  /// Creates the module.
+  const FakeStepsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_steps');
+
+  static const _file = ImportRef.app('core/fixture_steps/fixture_steps.dart');
+
+  static const _askTitle = LocalizedText(
+    'askTitle',
+    en: 'A step that asks',
+    translations: {'uk': 'Крок, що питає'},
+  );
+  static const _askText = LocalizedText(
+    'askText',
+    en: 'The fixture asks for something here.',
+    translations: {'uk': 'Тут фікстура про щось питає.'},
+  );
+  static const _askAction = LocalizedText(
+    'askAction',
+    en: 'Ask',
+    translations: {'uk': 'Спитати'},
+  );
+  static const _askLater = LocalizedText(
+    'askLater',
+    en: 'Not now',
+    translations: {'uk': 'Не зараз'},
+  );
+  static const _confirmTitle = LocalizedText(
+    'confirmTitle',
+    en: 'A step that confirms',
+    translations: {'uk': 'Крок, що підтверджує'},
+  );
+  static const _confirmText = LocalizedText(
+    'confirmText',
+    en: 'The fixture confirms something here.',
+  );
+  static const _confirmAction = LocalizedText(
+    'confirmAction',
+    en: 'Confirm',
+    translations: {'uk': 'Підтвердити'},
+  );
+
+  static const _icons = [ImportRef('package:flutter/material.dart')];
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Two steps of the onboarding (fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {onboardingScreenRole, localizationRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        // Only an app with an onboarding gets the functions of the steps
+        // and their texts.
+        BrickContribution(
+          fakeStepsBundle,
+          when: const {onboardingScreenRole},
+        ),
+        localizationRole.data(
+          const TextsData([
+            _askTitle,
+            _askText,
+            _askAction,
+            _askLater,
+            _confirmTitle,
+            _confirmText,
+            _confirmAction,
+          ]),
+          when: const {onboardingScreenRole},
+        ),
+        onboardingScreenRole.data(
+          const OnboardingStep(
+            name: 'ask',
+            stage: OnboardingStage.permission,
+            icon: Fragment('Icons.help_outline', imports: _icons),
+            title: _askTitle,
+            text: _askText,
+            action: _askAction,
+            later: _askLater,
+            run: FunctionRef('askFixture', import: _file),
+            showIf: FunctionRef('showsFixtureAsk', import: _file),
+          ),
+        ),
+        onboardingScreenRole.data(
+          const OnboardingStep(
+            name: 'confirm',
+            stage: OnboardingStage.permission,
+            icon: Fragment('Icons.check_circle_outline', imports: _icons),
+            title: _confirmTitle,
+            text: _confirmText,
+            action: _confirmAction,
+            run: FunctionRef('confirmFixture', import: _file),
+          ),
         ),
       ];
 }

@@ -26,7 +26,8 @@
 /// a later stage than the guards of the third, which does not bring the
 /// user back. It depends on the same state manager, and the registries list
 /// it before the third, so the stages of the guards go against the order of
-/// their modules.
+/// their modules. The fifth provides the onboarding screen role, with a
+/// screen that shows the steps of the onboarding of the app and no guard.
 library;
 
 import 'package:fake_feature/bundles/fake_feature_bloc_bundle.dart';
@@ -34,6 +35,7 @@ import 'package:fake_feature/bundles/fake_feature_bundle.dart';
 import 'package:fake_feature/bundles/fake_feature_riverpod_bundle.dart';
 import 'package:fake_feature/bundles/fake_gate_bundle.dart';
 import 'package:fake_feature/bundles/fake_late_gate_bundle.dart';
+import 'package:fake_feature/bundles/fake_onboarding_bundle.dart';
 import 'package:fake_feature/bundles/fake_second_bundle.dart';
 import 'package:fake_feature/bundles/fake_second_settings_bundle.dart';
 import 'package:fake_roles/fake_roles.dart';
@@ -504,5 +506,57 @@ final class FakeLateGateModule extends SmfModule {
             ],
           ),
         ),
+      ];
+}
+
+/// A provider of the onboarding screen role: a feature with a screen at
+/// `/fake_onboarding`, which it names as the onboarding screen, and no
+/// guard of the routes, so that nothing keeps the user on it and the tests
+/// of the router role see the other screens of the app as they are.
+///
+/// The screen has a page of its own first, then a page for each step of the
+/// onboarding that the modules of the app add, those that their showIf
+/// keeps when the screen opens, and a page of its own last. It reads the
+/// list of the steps that the template of the role generates, and draws
+/// each step plainly: its icon, its title as a header for a screen reader,
+/// its text and its buttons. The button of the action calls the action of
+/// the step once and shows the next page when its future completes, also
+/// when it fails; the button of later shows the next page without it.
+final class FakeOnboardingModule extends SmfModule {
+  /// Creates the module.
+  const FakeOnboardingModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_onboarding');
+
+  /// The name of the route of the screen.
+  static const _route = 'onboarding';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'An onboarding with the steps of the app (fixture)',
+        kind: ModuleKinds.feature,
+        providers: [RoleProvider.plain(onboardingScreenRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeOnboardingBundle),
+        routerRole.data(
+          const RoutesData([
+            Route(
+              '/',
+              name: _route,
+              screen: ScreenRef(
+                'FixtureOnboardingScreen',
+                import: ImportRef.app(
+                  'features/fake_onboarding/fixture_onboarding_screen.dart',
+                ),
+              ),
+            ),
+          ]),
+        ),
+        onboardingScreenRole.data(const OnboardingScreenRoute(_route)),
       ];
 }

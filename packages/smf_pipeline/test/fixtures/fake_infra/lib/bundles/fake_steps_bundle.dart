@@ -1,0 +1,22 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, implicit_dynamic_list_literal, implicit_dynamic_map_literal, inference_failure_on_collection_literal
+
+import 'package:mason/mason.dart';
+
+final fakeStepsBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "lib/core/fixture_steps/fixture_steps.dart",
+      "data":
+          "aW1wb3J0ICdkYXJ0OmFzeW5jJzsKCi8vLyBUaGUgc3RlcHMgb2YgdGhlIG9uYm9hcmRpbmcgb2YgdGhlIGZpeHR1cmUgd2hvc2UgYWN0aW9uIHJhbiwgaW4gdGhlCi8vLyBvcmRlciBvZiB0aGUgY2FsbHM6IGBhc2tgIG9yIGBjb25maXJtYCBmb3IgZWFjaCBjYWxsIG9mIHRoZSBhY3Rpb24gb2YKLy8vIHRoZSBzdGVwIG9mIHRoYXQgbmFtZS4KZmluYWwgTGlzdDxTdHJpbmc+IGZpeHR1cmVTdGVwQ2FsbHMgPSBbXTsKCi8vLyBXaGV0aGVyIHRoZSBvbmJvYXJkaW5nIHNob3dzIHRoZSBzdGVwIGBhc2tgLCB3aGljaCBhIHRlc3Qgc2V0czogdGhlCi8vLyBvbmJvYXJkaW5nIGFza3MgW3Nob3dzRml4dHVyZUFza10gb25jZSBlYWNoIHRpbWUgaXQgb3BlbnMuCmJvb2wgZml4dHVyZUFza1Nob3dzID0gdHJ1ZTsKCi8vLyBXaGF0IHRoZSBhY3Rpb24gb2YgdGhlIHN0ZXAgYGFza2Agd2FpdHMgZm9yIG9uY2UgaXQgbm90ZWQgaXRzIGNhbGwsIGFzCi8vLyBhIHRlc3Qgc2V0cyBpdCB0byBob2xkIHRoZSBhY3Rpb24gYmFjaywgb3IgYG51bGxgIGZvciBub3RoaW5nLgpDb21wbGV0ZXI8dm9pZD4/IGZpeHR1cmVBc2tIb2xkOwoKLy8vIFdoZXRoZXIgdGhlIGFjdGlvbiBvZiB0aGUgc3RlcCBgYXNrYCBmYWlscyBvbmNlIGl0IG5vdGVkIGl0cyBjYWxsLCBhcyBhCi8vLyB0ZXN0IHNldHMgaXQuCmJvb2wgZml4dHVyZUFza0ZhaWxzID0gZmFsc2U7CgovLy8gVGhlIGFjdGlvbiBvZiB0aGUgc3RlcCBgYXNrYDogbm90ZXMgaXRzIGNhbGwgaW4gW2ZpeHR1cmVTdGVwQ2FsbHNdLAovLy8gZmFpbHMgaWYgW2ZpeHR1cmVBc2tGYWlsc10sIGFuZCB0aGVuIHdhaXRzIGZvciBbZml4dHVyZUFza0hvbGRdLgpGdXR1cmU8dm9pZD4gYXNrRml4dHVyZSgpIGFzeW5jIHsKICBmaXh0dXJlU3RlcENhbGxzLmFkZCgnYXNrJyk7CiAgaWYgKGZpeHR1cmVBc2tGYWlscykgewogICAgdGhyb3cgU3RhdGVFcnJvcignVGhlIGFjdGlvbiBvZiB0aGUgZml4dHVyZSBzdGVwIGFzayBmYWlscy4nKTsKICB9CiAgYXdhaXQgZml4dHVyZUFza0hvbGQ/LmZ1dHVyZTsKfQoKLy8vIFdoZXRoZXIgdGhlIG9uYm9hcmRpbmcgc2hvd3MgdGhlIHN0ZXAgYGFza2A6IFtmaXh0dXJlQXNrU2hvd3NdLgpib29sIHNob3dzRml4dHVyZUFzaygpID0+IGZpeHR1cmVBc2tTaG93czsKCi8vLyBUaGUgYWN0aW9uIG9mIHRoZSBzdGVwIGBjb25maXJtYDogbm90ZXMgaXRzIGNhbGwgaW4gW2ZpeHR1cmVTdGVwQ2FsbHNdLgpGdXR1cmU8dm9pZD4gY29uZmlybUZpeHR1cmUoKSBhc3luYyB7CiAgZml4dHVyZVN0ZXBDYWxscy5hZGQoJ2NvbmZpcm0nKTsKfQo=",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "fake_steps",
+  "description":
+      "A brick of the fixture package fake_infra, for the tests of the SMF pipeline.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "vars": {}
+});

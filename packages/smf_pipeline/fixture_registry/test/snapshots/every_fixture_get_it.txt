@@ -78,6 +78,12 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
 - Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
 
+## Onboarding screen
+
+- The onboarding shows the steps of `appOnboardingSteps` in `lib/core/onboarding/onboarding_steps.dart`, each on a page of its own, in the order of the list. A step is an `OnboardingStep`: an `icon`, a `title`, a `text`, the label of its `action` and the function `run` that the action calls. Its `later` is the label of a button that goes on without calling `run`, and the onboarding leaves the step out when its `showIf` returns `false` as the onboarding opens.
+- To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` returns a `Future`, and `showIf` returns a `bool` at once. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
+- Skipping the onboarding skips its steps. So the app does not rely on `run` alone for what a step does, such as asking for a permission: the code that needs it calls the same function too.
+
 ## Preferences
 
 - `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
@@ -2444,6 +2450,43 @@ void restoreFixtureSetting(AppPreferences preferences) {
     );
   }
 }
+=== lib/core/fixture_steps/fixture_steps.dart (fake_steps) ===
+import 'dart:async';
+
+/// The steps of the onboarding of the fixture whose action ran, in the
+/// order of the calls: `ask` or `confirm` for each call of the action of
+/// the step of that name.
+final List<String> fixtureStepCalls = [];
+
+/// Whether the onboarding shows the step `ask`, which a test sets: the
+/// onboarding asks [showsFixtureAsk] once each time it opens.
+bool fixtureAskShows = true;
+
+/// What the action of the step `ask` waits for once it noted its call, as
+/// a test sets it to hold the action back, or `null` for nothing.
+Completer<void>? fixtureAskHold;
+
+/// Whether the action of the step `ask` fails once it noted its call, as a
+/// test sets it.
+bool fixtureAskFails = false;
+
+/// The action of the step `ask`: notes its call in [fixtureStepCalls],
+/// fails if [fixtureAskFails], and then waits for [fixtureAskHold].
+Future<void> askFixture() async {
+  fixtureStepCalls.add('ask');
+  if (fixtureAskFails) {
+    throw StateError('The action of the fixture step ask fails.');
+  }
+  await fixtureAskHold?.future;
+}
+
+/// Whether the onboarding shows the step `ask`: [fixtureAskShows].
+bool showsFixtureAsk() => fixtureAskShows;
+
+/// The action of the step `confirm`: notes its call in [fixtureStepCalls].
+Future<void> confirmFixture() async {
+  fixtureStepCalls.add('confirm');
+}
 === lib/core/l10n/app_locale.dart (role:localization) ===
 import 'package:flutter/widgets.dart';
 
@@ -2604,6 +2647,45 @@ class FixtureTexts {
     'uk' => 'Другий',
     _ => 'Second',
   };
+
+  /// The text askTitle of the module fake_steps.
+  String get fakeStepsAskTitle => switch (language) {
+    'uk' => 'Крок, що питає',
+    _ => 'A step that asks',
+  };
+
+  /// The text askText of the module fake_steps.
+  String get fakeStepsAskText => switch (language) {
+    'uk' => 'Тут фікстура про щось питає.',
+    _ => 'The fixture asks for something here.',
+  };
+
+  /// The text askAction of the module fake_steps.
+  String get fakeStepsAskAction => switch (language) {
+    'uk' => 'Спитати',
+    _ => 'Ask',
+  };
+
+  /// The text askLater of the module fake_steps.
+  String get fakeStepsAskLater => switch (language) {
+    'uk' => 'Не зараз',
+    _ => 'Not now',
+  };
+
+  /// The text confirmTitle of the module fake_steps.
+  String get fakeStepsConfirmTitle => switch (language) {
+    'uk' => 'Крок, що підтверджує',
+    _ => 'A step that confirms',
+  };
+
+  /// The text confirmText of the module fake_steps.
+  String get fakeStepsConfirmText => 'The fixture confirms something here.';
+
+  /// The text confirmAction of the module fake_steps.
+  String get fakeStepsConfirmAction => switch (language) {
+    'uk' => 'Підтвердити',
+    _ => 'Confirm',
+  };
 }
 
 class _FixtureTextsDelegate extends LocalizationsDelegate<FixtureTexts> {
@@ -2621,6 +2703,99 @@ class _FixtureTextsDelegate extends LocalizationsDelegate<FixtureTexts> {
   @override
   bool shouldReload(_FixtureTextsDelegate old) => false;
 }
+=== lib/core/onboarding/onboarding_steps.dart (role:onboarding_screen) ===
+import 'package:fixture_app/core/fixture_steps/fixture_steps.dart' as step0;
+import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+
+/// A step of the onboarding, such as a page that asks for a permission: an
+/// icon, a title, a text, and a button whose action is [run].
+///
+/// The onboarding shows each step of [appOnboardingSteps] on a page of its
+/// own, in the order of the list, unless [showIf] returns `false` when the
+/// onboarding opens. Skipping the onboarding skips its steps too.
+final class OnboardingStep {
+  /// Creates a step with [icon], [title] and [text], whose button [action]
+  /// calls [run], and with a second button [later] if it is set.
+  const OnboardingStep({
+    required this.icon,
+    required this.title,
+    required this.text,
+    required this.action,
+    required this.run,
+    this.later,
+    this.showIf,
+  });
+
+  /// The icon of the page of the step.
+  final IconData icon;
+
+  /// Returns the title of the page in the language of the app, for the
+  /// context of the widget that shows it. That widget calls it each time it
+  /// builds, so the text follows the language of the app.
+  final String Function(BuildContext context) title;
+
+  /// Returns the text of the page below its title, as [title] does.
+  final String Function(BuildContext context) text;
+
+  /// Returns the label of the button that calls [run], as [title] does.
+  final String Function(BuildContext context) action;
+
+  /// What the button [action] does, such as asking for a permission. The
+  /// onboarding goes on to its next page once the future completes, also
+  /// when it fails.
+  final Future<void> Function() run;
+
+  /// Returns the label of the button that goes on to the next page without
+  /// calling [run], as [title] does, or is `null` for a step without that
+  /// button.
+  final String Function(BuildContext context)? later;
+
+  /// Whether the onboarding shows the step, which it asks once when it
+  /// opens, or `null` for a step that it always shows.
+  final bool Function()? showIf;
+}
+
+/// The steps of the onboarding, in the order in which it shows them.
+const List<OnboardingStep> appOnboardingSteps = [
+  OnboardingStep(
+    icon: Icons.help_outline,
+    title: _fakeStepsAskTitle,
+    text: _fakeStepsAskText,
+    action: _fakeStepsAskAction,
+    run: step0.askFixture,
+    later: _fakeStepsAskLater,
+    showIf: step0.showsFixtureAsk,
+  ),
+  OnboardingStep(
+    icon: Icons.check_circle_outline,
+    title: _fakeStepsConfirmTitle,
+    text: _fakeStepsConfirmText,
+    action: _fakeStepsConfirmAction,
+    run: step0.confirmFixture,
+  ),
+];
+
+String _fakeStepsAskTitle(BuildContext context) =>
+    context.l10n.fakeStepsAskTitle;
+
+String _fakeStepsAskText(BuildContext context) => context.l10n.fakeStepsAskText;
+
+String _fakeStepsAskAction(BuildContext context) =>
+    context.l10n.fakeStepsAskAction;
+
+String _fakeStepsAskLater(BuildContext context) =>
+    context.l10n.fakeStepsAskLater;
+
+String _fakeStepsConfirmTitle(BuildContext context) =>
+    context.l10n.fakeStepsConfirmTitle;
+
+String _fakeStepsConfirmText(BuildContext context) =>
+    context.l10n.fakeStepsConfirmText;
+
+String _fakeStepsConfirmAction(BuildContext context) =>
+    context.l10n.fakeStepsConfirmAction;
 === lib/core/preferences/app_preferences.dart (role:preferences) ===
 import 'package:fixture_app/core/fixture_preferences/fixture_preferences.dart'
     as impl0;
@@ -3297,6 +3472,8 @@ import 'package:fixture_app/features/fake_gate/fixture_gate_screens.dart'
     as screen6;
 import 'package:fixture_app/features/fake_late_gate/fixture_late_gate_screen.dart'
     as screen5;
+import 'package:fixture_app/features/fake_onboarding/fixture_onboarding_screen.dart'
+    as screen7;
 import 'package:fixture_app/features/fake_second/fixture_members_screens.dart'
     as screen4;
 import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
@@ -3845,6 +4022,7 @@ Widget _screen(AppLocation location) => switch (location) {
   FakeGateGateLocation() => const screen6.FixtureGateScreen(),
   FakeGateStepLocation() => const screen6.FixtureGateStepScreen(),
   FakeGateSecondLocation() => const screen6.FixtureSecondGateScreen(),
+  FakeOnboardingOnboardingLocation() => const screen7.FixtureOnboardingScreen(),
 };
 === lib/core/router/fixture_annotations.dart (fake_router) ===
 import 'package:meta/meta_meta.dart';
@@ -4097,6 +4275,18 @@ final class FakeGateSecondLocation extends AppLocation {
   String get path => '/fake_gate/second';
 }
 
+/// The location of `fake_onboarding.onboarding`: `/fake_onboarding`.
+final class FakeOnboardingOnboardingLocation extends AppLocation {
+  /// Creates the location.
+  const FakeOnboardingOnboardingLocation();
+
+  @override
+  String get routeName => 'fake_onboarding.onboarding';
+
+  @override
+  String get path => '/fake_onboarding';
+}
+
 String _withQuery(String path, Map<String, String?> query) {
   query.removeWhere((key, value) => value == null);
   return query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
@@ -4125,6 +4315,9 @@ final class AppNav {
 
   /// The routes of the module `fake_gate`.
   FakeGateRoutes get fakeGate => FakeGateRoutes._(_context);
+
+  /// The routes of the module `fake_onboarding`.
+  FakeOnboardingRoutes get fakeOnboarding => FakeOnboardingRoutes._(_context);
 }
 
 /// The routes of the module `fake_feature`.
@@ -4195,6 +4388,17 @@ final class FakeGateRoutes {
 
   /// The route `fake_gate.second`: `/fake_gate/second`.
   NavLink second() => NavLink(_context, const FakeGateSecondLocation());
+}
+
+/// The routes of the module `fake_onboarding`.
+final class FakeOnboardingRoutes {
+  const FakeOnboardingRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `fake_onboarding.onboarding`: `/fake_onboarding`.
+  NavLink onboarding() =>
+      NavLink(_context, const FakeOnboardingOnboardingLocation());
 }
 === lib/core/theme/app_theme.dart (fake_theme) ===
 import 'package:flutter/material.dart';
@@ -4577,6 +4781,143 @@ class FixtureLateGateScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Scaffold();
+}
+=== lib/features/fake_onboarding/fixture_onboarding_screen.dart (fake_onboarding) ===
+import 'package:fixture_app/core/router/fixture_annotations.dart';
+import 'package:flutter/material.dart';
+
+import '../../core/onboarding/onboarding_steps.dart';
+
+/// The onboarding of the fixture: a first page of its own, a page for each
+/// step of [appOnboardingSteps] that its showIf keeps when the screen
+/// opens, in the order of the list, and a last page of its own. The pages
+/// turn with a swipe, and the button of the action of a step, or that of
+/// its later, shows the next page.
+@FixtureScreen('fake_onboarding.onboarding')
+class FixtureOnboardingScreen extends StatefulWidget {
+  /// Creates the screen.
+  const FixtureOnboardingScreen({super.key});
+
+  @override
+  State<FixtureOnboardingScreen> createState() =>
+      _FixtureOnboardingScreenState();
+}
+
+class _FixtureOnboardingScreenState extends State<FixtureOnboardingScreen> {
+  final _controller = PageController();
+
+  /// The steps that the screen shows: those of [appOnboardingSteps] that
+  /// their showIf keeps when the screen opens. A step stays while the
+  /// screen is shown, also once its showIf would leave it out.
+  late final List<OnboardingStep> _steps = [
+    for (final step in appOnboardingSteps)
+      if (step.showIf?.call() ?? true) step,
+  ];
+
+  /// Whether the action of a step runs, while the buttons of the steps take
+  /// no tap.
+  var _running = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Shows the page after the one that the user sees.
+  void _next() {
+    _controller.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  /// Calls the action of [step] and shows the next page once its future
+  /// completes, also when it fails: the error goes on to the handlers of
+  /// the uncaught errors of the app.
+  Future<void> _run(OnboardingStep step) async {
+    setState(() => _running = true);
+    try {
+      await step.run();
+    } finally {
+      if (mounted) {
+        setState(() => _running = false);
+        _next();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: PageView(
+        controller: _controller,
+        children: [
+          const _OwnPage('The onboarding of the fixture'),
+          for (final step in _steps)
+            _StepPage(
+              step: step,
+              onAction: _running ? null : () => _run(step),
+              onLater: _running ? null : _next,
+            ),
+          const _OwnPage('The onboarding of the fixture is over'),
+        ],
+      ),
+    ),
+  );
+}
+
+/// A page of the onboarding of the fixture itself, with [title].
+class _OwnPage extends StatelessWidget {
+  const _OwnPage(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Center(child: Text(title));
+}
+
+/// The page of [step]: its icon, its title as a header for a screen
+/// reader, its text, the button of its action, which calls [onAction], and
+/// that of its later, if it has one, which calls [onLater]. The labels are
+/// read each time the page builds, so they follow the language of the app.
+class _StepPage extends StatelessWidget {
+  const _StepPage({
+    required this.step,
+    required this.onAction,
+    required this.onLater,
+  });
+
+  final OnboardingStep step;
+  final VoidCallback? onAction;
+  final VoidCallback? onLater;
+
+  @override
+  Widget build(BuildContext context) {
+    final later = step.later;
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(step.icon, size: 48),
+          const SizedBox(height: 16),
+          // A node of its own, which a screen reader announces as a header.
+          Semantics(
+            container: true,
+            header: true,
+            child: Text(step.title(context)),
+          ),
+          const SizedBox(height: 8),
+          Text(step.text(context)),
+          const SizedBox(height: 24),
+          FilledButton(onPressed: onAction, child: Text(step.action(context))),
+          if (later != null)
+            TextButton(onPressed: onLater, child: Text(later(context))),
+        ],
+      ),
+    );
+  }
 }
 === lib/features/fake_second/fixture_members_screens.dart (fake_second) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';

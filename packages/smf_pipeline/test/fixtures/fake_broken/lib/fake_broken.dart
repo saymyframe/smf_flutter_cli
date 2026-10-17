@@ -14,6 +14,7 @@ import 'dart:convert';
 
 import 'package:fake_broken/bundles/broken_layout_bundle.dart';
 import 'package:fake_broken/bundles/broken_layout_labels_bundle.dart';
+import 'package:fake_broken/bundles/broken_onboarding_bundle.dart';
 import 'package:fake_broken/bundles/broken_settings_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
@@ -1012,4 +1013,51 @@ final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
       },
     );
   }
+}
+
+/// A provider of the onboarding screen role with one known bug: a feature
+/// whose screen shows a page for each step of the onboarding, also for a
+/// step whose showIf would leave it out, which it never asks.
+///
+/// The screen still reads the list of the steps, as the rule
+/// `onboarding_screen.steps_shown` of the role wants, and the app analyzes:
+/// only a running app shows the bug.
+final class BrokenOnboardingModule extends SmfModule {
+  /// Creates the module.
+  const BrokenOnboardingModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_onboarding_ignores_conditions');
+
+  /// The name of the route of the screen.
+  static const _route = 'onboarding';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'An onboarding that shows every step (fixture)',
+        kind: ModuleKinds.feature,
+        providers: [RoleProvider.plain(onboardingScreenRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(brokenOnboardingBundle),
+        routerRole.data(
+          const RoutesData([
+            Route(
+              '/',
+              name: _route,
+              screen: ScreenRef(
+                'BrokenOnboardingScreen',
+                import: ImportRef.app(
+                  'features/broken_onboarding_ignores_conditions/'
+                  'broken_onboarding_screen.dart',
+                ),
+              ),
+            ),
+          ]),
+        ),
+        onboardingScreenRole.data(const OnboardingScreenRoute(_route)),
+      ];
 }
