@@ -26,7 +26,8 @@ const _feed = StartFeature('feed');
 /// The modules of the tests: flutter_core, which creates the app,
 /// go_router, which routes it and asks the guard of the module, preferences
 /// in memory, gen_l10n, which provides the localization role, a feature
-/// that can start the app, and this module.
+/// that can start the app, this module, and a module with a step of the
+/// onboarding, which this module shows.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   GoRouterModule(),
@@ -34,6 +35,7 @@ const List<SmfModule> _modules = [
   GenL10nModule(),
   _feed,
   OnboardingModule(),
+  StepsModule(),
 ];
 
 /// The paths of the files of the module in the app.
@@ -177,6 +179,48 @@ final class _ForElements extends RecursiveAstVisitor<void> {
   }
 }
 
+/// The identifiers [name] in the code of [node], in the order of the code.
+List<SimpleIdentifier> _identifiersIn(AstNode node, String name) {
+  final visitor = _Identifiers(name);
+  node.accept(visitor);
+  return visitor.found;
+}
+
+final class _Identifiers extends RecursiveAstVisitor<void> {
+  _Identifiers(this.name);
+
+  final String name;
+
+  final List<SimpleIdentifier> found = [];
+
+  @override
+  void visitSimpleIdentifier(SimpleIdentifier node) {
+    // A reference in a comment, such as `[name]`, is not code.
+    if (node.name == name && node.thisOrAncestorOfType<Comment>() == null) {
+      found.add(node);
+    }
+    super.visitSimpleIdentifier(node);
+  }
+}
+
+/// What [node] assigns to variables, each by the code of the variable, as
+/// the code of its value.
+Map<String, String> _assignmentsOf(AstNode node) {
+  final visitor = _Assignments();
+  node.accept(visitor);
+  return visitor.values;
+}
+
+final class _Assignments extends RecursiveAstVisitor<void> {
+  final Map<String, String> values = {};
+
+  @override
+  void visitAssignmentExpression(AssignmentExpression node) {
+    values[node.leftHandSide.toSource()] = node.rightHandSide.toSource();
+    super.visitAssignmentExpression(node);
+  }
+}
+
 /// The URIs of the imports of [unit].
 List<String> _importsOf(CompilationUnit unit) => [
       for (final directive in unit.directives.whereType<ImportDirective>())
@@ -308,13 +352,14 @@ void main() {
 
   group('OnboardingModule', () {
     test(
-        'is a feature without variants, which requires the router and the '
-        'preferences and uses the localization', () {
+        'is a feature without variants, which provides the onboarding '
+        'screen, requires the router and the preferences and uses the '
+        'localization', () {
       final descriptor = module.descriptor;
 
       expect(descriptor.id, const ModuleId('onboarding'));
       expect(descriptor.kind, ModuleKinds.feature);
-      expect(descriptor.provides, isEmpty);
+      expect(descriptor.provides, {onboardingScreenRole});
       // The kind makes a feature require the router.
       expect(descriptor.requires, {preferencesRole});
       expect(descriptor.effectiveRequires, {preferencesRole, routerRole});
@@ -391,11 +436,12 @@ void main() {
 
     test(
         'contributes its brick with the key of the preferences, the symbol '
-        'of the app and the texts, its route with the guard, its restorer, '
-        'its texts and its note for coding agents, and nothing else', () {
+        'of the app and the texts, its route with the guard, that route as '
+        'the onboarding screen, its restorer, its texts and its note for '
+        'coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(5));
+      expect(contributions, hasLength(6));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(onboardingBundle));
       expect(brick.bundle.name, 'onboarding');
@@ -435,8 +481,15 @@ void main() {
             (localizationRole, 'context.l10n.$getter', "'$english'"),
         ],
       );
-      expect(contributions[1], isA<RoleData<RoutesData>>());
-      final restorer = contributions[2] as SocketContribution;
+      final routes = contributions[1] as RoleData<RoutesData>;
+      final screen = contributions[2] as RoleData<OnboardingData>;
+      expect(screen.role, onboardingScreenRole);
+      expect(
+        (screen.value as OnboardingScreenRoute).name,
+        routes.value.routes.single.name,
+      );
+      expect(screen.when, isEmpty);
+      final restorer = contributions[3] as SocketContribution;
       expect(restorer.socket, PreferencesRole.restorers);
       expect(restorer.fragment!.code, 'restoreOnboarding');
       expect(
@@ -445,10 +498,10 @@ void main() {
       );
       // The module requires the preferences, so every app with it has them.
       expect(restorer.when, isEmpty);
-      final texts = contributions[3] as RoleData<TextsData>;
+      final texts = contributions[4] as RoleData<TextsData>;
       expect(texts.role, localizationRole);
       expect(texts.value, same(OnboardingModule.texts));
-      final note = contributions[4] as SocketContribution;
+      final note = contributions[5] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, agentHeading);
       expect(note.entryValue, AgentNote(agentNote));
@@ -465,7 +518,9 @@ void main() {
 
     test(
         'builds the app of the module with the localization and without, '
-        'each with the router and the preferences that it requires', () {
+        'each with the router and the preferences that it requires, and the '
+        'app of a module with a step with this module as its onboarding '
+        'screen', () {
       expect(results.map((result) => result.contractCase.name), [
         'flutter_core with router, localization',
         'flutter_core with router',
@@ -476,6 +531,10 @@ void main() {
         'feed',
         'onboarding with localization',
         'onboarding',
+        // The module with a step, with this module, which shows it, and
+        // without an onboarding.
+        'steps with onboarding_screen',
+        'steps',
       ]);
       for (final result in results) {
         if (!result.contractCase.name.startsWith('onboarding')) continue;
@@ -499,6 +558,20 @@ void main() {
           reason: '${result.contractCase}',
         );
       }
+      expect(
+        {
+          for (final result in results)
+            if (result.contractCase.name.startsWith('steps'))
+              result.contractCase.name: _providersOf(
+                result,
+                onboardingScreenRole,
+              ),
+        },
+        {
+          'steps with onboarding_screen': {OnboardingModule.id},
+          'steps': isEmpty,
+        },
+      );
     });
 
     test('finds no errors in any app, rendered code included', () {
@@ -557,18 +630,31 @@ void main() {
 
     test(
         'is the app of the router and of the preferences but for its files, '
-        'its route with the guard, its restorer and its note', () {
+        'its route with the guard, its restorer, its note, and the steps of '
+        'the onboarding screen role, which it provides', () {
       // The provider of the router renders the route and asks the guard in
       // files of its own, whichever they are.
       final changedBy = _providersOf(result, routerRole);
 
       expect(
         app.files.keys.toSet(),
-        {...without.files.keys, _pages, _screen, _status},
+        {
+          ...without.files.keys,
+          _pages,
+          _screen,
+          _status,
+          OnboardingScreenRole.stepsFile,
+        },
       );
       for (final path in [_pages, _screen, _status]) {
         expect(app.files[path]!.owner, _module, reason: path);
       }
+      // The list of the steps, which the template of the role generates in
+      // every app with the role, empty in an app whose modules add none.
+      expect(
+        app.files[OnboardingScreenRole.stepsFile]!.owner,
+        const RoleTemplateOrigin(onboardingScreenRole),
+      );
       final changed = <String>[];
       for (final MapEntry(key: path, value: file) in without.files.entries) {
         expect(app.files[path]!.owner, file.owner, reason: path);
@@ -593,18 +679,29 @@ void main() {
         ]),
       );
       // The guide has the notes of the app without the module, the section
-      // of the module, and the note of the router role about the guards of
-      // the routes, which an app without a guard lacks. The note of the
-      // module leaves to it what a router does with a guard.
+      // of the module, the note of the onboarding screen role, and the note
+      // of the router role about the guards of the routes, which an app
+      // without a guard lacks. The note of the module leaves to them what a
+      // router does with a guard and what a step of the onboarding is.
       final notes = app.entriesOf(AppEntryRole.agentSections);
       final notesWithout = without.entriesOf(AppEntryRole.agentSections);
       bool ofGuards((ContributionOrigin, String, AgentNote) note) =>
           note.$1 == const RoleTemplateOrigin(routerRole) &&
           note.$3.text.contains('`${RouterRole.routeGuards}`');
+      const ofSteps = RoleTemplateOrigin(onboardingScreenRole);
       expect(notesWithout.where(ofGuards), isEmpty);
       expect(notes.where(ofGuards), hasLength(1));
       expect(
-        notes.where((note) => note.$1 != _module && !ofGuards(note)),
+        [
+          for (final (origin, heading, _) in notes)
+            if (origin == ofSteps) heading,
+        ],
+        [onboardingScreenRole.description],
+      );
+      expect(
+        notes.where(
+          (note) => note.$1 != _module && note.$1 != ofSteps && !ofGuards(note),
+        ),
         notesWithout,
       );
     });
@@ -709,6 +806,66 @@ void main() {
           ),
         ],
       );
+    });
+  });
+
+  group('the app with the onboarding and a module with a step', () {
+    late ContractResult result;
+    late RoleHookInput<Object> input;
+
+    setUpAll(() async {
+      result = await _rendered(const [OnboardingModule.id, StepsModule.id]);
+      input = onboardingScreenRole.hookInput(result.hook!);
+    });
+
+    test(
+        'has the onboarding of the module as its onboarding screen, at the '
+        'route of the module, where code that knows only the role finds it',
+        () {
+      final screen = onboardingScreenRole.screenIn(input)!;
+
+      expect(
+        _providersOf(result, onboardingScreenRole),
+        {OnboardingModule.id},
+      );
+      expect(screen.fullName, 'onboarding.onboarding');
+      expect(screen.fullPath, '/onboarding');
+      expect(screen.hasRequiredParams, isFalse);
+      expect(screen.route.screen.className, 'OnboardingScreen');
+      expect(screen.route.screen.file, _screen);
+    });
+
+    test(
+        'shows the step of the other module: its screen reads the list of '
+        'the steps that the template of the role generates with the step, '
+        'as the rule onboarding_screen.steps_shown of the role checks', () {
+      expect(
+        [for (final step in onboardingScreenRole.stepsIn(input)) step.fullName],
+        ['steps.ask'],
+      );
+      final list = _parsed(result.app!, OnboardingScreenRole.stepsFile)
+          .declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .single
+          .variables
+          .variables
+          .single;
+      expect(list.name.lexeme, OnboardingScreenRole.appOnboardingSteps);
+      expect((list.initializer! as ListLiteral).elements, hasLength(1));
+      expect(
+        _identifiersIn(
+          _parsed(result.app!, _screen),
+          OnboardingScreenRole.appOnboardingSteps,
+        ),
+        hasLength(1),
+      );
+      // The rule that reports a provider whose files do not read the list,
+      // which finds nothing to report here.
+      expect(
+        [for (final rule in onboardingScreenRole.structuralRules) rule.id],
+        contains('onboarding_screen.steps_shown'),
+      );
+      expect(result.errors, isEmpty);
     });
   });
 
@@ -1078,10 +1235,12 @@ void main() {
   group('the screen of the onboarding', () {
     late RenderedApp app;
     late CompilationUnit unit;
+    late MethodDeclaration build;
 
     setUpAll(() async {
       app = (await _rendered(const [OnboardingModule.id])).app!;
       unit = _parsed(app, _screen);
+      build = _methodOf(unit, '_OnboardingScreenState', 'build');
     });
 
     test(
@@ -1098,49 +1257,155 @@ void main() {
       expect(constructor.name, isNull);
       expect(constructor.constKeyword, isNotNull);
       expect(constructor.parameters.toSource(), '({super.key})');
-      // The page that the user sees is the state of a PageController.
+      // The page that the user sees is the state of a PageController, next
+      // to the steps that the screen shows and whether the action of one
+      // runs.
       final state = _classOf(unit, '_OnboardingScreenState');
       expect(
         '${state.extendsClause!.superclass}',
         'State<OnboardingScreen>',
       );
       expect(
-        [
+        {
           for (final field in state.body.members.whereType<FieldDeclaration>())
-            field.fields.variables.single.toSource(),
-        ],
-        ['_controller = PageController()', '_page = 0'],
+            field.fields.variables.single.name.lexeme:
+                field.fields.variables.single.initializer?.toSource(),
+        },
+        {
+          '_controller': 'PageController()',
+          '_steps': isNotNull,
+          '_page': '0',
+          '_running': 'false',
+        },
       );
     });
 
     test(
         'only finishes the onboarding and does not navigate: it knows '
-        'neither the router nor the navigation of the app, and no package '
-        'but Flutter', () {
+        'neither the router nor the navigation of the app, no package but '
+        'Flutter, and of the files of the roles only the steps of the '
+        'onboarding', () {
       expect(_importsOf(unit), [
         'dart:ui',
         'package:flutter/material.dart',
         'package:flutter/services.dart',
+        '../../core/onboarding/onboarding_steps.dart',
         'onboarding_pages.dart',
         'onboarding_status.dart',
       ]);
+      // The file that the template of the role generates in every app with
+      // the role, whichever module provides it.
+      expect(
+        OnboardingScreenRole.stepsFile,
+        'lib/core/onboarding/onboarding_steps.dart',
+      );
+      expect(
+        onboardingScreenRole.interface.files,
+        contains(OnboardingScreenRole.stepsFile),
+      );
+    });
+
+    test(
+        'asks the steps of the app once, when it is first built, and keeps '
+        'those whose showIf keeps them while it is shown', () {
+      final steps = _classOf(unit, '_OnboardingScreenState')
+          .body
+          .members
+          .whereType<FieldDeclaration>()
+          .singleWhere(
+            (field) => field.fields.variables.single.name.lexeme == '_steps',
+          );
+
+      expect(steps.fields.lateKeyword, isNotNull);
+      expect(steps.fields.isFinal, isTrue);
+      expect('${steps.fields.type}', 'List<OnboardingStep>');
+      final each = (steps.fields.variables.single.initializer! as ListLiteral)
+          .elements
+          .single as ForElement;
+      expect(
+        each.forLoopParts.toSource(),
+        'final step in ${OnboardingScreenRole.appOnboardingSteps}',
+      );
+      expect(each.body.toSource(), 'if (step.showIf?.call() ?? true) step');
+      // Nothing else reads the list, or asks a step again.
+      expect(
+        _identifiersIn(unit, OnboardingScreenRole.appOnboardingSteps),
+        hasLength(1),
+      );
+      expect(_identifiersIn(unit, 'showIf'), hasLength(1));
+    });
+
+    test(
+        'shows each step that it keeps on a page in the look of its own '
+        'pages, before the last page of the list, with the labels of the '
+        'step in the language of the app', () {
+      final variables = _variablesOf(build);
+
+      expect(variables, containsPair('own', 'onboardingPages(context)'));
+      expect(
+        variables,
+        containsPair('first', 'own.isEmpty ? 0 : own.length - 1'),
+      );
+      expect(
+        variables,
+        containsPair(
+          'pages',
+          '[...own.take(first), for (final step in _steps) '
+              'OnboardingPage(icon: step.icon, title: step.title(context), '
+              'text: step.text(context)), ...own.skip(first)]',
+        ),
+      );
+      // The step on the page that the user sees.
+      expect(
+        variables,
+        containsPair(
+          'step',
+          '_page >= first && _page < first + _steps.length ? '
+              '_steps[_page - first] : null',
+        ),
+      );
     });
 
     test(
         'has Skip, which finishes the onboarding, above the pages, and one '
-        'button of the whole width below them, which shows the next page as '
-        'Next and finishes the onboarding as Get started on the last page', () {
-      expect(_buttonsOf(unit), [
-        ('TextButton', 'onboardingStatus.complete', "'Skip'"),
-        (
-          'FilledButton',
-          'isLast ? onboardingStatus.complete : _next',
-          "isLast ? 'Get started' : 'Next'",
-        ),
-      ]);
+        'button of the whole width below them: Next, which shows the next '
+        'page, Get started, which finishes the onboarding on the last page, '
+        'and the action of a step on its page', () {
+      final [skip, button, ...] = _buttonCalls(unit);
+
+      expect(skip.methodName.name, 'TextButton');
+      expect(
+        _argument(skip, 'onPressed').toSource(),
+        'onboardingStatus.complete',
+      );
+      expect(_textsOf(_argument(skip, 'child')), ["'Skip'"]);
+      expect(button.methodName.name, 'FilledButton');
+      expect(_argument(button, 'onPressed').toSource(), 'onPressed');
+      // What the button does and says, on a page of the module and on the
+      // page of a step.
+      final choice = (build.body as BlockFunctionBody)
+          .block
+          .statements
+          .whereType<IfStatement>()
+          .single;
+      expect(choice.expression.toSource(), 'step == null');
+      expect(_assignmentsOf(choice.thenStatement), {
+        'onPressed': 'isLast ? onboardingStatus.complete : _next',
+        'label': "isLast ? 'Get started' : 'Next'",
+      });
+      expect(_assignmentsOf(choice.elseStatement!), {
+        'onPressed': '_running ? (spins ? () {} : null) : () => _run(step)',
+        'label': 'step.action(context)',
+      });
+      final switcher = _argument(button, 'child') as MethodInvocation;
+      expect(switcher.methodName.name, 'AnimatedSwitcher');
+      expect(
+        _argument(switcher, 'child').toSource(),
+        '_ButtonLabel(label, spins: spins, '
+        'key: ValueKey<Object>(step ?? isLast))',
+      );
       // In the order of the column of the screen.
       final pages = _calls(unit, 'PageView').single;
-      final [skip, button] = _buttonCalls(unit);
       expect(skip.offset, lessThan(pages.offset));
       expect(pages.offset, lessThan(button.offset));
       // The column of the button stretches it to its width.
@@ -1148,6 +1413,106 @@ void main() {
         _argument(_enclosing(button, 'Column'), 'crossAxisAlignment')
             .toSource(),
         'CrossAxisAlignment.stretch',
+      );
+    });
+
+    test(
+        'calls the action of a step on a tap, keeps its pages where they are '
+        'while the action runs, and shows the next page once its future '
+        'completes, also when it fails, leaving the error to the handlers '
+        'of the errors of the app', () {
+      final run = _methodOf(unit, '_OnboardingScreenState', '_run');
+      final [start, attempt as TryStatement] =
+          (run.body as BlockFunctionBody).block.statements;
+
+      expect(start.toSource(), 'setState(() => _running = true);');
+      expect(attempt.body.toSource(), '{await step.run();}');
+      // Nothing catches the error.
+      expect(attempt.catchClauses, isEmpty);
+      expect(
+        attempt.finallyBlock!.toSource(),
+        '{if (mounted) {setState(() => _running = false); _next();}}',
+      );
+      final ignoring =
+          _enclosing(_calls(unit, 'PageView').single, 'IgnorePointer');
+      expect(_argument(ignoring, 'ignoring').toSource(), '_running');
+    });
+
+    test(
+        'spins while the action of a step runs, keeping the label in its '
+        'place, and takes no tap instead in an app that asks for less '
+        'motion', () {
+      expect(
+        _variablesOf(build),
+        containsPair(
+          'spins',
+          '_running && !MediaQuery.disableAnimationsOf(context)',
+        ),
+      );
+      final label = _methodOf(unit, '_ButtonLabel', 'build');
+      final spinner = _calls(label, 'CircularProgressIndicator').single;
+      expect(
+        spinner.thisOrAncestorOfType<IfElement>()!.expression.toSource(),
+        'spins',
+      );
+      expect(
+        _calls(label, 'maintain').single.toSource(),
+        'Visibility.maintain(visible: !spins, child: Text(label))',
+      );
+    });
+
+    test(
+        'shows the later of the step whose page is shown below its button, '
+        'in a place as high as the tallest later, so that the pages keep '
+        'their height from page to page', () {
+      final later = _buttonCalls(unit)[2];
+
+      expect(later.methodName.name, 'TextButton');
+      expect(
+        _argument(later, 'onPressed').toSource(),
+        '_running ? null : _next',
+      );
+      expect(_textsOf(_argument(later, 'child')), ['other.later!(context)']);
+      expect(
+        _variablesOf(build),
+        containsPair(
+          'withLater',
+          '[for (final other in _steps) if (other.later != null) other]',
+        ),
+      );
+      final place = _enclosing(later, 'IndexedStack');
+      expect(
+        _argument(place, 'index').toSource(),
+        'step?.later == null ? withLater.length : withLater.indexOf(step!)',
+      );
+      expect(
+        _argument(_enclosing(later, 'ExcludeFocus'), 'excluding').toSource(),
+        '!identical(other, step)',
+      );
+      // Only in an app with such a step: the pages of the others keep the
+      // look that they have without steps.
+      expect(
+        place.thisOrAncestorOfType<IfElement>()!.expression.toSource(),
+        'withLater.isNotEmpty',
+      );
+    });
+
+    test(
+        'lets the labels of the buttons below the pages, and not Skip, grow '
+        'only by half with the text size of the device', () {
+      final clamped = _calls(unit, 'withClampedTextScaling').single;
+      final [skip, button, later] = _buttonCalls(unit);
+
+      expect(_argument(clamped, 'maxScaleFactor').toSource(), '1.5');
+      expect(_enclosing(button, 'withClampedTextScaling'), clamped);
+      expect(_enclosing(later, 'withClampedTextScaling'), clamped);
+      expect(
+        skip.thisOrAncestorMatching(
+          (node) =>
+              node is MethodInvocation &&
+              node.methodName.name == 'withClampedTextScaling',
+        ),
+        isNull,
       );
     });
 
@@ -1170,28 +1535,18 @@ void main() {
     });
 
     test(
-        'shows the pages of the list of the pages, however many it has, '
-        'each in the scope of its place among them: the last page and the '
-        'marks come from the length of the list, and Next shows the page '
-        'after the one that the user sees', () {
+        'shows its pages, however many they are, each in the scope of its '
+        'place among them: the last page and the marks come from the '
+        'number of the pages, and Next shows the page after the one that '
+        'the user sees', () {
       final pageView = _calls(unit, 'PageView').single;
-      final pages = _calls(unit, 'onboardingPages').single;
 
-      // The list of the pages, in the context of the screen.
-      expect(pages.toSource(), 'onboardingPages(context)');
-      expect(
-        (pages.parent! as VariableDeclaration).name.lexeme,
-        'pages',
-      );
       // Each page in a scope with its index and the controller of the
       // pages, from which the parts of a page read how far the pages are
       // turned.
-      final build = _methodOf(unit, '_OnboardingScreenState', 'build');
-      final each = _forElementsOf(build).single;
-      expect(
-        (_argument(pageView, 'children') as ListLiteral).elements,
-        [each],
-      );
+      final each = (_argument(pageView, 'children') as ListLiteral)
+          .elements
+          .single as ForElement;
       expect(
         each.forLoopParts.toSource(),
         'final (index, page) in pages.indexed',
@@ -1630,9 +1985,9 @@ void main() {
         'onboardingReady',
       ]);
       expect(_textsReadIn(screen), [
-        'onboardingSkip',
         'onboardingDone',
         'onboardingNext',
+        'onboardingSkip',
       ]);
       expect(_pageArguments(pages), [
         // The symbol and the name of the app are the same in every
@@ -1648,19 +2003,30 @@ void main() {
           'text': 'context.l10n.onboardingReady',
         },
       ]);
-      expect(_buttonsOf(screen), [
-        (
-          'TextButton',
-          'onboardingStatus.complete',
-          'context.l10n.onboardingSkip',
-        ),
-        (
-          'FilledButton',
-          'isLast ? onboardingStatus.complete : _next',
+      // Skip, and the label of the button below the pages on a page of the
+      // module.
+      expect(
+        _textsOf(_argument(_buttonCalls(screen).first, 'child')),
+        ['context.l10n.onboardingSkip'],
+      );
+      final onPageOfModule = (_methodOf(
+        screen,
+        '_OnboardingScreenState',
+        'build',
+      ).body as BlockFunctionBody)
+          .block
+          .statements
+          .whereType<IfStatement>()
+          .single
+          .thenStatement;
+      expect(
+        _assignmentsOf(onPageOfModule),
+        containsPair(
+          'label',
           'isLast ? context.l10n.onboardingDone : '
               'context.l10n.onboardingNext',
         ),
-      ]);
+      );
       // Without the role, no code reads the texts of an app.
       for (final path in [_pages, _screen]) {
         expect(_textsReadIn(_parsed(without, path)), isEmpty, reason: path);
@@ -1754,9 +2120,9 @@ void main() {
 
     test(
         'names the list of the pages, the widget of a page with what its '
-        'cell takes, the status with what finishes the onboarding and what '
-        'starts it again, and the key of the module, as the files of the '
-        'app declare them', () {
+        'cell takes, the list of the steps with what a step has, the status '
+        'with what finishes the onboarding and what starts it again, and '
+        'the key of the module, as the files of the app declare them', () {
       final code = _codeOf(agentNote);
 
       expect(
@@ -1773,7 +2139,29 @@ void main() {
           'restart()',
           'onboardingStatus.complete()',
           OnboardingModule.completedKey,
+          OnboardingScreenRole.appOnboardingSteps,
+          OnboardingScreenRole.stepsFile,
+          'later',
+          'run',
         ]),
+      );
+      // The list of the steps, which the template of the role generates in
+      // every app with the module, and the fields of a step.
+      final steps = _indexOf(app, OnboardingScreenRole.stepsFile);
+      expect(
+        steps.declaration(OnboardingScreenRole.appOnboardingSteps)?.kind,
+        DeclarationKind.variable,
+      );
+      expect(
+        {
+          for (final member
+              in steps.declaration(OnboardingScreenRole.step.name)!.members)
+            member.name: member.kind,
+        },
+        allOf(
+          containsPair('later', MemberKind.field),
+          containsPair('run', MemberKind.field),
+        ),
       );
       final pages = _indexOf(app, _pages);
       expect(
@@ -1930,17 +2318,6 @@ List<MethodInvocation> _buttonCalls(CompilationUnit unit) {
   unit.accept(visitor);
   return visitor.found;
 }
-
-/// The buttons of the screen in [unit], in the order of the code: the
-/// widget of each, what a tap on it calls, and the text that it shows.
-List<(String, String, String)> _buttonsOf(CompilationUnit unit) => [
-      for (final button in _buttonCalls(unit))
-        (
-          button.methodName.name,
-          _argument(button, 'onPressed').toSource(),
-          _textsOf(_argument(button, 'child')).single,
-        ),
-    ];
 
 /// What the `Text` widgets that [node] creates show, in the order of the
 /// code: the code of the first argument of each.

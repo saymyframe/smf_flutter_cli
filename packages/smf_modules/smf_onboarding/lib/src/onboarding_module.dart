@@ -19,16 +19,35 @@ import 'package:smf_onboarding/src/agents.dart';
 /// `lib/features/onboarding/onboarding_pages.dart`, which the app replaces
 /// with its own.
 ///
+/// The module provides the [OnboardingScreenRole]: the screen shows the
+/// steps that the modules of the app add to the onboarding, the list
+/// `appOnboardingSteps` that the template of the role generates, before
+/// the last of its own pages. It asks each step for its showIf once, when
+/// the screen opens, and shows each step that it keeps on a page in the
+/// look of its own pages, with the icon of the step in the cell. On the
+/// page of a step, the button below the pages is the action of the step: it
+/// calls the function of the step and spins until its future completes,
+/// while the pages stay where they are, and then shows the next page, also
+/// when the future fails, whose error goes on to the handlers of the errors
+/// of the app. A step with a later has a second button below that one. In
+/// an app with such a step, that button has its place on every page, so
+/// the pages keep their size while they turn. Skip skips the steps too.
+/// The module names its route as the screen of the role with an
+/// [OnboardingScreenRoute], so that code which knows only the role finds
+/// it.
+///
 /// While the pages turn, the cells and the texts of a page move at their
 /// own pace, the background blends into that of the last page, and the
 /// marks follow. Each of these motions ends. In an app that asks for less
-/// motion, Next shows the next page at once, and the cells of a page are
-/// there at once when the page is first shown. The letters and the number
-/// of a cell keep their size at a large text size, since the cell is a
-/// picture that does not grow. The screen takes its colours and its text
-/// styles from the theme of the app, whichever module provides it, and
-/// names no font but the monospaced one of the device, for the number of a
-/// cell.
+/// motion, Next shows the next page at once, the cells of a page are there
+/// at once when the page is first shown, and the button of a step takes no
+/// tap instead of spinning. The letters and the number of a cell keep their
+/// size at a large text size, since the cell is a picture that does not
+/// grow, and the labels of the buttons below the pages grow only by half,
+/// since the pages take the room that the buttons leave. The screen takes
+/// its colours and its text styles from the theme of the app, whichever
+/// module provides it, and names no font but the monospaced one of the
+/// device, for the number of a cell.
 ///
 /// The route is `/` of the module, so its full path is `/onboarding`. It is
 /// no destination of the main navigation, and the app cannot start on it.
@@ -88,8 +107,8 @@ import 'package:smf_onboarding/src/agents.dart';
 /// adds no package to the app.
 ///
 /// The guide for coding agents of the app has a section of the module: what
-/// shows the onboarding, where its pages and its status are, how to show it
-/// again, and what a test of another screen does about it.
+/// shows the onboarding, where its pages, its steps and its status are, how
+/// to show it again, and what a test of another screen does about it.
 final class OnboardingModule extends SmfModule {
   /// Creates the module.
   const OnboardingModule();
@@ -140,6 +159,7 @@ final class OnboardingModule extends SmfModule {
         id: id,
         description: 'Onboarding on the first launch of the app',
         kind: ModuleKinds.feature,
+        providers: [RoleProvider.plain(onboardingScreenRole)],
         requires: {preferencesRole},
         uses: {localizationRole},
       );
@@ -180,6 +200,7 @@ final class OnboardingModule extends SmfModule {
             ],
           ),
         ),
+        onboardingScreenRole.data(const OnboardingScreenRoute(_route)),
         const SocketContribution.item(
           PreferencesRole.restorers,
           Fragment('restoreOnboarding', imports: [_status]),

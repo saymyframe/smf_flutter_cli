@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 /// To change what the onboarding shows, change this list. A page is any
 /// widget, such as an [OnboardingPage]. The screen of the onboarding shows
 /// them one at a time, with Skip above them and, below them, a mark for
-/// each page and the button that leads on.
+/// each page and the button that leads on. Before the last page of the
+/// list, it shows the steps that the modules of the app add to the
+/// onboarding, each on an [OnboardingPage] with the icon of the step.
 List<Widget> onboardingPages(BuildContext context) => [
   OnboardingPage(
     symbol: {{{symbol}}},
