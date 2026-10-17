@@ -14,8 +14,9 @@
 // tells the app of it.
 //
 // It has a file of its own, since the probe starts the check once in a run
-// of the app. The probe reads appPush, so the start-up of the app runs
-// first, as on a device, with the mocks of the platform side of every
+// of the app, and the start-up of the app runs once in a test file. The
+// probe reads appPush, so the start-up of the app runs first, as on a
+// device, with the mocks of the platform side of every
 // module of the app, which the matrix sets up before the tests of each
 // test file (flutter_test_config.dart). The temporary directory of the app
 // is one of the test.
@@ -94,7 +95,9 @@ void main() {
 
   testWidgets(
     'the probe asks once for a push message to the address of the app, and '
-    'reports that it came with what it asked for, without the address',
+    'reports that it came with what it asked for; the check reports one that '
+    'came with something else, one that did not come in time, and an app '
+    'without an address, which asks for nothing; neither with the address',
     (tester) async {
       await startUp(tester);
       late List<String> problems;
@@ -166,36 +169,27 @@ void main() {
         isEmpty,
         reason: 'The address of the device is in the request alone.',
       );
-    },
-    // A widget test fails after ten minutes by default; a test that hangs
-    // fails sooner.
-    timeout: const Timeout(Duration(minutes: 2)),
-  );
 
-  testWidgets(
-    'the check reports a message that came with something else, one that '
-    'did not come in time, and an app without an address, which asks for '
-    'nothing',
-    (tester) async {
-      await startUp(tester);
+      // The check on its own, with short waits, for what it reports when
+      // the message is not what it asked for, and when nothing comes.
       late String otherTexts;
       late String tooLate;
       late String withoutAddress;
       String? requestedWithoutAddress;
       String? reported;
 
-      final printed = await checking(tester, () async {
+      final printedOnFailures = await checking(tester, () async {
         Future<String> check() => checkDelivery(
               directory: temporary,
               addressWait: const Duration(milliseconds: 300),
               messageWait: const Duration(milliseconds: 300),
             );
 
-        final checking = check();
+        final wrongTexts = check();
         await device.deliver(
           asked((await written(request()))!, title: 'Wrong', body: 'Text'),
         );
-        otherTexts = await checking;
+        otherTexts = await wrongTexts;
         tooLate = await check();
         // The next start, on a device that Firebase gives no token.
         request().deleteSync();
@@ -229,7 +223,12 @@ void main() {
       expect(reported, '$withoutAddress\n');
       expect(
         [
-          for (final text in [otherTexts, tooLate, withoutAddress, ...printed])
+          for (final text in [
+            otherTexts,
+            tooLate,
+            withoutAddress,
+            ...printedOnFailures,
+          ])
             if (text.contains(tokenOfTests)) text,
         ],
         isEmpty,
@@ -237,6 +236,8 @@ void main() {
             'of the device.',
       );
     },
+    // A widget test fails after ten minutes by default; a test that hangs
+    // fails sooner.
     timeout: const Timeout(Duration(minutes: 2)),
   );
 }
