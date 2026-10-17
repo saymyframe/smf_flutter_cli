@@ -184,12 +184,14 @@ jobs:
           fi
 
   # Every app of the matrix of a registry is generated with `smf create
-  # --no-input --skip-external-setup --no-dart-fix --strict` and must pass
-  # `flutter analyze`, and then the tests that the packages keep for it in
-  # `app_tests/`, with `flutter test`. Each job checks its shard of the apps
-  # in a directory with a space in its name, and then its shard of the apps
-  # with every module of the matrix in a directory whose name has letters
-  # beyond ASCII too.
+  # --no-input --skip-external-setup --no-dart-fix --strict`, with
+  # `--allow-warning=<code>` for each warning about what the app is made of
+  # that it has on purpose, and must pass `flutter analyze`, and then the
+  # tests that the packages keep for it in `app_tests/`, with
+  # `flutter test`. Each job checks its shard of the apps in a directory
+  # with a space in its name, and then its shard of the apps with every
+  # module of the matrix in a directory whose name has letters beyond ASCII
+  # too.
   matrix:
     name: Generated apps (${{ matrix.registry }}, ${{ matrix.shard }})
     needs: plan

@@ -151,9 +151,10 @@ final class CreatePipeline {
   /// directory, which the error names. If the user cancels the run before
   /// the app is in its place, nothing of it stays.
   ///
-  /// Throws a [GenerationFailedException] with the errors found, an
-  /// [SmfUsageException] for a problem of the command line, or an
-  /// [SmfCancelledException] when the user cancels the run.
+  /// Throws a [GenerationFailedException] with the errors found, and with
+  /// `--strict` the warnings about what the app is made of that stopped it
+  /// (see [plan]), an [SmfUsageException] for a problem of the command
+  /// line, or an [SmfCancelledException] when the user cancels the run.
   Future<GeneratedApp?> run(CreateRequest request) async {
     final plan = await this.plan(request);
     if (plan == null) return null;
@@ -293,9 +294,13 @@ extension CreatePlanning on CreatePipeline {
   /// rendered. A warning about the machine never stops it.
   /// `--explain` runs the stages 1 to 5 and the read-only part of 6, prints
   /// what it found, and stops: it never asks, installs, logs in or chooses.
+  /// So with `--strict` it stops on a warning of the validation, but not on
+  /// a warning of a choice, which the same run without `--explain` stops
+  /// on.
   ///
-  /// Throws a [GenerationFailedException] with the errors found, or an
-  /// [SmfUsageException] for a problem of the command line.
+  /// Throws a [GenerationFailedException] with the errors found, and with
+  /// `--strict` the warnings about what the app is made of that stopped it,
+  /// or an [SmfUsageException] for a problem of the command line.
   Future<GenerationPlan?> plan(CreateRequest request) async {
     final environment = PipelineEnvironment(
       host,

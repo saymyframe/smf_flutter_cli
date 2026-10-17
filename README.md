@@ -51,7 +51,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | `--org` | The organization in reverse domain notation, `com.example` by default. |
 | `-o`, `--output` | The directory in which the app's directory is created. |
 | `--no-input` | Ask nothing; everything comes from the options. |
-| `--explain` | Print what would be generated and whether the machine is ready, then stop. |
+| `--explain` | Print what would be generated and whether the machine is ready, then stop. It makes no choices, so `--strict` does not stop it on a warning that only a choice reports, such as an app without a route to start on. |
 | `--strict` | Stop instead of leaving out a module that cannot work in the app, and stop on a warning about what the app is made of, such as a destination that no main navigation leads to. |
 | `--skip-external-setup` | Never install tools, log in or configure external services. |
 | `--on-conflict` | What to do when the app's directory exists and is not empty: `prompt`, `replace`, `copy` or `cancel`. |
