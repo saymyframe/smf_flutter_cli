@@ -3,6 +3,7 @@ import 'package:smf_contracts/bundles/onboarding_screen_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/brick_templates.dart';
 import 'package:smf_contracts/src/roles/contributors.dart';
+import 'package:smf_contracts/src/roles/same_text.dart';
 import 'package:smf_contracts/src/roles/screen_routes.dart';
 import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
@@ -569,7 +570,7 @@ final class _OnboardingTemplate extends RoleTemplate<OnboardingData> {
           'localizationRole.data(TextsData([...]), when: '
           '{onboardingScreenRole}).',
         );
-      } else if (!_sameText(given, text)) {
+      } else if (!sameText(given, text)) {
         problems.add(
           '$who gives $what the text "${text.name}", and the '
           '$localizationRole a text of that name that differs from it. Give '
@@ -662,14 +663,6 @@ String _labelPrefixOf(AppOnboardingStep placed, Set<String> names) {
   }
   return name;
 }
-
-/// Whether [a] and [b] read the same in every language.
-bool _sameText(LocalizedText a, LocalizedText b) =>
-    a.en == b.en &&
-    a.translations.length == b.translations.length &&
-    a.translations.entries.every(
-      (translation) => b.translations[translation.key] == translation.value,
-    );
 
 /// The problems of the steps of the module of [input], which the module
 /// rule `onboarding_screen.steps` reports: those of each step on its own,

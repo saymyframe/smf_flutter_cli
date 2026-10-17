@@ -73,7 +73,7 @@ List<SmfIssue> _dataTextIssues(
             origin: origin,
           ),
         );
-      } else if (!_sameText(given, text)) {
+      } else if (!sameText(given, text)) {
         issues.add(
           SmfIssue(
             '$what, and the $localizationRole a text of that name that '
@@ -101,19 +101,11 @@ Map<Role, Map<String, List<LocalizedText>>> _dataTextsOf(
     final byName = texts.putIfAbsent(data.role, () => {});
     for (final text in value.shownTexts) {
       final named = byName.putIfAbsent(text.name, () => []);
-      if (!named.any((other) => _sameText(other, text))) named.add(text);
+      if (!named.any((other) => sameText(other, text))) named.add(text);
     }
   }
   return texts;
 }
-
-/// Whether [a] and [b] read the same in every language.
-bool _sameText(LocalizedText a, LocalizedText b) =>
-    a.en == b.en &&
-    a.translations.length == b.translations.length &&
-    a.translations.entries.every(
-      (translation) => b.translations[translation.key] == translation.value,
-    );
 
 /// [text] as a message shows it: its English text, and its translations by
 /// the code of their language.

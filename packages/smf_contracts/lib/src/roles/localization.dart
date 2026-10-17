@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/localization_role_bundle.dart';
 import 'package:smf_contracts/bundles/localization_role_settings_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contracts/src/roles/same_text.dart';
 
 part 'localization/localization_dsl.dart';
 part 'localization/localization_rules.dart';
