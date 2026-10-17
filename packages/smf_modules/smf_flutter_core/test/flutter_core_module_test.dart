@@ -231,7 +231,7 @@ void main() {
 
     test(
         'builds the app with and without a router, each with and without '
-        'the texts of the app', () {
+        'the texts of the app, and an app that a route starts', () {
       expect(
         results.map((result) => result.contractCase.name),
         containsAll([
@@ -239,6 +239,7 @@ void main() {
           'flutter_core with router',
           'flutter_core with localization',
           'flutter_core',
+          TestStartModule.id.value,
         ]),
       );
     });
