@@ -3258,7 +3258,7 @@ final class AppNotification {
   });
 
   /// The id of the notification. A notification with the id of one that is
-  /// shown or scheduled takes its place.
+  /// shown or scheduled takes its place, a scheduled one when it shows.
   final int id;
 
   /// The title of the notification.
@@ -3307,8 +3307,11 @@ final class NotificationTap {
 /// - [schedule] shows the notification at about the time that it is given,
 ///   not to the minute, also when the app is closed then, and after a
 ///   restart of the device. A notification with the id of one that is shown
-///   or scheduled takes its place, and [cancel] removes the one of its id,
-///   shown or scheduled.
+///   or scheduled takes its place: [show] cancels the scheduled
+///   notification of its id, if there is one, so that it does not show
+///   later, and a notification scheduled with the id of one that is shown
+///   takes its place when it shows. [cancel] removes the notification of
+///   its id, shown or scheduled.
 /// - [taps] tells of each tap on a notification of the app while the app
 ///   runs, and [launchTap] is the tap that launched the app. Each has the
 ///   data that the notification had, or none if the service cannot read it.
@@ -3338,7 +3341,8 @@ abstract interface class NotificationsService {
   /// Opens the settings of the system for the notifications of the app.
   Future<void> openSettings();
 
-  /// Shows [notification] now.
+  /// Shows [notification] now, in place of the notification of its id that
+  /// is shown, and cancels the scheduled notification of its id.
   Future<void> show(AppNotification notification);
 
   /// Shows [notification] at about [at].
