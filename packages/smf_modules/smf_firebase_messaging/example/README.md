@@ -33,10 +33,14 @@ The code of the app sends the address of the device to its backend, and opens th
 import 'core/push/app_push.dart';
 
 void listenToPushMessages(void Function(String screen) open) {
-  appPush.address.addListener(() {
+  void sendAddress() {
     final address = appPush.address.value;
     if (address != null) backend.registerDevice(address);
-  });
+  }
+
+  // The address may be there already, or come later.
+  sendAddress();
+  appPush.address.addListener(sendAddress);
   appPush.taps.listen((message) {
     if (message.data['screen'] case final screen?) open(screen);
   });
