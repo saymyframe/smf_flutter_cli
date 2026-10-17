@@ -831,6 +831,7 @@ void main() {
           'fake_gate.gate',
           'fake_gate.step',
           'fake_gate.second',
+          'fake_onboarding.onboarding',
         ],
         reason: app.name,
       );
@@ -1031,7 +1032,9 @@ void main() {
       // route below it needs a value. With one, both are in it, and so is
       // the destination of the second fixture feature, whose route outside
       // the main navigation is left. The routes of the flows of the guards,
-      // and those that ask for a condition, are none either.
+      // and those that ask for a condition, are none either. The screen of
+      // the fixture onboarding, which has no guard, is one in an app with
+      // it.
       expect(
         locationsOf(app),
         [
@@ -1039,6 +1042,8 @@ void main() {
             'FakeSecondOutsideLocation()'
           else
             'FakeFeatureHomeLocation()',
+          if (app.modules.contains(FakeOnboardingModule.id))
+            'FakeOnboardingOnboardingLocation()',
         ],
         reason: app.name,
       );
