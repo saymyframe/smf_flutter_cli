@@ -97,6 +97,10 @@ void main() {
   Finder next() => shown(find.widgetWithText(FilledButton, texts['next']!));
   Finder done() => shown(find.widgetWithText(FilledButton, texts['done']!));
 
+  /// The text buttons that the screen of the onboarding shows: Skip, and the
+  /// later of the step whose page the user sees.
+  Finder textButtons() => shown(find.byType(TextButton));
+
   /// The context of the screen of the onboarding, in whose language the
   /// labels of a step return their texts.
   BuildContext screen(WidgetTester tester) => tester.element(onboarding);
@@ -395,6 +399,12 @@ void main() {
           findsNothing,
           reason: 'Only on the last page is the button Get started.',
         );
+        expect(
+          textButtons(),
+          findsOneWidget,
+          reason: 'The first page has no text button but Skip: the later of '
+              'a step shows only on the page of its step, in $language.',
+        );
       }
       await useLanguage(tester, languages.first);
       expectMarks(tester, page: 0);
@@ -480,6 +490,12 @@ void main() {
             reason: 'On the page of a step, the button below the pages is '
                 'neither Next nor Get started: $title.',
           );
+          expect(
+            textButtons(),
+            step.later == null ? findsOneWidget : findsNWidgets(2),
+            reason: 'The page of a step has no text button but Skip and the '
+                'later of the step, if it has one: $title.',
+          );
         }
         await useLanguage(tester, languages.first);
         final title = titleOf(tester, page);
@@ -555,6 +571,13 @@ void main() {
           findsNothing,
           reason: 'The last page has no Skip: once it has faded away, it '
               'is gone from the screen.',
+        );
+        expect(
+          textButtons(),
+          findsNothing,
+          reason: 'The last page has no text button: Skip is gone, and the '
+              'later of a step shows only on the page of its step, in '
+              '$language.',
         );
       }
       await useLanguage(tester, languages.first);
