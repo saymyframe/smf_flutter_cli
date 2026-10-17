@@ -227,12 +227,24 @@ final class _TestNames extends RecursiveAstVisitor<void> {
   }
 }
 
+/// The results of [MatrixFailingApp.check] by the name of the app, so that
+/// the contract harness builds each app once for all the tests that read
+/// it.
+final _checks = <String, Future<({MatrixApp? app, List<String> problems})>>{};
+
+/// The result of [MatrixFailingApp.check] of [failing], which the first
+/// test that reads it computes.
+Future<({MatrixApp? app, List<String> problems})> _checkOf(
+  MatrixFailingApp failing,
+) =>
+    _checks.putIfAbsent(failing.name, failing.check);
+
 /// Checks that each test that must fail in the app of [failing] is among
 /// the tests that apply to the app, in one file, declared under its name,
 /// and that the file, or a file of its tests that it imports, writes the
 /// reason.
 Future<void> _expectFailuresAmongTests(MatrixFailingApp failing) async {
-  final (:app, problems: _) = await failing.check();
+  final (:app, problems: _) = await _checkOf(failing);
   final tests = [
     for (final test in await brokenProviderAppTests())
       if (test.appliesTo(app!)) test,
@@ -519,7 +531,7 @@ void main() {
     );
     for (final provider in providers) {
       if (!identical(provider.role, authRole)) continue;
-      final (:app, :problems) = await provider.failingApp.check();
+      final (:app, :problems) = await _checkOf(provider.failingApp);
       expect(problems, isEmpty);
       final mode = authRole.modeIn(authRole.hookInput(app!.hook!));
       final ofLinking = provider.module.descriptor.id == linking;
@@ -572,7 +584,7 @@ void main() {
       test(
           'its app is an app with every module of its registry, which the '
           'contract harness renders without errors', () async {
-        final (:app, :problems) = await provider.failingApp.check();
+        final (:app, :problems) = await _checkOf(provider.failingApp);
 
         expect(problems, isEmpty);
         expect(app!.modules, containsAll([id, ...provider.app]));
@@ -591,7 +603,7 @@ void main() {
           'app, such as those of the fixture providers that the tests of '
           'the analytics role and of the crash reporting role look at',
           () async {
-        final (:app, problems: _) = await provider.failingApp.check();
+        final (:app, problems: _) = await _checkOf(provider.failingApp);
         final files = await _filesOfAppOf(provider);
 
         for (final test in await brokenProviderAppTests()) {
@@ -616,7 +628,7 @@ void main() {
       test(
           'its app is the app with every module of its registry, which the '
           'contract harness renders without errors', () async {
-        final (:app, :problems) = await failing.check();
+        final (:app, :problems) = await _checkOf(failing);
 
         expect(problems, isEmpty);
         expect(ModuleRegistry.problemsOf(failing.modules), isEmpty);
@@ -645,7 +657,7 @@ void main() {
     final failing = brokenModuleApps().singleWhere(
       (app) => app.name == 'fake_gate_stays_closed',
     );
-    final (:app, problems: _) = await failing.check();
+    final (:app, problems: _) = await _checkOf(failing);
 
     expect(
       routerRole.facadeOf(routerRole.hookInput(app!.hook!)).guards,
@@ -743,7 +755,7 @@ void main() {
       for (final provider in providers) provider.failingApp,
       ...brokenModuleApps(),
     ]) {
-      final (:app, :problems) = await failing.check();
+      final (:app, :problems) = await _checkOf(failing);
       expect(problems, isEmpty, reason: failing.name);
       if (app!.warnings.isNotEmpty) warnings[app.name] = app.warnings;
     }
