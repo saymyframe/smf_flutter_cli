@@ -379,9 +379,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // The notifications of the apps with the notifications role,
       // whichever module provides it, the test that the CLI keeps: only in
       // the apps with every module, which run flutter test for other tests
-      // already. There the fixture notifications provide the role, on a
-      // system without a question for the permission, so a request opens
-      // the settings of the system.
+      // already. There the fixture notifications provide the role.
       await notificationsRoleAppTest(
         among: (app) => app.everyModuleWith != null,
       ),

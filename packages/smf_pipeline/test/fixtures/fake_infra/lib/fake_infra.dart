@@ -878,7 +878,8 @@ final class FakeAuthModule extends SmfModule {
 /// Its system has no question for the permission, as Android before 13, so
 /// a request opens the settings of the system, where the user of the tests
 /// turns the notifications on, as the mocks of a provider grant the
-/// permission when the app asks. It shows nothing and tells of no tap.
+/// permission when the app asks. Through the role, that looks like a
+/// question that the user allows. It shows nothing, and tells of no tap.
 ///
 /// The template of the role does the rest in an app with it, whichever
 /// module provides the role: `appNotifications`, which remembers in the

@@ -698,19 +698,22 @@ Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
 ///   provider answers: the permission follows what the service says, and
 ///   is denied once the app asked, which the preferences remember under
 ///   [NotificationsRole.askedKey]; a request asks the user only while the
-///   app may not show notifications, once for two requests at once; on a
-///   system without a question, the request opens its settings, and the
+///   app may not show notifications, once for two requests at once, and the
+///   app saves that it asked only once the user answered; on a system
+///   without a question, the request opens its settings, and the
 ///   app sees what the user did there once the user comes back; each tap
 ///   on a notification of the app reaches every listener of the taps, and
 ///   a tap on a notification of an owner reaches only that owner; and an
 ///   id that the app does not take, or a time that passed, never reaches
 ///   the service;
 /// - `appNotifications` over the service of the provider: the app starts
-///   as on a first launch, as the role asks of the mocks of a provider;
-///   one request turns the notifications on, whether the system shows its
-///   question or opens its settings; a scheduled notification is listed
-///   with what it has until it is cancelled, and one with its id takes its
-///   place; a notification of an owner, with a negative id, keeps its data
+///   as on a first launch, as the role asks of the mocks of a provider, and
+///   `show()` and `schedule()` complete without the permission; one request
+///   turns the notifications on, and `openSettings()` completes; a
+///   scheduled notification is listed with what it has until it is
+///   cancelled or a notification of its id is shown, and one scheduled with
+///   its id takes its place; a notification of an owner, with a negative
+///   id, keeps its data
 ///   and takes the place of no notification of the app; and the service
 ///   tells of the taps on a broadcast stream;
 /// - the next start, `initNotifications()` again, keeps the notifications

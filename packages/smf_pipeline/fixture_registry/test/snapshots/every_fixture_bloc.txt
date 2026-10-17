@@ -2215,7 +2215,8 @@ Future<NotificationsService> openFixtureNotifications() async {
 /// settings of the system for the notifications of the app instead, as the
 /// notifications role asks of a provider. The user of the tests turns the
 /// notifications on there, as the mocks of a provider grant the permission
-/// when the app asks, so one request turns them on.
+/// when the app asks, so one request turns them on: through the role, that
+/// looks like a question that the user allows.
 ///
 /// The device shows nothing and has no user who taps a notification, so
 /// the service tells of no tap.
