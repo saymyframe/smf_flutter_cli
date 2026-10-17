@@ -6,11 +6,13 @@ On its first launch, the app shows the onboarding in place of every other screen
 
 Skip is above the pages. Below them are a mark for each page and one button of the whole width: Next, and Get started on the last page, where Skip is gone. Skip and Get started finish the onboarding. The app then shows the screen that it starts on, and later launches start there.
 
+The module provides the onboarding screen role, so other modules can add steps to the onboarding, such as a page that asks for a permission. Each step gets a page of its own before the last page, in the same look as the others, with the icon of the step in the cell. On the page of a step, the button below the pages runs the action of the step. It spins until the action is done, then shows the next page, also when the action fails. A step can have a second button below it, such as Not now, which goes on without the action. Skip skips the steps too. The template of the role writes the steps into `lib/core/onboarding/onboarding_steps.dart` as the list `appOnboardingSteps`, and the screen reads them from there. When the screen opens, it asks each step once whether to show it.
+
 While the pages turn, the cells move at different speeds, the background blends into the colour of the last page, and the marks follow. No animation runs without end, so a widget test that waits for the screen with `pumpAndSettle()` returns. On a device that asks for less motion, the cells are there at once and Next shows the next page without the turn.
 
 The module generates three files in `lib/features/onboarding/`:
 
-- `onboarding_screen.dart` has `OnboardingScreen`, at `/onboarding`, which shows the pages one at a time, with Skip, the marks and the button around them.
+- `onboarding_screen.dart` has `OnboardingScreen`, at `/onboarding`, which shows the pages and the steps one at a time, with Skip, the marks and the buttons around them.
 - `onboarding_pages.dart` has the pages: the list that `onboardingPages()` returns, and `OnboardingPage`, the widget of a page, which takes a `symbol` or an `icon` for its cell, a title and a text. Replace the pages with your own, and the screen keeps what is around them. The screen puts an `OnboardingPageScope` around each page. Its `turned` tells how far the pages are turned away from the page, so a page of your own can move with them, as `OnboardingPage` does.
 - `onboarding_status.dart` has `onboardingStatus`, which knows whether the user has finished the onboarding. Its `complete()` finishes the onboarding at once and saves that, and its `restart()` starts it again.
 
@@ -26,19 +28,19 @@ The page that the user sees is the state of a `PageController` in the screen, so
 
 The screen takes its colours and its text styles from the theme of the app, in its light and in its dark mode, so it follows a theme of your own. It names no font but the monospaced one of the device, for the number in a cell.
 
-A page scrolls when it is too small for what it shows, as with a large text size on a small phone, and the buttons grow with their texts. The letters and the number in a cell keep their size, since they are part of the picture. A screen reader announces the title of each page as a header and passes over the picture.
+A page scrolls when it is too small for what it shows, as with a large text size on a small phone. Skip grows with the text size of the device, but the labels of the buttons below the pages grow only by half, so the pages keep some room on a small phone. The letters and the number in a cell keep their size, since they are part of the picture. A screen reader announces the title of each page as a header and passes over the picture.
 
 The texts of the screen are in English and in Ukrainian. In an app with a module that provides localization, they follow the language of the app. An app without such a module shows them in English.
 
 ## Use with the SMF CLI
 
-`smf create` asks which features the app has. To choose this one without the question, here with a start screen:
+`smf create` asks which module provides the onboarding screen. To choose this one without the question, here with a start screen:
 
 ```bash
 smf create my_app -m home,onboarding
 ```
 
-The feature requires a router and preferences, and `smf create` adds each when only one module provides it.
+The module requires a router and preferences, and `smf create` adds each when only one module provides it.
 
 You don't add this package to an app yourself: `smf create` of the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) puts what the module generates into the app.
 
