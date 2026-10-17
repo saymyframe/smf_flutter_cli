@@ -21,11 +21,12 @@
 //
 // A token with a nonce may be taken once, as an identity provider that
 // checks a nonce takes it: a provider of the role refuses a token whose
-// nonce it took already with invalidCredentials, and one whose rawNonce
-// is not the nonce of its token. The one exception is the credential
-// object that linkWith refused just before: signInWith takes the identical
-// object, with what the provider kept for it, as the role says. So every
-// call here gets a credential of its own, but for that one.
+// nonce it took already with invalidCredentials, and, where its backend
+// checks the nonce, one whose rawNonce is not the nonce of its token. The
+// one exception is the credential object that linkWith refused just
+// before: signInWith takes the identical object, with what the provider
+// kept for it, as the role says. So every call here gets a credential of
+// its own, but for that one.
 //
 // The mocks of the module of a way to sign in issue such tokens, of one
 // identity of their own and the same each time, each with a new nonce, so
