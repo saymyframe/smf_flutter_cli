@@ -10,6 +10,7 @@ void main() {
   const pbxproj = 'ios/Runner.xcodeproj/project.pbxproj';
   const manifest = 'android/app/src/main/AndroidManifest.xml';
   const infoPlist = 'ios/Runner/Info.plist';
+  const entitlements = 'ios/Runner/Runner.entitlements';
   const settingsGradle = 'android/settings.gradle.kts';
   const appGradle = 'android/app/build.gradle.kts';
 
@@ -173,6 +174,61 @@ void main() {
       final modes = _plistKeys(every[infoPlist]!)['UIBackgroundModes']!;
       expect(modes.name.local, 'array');
       expect(modes.findElements('string').map((e) => e.innerText), ['fetch']);
+    });
+
+    test(
+        'sign the app target with entitlements that parse, empty without '
+        'the entitlements of the modules', () {
+      const path = entitlements;
+
+      expect(alone.keys, contains(path));
+      expect(XmlDocument.parse(alone[path]!).rootElement.name.local, 'plist');
+      expect(_plistKeys(alone[path]!), isEmpty);
+      expect(alone[path], contains('<dict>\n</dict>\n'));
+      final domains =
+          _plistKeys(every[path]!)['com.apple.developer.associated-domains']!;
+      expect(domains.name.local, 'array');
+      expect(
+        domains.findElements('string').map((e) => e.innerText),
+        ['applinks:example.com'],
+      );
+
+      // Each build configuration of the app target, which reads Info.plist,
+      // signs with the file, which Xcode shows in the group of the target.
+      final project = alone[pbxproj]!;
+      final settings = RegExp(r'buildSettings = \{([^{}]*)\};')
+          .allMatches(project)
+          .map((match) => match[1]!)
+          .toList();
+      final ofApp = settings
+          .where((it) => it.contains('INFOPLIST_FILE = Runner/Info.plist;'))
+          .toList();
+      expect(ofApp, hasLength(3));
+      for (final configuration in ofApp) {
+        expect(
+          'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'
+              .allMatches(configuration),
+          hasLength(1),
+        );
+      }
+      expect('CODE_SIGN_ENTITLEMENTS'.allMatches(project), hasLength(3));
+      final reference = RegExp(
+        r'(\w{24}) /\* Runner\.entitlements \*/ = \{isa = PBXFileReference; '
+        r'lastKnownFileType = text\.plist\.entitlements; '
+        r'path = Runner\.entitlements; sourceTree = "<group>"; \};',
+      ).firstMatch(project)!;
+      final group = RegExp(
+        r'/\* Runner \*/ = \{\n\t*isa = PBXGroup;\n\t*children = \(([^)]*)\);',
+      ).firstMatch(project)!;
+      expect(
+        group[1],
+        contains('${reference[1]} /* Runner.entitlements */,'),
+      );
+      // A file of no build phase: Xcode only signs with it.
+      expect(
+        RegExp(RegExp.escape(reference[1]!)).allMatches(project),
+        hasLength(2),
+      );
     });
 
     test('have the bundle id and the highest minimum iOS version', () {

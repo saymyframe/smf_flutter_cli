@@ -298,6 +298,13 @@ dependencies {
 </dict>
 </plist>
 ''',
+  'ios/Runner/Runner.entitlements': '''
+<plist version="1.0">
+<dict>
+{{{smf_app_entry__ios_entitlements}}}
+</dict>
+</plist>
+''',
 };
 
 /// A brick of a small app with the tags of every socket of the app entry

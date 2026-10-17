@@ -35,7 +35,9 @@ final class AndroidMetaData {
   String toString() => attribute;
 }
 
-/// A value of an `Info.plist` key in [AppEntryRole.infoPlist].
+/// A value of a key of a property list: of `Info.plist` in
+/// [AppEntryRole.infoPlist], or of the entitlements of the iOS app in
+/// [AppEntryRole.iosEntitlements].
 @immutable
 sealed class PlistValue {
   const PlistValue();
@@ -146,8 +148,8 @@ final class PlistStringArray extends PlistValue {
   String toString() => '$values';
 }
 
-/// Merges `Info.plist` values: string arrays are united, other values must
-/// be equal.
+/// Merges the values of a key of a property list, such as `Info.plist`:
+/// string arrays are united, other values must be equal.
 final class PlistMergePolicy extends MergePolicy<PlistValue> {
   /// Creates the policy.
   const PlistMergePolicy();
@@ -221,12 +223,15 @@ String _renderAndroidMetaData(
         )
         .join('\n');
 
-String _renderInfoPlist(List<MapEntry<String, PlistValue>> entries) => entries
-    .map(
-      (entry) =>
-          '\t<key>${_escapeXml(entry.key)}</key>\n${entry.value.toXml('\t')}',
-    )
-    .join('\n');
+/// The entries of the top-level dictionary of a property list, each key
+/// with its value.
+String _renderPlistEntries(List<MapEntry<String, PlistValue>> entries) =>
+    entries
+        .map(
+          (entry) => '\t<key>${_escapeXml(entry.key)}</key>\n'
+              '${entry.value.toXml('\t')}',
+        )
+        .join('\n');
 
 String _renderGradleSettingsPlugins(List<MapEntry<String, String>> entries) =>
     entries
@@ -270,6 +275,7 @@ const _lineSockets = <(SocketRef, String)>[
   ),
   (AppEntryRole.mainActivityIntentFilters, AppEntryRole.androidManifestFile),
   (AppEntryRole.infoPlist, AppEntryRole.infoPlistFile),
+  (AppEntryRole.iosEntitlements, AppEntryRole.iosEntitlementsFile),
   (AppEntryRole.gradleSettingsPlugins, AppEntryRole.gradleSettingsFile),
   (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
   (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),
@@ -328,8 +334,11 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
   }
 
   final texts = input.texts;
-  if (texts[AppEntryRole.infoPlistFile] case final plist?) {
-    once(AppEntryRole.infoPlistFile, 'the key', _plistKeys(plist));
+  for (final path in const [
+    AppEntryRole.infoPlistFile,
+    AppEntryRole.iosEntitlementsFile,
+  ]) {
+    if (texts[path] case final plist?) once(path, 'the key', _plistKeys(plist));
   }
   if (texts[AppEntryRole.androidManifestFile] case final manifest?) {
     const path = AppEntryRole.androidManifestFile;
@@ -351,6 +360,99 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
     for (final plugins in _gradlePluginBlocks(texts[path] ?? '')) {
       once(path, 'the plugin', plugins);
     }
+  }
+  return issues;
+}
+
+/// The build settings of each build configuration of an Xcode project, with
+/// the name of the configuration when it follows them, as Xcode writes it.
+/// The settings have no braces inside: Xcode writes a list in parentheses.
+final _buildSettings = RegExp(
+  r'buildSettings\s*=\s*\{([^{}]*)\};(?:\s*name\s*=\s*"?([^";]*)"?\s*;)?',
+);
+
+/// The setting `INFOPLIST_FILE` of build settings, with its value.
+final _infoPlistSetting = RegExp(
+  r'^\s*"?INFOPLIST_FILE"?\s*=\s*"?([^";]*)"?\s*;',
+  multiLine: true,
+);
+
+/// A setting `CODE_SIGN_ENTITLEMENTS` of build settings, with its
+/// condition, such as `[sdk=iphoneos*]`, if any, and its value.
+final _entitlementsSetting = RegExp(
+  r'^\s*"?CODE_SIGN_ENTITLEMENTS(\[[^\]]*\])?"?\s*=\s*"?([^";]*)"?\s*;',
+  multiLine: true,
+);
+
+/// [path], a path of the app in its iOS project, as the build settings of
+/// [AppEntryRole.xcodeProjectFile] name it: from the directory of that
+/// project, such as `Runner/Info.plist`.
+String _inIosProject(String path) => path.substring(path.indexOf('/') + 1);
+
+List<SmfIssue> _checkIosEntitlementsSigned(StructuralRuleInput<NoDsl> input) {
+  const path = AppEntryRole.xcodeProjectFile;
+  const file = AppEntryRole.iosEntitlementsFile;
+  final project = input.texts[path];
+  if (project == null) return const [];
+  final origin = input.owners[path];
+  final infoPlist = _inIosProject(AppEntryRole.infoPlistFile);
+  final entitlements = _inIosProject(file);
+  final issues = <SmfIssue>[];
+  var ofApp = 0;
+  for (final configuration in _buildSettings.allMatches(project)) {
+    final settings = configuration[1]!;
+    final named = switch (configuration[2]) {
+      final name? => 'The build configuration $name',
+      null => 'A build configuration',
+    };
+    final signing = [
+      for (final setting in _entitlementsSetting.allMatches(settings))
+        (condition: setting[1], value: setting[2]!.trim()),
+    ];
+    final readsInfoPlist = _infoPlistSetting
+        .allMatches(settings)
+        .any((setting) => setting[1]!.trim() == infoPlist);
+    if (readsInfoPlist) {
+      ofApp++;
+      if (signing case [(condition: null, :final value)]
+          when value == entitlements) {
+        continue;
+      }
+      issues.add(
+        SmfIssue(
+          '$named of the app target in $path does not sign the app with '
+          '$file.',
+          hint: 'Each build configuration with INFOPLIST_FILE = $infoPlist '
+              'has CODE_SIGN_ENTITLEMENTS = $entitlements; and no other '
+              'CODE_SIGN_ENTITLEMENTS. Without it the app builds and signs, '
+              'but has none of the entitlements that the modules add.',
+          origin: origin,
+          path: path,
+        ),
+      );
+    } else if (signing.isNotEmpty) {
+      issues.add(
+        SmfIssue(
+          '$named in $path, which is not one of the app target, names '
+          'entitlements in CODE_SIGN_ENTITLEMENTS.',
+          hint: 'Only the app target signs with $file: they are the '
+              'entitlements of the app, and a setting of the project reaches '
+              'every target, such as the tests.',
+          origin: origin,
+          path: path,
+        ),
+      );
+    }
+  }
+  if (ofApp == 0) {
+    issues.add(
+      SmfIssue(
+        '$path has no build configuration of the app target, with '
+        'INFOPLIST_FILE = $infoPlist, that signs the app with $file.',
+        origin: origin,
+        path: path,
+      ),
+    );
   }
   return issues;
 }

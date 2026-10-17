@@ -23,7 +23,8 @@ const appEntryRole = AppEntryRole._();
 /// - [fallbackStartScreen], the screen of an app without a router;
 /// - the project of each platform of the app ([AppIdentity.platforms]), at
 ///   the paths of Flutter's templates, such as [androidManifestFile] and
-///   [xcodeProjectFile];
+///   [xcodeProjectFile]; the iOS project also has [iosEntitlementsFile],
+///   which the app target signs with;
 /// - [readmeFile], the README of the app.
 ///
 /// The provider builds the root of the app, inside the [rootWrappers], as a
@@ -67,7 +68,8 @@ const appEntryRole = AppEntryRole._();
 /// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
 /// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module
 /// rules of the role check these tags in the templates of its provider, and
-/// its structural rules check that the native files name every key once.
+/// its structural rules check that the native files name every key once and
+/// that the app target signs with [iosEntitlementsFile].
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -98,6 +100,9 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the Xcode project of the iOS app.
   static const xcodeProjectFile = 'ios/Runner.xcodeproj/project.pbxproj';
+
+  /// The path of the entitlements of the iOS app; see [iosEntitlements].
+  static const iosEntitlementsFile = 'ios/Runner/Runner.entitlements';
 
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
@@ -295,7 +300,25 @@ final class AppEntryRole extends Role<NoDsl> {
   static const infoPlist = SocketRef<KeyedSocket<PlistValue>>.role(
     appEntryRole,
     'info_plist',
-    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderInfoPlist),
+    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderPlistEntries),
+  );
+
+  /// Entitlements of the iOS app in [iosEntitlementsFile], keyed by
+  /// entitlement, such as `aps-environment`: as in [infoPlist], scalar
+  /// values must agree and string arrays are united.
+  ///
+  /// The provider has the file in every app, also when no module
+  /// contributes, and every build configuration of the app target signs
+  /// with it (`CODE_SIGN_ENTITLEMENTS`), which the structural rule
+  /// `app_entry.ios_entitlements_signed` checks. With nothing in it, the
+  /// file changes nothing of how the app is signed. On a device, a
+  /// capability that an entitlement stands for, such as push
+  /// notifications, may need a paid membership of the Apple Developer
+  /// Program; the simulator signs the app without one.
+  static const iosEntitlements = SocketRef<KeyedSocket<PlistValue>>.role(
+    appEntryRole,
+    'ios_entitlements',
+    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderPlistEntries),
   );
 
   /// Gradle plugins declared in [gradleSettingsFile], keyed by plugin id,
@@ -445,6 +468,7 @@ final class AppEntryRole extends Role<NoDsl> {
         androidManifestApplicationMeta,
         mainActivityIntentFilters,
         infoPlist,
+        iosEntitlements,
         gradleSettingsPlugins,
         gradleAppPlugins,
         gradleAppDependencies,
@@ -521,10 +545,21 @@ final class AppEntryRole extends Role<NoDsl> {
         StructuralRule(
           id: 'app_entry.native_keys',
           description: 'The native files name every key once: the keys of '
-              'the top-level dictionary of Info.plist, the permissions and '
-              'the meta-data of the application in the Android manifest, and '
-              'the plugins of each plugins block of the Gradle files.',
+              'the top-level dictionary of Info.plist and of the '
+              'entitlements of the iOS app, the permissions and the '
+              'meta-data of the application in the Android manifest, and the '
+              'plugins of each plugins block of the Gradle files.',
           check: _checkNativeKeys,
+        ),
+        StructuralRule(
+          id: 'app_entry.ios_entitlements_signed',
+          description: 'Every build configuration of the app target in '
+              'ios/Runner.xcodeproj/project.pbxproj, which reads '
+              'Runner/Info.plist, signs the app with '
+              'ios/Runner/Runner.entitlements (CODE_SIGN_ENTITLEMENTS), and '
+              'no other build configuration names entitlements, so the '
+              'entitlements that the modules add reach the app.',
+          check: _checkIosEntitlementsSigned,
         ),
         StructuralRule(
           id: 'app_entry.agent_guide_paths',
