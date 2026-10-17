@@ -250,7 +250,7 @@ void main() {
     // notifications that their role requires, and then the preferences of
     // the localization, the theme and the notifications and the DI
     // container, all before the state managers.
-    expect(run.asked[10].shown, [
+    expect(run.asked[11].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -1510,6 +1510,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
