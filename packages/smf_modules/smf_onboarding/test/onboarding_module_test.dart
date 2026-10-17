@@ -1485,10 +1485,6 @@ void main() {
         _argument(place, 'index').toSource(),
         'step?.later == null ? withLater.length : withLater.indexOf(step!)',
       );
-      expect(
-        _argument(_enclosing(later, 'ExcludeFocus'), 'excluding').toSource(),
-        '!identical(other, step)',
-      );
       // Only in an app with such a step: the pages of the others keep the
       // look that they have without steps.
       expect(

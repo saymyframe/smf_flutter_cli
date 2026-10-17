@@ -128,7 +128,7 @@ With `gen-l10n` of Flutter:
 
 - On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. Once the onboarding is finished, a navigation to that route, such as a link, shows the screen that the app starts on, or the `redirectTo` of another guard while that one does not allow.
 - The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, such as an `OnboardingPage` with a `symbol` or an `icon` for its cell. The screen keeps Skip above the pages, and below them a mark for each page and its button, which is Next and, on the last page, Get started.
-- Before the last page of that list, the screen shows the steps of `appOnboardingSteps` in `lib/core/onboarding/onboarding_steps.dart`, each on an `OnboardingPage` with the icon of the step. On the page of a step, the button below the pages is the action of the step and spins while its `run` runs. The `later` of the step is a second button below it, and Skip skips the steps too.
+- Before the last page of that list, the screen shows the steps of `appOnboardingSteps` in `lib/core/onboarding/onboarding_steps.dart`, each on an `OnboardingPage` with the icon of the step. On the page of a step, the button below the pages is the action of the step. It spins while its `run` runs, or is disabled then in an app that asks for less motion. The `later` of the step is a second button below it, and Skip skips the steps too.
 - The pages animate when they are first shown and while they turn, and each of these animations ends. Keep it so in a page of your own: a test that waits for the app to settle with `pumpAndSettle()` never ends on a screen that animates without end.
 - `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Nothing else shows the onboarding again: call `restart()` where the user asks to see it, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
 - In a test that starts the app to check another screen, call `onboardingStatus.complete()` before the app starts. It saves nothing then, and the app does not show the onboarding.
@@ -6189,8 +6189,9 @@ import 'onboarding_status.dart';
 /// A step is a page in the look of the others, with the icon of the step
 /// in its cell. On the page of a step, the button below the pages is the
 /// action of the step: it calls the function of the step, spins until the
-/// future of that function completes, and then shows the next page, also
-/// when the future fails. A step may have a second button below it, which
+/// future of that function completes, or takes no tap until then in an app
+/// that asks for less motion, and then shows the next page, also when the
+/// future fails. A step may have a second button below it, which
 /// goes on without the action. Skip skips the steps too.
 ///
 /// Skip and the last button finish the onboarding. The screen does not
@@ -6411,7 +6412,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       // The second button of a step, in a place of the height
                       // of the tallest of them, so that the pages keep their
                       // height from page to page. Only the one of the step
-                      // whose page is shown is on the screen.
+                      // whose page is shown is on the screen: the others take
+                      // no tap and no focus.
                       if (withLater.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
@@ -6422,12 +6424,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 : withLater.indexOf(step!),
                             children: [
                               for (final other in withLater)
-                                ExcludeFocus(
-                                  excluding: !identical(other, step),
-                                  child: TextButton(
-                                    onPressed: _running ? null : _next,
-                                    child: Text(other.later!(context)),
-                                  ),
+                                TextButton(
+                                  onPressed: _running ? null : _next,
+                                  child: Text(other.later!(context)),
                                 ),
                               const SizedBox.shrink(),
                             ],

@@ -17,8 +17,9 @@ import 'onboarding_status.dart';
 /// A step is a page in the look of the others, with the icon of the step
 /// in its cell. On the page of a step, the button below the pages is the
 /// action of the step: it calls the function of the step, spins until the
-/// future of that function completes, and then shows the next page, also
-/// when the future fails. A step may have a second button below it, which
+/// future of that function completes, or takes no tap until then in an app
+/// that asks for less motion, and then shows the next page, also when the
+/// future fails. A step may have a second button below it, which
 /// goes on without the action. Skip skips the steps too.
 ///
 /// Skip and the last button finish the onboarding. The screen does not
@@ -238,7 +239,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       // The second button of a step, in a place of the height
                       // of the tallest of them, so that the pages keep their
                       // height from page to page. Only the one of the step
-                      // whose page is shown is on the screen.
+                      // whose page is shown is on the screen: the others take
+                      // no tap and no focus.
                       if (withLater.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
@@ -249,12 +251,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 : withLater.indexOf(step!),
                             children: [
                               for (final other in withLater)
-                                ExcludeFocus(
-                                  excluding: !identical(other, step),
-                                  child: TextButton(
-                                    onPressed: _running ? null : _next,
-                                    child: Text(other.later!(context)),
-                                  ),
+                                TextButton(
+                                  onPressed: _running ? null : _next,
+                                  child: Text(other.later!(context)),
                                 ),
                               const SizedBox.shrink(),
                             ],
