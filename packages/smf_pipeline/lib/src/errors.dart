@@ -51,20 +51,59 @@ String issueLine(SmfIssue issue) {
       '${hint == null ? '' : ' ($hint)'}';
 }
 
-/// Returns [issue] with [origin] if it names no origin itself.
-SmfIssue issueWithOrigin(SmfIssue issue, ContributionOrigin origin) {
-  if (issue.origin != null) return issue;
-  return issue.isError
-      ? SmfIssue(
-          issue.message,
-          hint: issue.hint,
+/// The code of the warnings of the pipeline about an option of a role that
+/// the app lacks, which nothing reads.
+const unusedOptionWarning = 'pipeline.unused_option';
+
+/// [issue], which [who], a hook or a rule of [role] with the [origin],
+/// reported, with [origin] if it names no origin itself; or an error of
+/// [origin] if [who] may not report it.
+///
+/// It may report an error, and a warning about what the app is made of
+/// with a code of [role], `<role id>.<name>` (see [SmfIssue.code]). A code
+/// says which role reported a warning, so a code of another role or of
+/// another form is a bug of [origin]. So is a warning about the machine,
+/// which only the preflight checks of the pipeline report.
+SmfIssue reportedBy(
+  SmfIssue issue, {
+  required Role role,
+  required String who,
+  required ContributionOrigin origin,
+}) {
+  final ownOrigin = issue.origin ?? origin;
+  switch (issue.category) {
+    case null:
+      return SmfIssue(
+        issue.message,
+        hint: issue.hint,
+        origin: ownOrigin,
+        path: issue.path,
+      );
+    case WarningCategory.machine:
+      return SmfIssue(
+        '$who reported a warning about the machine, which only the '
+        'preflight checks of the pipeline report: ${issue.message}',
+        hint: 'Report a warning about what the app is made of, with a code '
+            'of the $role.',
+        origin: origin,
+      );
+    case WarningCategory.composition:
+      final code = issue.code!;
+      if (!SmfIssue.isWarningCode(code) || !code.startsWith('${role.id}.')) {
+        return SmfIssue(
+          '$who reported a warning with the code "$code", which is not a '
+          'code of the $role: ${issue.message}',
+          hint: 'A code of the $role is ${role.id}.<name>, with a name in '
+              'lower snake_case.',
           origin: origin,
-          path: issue.path,
-        )
-      : SmfIssue.warning(
-          issue.message,
-          hint: issue.hint,
-          origin: origin,
-          path: issue.path,
         );
+      }
+      return SmfIssue.warning(
+        issue.message,
+        code: code,
+        hint: issue.hint,
+        origin: ownOrigin,
+        path: issue.path,
+      );
+  }
 }

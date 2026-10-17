@@ -1170,6 +1170,90 @@ void main() {
     });
 
     test(
+        'gives the result the warnings about the app of its validation and '
+        'of the choices that the app is rendered with, and renders it',
+        () async {
+      final watch = TestRole<String>(
+        'watch',
+        template: TestTemplate(
+          issues: const [
+            SmfIssue.warning('Of the data.', code: 'watch.of_data'),
+          ],
+          choice: 'seen',
+          warnings: const [
+            SmfIssue.warning('Of the choice.', code: 'watch.of_choice'),
+          ],
+        ),
+      );
+      final bells = TestRole<String>(
+        'bells',
+        options: const [RoleOption(name: 'chime', help: '')],
+        template: TestTemplate(),
+      );
+      final registry = ModuleRegistry([
+        scaffold(),
+        TestModule('watcher', providers: [RoleProvider.plain(watch)]),
+        TestModule('tower', uses: {bells}),
+      ]);
+
+      final result = await ContractHarness(
+        registry,
+        roleOptions: const {'chime': 'loud'},
+      ).check(
+        const ContractCase('watcher', requested: [ModuleId('watcher')]),
+      );
+
+      expect(result.errors, isEmpty);
+      expect(result.app, isNotNull);
+      // An option of every case that the app lacks the role of, which
+      // `smf create` warns of with the same options, comes first.
+      expect(
+        [for (final warning in result.warnings) '$warning'],
+        [
+          'warning [role:watch] watch.of_data: Of the data.',
+          equals(
+            'warning pipeline.unused_option: --chime has no effect: no '
+            'module of the app provides the bells role.',
+          ),
+          'warning [role:watch] watch.of_choice: Of the choice.',
+        ],
+      );
+      expect(result.issues, result.warnings);
+    });
+
+    test(
+        'is an error when a choice reports a warning with a code of another '
+        'role, and the app is not rendered', () async {
+      final watch = TestRole<String>(
+        'watch',
+        template: TestTemplate(
+          warnings: const [
+            SmfIssue.warning('Borrowed.', code: 'router.no_start'),
+          ],
+        ),
+      );
+
+      final result = await ContractHarness(
+        ModuleRegistry([
+          scaffold(),
+          TestModule('watcher', providers: [RoleProvider.plain(watch)]),
+        ]),
+      ).check(
+        const ContractCase('watcher', requested: [ModuleId('watcher')]),
+      );
+
+      expect(
+        result.errors.single.message,
+        'The template of the watch role reported a warning with the code '
+        '"router.no_start", which is not a code of the watch role: Borrowed.',
+      );
+      expect(result.errors.single.origin, RoleTemplateOrigin(watch));
+      expect(result.warnings, isEmpty);
+      expect(result.app, isNull);
+      expect(result.choices, {watch: null, appEntryRole: null});
+    });
+
+    test(
         'gives the result the data and the roles of its app, with the context '
         'of the harness and the choices of the roles', () async {
       final pick = TestRole<String>(
@@ -1365,7 +1449,6 @@ void main() {
               logger.progress('Reading the dark theme').fail('No dark theme');
               logger
                 ..error('lib/theme.dart has no dark theme')
-                ..warn('Green unless --color says otherwise')
                 ..success('Read the themes');
             },
           ),
@@ -1375,6 +1458,35 @@ void main() {
 
         expect(result.errors, isEmpty);
         expect(result.choices, {role: 'green', appEntryRole: null});
+      });
+
+      test(
+          'is an error when its template warns through the logger, in a '
+          'terminal or without one, and the app is not rendered', () async {
+        for (final terminal in [true, false]) {
+          final role = colors(
+            _AskTemplate(
+              alsoDoes: (environment) async {
+                if (environment.interactive == terminal) {
+                  environment.logger.warn('Green unless --color says so');
+                }
+              },
+            ),
+          );
+
+          final result = await harnessOf(role).check(asker);
+
+          final error = result.errors.single;
+          expect(
+            error.message,
+            'The template of the colors role warned through the logger in '
+            'choose(): Green unless --color says so',
+            reason: 'terminal: $terminal',
+          );
+          expect(error.hint, 'Report it with context.warn() and a code.');
+          expect(error.origin, RoleTemplateOrigin(role));
+          expect(result.app, isNull);
+        }
       });
 
       test('of every kind gets its default or first choice', () async {
@@ -1394,6 +1506,163 @@ void main() {
           {curious: 'true, typed, b, one', appEntryRole: null},
         );
         expect(result.answers, {'answers': 'true, typed, b, one'});
+      });
+    });
+
+    group('a warning of a choice', () {
+      /// The result of the app of one module that provides [roles], in their
+      /// order.
+      Future<ContractResult> checked(List<TestRole<String>> roles) =>
+          ContractHarness(
+            ModuleRegistry([
+              scaffold(),
+              TestModule(
+                'roles',
+                providers: [for (final role in roles) RoleProvider.plain(role)],
+              ),
+            ]),
+          ).check(const ContractCase('roles', requested: [ModuleId('roles')]));
+
+      TestRole<String> plain(String id) =>
+          TestRole<String>(id, template: TestTemplate(choice: id));
+
+      /// The template of a role whose app has the mode option `--access`,
+      /// which it chooses without a question.
+      TestRole<String> doors() => TestRole<String>(
+            'doors',
+            options: const [
+              RoleOption.mode(
+                name: 'access',
+                help: 'Who may use the app.',
+                values: ['members', 'guests'],
+              ),
+            ],
+            template: _ModeTemplate(
+              values: const ['members', 'guests'],
+              asks: false,
+            ),
+          );
+
+      /// The only error of [result]: that [role] warned of [message]
+      /// through the logger.
+      void expectLoggedBy(
+        ContractResult result,
+        Role role, {
+        String message = 'Loud.',
+      }) {
+        final error = result.errors.single;
+        expect(
+          error.message,
+          'The template of the $role warned through the logger in choose(): '
+          '$message',
+        );
+        expect(error.origin, RoleTemplateOrigin(role));
+        expect(result.app, isNull);
+      }
+
+      test(
+          'through the logger is an error of the role that warns, which asks '
+          'nothing, and not of the role that chooses after it', () async {
+        final loud = TestRole<String>(
+          'loud',
+          template: _WarningTemplate(
+            logsInTerminal: true,
+            logsWithoutTerminal: true,
+          ),
+        );
+
+        expectLoggedBy(await checked([loud, plain('after')]), loud);
+      });
+
+      test(
+          'through the logger only in a terminal is an error of the role that '
+          'warns, after a role that chooses before it', () async {
+        final loud = TestRole<String>(
+          'loud',
+          template: _WarningTemplate(logsInTerminal: true),
+        );
+
+        expectLoggedBy(await checked([plain('before'), loud]), loud);
+      });
+
+      test(
+          'through the logger only without a terminal is an error of the role '
+          'that warns, in an app with a mode option', () async {
+        final loud = TestRole<String>(
+          'loud',
+          template: _WarningTemplate(logsWithoutTerminal: true),
+        );
+
+        expectLoggedBy(await checked([doors(), plain('before'), loud]), loud);
+      });
+
+      test(
+          'is an error of its role when the role warns of other codes without '
+          'a terminal than in a terminal, which the matrices replay without a '
+          'terminal', () async {
+        TestRole<String> quiet({
+          bool inTerminal = false,
+          bool withoutTerminal = false,
+        }) =>
+            TestRole<String>(
+              'quiet',
+              template: _WarningTemplate(
+                warnsInTerminal: inTerminal,
+                warnsWithoutTerminal: withoutTerminal,
+              ),
+            );
+        const hint = 'The matrices generate the app without a terminal, so '
+            'the choice has to warn of the same in both runs.';
+
+        // In a run without a terminal in every app, with or without a mode
+        // option, and with the answer to a question.
+        for (final (roles, run) in [
+          ([plain('before')], 'a run without a terminal'),
+          ([doors()], 'a run without a terminal'),
+          (
+            [
+              TestRole<String>(
+                'colors',
+                options: const [RoleOption(name: 'color', help: '')],
+                template: _AskTemplate(),
+              ),
+            ],
+            'a run without a terminal with --color green',
+          ),
+        ]) {
+          final late = quiet(withoutTerminal: true);
+          final result = await checked([...roles, late]);
+
+          final error = result.errors.single;
+          expect(
+            error.message,
+            'The quiet role warns of quiet.late in $run, and of nothing in a '
+            'terminal, where the harness answered as a user who presses '
+            'Enter.',
+            reason: run,
+          );
+          expect(error.hint, hint);
+          expect(error.origin, RoleTemplateOrigin(late));
+          expect(result.app, isNull);
+        }
+
+        final early = quiet(inTerminal: true);
+        expect(
+          (await checked([plain('before'), early])).errors.single.message,
+          'The quiet role warns of nothing in a run without a terminal, and '
+          'of quiet.late in a terminal, where the harness answered as a user '
+          'who presses Enter.',
+        );
+
+        // The same codes in both runs are no problem.
+        final always = await checked([
+          quiet(inTerminal: true, withoutTerminal: true),
+        ]);
+        expect(always.errors, isEmpty);
+        expect(
+          [for (final warning in always.warnings) warning.code],
+          ['quiet.late'],
+        );
       });
     });
 
@@ -2841,6 +3110,51 @@ void main() {
         expect(
           result.errors.single.origin,
           const ModuleOrigin(ModuleId('writer')),
+        );
+      });
+
+      test(
+          'a warning of a structural rule is an error, since smf create runs '
+          'no structural rule', () async {
+        final notes = TestRole<NoDsl>(
+          'notes',
+          structuralRules: const [
+            StructuralRule(
+              id: 'notes.warns',
+              description: 'Warns of the notes.',
+              check: _warnOfNotes,
+            ),
+          ],
+        );
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'writer',
+              providers: [RoleProvider.plain(notes)],
+              contributions: [
+                BrickContribution(
+                  bundle('notes', files: {'NOTES.md': '# Notes\n'}),
+                ),
+              ],
+            ),
+          ]),
+        );
+
+        final result = await harness.check(
+          const ContractCase('writer', requested: [ModuleId('writer')]),
+        );
+
+        String errorOf(String kind) =>
+            'error [writer] NOTES.md: A structural rule of the notes role '
+            'reported $kind, which nobody who generates the app sees: smf '
+            'create runs no structural rule. The notes are short. (Report it '
+            'as an error, or as a warning of a validate hook or a module '
+            'rule.)';
+        expect(result.warnings, isEmpty);
+        expect(
+          [for (final issue in result.errors) '$issue'],
+          [errorOf('a warning'), errorOf('a warning about the machine')],
         );
       });
 
@@ -4292,6 +4606,39 @@ final class _AskTemplate extends RoleTemplate<String> {
   Map<String, String> optionsOf(Object? choice) => optionsFor(choice);
 }
 
+/// A template that asks nothing, chooses `null` and warns: of `Loud.`
+/// through the logger in a terminal if [logsInTerminal] and without one if
+/// [logsWithoutTerminal], and of `Late.` with the code `<role id>.late` in
+/// a terminal if [warnsInTerminal] and without one if
+/// [warnsWithoutTerminal].
+final class _WarningTemplate extends RoleTemplate<String> {
+  _WarningTemplate({
+    this.logsInTerminal = false,
+    this.logsWithoutTerminal = false,
+    this.warnsInTerminal = false,
+    this.warnsWithoutTerminal = false,
+  });
+
+  final bool logsInTerminal;
+  final bool logsWithoutTerminal;
+  final bool warnsInTerminal;
+  final bool warnsWithoutTerminal;
+
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async {
+    final terminal = context.environment.interactive;
+    if (terminal ? logsInTerminal : logsWithoutTerminal) {
+      context.environment.logger.warn('Loud.');
+    }
+    if (terminal ? warnsInTerminal : warnsWithoutTerminal) {
+      context.warn(
+        SmfIssue.warning('Late.', code: '${context.role.id}.late'),
+      );
+    }
+    return null;
+  }
+}
+
 /// The template of a role with the mode option `--<name>` of [values]:
 /// `--access` of `members`, `guests` and `anyone` unless they are given.
 ///
@@ -4512,6 +4859,23 @@ List<SmfIssue> _checkNotes(StructuralRuleInput<NoDsl> input) => [
           origin: input.owners['NOTES.md'],
           path: 'NOTES.md',
         ),
+    ];
+
+List<SmfIssue> _warnOfNotes(StructuralRuleInput<NoDsl> input) => [
+      for (final warning in [
+        SmfIssue.warning(
+          'The notes are short.',
+          code: 'notes.short',
+          origin: input.owners['NOTES.md'],
+          path: 'NOTES.md',
+        ),
+        SmfIssue.machineWarning(
+          'The notes are short.',
+          origin: input.owners['NOTES.md'],
+          path: 'NOTES.md',
+        ),
+      ])
+        warning,
     ];
 
 /// A module whose contributions fail.

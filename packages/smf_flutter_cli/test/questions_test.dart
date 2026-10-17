@@ -464,11 +464,14 @@ void main() {
     const added = 'Adding go_router: the only provider of the router role, '
         'which settings requires.';
     // The screen is a destination, which an app without a layout has no
-    // main navigation for, and the app starts on none of its routes.
-    const start = 'No route is marked as a start candidate, so the app starts '
-        'on its fallback screen. Choose a start route with --start.';
-    const destination = 'No module provides the layout role, so the app has '
-        'no main navigation to lead to the destination /settings (settings). '
+    // main navigation for, and the app starts on none of its routes. The
+    // template of the router role reports both.
+    const start = '[role:router]: No route is marked as a start candidate, '
+        'so the app starts on its fallback screen. Choose a start route with '
+        '--start.';
+    const destination = '[role:router]: No module provides the layout role, '
+        'so the app has no main navigation to lead to the destination '
+        '/settings (settings). '
         'Choose a provider of the role, or open it from a screen of yours '
         'with context.nav.';
     expect(run.lines, containsAllInOrder([added, start, destination]));
@@ -1727,8 +1730,9 @@ void main() {
       ];
     }
 
-    const ofSettings = 'No module provides the layout role, so the app has no '
-        'main navigation to lead to the destination /settings (settings). '
+    const ofSettings = '[role:router]: No module provides the layout role, '
+        'so the app has no main navigation to lead to the destination '
+        '/settings (settings). '
         'Choose a provider of the role, or open it from a screen of yours '
         'with context.nav.';
 

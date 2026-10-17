@@ -118,6 +118,19 @@ void main() {
         _hasProblem('have the same id'),
       );
     });
+
+    test('must not be pipeline, which the codes of its warnings name', () {
+      final role = TestRole<NoDsl>('pipeline');
+
+      expect(
+        _problems([
+          TestModule('a', uses: {role}),
+        ]),
+        _hasProblem(
+          'The role id pipeline names the pipeline in the codes of warnings',
+        ),
+      );
+    });
   });
 
   group('dependencies', () {

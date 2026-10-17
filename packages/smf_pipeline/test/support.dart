@@ -95,11 +95,15 @@ final class TestTemplate<D extends Object> extends RoleTemplate<D> {
     this.contributions = const [],
     this.issues = const [],
     this.choice,
+    this.warnings = const [],
   });
 
   final List<Contribution> contributions;
   final List<SmfIssue> issues;
   final Object? choice;
+
+  /// The warnings that [choose] reports with [RoleChoiceContext.warn].
+  final List<SmfIssue> warnings;
 
   /// The inputs of [validate], in order.
   final List<RoleHookInput<D>> validated = [];
@@ -119,6 +123,7 @@ final class TestTemplate<D extends Object> extends RoleTemplate<D> {
   @override
   Future<Object?> choose(RoleChoiceContext<D> context) async {
     chosen.add(context);
+    warnings.forEach(context.warn);
     return choice;
   }
 }

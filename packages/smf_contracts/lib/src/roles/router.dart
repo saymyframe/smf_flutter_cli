@@ -611,6 +611,21 @@ final class RouterRole extends Role<RoutesData> {
     help: 'The full path of the screen the app starts on, such as /home.',
   );
 
+  /// The code of the warning that no route can start the app, which then
+  /// starts on the fallback start screen of the app entry role: the app has
+  /// routes, but none is a start candidate and `--start` names none.
+  static const noStartWarning = 'router.no_start';
+
+  /// The code of the warning that the app has destinations other than the
+  /// one that it starts on or below, but no provider of the layout role,
+  /// so no main navigation leads to them.
+  static const noMainNavigationWarning = 'router.no_main_navigation';
+
+  /// The code of the warning of the rule `router.routes` that two routes of
+  /// a module both match some locations, which go to the route declared
+  /// first.
+  static const ambiguousRoutesWarning = 'router.ambiguous_routes';
+
   @override
   String get id => 'router';
 

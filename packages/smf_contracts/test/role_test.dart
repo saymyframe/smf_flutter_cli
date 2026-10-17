@@ -412,6 +412,41 @@ void main() {
         ),
       );
     });
+
+    test(
+        'keeps the warnings about the app that the hook reports, in order, '
+        'and refuses an error and a warning about the machine', () {
+      final context = router.choiceContext(request(null));
+      expect(context.warnings, isEmpty);
+
+      const first = SmfIssue.warning('No start.', code: 'router.no_start');
+      const second = SmfIssue.warning('Far away.', code: 'router.far');
+      context
+        ..warn(first)
+        ..warn(second);
+
+      expect(context.warnings, [same(first), same(second)]);
+      expect(() => context.warnings.add(first), throwsUnsupportedError);
+      for (final refused in const [
+        SmfIssue('Broken.'),
+        SmfIssue.machineWarning('No tool.'),
+      ]) {
+        expect(
+          () => context.warn(refused),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.message,
+              'message',
+              'The choice of the router role reports only warnings about '
+                  'what the app is made of',
+            ),
+          ),
+        );
+      }
+      expect(context.warnings, hasLength(2));
+      // Each context has warnings of its own.
+      expect(router.choiceContext(request(null)).warnings, isEmpty);
+    });
   });
 
   group('RoleTemplate and RoleProvider defaults', () {

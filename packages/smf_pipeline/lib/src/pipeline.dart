@@ -389,7 +389,7 @@ extension CreatePlanning on CreatePipeline {
       }
 
       _reportAdded(resolution, logger);
-      final choices = await chooseRoles(
+      final (:choices, issues: chosen) = await chooseRoles(
         registry: registry,
         resolution: resolution,
         collection: collection,
@@ -397,6 +397,10 @@ extension CreatePlanning on CreatePipeline {
         environment: environment,
         context: context,
       );
+      // It reports the warnings of the choices. Their errors are of the
+      // templates of roles, which lenient mode cannot leave out, so it
+      // stops on them rather than plan the app again.
+      lenience.leaveOut(chosen);
       return GenerationPlan(
         request: request,
         selection: selection,

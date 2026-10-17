@@ -1914,7 +1914,9 @@ void main() {
       );
       final provider = TestProvider<String>(
         hooked,
-        issues: const [SmfIssue.warning('provider says maybe')],
+        issues: const [
+          SmfIssue.warning('provider says maybe', code: 'hooked.maybe'),
+        ],
       );
       final result = _validate([
         entry,
@@ -1936,8 +1938,74 @@ void main() {
         'home: home has 1 data',
       ]);
       expect(result.issues[1].isError, isFalse);
+      // The pipeline gives a warning the origin of its check, and keeps its
+      // code.
+      expect(result.issues[1].code, 'hooked.maybe');
+      expect(result.issues[2].code, 'hooked.count');
       expect(template.validated.single.data.single.value, 'from home');
       expect(provider.validated.single.data.single.value, 'from home');
+    });
+
+    test(
+        'a warning of a hook or a rule with a code of another role, or of '
+        'another form, or about the machine, is an error of its owner', () {
+      final role = TestRole<String>(
+        'hooked',
+        template: TestTemplate<String>(
+          issues: const [
+            SmfIssue.warning('Fine.', code: 'hooked.fine'),
+            SmfIssue.warning('Borrowed.', code: 'router.no_start'),
+            SmfIssue.warning('Shouting.', code: 'hooked.Loud'),
+            SmfIssue.warning('Bare.', code: 'hooked'),
+            SmfIssue.machineWarning('No tool.'),
+          ],
+        ),
+        moduleRules: const [
+          ModuleRule(id: 'hooked.wrong', description: '', check: _wrongCode),
+        ],
+      );
+      final result = _validate([
+        entry,
+        TestModule('home', requires: {role}, contributions: [role.data('x')]),
+        TestModule('prov', providers: [RoleProvider.plain(role)]),
+      ]);
+
+      const code = 'A code of the hooked role is hooked.<name>, with a name '
+          'in lower snake_case.';
+      expect(
+        [for (final issue in result.issues) '$issue'],
+        [
+          'warning [role:hooked] hooked.fine: Fine.',
+          equals(
+            'error [role:hooked]: The template of the hooked role reported a '
+            'warning with the code "router.no_start", which is not a code of '
+            'the hooked role: Borrowed. ($code)',
+          ),
+          equals(
+            'error [role:hooked]: The template of the hooked role reported a '
+            'warning with the code "hooked.Loud", which is not a code of the '
+            'hooked role: Shouting. ($code)',
+          ),
+          equals(
+            'error [role:hooked]: The template of the hooked role reported a '
+            'warning with the code "hooked", which is not a code of the '
+            'hooked role: Bare. ($code)',
+          ),
+          equals(
+            'error [role:hooked]: The template of the hooked role reported a '
+            'warning about the machine, which only the preflight checks of '
+            'the pipeline report: No tool. (Report a warning about what the '
+            'app is made of, with a code of the hooked role.)',
+          ),
+          // The error is of the module whose rule ran, as when the rule
+          // throws, though the warning names another origin.
+          equals(
+            'error [home]: A check of home reported a warning with the code '
+            '"other.thing", which is not a code of the hooked role: Not '
+            'mine. ($code)',
+          ),
+        ],
+      );
     });
 
     test('a hook that throws is an issue of its owner', () {
@@ -2470,5 +2538,17 @@ List<SmfModule> _notesOnACycle() {
 
 List<SmfIssue> _count(ModuleRuleInput<String> input) => [
       if (input.data.isNotEmpty)
-        SmfIssue.warning('${input.module.id} has ${input.data.length} data'),
+        SmfIssue.warning(
+          '${input.module.id} has ${input.data.length} data',
+          code: '${input.roleInput.role.id}.count',
+        ),
+    ];
+
+List<SmfIssue> _wrongCode(ModuleRuleInput<String> input) => [
+      if (input.data.isNotEmpty)
+        const SmfIssue.warning(
+          'Not mine.',
+          code: 'other.thing',
+          origin: ModuleOrigin(ModuleId('prov')),
+        ),
     ];

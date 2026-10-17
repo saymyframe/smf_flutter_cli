@@ -36,7 +36,7 @@ void main() {
     final host = FakeHost(terminal: true);
     final reported = <(Role, Object?)>[];
 
-    final choices = await chooseRoles(
+    final (:choices, :issues) = await chooseRoles(
       registry: ModuleRegistry(modules),
       resolution: resolution,
       collection: collect(resolution, testContext),
@@ -56,12 +56,149 @@ void main() {
     expect(context.data.single.value, 'route');
     expect(context.environment.interactive, isTrue);
     expect(context.context, same(testContext));
-    expect(host.logger.warnings, [
-      equals(
-        '--ignored has no effect: no module of the app provides the absent '
-        'role.',
+    // An option of a role that the app lacks is a warning about the app,
+    // which the pipeline reports.
+    expect(
+      [for (final issue in issues) '$issue'],
+      [
+        equals(
+          'warning pipeline.unused_option: --ignored has no effect: no module '
+          'of the app provides the absent role.',
+        ),
+      ],
+    );
+    expect(host.logger.warnings, isEmpty);
+  });
+
+  test(
+      'returns the warnings that the templates report, each of its template '
+      'unless it names its own origin, and an error of the template for a '
+      'code of another role', () async {
+    final first = TestRole<String>(
+      'first',
+      template: TestTemplate(
+        choice: 1,
+        warnings: const [
+          SmfIssue.warning('One.', code: 'first.one', hint: 'Fix it.'),
+          SmfIssue.warning(
+            'Of home.',
+            code: 'first.of_home',
+            origin: ModuleOrigin(ModuleId('home')),
+            path: 'lib/home.dart',
+          ),
+        ],
       ),
-    ]);
+    );
+    final second = TestRole<String>(
+      'second',
+      template: TestTemplate(
+        choice: 2,
+        warnings: const [
+          SmfIssue.warning('Borrowed.', code: 'first.one'),
+          SmfIssue.warning('Bare.', code: 'second'),
+        ],
+      ),
+    );
+    final modules = [
+      TestModule('home', uses: {first, second}),
+      TestModule(
+        'prov',
+        providers: [RoleProvider.plain(first), RoleProvider.plain(second)],
+      ),
+    ];
+    final resolution = resolutionOf(modules);
+    final host = FakeHost();
+
+    final (:choices, :issues) = await chooseRoles(
+      registry: ModuleRegistry(modules),
+      resolution: resolution,
+      collection: collect(resolution, testContext),
+      optionValues: const {},
+      environment: host.environment(),
+      context: testContext,
+    );
+
+    // The warnings do not keep the roles from choosing.
+    expect(choices, {first: 1, second: 2});
+    const code = 'A code of the second role is second.<name>, with a name in '
+        'lower snake_case.';
+    expect(
+      [for (final issue in issues) '$issue'],
+      [
+        'warning [role:first] first.one: One. (Fix it.)',
+        'warning [home] first.of_home lib/home.dart: Of home.',
+        equals(
+          'error [role:second]: The template of the second role reported a '
+          'warning with the code "first.one", which is not a code of the '
+          'second role: Borrowed. ($code)',
+        ),
+        equals(
+          'error [role:second]: The template of the second role reported a '
+          'warning with the code "second", which is not a code of the '
+          'second role: Bare. ($code)',
+        ),
+      ],
+    );
+    expect(host.logger.warnings, isEmpty);
+  });
+
+  test(
+      'reports the issues of the hooks before a hook that stops generation '
+      'through the logger, since the caller gets none', () async {
+    for (final (stopping, stops) in [
+      (_Refusing(), isA<SmfUsageException>()),
+      (_Failing(), isA<GenerationFailedException>()),
+    ]) {
+      final first = TestRole<String>(
+        'first',
+        template: TestTemplate(
+          warnings: const [
+            SmfIssue.warning('One.', code: 'first.one'),
+            SmfIssue.warning('Borrowed.', code: 'other.code'),
+          ],
+        ),
+      );
+      final last = TestRole<String>('last', template: stopping);
+      final absent = TestRole<String>(
+        'absent',
+        template: TestTemplate(),
+        options: const [RoleOption(name: 'ignored', help: '')],
+      );
+      final modules = [
+        TestModule('home', uses: {absent}),
+        TestModule(
+          'prov',
+          providers: [RoleProvider.plain(first), RoleProvider.plain(last)],
+        ),
+      ];
+      final resolution = resolutionOf(modules);
+      final host = FakeHost();
+
+      await expectLater(
+        chooseRoles(
+          registry: ModuleRegistry(modules),
+          resolution: resolution,
+          collection: collect(resolution, testContext),
+          optionValues: const {'ignored': 'x'},
+          environment: host.environment(),
+          context: testContext,
+        ),
+        throwsA(stops),
+      );
+      expect(host.logger.warnings, [
+        equals(
+          '--ignored has no effect: no module of the app provides the absent '
+          'role.',
+        ),
+        '[role:first]: One.',
+      ]);
+      expect(host.logger.errors, [
+        startsWith(
+          '[role:first]: The template of the first role reported a warning '
+          'with the code "other.code"',
+        ),
+      ]);
+    }
   });
 
   test('a template that fails to choose stops generation', () async {
@@ -152,15 +289,16 @@ void main() {
     Future<Map<Role, Object?>> choose(
       FakeHost host,
       Map<String, String?> options,
-    ) =>
-        chooseRoles(
+    ) async =>
+        (await chooseRoles(
           registry: ModuleRegistry(modules),
           resolution: resolution,
           collection: collect(resolution, testContext),
           optionValues: options,
           environment: host.environment(),
           context: testContext,
-        );
+        ))
+            .choices;
 
     final given = await choose(FakeHost(), {'start': '/home/other'});
     expect((given[routerRole]! as RouterChoice).startPath, '/home/other');
@@ -223,7 +361,7 @@ void main() {
       final resolution = resolutionOf(modules);
       final order = <Role>[];
 
-      final choices = await chooseRoles(
+      final (:choices, :issues) = await chooseRoles(
         registry: ModuleRegistry(modules),
         resolution: resolution,
         collection: collect(resolution, testContext),
@@ -235,6 +373,7 @@ void main() {
 
       expect(order, [first, clock, labels, last]);
       expect(choices, {first: 'a', clock: '12', labels: 'chosen', last: 'z'});
+      expect(issues, isEmpty);
       final template = labels.template! as TestTemplate<String>;
       expect(
         template.chosen.single.data.map((data) => data.value),
@@ -284,7 +423,7 @@ void main() {
       ];
       final resolution = resolutionOf(modules);
 
-      final choices = await chooseRoles(
+      final (:choices, :issues) = await chooseRoles(
         registry: ModuleRegistry(modules),
         resolution: resolution,
         collection: collect(resolution, testContext),
@@ -294,6 +433,7 @@ void main() {
       );
 
       expect(choices, {labels: 'chosen'});
+      expect(issues, isEmpty);
       final template = labels.template! as TestTemplate<String>;
       expect(
         template.chosen.single.data.map((data) => data.value),
@@ -366,6 +506,12 @@ void main() {
       );
     });
   });
+}
+
+final class _Refusing extends RoleTemplate<String> {
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async =>
+      throw const SmfUsageException('Give --last.');
 }
 
 final class _Failing extends RoleTemplate<String> {

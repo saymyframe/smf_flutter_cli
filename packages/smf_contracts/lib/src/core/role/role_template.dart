@@ -34,7 +34,10 @@ abstract base class RoleTemplate<D extends Object> {
 
   /// Checks the data of the role and returns the problems found.
   ///
-  /// It runs before [choose], so [RoleHookInput.choice] is `null`.
+  /// It runs before [choose], so [RoleHookInput.choice] is `null`. A
+  /// warning among the problems is about what the app is made of, with a
+  /// code of the role (see [SmfIssue.code]); a warning that depends on the
+  /// choice comes from [choose].
   List<SmfIssue> validate(RoleHookInput<D> input) => const [];
 
   /// Asks the user, or reads the role's options, for a decision that the
@@ -45,7 +48,9 @@ abstract base class RoleTemplate<D extends Object> {
   /// an [SmfUsageException] for an option value that does not fit the data,
   /// or if the run is not interactive and no option decides. A mode option
   /// that is not given decides with its first value, so the hook never
-  /// throws for the lack of one (see [RoleOption.mode]).
+  /// throws for the lack of one (see [RoleOption.mode]). It reports a
+  /// warning about the app that depends on the decision with
+  /// [RoleChoiceContext.warn], not through the logger.
   Future<Object?> choose(RoleChoiceContext<D> context) async => null;
 
   /// The values of the role's options by name that make [choice], a result

@@ -920,11 +920,62 @@ void main() {
     );
   });
 
-  test('the line of a warning has all of it but the severity', () {
+  test(
+      'reports the warnings of the choices as warnings of the template of '
+      'their role, and stops on one with a code of another role', () async {
+    TestModule watcher(List<SmfIssue> warnings) => TestModule(
+          'watcher',
+          providers: [
+            RoleProvider.plain(
+              TestRole<String>(
+                'watch',
+                template: TestTemplate(warnings: warnings),
+              ),
+            ),
+          ],
+        );
+
+    final host = FakeHost();
+    final warning = watcher(const [
+      SmfIssue.warning('No start screen.', code: 'watch.no_start'),
+    ]);
+    final plan =
+        await pipeline([scaffold(), warning], host).plan(request(['watcher']));
+
+    expect(plan, isNotNull);
+    // With the role, and without the code.
+    expect(host.logger.warnings, ['[role:watch]: No start screen.']);
+
+    final borrowing = watcher(const [
+      SmfIssue.warning('Borrowed.', code: 'nav.borrowed'),
+    ]);
+    await expectLater(
+      pipeline([scaffold(), borrowing], FakeHost()).plan(request(['watcher'])),
+      throwsA(
+        isA<GenerationFailedException>()
+            .having(
+              (e) => e.message,
+              'message',
+              'Generation stopped because of an error.',
+            )
+            .having(
+              (e) => '${e.issues.single}',
+              'issue',
+              'error [role:watch]: The template of the watch role reported a '
+                  'warning with the code "nav.borrowed", which is not a code '
+                  'of the watch role: Borrowed. (A code of the watch role is '
+                  'watch.<name>, with a name in lower snake_case.)',
+            ),
+      ),
+    );
+  });
+
+  test('the line of a warning has all of it but the severity and the code', () {
     expect(
       issueLine(
         const SmfIssue.warning(
           'Unused import.',
+          code: 'imports.unused',
           hint: 'Remove it.',
           origin: ModuleOrigin(ModuleId('home')),
           path: 'lib/main.dart',
@@ -933,14 +984,16 @@ void main() {
       '[home] lib/main.dart: Unused import. (Remove it.)',
     );
     expect(
-      issueLine(const SmfIssue.warning('Careful.', path: 'lib/a.dart')),
+      issueLine(
+        const SmfIssue.warning('Careful.', code: 'a.b', path: 'lib/a.dart'),
+      ),
       'lib/a.dart: Careful.',
     );
     expect(
-      issueLine(const SmfIssue.warning('Careful.', hint: 'Look.')),
+      issueLine(const SmfIssue.warning('Careful.', code: 'a.b', hint: 'Look.')),
       'Careful. (Look.)',
     );
-    expect(issueLine(const SmfIssue.warning('Careful.')), 'Careful.');
+    expect(issueLine(const SmfIssue.machineWarning('Careful.')), 'Careful.');
   });
 
   test('deletes temporary files when generation fails', () async {
