@@ -101,7 +101,7 @@ String _errorOf(String body) {
 /// The line with which the Firebase CLI says that it enabled the sign-in
 /// methods of an app in [mode]: it names Anonymous before Email/Password,
 /// whatever the order of its configuration (`lib/deploy/auth/deploy.js` of
-/// firebase-tools 15.14.0).
+/// firebase-tools 15.34.0).
 String enabledLineOf(AuthMode mode) {
   final methods = [
     if (mode == AuthMode.anonymous) 'anonymous',
@@ -118,7 +118,7 @@ String enabledLineOf(AuthMode mode) {
 /// APIs of Firebase in the project for it, and asks for the permission also
 /// where an API is enabled already. The others are the one that every
 /// command asks and those of the command (`TARGET_PERMISSIONS` in
-/// `lib/commands/deploy.js` of firebase-tools 15.14.0).
+/// `lib/commands/deploy.js` of firebase-tools 15.34.0).
 const deployPermissions = [
   'serviceusage.services.enable',
   'firebase.projects.get',
@@ -150,7 +150,7 @@ const Map<String, String> rolesWith = {
 /// Whether [output], what a run of the script printed that failed, tells
 /// that the project refused the Firebase CLI for lack of a permission.
 ///
-/// firebase-tools 15.14.0 only notes the permissions that its own check
+/// firebase-tools 15.34.0 only notes the permissions that its own check
 /// finds missing, in its debug output (`lib/requirePermissions.js`), and
 /// fails later, when Google refuses the request that provisions the app of
 /// the project, with `Failed to provision Firebase app` and either the

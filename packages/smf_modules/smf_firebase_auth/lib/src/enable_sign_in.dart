@@ -61,8 +61,8 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   since the log is removed with the directory.
 /// - It asks the Firebase CLI for its version first, and stops with what to
 ///   do when the Firebase CLI is missing or older than
-///   [firstFirebaseCliWithSignIn], which adds a web app to a project with
-///   only Android and iOS apps, by the rule of [firebaseCliWithSignIn]:
+///   [firstFirebaseCliWithSignIn] (an older one adds a web app to a project
+///   with only Android and iOS apps), by the rule of [firebaseCliWithSignIn]:
 ///   the last line that is a version counts, and a pre-release of that
 ///   version comes before it. A version that it cannot read passes, since
 ///   the Firebase CLI then tells itself what it cannot do.
