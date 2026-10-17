@@ -493,6 +493,10 @@ final class EverySocketModule extends SmfModule {
           'com.apple.developer.associated-domains',
           const PlistStringArray(['applinks:example.com']),
         ),
+        const SocketContribution.code(
+          AppEntryRole.iosAppDelegateLaunch,
+          Fragment('    UNUserNotificationCenter.current().delegate = self'),
+        ),
         AppEntryRole.gradleSettingsPlugins.entry(
           'io.github.ben-manes.versions',
           '0.64.0',

@@ -229,6 +229,7 @@ void main() {
           AppEntryRole.infoPlistFile,
           AppEntryRole.xcodeProjectFile,
           AppEntryRole.iosEntitlementsFile,
+          AppEntryRole.appDelegateFile,
         ])
           file.split('/').first,
       };
@@ -240,7 +241,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(20));
+      expect(sockets, hasLength(21));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -254,6 +255,7 @@ void main() {
         containsAll([
           'smf_app_entry__android_core_library_desugaring_enabled',
           'smf_app_entry__android_core_library_desugaring_library',
+          'smf_app_entry__ios_app_delegate_launch',
         ]),
       );
     });
@@ -306,6 +308,7 @@ void main() {
         [
           'app_entry.bootstrap_phases',
           'app_entry.root_wrappers_in_main',
+          'app_entry.launch_code_place',
           'app_entry.tag_lines',
         ],
       );
@@ -1120,6 +1123,39 @@ void main() {
             contains('(from fake_sockets and fake_overlap)'),
           ),
         ),
+      );
+    });
+
+    test(
+        'the code at the launch of the iOS app is Swift without imports, the '
+        'statements of one contribution after those of another', () {
+      const socket = AppEntryRole.iosAppDelegateLaunch;
+      const delegate = '    UNUserNotificationCenter.current().delegate = self';
+      const shake = '    application.applicationSupportsShakeToEdit = true';
+
+      expect(socket.name, 'ios_app_delegate_launch');
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        socket.render(const [
+          SocketContribution.code(socket, Fragment(delegate)),
+          SocketContribution.code(socket, Fragment(shake)),
+        ]),
+        {socket.tag: '$delegate\n$shake'},
+      );
+      expect(socket.render(const []), {socket.tag: ''});
+      expect(
+        socket.problemsWith(
+          const SocketContribution.code(
+            socket,
+            Fragment(delegate, imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        [
+          equals(
+            'socket app_entry.ios_app_delegate_launch is not Dart code and '
+            'takes no imports.',
+          ),
+        ],
       );
     });
 
@@ -2565,6 +2601,7 @@ Future<void> main() async {
               '<dict>\n{{{smf_app_entry__info_plist}}}\n</dict>\n',
           AppEntryRole.iosEntitlementsFile:
               '<dict>\n{{{smf_app_entry__ios_entitlements}}}\n</dict>\n',
+          AppEntryRole.appDelegateFile: _appDelegateTemplate,
           AppEntryRole.gradleSettingsFile:
               'plugins {\n{{{smf_app_entry__gradle_settings_plugins}}}\n}\n',
           AppEntryRole.gradleAppFile: 'plugins {\n'
@@ -2811,6 +2848,9 @@ Future<void> main() async {
             '<dict>\n{{{smf_app_entry__ios_entitlements}}}\n</dict>\n',
         AppEntryRole.iosEntitlementsFile:
             '<dict>{{{smf_app_entry__ios_entitlements}}}</dict>\n',
+        'ios/Runner/SceneDelegate.swift':
+            'class SceneDelegate: FlutterSceneDelegate {\n'
+                '{{{smf_app_entry__ios_app_delegate_launch}}}\n}\n',
         AppEntryRole.readmeFile:
             '# {{app_name}}\n\nAn app. {{{smf_app_entry__readme_sections}}}\n',
         // Each place of the desugaring renders lines of the Gradle file of
@@ -2845,6 +2885,11 @@ Future<void> main() async {
           'contributions render as complete lines.',
         ),
         equals(
+          'The tag {{{smf_app_entry__ios_app_delegate_launch}}} is in '
+          'ios/Runner/SceneDelegate.swift, but its lines belong in '
+          'ios/Runner/AppDelegate.swift.',
+        ),
+        equals(
           'The tag '
           '{{{smf_app_entry__android_core_library_desugaring_enabled}}} is in '
           'android/settings.gradle.kts, but its lines belong in '
@@ -2862,6 +2907,82 @@ Future<void> main() async {
           'as complete lines.',
         ),
       ]);
+    });
+
+    test(
+        'the code at the launch of the iOS app runs in '
+        'application(_:didFinishLaunchingWithOptions:), before Flutter takes '
+        'the launch', () {
+      const tag = '{{{smf_app_entry__ios_app_delegate_launch}}}';
+      const path = AppEntryRole.appDelegateFile;
+      const method = 'application(_:didFinishLaunchingWithOptions:)';
+      List<SmfIssue> issues(String template) => checkModule({path: template});
+      List<String> problems(String template) =>
+          [for (final issue in issues(template)) issue.message];
+      const notInBody = 'The tag $tag is in $path, but not in the body of '
+          '$method, where the code of the modules runs before the launch of '
+          'the app finishes.';
+      const call = 'super.application(_:didFinishLaunchingWithOptions:)';
+      const notFirst = 'The tag $tag is in the body of $method in $path, but '
+          'not before its call of $call, which hands the launch of the app to '
+          'Flutter: the code of the modules runs before it.';
+      String moved(String to) =>
+          _appDelegateTemplate.replaceFirst('$tag\n', '').replaceFirst(
+                to,
+                '$tag\n$to',
+              );
+
+      expect(problems(_appDelegateTemplate), isEmpty);
+      // Braces in the comments and strings of the method do not end it.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            tag,
+            '    // A } of a comment.\n'
+            '    print("A } of a string")\n'
+            '$tag',
+          ),
+        ),
+        isEmpty,
+      );
+      // In the method that registers the plugins, which runs once the scene
+      // of the app connects: too late for a tap that launched the app.
+      expect(problems(moved('    GeneratedPluginRegistrant')), [notInBody]);
+      // In another method that the launch calls, or in no method at all.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            'didFinishLaunchingWithOptions launchOptions',
+            'willFinishLaunchingWithOptions launchOptions',
+          ),
+        ),
+        [notInBody],
+      );
+      expect(
+        problems('import UIKit\n\nclass AppDelegate: FlutterAppDelegate {\n'
+            '$tag\n}\n'),
+        [notInBody],
+      );
+      // After Flutter took the launch, or in a method that never hands it
+      // over.
+      expect(problems(moved('  }\n\n  func didInitialize')), [notFirst]);
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            'return super.application(application, '
+                'didFinishLaunchingWithOptions: launchOptions)',
+            'return true',
+          ),
+        ),
+        [notFirst],
+      );
+      final issue = issues(moved('    GeneratedPluginRegistrant')).single;
+      expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
+      expect(issue.path, path);
+
+      // An app delegate without the tag: the rule of the lines of the
+      // native files reports a tag in another file.
+      expect(problems('import UIKit\n'), isEmpty);
     });
 
     test('the Gradle sockets refuse the plugins every app declares', () {
@@ -3139,6 +3260,28 @@ const _manifest = r'''
             android:value="2" />
     </application>
 </manifest>
+''';
+
+/// The app delegate of a provider, that of `flutter create` 3.44 with the
+/// tag of the code that runs before the launch of the app finishes.
+const _appDelegateTemplate = '''
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+{{{smf_app_entry__ios_app_delegate_launch}}}
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
 ''';
 
 /// The manifest of a provider, with the tags of its sockets.

@@ -176,6 +176,10 @@ final class FakeSocketsModule extends SmfModule {
           'com.apple.developer.associated-domains',
           const PlistStringArray(['applinks:example.com']),
         ),
+        const SocketContribution.code(
+          AppEntryRole.iosAppDelegateLaunch,
+          Fragment('    application.applicationSupportsShakeToEdit = true'),
+        ),
         // A plugin that only adds a task, so it builds with any version of
         // the Android and Kotlin plugins.
         AppEntryRole.gradleSettingsPlugins.entry(
