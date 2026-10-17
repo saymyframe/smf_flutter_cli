@@ -21,7 +21,8 @@ const _createdApp = 'SMF_FLUTTER_CREATE_APP';
 /// writes when it builds the app, the files of an IDE, and what
 /// `flutter pub get` wrote, which belongs to one machine. The guide for
 /// coding agents, which the app entry role adds to every app, is no file of
-/// `flutter create` either.
+/// `flutter create` either, and neither are the entitlements of the iOS
+/// app, which the brick adds.
 bool _leftOut(String path) =>
     const {
       'pubspec.yaml',
@@ -29,6 +30,7 @@ bool _leftOut(String path) =>
       'README.md',
       AppEntryRole.agentsFile,
       AppEntryRole.claudeFile,
+      AppEntryRole.iosEntitlementsFile,
       'analysis_options.yaml',
       '.flutter-plugins-dependencies',
       'android/gradlew',
@@ -49,6 +51,18 @@ bool _leftOut(String path) =>
       'ios/Flutter/ephemeral/',
     ].any(path.startsWith);
 
+/// The line of the setting with which a build configuration of the app
+/// target signs the app with its entitlements.
+final _signsWithEntitlements = RegExp(
+  r'\n\t*CODE_SIGN_ENTITLEMENTS = Runner/Runner\.entitlements;',
+);
+
+/// A line of the Xcode project with the reference to the entitlements of
+/// the app: the reference itself, and the child of the group of the target.
+final _entitlementsReference = RegExp(
+  r'\n[^\n]*/\* Runner\.entitlements \*/[^\n]*',
+);
+
 /// [text] of the file at [path] with what the brick changes on purpose
 /// made the same on both sides:
 /// - the label of the app is its name in title case, and `CFBundleName` in
@@ -57,6 +71,8 @@ bool _leftOut(String path) =>
 /// - the minimum iOS version comes from the app entry role;
 /// - the project has no development team, which `flutter create` takes
 ///   from the machine;
+/// - the app target signs with the entitlements of the app, which the
+///   project shows in the group of the target;
 /// - the empty `dependencies` block of the app's Gradle file holds a
 ///   socket.
 String _normalized(String path, String text) => switch (path) {
@@ -72,7 +88,9 @@ String _normalized(String path, String text) => switch (path) {
             RegExp(r'IPHONEOS_DEPLOYMENT_TARGET = [\d.]+;'),
             'IPHONEOS_DEPLOYMENT_TARGET = <minimum>;',
           )
-          .replaceAll(RegExp(r'\n\t*DEVELOPMENT_TEAM = \w+;'), ''),
+          .replaceAll(RegExp(r'\n\t*DEVELOPMENT_TEAM = \w+;'), '')
+          .replaceAll(_signsWithEntitlements, '')
+          .replaceAll(_entitlementsReference, ''),
       'android/app/build.gradle.kts' =>
         text.replaceAll('\n\ndependencies {\n}\n', '\n'),
       _ => text,

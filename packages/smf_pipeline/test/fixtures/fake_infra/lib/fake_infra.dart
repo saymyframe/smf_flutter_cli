@@ -165,6 +165,14 @@ final class FakeSocketsModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
+        AppEntryRole.iosEntitlements.entry(
+          'aps-environment',
+          const PlistString('development'),
+        ),
+        AppEntryRole.iosEntitlements.entry(
+          'com.apple.developer.associated-domains',
+          const PlistStringArray(['applinks:example.com']),
+        ),
         // A plugin that only adds a task, so it builds with any version of
         // the Android and Kotlin plugins.
         AppEntryRole.gradleSettingsPlugins.entry(
@@ -187,8 +195,9 @@ final class FakeSocketsModule extends SmfModule {
 
 /// A module that puts into the sockets of the app entry some of the keys
 /// and values that [FakeSocketsModule] does, so an app with both merges
-/// them: equal permissions, meta-data, plist strings and README sections
-/// agree, the plist arrays are united, the highest versions win, the
+/// them: equal permissions, meta-data, plist strings, entitlements and
+/// README sections agree, the plist arrays of Info.plist and of the
+/// entitlements are united, the highest versions win, the
 /// delegate of the localizations appears once, and so does the note for
 /// coding agents that both have.
 final class FakeOverlapModule extends SmfModule {
@@ -227,6 +236,14 @@ final class FakeOverlapModule extends SmfModule {
         AppEntryRole.infoPlist.entry(
           'UIBackgroundModes',
           const PlistStringArray(['remote-notification']),
+        ),
+        AppEntryRole.iosEntitlements.entry(
+          'aps-environment',
+          const PlistString('development'),
+        ),
+        AppEntryRole.iosEntitlements.entry(
+          'com.apple.developer.associated-domains',
+          const PlistStringArray(['applinks:example.org']),
         ),
         AppEntryRole.gradleSettingsPlugins.entry(
           'io.github.ben-manes.versions',

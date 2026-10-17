@@ -561,6 +561,23 @@ void main() {
     });
 
     test(
+        'names in its note the entitlements of the iOS app, which every '
+        'build configuration of the app target signs with', () {
+      const path = AppEntryRole.iosEntitlementsFile;
+
+      expect(agentNote, contains('`$path`'));
+      expect(texts.keys, contains(path));
+      // The file is the provider's, and each of the three build
+      // configurations of the app target signs with it.
+      expect(app.files[path]!.owner, const ModuleOrigin(FlutterCoreModule.id));
+      expect(
+        'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'
+            .allMatches(texts[AppEntryRole.xcodeProjectFile]!),
+        hasLength(3),
+      );
+    });
+
+    test(
         'names in its note the commands that check a change, which format '
         'only the code of the app and run its tests', () {
       final commands = RegExp(r'```bash\n([^`]+)```').firstMatch(agentNote);

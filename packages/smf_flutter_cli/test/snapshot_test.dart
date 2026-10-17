@@ -48,6 +48,7 @@ bool _shownOfAppEntry(String path) =>
       'pubspec.yaml',
       AppEntryRole.androidManifestFile,
       AppEntryRole.infoPlistFile,
+      AppEntryRole.iosEntitlementsFile,
       AppEntryRole.gradleSettingsFile,
       AppEntryRole.gradleAppFile,
       AppEntryRole.xcodeProjectFile,
@@ -73,8 +74,9 @@ Version _languageVersionOf(RenderedApp app) {
 /// The files of [app] as one text: each under a header with its path and
 /// owner. Every file of the modules is shown, and the files of the provider
 /// of the app entry among [_shownOfAppEntry]. Dart files are formatted as
-/// `dart format` formats the app, and the YAML, XML and plist files, and
-/// the ARB files, which are JSON, must parse.
+/// `dart format` formats the app, and the YAML, XML and plist files, the
+/// entitlements, which are a plist, and the ARB files, which are JSON, must
+/// parse.
 String _snapshotOf(RenderedApp app, Set<ContributionOrigin> appEntry) {
   final formatter = DartFormatter(languageVersion: _languageVersionOf(app));
   final buffer = StringBuffer();
@@ -89,7 +91,9 @@ String _snapshotOf(RenderedApp app, Set<ContributionOrigin> appEntry) {
     var text = file.text;
     if (path.endsWith('.dart')) {
       text = formatter.format(text, uri: path);
-    } else if (path.endsWith('.xml') || path.endsWith('.plist')) {
+    } else if (path.endsWith('.xml') ||
+        path.endsWith('.plist') ||
+        path.endsWith('.entitlements')) {
       XmlDocument.parse(text);
     } else if (path.endsWith('.yaml')) {
       loadYaml(text, sourceUrl: Uri.file(path));

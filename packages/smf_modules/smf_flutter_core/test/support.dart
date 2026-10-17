@@ -395,6 +395,10 @@ final class EverySocketModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
+        AppEntryRole.iosEntitlements.entry(
+          'com.apple.developer.associated-domains',
+          const PlistStringArray(['applinks:example.com']),
+        ),
         AppEntryRole.gradleSettingsPlugins.entry(
           'io.github.ben-manes.versions',
           '0.64.0',

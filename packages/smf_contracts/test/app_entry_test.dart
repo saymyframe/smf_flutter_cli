@@ -223,6 +223,7 @@ void main() {
           AppEntryRole.gradleAppFile,
           AppEntryRole.infoPlistFile,
           AppEntryRole.xcodeProjectFile,
+          AppEntryRole.iosEntitlementsFile,
         ])
           file.split('/').first,
       };
@@ -234,7 +235,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(18));
+      expect(sockets, hasLength(19));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -278,6 +279,7 @@ void main() {
           'app_entry.material_root',
           'app_entry.root_in_build',
           'app_entry.native_keys',
+          'app_entry.ios_entitlements_signed',
           'app_entry.agent_guide_paths',
         ],
       );
@@ -1011,6 +1013,64 @@ void main() {
           ('UIBackgroundModes', PlistString('fetch')),
         ]),
         throwsA(isA<MergeConflict>()),
+      );
+    });
+
+    test(
+        'the entitlements of the iOS app unite string arrays and keep '
+        'scalars unique, as the keys of Info.plist', () {
+      const socket = AppEntryRole.iosEntitlements;
+      const sockets = ModuleOrigin(ModuleId('fake_sockets'));
+      const overlap = ModuleOrigin(ModuleId('fake_overlap'));
+      SocketContribution entry(
+        ContributionOrigin origin,
+        String key,
+        PlistValue value,
+      ) =>
+          socket.entry(key, value).withOrigin(origin);
+
+      expect(socket.name, 'ios_entitlements');
+      expect(socket.tag, 'smf_app_entry__ios_entitlements');
+      expect(socket.kind.policy, isA<PlistMergePolicy>());
+      expect(
+        socket.render([
+          entry(sockets, 'aps-environment', const PlistString('development')),
+          entry(
+            sockets,
+            'com.apple.developer.associated-domains',
+            const PlistStringArray(['applinks:example.com']),
+          ),
+          entry(overlap, 'aps-environment', const PlistString('development')),
+          entry(
+            overlap,
+            'com.apple.developer.associated-domains',
+            const PlistStringArray(['applinks:example.org']),
+          ),
+        ]),
+        {
+          socket.tag: [
+            '\t<key>aps-environment</key>',
+            '\t<string>development</string>',
+            '\t<key>com.apple.developer.associated-domains</key>',
+            '\t<array>',
+            '\t\t<string>applinks:example.com</string>',
+            '\t\t<string>applinks:example.org</string>',
+            '\t</array>',
+          ].join('\n'),
+        },
+      );
+      expect(
+        () => socket.render([
+          entry(sockets, 'aps-environment', const PlistString('development')),
+          entry(overlap, 'aps-environment', const PlistString('production')),
+        ]),
+        throwsA(
+          isA<MergeConflict>().having(
+            (conflict) => '$conflict',
+            'description',
+            contains('(from fake_sockets and fake_overlap)'),
+          ),
+        ),
       );
     });
 
@@ -1980,6 +2040,308 @@ See `lib/missing.dart`.
       );
     });
 
+    test('report an entitlement that the entitlements have twice', () {
+      const path = AppEntryRole.iosEntitlementsFile;
+      final issues = checkTexts({
+        path: _entitlements.replaceFirst(
+          '</dict>',
+          '\t<key>aps-environment</key>\n\t<string>production</string>\n'
+              '</dict>',
+        ),
+      });
+
+      expect(messages(issues), [
+        equals(
+          'ios/Runner/Runner.entitlements has the key aps-environment more '
+          'than once.',
+        ),
+      ]);
+      expect(issues.single.path, path);
+    });
+
+    group('the signing of the iOS app with its entitlements', () {
+      const project = AppEntryRole.xcodeProjectFile;
+
+      List<SmfIssue> checkProject(String text) => checkTexts({
+            project: text,
+            AppEntryRole.iosEntitlementsFile: _entitlements,
+          });
+
+      test('accepts every build configuration of the app signing with them',
+          () {
+        expect(messages(checkProject(_xcodeProject)), isEmpty);
+        // As Xcode writes the settings when a value needs quotes.
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject
+                  .replaceAll(
+                    'INFOPLIST_FILE = Runner/Info.plist;',
+                    'INFOPLIST_FILE = "Runner/Info.plist";',
+                  )
+                  .replaceFirst(
+                    'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;',
+                    'CODE_SIGN_ENTITLEMENTS = "Runner/Runner.entitlements";',
+                  ),
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test(
+          'reports a build configuration of the app that does not sign with '
+          'them', () {
+        const signs = 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;';
+        const forDevices = '"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = '
+            'Runner/Runner.entitlements;';
+        final configurations = _xcodeProject.split(signs);
+        expect(configurations, hasLength(4));
+        // Profile without the setting, Debug with other entitlements, and
+        // Release with them for the devices only.
+        final text = [
+          configurations[0],
+          configurations[1],
+          'CODE_SIGN_ENTITLEMENTS = Runner/Other.entitlements;',
+          configurations[2],
+          forDevices,
+          configurations[3],
+        ].join();
+        final issues = checkProject(text);
+
+        expect(messages(issues), [
+          for (final name in [
+            'Profile (249021D4217E4FDB00AE95B9)',
+            'Debug (97C147061CF9000F007C117D)',
+            'Release (97C147071CF9000F007C117D)',
+          ])
+            equals(
+              'The build configuration $name of the app target in '
+              'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
+              'with ios/Runner/Runner.entitlements.',
+            ),
+        ]);
+        for (final issue in issues) {
+          expect(issue.path, project);
+          expect(issue.origin, const ModuleOrigin(ModuleId('flutter_core')));
+          expect(
+            issue.hint,
+            'Each build configuration with INFOPLIST_FILE = Runner/Info.plist '
+            'has CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements; and no '
+            'other CODE_SIGN_ENTITLEMENTS. Without it the app builds and '
+            'signs, but has none of the entitlements that the modules add.',
+          );
+        }
+
+        // A configuration whose name does not follow its settings.
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject.replaceFirst(signs, '').replaceFirst(
+                    '\t\t\tname = Profile;\n\t\t};\n\t\t331C',
+                    '\t\t};\n\t\t331C',
+                  ),
+            ),
+          ),
+          [
+            equals(
+              'The build configuration 249021D4217E4FDB00AE95B9 of the app '
+              'target in ios/Runner.xcodeproj/project.pbxproj does not sign '
+              'the app with ios/Runner/Runner.entitlements.',
+            ),
+          ],
+        );
+
+        // Twice in one configuration, once with a condition.
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject.replaceFirst(signs, '$signs\n\t\t\t\t$forDevices'),
+            ),
+          ),
+          [
+            equals(
+              'The build configuration Profile (249021D4217E4FDB00AE95B9) of '
+              'the app target in ios/Runner.xcodeproj/project.pbxproj does '
+              'not sign the app with ios/Runner/Runner.entitlements.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'reports the entitlements of the app in another target, and '
+          'entitlements in the build settings of the project', () {
+        String withSetting(String before, String value) =>
+            _xcodeProject.replaceFirst(
+              before,
+              'CODE_SIGN_ENTITLEMENTS = $value;\n\t\t\t\t$before',
+            );
+        const ofProject = 'ALWAYS_SEARCH_USER_PATHS = NO;';
+        const ofTests = 'CODE_SIGN_STYLE = Automatic;';
+
+        // The target of the tests signs with the file of the app.
+        final ofApp = checkProject(
+          withSetting(ofTests, 'Runner/Runner.entitlements'),
+        );
+        expect(messages(ofApp), [
+          equals(
+            'The build configuration Debug (331C8088294A63A400263BE5) in '
+            'ios/Runner.xcodeproj/project.pbxproj, which is not one of the '
+            'app target, signs with the entitlements of the app, '
+            'ios/Runner/Runner.entitlements.',
+          ),
+        ]);
+        expect(
+          ofApp.single.hint,
+          'Only the app target signs with ios/Runner/Runner.entitlements. '
+          'Another target, such as an app extension, signs with '
+          'entitlements of its own.',
+        );
+
+        // The project has a setting that every target inherits, whatever
+        // its file.
+        for (final value in [
+          'Runner/Runner.entitlements',
+          'Share/Share.entitlements',
+        ]) {
+          final inherited = checkProject(withSetting(ofProject, value));
+          expect(
+            messages(inherited),
+            [
+              equals(
+                'The build configuration Profile (249021D3217E4FDB00AE95B9) '
+                'of the project in ios/Runner.xcodeproj/project.pbxproj names '
+                'entitlements in CODE_SIGN_ENTITLEMENTS, which every target '
+                'without a setting of its own inherits, such as the tests.',
+              ),
+            ],
+            reason: value,
+          );
+          expect(
+            inherited.single.hint,
+            'Set CODE_SIGN_ENTITLEMENTS in the build configurations of each '
+            'target that signs with entitlements: Runner/Runner.entitlements '
+            'in those of the app target, which read Runner/Info.plist.',
+          );
+        }
+      });
+
+      test('reads what it can of a project that is cut off', () {
+        // A configuration without settings, and a comment, a string and a
+        // configuration that do not end.
+        const release = 'INFOPLIST_FILE = Runner/Info.plist;\n'
+            '\t\t\t};\n\t\t\tname = Release;';
+        final cut = _xcodeProject.substring(
+          0,
+          _xcodeProject.indexOf(release) + release.indexOf('\n'),
+        );
+        const empty = '\t\t00000000000000000000000A = '
+            '{isa = XCBuildConfiguration; name = Empty;};\n';
+        for (final end in ['', '\n/* cut', '\n// cut', '\n"cut']) {
+          expect(
+            messages(
+              checkProject(
+                cut.replaceFirst(
+                      '/* Begin XCBuildConfiguration section */\n',
+                      '/* Begin XCBuildConfiguration section */\n$empty',
+                    ) +
+                    end,
+              ),
+            ),
+            isEmpty,
+            reason: end,
+          );
+        }
+      });
+
+      test('reports a project without build settings of the app target', () {
+        final issues = checkProject(
+          _xcodeProject
+              .replaceAll(
+                'INFOPLIST_FILE = Runner/Info.plist;',
+                'GENERATE_INFOPLIST_FILE = YES;',
+              )
+              .replaceAll(
+                'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;',
+                '',
+              ),
+        );
+
+        expect(messages(issues), [
+          equals(
+            'ios/Runner.xcodeproj/project.pbxproj has no build configuration '
+            'of the app target, with INFOPLIST_FILE = Runner/Info.plist, '
+            'that signs the app with ios/Runner/Runner.entitlements.',
+          ),
+        ]);
+      });
+
+      test(
+          'reads build settings with braces in their strings, and none in '
+          'comments', () {
+        const signs = 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;';
+        final release = _xcodeProject.lastIndexOf(signs);
+        String releaseWith(String instead) => _xcodeProject.replaceRange(
+              release,
+              release + signs.length,
+              instead,
+            );
+
+        // Release does not sign with them, and has a brace in a string or in
+        // a comment, or the setting only in a comment.
+        for (final instead in [
+          r'OTHER_SWIFT_FLAGS = "-D FOO=${BAR}";',
+          '/* { */',
+          '/*\n\t\t\t\t$signs\n\t\t\t\t*/',
+          '// $signs',
+        ]) {
+          expect(
+            messages(checkProject(releaseWith(instead))),
+            [contains('Release')],
+            reason: instead,
+          );
+        }
+        // Release signs with them, next to a brace in a string and in a
+        // comment.
+        expect(
+          messages(
+            checkProject(
+              releaseWith(
+                '$signs\n\t\t\t\tOTHER_SWIFT_FLAGS = "-D FOO=\${BAR} \\"}\\"";'
+                '\n\t\t\t\t/* } { */',
+              ),
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test(
+          'accepts a target with entitlements of its own, such as an app '
+          'extension', () {
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject.replaceFirst(
+                'CODE_SIGN_STYLE = Automatic;',
+                'CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;\n'
+                    '\t\t\t\tCODE_SIGN_STYLE = Automatic;',
+              ),
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('checks nothing in an app without an iOS project', () {
+        expect(
+          messages(checkTexts({AppEntryRole.infoPlistFile: _plist})),
+          isEmpty,
+        );
+      });
+    });
+
     List<SmfIssue> checkModule(Map<String, String> templates) =>
         appEntryRole.checkModule(
           ModuleRuleRequest(
@@ -2030,6 +2392,8 @@ Future<void> main() async {
           AppEntryRole.androidManifestFile: _manifestTemplate,
           AppEntryRole.infoPlistFile:
               '<dict>\n{{{smf_app_entry__info_plist}}}\n</dict>\n',
+          AppEntryRole.iosEntitlementsFile:
+              '<dict>\n{{{smf_app_entry__ios_entitlements}}}\n</dict>\n',
           AppEntryRole.gradleSettingsFile:
               'plugins {\n{{{smf_app_entry__gradle_settings_plugins}}}\n}\n',
           AppEntryRole.gradleAppFile: 'plugins {\n'
@@ -2267,6 +2631,10 @@ Future<void> main() async {
           '    {{{smf_app_entry__android_manifest_permissions}}}',
         ),
         'ios/Podfile': '{{{smf_app_entry__info_plist}}}\n',
+        AppEntryRole.infoPlistFile:
+            '<dict>\n{{{smf_app_entry__ios_entitlements}}}\n</dict>\n',
+        AppEntryRole.iosEntitlementsFile:
+            '<dict>{{{smf_app_entry__ios_entitlements}}}</dict>\n',
         AppEntryRole.readmeFile:
             '# {{app_name}}\n\nAn app. {{{smf_app_entry__readme_sections}}}\n',
       });
@@ -2281,6 +2649,16 @@ Future<void> main() async {
         equals(
           'The tag {{{smf_app_entry__info_plist}}} is in ios/Podfile, but its '
           'lines belong in ios/Runner/Info.plist.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__ios_entitlements}}} is in '
+          'ios/Runner/Info.plist, but its lines belong in '
+          'ios/Runner/Runner.entitlements.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__ios_entitlements}}} must stand alone at '
+          'the start of a line of ios/Runner/Runner.entitlements, because its '
+          'contributions render as complete lines.',
         ),
         equals(
           'The tag {{{smf_app_entry__readme_sections}}} must stand alone at '
@@ -2420,6 +2798,128 @@ const _plist = '''
 	<true/>
 </dict>
 </plist>
+''';
+
+/// The entitlements of an iOS app with one entitlement.
+const _entitlements = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
+''';
+
+/// The Xcode project of `flutter create` 3.44, shortened, whose app target
+/// signs with its entitlements: the project, whose list of build
+/// configurations has one of its own, and the build configurations, those
+/// of the app target, which read its `Info.plist`, and one of the target of
+/// its tests.
+const _xcodeProject = r'''
+// !$*UTF8*$!
+{
+	objects = {
+
+/* Begin PBXProject section */
+		97C146E61CF9000F007C117D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1510;
+				TargetAttributes = {
+					97C146ED1CF9000F007C117D = {
+						CreatedOnToolsVersion = 7.3.1;
+					};
+				};
+			};
+			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
+			targets = (
+				97C146ED1CF9000F007C117D /* Runner */,
+				331C8080294A63A400263BE5 /* RunnerTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin XCBuildConfiguration section */
+		249021D3217E4FDB00AE95B9 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+			};
+			name = Profile;
+		};
+		249021D4217E4FDB00AE95B9 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				INFOPLIST_FILE = Runner/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+			};
+			name = Profile;
+		};
+		331C8088294A63A400263BE5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+			};
+			name = Debug;
+		};
+		97C147061CF9000F007C117D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				INFOPLIST_FILE = Runner/Info.plist;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		97C147071CF9000F007C117D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				INFOPLIST_FILE = Runner/Info.plist;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				249021D3217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				97C147061CF9000F007C117D /* Debug */,
+				97C147071CF9000F007C117D /* Release */,
+				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 97C146E61CF9000F007C117D /* Project object */;
+}
 ''';
 
 /// An Android manifest like the one of `flutter create`, shortened.

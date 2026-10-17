@@ -30,6 +30,7 @@ The files in `bricks/flutter_core/__brick__` are those that `flutter create --pl
 - The names and ids come from the app. `android:label` and `CFBundleDisplayName` are its name in title case, and `CFBundleName` in Pascal case. The Android namespace, application id and Kotlin package path, and the iOS bundle id are variables of the brick.
 - `IPHONEOS_DEPLOYMENT_TARGET`, in each build configuration of `project.pbxproj`, is the tag of the minimum iOS version, and the project has no `DEVELOPMENT_TEAM`.
 - The Android manifest, `Info.plist` and the Gradle files hold the tags of the native sockets of the app entry role, each alone on its line.
+- `ios/Runner/Runner.entitlements` belongs to the brick. It holds the tag of the entitlements of the app and is empty when no module adds any. Every build configuration of the Runner target signs with it (`CODE_SIGN_ENTITLEMENTS`), and the Runner group of `project.pbxproj` refers to it, the way Xcode does when it adds a capability.
 - `lib/`, `test/`, `pubspec.yaml`, `README.md` and `analysis_options.yaml` are SMF's own.
 
 `gradlew`, `gradle-wrapper.jar`, `local.properties`, `.idea/` and the `.iml` files are left out: Flutter writes the Gradle wrapper when it builds the app, and the rest belongs to one machine.
