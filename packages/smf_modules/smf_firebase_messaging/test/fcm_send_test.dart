@@ -53,6 +53,43 @@ Map<String, Object?> _info(String reason, Map<String, String> metadata) => {
       'metadata': metadata,
     };
 
+/// A block of PEM with [label] and [body], as the private key of a key of a
+/// service account has one.
+String _pem(String label, String body) =>
+    '-----BEGIN $label-----\n$body\n-----END $label-----\n';
+
+/// The PEM of an RSA private key that only parses: its modulus has the 1024
+/// bits that googleapis_auth asks for, and its other numbers are made up, so
+/// the signatures made with it prove nothing. The token endpoint of the
+/// tests does not check them.
+String _keyThatParses() {
+  // The lengths of DER, all below 256 here.
+  List<int> length(int count) => count < 128 ? [count] : [0x81, count];
+  List<int> integer(BigInt value) {
+    final hex = value.toRadixString(16);
+    final even = hex.length.isOdd ? '0$hex' : hex;
+    final bytes = [
+      for (var at = 0; at < even.length; at += 2)
+        int.parse(even.substring(at, at + 2), radix: 16),
+    ];
+    if (bytes.first >= 0x80) bytes.insert(0, 0);
+    return [0x02, ...length(bytes.length), ...bytes];
+  }
+
+  // version, n, e, d, p, q, d mod (p - 1), d mod (q - 1), q^-1 mod p
+  final numbers = [
+    BigInt.zero,
+    (BigInt.one << 1023) + BigInt.one,
+    BigInt.from(65537),
+    for (final number in [3, 5, 7, 3, 3, 1]) BigInt.from(number),
+  ];
+  final body = [for (final number in numbers) ...integer(number)];
+  return _pem(
+    'RSA PRIVATE KEY',
+    base64Encode([0x30, ...length(body.length), ...body]),
+  );
+}
+
 void main() {
   final request = PushRequest.parse(_asked);
 
@@ -141,23 +178,33 @@ void main() {
     test(
         'sends again after a quota, a server that failed or a network that '
         'broke, three times in all', () async {
-      var sent = 0;
-      final answers = [
-        () => http.Response(_error(503, 'UNAVAILABLE', 'Busy.'), 503),
-        () => throw http.ClientException('Connection reset'),
-        () => http.Response('{"name": "projects/p/messages/2"}', 200),
-      ];
-      final client = MockClient((_) async => answers[sent++]());
+      for (final failures in <List<http.Response Function()>>[
+        [
+          () => http.Response(_error(429, 'RESOURCE_EXHAUSTED', 'Quota.'), 429),
+          () => http.Response(_error(503, 'UNAVAILABLE', 'Busy.'), 503),
+        ],
+        [
+          () => throw http.ClientException('Connection reset'),
+          () => http.Response(_error(500, 'INTERNAL', 'Failed.'), 500),
+        ],
+      ]) {
+        var sent = 0;
+        final answers = [
+          ...failures,
+          () => http.Response('{"name": "projects/p/messages/2"}', 200),
+        ];
+        final client = MockClient((_) async => answers[sent++]());
 
-      final name = await send(
-        client,
-        project: 'p',
-        request: request,
-        retryDelay: Duration.zero,
-      );
+        final name = await send(
+          client,
+          project: 'p',
+          request: request,
+          retryDelay: Duration.zero,
+        );
 
-      expect(name, 'projects/p/messages/2');
-      expect(sent, 3);
+        expect(name, 'projects/p/messages/2');
+        expect(sent, 3);
+      }
     });
 
     test('tells what the last failure means once it sent three times',
@@ -430,14 +477,13 @@ void main() {
     test('that is not the JSON key of a service account, without its text',
         () async {
       for (final key in [
-        '{"private_key": "-----BEGIN PRIVATE KEY-----\nSECRETPART',
+        '{"private_key": "${_pem('PRIVATE KEY', 'SECRETPART')}',
         jsonEncode({'type': 'authorized_user', 'client_id': 'SECRETPART'}),
         jsonEncode({
           'type': 'service_account',
           'client_id': '1',
           'client_email': 'ci@p.iam.gserviceaccount.com',
-          'private_key': '-----BEGIN PRIVATE KEY-----\n'
-              'SECRETPART\n-----END PRIVATE KEY-----\n',
+          'private_key': _pem('PRIVATE KEY', 'SECRETPART'),
         }),
       ]) {
         await expectLater(
@@ -458,6 +504,56 @@ void main() {
           reason: key,
         );
       }
+    });
+
+    test(
+        'gets an access token for the scope of Firebase Cloud Messaging, '
+        'with which the message goes', () async {
+      final requests = <http.Request>[];
+      final google = MockClient((sent) async {
+        requests.add(sent);
+        return sent.url.host == 'oauth2.googleapis.com'
+            ? http.Response(
+                jsonEncode({
+                  'access_token': 'an-access-token-of-the-test',
+                  'token_type': 'Bearer',
+                  'expires_in': 3600,
+                }),
+                200,
+                headers: {'content-type': 'application/json'},
+              )
+            : http.Response('{"name": "projects/p/messages/1"}', 200);
+      });
+
+      final client = await clientOf(
+        jsonEncode({
+          'type': 'service_account',
+          'client_id': '1',
+          'client_email': 'ci@p.iam.gserviceaccount.com',
+          'private_key': _keyThatParses(),
+        }),
+        baseClient: google,
+      );
+      final name = await send(client, project: 'p', request: request);
+      client.close();
+
+      expect(name, 'projects/p/messages/1');
+      expect(requests, hasLength(2));
+      final assertion =
+          Uri.splitQueryString(requests.first.body)['assertion']!.split('.');
+      final claims = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(assertion[1]))),
+      ) as Map<String, Object?>;
+      expect(
+        claims['scope'],
+        'https://www.googleapis.com/auth/firebase.messaging',
+      );
+      expect(claims['iss'], 'ci@p.iam.gserviceaccount.com');
+      expect(requests.last.url, sendUriOf('p'));
+      expect(
+        requests.last.headers['authorization'],
+        'Bearer an-access-token-of-the-test',
+      );
     });
 
     test('that Google gives no access token for', () {
