@@ -57,6 +57,7 @@ With `firebase_auth`:
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section Firebase Authentication of `README.md`.
 - `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
 
+- For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`. After `flutterfire configure` for another project, it has to run again: run it only when asked.
 - Apple is enabled in the Firebase console by hand, with the private key of Apple that deleting an account needs. That key is a secret: never put it into the app or its repository.
 
 ## Crash reporting
@@ -270,7 +271,7 @@ Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global
 
 The app signs in with [Firebase Authentication](https://firebase.google.com/docs/auth) through `firebase_auth`: `lib/core/auth/firebase_auth_service.dart` implements the sign-in service of the app on it.
 
-The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, Anonymous when the mode of the app is `anonymous` (see the section Sign-in), and Apple for the ways to sign in of the app. Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
+The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, Anonymous when the mode of the app is `anonymous` (see the section Sign-in), and Google and Apple for the ways to sign in of the app. Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
 
 `smf create` asks to enable them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
 
@@ -278,10 +279,26 @@ The ways to sign in are enabled in the Firebase project, not in the code: Email/
 dart tool/enable_firebase_sign_in.dart
 ```
 
-The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
+The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app but those that Google needs, as told below. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart --account <email>
+```
+
+For Google sign-in, the script also gives Google the name of the app and the email address of the account of the Firebase CLI for the consent screen that users see when they sign in. The address is the support email there. When the Firebase CLI runs as no user account, as with a service account, the script leaves Google out and says so: run it with `--account <email>`, or enable Google in the Firebase console.
+
+The script sets up the rest of what Google needs only for the project that `firebase.json` names, not for one that `--project` names:
+
+- It registers the SHA-1 and SHA-256 of the Android debug key of the machine that runs it, which Google uses to recognize the Android app. When the machine has no debug key yet, the script creates it, as the first debug build would. Every machine has a debug key of its own, so run the script on each machine that builds the app for debugging, or add the SHA of its key in the Firebase console, in the settings of the Android app.
+- It downloads the Firebase files of the app again, such as `android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist`, once they have the clients of Google, and writes them where `flutterfire configure` wrote them.
+- It writes the URL scheme of the iOS app, `REVERSED_CLIENT_ID` of `ios/Runner/GoogleService-Info.plist`, into `CFBundleURLTypes` of `ios/Runner/Info.plist`. It adds the scheme and removes none: after a change of the project, remove the scheme of the former project there by hand.
+
+Run the script again after `flutterfire configure` for another project.
+
+A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, with the id of the Android app from `firebase.json`:
+
+```bash
+firebase apps:android:sha:create <appId> <sha>
 ```
 
 Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays.
@@ -9832,6 +9849,27 @@ void main() {
 // `firebase login:use` chose for the directory of the app does not apply in
 // the temporary directory: `--account <email>` names the account.
 //
+// For a way to sign in of Google, the script enables Google too, and gives
+// it the name of the app and a support email for its consent screen: the
+// email address of the account of the Firebase CLI, the one that
+// `--account <email>` names, or else the one that the Firebase CLI is
+// logged in as. With no such account, as with a service account, it leaves
+// Google out and says so.
+//
+// The ways to sign in of Google need more of the project and of the app,
+// which the script then sets up for the project that `flutterfire
+// configure` configured the app for, whose apps `firebase.json` names:
+// - it registers the SHA-1 and SHA-256 of the Android debug key of this
+//   machine for the Android app, and creates that key as the first debug
+//   build would when there is none;
+// - it downloads the Firebase files of the app again once they have the
+//   clients of Google, to where `flutterfire configure` wrote them;
+// - it writes the URL scheme that the iOS app needs, the reversed id of its
+//   client of Google, into `ios/Runner/Info.plist`. It adds the scheme and
+//   removes none, and a file that has it already stays as it is.
+// These are the only files of the app that the script changes. Of the
+// other arguments, those calls of the Firebase CLI get only the account.
+//
 // Apple is enabled in the Firebase console, which no command of the
 // Firebase CLI does, so the script tells what to set there.
 
@@ -9848,6 +9886,30 @@ const _sessionFile = 'lib/core/auth/app_session.dart';
 
 /// The mode in which the app signs in anonymous users.
 const _anonymous = 'anonymous';
+
+/// The name of the app, which Google shows on its consent screen.
+const _appName = 'My App';
+
+/// What a way to sign in needs of the Firebase project, besides the
+/// identity provider enabled.
+enum _Need {
+  /// The SHA-1 and SHA-256 of the key that signs the Android app.
+  androidCertificate,
+
+  /// The client of the iOS app in its Firebase file, whose reversed id is a
+  /// URL scheme of the app.
+  iosClient,
+
+  /// The client of the server in the Firebase file of the Android app.
+  serverClient,
+}
+
+/// What the ways to sign in of the app need of the Firebase project. SMF
+/// wrote it from the ways to sign in of the app.
+const _needs = {_Need.androidCertificate, _Need.iosClient, _Need.serverClient};
+
+/// The file of the app with the URL schemes of the iOS app.
+const _infoPlist = 'ios/Runner/Info.plist';
 
 /// The comments of [_sessionFile] and the declarations of `authMode` in it,
 /// in the form that the file keeps: a declaration starts its line and has a
@@ -9881,6 +9943,9 @@ Future<void> main(List<String> arguments) async {
 ///
 /// Throws a [_Stop] when it cannot tell the methods or the project, and
 /// when the Firebase CLI of the machine cannot enable them.
+///
+/// Once the methods are enabled, it sets up what the ways to sign in of the
+/// app need there, and returns 1 when that fails.
 Future<int> _enable(Directory app, List<String> arguments) async {
   final mode = _modeOf(app);
   final anonymous = mode == _anonymous;
@@ -9892,6 +9957,10 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     );
   }
   final project = named ?? _configuredProject(app);
+  final account = _accountIn(passedOn);
+  // What the ways to sign in need is for the apps of the app in the
+  // project.
+  final apps = _appsOf(app, project);
 
   // Every call of the Firebase CLI runs in this directory, also the one for
   // its version: the Firebase CLI keeps its log in the directory that it
@@ -9920,6 +9989,35 @@ Future<int> _enable(Directory app, List<String> arguments) async {
         // On Windows, npm installs the Firebase CLI as `firebase.cmd`.
         runInShell: Platform.isWindows,
       );
+  // Runs the Firebase CLI with [arguments], and returns its exit code, what
+  // it printed and its errors.
+  Future<(int, String, String)> run(List<String> arguments) async {
+    final process = await start(arguments, ProcessStartMode.normal);
+    final printed = process.stdout.transform(systemEncoding.decoder).join();
+    final failed = process.stderr.transform(systemEncoding.decoder).join();
+    final code = await process.exitCode;
+    return (code, await printed, (await failed).trim());
+  }
+
+  // Runs [executable], a tool such as keytool, with [arguments], in a shell
+  // on Windows when [inShell], and returns its exit code, what it printed
+  // and its errors. Ctrl+C reaches it as it reaches the Firebase CLI.
+  Future<(int, String, String)> tool(
+    String executable,
+    List<String> arguments, {
+    bool inShell = false,
+  }) async {
+    final process = firebase = await Process.start(
+      executable,
+      arguments,
+      runInShell: inShell && Platform.isWindows,
+    );
+    final printed = process.stdout.transform(systemEncoding.decoder).join();
+    final failed = process.stderr.transform(systemEncoding.decoder).join();
+    final code = await process.exitCode;
+    return (code, await printed, (await failed).trim());
+  }
+
   try {
     final int asked;
     final String version;
@@ -9953,20 +10051,46 @@ Future<int> _enable(Directory app, List<String> arguments) async {
       );
     }
 
+    // Google shows the name of the app and a support email on its consent
+    // screen: the email address of the account that the arguments name, or
+    // else of the one that the Firebase CLI is logged in as here.
+    final supportEmail = account ?? await _loggedInAs(run);
+    if (interrupted) return 130;
+    if (supportEmail == null) {
+      stdout.writeln(_withoutGoogle(project, named: named != null));
+    }
+    final google = supportEmail != null;
+
     File('${directory.path}/firebase.json').writeAsStringSync(
       jsonEncode({
         'auth': {
           'providers': {
             'emailPassword': true,
             if (anonymous) 'anonymous': true,
+            if (google)
+              'googleSignIn': {
+                'oAuthBrandDisplayName': _appName,
+                'supportEmail': supportEmail,
+              },
           },
         },
       }),
     );
+    final enabled = _listed([
+      'Email/Password',
+      if (anonymous) 'Anonymous',
+      if (google) 'Google',
+    ]);
     stdout.writeln(
-      'Enabling Email/Password${anonymous ? ' and Anonymous' : ''} in the '
-      'Firebase project $project (the mode of the app is $mode).',
+      'Enabling $enabled in the Firebase project $project (the mode of the '
+      'app is $mode).',
     );
+    if (google) {
+      stdout.writeln(
+        'Google shows the name "$_appName" and the support email '
+        '$supportEmail on its consent screen.',
+      );
+    }
     // What the Firebase CLI prints comes after this line.
     await stdout.flush();
     if (interrupted) return 130;
@@ -9983,7 +10107,27 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     final code = await deploy.exitCode;
     if (interrupted) return 130;
     if (code != 0) stderr.writeln(_afterFailure(code, project, passedOn));
+    if (code != 0) return code;
     if (code == 0) stdout.writeln(_appleInConsole(project));
+    try {
+      await _setUp(
+        app,
+        _Cli(run, tool, project, account, () => interrupted),
+        _needs,
+        apps,
+        waitForClients: google,
+      );
+    } on _Interrupted {
+      return 130;
+    } on _Failed catch (failed) {
+      stderr
+        ..writeln(failed.why)
+        ..writeln(
+          'What this script did before that stays done, and running it '
+          'again does the rest: $_command',
+        );
+      return 1;
+    }
     return code;
   } finally {
     await interrupts.cancel();
@@ -10003,6 +10147,96 @@ final class _Stop implements Exception {
   const _Stop(this.why);
 
   final String why;
+}
+
+/// Why the script stops once it enabled the sign-in methods, before it set
+/// up all that the ways to sign in need.
+final class _Failed implements Exception {
+  const _Failed(this.why);
+
+  final String why;
+}
+
+/// Ctrl+C, after which the script stops once the process that runs ended.
+final class _Interrupted implements Exception {
+  const _Interrupted();
+}
+
+/// The Firebase CLI and the other tools as the script runs them to set up
+/// what the ways to sign in need: the Firebase CLI for [project], as
+/// [account] if the arguments of the script name one, and the other tools,
+/// both so that Ctrl+C reaches them, with what tells whether the user
+/// pressed Ctrl+C.
+final class _Cli {
+  _Cli(
+    this._firebase,
+    this._tool,
+    this.project,
+    this.account,
+    this._interrupted,
+  );
+
+  final Future<(int, String, String)> Function(List<String> arguments)
+  _firebase;
+  final Future<(int, String, String)> Function(
+    String executable,
+    List<String> arguments, {
+    bool inShell,
+  })
+  _tool;
+  final String project;
+  final String? account;
+  final bool Function() _interrupted;
+
+  /// Runs [executable] with [arguments], in a shell on Windows when
+  /// [inShell], and returns its exit code, its output and its errors.
+  /// Throws an [_Interrupted] after Ctrl+C.
+  Future<(int, String, String)> run(
+    String executable,
+    List<String> arguments, {
+    bool inShell = false,
+  }) async {
+    final result = await _tool(executable, arguments, inShell: inShell);
+    if (_interrupted()) throw const _Interrupted();
+    return result;
+  }
+
+  /// Runs the Firebase CLI with [arguments], for the project and as the
+  /// account of the script, and returns the result that it gives as JSON.
+  ///
+  /// Throws a [_Failed] that tells that the Firebase CLI did not do [what]
+  /// when it fails or gives no result, and an [_Interrupted] after Ctrl+C.
+  Future<Object?> json(List<String> arguments, String what) async {
+    final (code, printed, errors) = await _firebase([
+      ...arguments,
+      '--project=$project',
+      '--non-interactive',
+      '--json',
+      if (account case final account?) '--account=$account',
+    ]);
+    if (_interrupted()) throw const _Interrupted();
+    final start = printed.indexOf('{');
+    Object? answer;
+    try {
+      answer = start < 0 ? null : jsonDecode(printed.substring(start));
+    } on FormatException {
+      answer = null;
+    }
+    if (answer case {
+      'status': 'success',
+      'result': final result,
+    } when code == 0) {
+      return result;
+    }
+    final error = switch (answer) {
+      {'error': final String error} => error,
+      _ => [printed.trim(), errors].where((text) => text.isNotEmpty).join(' '),
+    };
+    throw _Failed(
+      'The Firebase CLI did not $what (exit code $code)'
+      '${error.isEmpty ? '' : ': $error'}\n${_accountHint(account)}',
+    );
+  }
 }
 
 /// An id of a Firebase project, as the Firebase CLI takes it: lower-case
@@ -10031,6 +10265,67 @@ String _appleInConsole(String project) =>
     'authentication/providers\nThe deletion of an account of Apple also '
     'needs the Services ID and the OAuth code flow configuration of Apple '
     'there; see the section Firebase Authentication of README.md.';
+
+/// [items] as a sentence lists them, such as `A, B and C`.
+String _listed(List<String> items) => items.length < 2
+    ? items.join()
+    : '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}';
+
+/// The page of the Firebase console with the sign-in methods of [project].
+String _consoleOf(String project) =>
+    'https://console.firebase.google.com/project/$project/authentication/'
+    'providers';
+
+/// What the script tells when it leaves Google out in [project], since the
+/// Firebase CLI runs as no user account, and how to run it again, with the
+/// project if its arguments [named] it.
+String _withoutGoogle(String project, {required bool named}) =>
+    'Google is left out: its consent screen needs a support email, the '
+    'email address of a user account of the Firebase CLI, and the Firebase '
+    'CLI runs as none here, as with a service account. To enable Google, '
+    'run: $_command${named ? ' --project $project' : ''} --account <email>, '
+    'or enable it in the Firebase console: ${_consoleOf(project)}';
+
+/// The account that [options], the arguments of the script for the Firebase
+/// CLI, name: the last one before `--`, as the Firebase CLI takes it, if
+/// any.
+String? _accountIn(List<String> options) {
+  final before = options.takeWhile((argument) => argument != '--').toList();
+  String? account;
+  for (final (index, option) in before.indexed) {
+    if (option.startsWith('--account=')) {
+      account = option.substring('--account='.length);
+    } else if (option == '--account' && index + 1 < before.length) {
+      account = before[index + 1];
+    }
+  }
+  return account;
+}
+
+/// The email address of the user account that the Firebase CLI is logged
+/// in as, as [run] runs it, or `null` if it is logged in as none, as with a
+/// service account. It reads what `firebase login:list` prints, not what it
+/// gives with `--json`, which has the tokens of the accounts.
+Future<String?> _loggedInAs(
+  Future<(int, String, String)> Function(List<String> arguments) run,
+) async {
+  final (code, printed, _) = await run(const ['login:list']);
+  if (code != 0) return null;
+  return RegExp(
+    r'^Logged in as (\S+@\S+)$',
+    multiLine: true,
+  ).firstMatch(printed.replaceAll('\r', ''))?[1];
+}
+
+/// What the script tells of [account], the one that its arguments name,
+/// after a call of the Firebase CLI failed.
+String _accountHint(String? account) => account != null
+    ? '- The arguments name the account $account for it. "firebase '
+          'login:list" shows the accounts that the Firebase CLI has.'
+    : '- If it ran as the wrong account: this script runs the Firebase CLI '
+          'in a temporary directory, where an account that "firebase '
+          'login:use" chose for the directory of the app does not apply. To '
+          'name the account, run: $_command --account <email>';
 
 /// What the script tells after the Firebase CLI failed with the exit code
 /// [code] for [project], with the arguments [passedOn]: which account it
@@ -10219,4 +10514,558 @@ String? _olderCli(String printed) {
     if (found < number) return version[0];
   }
   return version[4] == null ? null : version[0];
+}
+
+/// The configurations of the platforms that `flutterfire configure` wrote
+/// into `firebase.json` of [app], under `flutter`, or `null` when the file
+/// is missing or is not JSON.
+Object? _flutterfireOf(Directory app) {
+  final file = File('${app.path}/firebase.json');
+  if (!file.existsSync()) return null;
+  try {
+    return switch (jsonDecode(_textOf(file))) {
+      {'flutter': final Object? flutter} => flutter,
+      _ => null,
+    };
+  } on FormatException {
+    return null;
+  }
+}
+
+/// A Firebase app of the app, as `flutterfire configure` wrote it into
+/// `firebase.json`: its platform, `android` or `ios`, its id, and the path
+/// of its Firebase file in the app.
+typedef _App = ({String platform, String id, String file});
+
+/// The Firebase apps of [app] in [project], each once, as `firebase.json`
+/// of the app names them: for each platform, the app of the platform, and
+/// those of the build types of Android and of the build configurations and
+/// the targets of iOS, if it has them.
+List<_App> _appsOf(Directory app, String project) {
+  final apps = <_App>{};
+  void collect(String platform, Object? node) {
+    if (node is! Map) return;
+    if (node case {
+      'projectId': final String id,
+      'appId': final String appId,
+      'fileOutput': final String file,
+    } when id == project) {
+      apps.add((platform: platform, id: appId, file: file));
+    }
+    for (final value in node.values) {
+      collect(platform, value);
+    }
+  }
+
+  if (_flutterfireOf(app) case {'platforms': final Map<Object?, Object?> of}) {
+    for (final platform in const ['android', 'ios']) {
+      collect(platform, of[platform]);
+    }
+  }
+  return apps.toList();
+}
+
+/// Sets up in its Firebase project what the ways to sign in of [app] need,
+/// [needs], for [apps], the Firebase apps of the app in that project.
+/// [waitForClients] tells that this run enabled Google, whose clients may
+/// come to the Firebase files a moment later.
+///
+/// Throws a [_Failed] when a step fails.
+Future<void> _setUp(
+  Directory app,
+  _Cli cli,
+  Set<_Need> needs,
+  List<_App> apps, {
+  required bool waitForClients,
+}) async {
+  if (apps.isEmpty) {
+    stdout.writeln(
+      'firebase.json of the app names no app of the project ${cli.project} '
+      'that "flutterfire configure" configured the app for, so this run '
+      'registers no debug key, downloads no Firebase file and writes no URL '
+      'scheme there. To set the app up for that project, run "flutterfire '
+      'configure" for it first, and then this script again.',
+    );
+    return;
+  }
+  final android = [
+    for (final app in apps)
+      if (app.platform == 'android') app,
+  ];
+  final ios = [
+    for (final app in apps)
+      if (app.platform == 'ios') app,
+  ];
+  if (needs.contains(_Need.androidCertificate) && android.isNotEmpty) {
+    await _registerDebugKey(cli, {for (final app in android) app.id});
+  }
+  final files = [
+    if (needs.contains(_Need.serverClient)) ...android,
+    if (needs.contains(_Need.iosClient)) ...ios,
+  ];
+  if (files.isEmpty) return;
+  final schemes = await _downloadFiles(
+    app,
+    cli,
+    files,
+    waitForClients: waitForClients,
+  );
+  if (schemes != null && schemes.isNotEmpty) _writeUrlSchemes(app, schemes);
+}
+
+/// A hash of a certificate as the script compares it: its hexadecimal
+/// digits in lower case, without the colons that keytool prints.
+String _hashOf(String printed) =>
+    printed.replaceAll(':', '').toLowerCase().trim();
+
+/// Registers the SHA-1 and SHA-256 of the debug key of this machine for the
+/// Android apps [ids] in the project of [cli], those of each that the
+/// project does not have yet, and creates the debug key as the first debug
+/// build would when there is none.
+Future<void> _registerDebugKey(_Cli cli, Set<String> ids) async {
+  final keystore = _debugKeystore();
+  stdout.writeln(
+    'Registering the SHA-1 and SHA-256 of the Android debug key of this '
+    'machine, ${keystore.path}, for the Android app ${_listed([...ids])}.',
+  );
+  final keytool =
+      await _keytool(cli) ??
+      (throw _Failed(
+        'keytool, which reads the debug key, was not found on the PATH, in '
+        'JAVA_HOME or in Android Studio at ${_androidStudioKeytool()}. '
+        'Install a JDK or Android Studio, or put keytool on the PATH, and '
+        'run this script again.',
+      ));
+  final inShell = keytool == 'keytool';
+  if (!keystore.existsSync()) {
+    stdout.writeln(
+      'There is no debug key yet, so this script creates it, as the first '
+      'debug build would.',
+    );
+    keystore.parent.createSync(recursive: true);
+    // As the Android Gradle plugin creates the debug key (KeystoreHelper of
+    // the plugin 9): an RSA key of 2048 bits for 30 years in the keystore
+    // of the default type of the JDK.
+    final (code, _, errors) = await cli.run(keytool, [
+      '-genkeypair',
+      '-keystore',
+      keystore.path,
+      '-storepass',
+      'android',
+      '-alias',
+      'androiddebugkey',
+      '-keypass',
+      'android',
+      '-keyalg',
+      'RSA',
+      '-keysize',
+      '2048',
+      '-sigalg',
+      'SHA256withRSA',
+      '-validity',
+      '10950',
+      '-dname',
+      'CN=Android Debug,O=Android,C=US',
+    ], inShell: inShell);
+    if (code != 0) {
+      throw _Failed(
+        'keytool did not create the debug key ${keystore.path} (exit code '
+        '$code)${errors.isEmpty ? '' : ': $errors'}',
+      );
+    }
+  }
+  final (code, printed, errors) = await cli.run(keytool, [
+    '-list',
+    '-v',
+    '-keystore',
+    keystore.path,
+    '-alias',
+    'androiddebugkey',
+    '-storepass',
+    'android',
+  ], inShell: inShell);
+  final hashes = [
+    for (final name in const ['SHA1', 'SHA256'])
+      RegExp(
+        '^\\s*$name:\\s*([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2})+)\\s*\$',
+        multiLine: true,
+      ).firstMatch(printed)?[1],
+  ];
+  if (code != 0 || hashes.contains(null)) {
+    throw _Failed(
+      'keytool did not read the SHA-1 and SHA-256 of the debug key '
+      '${keystore.path} (exit code $code)'
+      '${errors.isEmpty ? '' : ': $errors'}',
+    );
+  }
+  stdout.writeln(
+    'The SHA-1 of the key is ${hashes[0]}, and its SHA-256 is ${hashes[1]}.',
+  );
+  for (final id in ids) {
+    final listed = await cli.json([
+      'apps:android:sha:list',
+      id,
+    ], 'list the SHA certificate hashes of the Android app $id');
+    final known = {
+      if (listed is List)
+        for (final certificate in listed)
+          if (certificate case {'shaHash': final String hash}) _hashOf(hash),
+    };
+    final missing = [
+      for (final hash in hashes.nonNulls)
+        if (!known.contains(_hashOf(hash))) hash,
+    ];
+    for (final hash in missing) {
+      // As keytool prints it, with colons, which the API of Firebase takes,
+      // as a check against a real project showed.
+      await cli.json([
+        'apps:android:sha:create',
+        id,
+        hash,
+      ], 'register $hash for the Android app $id');
+    }
+    stdout.writeln(
+      missing.isEmpty
+          ? 'The Android app $id has them already.'
+          : 'Registered them for the Android app $id.',
+    );
+  }
+}
+
+/// The debug key of Android of this machine, where the Android Gradle
+/// plugin keeps it and creates it for the first debug build:
+/// `debug.keystore` in the directory of the preferences of the Android
+/// tools (`AbstractAndroidLocations` of the plugin 9). That is the
+/// directory that ANDROID_USER_HOME names, or `.android` in the one that
+/// ANDROID_PREFS_ROOT or ANDROID_SDK_HOME name, which are deprecated, or
+/// else `.android` in the first directory that exists of TEST_TMPDIR,
+/// XDG_CONFIG_HOME and the home directory.
+File _debugKeystore() {
+  final environment = Platform.environment;
+  final separator = Platform.pathSeparator;
+  String? named(String variable) => switch (environment[variable]) {
+    final value? when value.isNotEmpty => value,
+    _ => null,
+  };
+  String? dotAndroidIn(List<String?> directories) => [
+    for (final directory in directories.nonNulls)
+      if (Directory(directory).existsSync()) '$directory$separator.android',
+  ].firstOrNull;
+  final preferences =
+      named('ANDROID_USER_HOME') ??
+      dotAndroidIn([named('ANDROID_PREFS_ROOT'), named('ANDROID_SDK_HOME')]) ??
+      dotAndroidIn([
+        named('TEST_TMPDIR'),
+        named('XDG_CONFIG_HOME'),
+        named(Platform.isWindows ? 'USERPROFILE' : 'HOME'),
+      ]);
+  if (preferences == null) {
+    throw const _Failed(
+      'Cannot tell where the Android Gradle plugin keeps the debug key of '
+      'this machine: no directory of ANDROID_USER_HOME and of the home '
+      'directory exists.',
+    );
+  }
+  return File('$preferences${separator}debug.keystore');
+}
+
+/// Where Android Studio has keytool, in the JDK that Flutter builds with
+/// when JAVA_HOME is not set, at the default place of Android Studio on
+/// this system.
+String _androidStudioKeytool() {
+  if (Platform.isMacOS) {
+    return '/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/'
+        'keytool';
+  }
+  if (Platform.isWindows) {
+    final programs =
+        Platform.environment['ProgramFiles'] ?? r'C:\Program Files';
+    return '$programs\\Android\\Android Studio\\jbr\\bin\\keytool.exe';
+  }
+  return '/opt/android-studio/jbr/bin/keytool';
+}
+
+/// The keytool of a JDK of this machine that runs: the one on the PATH, the
+/// one in JAVA_HOME or the one of Android Studio, or `null` if none runs.
+/// A keytool that does not run, such as the one of macOS on a machine
+/// without a JDK that macOS knows, is passed over.
+Future<String?> _keytool(_Cli cli) async {
+  final javaHome = Platform.environment['JAVA_HOME'] ?? '';
+  final separator = Platform.pathSeparator;
+  for (final keytool in [
+    'keytool',
+    if (javaHome.isNotEmpty)
+      [
+        javaHome,
+        'bin',
+        Platform.isWindows ? 'keytool.exe' : 'keytool',
+      ].join(separator),
+    _androidStudioKeytool(),
+  ]) {
+    final onPath = keytool == 'keytool';
+    if (!onPath && !File(keytool).existsSync()) continue;
+    try {
+      final (code, _, _) = await cli.run(keytool, ['-help'], inShell: onPath);
+      if (code == 0) return keytool;
+    } on ProcessException {
+      continue;
+    }
+  }
+  return null;
+}
+
+/// Downloads the Firebase files of [files], apps of [app], from the project
+/// of [cli], and writes those that have the clients of Google to their
+/// paths in the app. Returns the URL schemes that the iOS files among them
+/// have, or `null` when a file lacks the clients, which the script then
+/// tells.
+///
+/// When [waitForClients], Google was enabled a moment ago, so the script
+/// downloads a file without the clients again, three times at most, five
+/// seconds apart, and fails when it still lacks them.
+Future<List<String>?> _downloadFiles(
+  Directory app,
+  _Cli cli,
+  List<_App> files, {
+  required bool waitForClients,
+}) async {
+  stdout.writeln(
+    'Downloading the Firebase files of the app again, with the clients of '
+    'Google: ${_listed([for (final file in files) file.file])}.',
+  );
+  final contents = <_App, String>{};
+  for (var attempt = 1; ; attempt++) {
+    for (final file in files) {
+      if (contents[file] case final text? when _clientsOf(file, text) != null) {
+        continue;
+      }
+      final result = await cli.json([
+        'apps:sdkconfig',
+        file.platform.toUpperCase(),
+        file.id,
+      ], 'download the Firebase file of the app ${file.id}');
+      contents[file] = switch (result) {
+        {'fileContents': final String text} => text,
+        _ => throw _Failed(
+          'The Firebase CLI gave no Firebase file of the app ${file.id}.',
+        ),
+      };
+    }
+    final lacking = [
+      for (final file in files)
+        if (_clientsOf(file, contents[file]!) == null) file,
+    ];
+    if (lacking.isEmpty || !waitForClients || attempt > 3) {
+      final written = <String>[];
+      for (final file in files) {
+        if (lacking.contains(file)) continue;
+        if (_write(app, file.file, contents[file]!)) written.add(file.file);
+      }
+      stdout.writeln(
+        written.isEmpty
+            ? 'The files of the app are as Firebase has them already.'
+            : 'Wrote ${_listed(written)}.',
+      );
+      if (lacking.isEmpty) {
+        return [
+          for (final file in files)
+            if (file.platform == 'ios') ...?_clientsOf(file, contents[file]!),
+        ];
+      }
+      final names = _listed([for (final file in lacking) file.file]);
+      if (waitForClients) {
+        throw _Failed(
+          'Firebase has not added the clients of Google yet, so this script '
+          'has not written $names.',
+        );
+      }
+      stdout.writeln(
+        'Firebase has no clients of Google, as in a project in which Google '
+        'is not enabled, so this script has not written $names, and writes '
+        'no URL scheme. Enable Google, and run this script again.',
+      );
+      return null;
+    }
+    await Future<void>.delayed(const Duration(seconds: 5));
+  }
+}
+
+/// The URL schemes of the clients of Google in [text], the Firebase file of
+/// [file], or `null` if it lacks a client that the app needs: for an iOS
+/// app, `REVERSED_CLIENT_ID`, its client of Google reversed, and for an
+/// Android app none, with the client of the server, an OAuth client of the
+/// type 3.
+List<String>? _clientsOf(_App file, String text) {
+  if (file.platform == 'ios') {
+    final scheme = RegExp(
+      r'<key>REVERSED_CLIENT_ID</key>\s*<string>([A-Za-z0-9.-]+)</string>',
+    ).firstMatch(text)?[1];
+    return scheme == null ? null : [scheme];
+  }
+  bool hasServer(Object? node) => switch (node) {
+    {'client_type': 3} => true,
+    Map() => node.values.any(hasServer),
+    List() => node.any(hasServer),
+    _ => false,
+  };
+  try {
+    return hasServer(jsonDecode(text)) ? const [] : null;
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Writes [text] to [path] of [app], unless the file has it already, and
+/// returns whether it wrote it.
+///
+/// Throws a [_Failed] when [path] is outside the app, and when the file
+/// cannot be read or written.
+bool _write(Directory app, String path, String text) {
+  final segments = path.split(RegExp(r'[/\\]'));
+  if (path.isEmpty ||
+      path.startsWith('/') ||
+      path.startsWith(r'\') ||
+      path.contains(':') ||
+      segments.contains('..')) {
+    throw _Failed(
+      'firebase.json of the app names "$path" as a Firebase file of the app, '
+      'which is outside the app.',
+    );
+  }
+  final file = File('${app.path}/$path');
+  try {
+    if (file.existsSync() && file.readAsStringSync() == text) return false;
+    file
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+  } on FileSystemException catch (error) {
+    throw _Failed('$path could not be written (${error.message}).');
+  }
+  return true;
+}
+
+/// Writes [schemes] into the URL schemes of [_infoPlist] of [app], those
+/// that it does not have, as a URL type of their own, and leaves the file
+/// as it is when it has them all.
+///
+/// Throws a [_Failed] with what to add by hand when the file is not in a
+/// form that the script knows, and when it cannot be read or written.
+void _writeUrlSchemes(Directory app, List<String> schemes) {
+  final file = File('${app.path}/$_infoPlist');
+  if (!file.existsSync()) {
+    throw _Failed(
+      '$_infoPlist is missing, so this script cannot write the URL scheme '
+      'of Google, ${_listed(schemes)}, into it.',
+    );
+  }
+  final String text;
+  try {
+    text = file.readAsStringSync();
+  } on FileSystemException catch (error) {
+    throw _Failed('$_infoPlist could not be read (${error.message}).');
+  }
+  final missing = [
+    for (final scheme in {...schemes})
+      if (!text.contains('<string>$scheme</string>')) scheme,
+  ];
+  if (missing.isEmpty) {
+    stdout.writeln('$_infoPlist has the URL scheme of Google already.');
+    return;
+  }
+  stdout.writeln(
+    'Writing the URL scheme of Google, ${_listed(missing)}, into '
+    '$_infoPlist.',
+  );
+  final changed = _withUrlSchemes(text, missing);
+  final newline = text.contains('\r\n') ? '\r\n' : '\n';
+  if (changed == null) {
+    throw _Failed(
+      '$_infoPlist is not in a form in which this script can add the URL '
+      'scheme. Add this to CFBundleURLTypes there by hand:\n'
+      '${_urlTypesOf(missing, '', newline).trimRight()}',
+    );
+  }
+  try {
+    file.writeAsStringSync(changed);
+  } on FileSystemException catch (error) {
+    throw _Failed(
+      '$_infoPlist could not be written (${error.message}). Add this to '
+      'CFBundleURLTypes there by hand:\n'
+      '${_urlTypesOf(missing, '', newline).trimRight()}',
+    );
+  }
+}
+
+/// The URL types of [schemes] as the items of `CFBundleURLTypes`, each line
+/// after [indent], one tab further in for each level, and ending with
+/// [newline].
+String _urlTypesOf(List<String> schemes, String indent, String newline) => [
+  for (final scheme in schemes) ...[
+    '$indent<dict>',
+    '$indent\t<key>CFBundleTypeRole</key>',
+    '$indent\t<string>Editor</string>',
+    '$indent\t<key>CFBundleURLSchemes</key>',
+    '$indent\t<array>',
+    '$indent\t\t<string>$scheme</string>',
+    '$indent\t</array>',
+    '$indent</dict>',
+  ],
+].map((line) => '$line$newline').join();
+
+/// [text], an Info.plist in XML, with the URL types of [schemes] added: at
+/// the end of `CFBundleURLTypes`, or in a `CFBundleURLTypes` of their own
+/// at the end of the dictionary of the file. Returns `null` when [text] is
+/// not in a form that the script knows.
+String? _withUrlSchemes(String text, List<String> schemes) {
+  final newline = text.contains('\r\n') ? '\r\n' : '\n';
+  // The start of the line of the tag at [index], when only spaces and tabs
+  // come before it there.
+  int? lineOf(int index) {
+    final start = text.lastIndexOf('\n', index - 1) + 1;
+    return text.substring(start, index).trim().isEmpty ? start : null;
+  }
+
+  String insert(int at, String lines) =>
+      '${text.substring(0, at)}$lines${text.substring(at)}';
+  final key = RegExp(r'<key>CFBundleURLTypes</key>\s*');
+  final keys = key.allMatches(text).toList();
+  if (keys.length > 1) return null;
+  if (keys case [final found]) {
+    if (text.startsWith('<array/>', found.end)) {
+      final line = lineOf(found.start);
+      if (line == null) return null;
+      final indent = text.substring(line, found.start);
+      return text.replaceRange(
+        found.end,
+        found.end + '<array/>'.length,
+        '<array>$newline${_urlTypesOf(schemes, '$indent\t', newline)}'
+        '$indent</array>',
+      );
+    }
+    if (!text.startsWith('<array>', found.end)) return null;
+    // The end of that array, after the arrays within it.
+    var depth = 0;
+    for (final tag in RegExp(r'<(/?)array>').allMatches(text, found.end)) {
+      depth += tag[1]!.isEmpty ? 1 : -1;
+      if (depth > 0) continue;
+      final line = lineOf(tag.start);
+      if (line == null) return null;
+      final indent = text.substring(line, tag.start);
+      return insert(line, _urlTypesOf(schemes, '$indent\t', newline));
+    }
+    return null;
+  }
+  // The dictionary of the file ends with its last `</dict>`, right before
+  // `</plist>`.
+  final end = RegExp(r'</dict>\s*</plist>\s*$').firstMatch(text);
+  final line = end == null ? null : lineOf(end.start);
+  if (end == null || line == null) return null;
+  final indent = '${text.substring(line, end.start)}\t';
+  return insert(
+    line,
+    '$indent<key>CFBundleURLTypes</key>$newline'
+    '$indent<array>$newline'
+    '${_urlTypesOf(schemes, '$indent\t', newline)}'
+    '$indent</array>$newline',
+  );
 }
