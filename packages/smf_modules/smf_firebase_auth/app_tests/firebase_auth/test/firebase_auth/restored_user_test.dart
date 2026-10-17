@@ -3,7 +3,8 @@
 // is a backend in memory (firebase_auth_mocks.dart): the sign-in service of
 // the module, which createFirebaseAuthService() creates, has the user of an
 // account whom Firebase kept on the device from the moment it is created,
-// without a call of Firebase.
+// with the identity providers that the user signs in with, without a call
+// of Firebase.
 //
 // The backend starts with nobody signed in, as on a first launch, so the
 // test puts a user on the device itself, before Firebase is initialized,
@@ -24,21 +25,37 @@ void main() {
   late MockFirebaseAuth firebase;
 
   setUpAll(() async {
-    firebase = mockFirebaseAuth()..restoreUser(uid, email: email);
+    firebase = mockFirebaseAuth()
+      ..restoreUser(
+        uid,
+        email: email,
+        identities: {'apple.com': 'firebase-auth-tests-restored'},
+      );
     await initializeFirebase();
   });
 
   test(
       'the service has the user of the device from the moment it is '
-      'created, without a call of Firebase', () {
+      'created, with the identity providers of the user, without a call of '
+      'Firebase', () {
     final service = createFirebaseAuthService();
 
     expect(
-      [userOf(service.currentUser), firebase.calls],
-      ['the account $uid of $email', isEmpty],
+      [userOf(service.currentUser), issuersOf(service.currentUser)],
+      [
+        'the account $uid of $email',
+        [apple],
+      ],
       reason: 'Firebase keeps the user on the device and hands that user '
-          'over when it is initialized, so the service has the user as soon '
-          'as it is created, and asks Firebase for nothing.',
+          'over when it is initialized, with the identity providers that the '
+          'user signs in with, so the service has the user as soon as it is '
+          'created: the user of an account, with its email address, who signs '
+          'in with Apple.',
+    );
+    expect(
+      firebase.calls,
+      isEmpty,
+      reason: 'The service asks Firebase for nothing to have the user.',
     );
   });
 }

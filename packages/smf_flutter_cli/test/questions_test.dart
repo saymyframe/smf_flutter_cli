@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
-import 'package:smf_contracts/core.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -230,6 +230,7 @@ void main() {
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
+      'apple_sign_in — Sign in with Apple on iOS with sign_in_with_apple',
     ]);
     expect(run.asked[2].shown, [
       'bottom_tabs — Tabs in a bar at the bottom of the app',
@@ -464,11 +465,14 @@ void main() {
     const added = 'Adding go_router: the only provider of the router role, '
         'which settings requires.';
     // The screen is a destination, which an app without a layout has no
-    // main navigation for, and the app starts on none of its routes.
-    const start = 'No route is marked as a start candidate, so the app starts '
-        'on its fallback screen. Choose a start route with --start.';
-    const destination = 'No module provides the layout role, so the app has '
-        'no main navigation to lead to the destination /settings (settings). '
+    // main navigation for, and the app starts on none of its routes. The
+    // template of the router role reports both.
+    const start = '[role:router]: No route is marked as a start candidate, '
+        'so the app starts on its fallback screen. Choose a start route with '
+        '--start.';
+    const destination = '[role:router]: No module provides the layout role, '
+        'so the app has no main navigation to lead to the destination '
+        '/settings (settings). '
         'Choose a provider of the role, or open it from a screen of yours '
         'with context.nav.';
     expect(run.lines, containsAllInOrder([added, start, destination]));
@@ -643,9 +647,9 @@ void main() {
     ]);
     final app = run.files.directory('/work/my_app');
     // The texts of the app are those of the start screen, after the label
-    // of that screen in a main navigation, and then the two of the fallback
-    // start screen of the app entry, in English and in Ukrainian, so the
-    // app is in both.
+    // of that screen in a main navigation, in English and in Ukrainian, so
+    // the app is in both. The app starts on that screen, so it has no
+    // fallback start screen, and none of its texts.
     for (final (language, label) in [('en', 'Home'), ('uk', 'Головна')]) {
       final texts = jsonDecode(
         app.childFile('lib/l10n/app_$language.arb').readAsStringSync(),
@@ -655,14 +659,14 @@ void main() {
       expect(texts['homeLabel'], label);
       expect(
         texts.keys.skip(1),
-        [
-          ...texts.keys.where((key) => key.startsWith('home')),
-          'flutterCoreFallbackHint',
-          'flutterCoreFallbackCopied',
-        ],
+        texts.keys.where((key) => key.startsWith('home')),
         reason: language,
       );
     }
+    expect(
+      app.childFile(AppEntryRole.fallbackStartScreenFile).existsSync(),
+      isFalse,
+    );
     expect(
       [
         for (final file in app.childDirectory('lib/l10n').listSync())
@@ -1548,6 +1552,67 @@ void main() {
   });
 
   test(
+      'a run in a terminal offers Sign in with Apple among the '
+      'infrastructure, adds the only provider of the authentication, which '
+      'it requires, without a question, and gives the app its way to sign in '
+      'and the entitlement of its capability', () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': ['apple_sign_in'],
+        'Layout': ['None'],
+        'Settings screen': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Theme': ['None'],
+        'Localization': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+        'Preferences': ['None'],
+        'Crash reporting': [],
+        'Analytics': [],
+        'Who may use the app': ['Nobody'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // firebase_auth is the only module that provides the authentication,
+    // which Sign in with Apple requires, so there is nothing to ask.
+    expect(
+      [for (final question in run.asked) question.message],
+      isNot(contains(startsWith('Authentication:'))),
+    );
+    expect(
+      run.lines,
+      contains(
+        'Adding firebase_auth: the only provider of the authentication '
+        'role, which apple_sign_in requires.',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app.childFile('lib/core/auth/sign_in_methods.dart').readAsStringSync(),
+      allOf(
+        contains('credential: method0.appleCredential,'),
+        contains("issuer: 'https://appleid.apple.com',"),
+      ),
+    );
+    expect(
+      app.childFile('ios/Runner/Runner.entitlements').readAsStringSync(),
+      contains('<key>com.apple.developer.applesignin</key>'),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(contains('  sign_in_with_apple: '), contains('  crypto: ')),
+    );
+    expect(
+      app.childFile('README.md').readAsStringSync(),
+      contains('\n## Sign in with Apple\n'),
+    );
+  });
+
+  test(
       'a run in a terminal offers the sign-in among the features, asks '
       'which module manages the state of its screens, with no choice of '
       'none, adds the only providers of the authentication and of the '
@@ -1727,22 +1792,17 @@ void main() {
       ];
     }
 
-    const ofSettings = 'No module provides the layout role, so the app has no '
-        'main navigation to lead to the destination /settings (settings). '
+    const ofSettings = '[role:router]: No module provides the layout role, '
+        'so the app has no main navigation to lead to the destination '
+        '/settings (settings). '
         'Choose a provider of the role, or open it from a screen of yours '
         'with context.nav.';
 
     test(
         'is given once, with the path and the module of each destination '
-        'that the app does not start in, also with --strict, and not in an '
-        'app with a layout', () async {
+        'that the app does not start in, and not in an app with a layout',
+        () async {
       expect(await warningsOf('home,settings'), [ofSettings]);
-      // --strict stops a run that would leave a module out, and the
-      // warning leaves none out.
-      expect(
-        await warningsOf('home,settings', options: ['--strict']),
-        [ofSettings],
-      );
       // The app starts on the settings screen, so the other destination is
       // the one that it has no main navigation for.
       expect(
@@ -1753,6 +1813,43 @@ void main() {
       expect(await warningsOf('home,settings,bottom_tabs'), isEmpty);
       // The only destination of the app is the screen that it starts on.
       expect(await warningsOf('home'), isEmpty);
+    });
+
+    test(
+        'stops a run with --strict, which names its code and creates '
+        'nothing, unless --allow-warning names the code', () async {
+      final strict = await _create(
+        {},
+        options: [
+          '--no-input',
+          '--skip-external-setup',
+          '-m',
+          'home,settings',
+          '--strict',
+        ],
+      );
+
+      const stopped = 'Generation stopped because of a warning about the '
+          'app. Without --strict, the run goes on after it.';
+      final cause = '  warning [role:router] router.no_main_navigation'
+          '${ofSettings.substring('[role:router]'.length)}';
+
+      expect(strict.code, SmfExitCodes.generationFailed);
+      // After the modules that the run added.
+      expect(strict.lines.skip(2), [stopped, cause]);
+      expect(strict.warnings, isEmpty);
+      expect(strict.files.directory('/work/my_app').existsSync(), isFalse);
+
+      expect(
+        await warningsOf(
+          'home,settings',
+          options: [
+            '--strict',
+            '--allow-warning=router.no_main_navigation',
+          ],
+        ),
+        [ofSettings],
+      );
     });
 
     test(

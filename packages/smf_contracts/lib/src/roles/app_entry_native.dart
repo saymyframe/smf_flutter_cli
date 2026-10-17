@@ -35,7 +35,9 @@ final class AndroidMetaData {
   String toString() => attribute;
 }
 
-/// A value of an `Info.plist` key in [AppEntryRole.infoPlist].
+/// A value of a key of a property list: of `Info.plist` in
+/// [AppEntryRole.infoPlist], or of the entitlements of the iOS app in
+/// [AppEntryRole.iosEntitlements].
 @immutable
 sealed class PlistValue {
   const PlistValue();
@@ -146,8 +148,8 @@ final class PlistStringArray extends PlistValue {
   String toString() => '$values';
 }
 
-/// Merges `Info.plist` values: string arrays are united, other values must
-/// be equal.
+/// Merges the values of a key of a property list, such as `Info.plist`:
+/// string arrays are united, other values must be equal.
 final class PlistMergePolicy extends MergePolicy<PlistValue> {
   /// Creates the policy.
   const PlistMergePolicy();
@@ -221,12 +223,15 @@ String _renderAndroidMetaData(
         )
         .join('\n');
 
-String _renderInfoPlist(List<MapEntry<String, PlistValue>> entries) => entries
-    .map(
-      (entry) =>
-          '\t<key>${_escapeXml(entry.key)}</key>\n${entry.value.toXml('\t')}',
-    )
-    .join('\n');
+/// The entries of the top-level dictionary of a property list, each key
+/// with its value.
+String _renderPlistEntries(List<MapEntry<String, PlistValue>> entries) =>
+    entries
+        .map(
+          (entry) => '\t<key>${_escapeXml(entry.key)}</key>\n'
+              '${entry.value.toXml('\t')}',
+        )
+        .join('\n');
 
 String _renderGradleSettingsPlugins(List<MapEntry<String, String>> entries) =>
     entries
@@ -270,6 +275,7 @@ const _lineSockets = <(SocketRef, String)>[
   ),
   (AppEntryRole.mainActivityIntentFilters, AppEntryRole.androidManifestFile),
   (AppEntryRole.infoPlist, AppEntryRole.infoPlistFile),
+  (AppEntryRole.iosEntitlements, AppEntryRole.iosEntitlementsFile),
   (AppEntryRole.gradleSettingsPlugins, AppEntryRole.gradleSettingsFile),
   (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
   (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),
@@ -328,8 +334,11 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
   }
 
   final texts = input.texts;
-  if (texts[AppEntryRole.infoPlistFile] case final plist?) {
-    once(AppEntryRole.infoPlistFile, 'the key', _plistKeys(plist));
+  for (final path in const [
+    AppEntryRole.infoPlistFile,
+    AppEntryRole.iosEntitlementsFile,
+  ]) {
+    if (texts[path] case final plist?) once(path, 'the key', _plistKeys(plist));
   }
   if (texts[AppEntryRole.androidManifestFile] case final manifest?) {
     const path = AppEntryRole.androidManifestFile;
@@ -351,6 +360,209 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
     for (final plugins in _gradlePluginBlocks(texts[path] ?? '')) {
       once(path, 'the plugin', plugins);
     }
+  }
+  return issues;
+}
+
+/// The text of the Xcode project [text] without its comments: those
+/// between `/*` and `*/`, and those from `//` to the end of the line, but
+/// none in a string in quotes.
+String _withoutProjectComments(String text) {
+  final kept = StringBuffer();
+  var i = 0;
+  while (i < text.length) {
+    if (text[i] == '"') {
+      final end = _endOfString(text, i);
+      kept.write(text.substring(i, end));
+      i = end;
+    } else if (text.startsWith('/*', i)) {
+      final end = text.indexOf('*/', i + 2);
+      i = end < 0 ? text.length : end + 2;
+    } else if (text.startsWith('//', i)) {
+      final end = text.indexOf('\n', i);
+      i = end < 0 ? text.length : end;
+    } else {
+      kept.write(text[i]);
+      i++;
+    }
+  }
+  return kept.toString();
+}
+
+/// The index after the string in quotes that starts at [start] in [text],
+/// or the length of [text] when the string does not end.
+int _endOfString(String text, int start) {
+  for (var i = start + 1; i < text.length; i++) {
+    if (text[i] == r'\') {
+      i++;
+    } else if (text[i] == '"') {
+      return i + 1;
+    }
+  }
+  return text.length;
+}
+
+/// The index of the `}` that closes the `{` at [open] in [text], which has
+/// no comments, whatever the braces in its strings, or the length of
+/// [text] when none does.
+int _closingBrace(String text, int open) {
+  var depth = 0;
+  var i = open;
+  while (i < text.length) {
+    final char = text[i];
+    if (char == '"') {
+      i = _endOfString(text, i);
+      continue;
+    }
+    if (char == '{') depth++;
+    if (char == '}' && --depth == 0) return i;
+    i++;
+  }
+  return text.length;
+}
+
+/// The start of an object of an Xcode project without comments: its id,
+/// and its `isa`, which Xcode writes first.
+final _projectObject = RegExp(r'(\w+)\s*=\s*\{\s*isa\s*=\s*"?(\w+)"?\s*;');
+
+/// An object of an Xcode project: its `id`, its `isa`, such as
+/// `XCBuildConfiguration`, and the text between its braces, its `body`.
+typedef _ProjectObject = ({String id, String isa, String body});
+
+/// The objects of the Xcode project [text], which has no comments.
+List<_ProjectObject> _projectObjects(String text) {
+  final objects = <_ProjectObject>[];
+  for (final start in _projectObject.allMatches(text)) {
+    final open = text.indexOf('{', start.start);
+    objects.add(
+      (
+        id: start[1]!,
+        isa: start[2]!,
+        body: text.substring(open + 1, _closingBrace(text, open)),
+      ),
+    );
+  }
+  return objects;
+}
+
+/// The ids of the build configurations of the project itself, whose
+/// settings every target inherits, in the Xcode project of [objects].
+Set<String> _projectConfigurations(List<_ProjectObject> objects) {
+  final list = RegExp(r'buildConfigurationList\s*=\s*(\w+)\s*;');
+  final ids = RegExp(r'buildConfigurations\s*=\s*\(([^)]*)\)');
+  return {
+    for (final project in objects)
+      if (project.isa == 'PBXProject')
+        if (list.firstMatch(project.body)?[1] case final listId?)
+          for (final configurations in objects)
+            if (configurations.id == listId)
+              if (ids.firstMatch(configurations.body)?[1] case final items?)
+                for (final id in RegExp(r'\w+').allMatches(items)) id[0]!,
+  };
+}
+
+/// The build settings of the build configuration whose object has [body],
+/// and its name, if any.
+({String settings, String? name}) _buildConfiguration(String body) {
+  final open = RegExp(r'buildSettings\s*=\s*\{').firstMatch(body);
+  if (open == null) return (settings: '', name: _nameSetting(body));
+  final close = _closingBrace(body, open.end - 1);
+  return (
+    settings: body.substring(open.end, close),
+    name: _nameSetting(body.replaceRange(open.start, close, '')),
+  );
+}
+
+/// The value of the setting `name` in [text], if any.
+String? _nameSetting(String text) =>
+    RegExp(r'\bname\s*=\s*"?([^";]*)"?\s*;').firstMatch(text)?[1]!.trim();
+
+/// The setting `INFOPLIST_FILE` of build settings, with its value.
+final _infoPlistSetting = RegExp(
+  r'(?:^|(?<=;))\s*"?INFOPLIST_FILE"?\s*=\s*"?([^";]*)"?\s*;',
+  multiLine: true,
+);
+
+/// A setting `CODE_SIGN_ENTITLEMENTS` of build settings, with its
+/// condition, such as `[sdk=iphoneos*]`, if any, and its value.
+final _entitlementsSetting = RegExp(
+  r'(?:^|(?<=;))\s*"?CODE_SIGN_ENTITLEMENTS(\[[^\]]*\])?"?\s*=\s*"?([^";]*)"?'
+  r'\s*;',
+  multiLine: true,
+);
+
+/// [path], a path of the app in its iOS project, as the build settings of
+/// [AppEntryRole.xcodeProjectFile] name it: from the directory of that
+/// project, such as `Runner/Info.plist`.
+String _inIosProject(String path) => path.substring(path.indexOf('/') + 1);
+
+List<SmfIssue> _checkIosEntitlementsSigned(StructuralRuleInput<NoDsl> input) {
+  const path = AppEntryRole.xcodeProjectFile;
+  const file = AppEntryRole.iosEntitlementsFile;
+  final text = input.texts[path];
+  if (text == null) return const [];
+  final origin = input.owners[path];
+  final infoPlist = _inIosProject(AppEntryRole.infoPlistFile);
+  final entitlements = _inIosProject(file);
+  final objects = _projectObjects(_withoutProjectComments(text));
+  final ofProject = _projectConfigurations(objects);
+  final issues = <SmfIssue>[];
+  void report(String message, String hint) =>
+      issues.add(SmfIssue(message, hint: hint, origin: origin, path: path));
+  var ofApp = 0;
+  for (final object in objects) {
+    if (object.isa != 'XCBuildConfiguration') continue;
+    final (:settings, :name) = _buildConfiguration(object.body);
+    final named = 'The build configuration '
+        '${name == null ? object.id : '$name (${object.id})'}';
+    final signing = [
+      for (final setting in _entitlementsSetting.allMatches(settings))
+        (condition: setting[1], value: setting[2]!.trim()),
+    ];
+    if (ofProject.contains(object.id)) {
+      if (signing.isEmpty) continue;
+      report(
+        '$named of the project in $path names entitlements in '
+            'CODE_SIGN_ENTITLEMENTS, which every target without a setting '
+            'of its own inherits, such as the tests.',
+        'Set CODE_SIGN_ENTITLEMENTS in the build configurations of each '
+            'target that signs with entitlements: $entitlements in those of '
+            'the app target, which read $infoPlist.',
+      );
+    } else if (_infoPlistSetting
+        .allMatches(settings)
+        .any((setting) => setting[1]!.trim() == infoPlist)) {
+      ofApp++;
+      if (signing case [(condition: null, :final value)]
+          when value == entitlements) {
+        continue;
+      }
+      report(
+        '$named of the app target in $path does not sign the app with '
+            '$file.',
+        'Each build configuration with INFOPLIST_FILE = $infoPlist has '
+            'CODE_SIGN_ENTITLEMENTS = $entitlements; and no other '
+            'CODE_SIGN_ENTITLEMENTS. Without it the app builds and signs, but '
+            'has none of the entitlements that the modules add.',
+      );
+    } else if (signing.any((setting) => setting.value == entitlements)) {
+      report(
+        '$named in $path, which is not one of the app target, signs with '
+            'the entitlements of the app, $file.',
+        'Only the app target signs with $file. Another target, such as an '
+            'app extension, signs with entitlements of its own.',
+      );
+    }
+  }
+  if (ofApp == 0) {
+    issues.add(
+      SmfIssue(
+        '$path has no build configuration of the app target, with '
+        'INFOPLIST_FILE = $infoPlist, that signs the app with $file.',
+        origin: origin,
+        path: path,
+      ),
+    );
   }
   return issues;
 }

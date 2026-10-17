@@ -92,6 +92,36 @@ void main() {
     expect(result.postGenOrder.contributions, isEmpty);
   });
 
+  test(
+      'warns of each option on the command line of a role that the app '
+      'lacks, since nothing reads it, and of no option of a present role', () {
+    TestRole<String> withOption(String id, String option) => TestRole<String>(
+          id,
+          options: [RoleOption(name: option, help: '')],
+          template: TestTemplate(),
+        );
+    final present = withOption('present', 'entry');
+    final absent = withOption('absent', 'chime');
+    final modules = [
+      scaffold(),
+      TestModule('prov', providers: [RoleProvider.plain(present)]),
+      TestModule('other', providers: [RoleProvider.plain(absent)]),
+    ];
+    final resolution = resolutionOf(modules.take(2).toList());
+
+    final result = validate(
+      registry: ModuleRegistry(modules),
+      resolution: resolution,
+      collection: collect(resolution, testContext),
+      context: testContext,
+      optionValues: const {'entry': '/home', 'chime': null, 'flavor': 'x'},
+    );
+
+    const unused = 'warning pipeline.unused_option: --chime has no effect: '
+        'no module of the app provides the absent role.';
+    expect([for (final issue in result.issues) '$issue'], [unused]);
+  });
+
   group('access', () {
     final nav = TestRole<String>('nav');
     final navSocket =
@@ -366,6 +396,224 @@ void main() {
             'nav.observers, but does not provide, require or use the nav '
             'role.'),
       ]);
+    });
+  });
+
+  group('conditions on what roles chose', () {
+    final clock = TestRole<String>('clock', template: TestTemplate());
+    final twelve = ChoiceCondition(
+      clock,
+      'the clock shows 12 hours',
+      holdsFor: (choice) => choice == '12',
+      withoutRole: false,
+    );
+    ChoiceCondition chose(Role role) => ChoiceCondition(
+          role,
+          'the ${role.id} role chose',
+          holdsFor: (choice) => true,
+          withoutRole: false,
+        );
+
+    test(
+        'make no contribution apply less: validation checks it as one of '
+        'every app that may have it', () {
+      final template = TestTemplate<String>();
+      final labels = TestRole<String>(
+        'labels',
+        template: template,
+        moduleRules: const [
+          ModuleRule(id: 'labels.count', description: 'Counts', check: _count),
+        ],
+      );
+      final result = _validate([
+        entry,
+        TestModule(
+          'face',
+          uses: {clock, labels},
+          contributions: [
+            labels.data('noon', whenChosen: {twelve}),
+            BrickContribution(
+              bundle('dial', paths: ['lib/dial.dart']),
+              whenChosen: {twelve},
+            ),
+          ],
+        ),
+        TestModule(
+          'other',
+          contributions: [
+            BrickContribution(bundle('other', paths: ['lib/dial.dart'])),
+          ],
+        ),
+        TestModule(
+          'prov',
+          providers: [RoleProvider.plain(clock), RoleProvider.plain(labels)],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'other: Both face and other generate lib/dial.dart; every file has '
+          'one brick.',
+        ),
+        'face: face has 1 data',
+      ]);
+      expect(template.validated.single.data.single.value, 'noon');
+    });
+
+    test('are of the roles of their contributor', () {
+      final hidden = TestRole<String>('hidden', template: TestTemplate());
+      final ofTemplate = <Contribution>[];
+      final labels = TestRole<String>(
+        'labels',
+        uses: {clock},
+        template: TestTemplate(contributions: ofTemplate),
+      );
+      ofTemplate.addAll([
+        // The template of a role names its role and its visible roles.
+        BrickContribution(
+          bundle('own', paths: ['lib/own.dart']),
+          whenChosen: {chose(labels)},
+        ),
+        BrickContribution(
+          bundle('visible', paths: ['lib/visible.dart']),
+          whenChosen: {twelve},
+        ),
+        BrickContribution(
+          bundle('hidden', paths: ['lib/hidden.dart']),
+          whenChosen: {chose(hidden)},
+        ),
+      ]);
+      final result = _validate([
+        entry,
+        TestModule(
+          'face',
+          uses: {labels},
+          contributions: [
+            labels.data('noon', whenChosen: {twelve}),
+            BrickContribution(
+              bundle('dial', paths: ['lib/dial.dart']),
+              whenChosen: {twelve},
+            ),
+          ],
+        ),
+        TestModule(
+          'prov',
+          providers: [
+            RoleProvider.plain(clock),
+            RoleProvider.plain(labels),
+            RoleProvider.plain(hidden),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        for (var i = 0; i < 2; i++)
+          equals(
+            'face: face makes a contribution depend on what the clock role '
+            'chose (the clock shows 12 hours), but does not provide, require '
+            'or use it.',
+          ),
+        equals(
+          'role:labels: role:labels makes a contribution depend on what the '
+          'hidden role chose (the hidden role chose), but does not provide, '
+          'require or use it.',
+        ),
+      ]);
+      expect(result.issues.first.hint, contains('uses of the module'));
+    });
+
+    test('of a role are not on its own data, which it chooses from', () {
+      final result = _validate([
+        entry,
+        TestModule(
+          'face',
+          uses: {clock},
+          contributions: [
+            clock.data('noon', whenChosen: {twelve}),
+            // A brick may depend on what a role of the module chose.
+            BrickContribution(
+              bundle('dial', paths: ['lib/dial.dart']),
+              whenChosen: {twelve},
+            ),
+          ],
+        ),
+        TestModule('prov', providers: [RoleProvider.plain(clock)]),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'face: face gives the clock role data that depends on what the '
+          'clock role chose (the clock shows 12 hours), but the clock role '
+          'chooses from its data.',
+        ),
+      ]);
+      expect(result.issues.single.hint, contains('without the condition'));
+    });
+
+    test('on the data of roles may not form a cycle', () {
+      final a = TestRole<String>('a', template: TestTemplate());
+      final b = TestRole<String>('b', template: TestTemplate());
+      final c = TestRole<String>('c', template: TestTemplate());
+      final result = _validate([
+        entry,
+        TestModule(
+          'face',
+          uses: {a, b, c},
+          contributions: [
+            a.data('of a', whenChosen: {chose(b)}),
+            c.data('of c', whenChosen: {chose(a)}),
+          ],
+        ),
+        TestModule(
+          'more',
+          uses: {a, b},
+          contributions: [
+            b.data('of b', whenChosen: {chose(a)}),
+          ],
+        ),
+        TestModule(
+          'prov',
+          providers: [
+            RoleProvider.plain(a),
+            RoleProvider.plain(b),
+            RoleProvider.plain(c),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'null: The roles cannot choose one after another, because the data '
+          'of each depends on what the next one chose: a role → b role → a '
+          'role. The data with these conditions comes from face, more.',
+        ),
+      ]);
+      expect(result.hasErrors, isTrue);
+      expect(result.issues.single.hint, 'Leave one of the conditions out.');
+
+      // The order of the choices, which the data allows without the cycle.
+      expect(
+        _validate([
+          entry,
+          TestModule(
+            'face',
+            uses: {a, b, c},
+            contributions: [
+              a.data('of a', whenChosen: {chose(b)}),
+              c.data('of c', whenChosen: {chose(a)}),
+            ],
+          ),
+          TestModule(
+            'prov',
+            providers: [
+              RoleProvider.plain(a),
+              RoleProvider.plain(b),
+              RoleProvider.plain(c),
+            ],
+          ),
+        ]).issues,
+        isEmpty,
+      );
     });
   });
 
@@ -1696,7 +1944,9 @@ void main() {
       );
       final provider = TestProvider<String>(
         hooked,
-        issues: const [SmfIssue.warning('provider says maybe')],
+        issues: const [
+          SmfIssue.warning('provider says maybe', code: 'hooked.maybe'),
+        ],
       );
       final result = _validate([
         entry,
@@ -1718,8 +1968,74 @@ void main() {
         'home: home has 1 data',
       ]);
       expect(result.issues[1].isError, isFalse);
+      // The pipeline gives a warning the origin of its check, and keeps its
+      // code.
+      expect(result.issues[1].code, 'hooked.maybe');
+      expect(result.issues[2].code, 'hooked.count');
       expect(template.validated.single.data.single.value, 'from home');
       expect(provider.validated.single.data.single.value, 'from home');
+    });
+
+    test(
+        'a warning of a hook or a rule with a code of another role, or of '
+        'another form, or about the machine, is an error of its owner', () {
+      final role = TestRole<String>(
+        'hooked',
+        template: TestTemplate<String>(
+          issues: const [
+            SmfIssue.warning('Fine.', code: 'hooked.fine'),
+            SmfIssue.warning('Borrowed.', code: 'router.no_start'),
+            SmfIssue.warning('Shouting.', code: 'hooked.Loud'),
+            SmfIssue.warning('Bare.', code: 'hooked'),
+            SmfIssue.machineWarning('No tool.'),
+          ],
+        ),
+        moduleRules: const [
+          ModuleRule(id: 'hooked.wrong', description: '', check: _wrongCode),
+        ],
+      );
+      final result = _validate([
+        entry,
+        TestModule('home', requires: {role}, contributions: [role.data('x')]),
+        TestModule('prov', providers: [RoleProvider.plain(role)]),
+      ]);
+
+      const code = 'A code of the hooked role is hooked.<name>, with a name '
+          'in lower snake_case.';
+      expect(
+        [for (final issue in result.issues) '$issue'],
+        [
+          'warning [role:hooked] hooked.fine: Fine.',
+          equals(
+            'error [role:hooked]: The template of the hooked role reported a '
+            'warning with the code "router.no_start", which is not a code of '
+            'the hooked role: Borrowed. ($code)',
+          ),
+          equals(
+            'error [role:hooked]: The template of the hooked role reported a '
+            'warning with the code "hooked.Loud", which is not a code of the '
+            'hooked role: Shouting. ($code)',
+          ),
+          equals(
+            'error [role:hooked]: The template of the hooked role reported a '
+            'warning with the code "hooked", which is not a code of the '
+            'hooked role: Bare. ($code)',
+          ),
+          equals(
+            'error [role:hooked]: The template of the hooked role reported a '
+            'warning about the machine, which only the preflight checks of '
+            'the pipeline report: No tool. (Report a warning about what the '
+            'app is made of, with a code of the hooked role.)',
+          ),
+          // The error is of the module whose rule ran, as when the rule
+          // throws, though the warning names another origin.
+          equals(
+            'error [home]: A check of home reported a warning with the code '
+            '"other.thing", which is not a code of the hooked role: Not '
+            'mine. ($code)',
+          ),
+        ],
+      );
     });
 
     test('a hook that throws is an issue of its owner', () {
@@ -2205,7 +2521,10 @@ void main() {
 /// screen requires `nav`.
 List<SmfModule> _notesOnACycle() {
   final theme = TestRole<NoDsl>('theme');
-  final settingsScreen = TestRole<NoDsl>('settings_screen');
+  // Not the ids of the real roles, which every registry has: the app entry
+  // uses the router, which brings the settings screen with the roles that
+  // it uses.
+  final settingsScreen = TestRole<NoDsl>('options_screen');
   final nav = TestRole<NoDsl>(
     'nav',
     uses: {theme},
@@ -2225,7 +2544,7 @@ List<SmfModule> _notesOnACycle() {
   );
   return [
     scaffold(),
-    TestModule('router', providers: [RoleProvider.plain(nav)]),
+    TestModule('navigator', providers: [RoleProvider.plain(nav)]),
     TestModule(
       'material_theme',
       uses: {settingsScreen},
@@ -2252,5 +2571,17 @@ List<SmfModule> _notesOnACycle() {
 
 List<SmfIssue> _count(ModuleRuleInput<String> input) => [
       if (input.data.isNotEmpty)
-        SmfIssue.warning('${input.module.id} has ${input.data.length} data'),
+        SmfIssue.warning(
+          '${input.module.id} has ${input.data.length} data',
+          code: '${input.roleInput.role.id}.count',
+        ),
+    ];
+
+List<SmfIssue> _wrongCode(ModuleRuleInput<String> input) => [
+      if (input.data.isNotEmpty)
+        const SmfIssue.warning(
+          'Not mine.',
+          code: 'other.thing',
+          origin: ModuleOrigin(ModuleId('prov')),
+        ),
     ];

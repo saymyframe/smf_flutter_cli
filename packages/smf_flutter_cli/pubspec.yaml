@@ -28,6 +28,7 @@ dependencies:
   pub_semver: ^2.2.0
 
   # SMF packages
+  smf_apple_sign_in: ^0.5.0
   smf_bloc: ^0.3.2
   smf_bottom_tabs: ^0.4.1
   smf_contracts: ^0.5.0

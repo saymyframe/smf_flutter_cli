@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Keeps the small icon of a notification in a release build. The code
+    names the icon by its name alone, so the shrinking of the resources of a
+    release build would remove it, and the app could not show a
+    notification.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification" />

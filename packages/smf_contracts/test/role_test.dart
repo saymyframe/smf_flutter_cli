@@ -114,6 +114,19 @@ void main() {
       expect(data, isA<RoleData<String>>());
       expect(data.role, same(role));
       expect(data.when, {role});
+      expect(data.whenChosen, isEmpty);
+    });
+
+    test('creates data that depends on what another role chose', () {
+      final clock = TestRole<String>('clock');
+      final twelve = ChoiceCondition(
+        clock,
+        'the clock shows 12 hours',
+        holdsFor: (choice) => choice == '12',
+        withoutRole: false,
+      );
+
+      expect(role.data('routes', whenChosen: {twelve}).whenChosen, {twelve});
     });
   });
 
@@ -265,9 +278,20 @@ void main() {
     });
 
     test('retypes data created with a wider type argument', () {
+      final shows = ChoiceCondition(
+        di,
+        'the container shows',
+        holdsFor: (choice) => true,
+        withoutRole: false,
+      );
       final widened = RoleHookRequest(
         data: [
-          RoleData<Object>(router, 'routes', when: {di}).withOrigin(home),
+          RoleData<Object>(
+            router,
+            'routes',
+            when: {di},
+            whenChosen: {shows},
+          ).withOrigin(home),
           RoleData<Object>(router, 'plain'),
         ],
         presentRoles: {router, di},
@@ -278,7 +302,32 @@ void main() {
       expect(data.first, isA<RoleData<String>>());
       expect(data.first.origin, home);
       expect(data.first.when, {di});
+      expect(data.first.whenChosen, {shows});
       expect(data.last.origin, isNull);
+      expect(data.last.whenChosen, isEmpty);
+    });
+
+    test(
+        'takes data whose conditions on choices do not hold, which the '
+        'pipeline leaves out of the request once the roles chose', () {
+      final never = ChoiceCondition(
+        di,
+        'never',
+        holdsFor: (choice) => false,
+        withoutRole: false,
+      );
+      final input = router.hookInput(
+        RoleHookRequest(
+          data: [
+            RoleData<String>(router, 'routes', whenChosen: {never}),
+          ],
+          presentRoles: {router, di},
+          context: testContext,
+          choices: {di: 'chosen'},
+        ),
+      );
+
+      expect(input.data.single.value, 'routes');
     });
   });
 
@@ -362,6 +411,41 @@ void main() {
           ),
         ),
       );
+    });
+
+    test(
+        'keeps the warnings about the app that the hook reports, in order, '
+        'and refuses an error and a warning about the machine', () {
+      final context = router.choiceContext(request(null));
+      expect(context.warnings, isEmpty);
+
+      const first = SmfIssue.warning('No start.', code: 'router.no_start');
+      const second = SmfIssue.warning('Far away.', code: 'router.far');
+      context
+        ..warn(first)
+        ..warn(second);
+
+      expect(context.warnings, [same(first), same(second)]);
+      expect(() => context.warnings.add(first), throwsUnsupportedError);
+      for (final refused in const [
+        SmfIssue('Broken.'),
+        SmfIssue.machineWarning('No tool.'),
+      ]) {
+        expect(
+          () => context.warn(refused),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.message,
+              'message',
+              'The choice of the router role reports only warnings about '
+                  'what the app is made of',
+            ),
+          ),
+        );
+      }
+      expect(context.warnings, hasLength(2));
+      // Each context has warnings of its own.
+      expect(router.choiceContext(request(null)).warnings, isEmpty);
     });
   });
 
@@ -470,19 +554,221 @@ void main() {
 
     expect(interface.files, ['lib/core/router/app_router.dart']);
     expect(
-      interface.checkSymbols(const {
-        'lib/router.dart': DartFileIndex(
-          path: 'lib/router.dart',
-          declarations: [
-            IndexedDeclaration(
-              name: 'createAppRouter',
-              kind: DeclarationKind.function,
-            ),
-          ],
-        ),
-      }),
+      interface.checkSymbols(
+        const {
+          'lib/router.dart': DartFileIndex(
+            path: 'lib/router.dart',
+            declarations: [
+              IndexedDeclaration(
+                name: 'createAppRouter',
+                kind: DeclarationKind.function,
+              ),
+            ],
+          ),
+        },
+        appWith(const {}),
+      ),
       isEmpty,
     );
-    expect(interface.checkSymbols(const {}), hasLength(1));
+    expect(interface.checkSymbols(const {}, appWith(const {})), hasLength(1));
+  });
+
+  group('ChoiceCondition', () {
+    final clock = TestRole<String>('clock');
+    final twelve = ChoiceCondition(
+      clock,
+      'the clock shows 12 hours',
+      holdsFor: (choice) => choice == '12',
+      withoutRole: false,
+    );
+    final noChoice = ChoiceCondition(
+      clock,
+      'the clock chose nothing',
+      holdsFor: (choice) => choice == null,
+      withoutRole: true,
+    );
+
+    test('holds by the choice of its role, which is null without one', () {
+      expect(twelve.role, same(clock));
+      expect(twelve.name, 'the clock shows 12 hours');
+      expect('$twelve', 'the clock shows 12 hours');
+      expect(
+        twelve.holds(presentRoles: {clock}, choices: {clock: '12'}),
+        isTrue,
+      );
+      expect(
+        twelve.holds(presentRoles: {clock}, choices: {clock: '24'}),
+        isFalse,
+      );
+      // A role without a template, or one that made no choice.
+      expect(noChoice.holds(presentRoles: {clock}, choices: const {}), isTrue);
+      expect(
+        noChoice.holds(presentRoles: {clock}, choices: {clock: '24'}),
+        isFalse,
+      );
+    });
+
+    test('holds as it says in an app without its role, whatever was chosen',
+        () {
+      expect(twelve.withoutRole, isFalse);
+      expect(
+        twelve.holds(presentRoles: const {}, choices: {clock: '12'}),
+        isFalse,
+      );
+      expect(noChoice.withoutRole, isTrue);
+      expect(
+        noChoice.holds(presentRoles: const {}, choices: {clock: '24'}),
+        isTrue,
+      );
+    });
+
+    test('holds in the app of a request of the hooks', () {
+      expect(twelve.holdsIn(appWith({clock}, choices: {clock: '12'})), isTrue);
+      expect(twelve.holdsIn(appWith({clock}, choices: {clock: '24'})), isFalse);
+      expect(twelve.holdsIn(appWith(const {})), isFalse);
+      expect(noChoice.holdsIn(appWith(const {})), isTrue);
+    });
+  });
+
+  group('RoleInterface with a symbol that depends on a choice', () {
+    final clock = TestRole<String>('clock');
+    final twelve = ChoiceCondition(
+      clock,
+      'the clock shows 12 hours',
+      holdsFor: (choice) => choice == '12',
+      withoutRole: false,
+    );
+    final evening = ChoiceCondition(
+      clock,
+      'the evening shows',
+      holdsFor: (choice) => choice == '12',
+      withoutRole: false,
+    );
+    const dialFile = 'lib/core/clock/dial.dart';
+    final dial = RequiredClass('Dial', path: dialFile, whenChosen: {twelve});
+    final interface = RoleInterface(
+      symbols: [
+        const RequiredFunction('createClock', path: 'lib/clock.dart'),
+        dial,
+      ],
+    );
+    const clockFile = DartFileIndex(
+      path: 'lib/clock.dart',
+      declarations: [
+        IndexedDeclaration(
+          name: 'createClock',
+          kind: DeclarationKind.function,
+        ),
+      ],
+    );
+    const dialClass = DartFileIndex(
+      path: dialFile,
+      declarations: [
+        IndexedDeclaration(name: 'Dial', kind: DeclarationKind.classType),
+      ],
+    );
+    final twelveHours = appWith({clock}, choices: {clock: '12'});
+    final twentyFourHours = appWith({clock}, choices: {clock: '24'});
+
+    List<String> messages(
+      Map<String, DartFileIndex> files,
+      RoleHookRequest hook,
+    ) =>
+        [
+          for (final issue in interface.checkSymbols(files, hook))
+            issue.message,
+        ];
+
+    test('requires it where its conditions hold, as any other', () {
+      expect(dial.whenChosen, {twelve});
+      expect(
+        messages(const {'lib/clock.dart': clockFile}, twelveHours),
+        ['$dialFile is missing, so it cannot declare class Dial.'],
+      );
+      expect(
+        messages(
+          const {'lib/clock.dart': clockFile, dialFile: dialClass},
+          twelveHours,
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+        'requires that an app where a condition does not hold has no file '
+        'at its path', () {
+      expect(
+        messages(const {'lib/clock.dart': clockFile}, twentyFourHours),
+        isEmpty,
+      );
+      final issues = interface.checkSymbols(
+        const {'lib/clock.dart': clockFile, dialFile: dialClass},
+        twentyFourHours,
+      );
+      expect(
+          issues.single.message,
+          'The app has $dialFile, the file of class Dial, which only an app '
+          'where the clock shows 12 hours needs.');
+      expect(issues.single.path, dialFile);
+      expect(issues.single.hint, contains('whenChosen'));
+      // The file is the problem, whatever it declares, and without the role
+      // too.
+      expect(
+        messages(
+          const {
+            'lib/clock.dart': clockFile,
+            dialFile: DartFileIndex(path: dialFile),
+          },
+          appWith(const {}),
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('names each condition that does not hold', () {
+      final both = RoleInterface(
+        symbols: [
+          RequiredFunction(
+            'eveningDial',
+            path: dialFile,
+            whenChosen: {twelve, evening},
+          ),
+        ],
+      );
+
+      final issues = both.checkSymbols(
+        const {dialFile: DartFileIndex(path: dialFile)},
+        twentyFourHours,
+      );
+      expect(
+        issues.single.message,
+        'The app has $dialFile, the file of function eveningDial(), which '
+        'only an app where the clock shows 12 hours and where the evening '
+        'shows needs.',
+      );
+    });
+
+    test('every kind of symbol takes conditions, and none by default', () {
+      const plain = RequiredFunction('f', path: 'lib/f.dart');
+      final extension = RequiredExtension(
+        'Texts',
+        path: 'lib/texts.dart',
+        on: 'BuildContext',
+        whenChosen: {twelve},
+      );
+
+      expect(plain.whenChosen, isEmpty);
+      expect(const RequiredClass('C', path: 'lib/c.dart').whenChosen, isEmpty);
+      expect(
+        const RequiredExtension('E', path: 'lib/e.dart', on: 'int').whenChosen,
+        isEmpty,
+      );
+      expect(extension.whenChosen, {twelve});
+      expect(
+        RequiredFunction('f', path: 'lib/f.dart', whenChosen: {evening})
+            .whenChosen,
+        {evening},
+      );
+    });
   });
 }

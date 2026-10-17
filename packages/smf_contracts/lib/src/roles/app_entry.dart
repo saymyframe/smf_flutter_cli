@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/app_entry_role_bundle.dart';
-import 'package:smf_contracts/core.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 part 'app_entry_guide.dart';
 part 'app_entry_native.dart';
@@ -20,10 +20,12 @@ const appEntryRole = AppEntryRole._();
 /// - `lib/bootstrap.dart`, whose `Future<void> bootstrap()` runs the
 ///   start-up code of all modules and imports neither `material` nor
 ///   `cupertino`;
-/// - [fallbackStartScreen], the screen of an app without a router;
+/// - [fallbackStartScreen], the screen that an app starts on when no route
+///   starts it, in such an app only;
 /// - the project of each platform of the app ([AppIdentity.platforms]), at
 ///   the paths of Flutter's templates, such as [androidManifestFile] and
-///   [xcodeProjectFile];
+///   [xcodeProjectFile]; the iOS project also has [iosEntitlementsFile],
+///   which the app target signs with;
 /// - [readmeFile], the README of the app.
 ///
 /// The provider builds the root of the app, inside the [rootWrappers], as a
@@ -53,13 +55,16 @@ const appEntryRole = AppEntryRole._();
 /// Dart files: each is a file or a directory of the app.
 ///
 /// The template also tells the system which icons of the status bar suit
-/// the theme of the app, on every screen: it puts a widget into
-/// [appBuilder] that reads the brightness of the theme below the root
-/// `MaterialApp`, and asks for dark icons on a light theme and for light
-/// ones on a dark theme. So a screen without an app bar tells nothing of
-/// the status bar itself, in an app with a module that provides the theme
-/// and in one without it; a screen with an `AppBar` gets the icons that
-/// suit its bar.
+/// the theme of the app, on every screen: it generates [statusBarIconsFile]
+/// with the widget `StatusBarIcons`, which reads the brightness of the
+/// theme below the root `MaterialApp` and asks for dark icons on a light
+/// theme and for light ones on a dark theme, and [statusBarIconsTestFile],
+/// a widget test of it, and puts the widget into [appBuilder]. So a screen
+/// without an app bar tells nothing of the status bar itself, in an app
+/// with a module that provides the theme and in one without it; a screen
+/// with an `AppBar` gets the icons that suit its bar. The test is in every
+/// app, so `flutter test` has a test to run in an app whose modules bring
+/// none.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -67,7 +72,8 @@ const appEntryRole = AppEntryRole._();
 /// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
 /// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module
 /// rules of the role check these tags in the templates of its provider, and
-/// its structural rules check that the native files name every key once.
+/// its structural rules check that the native files name every key once and
+/// that the app target signs with [iosEntitlementsFile].
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -99,6 +105,9 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The path of the Xcode project of the iOS app.
   static const xcodeProjectFile = 'ios/Runner.xcodeproj/project.pbxproj';
 
+  /// The path of the entitlements of the iOS app; see [iosEntitlements].
+  static const iosEntitlementsFile = 'ios/Runner/Runner.entitlements';
+
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
 
@@ -110,13 +119,35 @@ final class AppEntryRole extends Role<NoDsl> {
   /// `CLAUDE.md` instead: its whole content is `@AGENTS.md`.
   static const claudeFile = 'CLAUDE.md';
 
-  /// The screen an app shows when no router provides one, created as
+  /// The path of the file with `StatusBarIcons`, the widget that the
+  /// template of the role puts around the content of every route (see
+  /// [appBuilder]), which asks the system for the icons of the status bar
+  /// that suit the theme.
+  static const statusBarIconsFile = 'lib/core/app/status_bar_icons.dart';
+
+  /// The path of the widget test of `StatusBarIcons` (see
+  /// [statusBarIconsFile]), which the template of the role generates in
+  /// every app, so that `flutter test` has a test to run in an app whose
+  /// modules bring none.
+  static const statusBarIconsTestFile =
+      'test/core/app/status_bar_icons_test.dart';
+
+  /// The screen that an app starts on when no route starts it, created as
   /// `const FallbackStartScreen()`; import it with
   /// [RequiredSymbol.importRef].
+  ///
+  /// Only an app where [RouterRole.noStartRoute] holds has it: one without a
+  /// router, which shows the screen as the home of its root, and one whose
+  /// router has no route to start on, which builds the screen at `/`. Any
+  /// other app has no file at [fallbackStartScreenFile]. So the provider
+  /// contributes the file, and what only the screen needs, such as its
+  /// texts and its test, under that condition (see
+  /// [Contribution.whenChosen]).
   static const fallbackStartScreen = RequiredClass(
     'FallbackStartScreen',
     path: fallbackStartScreenFile,
     constConstructor: true,
+    whenChosen: {RouterRole.noStartRoute},
   );
 
   /// `Future<void> bootstrap()`, which runs the start-up code of all modules
@@ -295,7 +326,25 @@ final class AppEntryRole extends Role<NoDsl> {
   static const infoPlist = SocketRef<KeyedSocket<PlistValue>>.role(
     appEntryRole,
     'info_plist',
-    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderInfoPlist),
+    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderPlistEntries),
+  );
+
+  /// Entitlements of the iOS app in [iosEntitlementsFile], keyed by
+  /// entitlement, such as `aps-environment`: as in [infoPlist], scalar
+  /// values must agree and string arrays are united.
+  ///
+  /// The provider has the file in every app, also when no module
+  /// contributes, and every build configuration of the app target signs
+  /// with it (`CODE_SIGN_ENTITLEMENTS`), which the structural rule
+  /// `app_entry.ios_entitlements_signed` checks. With nothing in it, the
+  /// file changes nothing of how the app is signed. On a device, a
+  /// capability that an entitlement stands for, such as push
+  /// notifications, may need a paid membership of the Apple Developer
+  /// Program; the simulator signs the app without one.
+  static const iosEntitlements = SocketRef<KeyedSocket<PlistValue>>.role(
+    appEntryRole,
+    'ios_entitlements',
+    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderPlistEntries),
   );
 
   /// Gradle plugins declared in [gradleSettingsFile], keyed by plugin id,
@@ -427,6 +476,12 @@ final class AppEntryRole extends Role<NoDsl> {
   @override
   RoleCardinality get cardinality => RoleCardinality.exactlyOne;
 
+  /// The router, whose choice decides whether the app has the
+  /// [fallbackStartScreen]. Every provider of the role uses it too, so it
+  /// may contribute under [RouterRole.noStartRoute].
+  @override
+  Set<Role> get uses => {routerRole};
+
   @override
   bool get openToAllModules => true;
 
@@ -445,6 +500,7 @@ final class AppEntryRole extends Role<NoDsl> {
         androidManifestApplicationMeta,
         mainActivityIntentFilters,
         infoPlist,
+        iosEntitlements,
         gradleSettingsPlugins,
         gradleAppPlugins,
         gradleAppDependencies,
@@ -454,7 +510,12 @@ final class AppEntryRole extends Role<NoDsl> {
 
   @override
   RoleInterface get interface => const RoleInterface(
-        files: [agentsFile, claudeFile],
+        files: [
+          agentsFile,
+          claudeFile,
+          statusBarIconsFile,
+          statusBarIconsTestFile,
+        ],
         symbols: [main, bootstrap, fallbackStartScreen],
       );
 
@@ -521,10 +582,23 @@ final class AppEntryRole extends Role<NoDsl> {
         StructuralRule(
           id: 'app_entry.native_keys',
           description: 'The native files name every key once: the keys of '
-              'the top-level dictionary of Info.plist, the permissions and '
-              'the meta-data of the application in the Android manifest, and '
-              'the plugins of each plugins block of the Gradle files.',
+              'the top-level dictionary of Info.plist and of the '
+              'entitlements of the iOS app, the permissions and the '
+              'meta-data of the application in the Android manifest, and the '
+              'plugins of each plugins block of the Gradle files.',
           check: _checkNativeKeys,
+        ),
+        StructuralRule(
+          id: 'app_entry.ios_entitlements_signed',
+          description: 'Every build configuration of the app target in '
+              'ios/Runner.xcodeproj/project.pbxproj, which reads '
+              'Runner/Info.plist, signs the app with '
+              'ios/Runner/Runner.entitlements (CODE_SIGN_ENTITLEMENTS), so '
+              'the entitlements that the modules add reach the app. No other '
+              'target signs with that file, and the build configurations of '
+              'the project, which every target inherits, name no '
+              'entitlements.',
+          check: _checkIosEntitlementsSigned,
         ),
         StructuralRule(
           id: 'app_entry.agent_guide_paths',

@@ -1,6 +1,7 @@
 import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/access.dart';
+import 'package:smf_pipeline/src/choices.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/machine_files.dart';
@@ -57,6 +58,10 @@ bool isReservedVar(String name) =>
 /// The request that the hooks of the roles get: the data of [collection]
 /// that applies, the present roles of [resolution], the [context] and the
 /// [choices] of the roles once they are made.
+///
+/// With the [choices], [collection] is the one that they decided (see
+/// [Collection.decide]), so that the hooks get only the data whose
+/// conditions on what the roles chose hold.
 ///
 /// Data of the wrong type, or for a role its contributor has no access to,
 /// is reported with its contribution by [validate] and left out here: the
@@ -174,15 +179,27 @@ List<Collected> _boundSteps(List<Collected> steps) {
 /// the module model and the hooks of the roles, orders the contributions of
 /// every socket, and merges the pubspec.
 ///
+/// The roles have not chosen yet, so a contribution with conditions on what
+/// they choose ([Contribution.whenChosen]) applies here as any other: its
+/// problems are those of every app that may have it.
+///
 /// Checks, in this order:
+/// - the options in [optionValues], those given on the command line, of
+///   the roles of [registry]: each option of a role that the app lacks is a
+///   warning about the app, since nothing reads it (code
+///   [unusedOptionWarning]);
 /// - the rules of the pipeline for each contribution: who may use which
-///   socket, role and [Contribution.when], bricks without hooks and with one
-///   owner per file, brick variables that are not reserved and that mason
-///   renders as they are, and those among them that depend on a role
-///   ([RoleVar]), which name a role of their contributor and hold code;
+///   socket, role, [Contribution.when] and [Contribution.whenChosen], with
+///   no data of a role that depends on what the role chose, bricks without
+///   hooks and with one owner per file, brick variables that are not
+///   reserved and that mason renders as they are, and those among them
+///   that depend on a role ([RoleVar]), which name a role of their
+///   contributor and hold code;
 /// - the rules of each module's kind;
 /// - that a module contributes the package of a provider of a role only in
 ///   its variant for the provider or when it depends on the provider;
+/// - that the conditions of the data of the roles on what other roles chose
+///   leave an order in which the roles can choose (see [choiceOrder]);
 /// - the pubspec, with [codegenDependency] if code generation is requested:
 ///   it has a Dart SDK constraint, and the app is not named like a
 ///   dependency;
@@ -203,6 +220,7 @@ ValidationResult validate({
   required Resolution resolution,
   required Collection collection,
   required ModuleContext context,
+  Map<String, String?> optionValues = const {},
   bool interactive = true,
   bool skipExternalSetup = false,
 }) {
@@ -211,6 +229,7 @@ ValidationResult validate({
   final (issues: ofContributions, :broken) =
       _brokenContributions(collection, registry, resolution);
   final issues = <SmfIssue>[
+    ..._unusedOptions(registry, resolution.presentRoles, optionValues),
     ...collection.issues,
     ...ofContributions,
     ..._ownerIssues(collection),
@@ -221,7 +240,9 @@ ValidationResult validate({
   for (final module in resolution.modules) {
     issues.addAll(_kindIssues(module, collection));
   }
-  issues.addAll(_packageIssues(resolution, collection));
+  issues
+    ..addAll(_packageIssues(resolution, collection))
+    ..addAll(_choiceOrderIssues(resolution, collection));
 
   final codegen = collection.applyingOf<CodegenRequest>().isNotEmpty;
   // First, so that a module whose constraint conflicts is at fault.
@@ -387,6 +408,34 @@ List<SmfIssue> _dryRenderIssues(SocketRef socket, ContributionOrder order) {
   return const [];
 }
 
+/// The problem of the conditions of the data of the roles of [collection]
+/// on what other roles chose (see [Contribution.whenChosen]) when they form
+/// a cycle, so that no role of the cycle can choose first; see
+/// [choiceOrder].
+Iterable<SmfIssue> _choiceOrderIssues(
+  Resolution resolution,
+  Collection collection,
+) sync* {
+  final data = collection.roleData;
+  final (order: _, :cycle) = choiceOrder(resolution.presentRoles, data);
+  if (cycle.isEmpty) return;
+  final contributors = <ContributionOrigin>{
+    for (var i = 0; i < cycle.length - 1; i++)
+      for (final item in data)
+        if (identical(item.role, cycle[i]) &&
+            item.whenChosen.any(
+              (condition) => identical(condition.role, cycle[i + 1]),
+            ))
+          item.origin!,
+  };
+  yield SmfIssue(
+    'The roles cannot choose one after another, because the data of each '
+    'depends on what the next one chose: ${cycle.join(' → ')}. The data '
+    'with these conditions comes from ${contributors.join(', ')}.',
+    hint: 'Leave one of the conditions out.',
+  );
+}
+
 Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
   if (order.cycle.isEmpty) return;
   yield SmfIssue(
@@ -397,7 +446,8 @@ Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
 }
 
 /// The problems of [collected] with the rules of the pipeline: the roles in
-/// its [Contribution.when], who may use which role and socket, for a brick,
+/// its [Contribution.when] and of the conditions in its
+/// [Contribution.whenChosen], who may use which role and socket, for a brick,
 /// its hooks, variables and files, and for a post-generation step, its id,
 /// its notice and the step it continues; see [_stepIssues].
 ///
@@ -421,6 +471,7 @@ Iterable<SmfIssue> contributionIssues(
       );
     }
   }
+  yield* _whenChosenIssues(contribution, origin, roles.when);
 
   switch (contribution) {
     case final RoleData<Object> data:
@@ -444,6 +495,38 @@ Iterable<SmfIssue> contributionIssues(
       yield* _stepIssues(step, origin, resolution);
     case Preflight() || PubspecContribution():
       break;
+  }
+}
+
+/// The problems of the conditions of [contribution] of [origin] on what
+/// roles chose (see [Contribution.whenChosen]): each is of one of the
+/// [roles] that [origin] may list in a condition, and data of a role has no
+/// condition of that role, which chooses from its data.
+Iterable<SmfIssue> _whenChosenIssues(
+  Contribution contribution,
+  ContributionOrigin origin,
+  Set<Role> roles,
+) sync* {
+  for (final condition in contribution.whenChosen) {
+    final role = condition.role;
+    if (!roles.contains(role)) {
+      yield SmfIssue(
+        '$origin makes a contribution depend on what the $role chose '
+        '(${condition.name}), but does not provide, require or use it.',
+        hint: 'Add the role to the uses of the module.',
+        origin: origin,
+      );
+    }
+    if (contribution case RoleData(role: final dataRole)
+        when identical(dataRole, role)) {
+      yield SmfIssue(
+        '$origin gives the $role data that depends on what the $role chose '
+        '(${condition.name}), but the $role chooses from its data.',
+        hint: 'Give the data without the condition; the hooks of the role '
+            'read its choice.',
+        origin: origin,
+      );
+    }
   }
 }
 
@@ -1366,6 +1449,7 @@ Iterable<SmfIssue> _hookIssues(
     final template = role.template;
     if (template != null) {
       yield* _guarded(
+        role,
         RoleTemplateOrigin(role),
         () => template.validate(input),
       );
@@ -1373,6 +1457,7 @@ Iterable<SmfIssue> _hookIssues(
     for (final module in resolution.providersOf(role)) {
       final provider = Resolution.providerObject(module, role);
       yield* _guarded(
+        role,
         module.origin,
         () => provider.validate(input),
       );
@@ -1380,6 +1465,7 @@ Iterable<SmfIssue> _hookIssues(
     for (final module in resolution.modules) {
       if (!module.descriptor.roles.contains(role)) continue;
       yield* _guarded(
+        role,
         module.origin,
         () => role.checkModule(
           ModuleRuleRequest(
@@ -1396,9 +1482,12 @@ Iterable<SmfIssue> _hookIssues(
   }
 }
 
-/// The issues of [check], each with [origin] unless it names its own; a
-/// hook that throws becomes an issue of [origin].
+/// The issues of [check], a hook or the module rules of [role], each with
+/// [origin] unless it names its own; a hook that throws becomes an issue
+/// of [origin], and so does a warning that it may not report (see
+/// [reportedBy]).
 Iterable<SmfIssue> _guarded(
+  Role role,
   ContributionOrigin origin,
   List<SmfIssue> Function() check,
 ) sync* {
@@ -1410,6 +1499,33 @@ Iterable<SmfIssue> _guarded(
     return;
   }
   for (final issue in issues) {
-    yield issueWithOrigin(issue, origin);
+    yield reportedBy(
+      issue,
+      role: role,
+      who: origin is RoleTemplateOrigin
+          ? 'The template of the $role'
+          : 'A check of $origin',
+      origin: origin,
+    );
   }
 }
+
+/// A warning of each of the [optionValues] that is an option of a role of
+/// [registry] that is not among the [present] roles, since nothing reads
+/// it.
+List<SmfIssue> _unusedOptions(
+  ModuleRegistry registry,
+  Set<Role> present,
+  Map<String, String?> optionValues,
+) =>
+    [
+      for (final role in registry.roles)
+        if (!present.contains(role))
+          for (final option in role.options)
+            if (optionValues.containsKey(option.name))
+              SmfIssue.warning(
+                '--${option.name} has no effect: no module of the app '
+                'provides the $role.',
+                code: unusedOptionWarning,
+              ),
+    ];

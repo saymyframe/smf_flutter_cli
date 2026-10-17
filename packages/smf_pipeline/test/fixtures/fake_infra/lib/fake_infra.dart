@@ -15,8 +15,10 @@ import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
+import 'package:fake_infra/bundles/fake_sign_in_method_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
+import 'package:fake_infra/bundles/fake_steps_bundle.dart';
 import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
@@ -165,6 +167,14 @@ final class FakeSocketsModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
+        AppEntryRole.iosEntitlements.entry(
+          'aps-environment',
+          const PlistString('development'),
+        ),
+        AppEntryRole.iosEntitlements.entry(
+          'com.apple.developer.associated-domains',
+          const PlistStringArray(['applinks:example.com']),
+        ),
         // A plugin that only adds a task, so it builds with any version of
         // the Android and Kotlin plugins.
         AppEntryRole.gradleSettingsPlugins.entry(
@@ -187,8 +197,9 @@ final class FakeSocketsModule extends SmfModule {
 
 /// A module that puts into the sockets of the app entry some of the keys
 /// and values that [FakeSocketsModule] does, so an app with both merges
-/// them: equal permissions, meta-data, plist strings and README sections
-/// agree, the plist arrays are united, the highest versions win, the
+/// them: equal permissions, meta-data, plist strings, entitlements and
+/// README sections agree, the plist arrays of Info.plist and of the
+/// entitlements are united, the highest versions win, the
 /// delegate of the localizations appears once, and so does the note for
 /// coding agents that both have.
 final class FakeOverlapModule extends SmfModule {
@@ -227,6 +238,14 @@ final class FakeOverlapModule extends SmfModule {
         AppEntryRole.infoPlist.entry(
           'UIBackgroundModes',
           const PlistStringArray(['remote-notification']),
+        ),
+        AppEntryRole.iosEntitlements.entry(
+          'aps-environment',
+          const PlistString('development'),
+        ),
+        AppEntryRole.iosEntitlements.entry(
+          'com.apple.developer.associated-domains',
+          const PlistStringArray(['applinks:example.org']),
         ),
         AppEntryRole.gradleSettingsPlugins.entry(
           'io.github.ben-manes.versions',
@@ -649,6 +668,117 @@ final class FakePreferencesUserModule extends SmfModule {
       ];
 }
 
+/// A module with two steps of the onboarding, which it gives the onboarding
+/// screen role in an app with that role: `ask`, with the button `later`
+/// and a function that says whether the onboarding shows it, and then
+/// `confirm`, without either. Their actions note each call, and that of
+/// `ask` waits for what a test holds it back with and fails when a test
+/// says so. A test also says whether the onboarding shows `ask`.
+///
+/// It uses the localization role: the texts of the steps are texts of the
+/// module, in English and in Ukrainian, but for the text of `confirm`,
+/// which has no translation and reads in English in every language.
+final class FakeStepsModule extends SmfModule {
+  /// Creates the module.
+  const FakeStepsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_steps');
+
+  static const _file = ImportRef.app('core/fixture_steps/fixture_steps.dart');
+
+  static const _askTitle = LocalizedText(
+    'askTitle',
+    en: 'A step that asks',
+    translations: {'uk': 'Крок, що питає'},
+  );
+  static const _askText = LocalizedText(
+    'askText',
+    en: 'The fixture asks for something here.',
+    translations: {'uk': 'Тут фікстура про щось питає.'},
+  );
+  static const _askAction = LocalizedText(
+    'askAction',
+    en: 'Ask',
+    translations: {'uk': 'Спитати'},
+  );
+  static const _askLater = LocalizedText(
+    'askLater',
+    en: 'Not now',
+    translations: {'uk': 'Не зараз'},
+  );
+  static const _confirmTitle = LocalizedText(
+    'confirmTitle',
+    en: 'A step that confirms',
+    translations: {'uk': 'Крок, що підтверджує'},
+  );
+  static const _confirmText = LocalizedText(
+    'confirmText',
+    en: 'The fixture confirms something here.',
+  );
+  static const _confirmAction = LocalizedText(
+    'confirmAction',
+    en: 'Confirm',
+    translations: {'uk': 'Підтвердити'},
+  );
+
+  static const _icons = [ImportRef('package:flutter/material.dart')];
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Two steps of the onboarding (fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {onboardingScreenRole, localizationRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        // Only an app with an onboarding gets the functions of the steps
+        // and their texts.
+        BrickContribution(
+          fakeStepsBundle,
+          when: const {onboardingScreenRole},
+        ),
+        localizationRole.data(
+          const TextsData([
+            _askTitle,
+            _askText,
+            _askAction,
+            _askLater,
+            _confirmTitle,
+            _confirmText,
+            _confirmAction,
+          ]),
+          when: const {onboardingScreenRole},
+        ),
+        onboardingScreenRole.data(
+          const OnboardingStep(
+            name: 'ask',
+            stage: OnboardingStage.permission,
+            icon: Fragment('Icons.help_outline', imports: _icons),
+            title: _askTitle,
+            text: _askText,
+            action: _askAction,
+            later: _askLater,
+            run: FunctionRef('askFixture', import: _file),
+            showIf: FunctionRef('showsFixtureAsk', import: _file),
+          ),
+        ),
+        onboardingScreenRole.data(
+          const OnboardingStep(
+            name: 'confirm',
+            stage: OnboardingStage.permission,
+            icon: Fragment('Icons.check_circle_outline', imports: _icons),
+            title: _confirmTitle,
+            text: _confirmText,
+            action: _confirmAction,
+            run: FunctionRef('confirmFixture', import: _file),
+          ),
+        ),
+      ];
+}
+
 /// A provider of the theme role, which has at most one provider, whose look
 /// depends on state of its own: its light theme and its dark theme derive
 /// their colours from a colour that it keeps and that a test changes. The
@@ -706,6 +836,19 @@ final class FakeThemeModule extends SmfModule {
 /// to sign in with again, so the fixture deletes one whenever it is asked
 /// to.
 ///
+/// It takes a credential of any identity provider whose token is a test
+/// token: a JSON Web Token without a signature whose payload has the issuer
+/// of the credential, the subject of the identity, maybe its email address
+/// and maybe a nonce, the `rawNonce` of the credential, as
+/// [FakeSignInMethodModule] gives. It takes a token with a nonce once, as an
+/// identity provider that checks a nonce does. It keeps each identity by
+/// its issuer and its subject: a link keeps the id of the user, an identity
+/// of another user is `credentialInUse`, and one whose address has an
+/// account of another user is `accountExistsWithOtherMethod`. A refused
+/// link takes the token too, and keeps the identity for the credential
+/// object in an `Expando`, which a sign-in with the identical object then
+/// takes, as the role asks of a provider.
+///
 /// The template of the role does the rest in an app with it, whichever
 /// module provides the role: the session of the app, and the mode of the
 /// app, which the fixture has the same code for.
@@ -730,11 +873,77 @@ final class FakeAuthModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(fakeAuthBundle),
         authRole.data(
-          const RoleImplementation.async(
+          const AuthImplementation.async(
             type: TypeRef('FixtureAuth', import: _file),
             init: FactoryRef('openFixtureAuth', import: _file),
           ),
         ),
+      ];
+}
+
+/// A way to sign in with the identity provider of the fixture, which a
+/// module that requires the auth role gives the role: the template of the
+/// role lists it in `appSignInMethods` of the app, whichever module
+/// provides the role.
+///
+/// Its function asks no platform: it returns a credential a turn of the
+/// event loop later, as a sheet of an identity provider does, and each
+/// time of the one identity of the fixture, with a test token that the
+/// fixture sign-in takes, a new nonce and a new authorization code. It
+/// works on Android and on iOS, the App Store takes it as the equivalent
+/// of a login service of a third party, and the deletion of an account
+/// that signs in with it asks it for a credential again. Its label is in
+/// English and in Ukrainian, a text that it gives the localization role,
+/// which it uses.
+final class FakeSignInMethodModule extends SmfModule {
+  /// Creates the module.
+  const FakeSignInMethodModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_sign_in_method');
+
+  /// The issuer of the tokens of the identity provider of the fixture.
+  static const issuer = 'https://accounts.fixture.example.com';
+
+  /// The label of the button of the way to sign in.
+  static const label = LocalizedText(
+    'label',
+    en: 'Continue with the fixture',
+    translations: {'uk': 'Продовжити з фікстурою'},
+  );
+
+  static const _file = ImportRef.app(
+    'core/fixture_sign_in_method/fixture_sign_in_method.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Sign-in with the identity provider of the fixture '
+            '(fixture)',
+        kind: ModuleKinds.infrastructure,
+        requires: {authRole},
+        uses: {localizationRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          fakeSignInMethodBundle,
+          vars: const {'issuer': issuer},
+        ),
+        authRole.data(
+          const SignInMethod(
+            label: label,
+            icon: TypeRef('FixtureSignInIcon', import: _file),
+            platforms: {AppPlatform.android, AppPlatform.ios},
+            credential: FunctionRef('fixtureCredential', import: _file),
+            issuer: issuer,
+            appStore: AppStoreLogin.privacyFocused,
+            revokesOnDeletion: true,
+          ),
+        ),
+        localizationRole.data(const TextsData([label])),
       ];
 }
 

@@ -14,6 +14,7 @@ import 'dart:convert';
 
 import 'package:fake_broken/bundles/broken_layout_bundle.dart';
 import 'package:fake_broken/bundles/broken_layout_labels_bundle.dart';
+import 'package:fake_broken/bundles/broken_onboarding_bundle.dart';
 import 'package:fake_broken/bundles/broken_settings_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
@@ -674,6 +675,24 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture sign-in whose `linkWith()` creates a new user for the
+  /// identity, rather than giving it to the anonymous user who is signed
+  /// in: the user of the identity has another id than the anonymous user
+  /// had, so what the app keeps under that id is left behind.
+  static const authLinkingCredentialAsNewUser = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_links_credential_as_new_user'),
+    'Sign-in that gives an anonymous user a new id with an identity (fixture)',
+    _fixtureAuthFile,
+    [
+      (
+        '    // The user who is signed in keeps the id with the identity.\n'
+            '    final uid = user.uid;\n',
+        '    final uid = _newUid();\n',
+      ),
+    ],
+  );
+
   /// The file of the fixture sign-in.
   static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
 
@@ -738,6 +757,7 @@ final class BrokenModule extends SmfModule {
                 name: value is RoleVar ? texts[name] ?? value : value,
             },
             when: contribution.when,
+            whenChosen: contribution.whenChosen,
           )
         else
           contribution,
@@ -1011,4 +1031,51 @@ final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
       },
     );
   }
+}
+
+/// A provider of the onboarding screen role with one known bug: a feature
+/// whose screen shows a page for each step of the onboarding, also for a
+/// step whose showIf would leave it out, which it never asks.
+///
+/// The screen still reads the list of the steps, as the rule
+/// `onboarding_screen.steps_shown` of the role wants, and the app analyzes:
+/// only a running app shows the bug.
+final class BrokenOnboardingModule extends SmfModule {
+  /// Creates the module.
+  const BrokenOnboardingModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_onboarding_ignores_conditions');
+
+  /// The name of the route of the screen.
+  static const _route = 'onboarding';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'An onboarding that shows every step (fixture)',
+        kind: ModuleKinds.feature,
+        providers: [RoleProvider.plain(onboardingScreenRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(brokenOnboardingBundle),
+        routerRole.data(
+          const RoutesData([
+            Route(
+              '/',
+              name: _route,
+              screen: ScreenRef(
+                'BrokenOnboardingScreen',
+                import: ImportRef.app(
+                  'features/broken_onboarding_ignores_conditions/'
+                  'broken_onboarding_screen.dart',
+                ),
+              ),
+            ),
+          ]),
+        ),
+        onboardingScreenRole.data(const OnboardingScreenRoute(_route)),
+      ];
 }

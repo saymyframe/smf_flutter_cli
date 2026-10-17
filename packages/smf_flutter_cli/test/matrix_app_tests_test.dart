@@ -60,6 +60,12 @@ final class SignInOfTest implements AuthService {
       _refuse();
 
   @override
+  Future<void> signInWith(SignInCredential credential) => _refuse();
+
+  @override
+  Future<void> linkWith(SignInCredential credential) => _refuse();
+
+  @override
   Future<void> signInAnonymously() => _refuse();
 
   @override
@@ -69,7 +75,7 @@ final class SignInOfTest implements AuthService {
   Future<void> signOut() async {}
 
   @override
-  Future<void> deleteAccount() => _refuse();
+  Future<void> deleteAccount({SignInCredential? fresh}) => _refuse();
 
   Future<void> _refuse() async =>
       throw const AuthFailure(AuthFailureReason.notConfigured);
@@ -101,9 +107,74 @@ final class SignInOfTest implements AuthService {
           ),
         ),
         authRole.data(
-          const RoleImplementation(
+          const AuthImplementation(
             type: TypeRef('SignInOfTest', import: _file),
             create: FactoryRef('createSignInOfTest', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A module for the test of the app test of the ways to sign in of the auth
+/// role, which applies to the apps whose modules give the role one: a way
+/// to sign in with an identity provider of the test.
+final class _WayOfTest extends SmfModule {
+  const _WayOfTest();
+
+  /// The id of the module.
+  static const id = ModuleId('way_of_test');
+
+  static const _path = 'core/way_of_test/way_of_test.dart';
+
+  static const _file = ImportRef.app(_path);
+
+  static const _source = '''
+import 'package:flutter/widgets.dart';
+
+import '../auth/app_session.dart';
+
+Future<SignInCredential?> wayOfTestCredential() async => null;
+
+class WayOfTestIcon extends StatelessWidget {
+  const WayOfTestIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+''';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A way to sign in of the test',
+        kind: ModuleKinds.infrastructure,
+        requires: {authRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          MasonBundle(
+            name: id.value,
+            description: 'The function and the icon of the way to sign in',
+            version: '0.1.0',
+            files: [
+              MasonBundledFile(
+                'lib/$_path',
+                base64.encode(utf8.encode(_source)),
+                'text',
+              ),
+            ],
+          ),
+        ),
+        authRole.data(
+          const SignInMethod(
+            label: LocalizedText('label', en: 'Continue with the test'),
+            icon: TypeRef('WayOfTestIcon', import: _file),
+            platforms: {AppPlatform.android, AppPlatform.ios},
+            credential: FunctionRef('wayOfTestCredential', import: _file),
+            issuer: 'https://accounts.example.com',
+            appStore: AppStoreLogin.privacyFocused,
           ),
         ),
       ];
@@ -119,6 +190,21 @@ const _everyModule = [
   'every module (bloc) --auth-mode=anonymous',
   'every module (riverpod) --auth-mode=guest',
   'every module (riverpod) --auth-mode=anonymous',
+];
+
+/// The apps of Firebase Authentication in the other modes of the auth role,
+/// with the router and the localization, since the role uses both.
+const _authModes = [
+  'auth by firebase_auth with router, localization --auth-mode=guest',
+  'auth by firebase_auth with router, localization --auth-mode=anonymous',
+];
+
+/// The apps of Sign in with Apple of the matrix of the CLI, with the
+/// localization and without. Each gets Firebase Authentication, the
+/// provider of the auth role, which the module requires.
+const _appleSignIn = [
+  'apple_sign_in with localization',
+  'apple_sign_in',
 ];
 
 /// The apps of the sign-in of the matrix of the CLI: one for each state
@@ -893,11 +979,13 @@ void main() {
         'onboarding with localization',
         'onboarding',
         // Firebase Authentication with the localization, which requires
-        // the preferences, and the sign-in with it.
+        // the preferences, and Sign in with Apple and the sign-in with it.
         'firebase_auth with localization, router',
         'firebase_auth with localization',
+        'apple_sign_in with localization',
         'sign_in (bloc) with localization',
         'sign_in (riverpod) with localization',
+        ..._authModes,
         ..._everyModule,
       ],
     );
@@ -1005,22 +1093,26 @@ void main() {
         'material_theme with localization',
         'onboarding with localization',
         // Firebase Authentication, which asks for its messages in the
-        // language of the app, and the sign-in, whose screens have texts.
+        // language of the app, Sign in with Apple, whose button has a
+        // label, and the sign-in, whose screens have texts.
         'firebase_auth with localization, router',
         'firebase_auth with localization',
+        'apple_sign_in with localization',
         'sign_in (bloc) with localization',
         'sign_in (riverpod) with localization',
+        ..._authModes,
         ..._everyModule,
       ],
     );
-    // What the test has to check there. Every app has the two texts of the
-    // fallback start screen of its app entry, in English and in Ukrainian.
-    // An app with a settings screen also has the texts of the setting of
-    // the language, which the role gives it in both languages. An app with
-    // the start screen or with the settings module has the label of its
-    // destination in both, and an app with the onboarding the texts of its
-    // pages. So the test reads texts in two languages in each app, with
-    // the provider of the CLI.
+    // What the test has to check there. An app that no route starts has
+    // the two texts of the fallback start screen of its app entry, in
+    // English and in Ukrainian. An app with a settings screen also has the
+    // texts of the setting of the language, which the role gives it in
+    // both languages. An app with the start screen or with the settings
+    // module has the label of its destination in both, and an app with the
+    // onboarding the texts of its pages, and an app with Sign in with Apple
+    // the label of its button. So the test reads texts in two
+    // languages in each app, with the provider of the CLI.
     List<String> languagesOf(MatrixApp app) =>
         localizationRole.localesIn(localizationRole.hookInput(app.hook!));
     expect(
@@ -1039,8 +1131,10 @@ void main() {
         'onboarding with localization': ['en', 'uk'],
         'firebase_auth with localization, router': ['en', 'uk'],
         'firebase_auth with localization': ['en', 'uk'],
+        'apple_sign_in with localization': ['en', 'uk'],
         'sign_in (bloc) with localization': ['en', 'uk'],
         'sign_in (riverpod) with localization': ['en', 'uk'],
+        for (final app in _authModes) app: ['en', 'uk'],
         for (final app in _everyModule) app: ['en', 'uk'],
       },
     );
@@ -3238,12 +3332,12 @@ void main() {
           'firebase_auth with localization',
           'firebase_auth with router',
           'firebase_auth',
-          // The sign-in requires the role.
+          // Sign in with Apple and the sign-in require the role.
+          ..._appleSignIn,
           ..._signIn,
         ])
           name: 'required',
-        'auth by firebase_auth with router --auth-mode=guest': 'guest',
-        'auth by firebase_auth with router --auth-mode=anonymous': 'anonymous',
+        for (final name in _authModes) name: name.split('--auth-mode=').last,
         for (final name in _everyModule)
           name: switch (name.split('--auth-mode=')) {
             [_, final mode] => mode,
@@ -3261,6 +3355,111 @@ void main() {
           if (app.hook!.presentRoles.contains(authRole)) app.name,
       ],
     );
+  });
+
+  test(
+      'the test of the ways to sign in of the auth role applies to the apps '
+      'whose modules give the role a way to sign in, whichever modules '
+      'provide the role and the ways to sign in, in each mode of the role, '
+      'and in the matrix of the CLI to the apps of Sign in with Apple and '
+      'those with every module', () async {
+    final methodsTest = await authMethodsAppTest();
+    // A registry with a provider of the test and a way to sign in of the
+    // test, so that the test applies to an app whatever the modules of the
+    // CLI give the role.
+    const modules = <SmfModule>[
+      FlutterCoreModule(),
+      _SignInOfTest(),
+      _WayOfTest(),
+    ];
+    final (apps: ofRole, :failed) = await matrixOf(modules);
+    expect(
+      [
+        for (final result in failed)
+          '${result.contractCase}: ${result.errors.join('; ')}',
+      ],
+      isEmpty,
+    );
+
+    expect(p.basename(methodsTest.directory), 'auth_methods');
+    expect(Directory(methodsTest.directory).existsSync(), isTrue);
+    expect(methodsTest.roles, {authRole});
+    // It reads the ways to sign in from the app, so the matrix writes no
+    // file for it, and it has no values, no mocks and no probe for the
+    // start check.
+    expect(methodsTest.generatedFiles, isNull);
+    expect(methodsTest.values, isNull);
+    expect(methodsTest.mocks, isNull);
+    expect(methodsTest.startProbe, isNull);
+    expect(
+      {for (final app in ofRole) app.name: methodsTest.appliesTo(app)},
+      {
+        // The app entry alone has no sign-in.
+        'flutter_core': false,
+        // The provider alone has the role and no way to sign in.
+        'sign_in_of_test': false,
+        // The way to sign in requires the role, so its app has the
+        // provider, and is the app with every module of the registry too.
+        'way_of_test': true,
+        'auth by sign_in_of_test --auth-mode=guest': false,
+        'auth by sign_in_of_test --auth-mode=anonymous': false,
+        'every module --auth-mode=guest': true,
+        'every module --auth-mode=anonymous': true,
+      },
+    );
+    // It selects its apps by the role and its data, and reads nothing of
+    // the name, the options or the modes of an app.
+    final tests = MatrixAppTests([methodsTest], testedRoles: {authRole});
+    expect(tests.roleProblems(modules, ofRole), isEmpty);
+    expect(tests.modeProblems(ofRole), isEmpty);
+    // The CLI registers it too, and its matrix runs it in the apps of the
+    // way to sign in with Apple, on Firebase Authentication, and in those
+    // with every module, in each mode.
+    final registered = named('auth_methods');
+    expect(registered.directory, methodsTest.directory);
+    expect(registered.roles, methodsTest.roles);
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [..._appleSignIn, ..._everyModule],
+    );
+  });
+
+  test(
+      'the test of Sign in with Apple applies to the apps with the module, '
+      'whatever else they have, in every mode of the auth role, and declares '
+      'the mocks of its platform side for the tests of every module of those '
+      'apps, with no probe for the start check', () {
+    final test = named('apple_sign_in');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [..._appleSignIn, ..._everyModule],
+    );
+    // It tests what only this module does, so it names no role: the test
+    // of the ways to sign in of the auth role checks what a provider does
+    // with the credential.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    // The mocks answer the method channel of the package, which needs no
+    // package of the platform interface.
+    expect(test.devDependencies, isEmpty);
+    expect(test.mocks!.path, 'test/apple_sign_in_mocks.dart');
+    expect(test.mocks!.function, 'mockSignInWithApple');
+    expect(
+      File(
+        p.joinAll([test.directory, ...test.mocks!.path.split('/')]),
+      ).existsSync(),
+      isTrue,
+    );
+    // Nobody can sign in on a device.
+    expect(test.startProbe, isNull);
   });
 
   test(
@@ -3282,10 +3481,11 @@ void main() {
         'firebase_auth with localization',
         'firebase_auth with router',
         'firebase_auth',
-        // The apps of the sign-in get the provider of the auth role.
+        // The apps of Sign in with Apple and of the sign-in get the provider
+        // of the auth role.
+        ..._appleSignIn,
         ..._signIn,
-        'auth by firebase_auth with router --auth-mode=guest',
-        'auth by firebase_auth with router --auth-mode=anonymous',
+        ..._authModes,
         ..._everyModule,
       ],
     );

@@ -1,10 +1,12 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
@@ -20,27 +22,61 @@ const _sessionImport = ImportRef.app('core/auth/app_session.dart');
 
 /// The implementation of the service of the test app: one that is created
 /// asynchronously, or one created with the app.
-RoleImplementation _implementation({required bool async}) => async
-    ? const RoleImplementation.async(
+AuthImplementation _implementation({required bool async}) => async
+    ? const AuthImplementation.async(
         type: TypeRef('FakeAuth', import: _fakeFile),
         init: FactoryRef('openFakeAuth', import: _fakeFile),
       )
-    : const RoleImplementation(
+    : const AuthImplementation(
         type: TypeRef('FakeAuth', import: _fakeFile),
         create: FactoryRef('createFakeAuth', import: _fakeFile),
       );
 
+/// The file of the test app with the function of its ways to sign in.
+const _methodFile = ImportRef.app('fakes/fake_method.dart');
+
+/// The path of [_methodFile].
+const _methodPath = 'lib/fakes/fake_method.dart';
+
+/// The issuer of the way to sign in of the tests.
+const _issuer = 'https://id.example.com';
+
+/// A way to sign in of the test app with the identity provider [issuer],
+/// on [platforms], whose label is the text [label] and which asks for a
+/// credential again before a deletion if it [revokes].
+SignInMethod _method({
+  String issuer = _issuer,
+  Set<AppPlatform> platforms = const {AppPlatform.android, AppPlatform.ios},
+  AppStoreLogin appStore = AppStoreLogin.privacyFocused,
+  bool revokes = false,
+  LocalizedText label =
+      const LocalizedText('label', en: 'Continue with Example'),
+}) =>
+    SignInMethod(
+      label: label,
+      icon: const TypeRef('FakeIcon', import: _methodFile),
+      platforms: platforms,
+      credential: const FunctionRef('fakeCredential', import: _methodFile),
+      issuer: issuer,
+      appStore: appStore,
+      revokesOnDeletion: revokes,
+    );
+
 /// The files of the role in an app of [mode], rendered with an
 /// implementation that is created asynchronously, or with the app, and
-/// what the template puts into other sockets.
+/// with [methods], the ways to sign in of the module `example_sign_in`,
+/// and what the template puts into other sockets.
 Future<RenderedTemplate> _rendered({
   AuthMode mode = AuthMode.required,
   bool async = false,
+  List<SignInMethod> methods = const [],
 }) =>
     renderTemplate(
       authRole,
       data: [
         dataOf(authRole, _implementation(async: async), module: 'fake_auth'),
+        for (final method in methods)
+          dataOf(authRole, method, module: 'example_sign_in'),
       ],
       choice: mode,
     );
@@ -138,6 +174,17 @@ class FlutterError {
   static void reportError(FlutterErrorDetails details) =>
       reportedErrors.add(details);
 }
+
+enum TargetPlatform { android, fuchsia, iOS, linux, macOS, windows }
+
+/// The platform that the app runs on in place of the one of the device, as
+/// a test of Flutter sets it.
+TargetPlatform? debugDefaultTargetPlatformOverride;
+
+/// The platform that the app runs on: Android, unless a script says
+/// otherwise.
+TargetPlatform get defaultTargetPlatform =>
+    debugDefaultTargetPlatformOverride ?? TargetPlatform.android;
 ''';
 
 /// A stand-in for the part of Flutter's widgets library that the files of
@@ -157,6 +204,19 @@ export 'foundation.dart'
         immutable;
 
 enum AppLifecycleState { detached, resumed, inactive, hidden, paused }
+
+abstract class Widget {
+  const Widget();
+}
+
+/// The context of a widget, which is in a language, as one below the root
+/// of an app is.
+final class BuildContext {
+  const BuildContext(this.language);
+
+  /// The code of the language of the app at the context.
+  final String language;
+}
 
 abstract mixin class WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {}
@@ -203,6 +263,13 @@ import '../core/auth/auth_service.dart';
 
 /// The accounts on the server, by their email addresses.
 final Map<String, ({String uid, String password})> accounts = {};
+
+/// The identities of the identity providers on the server: the id of the
+/// user of each, by its issuer and its token.
+final Map<String, String> identities = {};
+
+/// The credentials that reached the services, in order.
+final List<SignInCredential> credentials = [];
 
 /// The user who is signed in on the device.
 AuthUser? onDevice;
@@ -321,6 +388,45 @@ final class FakeAuth implements AuthService {
   }
 
   @override
+  Future<void> signInWith(SignInCredential credential) async {
+    credentials.add(credential);
+    await _enter('signInWith', '$credential');
+    final (:key, :issuer) = _identityOf(credential);
+    final uid = identities[key] ??= 'user-${++_users}';
+    _set(AuthUser(uid: uid, isAnonymous: false, issuers: {issuer}));
+  }
+
+  @override
+  Future<void> linkWith(SignInCredential credential) async {
+    credentials.add(credential);
+    await _enter('linkWith', '$credential');
+    final (:key, :issuer) = _identityOf(credential);
+    if (identities.containsKey(key)) {
+      throw const AuthFailure(AuthFailureReason.credentialInUse);
+    }
+    final user = _user!;
+    identities[key] = user.uid;
+    _set(
+      AuthUser(
+        uid: user.uid,
+        isAnonymous: false,
+        email: user.email,
+        issuers: {...user.issuers, issuer},
+      ),
+    );
+  }
+
+  /// The identity of [credential], by its issuer and its token, and its
+  /// issuer.
+  ({String key, String issuer}) _identityOf(SignInCredential credential) =>
+      switch (credential) {
+        IdTokenCredential(:final issuer, :final idToken) => (
+            key: '$issuer $idToken',
+            issuer: issuer,
+          ),
+      };
+
+  @override
   Future<void> signInAnonymously() async {
     await _enter('signInAnonymously');
     _set(AuthUser(uid: 'user-${++_users}', isAnonymous: true));
@@ -337,12 +443,47 @@ final class FakeAuth implements AuthService {
   }
 
   @override
-  Future<void> deleteAccount() async {
-    await _enter('deleteAccount');
+  Future<void> deleteAccount({SignInCredential? fresh}) async {
+    if (fresh != null) credentials.add(fresh);
+    await _enter('deleteAccount', fresh == null ? '' : 'fresh $fresh');
     final uid = _user!.uid;
     accounts.removeWhere((email, account) => account.uid == uid);
+    identities.removeWhere((key, owner) => owner == uid);
     _set(null);
   }
+}
+''';
+
+/// The file of the test app with the function of a way to sign in, which
+/// notes each call in `calls` of the fake provider, and returns, throws or
+/// holds what a script says, and the icon of that way to sign in.
+const _fakeMethod = '''
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+
+import '../core/auth/app_session.dart';
+import 'fake_auth.dart';
+
+/// What [fakeCredential] answers next: a credential, `null` for a sheet
+/// that the user closed, or what it throws.
+Object? answer;
+
+/// Holds [fakeCredential] until it completes.
+Completer<void>? holdCredential;
+
+Future<SignInCredential?> fakeCredential() async {
+  calls.add('credential');
+  await holdCredential?.future;
+  return switch (answer) {
+    final SignInCredential credential => credential,
+    null => null,
+    final error => throw error,
+  };
+}
+
+final class FakeIcon extends Widget {
+  const FakeIcon();
 }
 ''';
 
@@ -363,6 +504,7 @@ import 'package:my_app/core/auth/app_session.dart';
 import 'package:my_app/core/auth/auth_service.dart' show AuthService, AuthUser;
 import 'package:my_app/core/auth/guest_data.dart';
 import 'package:my_app/fakes/fake_auth.dart';
+import 'package:my_app/fakes/fake_method.dart';
 
 final result = <String, Object?>{};
 
@@ -440,6 +582,12 @@ void timed(void Function() body) => runZoned(
 
 const email = 'ann@example.com';
 const password = 'secret';
+
+/// A credential of the identity provider of the tests.
+const credential = IdTokenCredential(
+  issuer: 'https://id.example.com',
+  idToken: 'token-of-ann',
+);
 ''';
 
 /// Goes through the life of the session of the app, with the session and
@@ -606,6 +754,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   final callsOfSession = <String, Future<void> Function()>{
     'signIn': signIn,
     'signUp': () => appSession.signUp(email: 'bob@example.com', password: 'x'),
+    'signInWith': () => appSession.signInWith(credential),
     'sendPasswordReset': () => appSession.sendPasswordReset(email),
     'signOut': appSession.signOut,
     'deleteAccount': appSession.deleteAccount,
@@ -747,6 +896,15 @@ Future<void> main(List<String> arguments, SendPort port) async {
         AccountSession('a', email: email) == AccountSession('a'),
     'an account and an anonymous user of one id':
         AccountSession('a') == AnonymousSession('a'),
+    'the same issuers of the account, in another order':
+        AccountSession('a', issuers: {'x', 'y'}) ==
+            AccountSession('a', issuers: {'y', 'x'}),
+    'other issuers of the account':
+        AccountSession('a', issuers: {'x'}) ==
+            AccountSession('a', issuers: {'x', 'y'}),
+    'an issuer of the account more':
+        AccountSession('a', issuers: {'x', 'y'}) ==
+            AccountSession('a', issuers: {'x'}),
     'as keys': {
       SignedOutSession(),
       SignedOutSession(),
@@ -754,6 +912,8 @@ Future<void> main(List<String> arguments, SendPort port) async {
       AnonymousSession('a'),
       AccountSession('a', email: email),
       AccountSession('a', email: email),
+      AccountSession('a', issuers: {'x', 'y'}),
+      AccountSession('a', issuers: {'y', 'x'}),
     }.length,
   };
   port.send(result);
@@ -838,6 +998,23 @@ Future<void> main(List<String> arguments, SendPort port) async {
     };
     session.dispose();
   }
+
+  // A sign-in with a credential made before the start of an app with
+  // anonymous users finds the anonymous user of the start, who gets the
+  // identity.
+  onDevice = null;
+  final session = AppSessionController(
+    mode: AuthMode.anonymous,
+    takeGuestData: takeGuestData,
+  );
+  final signedIn = session.signInWith(credential);
+  await session.start(FakeAuth());
+  await signedIn;
+  result['a credential before the start of an app with anonymous users'] = {
+    'calls': takeCalls(),
+    'state': show(session.value),
+  };
+  session.dispose();
   port.send(result);
 }
 ''';
@@ -1350,9 +1527,29 @@ Future<void> main(List<String> arguments, SendPort port) async {
     session = AppSessionController(mode: mode, takeGuestData: take);
     await session.start(FakeAuth());
     await signIn(session);
+    final signedIn = note(session);
+    session.dispose();
+    // A credential of a new identity, and then one of an identity that
+    // the user of the first has.
+    final identity = IdTokenCredential(
+      issuer: 'https://id.example.com',
+      idToken: 'token-of-$name',
+    );
+    onDevice = AuthUser(uid: 'linked-$name', isAnonymous: true);
+    session = AppSessionController(mode: mode, takeGuestData: take);
+    await session.start(FakeAuth());
+    await session.signInWith(identity);
+    final linked = note(session);
+    session.dispose();
+    onDevice = AuthUser(uid: 'guest-$name', isAnonymous: true);
+    session = AppSessionController(mode: mode, takeGuestData: take);
+    await session.start(FakeAuth());
+    await session.signInWith(identity);
     result['an anonymous user in the mode $name'] = {
       'signs up': signedUp,
-      'signs in': note(session),
+      'signs in': signedIn,
+      'signs in with a new identity': linked,
+      'signs in with the identity of another user': note(session),
     };
     session.dispose();
   }
@@ -1364,14 +1561,20 @@ Future<void> main(List<String> arguments, SendPort port) async {
 ''';
 
 /// The files of the test app of [mode]: the files of the role, as its
-/// template generates them, and the fake provider.
+/// template generates them with [methods], the fake provider, and the file
+/// of the function of the ways to sign in.
 Future<DartFiles> _app({
   AuthMode mode = AuthMode.required,
   bool async = false,
+  List<SignInMethod> methods = const [],
 }) async {
-  final rendered = await _rendered(mode: mode, async: async);
+  final rendered = await _rendered(mode: mode, async: async, methods: methods);
   return DartFiles.write(
-    {...rendered.files, 'lib/fakes/fake_auth.dart': _fakeAuth},
+    {
+      ...rendered.files,
+      'lib/fakes/fake_auth.dart': _fakeAuth,
+      _methodPath: _fakeMethod,
+    },
     flutter: const {'foundation.dart': _foundation, 'widgets.dart': _widgets},
   );
 }
@@ -1428,7 +1631,7 @@ final _otherRole = TestRole<NoDsl>('account_screens');
 
 /// The implementation of the provider of the apps of the rules: its class
 /// in one file and its function in another.
-const _providerImplementation = RoleImplementation(
+const _providerImplementation = AuthImplementation(
   type: TypeRef(
     'FakeAuthService',
     import: ImportRef.app('core/auth/fake_auth_service.dart'),
@@ -1563,7 +1766,7 @@ const _accountGuard = RouteGuard(
 List<SmfIssue> _issuesWith(
   Map<String, RoutesData> routes, {
   Set<Role> present = const {routerRole},
-  RoleImplementation? implementation,
+  AuthImplementation? implementation,
 }) =>
     authRole.template.validate(
       inputOf(
@@ -1591,24 +1794,490 @@ DartFileIndex _calling(String path, String function) => DartFileIndex(
       invocations: [IndexedInvocation(function)],
     );
 
+/// Signs in with credentials: a user who is not signed in, the user of an
+/// account, and anonymous users whose identity is new, belongs to another
+/// user, or has the address of an account that signs in in another way,
+/// with a function for the data of a guest that notes what it is asked.
+const _signInWith = r'''
+Future<GiveGuestData?> take(String guestUid) async {
+  calls.add('take $guestUid');
+  return (accountUid) async => calls.add('give $accountUid');
+}
+
+/// A session of [mode] that started on a device without a user.
+Future<AppSessionController> sessionOf(AuthMode mode) async {
+  onDevice = null;
+  final session = AppSessionController(mode: mode, takeGuestData: take);
+  await session.start(FakeAuth());
+  takeCalls();
+  credentials.clear();
+  return session;
+}
+
+String issuersOf(AppSession session) => switch (session) {
+      AccountSession(:final issuers) => issuers.join(', '),
+      _ => '-',
+    };
+
+Map<String, Object?> note(AppSessionController session, [String? failure]) => {
+      'calls': takeCalls(),
+      'state': show(session.value),
+      'issuers': issuersOf(session.value),
+      if (failure != null) 'failure': failure,
+    };
+
+IdTokenCredential tokenOf(String name) =>
+    IdTokenCredential(issuer: 'https://id.example.com', idToken: name);
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  var session = await sessionOf(AuthMode.guest);
+  await session.signInWith(credential);
+  result['a user who is not signed in'] = note(session);
+  final first = session.value.uid;
+  await session.signInWith(tokenOf('token-of-bob'));
+  result['the user of an account, with another identity'] = note(session);
+  await session.signInWith(credential);
+  result['the first identity again'] = {
+    ...note(session),
+    'the same user': session.value.uid == first,
+  };
+  result['the issuers cannot change'] = await failureOf(() async {
+    (session.value as AccountSession).issuers.add('https://other.example.com');
+  });
+  session.dispose();
+
+  identities.clear();
+  session = await sessionOf(AuthMode.anonymous);
+  final guest = session.value.uid;
+  await session.signInWith(credential);
+  result['an anonymous user, with a new identity'] = {
+    ...note(session),
+    'keeps the id': session.value.uid == guest,
+  };
+  session.dispose();
+
+  session = await sessionOf(AuthMode.anonymous);
+  await session.signInWith(credential);
+  result['an anonymous user, with the identity of another user'] = {
+    ...note(session),
+    'the sign-in got the credential of the link': credentials.length == 2 &&
+        identical(credentials.first, credentials.last),
+  };
+  session.dispose();
+
+  session = await sessionOf(AuthMode.anonymous);
+  failures['linkWith'] = const AuthFailure(
+    AuthFailureReason.accountExistsWithOtherMethod,
+  );
+  await session.signInWith(tokenOf('token-of-carol'));
+  failures.clear();
+  result['an anonymous user, with an identity whose address has an account'] =
+      note(session);
+  session.dispose();
+
+  session = await sessionOf(AuthMode.anonymous);
+  failures['linkWith'] = const AuthFailure(
+    AuthFailureReason.accountExistsWithOtherMethod,
+  );
+  failures['signInWith'] = const AuthFailure(
+    AuthFailureReason.accountExistsWithOtherMethod,
+  );
+  final refused =
+      await failureOf(() => session.signInWith(tokenOf('token-of-dan')));
+  failures.clear();
+  result['the sign-in after the link fails too'] = note(session, refused);
+  session.dispose();
+
+  for (final (name, error) in [
+    ('another reason', const AuthFailure(AuthFailureReason.network)),
+    ('an error of another kind', StateError('The link broke.')),
+  ]) {
+    session = await sessionOf(AuthMode.anonymous);
+    failures['linkWith'] = error;
+    final failure =
+        await failureOf(() => session.signInWith(tokenOf('token-of-eve')));
+    failures.clear();
+    result['a link that fails with $name'] = note(session, failure);
+    session.dispose();
+  }
+
+  // A call made while the link waits runs after the whole sign-in, the
+  // sign-in that follows the refused link too.
+  session = await sessionOf(AuthMode.anonymous);
+  final hold = holds['linkWith'] = Completer<void>();
+  final signedIn = session.signInWith(credential);
+  final signedOut = session.signOut();
+  await pump();
+  final whileTheLinkWaits = takeCalls();
+  holds.clear();
+  hold.complete();
+  await signedIn;
+  await signedOut;
+  result['a sign-out while the link waits'] = {
+    'calls while the link waits': whileTheLinkWaits,
+    ...note(session),
+  };
+  session.dispose();
+  port.send(result);
+}
+''';
+
+/// The ways to sign in of the app of [_revokingDeletion]: one on iOS and
+/// one on both platforms that ask for a credential again before a
+/// deletion, and one that does not.
+final List<SignInMethod> _deletionMethods = [
+  _method(revokes: true, platforms: const {AppPlatform.ios}),
+  _method(issuer: 'https://other.example.com', revokes: true),
+  _method(issuer: 'https://plain.example.com'),
+];
+
+/// Deletes accounts of ways to sign in, on Android and on iOS, while the
+/// way to sign in answers with a credential, with `null`, or with an error,
+/// and while the service deletes or fails, in the app of
+/// [_deletionMethods].
+const _revokingDeletion = '''
+const fresh = IdTokenCredential(
+  issuer: 'https://id.example.com',
+  idToken: 'fresh-token',
+  authorizationCode: 'code',
+);
+
+/// A session in [mode] with the user of an account on the device, who
+/// signs in with [issuers].
+Future<AppSessionController> sessionOf(
+  Set<String> issuers, {
+  AuthMode mode = AuthMode.required,
+}) async {
+  onDevice = AuthUser(uid: 'account', isAnonymous: false, issuers: issuers);
+  final session = AppSessionController(
+    mode: mode,
+    takeGuestData: takeGuestData,
+  );
+  await session.start(FakeAuth());
+  takeCalls();
+  credentials.clear();
+  return session;
+}
+
+/// Deletes the account of [issuers] on [platform], while the way to sign in
+/// answers [answered] and the service fails with [deletionFails].
+Future<Map<String, Object?>> delete(
+  Set<String> issuers, {
+  TargetPlatform platform = TargetPlatform.iOS,
+  Object? answered = fresh,
+  Object? deletionFails,
+  AuthMode mode = AuthMode.required,
+}) async {
+  debugDefaultTargetPlatformOverride = platform;
+  answer = answered;
+  final session = await sessionOf(issuers, mode: mode);
+  if (deletionFails != null) failures['deleteAccount'] = deletionFails;
+  final failure = await failureOf(session.deleteAccount);
+  failures.clear();
+  final noted = {
+    'calls': takeCalls(),
+    'state': show(session.value),
+    'failure': failure,
+    if (credentials.isNotEmpty)
+      'the service got the credential of the way to sign in':
+          identical(credentials.single, answered),
+  };
+  session.dispose();
+  return noted;
+}
+
+const id = 'https://id.example.com';
+const other = 'https://other.example.com';
+const plain = 'https://plain.example.com';
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  result['a way to sign in that revokes, on its platform'] = await delete({id});
+  result['the same way to sign in on another platform'] =
+      await delete({id}, platform: TargetPlatform.android);
+  result['two that revoke, on the platform of the second only'] =
+      await delete({id, other}, platform: TargetPlatform.android);
+  result['a way to sign in that does not revoke'] = await delete({plain});
+  result['no way to sign in'] = await delete({});
+  result['the user closes the sheet'] = await delete({id}, answered: null);
+  result['the way to sign in fails'] = await delete(
+    {id},
+    answered: const AuthFailure(
+      AuthFailureReason.notConfigured,
+      developerHint: 'Set up the capability.',
+    ),
+  );
+  result['the way to sign in throws another error'] =
+      await delete({id}, answered: StateError('The sheet broke.'));
+  result['the revocation fails'] = await delete(
+    {id},
+    deletionFails: const AuthFailure(
+      AuthFailureReason.notConfigured,
+      developerHint: 'Set up the key.',
+    ),
+  );
+  result['in the anonymous mode'] =
+      await delete({id}, mode: AuthMode.anonymous);
+
+  debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+  answer = fresh;
+  final session = await sessionOf({id});
+  final hold = holdCredential = Completer<void>();
+  final deleted = session.deleteAccount();
+  unawaited(session.signOut());
+  await pump();
+  final whileItAsks = takeCalls();
+  holdCredential = null;
+  hold.complete();
+  await deleted;
+  await pump();
+  result['a call while the way to sign in asks'] = {
+    'calls while it asks': whileItAsks,
+    'calls': takeCalls(),
+  };
+  session.dispose();
+  port.send(result);
+}
+''';
+
+/// The file of the test app with the function of the ways to sign in of a
+/// second module, and their icon.
+const _secondMethod = '''
+import 'package:flutter/widgets.dart';
+
+import '../core/auth/app_session.dart';
+
+Future<SignInCredential?> secondCredential() async => const IdTokenCredential(
+      issuer: 'https://second.example.com',
+      idToken: 'second-token',
+    );
+
+final class SecondIcon extends Widget {
+  const SecondIcon();
+}
+''';
+
+/// The file of [_secondMethod].
+const _secondFile = ImportRef.app('fakes/second_method.dart');
+
+/// The file of the texts of a provider of the localization role, with a
+/// getter for each of [getters], which returns the name of the getter after
+/// the language of the context.
+String _textsFile(List<String> getters) => [
+      "import 'package:flutter/widgets.dart';",
+      '',
+      'final class Texts {',
+      '  const Texts(this._language);',
+      '',
+      '  final String _language;',
+      for (final getter in getters) ...[
+        '',
+        "  String get $getter => '\$_language $getter';",
+      ],
+      '}',
+      '',
+      'extension AppTexts on BuildContext {',
+      '  Texts get l10n => Texts(language);',
+      '}',
+      '',
+    ].join('\n');
+
+/// A script that sends the ways to sign in of the app: for each, its label
+/// in English and in Ukrainian, the type of its icon, its platforms, its
+/// issuer, whether it revokes, whether it is available on Android and on
+/// iOS, and what its function returns.
+const _readMethods = r'''
+import 'dart:isolate';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/auth/app_session.dart';
+import 'package:my_app/core/auth/sign_in_methods.dart';
+import 'package:my_app/fakes/fake_method.dart';
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  answer = const IdTokenCredential(
+    issuer: 'https://id.example.com',
+    idToken: 'token',
+  );
+  bool availableOn(SignInMethod method, TargetPlatform platform) {
+    debugDefaultTargetPlatformOverride = platform;
+    return method.isAvailable;
+  }
+
+  port.send([
+    for (final method in appSignInMethods)
+      {
+        'label': '${method.label(const BuildContext('en'))} / '
+            '${method.label(const BuildContext('uk'))}',
+        'icon': '${method.icon.runtimeType}',
+        'platforms': [for (final platform in method.platforms) platform.name],
+        'issuer': method.issuer,
+        'revokes': method.revokesOnDeletion,
+        'on Android': availableOn(method, TargetPlatform.android),
+        'on iOS': availableOn(method, TargetPlatform.iOS),
+        'credential': '${await method.credential()}',
+      },
+  ]);
+}
+''';
+
+/// What [_readMethods] sends for the app of the template rendered with
+/// [data] in an app with the roles in [present], once its files type-check
+/// with the files of the functions against the stand-ins of Flutter and
+/// [texts], the file of the texts of the app, if it has one. It also
+/// returns the file of the ways to sign in.
+Future<(String, Object?)> _methodsOf(
+  List<RoleData<Object>> data, {
+  Set<Role> present = const {},
+  String? texts,
+}) async {
+  final rendered = await renderTemplate(
+    authRole,
+    data: [
+      dataOf(authRole, _implementation(async: false), module: 'fake_auth'),
+      ...data,
+    ],
+    present: present,
+    choice: AuthMode.required,
+  );
+  final files = DartFiles.write(
+    {
+      ...rendered.files,
+      'lib/fakes/fake_auth.dart': _fakeAuth,
+      _methodPath: _fakeMethod,
+      'lib/${_secondFile.uri}': _secondMethod,
+      if (texts != null) LocalizationRole.textsFile: texts,
+    },
+    flutter: const {'foundation.dart': _foundation, 'widgets.dart': _widgets},
+  );
+  try {
+    final code = rendered.files[AuthRole.methodsFile]!;
+    expect(await files.analysisProblems(), isEmpty, reason: code);
+    return (code, await files.run(_readMethods));
+  } finally {
+    files.delete();
+  }
+}
+
+/// The named arguments of each way to sign in of the list of the Dart
+/// [code], each as its source by its name.
+List<Map<String, String>> _itemsOf(String code) {
+  final list = parseString(content: code)
+      .unit
+      .declarations
+      .whereType<TopLevelVariableDeclaration>()
+      .single
+      .variables
+      .variables
+      .single
+      .initializer! as ListLiteral;
+  return [
+    for (final item in list.elements)
+      {
+        for (final argument
+            in (item as MethodInvocation).argumentList.arguments)
+          if (argument
+              case NamedArgument(:final name, :final argumentExpression))
+            name.lexeme: argumentExpression.toSource(),
+      },
+  ];
+}
+
+/// The imports of the Dart [code], in order, each as its URI and, after a
+/// space, its prefix if it has one.
+List<String> _importsOf(String code) => [
+      for (final directive in parseString(content: code).unit.directives)
+        if (directive is ImportDirective)
+          [
+            directive.uri.stringValue,
+            if (directive.prefix case final prefix?) prefix.name,
+          ].join(' '),
+    ];
+
+/// A brick named [name] with a file at each of [paths].
+BrickContribution _brick(List<String> paths, {String name = 'brick'}) =>
+    BrickContribution(
+      MasonBundle(
+        name: name,
+        description: name,
+        version: '0.1.0',
+        files: [
+          for (final path in paths)
+            MasonBundledFile(
+              path,
+              base64.encode(utf8.encode('// A file of the tests.\n')),
+              'text',
+            ),
+        ],
+      ),
+    );
+
+/// A module with ways to sign in, which requires the role and uses the
+/// localization role.
+const _methodModule = ModuleDescriptor(
+  id: ModuleId('example_sign_in'),
+  description: 'Sign-in with an example identity provider',
+  kind: ModuleKinds.infrastructure,
+  requires: {authRole},
+  uses: {localizationRole},
+);
+
+/// The issues of the module rules of the role for [module], which
+/// contributes [contributions], in an app with the localization role.
+List<SmfIssue> _methodModuleIssues(
+  List<Contribution> contributions, {
+  ModuleDescriptor module = _methodModule,
+}) {
+  final origin = ModuleOrigin(module.id);
+  // The pipeline gives each data its origin when it collects it.
+  final own = [
+    for (final contribution in contributions)
+      if (contribution is RoleData<Object>)
+        contribution.withOrigin(origin)
+      else
+        contribution,
+  ];
+  return authRole.checkModule(
+    ModuleRuleRequest(
+      hook: RoleHookRequest(
+        data: [...own.whereType<RoleData<Object>>()],
+        presentRoles: {authRole, localizationRole},
+        context: testContext,
+      ),
+      module: module,
+      contributions: own,
+    ),
+  );
+}
+
+/// The index of the icon of the way to sign in of the tests, a class with
+/// a `const` unnamed constructor that requires no arguments.
+const _fakeIcon = IndexedDeclaration(
+  name: 'FakeIcon',
+  kind: DeclarationKind.classType,
+  constructors: [IndexedConstructor(isConst: true)],
+);
+
 void main() {
   group('the auth role', () {
     test(
-        'takes one provider, requires no other role, works with a router, '
-        'and has the socket of its implementation, the option of the mode '
-        'and three files', () {
+        'takes one provider, requires no other role, works with a router and '
+        'with the texts of the app, and has the socket of its '
+        'implementation, the option of the mode and four files', () {
       expect(authRole.id, 'auth');
       expect(authRole.description, 'Authentication');
       expect(authRole.presenceFlag, 'has_auth');
       expect('$authRole', 'authentication role');
       expect(authRole.cardinality, RoleCardinality.atMostOne);
       expect(authRole.requires, isEmpty);
-      // The router, whose routes ask for the account. Not the DI role: the
-      // role registers nothing in a container.
-      expect(authRole.uses, {routerRole});
+      // The router, whose routes ask for the account, and the texts of the
+      // app, which the labels of the ways to sign in are. Not the DI role:
+      // the role registers nothing in a container.
+      expect(authRole.uses, {routerRole, localizationRole});
       // Its provider uses what the role uses, so the contract harness
-      // builds the apps of a provider with a router and without one.
-      expect(_provider.effectiveUses, {routerRole});
+      // builds the apps of a provider with a router and without one, and
+      // with the texts of the app and without them.
+      expect(_provider.effectiveUses, {routerRole, localizationRole});
       expect(_provider.effectiveRequires, isEmpty);
       expect(authRole.sockets, const [AuthRole.implementations]);
       expect(AuthRole.implementations.tag, 'smf_auth__implementations');
@@ -1617,16 +2286,20 @@ void main() {
         'lib/core/auth/auth_service.dart',
         'lib/core/auth/app_session.dart',
         'lib/core/auth/guest_data.dart',
+        'lib/core/auth/sign_in_methods.dart',
       ]);
       expect(authRole.interface.files, [
         AuthRole.serviceFile,
         AuthRole.sessionFile,
         AuthRole.guestDataFile,
+        AuthRole.methodsFile,
       ]);
-      expect(authRole.interface.symbols, isEmpty);
+      expect(authRole.interface.symbols, const [AuthRole.signInMethod]);
+      expect(AuthRole.signInMethod.path, AuthRole.methodsFile);
+      expect(AuthRole.appSignInMethods, 'appSignInMethods');
       expect(
         [for (final rule in authRole.moduleRules) rule.id],
-        ['services.implementations'],
+        ['services.implementations', 'auth.methods'],
       );
       expect(
         [for (final rule in authRole.structuralRules) rule.id],
@@ -1634,6 +2307,8 @@ void main() {
           'auth.factory_calls',
           'auth.start_calls',
           'auth.implementation_factories',
+          'auth.method_functions',
+          'auth.method_icons',
         ],
       );
     });
@@ -2014,6 +2689,8 @@ void main() {
 
       // A warning: an app whose developer writes the guard later is an app.
       expect(issue.isError, isFalse);
+      expect(issue.code, AuthRole.openAccountRoutesWarning);
+      expect(AuthRole.openAccountRoutesWarning, 'auth.open_account_routes');
       expect(
         issue.message,
         'The routes profile.account, profile.email, shop.orders are for '
@@ -2137,7 +2814,7 @@ void main() {
         () {
       final issues = _issuesWith(
         {'shop': _shopRoutes},
-        implementation: const RoleImplementation(
+        implementation: const AuthImplementation(
           type: TypeRef('_Private'),
           create: FactoryRef('create', import: _fakeFile),
         ),
@@ -2166,8 +2843,9 @@ void main() {
     });
 
     test(
-        'generates the interface that a provider implements, with the user '
-        'and the reasons of a failure', () async {
+        'generates the interface that a provider implements, with the user, '
+        'the reasons of a failure and the credentials of identity '
+        'providers', () async {
       final unit = parseString(
         content: (await _rendered()).files[AuthRole.serviceFile]!,
       ).unit;
@@ -2189,15 +2867,19 @@ void main() {
           'Future<void> signIn$credentials',
           'Future<void> signUp$credentials',
           'Future<void> linkPassword$credentials',
+          'Future<void> signInWith(SignInCredential credential)',
+          'Future<void> linkWith(SignInCredential credential)',
           'Future<void> signInAnonymously()',
           'Future<void> sendPasswordReset(String email)',
           'Future<void> signOut()',
-          'Future<void> deleteAccount()',
+          'Future<void> deleteAccount({SignInCredential? fresh})',
         ],
       );
       expect(_enumValuesOf(unit, 'AuthFailureReason'), [
         'invalidCredentials',
         'emailInUse',
+        'credentialInUse',
+        'accountExistsWithOtherMethod',
         'weakPassword',
         'invalidEmail',
         'userDisabled',
@@ -2207,6 +2889,30 @@ void main() {
         'notConfigured',
         'unknown',
       ]);
+      ClassDeclaration classOf(String name) => unit.declarations
+          .whereType<ClassDeclaration>()
+          .singleWhere((type) => type.namePart.typeName.lexeme == name);
+      String fieldsOf(String name) => [
+            for (final member in classOf(name).body.members)
+              if (member is FieldDeclaration) '${member.fields}',
+          ].join('; ');
+      // A credential is one of a closed set, which a provider tells apart.
+      expect(classOf('SignInCredential').sealedKeyword, isNotNull);
+      expect(
+        '${classOf('IdTokenCredential').extendsClause}',
+        'extends SignInCredential',
+      );
+      expect(
+        fieldsOf('IdTokenCredential'),
+        'final String issuer; final String idToken; final String? rawNonce; '
+        'final String? authorizationCode; final String? givenName; '
+        'final String? familyName',
+      );
+      expect(
+        fieldsOf('AuthUser'),
+        'final String uid; final bool isAnonymous; final String? email; '
+        'final Set<String> issuers',
+      );
       // The file of the provider needs nothing of Flutter and no other
       // file of the app.
       expect(unit.directives, isEmpty);
@@ -2283,7 +2989,7 @@ void main() {
           data: [
             dataOf(
               authRole,
-              const RoleImplementation(
+              const AuthImplementation(
                 type: TypeRef('_Private'),
                 create: FactoryRef('create', import: _fakeFile),
               ),
@@ -2372,6 +3078,8 @@ void main() {
             for (final reason in [
               'invalidCredentials',
               'emailInUse',
+              'credentialInUse',
+              'accountExistsWithOtherMethod',
               'weakPassword',
               'invalidEmail',
               'userDisabled',
@@ -2387,6 +3095,7 @@ void main() {
             for (final call in [
               'signIn',
               'signUp',
+              'signInWith',
               'sendPasswordReset',
               'signOut',
               'deleteAccount',
@@ -2477,7 +3186,10 @@ void main() {
             'the same account': true,
             'another address of the account': false,
             'an account and an anonymous user of one id': false,
-            'as keys': 3,
+            'the same issuers of the account, in another order': true,
+            'other issuers of the account': false,
+            'an issuer of the account more': false,
+            'as keys': 4,
           },
         });
       });
@@ -2528,6 +3240,15 @@ void main() {
 
         expect(await app.run('$_notes$_earlyCalls'), {
           for (final mode in AuthMode.values) mode.name: expected(mode),
+          // The call waits for the anonymous user of the start, so it links
+          // the identity to that user.
+          'a credential before the start of an app with anonymous users': {
+            'calls': [
+              'signInAnonymously',
+              'linkWith IdTokenCredential(https://id.example.com)',
+            ],
+            'state': 'account user-5 null',
+          },
         });
       });
 
@@ -2781,6 +3502,21 @@ void main() {
                 owner,
                 ['take other-$mode', 'signIn $_email', 'give owner'],
               ),
+              // The anonymous user gets the new identity with the id, and
+              // the next one signs in to the user of that identity.
+              'signs in with a new identity': note(
+                'account linked-$mode null',
+                ['linkWith IdTokenCredential(https://id.example.com)'],
+              ),
+              'signs in with the identity of another user': note(
+                'account linked-$mode null',
+                [
+                  'linkWith IdTokenCredential(https://id.example.com)',
+                  'take guest-$mode',
+                  'signInWith IdTokenCredential(https://id.example.com)',
+                  'give linked-$mode',
+                ],
+              ),
             },
           'the function of the app has nothing to move': true,
         });
@@ -2791,7 +3527,7 @@ void main() {
   group('the note of the auth role for coding agents', () {
     test(
         'is a note of the role in the section of the role of every app with '
-        'it, and names what the three files declare', () async {
+        'it, and names what the four files declare', () async {
       final rendered = await _rendered();
       final note = agentNoteOf(authRole);
 
@@ -2814,6 +3550,10 @@ void main() {
             'authMode',
             'initAuth',
             'createAuthService',
+            'AppSessionController.signInWith',
+            'AppSessionController.deleteAccount',
+            'AccountSession.issuers',
+            'AccountSession.email',
           ],
           AuthRole.serviceFile: [
             'AuthService',
@@ -2822,8 +3562,20 @@ void main() {
             'AuthFailure.developerHint',
             'AuthFailureReason',
             'AuthFailureReason.recentSignInRequired',
+            'SignInCredential',
+            'IdTokenCredential',
           ],
           AuthRole.guestDataFile: ['takeGuestData'],
+          AuthRole.methodsFile: [
+            'appSignInMethods',
+            'SignInMethod',
+            'SignInMethod.isAvailable',
+            'SignInMethod.label',
+            'SignInMethod.icon',
+            'SignInMethod.credential',
+            'SignInMethod.issuer',
+            'SignInMethod.revokesOnDeletion',
+          ],
         },
         files: rendered.files,
       );
@@ -2840,23 +3592,23 @@ void main() {
 
     test(
         'tells to import the file of the session alone, which exports the '
-        'failure and its reasons, as the rule of the role asks', () async {
+        'failure and its reasons and the credentials, as the rule of the '
+        'role asks', () async {
       final unit = parseString(
         content: (await _rendered()).files[AuthRole.sessionFile]!,
       ).unit;
 
       expect(
-        [
-          for (final directive in unit.directives)
-            if (directive is ExportDirective) directive.toSource(),
-        ],
-        ["export 'auth_service.dart' show AuthFailure, AuthFailureReason;"],
+        unit.directives.whereType<ExportDirective>().single.toSource(),
+        "export 'auth_service.dart' show AuthFailure, AuthFailureReason, "
+        'IdTokenCredential, SignInCredential;',
       );
       expect(
         agentNoteOf(authRole).text,
         contains(
           'The code of the app imports `${AuthRole.sessionFile}`, which '
-          'exports `AuthFailure` and `AuthFailureReason`',
+          'exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` '
+          'and `IdTokenCredential`',
         ),
       );
     });
@@ -2935,6 +3687,7 @@ void main() {
             'AppSession.uid',
           ],
           AuthRole.guestDataFile: ['takeGuestData'],
+          AuthRole.methodsFile: ['appSignInMethods', 'SignInMethod'],
         },
         files: rendered.files,
       );
@@ -2943,7 +3696,7 @@ void main() {
           for (final span in codeSpansOf(section))
             if (span.contains('/')) span,
         },
-        {AuthRole.sessionFile, AuthRole.guestDataFile},
+        {AuthRole.sessionFile, AuthRole.guestDataFile, AuthRole.methodsFile},
       );
       final wait = RegExp(r'anonymousWait = const Duration\(seconds: (\d+)\)')
           .firstMatch(rendered.files[AuthRole.sessionFile]!)![1];
@@ -2991,7 +3744,7 @@ void main() {
         'put code into the socket of the implementation', () {
       List<SmfIssue> issuesOf(
         ModuleDescriptor module, {
-        List<RoleImplementation> implementations = const [],
+        List<AuthData> implementations = const [],
         List<Contribution> contributions = const [],
       }) =>
           authRole.checkModule(
@@ -3033,7 +3786,11 @@ void main() {
         ],
       ).single;
       expect(issue.message, contains('socket auth.implementations'));
-      expect(issue.hint, contains('RoleImplementation'));
+      expect(
+        issue.hint,
+        'Contribute the implementation as data of the role, '
+        'AuthImplementation, instead.',
+      );
     });
 
     test(
@@ -3268,6 +4025,1248 @@ void main() {
           ): ofFeature,
         }),
         isEmpty,
+      );
+    });
+  });
+
+  group('the data of the auth role', () {
+    test(
+        'has the implementation of the provider, created with the app or '
+        'asynchronously', () {
+      final sync = _implementation(async: false);
+      final async = _implementation(async: true);
+
+      expect(sync.implementation.isAsync, isFalse);
+      expect(sync.implementation.type, sync.type);
+      expect(sync.implementation.factory.name, 'createFakeAuth');
+      expect(async.implementation.isAsync, isTrue);
+      expect(async.implementation.factory.name, 'openFakeAuth');
+      expect('$sync', 'implementation FakeAuth');
+      expect('${sync.implementation}', '$sync');
+    });
+
+    test(
+        'has ways to sign in, each with its label as the text that a user '
+        'sees, which ask for nothing of a backend and do not revoke unless '
+        'they say so', () {
+      final method = _method();
+
+      expect(method.shownTexts, [method.label]);
+      expect(method.needs, isEmpty);
+      expect(method.revokesOnDeletion, isFalse);
+      expect(method.problems(), isEmpty);
+      expect('$method', 'way to sign in of https://id.example.com');
+      expect(AppPlatform.values, [AppPlatform.android, AppPlatform.ios]);
+      expect(
+        AppStoreLogin.values,
+        [AppStoreLogin.thirdParty, AppStoreLogin.privacyFocused],
+      );
+      expect(SignInNeed.values, [
+        SignInNeed.androidCertificate,
+        SignInNeed.iosClient,
+        SignInNeed.serverClient,
+      ]);
+    });
+
+    test(
+        'takes an issuer that is an https URL without a query or a fragment, '
+        'as an identity provider writes it into its tokens', () {
+      for (final issuer in [
+        'https://id.example.com',
+        'https://id.example.com/',
+        'https://login.example.com/tenant/v2.0',
+      ]) {
+        expect(_method(issuer: issuer).problems(), isEmpty, reason: issuer);
+      }
+      for (final issuer in [
+        'http://id.example.com',
+        'id.example.com',
+        'https://',
+        'https://id.example.com?tenant=1',
+        'https://id.example.com#top',
+        '',
+      ]) {
+        expect(
+          _method(issuer: issuer).problems().single,
+          'The issuer "$issuer" of a way to sign in must be an https URL '
+          'without a query or a fragment, such as '
+          'https://accounts.example.com, as the identity provider writes it '
+          'into its tokens.',
+          reason: issuer,
+        );
+      }
+    });
+
+    test(
+        'reports an icon that is no class of a file of the app, a way to '
+        'sign in on no platform, and a function that is no public function '
+        'of the app', () {
+      final problems = const SignInMethod(
+        label: LocalizedText('label', en: 'Continue with Example'),
+        icon: TypeRef('Icon'),
+        platforms: {},
+        credential: FunctionRef(
+          '_credential',
+          import: ImportRef('package:example/example.dart'),
+        ),
+        issuer: _issuer,
+        appStore: AppStoreLogin.thirdParty,
+      ).problems();
+
+      const outsideIcon = 'The icon Icon of the way to sign in of '
+          'https://id.example.com must be a widget class of a file of the '
+          'app, imported with ImportRef.app.';
+      const noPlatform = 'The way to sign in of https://id.example.com names '
+          'no platform that it works on.';
+      const outside = 'The function _credential of the way to sign in of '
+          'https://id.example.com must be a function of a file of the app, '
+          'imported with ImportRef.app.';
+      expect(problems, [
+        outsideIcon,
+        noPlatform,
+        'The function "_credential" is not a public Dart function name.',
+        outside,
+      ]);
+      const badName = 'The type "_Icon" is not a public Dart type name.';
+      const ofPackage = 'The icon _Icon of the way to sign in of '
+          'https://id.example.com must be a widget class of a file of the '
+          'app, imported with ImportRef.app.';
+      expect(
+        const SignInMethod(
+          label: LocalizedText('label', en: 'Continue with Example'),
+          icon: TypeRef(
+            '_Icon',
+            import: ImportRef('package:flutter/material.dart'),
+          ),
+          platforms: {AppPlatform.ios},
+          credential: FunctionRef('credential', import: _methodFile),
+          issuer: _issuer,
+          appStore: AppStoreLogin.privacyFocused,
+        ).problems(),
+        [badName, ofPackage],
+      );
+    });
+  });
+
+  group('AuthRole.methodsIn', () {
+    test(
+        'has the ways to sign in in the order of the data, each with its '
+        'module, also one of a variant of the module', () {
+      final input = inputOf(
+        authRole,
+        data: [
+          dataOf(authRole, _implementation(async: false), module: 'fake_auth'),
+          dataOf(authRole, _method(), module: 'example_sign_in'),
+          authRole
+              .data(_method(issuer: 'https://other.example.com'))
+              .withOrigin(
+                const ModuleOrigin(
+                  ModuleId('second'),
+                  variant: ModuleId('bloc'),
+                ),
+              ),
+        ],
+      );
+      final methods = authRole.methodsIn(input);
+
+      expect(
+        [for (final placed in methods) placed.method.issuer],
+        [_issuer, 'https://other.example.com'],
+      );
+      expect(
+        [for (final placed in methods) placed.owner],
+        const [
+          ModuleOrigin(ModuleId('example_sign_in')),
+          ModuleOrigin(ModuleId('second')),
+        ],
+      );
+      expect(
+        '${methods.first}',
+        'way to sign in of https://id.example.com of example_sign_in',
+      );
+    });
+
+    test('is empty in an app without ways to sign in', () {
+      expect(authRole.methodsIn(inputOf(authRole)), isEmpty);
+    });
+
+    test('reads the ways to sign in for a role that uses the auth role', () {
+      final account = TestRole<NoDsl>('account_screens', uses: {authRole});
+      final input = inputOf(
+        account,
+        data: [dataOf(authRole, _method(), module: 'example_sign_in')],
+        present: {authRole},
+      );
+
+      expect(authRole.methodsIn(input).single.method.issuer, _issuer);
+    });
+  });
+
+  group('the list of the ways to sign in', () {
+    test(
+        'is a constant list of SignInMethod, empty in an app without ways to '
+        'sign in, whose class has what the role requires', () async {
+      final code = (await _rendered()).files[AuthRole.methodsFile]!;
+      final unit = parseString(content: code).unit;
+      final list = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .single
+          .variables;
+
+      expect('${list.type}', 'List<SignInMethod>');
+      expect(list.isConst, isTrue);
+      expect(list.variables.single.name.lexeme, AuthRole.appSignInMethods);
+      expect(
+        (list.variables.single.initializer! as ListLiteral).elements,
+        isEmpty,
+      );
+      final declared = declarationsOf(code);
+      for (final getter in AuthRole.signInMethod.getters) {
+        expect(declared, contains('SignInMethod.$getter'));
+      }
+      final type = unit.declarations.whereType<ClassDeclaration>().singleWhere(
+            (type) => type.namePart.typeName.lexeme == 'SignInMethod',
+          );
+      final constructor =
+          type.body.members.whereType<ConstructorDeclaration>().single;
+      expect(constructor.constKeyword, isNotNull);
+      expect(
+        [
+          for (final parameter in constructor.parameters.parameters)
+            parameter.name!.lexeme,
+        ],
+        AuthRole.signInMethod.namedParameters,
+      );
+      // An app without ways to sign in type-checks too.
+      final (ofApp, methods) = await _methodsOf(const []);
+      expect(ofApp, code);
+      expect(methods, isEmpty);
+    });
+
+    test(
+        'has each way to sign in with a function of the file for its label, '
+        'its icon, its platforms, its function through a prefix of the '
+        'file of its function, its issuer and whether it revokes, in the '
+        'order of the modules', () async {
+      final (code, methods) = await _methodsOf([
+        dataOf(
+          authRole,
+          _method(
+            revokes: true,
+            label: const LocalizedText('signInLabel', en: 'Continue'),
+          ),
+          module: 'example',
+        ),
+        dataOf(
+          authRole,
+          _method(
+            issuer: 'https://ios.example.com',
+            platforms: const {AppPlatform.ios},
+            appStore: AppStoreLogin.thirdParty,
+          ),
+          module: 'example_sign_in',
+        ),
+        dataOf(
+          authRole,
+          const SignInMethod(
+            label: LocalizedText('label', en: "Continue with 'Second'"),
+            icon: TypeRef('SecondIcon', import: _secondFile),
+            platforms: {AppPlatform.ios, AppPlatform.android},
+            credential: FunctionRef('secondCredential', import: _secondFile),
+            issuer: 'https://second.example.com',
+            appStore: AppStoreLogin.thirdParty,
+          ),
+          module: 'second_sign_in',
+        ),
+      ]);
+
+      expect(_itemsOf(code), [
+        {
+          'label': '_exampleSignInLabel',
+          'icon': 'method0.FakeIcon()',
+          'platforms': '{TargetPlatform.android, TargetPlatform.iOS}',
+          'credential': 'method0.fakeCredential',
+          'issuer': "'https://id.example.com'",
+          'revokesOnDeletion': 'true',
+        },
+        // The id of the module continues in the name of the text of the
+        // one before, so the name of its function takes a number.
+        {
+          'label': '_exampleSignInLabel2',
+          'icon': 'method0.FakeIcon()',
+          'platforms': '{TargetPlatform.iOS}',
+          'credential': 'method0.fakeCredential',
+          'issuer': "'https://ios.example.com'",
+        },
+        {
+          'label': '_secondSignInLabel',
+          'icon': 'method1.SecondIcon()',
+          'platforms': '{TargetPlatform.android, TargetPlatform.iOS}',
+          'credential': 'method1.secondCredential',
+          'issuer': "'https://second.example.com'",
+        },
+      ]);
+      expect(_importsOf(code), [
+        'package:flutter/foundation.dart',
+        'package:flutter/widgets.dart',
+        'auth_service.dart',
+        // One import of each file, with a prefix of the template's own, for
+        // the icon and the function of the ways to sign in.
+        'package:my_app/fakes/fake_method.dart method0',
+        'package:my_app/fakes/second_method.dart method1',
+      ]);
+      // Without the texts of the app, each label is its English text.
+      expect(methods, [
+        {
+          'label': 'Continue / Continue',
+          'icon': 'FakeIcon',
+          'platforms': ['android', 'iOS'],
+          'issuer': 'https://id.example.com',
+          'revokes': true,
+          'on Android': true,
+          'on iOS': true,
+          'credential': 'IdTokenCredential(https://id.example.com)',
+        },
+        {
+          'label': 'Continue with Example / Continue with Example',
+          'icon': 'FakeIcon',
+          'platforms': ['iOS'],
+          'issuer': 'https://ios.example.com',
+          'revokes': false,
+          'on Android': false,
+          'on iOS': true,
+          'credential': 'IdTokenCredential(https://id.example.com)',
+        },
+        {
+          'label': "Continue with 'Second' / Continue with 'Second'",
+          'icon': 'SecondIcon',
+          'platforms': ['android', 'iOS'],
+          'issuer': 'https://second.example.com',
+          'revokes': false,
+          'on Android': true,
+          'on iOS': true,
+          'credential': 'IdTokenCredential(https://second.example.com)',
+        },
+      ]);
+    });
+
+    test(
+        'reads a label from the texts of the app when the module of the way '
+        'to sign in gave them the text, and is the English text otherwise',
+        () async {
+      const label = LocalizedText(
+        'label',
+        en: 'Continue with Example',
+        translations: {'uk': 'Продовжити з Example'},
+      );
+      final (code, methods) = await _methodsOf(
+        [
+          dataOf(authRole, _method(label: label), module: 'example_sign_in'),
+          dataOf(
+            localizationRole,
+            const TextsData([label]),
+            module: 'example_sign_in',
+          ),
+          // A module that gave the texts of the app no text.
+          dataOf(
+            authRole,
+            _method(issuer: 'https://other.example.com'),
+            module: 'other_sign_in',
+          ),
+        ],
+        present: {localizationRole},
+        texts: _textsFile(['exampleSignInLabel']),
+      );
+
+      expect(
+        [
+          for (final method in methods! as List<Object?>)
+            (method! as Map)['label'],
+        ],
+        [
+          'en exampleSignInLabel / uk exampleSignInLabel',
+          'Continue with Example / Continue with Example',
+        ],
+      );
+      expect(code, contains("import 'package:my_app/core/l10n/l10n.dart';"));
+    });
+
+    test('refuses a label with problems, in every app', () {
+      final broken = _method(label: const LocalizedText('Label', en: ''));
+      for (final present in [
+        <Role>{},
+        {localizationRole},
+      ]) {
+        expect(
+          () => authRole.template.render(
+            inputOf(
+              authRole,
+              data: [
+                dataOf(
+                  authRole,
+                  _implementation(async: false),
+                  module: 'fake_auth',
+                ),
+                dataOf(authRole, broken, module: 'example_sign_in'),
+              ],
+              present: present,
+              choice: AuthMode.required,
+            ),
+          ),
+          throwsArgumentError,
+        );
+      }
+    });
+  });
+
+  group('the template validates the ways to sign in', () {
+    /// What the template reports for an app with [methods], each of a
+    /// module of its own, `sign_in_0`, `sign_in_1` and so on.
+    List<SmfIssue> issuesOf(List<SignInMethod> methods) =>
+        authRole.template.validate(
+          inputOf(
+            authRole,
+            data: [
+              dataOf(
+                authRole,
+                _implementation(async: false),
+                module: 'fake_auth',
+              ),
+              for (final (index, method) in methods.indexed)
+                dataOf(authRole, method, module: 'sign_in_$index'),
+            ],
+          ),
+        );
+    SignInMethod thirdParty(
+      String name, {
+      Set<AppPlatform> platforms = const {AppPlatform.android, AppPlatform.ios},
+    }) =>
+        _method(
+          issuer: 'https://$name.example.com',
+          label: LocalizedText('label', en: 'Continue with $name'),
+          appStore: AppStoreLogin.thirdParty,
+          platforms: platforms,
+        );
+    SignInMethod private({
+      Set<AppPlatform> platforms = const {AppPlatform.ios},
+    }) =>
+        _method(
+          issuer: 'https://private.example.com',
+          platforms: platforms,
+        );
+
+    test(
+        'warns of an app with a login service of a third party on iOS and '
+        'no way to sign in that the App Store takes as its equivalent there',
+        () {
+      final warning = issuesOf([thirdParty('Example')]).single;
+
+      expect(warning.isError, isFalse);
+      expect(warning.category, WarningCategory.composition);
+      expect(warning.code, AuthRole.noEquivalentSignInWarning);
+      expect(warning.code, 'auth.no_equivalent_sign_in');
+      expect(SmfIssue.isWarningCode(warning.code!), isTrue);
+      expect(warning.origin, isNull);
+      expect(
+        warning.message,
+        'The app offers Continue with Example on iOS, a login service of a '
+        'third party, but no way to sign in that the App Store takes as an '
+        'equivalent: one that asks for no more than the name and the email '
+        'address of the user and lets the user keep the address private '
+        '(App Store Review Guideline 4.8).',
+      );
+      expect(
+        warning.hint,
+        'Add such a way to sign in on iOS, such as Sign in with Apple.',
+      );
+      expect(
+        issuesOf([thirdParty('One'), thirdParty('Two'), thirdParty('Three')])
+            .single
+            .message,
+        startsWith(
+          'The app offers Continue with One, Continue with Two and Continue '
+          'with Three on iOS, login services of third parties, but',
+        ),
+      );
+      // The equivalent on Android only is none on iOS.
+      expect(
+        issuesOf([
+          thirdParty('Example'),
+          private(platforms: const {AppPlatform.android}),
+        ]).single.code,
+        AuthRole.noEquivalentSignInWarning,
+      );
+    });
+
+    test(
+        'warns of nothing with an equivalent on iOS, with a login service of '
+        'a third party on Android only, and without one', () {
+      expect(issuesOf([thirdParty('Example'), private()]), isEmpty);
+      expect(issuesOf([private(), thirdParty('Example')]), isEmpty);
+      expect(
+        issuesOf([
+          thirdParty('Example', platforms: const {AppPlatform.android}),
+        ]),
+        isEmpty,
+      );
+      expect(issuesOf([private()]), isEmpty);
+      expect(issuesOf(const []), isEmpty);
+    });
+
+    test(
+        'reports two modules with ways to sign in of one issuer, which the '
+        'app would show two buttons for', () {
+      final issues = issuesOf([_method(), _method(), _method()]);
+
+      expect([
+        for (final issue in issues) issue.origin,
+      ], const [
+        ModuleOrigin(ModuleId('sign_in_1')),
+        ModuleOrigin(ModuleId('sign_in_2')),
+      ]);
+      expect(
+        issues.first.message,
+        'The modules sign_in_0 and sign_in_1 both give the authentication '
+        'role a way to sign in of https://id.example.com, so the app would '
+        'show two buttons for one identity provider.',
+      );
+      expect(issues.first.isError, isTrue);
+      // The module rule of the module reports two of its own.
+      expect(
+        authRole.template.validate(
+          inputOf(
+            authRole,
+            data: [
+              dataOf(authRole, _method(), module: 'example_sign_in'),
+              authRole.data(_method()).withOrigin(
+                    const ModuleOrigin(
+                      ModuleId('example_sign_in'),
+                      variant: ModuleId('bloc'),
+                    ),
+                  ),
+            ],
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('reports a way to sign in that the template of a role gives', () {
+      final issue = authRole.template
+          .validate(
+            inputOf(
+              authRole,
+              data: [
+                authRole.data(_method()).withOrigin(
+                      RoleTemplateOrigin(_otherRole),
+                    ),
+              ],
+            ),
+          )
+          .single;
+
+      expect(issue.isError, isTrue);
+      expect(issue.origin, RoleTemplateOrigin(_otherRole));
+      expect(
+        issue.message,
+        'The way to sign in of https://id.example.com comes from '
+        'role:account_screens, but only a module gives the authentication '
+        'role a way to sign in.',
+      );
+    });
+  });
+
+  group('the module rule auth.methods', () {
+    final brick = _brick([_methodPath]);
+    final method = authRole.data(_method());
+    final texts = localizationRole.data(TextsData([_method().label]));
+
+    test(
+        'accepts ways to sign in whose functions the bricks of the module '
+        'generate, of a module that requires or provides the role', () {
+      expect(_methodModuleIssues([brick, method, texts]), isEmpty);
+      expect(
+        _methodModuleIssues(
+          [brick, method, authRole.data(_implementation(async: false))],
+          module: _provider,
+        ),
+        isEmpty,
+      );
+      // A module that only uses the role and gives it no way to sign in.
+      expect(_methodModuleIssues(const [], module: _feature), isEmpty);
+    });
+
+    test(
+        'rejects a way to sign in of a module that neither requires nor '
+        'provides the role, whose function would be in an app without the '
+        'files of the role', () {
+      final issue =
+          _methodModuleIssues([brick, method], module: _feature).single;
+
+      expect(issue.origin, const ModuleOrigin(ModuleId('profile')));
+      expect(
+        issue.message,
+        'The module gives the authentication role a way to sign in, but '
+        'neither requires nor provides the role, so its function would be in '
+        'an app without the files of the role that it uses.',
+      );
+      expect(issue.hint, 'Add the role to the requires of the module.');
+    });
+
+    test(
+        'rejects a way to sign in with problems, a label with translations '
+        'of a module without the texts of the app, and two ways to sign in '
+        'of one issuer', () {
+      const plain = ModuleDescriptor(
+        id: ModuleId('example_sign_in'),
+        description: 'Sign-in with an example identity provider',
+        kind: ModuleKinds.infrastructure,
+        requires: {authRole},
+      );
+      final issues = _methodModuleIssues(
+        [
+          brick,
+          authRole.data(_method(issuer: 'http://id.example.com')),
+          authRole.data(
+            _method(
+              label: const LocalizedText(
+                'label',
+                en: 'Continue',
+                translations: {'uk': 'Продовжити'},
+              ),
+            ),
+          ),
+          method,
+        ],
+        module: plain,
+      );
+
+      expect(
+        [for (final issue in issues) issue.message],
+        [
+          contains('must be an https URL'),
+          contains('has a translation into uk, but the module '
+              'example_sign_in does not list the localization role'),
+          'The module gives two ways to sign in of https://id.example.com.',
+        ],
+      );
+      for (final issue in issues) {
+        expect(issue.origin, const ModuleOrigin(ModuleId('example_sign_in')));
+      }
+    });
+
+    test(
+        'rejects a function and an icon in files that the bricks of the '
+        'module do not generate', () {
+      final issues = _methodModuleIssues([method, texts]);
+
+      expect(
+        [for (final issue in issues) (issue.message, issue.hint, issue.path)],
+        [
+          (
+            'The function fakeCredential of the way to sign in of '
+                'https://id.example.com is in lib/fakes/fake_method.dart, '
+                'which the bricks of the module do not generate.',
+            'Generate the file of the function in a brick of the module.',
+            _methodPath,
+          ),
+          (
+            'The icon FakeIcon of the way to sign in of '
+                'https://id.example.com is in lib/fakes/fake_method.dart, '
+                'which the bricks of the module do not generate.',
+            'Generate the file of the icon in a brick of the module.',
+            _methodPath,
+          ),
+        ],
+      );
+    });
+  });
+
+  group('the structural rule auth.method_functions', () {
+    /// The issues of the structural rules of the role in an app with the
+    /// way to sign in of the module `example_sign_in`, [method], and with
+    /// [files], each with its owner, or with the module as its owner.
+    List<SmfIssue> issuesOf(
+      List<DartFileIndex> files, {
+      SignInMethod? method,
+      Map<String, ContributionOrigin> owners = const {},
+    }) =>
+        authRole
+            .checkStructure(
+              StructuralRuleRequest(
+                hook: RoleHookRequest(
+                  data: [
+                    dataOf(
+                      authRole,
+                      method ?? _method(),
+                      module: 'example_sign_in',
+                    ),
+                  ],
+                  presentRoles: {authRole},
+                  context: testContext,
+                ),
+                files: {for (final file in files) file.path: file},
+                owners: {
+                  for (final file in files)
+                    file.path: const ModuleOrigin(ModuleId('example_sign_in')),
+                  ...owners,
+                },
+              ),
+            )
+            .where((issue) => issue.path == _methodPath)
+            .toList();
+
+    /// The file of the function of the way to sign in, which declares it
+    /// with [type] and [parameters], and imports the file of the session
+    /// and invokes [invocations].
+    DartFileIndex functionFile({
+      String? type = 'Future<SignInCredential?>',
+      List<IndexedParameter> parameters = const [],
+      List<IndexedInvocation> invocations = const [],
+      List<IndexedReference> references = const [],
+    }) =>
+        DartFileIndex(
+          path: _methodPath,
+          imports: const [
+            IndexedImport('package:my_app/core/auth/app_session.dart'),
+          ],
+          declarations: [
+            IndexedDeclaration(
+              name: 'fakeCredential',
+              kind: DeclarationKind.function,
+              type: type,
+              parameters: parameters,
+            ),
+            _fakeIcon,
+          ],
+          invocations: invocations,
+          references: references,
+        );
+
+    test(
+        'accepts a function that returns a Future of a credential that may '
+        'be null and takes no arguments, in a file that uses the session '
+        'only for its types', () {
+      expect(issuesOf([functionFile()]), isEmpty);
+      expect(
+        issuesOf([functionFile(type: 'Future<IdTokenCredential?>')]),
+        isEmpty,
+      );
+      expect(
+        issuesOf([
+          functionFile(
+            invocations: const [IndexedInvocation('IdTokenCredential')],
+          ),
+        ]),
+        isEmpty,
+      );
+    });
+
+    test(
+        'rejects a function that returns no Future of a credential that '
+        'may be null, or requires arguments', () {
+      const hint = 'The screens of sign-in and appSession.deleteAccount() '
+          'call it without arguments, and await a credential or null.';
+      final issues = {
+        for (final (name, file) in [
+          ('a credential', functionFile(type: 'Future<SignInCredential>')),
+          ('no Future', functionFile(type: 'SignInCredential?')),
+          ('no type', functionFile(type: null)),
+          (
+            'an argument',
+            functionFile(
+              parameters: const [
+                IndexedParameter(
+                  'hint',
+                  kind: ParameterKind.requiredPositional,
+                ),
+              ],
+            ),
+          ),
+        ])
+          name: [
+            for (final issue in issuesOf([file])) ...[
+              issue.message,
+              if (issue.hint != hint) 'another hint',
+            ],
+          ],
+      };
+
+      const notNullable = 'function fakeCredential() in '
+          'lib/fakes/fake_method.dart must return a Future of a credential '
+          'that may be null, such as Future<SignInCredential?>, not '
+          'Future<SignInCredential>.';
+      expect(issues, {
+        'a credential': [notNullable],
+        'no Future': [contains('not SignInCredential?.')],
+        'no type': [contains('not an undeclared type.')],
+        'an argument': [contains('fakeCredential')],
+      });
+    });
+
+    test(
+        'rejects a missing function, and a function in a file of another '
+        'module', () {
+      expect(
+        issuesOf([
+          const DartFileIndex(path: _methodPath, declarations: [_fakeIcon]),
+        ]).single.message,
+        contains('does not declare function fakeCredential()'),
+      );
+      expect(
+        [
+          for (final issue in issuesOf(
+            [functionFile()],
+            owners: {_methodPath: const ModuleOrigin(ModuleId('other'))},
+          ))
+            issue.message,
+        ],
+        contains(
+          'The function fakeCredential of the way to sign in of '
+          'https://id.example.com of example_sign_in is in '
+          'lib/fakes/fake_method.dart, a file of other; a way to sign in '
+          'calls a function of its own module.',
+        ),
+      );
+    });
+
+    test(
+        'rejects a file of the function that uses appSession, which calls '
+        'the function within its own calls', () {
+      for (final file in [
+        // As the index of a file has `appSession.signInWith(credential)`.
+        functionFile(
+          invocations: const [
+            IndexedInvocation('signInWith', target: 'appSession'),
+          ],
+          references: const [IndexedReference('appSession')],
+        ),
+        // And `session.appSession.value`, after an import with a prefix.
+        const DartFileIndex(
+          path: _methodPath,
+          imports: [
+            IndexedImport(
+              'package:my_app/core/auth/app_session.dart',
+              prefix: 'session',
+            ),
+          ],
+          declarations: [
+            IndexedDeclaration(
+              name: 'fakeCredential',
+              kind: DeclarationKind.function,
+              type: 'Future<SignInCredential?>',
+            ),
+            _fakeIcon,
+          ],
+          memberAccesses: [IndexedMemberAccess('session', 'appSession')],
+        ),
+      ]) {
+        final issue = issuesOf([file]).single;
+        expect(
+          issue.message,
+          'lib/fakes/fake_method.dart, the file of the function '
+          'fakeCredential of the way to sign in of https://id.example.com, '
+          'uses appSession, which calls that function within its own calls '
+          'when it deletes an account, so a call of appSession there would '
+          'wait for itself.',
+        );
+        expect(issue.origin, const ModuleOrigin(ModuleId('example_sign_in')));
+      }
+    });
+
+    test('leaves a function and an icon of a package to the compiler', () {
+      expect(
+        issuesOf(
+          const [],
+          method: const SignInMethod(
+            label: LocalizedText('label', en: 'Continue with Example'),
+            icon: TypeRef(
+              'ExampleIcon',
+              import: ImportRef('package:example/example.dart'),
+            ),
+            platforms: {AppPlatform.ios},
+            credential: FunctionRef(
+              'credential',
+              import: ImportRef('package:example/example.dart'),
+            ),
+            issuer: _issuer,
+            appStore: AppStoreLogin.privacyFocused,
+          ),
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  group('the generated session signs in with a credential', () {
+    late DartFiles app;
+
+    setUpAll(() async => app = await _app());
+
+    tearDownAll(() => app.delete());
+
+    test(
+        'signs in a user who is not signed in and the user of an account, '
+        'gives an anonymous user a new identity with the same id, and signs '
+        'an anonymous user in to the account of an identity that has one, '
+        'with the same credential, moving the data of the guest', () async {
+      const issuer = 'https://id.example.com';
+      const signIn = 'signInWith IdTokenCredential($issuer)';
+      const link = 'linkWith IdTokenCredential($issuer)';
+      Map<String, Object?> note(
+        String state,
+        List<String> calls, {
+        String issuers = issuer,
+        String? failure,
+      }) =>
+          {
+            'calls': calls,
+            'state': state,
+            'issuers': issuers,
+            if (failure != null) 'failure': failure,
+          };
+
+      expect(await app.run('$_notes$_signInWith'), {
+        'a user who is not signed in': note('account user-1 null', [signIn]),
+        'the user of an account, with another identity':
+            note('account user-2 null', [signIn]),
+        'the first identity again': {
+          ...note('account user-1 null', [signIn]),
+          'the same user': true,
+        },
+        'the issuers cannot change': startsWith('no AuthFailure: Unsupported'),
+        'an anonymous user, with a new identity': {
+          ...note('account user-3 null', [link]),
+          'keeps the id': true,
+        },
+        'an anonymous user, with the identity of another user': {
+          ...note(
+            'account user-3 null',
+            [link, 'take user-4', signIn, 'give user-3'],
+          ),
+          'the sign-in got the credential of the link': true,
+        },
+        'an anonymous user, with an identity whose address has an account':
+            note(
+          'account user-6 null',
+          [link, 'take user-5', signIn, 'give user-6'],
+        ),
+        // The anonymous user stays, and nothing was given.
+        'the sign-in after the link fails too': note(
+          'anonymous user-7',
+          [link, 'take user-7', signIn],
+          issuers: '-',
+          failure: 'accountExistsWithOtherMethod, hint null, thrown in '
+              'fake_auth.dart',
+        ),
+        'a link that fails with another reason': note(
+          'anonymous user-8',
+          [link],
+          issuers: '-',
+          failure: 'network, hint null, thrown in fake_auth.dart',
+        ),
+        'a link that fails with an error of another kind': note(
+          'anonymous user-9',
+          [link],
+          issuers: '-',
+          failure: 'unknown, hint Bad state: The link broke., thrown in '
+              'fake_auth.dart',
+        ),
+        // The sign-out waits for the sign-in to the account of the
+        // identity, and the app then has a new anonymous user.
+        'a sign-out while the link waits': {
+          'calls while the link waits': [link],
+          ...note(
+            'anonymous user-11',
+            [
+              'take user-10',
+              signIn,
+              'give user-3',
+              'signOut',
+              'signInAnonymously',
+            ],
+            issuers: '-',
+          ),
+        },
+      });
+    });
+  });
+
+  group('the generated session deletes an account of a way to sign in', () {
+    late DartFiles app;
+
+    setUpAll(() async => app = await _app(methods: _deletionMethods));
+
+    tearDownAll(() => app.delete());
+
+    test('is code that type-checks', () async {
+      expect(await app.analysisProblems(), isEmpty);
+    });
+
+    test(
+        'asks a way to sign in of the account that revokes and is available '
+        'for a credential again first, within its call, and gives it to the '
+        'service; deletes nothing when the user closes the sheet, which is '
+        'no failure, nor when that way to sign in or the service fails',
+        () async {
+      const fresh =
+          'deleteAccount fresh IdTokenCredential(https://id.example.com)';
+      const account = 'account account null';
+      const none = 'none';
+      Map<String, Object?> note(
+        List<String> calls, {
+        String state = 'signed out',
+        String failure = none,
+        bool? got,
+      }) =>
+          {
+            'calls': calls,
+            'state': state,
+            'failure': failure,
+            if (got != null)
+              'the service got the credential of the way to sign in': got,
+          };
+
+      expect(await app.run('$_notes$_revokingDeletion'), {
+        'a way to sign in that revokes, on its platform':
+            note(['credential', fresh], got: true),
+        'the same way to sign in on another platform': note(['deleteAccount']),
+        'two that revoke, on the platform of the second only':
+            note(['credential', fresh], got: true),
+        'a way to sign in that does not revoke': note(['deleteAccount']),
+        'no way to sign in': note(['deleteAccount']),
+        'the user closes the sheet': note(['credential'], state: account),
+        'the way to sign in fails': note(
+          ['credential'],
+          state: account,
+          failure: 'notConfigured, hint Set up the capability., thrown in '
+              'fake_method.dart',
+        ),
+        'the way to sign in throws another error': note(
+          ['credential'],
+          state: account,
+          failure: 'unknown, hint Bad state: The sheet broke., thrown in '
+              'fake_method.dart',
+        ),
+        'the revocation fails': note(
+          ['credential', fresh],
+          state: account,
+          failure: 'notConfigured, hint Set up the key., thrown in '
+              'fake_auth.dart',
+          got: true,
+        ),
+        'in the anonymous mode': note(
+          ['credential', fresh, 'signInAnonymously'],
+          state: 'anonymous user-1',
+          got: true,
+        ),
+        // The sign-out waits for the deletion.
+        'a call while the way to sign in asks': {
+          'calls while it asks': ['credential'],
+          'calls': [fresh, 'signOut'],
+        },
+      });
+    });
+  });
+
+  group('the ways to sign in in the section of the auth role in the README',
+      () {
+    /// The section of the README of the app with [methods].
+    Future<String> sectionWith(List<SignInMethod> methods) async {
+      final rendered = await _rendered(methods: methods);
+      return rendered.elsewhere
+          .singleWhere((entry) => entry.socket == AppEntryRole.readmeSections)
+          .entryValue! as String;
+    }
+
+    test(
+        'tells in an app without ways to sign in where one goes, after what '
+        'it tells of the mode and of the data of a guest', () async {
+      final section = await sectionWith(const []);
+
+      expect(
+        section,
+        endsWith(
+          'As generated it moves nothing.\n\n'
+          'Besides an email address and a password, the app signs in with no '
+          'identity provider, such as the account of a user at another '
+          'service. Such a way to sign in is a `SignInMethod` of '
+          '`appSignInMethods` in `lib/core/auth/sign_in_methods.dart`, which '
+          'the module of the way to sign in adds.\n',
+        ),
+      );
+    });
+
+    test(
+        'lists the ways to sign in of the app with their platforms, tells '
+        'what the deletion of an account of one that revokes asks, and what '
+        'an anonymous user gets', () async {
+      final section = await sectionWith([
+        _method(revokes: true, platforms: const {AppPlatform.ios}),
+        _method(
+          issuer: 'https://other.example.com',
+          label: const LocalizedText('label', en: 'Continue with Other'),
+          appStore: AppStoreLogin.thirdParty,
+        ),
+      ]);
+
+      expect(
+        section,
+        endsWith(
+          'Besides an email address and a password, the app signs in with '
+          'these identity providers, the ways to sign in of '
+          '`appSignInMethods` in `lib/core/auth/sign_in_methods.dart`:\n'
+          '\n'
+          '- Continue with Example, on iOS. Deleting an account that signs in '
+          'this way asks the identity provider for a credential again first, '
+          'so that the provider of sign-in can revoke the tokens that it gave '
+          'the app. If the user closes its sheet, nothing is deleted.\n'
+          '- Continue with Other, on Android and iOS.\n'
+          '\n'
+          'A screen of sign-in shows the button of a way to sign in only on '
+          'the platforms that it works on. When an anonymous user signs in '
+          'this way and no account has the identity yet, the user gets the '
+          'identity and keeps the id. Otherwise the user signs in to that '
+          'account, as with a password, and `takeGuestData()` moves what the '
+          'anonymous user had. The sign-in may also fail, because the address '
+          'of the identity has an account that signs in in another way: the '
+          'provider of sign-in decides which.\n',
+        ),
+      );
+    });
+
+    test(
+        'tells what the App Store asks when the app has a login service of '
+        'a third party on iOS and no equivalent, as the warning does',
+        () async {
+      const asks = 'On iOS, the App Store asks an app that offers a login '
+          'service of a third party to offer an equivalent one too, one that '
+          'asks for no more than the name and the email address of the user '
+          'and lets the user keep the address private (App Store Review '
+          'Guideline 4.8). This app offers none on iOS, so the review may '
+          'reject it until it does.\n';
+      final thirdParty = _method(
+        issuer: 'https://other.example.com',
+        appStore: AppStoreLogin.thirdParty,
+      );
+
+      expect(await sectionWith([thirdParty]), endsWith('which.\n\n$asks'));
+      expect(await sectionWith([thirdParty, _method()]), isNot(contains(asks)));
+      expect(
+        await sectionWith([
+          _method(
+            issuer: 'https://other.example.com',
+            appStore: AppStoreLogin.thirdParty,
+            platforms: const {AppPlatform.android},
+          ),
+        ]),
+        isNot(contains(asks)),
+      );
+    });
+  });
+
+  group('the structural rule auth.method_icons', () {
+    /// The issues of the structural rules of the role in an app with the
+    /// way to sign in of the module `example_sign_in` and with the file of
+    /// its function and its icon, which declares [icon], owned by [owner].
+    List<SmfIssue> issuesWith(
+      IndexedDeclaration? icon, {
+      ContributionOrigin owner =
+          const ModuleOrigin(ModuleId('example_sign_in')),
+    }) =>
+        authRole.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: [dataOf(authRole, _method(), module: 'example_sign_in')],
+              presentRoles: {authRole},
+              context: testContext,
+            ),
+            files: {
+              _methodPath: DartFileIndex(
+                path: _methodPath,
+                declarations: [
+                  const IndexedDeclaration(
+                    name: 'fakeCredential',
+                    kind: DeclarationKind.function,
+                    type: 'Future<SignInCredential?>',
+                  ),
+                  if (icon != null) icon,
+                ],
+              ),
+            },
+            owners: {_methodPath: owner},
+          ),
+        );
+
+    test(
+        'accepts an icon that is a class with a const unnamed constructor '
+        'that requires no arguments', () {
+      expect(issuesWith(_fakeIcon), isEmpty);
+    });
+
+    test(
+        'rejects a missing class, one without a const constructor, and one '
+        'whose constructor requires an argument, which the list cannot '
+        'create as a constant', () {
+      const hint = 'The list of the ways to sign in creates the icon as a '
+          'constant, without arguments.';
+      final issues = {
+        for (final (name, icon) in [
+          ('missing', null),
+          (
+            'not const',
+            const IndexedDeclaration(
+              name: 'FakeIcon',
+              kind: DeclarationKind.classType,
+              constructors: [IndexedConstructor()],
+            ),
+          ),
+          (
+            'an argument',
+            const IndexedDeclaration(
+              name: 'FakeIcon',
+              kind: DeclarationKind.classType,
+              constructors: [
+                IndexedConstructor(
+                  isConst: true,
+                  parameters: [
+                    IndexedParameter(
+                      'size',
+                      kind: ParameterKind.requiredPositional,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ])
+          name: [
+            for (final issue in issuesWith(icon))
+              if (issue.hint == hint) issue.message,
+          ],
+      };
+
+      expect(issues, {
+        'missing': [contains('does not declare class FakeIcon')],
+        'not const': [contains('FakeIcon')],
+        'an argument': [contains('FakeIcon')],
+      });
+    });
+
+    test('rejects an icon in a file of another module', () {
+      expect(
+        [
+          for (final issue in issuesWith(
+            _fakeIcon,
+            owner: const ModuleOrigin(ModuleId('other')),
+          ))
+            issue.message,
+        ],
+        contains(
+          'The icon FakeIcon of the way to sign in of https://id.example.com '
+          'of example_sign_in is in lib/fakes/fake_method.dart, a file of '
+          'other; a way to sign in shows an icon of its own module.',
+        ),
       );
     });
   });

@@ -24,7 +24,8 @@ abstract base class RoleProvider<D extends Object> {
   /// problems found.
   ///
   /// It runs before [RoleTemplate.choose], so [RoleHookInput.choice] is
-  /// `null`.
+  /// `null`. A warning among the problems is about what the app is made of,
+  /// with a code of the role (see [SmfIssue.code]).
   List<SmfIssue> validate(RoleHookInput<D> input) => const [];
 
   /// Returns the fragments, the variables of the module's bricks and the

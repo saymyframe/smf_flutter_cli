@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/src/render.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -50,9 +51,11 @@ RoutesData _routes(String name) => RoutesData([
     ]);
 
 void main() {
+  // Its option is not --start, which is the router's: the app entry uses
+  // the router, so every registry has it.
   final nav = TestRole<String>(
     'nav',
-    options: const [RoleOption(name: 'start', help: 'Start')],
+    options: const [RoleOption(name: 'entry', help: 'Entry')],
     template: TestTemplate(choice: 'the start'),
   );
 
@@ -69,7 +72,7 @@ void main() {
         modules: [for (final id in modules) ModuleId(id)],
         strict: strict,
         explain: explain,
-        roleOptions: const {'start': '/home'},
+        roleOptions: const {'entry': '/home'},
       );
 
   test('plans an app', () async {
@@ -218,6 +221,7 @@ void main() {
             providers: [const RoleProvider.plain(appEntryRole)],
             contributions: [
               entryBrick(),
+              fallbackBrick(),
               AppEntryRole.iosDeploymentTarget.value('13.0'),
               const PubspecContribution.environment(sdk: '^3.8.1'),
               const PubspecContribution.sdk('flutter'),
@@ -705,6 +709,101 @@ void main() {
     });
   });
 
+  test(
+      'renders only the bricks and the data whose conditions on what the '
+      'roles chose hold', () async {
+    final hours = TestRole<String>(
+      'hours',
+      options: const [RoleOption(name: 'hours', help: 'Hours')],
+      template: _HoursTemplate(),
+    );
+    final twelve = ChoiceCondition(
+      hours,
+      'the clock shows 12 hours',
+      holdsFor: (choice) => choice == '12',
+      withoutRole: false,
+    );
+    final labelsTemplate = _LabelsTemplate();
+    final labels = TestRole<String>('labels', template: labelsTemplate);
+    final modules = [
+      scaffold(),
+      TestModule(
+        'face',
+        uses: {hours, labels},
+        contributions: [
+          labels.data('always'),
+          labels.data('noon', whenChosen: {twelve}),
+          BrickContribution(
+            bundle('dial', files: {'lib/dial.dart': 'class Dial {}\n'}),
+            whenChosen: {twelve},
+          ),
+        ],
+      ),
+      // The labels choose first, unless their data waits for the hours.
+      TestModule('tags', providers: [RoleProvider.plain(labels)]),
+      TestModule('clock', providers: [RoleProvider.plain(hours)]),
+    ];
+
+    Future<(GenerationPlan, RenderedApp)> run(String value) async {
+      final plan = (await pipeline(modules, FakeHost()).plan(
+        CreateRequest(
+          appName: 'my_app',
+          modules: const [
+            ModuleId('face'),
+            ModuleId('tags'),
+            ModuleId('clock'),
+          ],
+          roleOptions: {'hours': value},
+        ),
+      ))!;
+      await plan.environment.dispose();
+      final app = renderApp(
+        registry: ModuleRegistry(modules),
+        resolution: plan.resolution,
+        collection: plan.collection,
+        context: plan.context,
+        choices: plan.choices,
+        pubspec: plan.pubspec,
+      );
+      return (plan, app);
+    }
+
+    final (twelveHours, withDial) = await run('12');
+    expect(twelveHours.choices[hours], '12');
+    expect(
+      twelveHours.collection.roleData.map((data) => data.value),
+      ['always', 'noon'],
+    );
+    expect(withDial.files['lib/dial.dart']!.text, 'class Dial {}\n');
+    expect(
+      withDial.files['lib/labels.dart']!.text,
+      "const labels = 'always, noon';\n",
+    );
+
+    final (twentyFourHours, withoutDial) = await run('24');
+    expect(twentyFourHours.choices[hours], '24');
+    expect(
+      twentyFourHours.collection.roleData.map((data) => data.value),
+      ['always'],
+    );
+    expect(withoutDial.files.containsKey('lib/dial.dart'), isFalse);
+    expect(
+      withoutDial.files['lib/labels.dart']!.text,
+      "const labels = 'always';\n",
+    );
+    // The choice of the labels read only the data whose conditions held.
+    expect(
+      [
+        for (final context in labelsTemplate.chosen)
+          [for (final data in context.data) data.value],
+      ],
+      [
+        ['always', 'noon'],
+        ['always'],
+      ],
+    );
+  });
+
   test('strict mode fails on every error', () async {
     final modules = [
       scaffold(),
@@ -824,11 +923,375 @@ void main() {
     );
   });
 
-  test('the line of a warning has all of it but the severity', () {
+  group('--strict and the warnings about what the app is made of', () {
+    const noStart = SmfIssue.warning(
+      'No screen to start on.',
+      code: 'watch.no_start',
+    );
+    const noTabs = SmfIssue.warning(
+      'No main navigation.',
+      code: 'watch.no_tabs',
+    );
+
+    /// A module that provides the role `watch`, whose template reports
+    /// [validated] from its validation and [chosen] from its choice, and
+    /// that has [check] among its checks of the machine.
+    TestModule watcher({
+      List<SmfIssue> validated = const [],
+      List<SmfIssue> chosen = const [],
+      TestCheck? check,
+    }) =>
+        TestModule(
+          'watcher',
+          providers: [
+            RoleProvider.plain(
+              TestRole<String>(
+                'watch',
+                template: TestTemplate(issues: validated, warnings: chosen),
+              ),
+            ),
+          ],
+          contributions: [
+            if (check != null) Preflight([check]),
+          ],
+        );
+
+    /// A run on [host] of the app with [watcher], which generates the app.
+    Future<GeneratedApp?> create(
+      TestModule watcher,
+      FakeHost host, {
+      bool strict = false,
+      Set<String> allowed = const {},
+      bool explain = false,
+    }) =>
+        pipeline([scaffold(), watcher], host).run(
+          CreateRequest(
+            appName: 'my_app',
+            modules: const [ModuleId('watcher')],
+            strict: strict,
+            allowedWarnings: allowed,
+            explain: explain,
+          ),
+        );
+
+    /// What a run that stops throws: [message] with [issues].
+    Matcher stops(String message, List<String> issues) => throwsA(
+          isA<GenerationFailedException>()
+              .having((e) => e.message, 'message', message)
+              .having(
+                (e) => [for (final issue in e.issues) '$issue'],
+                'issues',
+                issues,
+              ),
+        );
+
+    const stoppedByOne = 'Generation stopped because of a warning about the '
+        'app. Without --strict, the run goes on after it.';
+    const noStartLine = 'warning [role:watch] watch.no_start: No screen to '
+        'start on.';
+    const noTabsLine =
+        'warning [role:watch] watch.no_tabs: No main navigation.';
+
+    test(
+        'a warning of a validation stops a strict run before the machine is '
+        'checked, with the warning, and a run without --strict goes on',
+        () async {
+      TestCheck tool() => TestCheck(
+            'cli',
+            status: const PreflightMissing(instructions: 'Install it.'),
+            afterInstall: const PreflightPassed(),
+          );
+
+      final host = FakeHost(processRunner: RecordingRunner());
+      final strictTool = tool();
+      await expectLater(
+        create(
+          watcher(validated: [noStart], check: strictTool),
+          host,
+          strict: true,
+        ),
+        stops(stoppedByOne, [noStartLine]),
+      );
+      // It stopped before the machine was checked, so nothing could be
+      // installed, and it printed the warning only as the cause.
+      expect(strictTool.checks, 0);
+      expect(host.logger.warnings, isEmpty);
+      expect(host.fileSystem.directory('/work/my_app').existsSync(), isFalse);
+
+      final lenient = FakeHost(processRunner: RecordingRunner());
+      final app = await create(
+        watcher(validated: [noStart], check: tool()),
+        lenient,
+      );
+      expect(app?.path, '/work/my_app');
+      expect(
+        lenient.logger.warnings,
+        contains('[role:watch]: No screen to start on.'),
+      );
+    });
+
+    test(
+        'a warning of a choice stops a strict run before the app is '
+        'rendered, and a run without --strict goes on', () async {
+      final runner = RecordingRunner();
+      final host = FakeHost(processRunner: runner);
+      await expectLater(
+        create(watcher(chosen: [noStart]), host, strict: true),
+        stops(stoppedByOne, [noStartLine]),
+      );
+      expect(
+        host.logger.progresses,
+        isNot(contains('start: Rendering the app')),
+      );
+      expect(runner.calls, isEmpty);
+      expect(host.fileSystem.directory('/work/my_app').existsSync(), isFalse);
+
+      final lenient = FakeHost(processRunner: RecordingRunner());
+      final app = await create(watcher(chosen: [noStart]), lenient);
+      expect(app?.path, '/work/my_app');
+      expect(
+        lenient.logger.warnings,
+        ['[role:watch]: No screen to start on.'],
+      );
+    });
+
+    test(
+        'a strict run goes on after a warning whose code --allow-warning '
+        'names, which it prints once, and stops on another code', () async {
+      final host = FakeHost(processRunner: RecordingRunner());
+      final app = await create(
+        watcher(validated: [noStart], chosen: [noStart]),
+        host,
+        strict: true,
+        allowed: {'watch.no_start', 'watch.other'},
+      );
+
+      expect(app?.path, '/work/my_app');
+      expect(host.logger.warnings, ['[role:watch]: No screen to start on.']);
+
+      await expectLater(
+        create(
+          watcher(validated: [noStart, noTabs]),
+          FakeHost(processRunner: RecordingRunner()),
+          strict: true,
+          allowed: {'watch.no_start'},
+        ),
+        stops(stoppedByOne, [
+          noTabsLine,
+        ]),
+      );
+    });
+
+    test(
+        'a strict run tells how many warnings and errors stopped it, all of '
+        'which lenient mode reports', () async {
+      await expectLater(
+        create(
+          watcher(validated: [noStart, noTabs]),
+          FakeHost(),
+          strict: true,
+        ),
+        stops(
+          'Generation stopped because of 2 warnings about the app. Without '
+          '--strict, the run goes on after them.',
+          [noStartLine, noTabsLine],
+        ),
+      );
+
+      // An error of the template of a role stops lenient mode too, which
+      // reports the warnings.
+      const broken = SmfIssue('The data is broken.');
+      final validated = watcher(validated: [noStart, broken, noTabs]);
+      await expectLater(
+        create(validated, FakeHost(), strict: true),
+        stops(
+          'Generation stopped because of an error and 2 warnings about the '
+          'app.',
+          [
+            noStartLine,
+            'error [role:watch]: The data is broken.',
+            noTabsLine,
+          ],
+        ),
+      );
+      await expectLater(
+        create(
+          watcher(validated: [noStart, broken, broken, noTabs]),
+          FakeHost(),
+          strict: true,
+          allowed: {'watch.no_tabs'},
+        ),
+        stops(
+          'Generation stopped because of 2 errors and a warning about the '
+          'app.',
+          [
+            noStartLine,
+            'error [role:watch]: The data is broken.',
+            'error [role:watch]: The data is broken.',
+          ],
+        ),
+      );
+
+      final lenient = FakeHost();
+      await expectLater(
+        create(validated, lenient),
+        stops(
+          'Generation stopped because of an error.',
+          ['error [role:watch]: The data is broken.'],
+        ),
+      );
+      expect(lenient.logger.warnings, [
+        '[role:watch]: No screen to start on.',
+        '[role:watch]: No main navigation.',
+      ]);
+    });
+
+    test(
+        'an option of a role that the app lacks stops a strict run before '
+        'the machine is checked, since the command line asks for a role that '
+        'the app does not have, and --explain tells of it', () async {
+      final tool = TestCheck(
+        'cli',
+        status: const PreflightMissing(instructions: 'Install it.'),
+      );
+      final modules = [
+        scaffold(),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule(
+          'fine',
+          contributions: [
+            Preflight([tool]),
+          ],
+        ),
+      ];
+
+      const unused =
+          '--entry has no effect: no module of the app provides the nav role.';
+
+      // The request gives --entry, an option of the nav role.
+      await expectLater(
+        pipeline(modules, FakeHost()).plan(request(['fine'], strict: true)),
+        stops(stoppedByOne, ['warning pipeline.unused_option: $unused']),
+      );
+      // It depends only on the command line and the roles of the app, so
+      // the run stops with the validation.
+      expect(tool.checks, 0);
+
+      final host = FakeHost();
+      final plan = (await pipeline(modules, host).plan(request(['fine'])))!;
+      expect(host.logger.warnings, [
+        unused,
+        '[fine]: Tool cli is missing. Install it.',
+      ]);
+      await plan.environment.dispose();
+
+      final explained = FakeHost();
+      expect(
+        await pipeline(modules, explained)
+            .plan(request(['fine'], explain: true)),
+        isNull,
+      );
+      expect(explained.logger.warnings, [unused]);
+    });
+
+    test('a warning about the machine never stops a strict run', () async {
+      final host = FakeHost(processRunner: RecordingRunner());
+      final app = await create(
+        watcher(
+          check: TestCheck(
+            'cli',
+            status: const PreflightMissing(instructions: 'Install it.'),
+          ),
+        ),
+        host,
+        strict: true,
+      );
+
+      expect(app?.path, '/work/my_app');
+      expect(host.logger.warnings, [
+        '[watcher]: Tool cli is missing. Install it.',
+      ]);
+    });
+
+    test(
+        '--explain with --strict stops on a warning of the validation, as on '
+        'an error, and without --strict it prints the warning', () async {
+      await expectLater(
+        create(
+          watcher(validated: [noStart]),
+          FakeHost(),
+          strict: true,
+          explain: true,
+        ),
+        stops(stoppedByOne, [noStartLine]),
+      );
+
+      final host = FakeHost();
+      expect(
+        await create(watcher(validated: [noStart]), host, explain: true),
+        isNull,
+      );
+      expect(host.logger.warnings, ['[role:watch]: No screen to start on.']);
+      expect(host.logger.infos, contains('Modules'));
+    });
+  });
+
+  test(
+      'reports the warnings of the choices as warnings of the template of '
+      'their role, and stops on one with a code of another role', () async {
+    TestModule watcher(List<SmfIssue> warnings) => TestModule(
+          'watcher',
+          providers: [
+            RoleProvider.plain(
+              TestRole<String>(
+                'watch',
+                template: TestTemplate(warnings: warnings),
+              ),
+            ),
+          ],
+        );
+
+    final host = FakeHost();
+    final warning = watcher(const [
+      SmfIssue.warning('No start screen.', code: 'watch.no_start'),
+    ]);
+    final plan =
+        await pipeline([scaffold(), warning], host).plan(request(['watcher']));
+
+    expect(plan, isNotNull);
+    // With the role, and without the code.
+    expect(host.logger.warnings, ['[role:watch]: No start screen.']);
+
+    final borrowing = watcher(const [
+      SmfIssue.warning('Borrowed.', code: 'nav.borrowed'),
+    ]);
+    await expectLater(
+      pipeline([scaffold(), borrowing], FakeHost()).plan(request(['watcher'])),
+      throwsA(
+        isA<GenerationFailedException>()
+            .having(
+              (e) => e.message,
+              'message',
+              'Generation stopped because of an error.',
+            )
+            .having(
+              (e) => '${e.issues.single}',
+              'issue',
+              'error [role:watch]: The template of the watch role reported a '
+                  'warning with the code "nav.borrowed", which is not a code '
+                  'of the watch role: Borrowed. (A code of the watch role is '
+                  'watch.<name>, with a name in lower snake_case.)',
+            ),
+      ),
+    );
+  });
+
+  test('the line of a warning has all of it but the severity and the code', () {
     expect(
       issueLine(
         const SmfIssue.warning(
           'Unused import.',
+          code: 'imports.unused',
           hint: 'Remove it.',
           origin: ModuleOrigin(ModuleId('home')),
           path: 'lib/main.dart',
@@ -837,14 +1300,16 @@ void main() {
       '[home] lib/main.dart: Unused import. (Remove it.)',
     );
     expect(
-      issueLine(const SmfIssue.warning('Careful.', path: 'lib/a.dart')),
+      issueLine(
+        const SmfIssue.warning('Careful.', code: 'a.b', path: 'lib/a.dart'),
+      ),
       'lib/a.dart: Careful.',
     );
     expect(
-      issueLine(const SmfIssue.warning('Careful.', hint: 'Look.')),
+      issueLine(const SmfIssue.warning('Careful.', code: 'a.b', hint: 'Look.')),
       'Careful. (Look.)',
     );
-    expect(issueLine(const SmfIssue.warning('Careful.')), 'Careful.');
+    expect(issueLine(const SmfIssue.machineWarning('Careful.')), 'Careful.');
   });
 
   test('deletes temporary files when generation fails', () async {
@@ -981,11 +1446,11 @@ void main() {
         contains(
           'Dependencies\n'
           '  core_lib ^1.2.0 (core)\n'
-          '  flutter from the flutter SDK (scaffold)\n\n'
+          '  flutter from the flutter SDK (scaffold, role:app_entry)\n\n'
           'Dev dependencies\n'
           // Code generation needs build_runner, which the pipeline adds.
           '  build_runner ^2.10.0 (pipeline)\n'
-          '  flutter_test from the flutter SDK (core)',
+          '  flutter_test from the flutter SDK (core, role:app_entry)',
         ),
       );
       expect(
@@ -1339,4 +1804,41 @@ void main() {
       );
     });
   });
+}
+
+/// A template that chooses the value of `--hours`, or 24.
+final class _HoursTemplate extends RoleTemplate<String> {
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async =>
+      context.option('hours') ?? '24';
+}
+
+/// A template that writes its data into `lib/labels.dart`, and records the
+/// data that its choice got.
+final class _LabelsTemplate extends RoleTemplate<String> {
+  /// The contexts of [choose], in order.
+  final List<RoleChoiceContext<String>> chosen = [];
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundle(
+            'labels',
+            files: {'lib/labels.dart': "const labels = '{{labels}}';\n"},
+          ),
+        ),
+      ];
+
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async {
+    chosen.add(context);
+    return null;
+  }
+
+  @override
+  RoleOutput render(RoleHookInput<String> input) => RoleOutput(
+        vars: {
+          'labels': [for (final data in input.data) data.value].join(', '),
+        },
+      );
 }

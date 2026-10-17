@@ -182,6 +182,11 @@ final class _VariableImports {
 
 /// Stage 8 of the pipeline: renders the app in memory.
 ///
+/// [collection] is decided by the [choices] (see [Collection.decide]), so a
+/// brick or data whose conditions on what the roles chose do not hold is no
+/// part of the app: the render hooks do not get the data, and the brick is
+/// one that the app leaves out.
+///
 /// 1. Runs the render hooks of the templates and providers of the present
 ///    roles, with the results of [choices]. Their fragments follow the rules
 ///    of the contributions of their owner, and their brick variables must

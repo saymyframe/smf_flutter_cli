@@ -30,7 +30,10 @@ final class StructuralRule<D extends Object> {
 
   final List<SmfIssue> Function(StructuralRuleInput<D> input) _check;
 
-  /// Returns the problems the rule finds in [input].
+  /// Returns the problems the rule finds in [input], which are errors:
+  /// `smf create` runs no structural rule, so the harness reports a warning
+  /// among them as an error. A warning about what the app is made of comes
+  /// from a module rule or a validation hook of the role.
   List<SmfIssue> check(StructuralRuleInput<D> input) => _check(input);
 }
 
@@ -162,7 +165,9 @@ final class ModuleRule<D extends Object> {
 
   final List<SmfIssue> Function(ModuleRuleInput<D> input) _check;
 
-  /// Returns the problems the rule finds in [input].
+  /// Returns the problems the rule finds in [input]. A warning among them
+  /// is about what the app is made of, with a code of the role (see
+  /// [SmfIssue.code]).
   List<SmfIssue> check(ModuleRuleInput<D> input) => _check(input);
 }
 
@@ -208,6 +213,8 @@ final class ModuleRuleInput<D extends Object> {
 
   /// The contributions of the module and its variant that apply in this
   /// app: those whose [Contribution.when] roles, and for [RoleData] whose
-  /// role, are present.
+  /// role, are present. Those with conditions on what roles chose
+  /// ([Contribution.whenChosen]) are among them, since the rules run before
+  /// the roles choose.
   final List<Contribution> contributions;
 }

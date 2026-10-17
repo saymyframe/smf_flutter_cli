@@ -454,9 +454,10 @@ void main() {
         'the services and to reset the container, which disposes of them '
         'and removes them', () {
       List<String> problemsOf(List<String> names) => [
-            for (final issue in diRole.interface.checkSymbols({
-              DiRole.dependenciesFile: dependencies(names),
-            }))
+            for (final issue in diRole.interface.checkSymbols(
+              {DiRole.dependenciesFile: dependencies(names)},
+              appWith({diRole}),
+            ))
               issue.message,
           ];
 

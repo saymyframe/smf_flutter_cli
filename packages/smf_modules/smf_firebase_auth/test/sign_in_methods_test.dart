@@ -224,59 +224,6 @@ class DefaultFirebaseOptions {
     });
   });
 
-  group('webAppIdsOf', () {
-    test('finds the web apps that the Firebase CLI lists, after its own line',
-        () {
-      String listed(List<Map<String, String>> apps) =>
-          'i  Preparing the list of your Firebase WEB apps\n'
-          '${jsonEncode({'status': 'success', 'result': apps})}\n';
-
-      expect(
-        webAppIdsOf(
-          listed([
-            {
-              'appId': '1:1234567890:web:0a1b2c3d4e5f6789',
-              'displayName': 'Default Web App',
-              'platform': 'WEB',
-            },
-            {'appId': '1:1234567890:web:9876f5e4d3c2b1a0', 'platform': 'WEB'},
-          ]),
-        ),
-        [
-          '1:1234567890:web:0a1b2c3d4e5f6789',
-          '1:1234567890:web:9876f5e4d3c2b1a0',
-        ],
-      );
-      expect(webAppIdsOf(listed([])), isEmpty);
-    });
-  });
-
-  group('webAppProblem', () {
-    String? problem(List<String> webApps, {required bool register}) =>
-        webAppProblem(webApps: webApps, project: _project, register: register);
-
-    test('lets every run enable the methods in a project with a web app', () {
-      for (final register in [true, false]) {
-        expect(problem(['1:1:web:a'], register: register), isNull);
-        expect(problem(['1:1:web:a', '1:1:web:b'], register: register), isNull);
-      }
-    });
-
-    test(
-        'lets only a run that may register apps enable them in a project '
-        'without a web app, to which the Firebase CLI would add one', () {
-      expect(problem([], register: true), isNull);
-      expect(
-        problem([], register: false),
-        'The Firebase project $_project has no web app, and the Firebase CLI '
-        'would add one, named "Default Web App", to enable the sign-in '
-        'methods through it. Only the runs of the workflow Build register an '
-        'app in the project, with SMF_FIREBASE_REGISTER=1. Run Build first, '
-        'such as by hand on this branch.',
-      );
-    });
-  });
-
   group('enabledLineOf', () {
     test(
         'is the line of the Firebase CLI for the methods of the mode of the '

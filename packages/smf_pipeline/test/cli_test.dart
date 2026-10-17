@@ -710,6 +710,97 @@ void main() {
     ]);
   });
 
+  group('a warning about what the app is made of', () {
+    setUp(() {
+      modules = [
+        ...modulesWith(),
+        TestModule(
+          'watcher',
+          providers: [
+            RoleProvider.plain(
+              TestRole<String>(
+                'watch',
+                template: TestTemplate(
+                  warnings: const [
+                    SmfIssue.warning(
+                      'No screen to start on.',
+                      code: 'watch.no_start',
+                      hint: 'Add one.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ];
+    });
+
+    const create = [
+      'create',
+      'my_app',
+      '-o',
+      '/work',
+      '-m',
+      'watcher',
+      '--no-input',
+    ];
+
+    test('is printed after its origin and without its code', () async {
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(host.logger.warnings, [
+        '[role:watch]: No screen to start on. (Add one.)',
+      ]);
+      expect(created, hasLength(1));
+    });
+
+    test(
+        'stops a run with --strict, which exits with 1 and names its code, '
+        'and creates nothing', () async {
+      const stoppedLine = 'Generation stopped because of a warning about '
+          'the app. Without --strict, the run goes on after it.';
+      const warningLine = '  warning [role:watch] watch.no_start: No screen '
+          'to start on. (Add one.)';
+      expect(await smf([...create, '--strict']), SmfExitCodes.generationFailed);
+
+      expect(host.logger.errors, [
+        // The code tells which --allow-warning would let the run go on.
+        stoppedLine,
+        warningLine,
+      ]);
+      expect(host.logger.warnings, isEmpty);
+      expect(created, isEmpty);
+      expect(host.fileSystem.directory('/work/my_app').existsSync(), isFalse);
+    });
+
+    test('does not stop a run with --strict that names its code', () async {
+      expect(
+        await smf([...create, '--strict', '--allow-warning=watch.no_start']),
+        SmfExitCodes.success,
+      );
+
+      expect(host.logger.warnings, [
+        '[role:watch]: No screen to start on. (Add one.)',
+      ]);
+      expect(created, hasLength(1));
+    });
+
+    test('cannot be allowed with a value that is not a code', () async {
+      expect(
+        await smf([...create, '--strict', '--allow-warning=no_start']),
+        SmfExitCodes.usage,
+      );
+
+      expect(
+        host.logger.errors.single,
+        startsWith('"no_start" is not the code of a warning'),
+      );
+      expect(host.logger.infos.last, contains('Usage: smf create <app name>'));
+      expect(created, isEmpty);
+    });
+  });
+
   test('an unexpected error exits with 70', () async {
     host = FakeHost(processRunner: runner, terminal: true);
 

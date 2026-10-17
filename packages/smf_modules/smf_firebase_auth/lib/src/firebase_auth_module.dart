@@ -2,6 +2,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/bundles/firebase_auth_bundle.dart';
 import 'package:smf_firebase_auth/src/agents.dart';
 import 'package:smf_firebase_auth/src/enable_sign_in.dart';
+import 'package:smf_firebase_auth/src/identity_providers.dart';
 import 'package:smf_firebase_auth/src/readme.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 
@@ -15,8 +16,9 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// before the first frame. This module adds `firebase_auth` to the
 /// dependencies of the app and implements the service in
 /// `lib/core/auth/firebase_auth_service.dart` on `FirebaseAuth`, with an
-/// email address and a password, and for anonymous users. The service is
-/// the same in every mode of the role.
+/// email address and a password, for anonymous users, and with the
+/// credentials of Google and Apple. The service is the same in every mode
+/// of the role.
 ///
 /// Firebase Authentication works on the Firebase app, so the module depends
 /// on [FirebaseCoreModule], which initializes Firebase in `bootstrap()`, and
@@ -63,11 +65,39 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// Firebase CLI, and writes nothing into the app. After generation, once
 /// `flutterfire configure` of [FirebaseCoreModule] configured the app, the
 /// module runs the script: its step continues
-/// [FirebaseCoreModule.configureStep]. The Firebase CLI adds a web app to a
-/// project that has none, so a run in a terminal asks first, and tells of
-/// the Firebase console as the other way. Any other run prints the command
-/// to run later, and so does a run on a machine whose Firebase CLI is older
-/// than the command, which the module checks before generation.
+/// [FirebaseCoreModule.configureStep], so a run in a terminal asks only
+/// about `flutterfire configure`. Any other run prints the command to run
+/// later, and so does a run on a machine whose Firebase CLI is older than
+/// the version that the script needs, which the module checks before
+/// generation.
+///
+/// The service also signs in, links an anonymous user and confirms a
+/// deletion with the credentials of the ways to sign in of Google and
+/// Apple, which other modules give the auth role:
+/// - Apple takes a credential once, so when Firebase refuses a link because
+///   the identity or its email address belongs to another user, the service
+///   keeps the credential that Firebase gives with its answer for the
+///   credential object, and the sign-in with that object that the session
+///   makes next uses it. The reasons of such a refusal are
+///   `credentialInUse` and `accountExistsWithOtherMethod` for a link of a
+///   credential, and `emailInUse` for a link of a password;
+/// - a deletion with a fresh credential signs the user in again with it,
+///   and, for a credential of Apple, revokes the tokens of Apple with its
+///   authorization code before the account is deleted, on iOS and macOS,
+///   where Firebase does. A revocation that fails keeps the account and is
+///   `notConfigured`, with a hint that names what the Apple sign-in method
+///   of the Firebase project needs for it, but for an answer that has
+///   nothing to do with the setup, such as a request that did not reach
+///   Firebase. The service maps its failures itself, and asks Firebase only
+///   while a user is signed in, since the future of the call never
+///   completes without one. Firebase answers a sign-in again with
+///   `user-not-found` for an identity without a user and for an account
+///   that the server deleted, which a reload of the user tells apart.
+///
+/// The provider of the module refuses an app with a way to sign in of
+/// another identity provider in its `validate` hook, as the role asks of a
+/// provider whose backend does not take the identity provider of a way to
+/// sign in.
 ///
 /// The README of the app tells how to enable the ways to sign in, with the
 /// script and in the Firebase console, and what the script does to the
@@ -113,7 +143,7 @@ final class FirebaseAuthModule extends SmfModule {
         kind: ModuleKinds.infrastructure,
         dependsOn: {FirebaseCoreModule.id},
         uses: {localizationRole},
-        providers: [RoleProvider.plain(authRole)],
+        providers: [_FirebaseAuthProvider()],
       );
 
   @override
@@ -138,7 +168,7 @@ final class FirebaseAuthModule extends SmfModule {
         ),
         const PubspecContribution.hosted('firebase_auth', '^6.7.0'),
         authRole.data(
-          const RoleImplementation(
+          const AuthImplementation(
             type: TypeRef('FirebaseAuthService', import: _file),
             create: FactoryRef('createFirebaseAuthService', import: _file),
           ),
@@ -150,5 +180,39 @@ final class FirebaseAuthModule extends SmfModule {
           authRole.description,
           AgentNote(agentNote),
         ),
+      ];
+}
+
+/// The provider of the auth role of [FirebaseAuthModule]: its bricks
+/// implement the role, and its `validate` hook reports each way to sign in
+/// with an identity provider that a module gives the role, whose credential
+/// the service of the module does not take: one of another identity
+/// provider than Google and Apple.
+final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
+  const _FirebaseAuthProvider();
+
+  @override
+  Role<AuthData> get role => authRole;
+
+  @override
+  List<SmfIssue> validate(RoleHookInput<AuthData> input) => [
+        for (final AppSignInMethod(:owner, :method)
+            in authRole.methodsIn(input))
+          if (!identityProviders.containsKey(method.issuer))
+            SmfIssue(
+              'The module $owner gives the app a way to sign in with '
+              '${method.issuer}, whose credential ${FirebaseAuthModule.id} '
+              'does not take: it signs in to Firebase Authentication with the '
+              'credentials of ${[
+                for (final MapEntry(key: issuer, value: name)
+                    in identityProviders.entries)
+                  '$name ($issuer)',
+              ].join(' and ')}, besides an email address and a password, '
+              'and as an anonymous user. A sign-in with it would fail with '
+              'notConfigured.',
+              hint: 'Leave $owner out of an app with '
+                  '${FirebaseAuthModule.id}.',
+              origin: owner,
+            ),
       ];
 }

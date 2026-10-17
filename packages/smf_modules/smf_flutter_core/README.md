@@ -6,10 +6,10 @@ The SMF module that creates the Flutter app every SMF app starts from. It provid
 - `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs the root widget inside the wrappers of other modules;
 - `lib/bootstrap.dart`, where modules put their start-up code, phase by phase;
 - `lib/app.dart`, the root `MaterialApp`, which becomes `MaterialApp.router` when the app has a router;
-- the fallback start screen, which an app shows while it has no screen to start on, with a widget test;
+- the fallback start screen with a widget test, which only an app that no route starts gets;
 - `pubspec.yaml` with the dependencies of all modules, and `analysis_options.yaml`, which leaves `build/` out of the analysis.
 
-The fallback start screen is for the developer of the app, who sees it until the app has a screen to start on. It shows a cell with a symbol and a number, both made from the name of the app. Below the cell are the name of the app, a hint that the app has no start screen yet, and the path of the file of the screen. A tap on the path copies it. An app with a feature whose route can start the app never shows the screen.
+The fallback start screen is for the developer of the app, who sees it until the app has a screen to start on. It shows a cell with a symbol and a number, both made from the name of the app. Below the cell are the name of the app, a hint that the app has no start screen yet, and the path of the file of the screen. A tap on the path copies it. An app with a feature whose route can start the app gets neither the screen nor its test nor its texts.
 
 The hint and the word that the screen says after a copy are in English and in Ukrainian. With a module for the languages of the app, such as `gen_l10n`, the screen reads them from the texts of the app. Without one they are in English.
 
@@ -30,6 +30,7 @@ The files in `bricks/flutter_core/__brick__` are those that `flutter create --pl
 - The names and ids come from the app. `android:label` and `CFBundleDisplayName` are its name in title case, and `CFBundleName` in Pascal case. The Android namespace, application id and Kotlin package path, and the iOS bundle id are variables of the brick.
 - `IPHONEOS_DEPLOYMENT_TARGET`, in each build configuration of `project.pbxproj`, is the tag of the minimum iOS version, and the project has no `DEVELOPMENT_TEAM`.
 - The Android manifest, `Info.plist` and the Gradle files hold the tags of the native sockets of the app entry role, each alone on its line.
+- `ios/Runner/Runner.entitlements` belongs to the brick. It holds the tag of the entitlements of the app and is empty when no module adds any. Every build configuration of the Runner target signs with it (`CODE_SIGN_ENTITLEMENTS`), and the Runner group of `project.pbxproj` refers to it, the way Xcode does when it adds a capability.
 - `lib/`, `test/`, `pubspec.yaml`, `README.md` and `analysis_options.yaml` are SMF's own.
 
 `gradlew`, `gradle-wrapper.jar`, `local.properties`, `.idea/` and the `.iml` files are left out: Flutter writes the Gradle wrapper when it builds the app, and the rest belongs to one machine.

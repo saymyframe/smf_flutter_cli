@@ -15,7 +15,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, whose providers call the listeners of the screen, the DI role, the
 /// events role, the preferences role, the localization role, the theme
 /// role, the app entry role, whose provider builds the root that follows
-/// the theme mode, and the auth role.
+/// the theme mode, the auth role and the onboarding screen role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -24,8 +24,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// guards of the routes a test closes and opens, the fixture analytics and
 /// the fixture screen log, whose listeners of the screen note what they
 /// hear, the fixture setting, whose restorers note what they read, the
-/// fixture theme, whose colour a test changes, and the module that uses the
-/// fixture clock, which shows an hour on a clock of 24 hours or of 12.
+/// fixture theme, whose colour a test changes, the module that uses the
+/// fixture clock, which shows an hour on a clock of 24 hours or of 12, and
+/// the fixture steps of the onboarding, whose actions note their calls.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -346,14 +347,43 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(FakeThemeModule.id),
         roles: {appEntryRole},
       ),
+      // The steps of the onboarding in the apps with the onboarding screen
+      // role, whichever module provides it: a new screen shows each step
+      // that its showIf keeps when the screen opens, on a page of its own,
+      // in the order of the role, with its icon, its title as a header and
+      // its labels in the language of the app; the button of the action
+      // calls the action once, takes no tap until its future completes and
+      // then shows the next page, also when the action fails; and that of
+      // later shows it without the action. The matrix writes the screen
+      // and the texts of the steps for the tests, from the data of the role
+      // and of the localization role, and the tests take the two steps of
+      // the fixture steps, whose actions note their calls. Only in the apps
+      // with every module whose modules give the role steps, which run
+      // flutter test for other tests already.
+      MatrixAppTest(
+        '$appTests/onboarding_screen_role',
+        appliesTo: (app) =>
+            app.everyModuleWith != null && _stepsOf(app).isNotEmpty,
+        generatedFiles: _onboardingOf,
+        roles: {onboardingScreenRole},
+      ),
       // Sign-in in the apps with the auth role, whichever module provides
       // it, the test that the CLI keeps: in every app with the role, since
       // it must hold in each mode of the role. Those are the apps of the
       // fixture sign-in alone, without a router and with each of the two in
-      // the default mode and with a router in each other mode, and the apps
-      // with every module, which the matrix has once more for the other
-      // modes.
+      // the default mode and with a router in each other mode, the apps of
+      // the fixture way to sign in, and the apps with every module, which
+      // the matrix has once more for the other modes.
       await authRoleAppTest(),
+      // The ways to sign in of the apps with the auth role whose modules
+      // give the role one, whichever modules provide the role and the ways
+      // to sign in, the test that the CLI keeps: the service takes the
+      // credentials of identities of each issuer of the app as the role
+      // says, and the session signs in with the credential that the
+      // function of each way to sign in returns, in each mode of the role.
+      // Those are the apps of the fixture way to sign in, with the fixture
+      // sign-in, and the apps with every module.
+      await authMethodsAppTest(),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -379,9 +409,159 @@ Future<MatrixAppTests> fixtureAppTests() async {
       themeRole,
       appEntryRole,
       authRole,
+      onboardingScreenRole,
     },
   );
 }
+
+/// The steps of the onboarding of [app], an app of the matrix, in the order
+/// of the role ([OnboardingScreenRole.stepsIn]), or none in an app without
+/// the onboarding screen role.
+List<AppOnboardingStep> _stepsOf(MatrixApp app) {
+  final hook = app.hook!;
+  return hook.presentRoles.contains(onboardingScreenRole)
+      ? onboardingScreenRole.stepsIn(onboardingScreenRole.hookInput(hook))
+      : const [];
+}
+
+/// The path in an app of what the matrix writes for the tests of the
+/// onboarding screen role: `onboardingScreen`, the type of the screen of the
+/// route that the provider of the role names
+/// ([OnboardingScreenRole.screenIn]), and `newOnboardingScreen()`, which
+/// creates one as that route does; `stepLanguages`, the codes of the
+/// languages of the app in their order ([LocalizationRole.localesIn]), or
+/// English alone in an app without the localization role; `appSteps`, the
+/// steps of the app in the order of the role, each with its full name and
+/// its texts in each of these languages; and `chooseLanguage()`, which puts
+/// the app into one of these languages, and does nothing in an app without
+/// the localization role.
+const onboardingOfAppFile = 'test/onboarding_screen_role/of_app.dart';
+
+/// The file at [onboardingOfAppFile] of [app], an app of the matrix with
+/// the onboarding screen role, whose package is [packageName].
+///
+/// A step shows a text of its owner in a language as the template of the
+/// role reads it: the text that the owner gave the localization role under
+/// its name, in that language or in English where it has no translation
+/// ([LocalizationRole.appTextOf]), and its English text otherwise, as for an
+/// owner that does not list that role. Throws a [StateError] if no module
+/// names a route of its own as the onboarding screen, which the rules of the
+/// role report in an app of the matrix.
+Map<String, String> _onboardingOf(MatrixApp app, String packageName) {
+  final hook = app.hook!;
+  final input = onboardingScreenRole.hookInput(hook);
+  final route = onboardingScreenRole.screenIn(input);
+  if (route == null) {
+    throw StateError(
+      'No module of ${app.name} names a route of its own as the onboarding '
+      'screen.',
+    );
+  }
+  final screen = route.route.screen;
+  final localized = hook.presentRoles.contains(localizationRole);
+  final languages = localized
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  String textOf(AppOnboardingStep placed, LocalizedText text, String code) {
+    final given = localizationRole.appTextOf(input, placed.owner, text)?.text;
+    return SmfNames.dartString(
+      given == null ? text.en : given.textIn(code) ?? given.en,
+    );
+  }
+
+  final steps = StringBuffer();
+  for (final placed in onboardingScreenRole.stepsIn(input)) {
+    final step = placed.step;
+    steps
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString(placed.fullName)},')
+      ..writeln('    texts: {');
+    for (final code in languages) {
+      final later = step.later;
+      final fields = [
+        'title: ${textOf(placed, step.title, code)}',
+        'text: ${textOf(placed, step.text, code)}',
+        'action: ${textOf(placed, step.action, code)}',
+        'later: ${later == null ? 'null' : textOf(placed, later, code)}',
+      ];
+      steps.writeln(
+        '      ${SmfNames.dartString(code)}: (${fields.join(', ')}),',
+      );
+    }
+    steps
+      ..writeln('    },')
+      ..writeln('  ),');
+  }
+  final codes = [
+    for (final code in languages) SmfNames.dartString(code),
+  ].join(', ');
+  // The file of the language of the app, which only an app with the
+  // localization role has.
+  final appLocale =
+      ImportRef.app(LocalizationRole.appLocaleFile.substring('lib/'.length))
+          .resolveUri(packageName);
+  final directives = [
+    "import 'package:flutter/widgets.dart';",
+    if (localized) "import '$appLocale';",
+    "import '${screen.import.resolveUri(packageName)}' as screen;",
+  ]..sort();
+  return {
+    onboardingOfAppFile: '''
+// The onboarding screen of the app and the texts of its steps, which the
+// matrix of SMF writes from the data of the onboarding screen role and of
+// the localization role of the app for the tests of the onboarding screen
+// role.
+${directives.join('\n')}
+
+/// The type of the onboarding screen: that of the route that the provider
+/// of the onboarding screen role names.
+const Type onboardingScreen = screen.${screen.className};
+
+/// Creates an onboarding screen, as the route of the screen does.
+Widget newOnboardingScreen() => screen.${screen.className}();
+
+/// The codes of the languages that the tests read the texts of the steps
+/// in: those of the app, in their order, or English alone for an app
+/// without the localization role.
+const List<String> stepLanguages = [$codes];
+
+/// The texts of a step in one language: its title, its text, the label of
+/// its action, and the label of its later, or `null` for a step without
+/// that button.
+typedef StepTexts = ({
+  String title,
+  String text,
+  String action,
+  String? later,
+});
+
+/// The steps of the onboarding of the app, in the order of the onboarding
+/// screen role, each with its full name and its texts by the code of each
+/// language of [stepLanguages].
+const List<({String name, Map<String, StepTexts> texts})> appSteps = [
+$steps];
+${localized ? _withStepLanguages : _withoutStepLanguages}''',
+  };
+}
+
+/// What [onboardingOfAppFile] has in an app with the localization role, to
+/// put the app into a language.
+const _withStepLanguages = '''
+
+/// Puts the app into [language], one of [stepLanguages], as a choice of the
+/// user does.
+Future<void> chooseLanguage(String language) =>
+    appLocale.choose(Locale(language));
+''';
+
+/// What [onboardingOfAppFile] has in an app without the localization role,
+/// which is in English, the one language of `stepLanguages`.
+const _withoutStepLanguages = '''
+
+/// Does nothing: the app has no localization role, so its steps are in
+/// English, the one language of [stepLanguages].
+Future<void> chooseLanguage(String language) async {}
+''';
 
 /// The name of the mode option of the clock role of the fixtures, which
 /// that role, of a package of its own, declares.

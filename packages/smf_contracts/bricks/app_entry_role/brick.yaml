@@ -1,5 +1,5 @@
 name: app_entry_role
-description: "The template of the app entry role of SMF: the guide for coding agents."
+description: "The template of the app entry role of SMF: the guide for coding agents, and the icons of the status bar that suit the theme, with a widget test."
 
 # The template of a role in the module model. Its files are relative to the
 # root of the generated app. The pipeline renders it with app_name, org_name,

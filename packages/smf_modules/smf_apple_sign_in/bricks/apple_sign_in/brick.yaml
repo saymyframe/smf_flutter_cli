@@ -1,0 +1,12 @@
+name: apple_sign_in
+description: "The way to sign in of an SMF app with Sign in with Apple on iOS: the function that asks Apple for a credential, and the icon of its button."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: issuer, the issuer of the ID tokens of Apple, and readme, the
+# heading of the section of the module in the README of the app.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

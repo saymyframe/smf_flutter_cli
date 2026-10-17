@@ -385,6 +385,9 @@ void main() {
 
       expect(check.installs, 0);
       expect(report.issues.single.isError, isFalse);
+      // A warning about the machine, which has no code.
+      expect(report.issues.single.category, WarningCategory.machine);
+      expect(report.issues.single.code, isNull);
       expect(
         report.issues.single.message,
         'Tool firebase_cli is missing. Run npm install -g firebase-tools.',

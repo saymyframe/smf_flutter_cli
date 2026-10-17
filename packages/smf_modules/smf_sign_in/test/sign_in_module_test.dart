@@ -160,6 +160,8 @@ const _textNames = [
   'passwordRequired',
   'failureCredentials',
   'failureEmailInUse',
+  'failureCredentialInUse',
+  'failureOtherMethod',
   'failureWeakPassword',
   'failureDisabled',
   'failureTooManyAttempts',
@@ -185,6 +187,8 @@ const _textNames = [
 const _failureTexts = {
   'invalidCredentials': 'failureCredentials',
   'emailInUse': 'failureEmailInUse',
+  'credentialInUse': 'failureCredentialInUse',
+  'accountExistsWithOtherMethod': 'failureOtherMethod',
   'weakPassword': 'failureWeakPassword',
   // What the form says of an address without an @ too.
   'invalidEmail': 'emailInvalid',
@@ -1211,13 +1215,16 @@ void main() {
     });
 
     test(
-        'finds no warning in an app of the module, such as that of a route '
-        'that asks for an account without a guard', () {
+        'finds no warning in an app of the module but those of an app '
+        'without a layout and a start route, and none of a route that asks '
+        'for an account without a guard', () {
       for (final result in results) {
         if (!result.contractCase.name.startsWith('sign_in')) continue;
+        // The settings screen is a destination, and no route of the app
+        // can start it.
         expect(
-          result.issues.map((issue) => '$issue'),
-          isEmpty,
+          [for (final warning in result.issues) warning.code],
+          [RouterRole.noStartWarning, RouterRole.noMainNavigationWarning],
           reason: '${result.contractCase}',
         );
       }
@@ -1233,7 +1240,8 @@ void main() {
         'finds no errors in the apps of the module in the other modes of '
         'the auth role, where the module generates the same files', () async {
       for (final contractCase in harness.casesOfModule(SignInModule.id)) {
-        final byDefault = (await harness.check(contractCase)).app!;
+        final checked = await harness.check(contractCase);
+        final byDefault = checked.app!;
         for (final mode in AuthRole.modeOption.allowed!.skip(1)) {
           final name = '${contractCase.name} --auth-mode=$mode';
           final result = await harness.check(
@@ -1245,7 +1253,13 @@ void main() {
             ),
           );
 
-          expect(result.issues.map((issue) => '$issue'), isEmpty, reason: name);
+          expect(result.errors.map((issue) => '$issue'), isEmpty, reason: name);
+          // The mode changes nothing that the roles warn of.
+          expect(
+            result.warnings.map((issue) => '$issue'),
+            checked.warnings.map((issue) => '$issue'),
+            reason: name,
+          );
           final app = result.app!;
           expect(
             authRole.modeIn(authRole.hookInput(result.hook!)).name,

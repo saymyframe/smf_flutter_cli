@@ -8,6 +8,7 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
+import 'package:file/file.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_bloc/smf_bloc.dart';
@@ -446,6 +447,19 @@ void main() {
       expect(plist, contains('<string>fetch</string>'));
       expect(plist, contains('<string>remote-notification</string>'));
       expect('<key>FixtureName</key>'.allMatches(plist), hasLength(1));
+      // fake_overlap contributes first, by its id.
+      expect(
+        rendered(result, AppEntryRole.iosEntitlements).values.single,
+        [
+          '\t<key>aps-environment</key>',
+          '\t<string>development</string>',
+          '\t<key>com.apple.developer.associated-domains</key>',
+          '\t<array>',
+          '\t\t<string>applinks:example.org</string>',
+          '\t\t<string>applinks:example.com</string>',
+          '\t</array>',
+        ].join('\n'),
+      );
       expect(
         rendered(result, AppEntryRole.gradleSettingsPlugins).values.single,
         '    id("io.github.ben-manes.versions") version("0.64.0") apply false',
@@ -1839,20 +1853,27 @@ void main() {
         'which the matrix generates with the option, and the other apps with '
         'the role get no value of the option and the mode required', () async {
       // The auth role uses the router role, for the routes that ask for an
-      // account, so its provider is checked with each router and without
-      // one.
-      const withRouter = 'fake_auth (fake_router) with router';
+      // account, and the localization role, for the labels of the ways to
+      // sign in, so its provider is checked with each router and without
+      // one, with the texts of the app and without them.
+      const withRouter = 'fake_auth (fake_router) with router, localization';
       expect(harness.casesOfModule(FakeAuthModule.id).map((c) => '$c'), [
         withRouter,
+        'fake_auth (go_router) with router, localization',
+        'fake_auth (fake_router) with router',
         'fake_auth (go_router) with router',
+        'fake_auth with localization',
         'fake_auth',
       ]);
       // The case of another mode is the first case of the provider, which
       // has every role that the role uses: the app of such a mode has a
-      // router, the first one of the registry.
+      // router, the first one of the registry, and the texts of the app.
       expect(harness.casesOfRole(authRole).map((c) => '$c'), [
         'auth by $withRouter',
+        'auth by fake_auth (go_router) with router, localization',
+        'auth by fake_auth (fake_router) with router',
         'auth by fake_auth (go_router) with router',
+        'auth by fake_auth with localization',
         'auth by fake_auth',
         'auth by $withRouter --auth-mode=guest',
         'auth by $withRouter --auth-mode=anonymous',
@@ -1888,14 +1909,16 @@ void main() {
             app,
       ];
       // The apps of the fixture alone, without a router and with each of
-      // the two, and each app with every module, with a clock of 24 hours
-      // and with one of 12.
+      // the two, with the texts of the app and without them, the apps of
+      // the fixture way to sign in, with the texts and without them, and
+      // each app with every module, with a clock of 24 hours and with one
+      // of 12.
       expect(withoutMode, contains(named('fake_auth')));
       expect(
         named('fake_auth').hook!.presentRoles,
         isNot(contains(routerRole)),
       );
-      expect(withoutMode, hasLength(19));
+      expect(withoutMode, hasLength(24));
       for (final app in withoutMode) {
         expect(
           app.createArguments('app_1', '/apps'),
@@ -2012,7 +2035,8 @@ void main() {
   group('smf create', () {
     test('generates an app of every fixture', () async {
       final runner = RecordingRunner();
-      final host = testHost(processRunner: runner);
+      final logger = RecordingLogger();
+      final host = testHost(processRunner: runner, logger: logger);
 
       GeneratedApp? created;
       final code = await runSmf(
@@ -2025,6 +2049,13 @@ void main() {
           '/fake_feature',
           '--no-input',
           '--skip-external-setup',
+          // The texts of fake_second have a language that no app can be
+          // in, and one without a translation, on purpose. The app has no
+          // layout, so no main navigation leads to the destination of
+          // fake_second.
+          '--allow-warning=${LocalizationRole.unsupportedLanguageWarning}',
+          '--allow-warning=${LocalizationRole.untranslatedWarning}',
+          '--allow-warning=${RouterRole.noMainNavigationWarning}',
           '--strict',
         ],
         modules: fixtureModules(),
@@ -2032,7 +2063,7 @@ void main() {
         onCreated: (app) => created = app,
       );
 
-      expect(code, SmfExitCodes.success);
+      expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
       expect(created?.path, '/work/fixture_app');
       expect(created?.skippedSteps, isEmpty);
       expect(runner.lines, [
@@ -2058,44 +2089,67 @@ void main() {
 
     test(
         'warns of a language of a text that no app can be in, and of a text '
-        'without a translation into a language of the app', () async {
-      final logger = RecordingLogger();
-      final host = testHost(processRunner: RecordingRunner(), logger: logger);
+        'without a translation into a language of the app, on which a run '
+        'with --strict stops', () async {
+      /// Runs `smf create` for the second fixture feature with the fixture
+      /// texts, with [options].
+      Future<(int, RecordingLogger, FileSystem)> create(
+        List<String> options,
+      ) async {
+        final logger = RecordingLogger();
+        final host = testHost(processRunner: RecordingRunner(), logger: logger);
+        final code = await runSmf(
+          [
+            'create',
+            'fixture_app',
+            '-m',
+            [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
+                .join(','),
+            '--no-input',
+            '--skip-external-setup',
+            ...options,
+          ],
+          modules: fixtureModules(),
+          hostFor: ({required verbose}) => host,
+        );
+        return (code, logger, host.fileSystem);
+      }
 
-      final code = await runSmf(
-        [
-          'create',
-          'fixture_app',
-          '-m',
-          [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
-              .join(','),
-          '--no-input',
-          '--skip-external-setup',
-          '--strict',
-        ],
-        modules: fixtureModules(),
-        hostFor: ({required verbose}) => host,
-      );
+      const leftOut = 'The app is not in mt, which the text title of the '
+          'module fake_second has a translation into: Flutter has no texts '
+          'for its own widgets in that language.';
+      const untranslated = 'No translation into uk of the text outside of '
+          'the module fake_second: the app shows it in English there.';
 
+      final (code, logger, files) = await create(const []);
       expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
-      expect(logger.warnings, hasLength(2));
+      // The template of the localization role reports both.
+      expect(logger.warnings, [
+        '[role:localization]: $leftOut',
+        '[role:localization]: $untranslated',
+      ]);
       expect(
-        logger.warnings.first,
-        'The app is not in mt, which the text title of the module '
-        'fake_second has a translation into: Flutter has no texts for its '
-        'own widgets in that language.',
-      );
-      expect(
-        logger.warnings.last,
-        'No translation into uk of the text outside of the module '
-        'fake_second: the app shows it in English there.',
-      );
-      expect(
-        host.fileSystem
+        files
             .file('/work/fixture_app/${LocalizationRole.appLocaleFile}')
             .readAsStringSync(),
         contains("const appLocales = <Locale>[Locale('en'), Locale('uk')];"),
       );
+
+      final (strictCode, strict, strictFiles) =
+          await create(const ['--strict']);
+      expect(strictCode, SmfExitCodes.generationFailed);
+      const stopped = 'Generation stopped because of 2 warnings about the '
+          'app. Without --strict, the run goes on after them.';
+      // Each with its code, which --allow-warning names.
+      String cause(String code, String message) =>
+          '  warning [role:localization] $code: $message';
+      expect(strict.errors, [
+        stopped,
+        cause(LocalizationRole.unsupportedLanguageWarning, leftOut),
+        cause(LocalizationRole.untranslatedWarning, untranslated),
+      ]);
+      expect(strict.warnings, isEmpty);
+      expect(strictFiles.directory('/work/fixture_app').existsSync(), isFalse);
     });
 
     test('refuses in --locales a language that no app can be in', () async {
@@ -2228,10 +2282,14 @@ RoleImplementation? _implementationOf(SmfModule? module, Role role) {
   if (module == null) return null;
   for (final contribution
       in module.contribute(ContractHarness.defaultContext)) {
-    if (contribution
-        case RoleData<RoleImplementation>(role: final of, :final value)
+    if (contribution case RoleData(role: final of, :final value)
         when identical(of, role)) {
-      return value;
+      switch (value) {
+        case final RoleImplementation implementation:
+          return implementation;
+        case AuthImplementation(:final implementation):
+          return implementation;
+      }
     }
   }
   return null;
@@ -2341,6 +2399,12 @@ const _cases = [
   'fake_late_gate (go_router)',
   'fake_gate (fake_router)',
   'fake_gate (go_router)',
+  // The fixture onboarding with each router, which the onboarding screen
+  // role requires, with the localization role, which it uses, and without.
+  'fake_onboarding (fake_router) with localization',
+  'fake_onboarding (go_router) with localization',
+  'fake_onboarding (fake_router)',
+  'fake_onboarding (go_router)',
   'fake_sockets',
   'fake_overlap',
   'fake_analytics (fake_di, fake_router) with di, router',
@@ -2365,13 +2429,28 @@ const _cases = [
   'fake_preferences',
   'fake_preferences_user with preferences',
   'fake_preferences_user',
+  // The fixture steps of the onboarding, with the fixture onboarding and
+  // the first router, which its role requires, and without them.
+  'fake_steps with onboarding_screen, localization',
+  'fake_steps with onboarding_screen',
+  'fake_steps with localization',
+  'fake_steps',
   'fake_theme with localization',
   'fake_theme',
-  // The fixture sign-in with each router and without one: the auth role
-  // uses the router role.
+  // The fixture sign-in with each router and without one, with the texts of
+  // the app and without them: the auth role uses the router role and the
+  // localization role.
+  'fake_auth (fake_router) with router, localization',
+  'fake_auth (go_router) with router, localization',
   'fake_auth (fake_router) with router',
   'fake_auth (go_router) with router',
+  'fake_auth with localization',
   'fake_auth',
+  // The fixture way to sign in, with the fixture sign-in, which provides
+  // the auth role that it requires, and with the texts of the app, which
+  // have its label, and without them.
+  'fake_sign_in_method with localization',
+  'fake_sign_in_method',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',
@@ -2383,14 +2462,19 @@ const _cases = [
   'bottom_tabs (fake_router) with localization',
   'bottom_tabs (go_router) with localization',
   // The other values of the mode option of the auth role, with the
-  // fixture sign-in, which provides it, and the first router, since the
-  // role uses the router role.
-  'auth by fake_auth (fake_router) with router --auth-mode=guest',
-  'auth by fake_auth (fake_router) with router --auth-mode=anonymous',
+  // fixture sign-in, which provides it, the first router and the texts of
+  // the app, since the role uses the router role and the localization role.
+  '$_authOfModes --auth-mode=guest',
+  '$_authOfModes --auth-mode=anonymous',
   // The other value of the mode option of the fixture clock, with its
   // provider.
   'clock by fake_clock_badge --clock-hours=12',
 ];
+
+/// The case of the auth role whose app the other values of its mode
+/// option have.
+const _authOfModes = 'auth by fake_auth (fake_router) with router, '
+    'localization';
 
 /// Whether [text] is a text of the app entry of the fixtures, which every
 /// app has besides the texts of the fixtures.

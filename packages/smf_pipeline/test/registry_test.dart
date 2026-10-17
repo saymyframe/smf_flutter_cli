@@ -20,7 +20,19 @@ void main() {
     ]);
 
     expect(registry.modules, hasLength(3));
-    expect(registry.roles, [appEntryRole, layout, router]);
+    // The app entry uses the router, which brings the roles that it uses,
+    // and those bring theirs.
+    expect(registry.roles, [
+      appEntryRole,
+      routerRole,
+      layoutRole,
+      localizationRole,
+      preferencesRole,
+      diRole,
+      settingsScreenRole,
+      layout,
+      router,
+    ]);
     expect(registry[const ModuleId('home')], isNotNull);
     expect(registry[const ModuleId('nope')], isNull);
     expect(registry.ids.map((id) => id.value), ['scaffold', 'tabs', 'home']);
@@ -116,6 +128,19 @@ void main() {
           TestModule('home', uses: {role}),
         ]),
         _hasProblem('have the same id'),
+      );
+    });
+
+    test('must not be pipeline, which the codes of its warnings name', () {
+      final role = TestRole<NoDsl>('pipeline');
+
+      expect(
+        _problems([
+          TestModule('a', uses: {role}),
+        ]),
+        _hasProblem(
+          'The role id pipeline names the pipeline in the codes of warnings',
+        ),
       );
     });
   });
@@ -458,6 +483,89 @@ void main() {
     );
   });
 
+  group('symbols that depend on what a role chose', () {
+    final nav = TestRole<NoDsl>('nav', template: TestTemplate());
+    final hidden = TestRole<NoDsl>('hidden', template: TestTemplate());
+    final tabs = ChoiceCondition(
+      nav,
+      'the nav shows tabs',
+      holdsFor: (choice) => choice == 'tabs',
+      withoutRole: false,
+    );
+    final secret = ChoiceCondition(
+      hidden,
+      'the hidden role chose',
+      holdsFor: (choice) => choice != null,
+      withoutRole: false,
+    );
+    List<String> problemsOf(List<RequiredSymbol> symbols) => _problems([
+          scaffold(),
+          TestModule('nav_provider', providers: [RoleProvider.plain(nav)]),
+          TestModule(
+            'hidden_provider',
+            providers: [RoleProvider.plain(hidden)],
+          ),
+          TestModule(
+            'tabs',
+            providers: [
+              RoleProvider.plain(
+                TestRole<NoDsl>(
+                  'shell',
+                  uses: {nav},
+                  interface: RoleInterface(symbols: symbols),
+                ),
+              ),
+            ],
+          ),
+        ]);
+
+    test('share a file only with symbols of the same conditions', () {
+      expect(
+        problemsOf([
+          RequiredClass('Dial', path: 'lib/dial.dart', whenChosen: {tabs}),
+          const RequiredFunction('makeDial', path: 'lib/dial.dart'),
+          RequiredFunction('tick', path: 'lib/tick.dart', whenChosen: {tabs}),
+          RequiredClass('Tick', path: 'lib/tick.dart', whenChosen: {tabs}),
+          const RequiredFunction('plain', path: 'lib/plain.dart'),
+          const RequiredClass('Plain', path: 'lib/plain.dart'),
+        ]),
+        [
+          equals(
+            'The symbols of the shell role at lib/dial.dart depend on '
+            'different conditions on what roles chose: class Dial (the nav '
+            'shows tabs), function makeDial() (no condition). An app has '
+            'the file or not, so all its symbols have the same conditions.',
+          ),
+        ],
+      );
+    });
+
+    test('depend only on the role or on a role that it requires or uses', () {
+      expect(
+        problemsOf([
+          RequiredClass('Dial', path: 'lib/dial.dart', whenChosen: {tabs}),
+          RequiredClass('Vault', path: 'lib/vault.dart', whenChosen: {secret}),
+        ]),
+        [
+          equals(
+            'The class Vault of the shell role depends on what the hidden role '
+            'chose (the hidden role chose), but the shell role neither '
+            'requires nor uses the hidden role, so its providers may not '
+            'name the condition.',
+          ),
+        ],
+      );
+      // A condition of the role itself.
+      expect(
+        _problems([
+          scaffold(),
+          TestModule('lock', providers: [const RoleProvider.plain(_dialRole)]),
+        ]),
+        isEmpty,
+      );
+    });
+  });
+
   test('two different kinds must not share an id', () {
     expect(
       _problems([
@@ -494,3 +602,35 @@ void main() {
     );
   });
 }
+
+/// A role with a symbol that depends on its own choice.
+const _dialRole = _DialRole();
+
+final class _DialRole extends Role<NoDsl> {
+  const _DialRole();
+
+  static const twelve = ChoiceCondition(
+    _dialRole,
+    'the dial shows 12 hours',
+    holdsFor: _isTwelve,
+    withoutRole: false,
+  );
+
+  @override
+  String get id => 'dial';
+
+  @override
+  String get description => 'Dial';
+
+  @override
+  RoleCardinality get cardinality => RoleCardinality.atMostOne;
+
+  @override
+  RoleInterface get interface => const RoleInterface(
+        symbols: [
+          RequiredClass('Dial', path: 'lib/dial.dart', whenChosen: {twelve}),
+        ],
+      );
+}
+
+bool _isTwelve(Object? choice) => choice == '12';

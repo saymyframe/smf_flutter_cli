@@ -4,24 +4,33 @@ import 'package:smf_contracts/bundles/analytics_role_bundle.dart';
 import 'package:smf_contracts/bundles/auth_role_bundle.dart';
 import 'package:smf_contracts/bundles/crash_reporting_role_bundle.dart';
 import 'package:smf_contracts/bundles/events_role_bundle.dart';
+import 'package:smf_contracts/bundles/notifications_role_bundle.dart';
+import 'package:smf_contracts/bundles/notifications_role_setting_bundle.dart';
+import 'package:smf_contracts/bundles/notifications_role_step_bundle.dart';
 import 'package:smf_contracts/bundles/preferences_role_bundle.dart';
+import 'package:smf_contracts/bundles/push_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contracts/src/roles/brick_templates.dart';
+import 'package:smf_contracts/src/roles/contributors.dart';
 import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
 part 'services/analytics.dart';
 part 'services/auth.dart';
 part 'services/crash_reporting.dart';
 part 'services/events.dart';
+part 'services/notifications.dart';
 part 'services/preferences.dart';
+part 'services/push.dart';
 
 /// The implementation of a service role that a provider contributes as its
 /// data, such as the Firebase implementation of `AnalyticsService`.
 ///
 /// The service roles are [eventsRole], [preferencesRole], [analyticsRole],
-/// [crashReportingRole] and [authRole]. Each generates the interface of its
-/// service and a factory that returns the implementation, or, for a role
-/// with many providers, one service that forwards every call to all of
-/// them. Every provider contributes exactly one implementation:
+/// [crashReportingRole], [authRole], [notificationsRole] and [pushRole].
+/// Each generates the interface of its service and a factory that returns
+/// the implementation, or, for a role with many providers, one service that
+/// forwards every call to all of them. Every provider contributes exactly
+/// one implementation:
 ///
 /// ```dart
 /// analyticsRole.data(
@@ -34,9 +43,11 @@ part 'services/preferences.dart';
 ///
 /// The factory takes no services: the services work without a DI
 /// container. The role registers its service in the DI container when one
-/// is present, but for the [authRole], which registers nothing: the code
-/// of an app does not use the service of its provider, only the session
-/// that the role generates over it (see [AuthRole]).
+/// is present, but for the [authRole], the [notificationsRole] and the
+/// [pushRole], which register nothing: the code of an app does not use the
+/// service of their provider, only the controller that the role generates
+/// over it, the session of [AuthRole], the notifications of
+/// [NotificationsRole] and the push messages of [PushRole].
 ///
 /// A role that an app can have several providers of creates each
 /// implementation on its own: one whose factory throws, or whose
@@ -89,8 +100,8 @@ final class RoleImplementation {
   String toString() => 'implementation $type';
 }
 
-List<SmfIssue> _checkImplementations(
-  ModuleRuleInput<RoleImplementation> input,
+List<SmfIssue> _checkImplementations<D extends Object>(
+  ModuleRuleInput<D> input,
 ) {
   final role = input.roleInput.role;
   final provides = input.module.provides.contains(role);
@@ -98,7 +109,14 @@ List<SmfIssue> _checkImplementations(
   // The rule is of the service roles, whose templates render the
   // implementations into a socket of their own. The other sockets of such a
   // role are for the modules, such as the restorers of the preferences.
-  final implementations = (role.template! as _ServiceTemplate).implementations;
+  final template = role.template! as _ServiceTemplate<D>;
+  final implementations = template.implementations;
+  // The data of a role may hold more than implementations, such as the
+  // ways to sign in of the auth role, which other modules give.
+  final given = [
+    for (final data in input.data)
+      if (template.implementationOf(data.value) != null) data,
+  ];
   return [
     for (final contribution in input.contributions)
       if (contribution is SocketContribution &&
@@ -106,31 +124,36 @@ List<SmfIssue> _checkImplementations(
         SmfIssue(
           'The module contributes code to the ${contribution.socket}, which '
           'the template of the role fills from the implementations.',
-          hint: 'Contribute a RoleImplementation instead.',
+          hint: 'Contribute the implementation as data of the role, '
+              '${template.implementationClass}, instead.',
           origin: origin,
         ),
-    if (!provides && input.data.isNotEmpty)
+    if (!provides && given.isNotEmpty)
       SmfIssue(
         'The module contributes an implementation to the $role, which only '
         'its providers do.',
         origin: origin,
       ),
-    if (provides && input.data.length != 1)
+    if (provides && given.length != 1)
       SmfIssue(
         'A provider of the $role contributes exactly one implementation, but '
-        'the module contributes ${input.data.length}.',
+        'the module contributes ${given.length}.',
         origin: origin,
       ),
   ];
 }
 
 const _implementationsRule = ModuleRule<RoleImplementation>(
-  id: 'services.implementations',
-  description: 'Every provider of a service role, and only a provider, '
-      'contributes one implementation, and no module contributes code to the '
-      'socket of the implementations of the role.',
+  id: _implementationsRuleId,
+  description: _implementationsRuleDescription,
   check: _checkImplementations,
 );
+
+const _implementationsRuleId = 'services.implementations';
+
+const _implementationsRuleDescription = 'Every provider of a service role, '
+    'and only a provider, contributes one implementation, and no module '
+    'contributes code to the socket of the implementations of the role.';
 
 /// The problems of files of modules in [input] that call or tear off
 /// [factory], the function in the role's [file] that returns the service of
@@ -181,12 +204,13 @@ List<SmfIssue> _checkFactoryCalls(
 /// needs arguments, since the template calls it without any.
 ///
 /// Functions from other packages are left to the compiler.
-List<SmfIssue> _checkImplementationFactories(
-  StructuralRuleInput<RoleImplementation> input,
+List<SmfIssue> _checkImplementationFactories<D extends Object>(
+  StructuralRuleInput<D> input,
 ) {
   final issues = <SmfIssue>[];
-  for (final data in input.roleInput.data) {
-    final factory = data.value.factory;
+  for (final (:implementation, :origin)
+      in _implementationsIn(input.roleInput)) {
+    final factory = implementation.factory;
     if (!factory.import.isAppFile) continue;
     final symbol = RequiredFunction(
       factory.name,
@@ -197,7 +221,7 @@ List<SmfIssue> _checkImplementationFactories(
         SmfIssue(
           issue.message,
           hint: 'The template of the role calls it without arguments.',
-          origin: data.origin,
+          origin: origin,
           path: issue.path,
         ),
       );
@@ -206,14 +230,152 @@ List<SmfIssue> _checkImplementationFactories(
   return issues;
 }
 
+/// Whether [owner], the owner of a file, reaches the service of the
+/// provider of [role] only through the controller that the template of
+/// [role] generates over it: a module, or the template of another role.
+bool _usesController(ContributionOrigin? owner, Role role) => switch (owner) {
+      ModuleOrigin() => true,
+      RoleTemplateOrigin(role: final other) => !identical(other, role),
+      _ => false,
+    };
+
+/// The problems with the service of the provider of a role whose code the
+/// app reaches only through a controller of the role's template, such as
+/// the session of the [authRole], in the files of modules and of the
+/// templates of other roles in [input]:
+/// - a file that calls [factory], the function in [controllerFile] that
+///   returns the service;
+/// - a file other than those of the implementation of the provider, the
+///   files of its class and of its function, that imports or exports
+///   [serviceFile], the file of [service]. So another file of the provider,
+///   such as a widget, is held to the rule too.
+///
+/// Such code would reach the service around the controller, which does what
+/// is the same with every provider. [hint] tells the owner of a file what
+/// to do instead.
+///
+/// The rule reads what a file itself imports and calls. It does not see a
+/// `part` file of a library that imports [controllerFile], nor a file that
+/// reaches it through an export of another file.
+List<SmfIssue> _checkServiceReach<D extends Object>(
+  StructuralRuleInput<D> input, {
+  required String factory,
+  required String service,
+  required String serviceFile,
+  required String controllerFile,
+  required String hint,
+}) {
+  final role = input.roleInput.role;
+  final implementation = {
+    for (final (implementation: value, origin: _)
+        in _implementationsIn(input.roleInput))
+      for (final import in [value.type.import, value.factory.import])
+        if (import != null && import.isAppFile) 'lib/${import.uri}',
+  };
+  final issues = <SmfIssue>[];
+  for (final MapEntry(key: path, value: index) in input.files.entries) {
+    final owner = input.owners[path];
+    if (!_usesController(owner, role)) continue;
+    if (usesSymbols(index, {factory}, controllerFile)) {
+      issues.add(
+        SmfIssue(
+          '$path calls $factory(), which no module may call.',
+          hint: hint,
+          origin: owner,
+          path: path,
+        ),
+      );
+    }
+    if (!implementation.contains(path) && importsLibrary(index, serviceFile)) {
+      issues.add(
+        SmfIssue(
+          '$path imports $serviceFile, the file of $service, which only the '
+          'files of the implementation of the provider of the $role import.',
+          hint: hint,
+          origin: owner,
+          path: path,
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
+/// The problems with the start of the controller of a role, such as
+/// `appSession` of the [authRole], in [input]:
+/// - a call of [init] in any file of the app but that of `bootstrap()`,
+///   which awaits it once, before the first frame;
+/// - a call of `start()` on [controller] of [controllerFile] in a file of a
+///   module or of the template of another role: [init] starts the
+///   controller, and a test gives it a service of its own, but the code of
+///   an app has no reason to.
+///
+/// [hint] tells the owner of a file what to do instead. The rule reads what
+/// a file itself imports and calls, as [_checkServiceReach] does, and does
+/// not see [controller] under another name.
+List<SmfIssue> _checkControllerStart<D extends Object>(
+  StructuralRuleInput<D> input, {
+  required String init,
+  required String controller,
+  required String controllerFile,
+  required String hint,
+}) =>
+    [
+      for (final MapEntry(key: path, value: index) in input.files.entries) ...[
+        if (path != AppEntryRole.bootstrapFile &&
+            usesSymbols(index, {init}, controllerFile))
+          SmfIssue(
+            '$path calls $init(), which only bootstrap() calls.',
+            hint: hint,
+            origin: input.owners[path],
+            path: path,
+          ),
+        if (_usesController(input.owners[path], input.roleInput.role) &&
+            invokesOn(index, controller, 'start', controllerFile))
+          SmfIssue(
+            '$path calls $controller.start(), which only $init() calls.',
+            hint: hint,
+            origin: input.owners[path],
+            path: path,
+          ),
+      ],
+    ];
+
+/// The implementations that the providers of the role of [input] give it,
+/// each with its origin, in the order of the data of the role; see
+/// [_ServiceTemplate.implementationOf].
+List<({RoleImplementation implementation, ContributionOrigin? origin})>
+    _implementationsIn<D extends Object>(RoleHookInput<D> input) {
+  final template = input.role.template! as _ServiceTemplate<D>;
+  return [
+    for (final data in input.data)
+      if (template.implementationOf(data.value) case final implementation?)
+        (implementation: implementation, origin: data.origin),
+  ];
+}
+
 /// The template shared by the service roles: the brick with the service's
 /// interface, the implementations in the socket [implementations], and the
 /// registration of the service in the DI container, which the template of
 /// a role whose service is not for the code of the app leaves out.
-abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
+///
+/// [D] is the data of the role. For most service roles it is the
+/// [RoleImplementation] of a provider; a role that takes more than that,
+/// as the auth role takes the ways to sign in, tells the implementation
+/// apart with [implementationOf].
+abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
   const _ServiceTemplate();
 
-  Role<RoleImplementation> get role;
+  Role<D> get role;
+
+  /// The implementation that [data], data of the role, holds, or `null` if
+  /// it holds none.
+  RoleImplementation? implementationOf(D data) =>
+      data is RoleImplementation ? data : null;
+
+  /// The class of the data with which a provider contributes its
+  /// implementation, as a message names it.
+  String get implementationClass => 'RoleImplementation';
 
   MasonBundle get bundle;
 
@@ -263,10 +425,10 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
   /// Checks each implementation; the module rule of the role checks that
   /// every provider contributes exactly one.
   @override
-  List<SmfIssue> validate(RoleHookInput<RoleImplementation> input) => [
-        for (final data in input.data)
-          for (final problem in data.value.problems())
-            SmfIssue(problem, origin: data.origin),
+  List<SmfIssue> validate(RoleHookInput<D> input) => [
+        for (final (:implementation, :origin) in _implementationsIn(input))
+          for (final problem in implementation.problems())
+            SmfIssue(problem, origin: origin),
       ];
 
   /// Renders the implementations into [implementations].
@@ -279,10 +441,11 @@ abstract base class _ServiceTemplate extends RoleTemplate<RoleImplementation> {
   /// role makes sure before an app renders, so a role that has one provider
   /// has one implementation.
   @override
-  RoleOutput render(RoleHookInput<RoleImplementation> input) {
+  RoleOutput render(RoleHookInput<D> input) {
     final all = [
-      for (final (index, data) in input.data.indexed)
-        (implementation: data.value, prefix: 'impl$index'),
+      for (final (index, (:implementation, origin: _))
+          in _implementationsIn(input).indexed)
+        (implementation: implementation, prefix: 'impl$index'),
     ];
     final asynchronous = [
       for (final entry in all)

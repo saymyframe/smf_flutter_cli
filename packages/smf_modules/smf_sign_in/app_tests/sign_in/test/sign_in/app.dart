@@ -103,6 +103,8 @@ Finder text(String name) => find.text(texts[name]!);
 String failureTextOf(AuthFailureReason reason) => switch (reason) {
       AuthFailureReason.invalidCredentials => 'failureCredentials',
       AuthFailureReason.emailInUse => 'failureEmailInUse',
+      AuthFailureReason.credentialInUse => 'failureCredentialInUse',
+      AuthFailureReason.accountExistsWithOtherMethod => 'failureOtherMethod',
       AuthFailureReason.weakPassword => 'failureWeakPassword',
       AuthFailureReason.invalidEmail => 'emailInvalid',
       AuthFailureReason.userDisabled => 'failureDisabled',
@@ -427,7 +429,18 @@ final class ScriptedAuthService implements AuthService {
   Future<void> signOut() => _answer('signOut', () => null);
 
   @override
-  Future<void> deleteAccount() => _answer('deleteAccount', () => null);
+  Future<void> deleteAccount({SignInCredential? fresh}) =>
+      _answer('deleteAccount', () => null);
+
+  /// The screens of the module sign in with no credential of an identity
+  /// provider, so the service takes none.
+  @override
+  Future<void> signInWith(SignInCredential credential) async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
+
+  @override
+  Future<void> linkWith(SignInCredential credential) async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
 }
 
 /// Gives the session of the app [service], a service of the test with

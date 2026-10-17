@@ -21,6 +21,11 @@ final class Collected {
   /// Whether it applies: every role in its [Contribution.when] is present
   /// and, for [RoleData] and for a [SocketContribution] to a socket of a
   /// role, that role is.
+  ///
+  /// A contribution with conditions on what roles chose
+  /// ([Contribution.whenChosen]) applies by the roles alone until the
+  /// collection is decided by the choices (see [Collection.decide]); after
+  /// that, also only if every condition holds.
   final bool applies;
 
   /// Whether a render hook of [origin] returned it, as one of
@@ -31,6 +36,11 @@ final class Collected {
 
 /// Stage 4 of the pipeline: the contributions of every module, of the
 /// variants that apply, and of the templates of the present roles.
+///
+/// Validation, the checks of the machine and the choices of the roles take
+/// the collection as stage 4 makes it, where a contribution with conditions
+/// on what roles chose applies as any other. Rendering takes it decided by
+/// the choices ([decide]).
 final class Collection {
   /// Creates the collection.
   const Collection(this.all, {this.issues = const []});
@@ -63,6 +73,37 @@ final class Collection {
               when module == id)
             collected,
       ];
+
+  /// This collection once the roles have chosen: a contribution with
+  /// conditions on what roles chose ([Contribution.whenChosen]) applies
+  /// only if it applies by the roles and each condition holds in an app
+  /// with the [presentRoles], whose roles made the [choices].
+  ///
+  /// Contributions that do not apply are kept, as in [collect], so that a
+  /// fragment variable that only a brick which the app leaves out reads is
+  /// left out with it.
+  Collection decide(Map<Role, Object?> choices, Set<Role> presentRoles) =>
+      Collection(
+        List.unmodifiable([
+          for (final collected in all)
+            if (collected.applies &&
+                !collected.contribution.whenChosen.every(
+                  (condition) => condition.holds(
+                    presentRoles: presentRoles,
+                    choices: choices,
+                  ),
+                ))
+              Collected(
+                collected.contribution,
+                collected.origin,
+                applies: false,
+                fromHook: collected.fromHook,
+              )
+            else
+              collected,
+        ]),
+        issues: issues,
+      );
 }
 
 /// Stage 4 of the pipeline: collects the contributions of the modules in

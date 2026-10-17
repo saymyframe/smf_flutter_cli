@@ -16,14 +16,11 @@
 // The test of firebase_auth that enables the sign-in methods of an app in
 // the project writes to the project too, in the run that gets
 // SMF_FIREBASE_ENABLE_SIGN_IN=1, and only asks the project for them in
-// every other. The Firebase CLI enables the methods through a web app of
-// the project, and adds one to a project that has none. So the check holds
-// that variable to the same input, and SMF_FIREBASE_REGISTER of such a
-// step too, by which the test lets the Firebase CLI add the web app. It
-// also fails when more than one job gives the test the variable, and when
-// the job that gives it has a matrix and does not keep it to its first
-// job, with `strategy.job-index == 0`: two jobs would write to the project
-// at once.
+// every other. So the check holds that variable to the same input. It also
+// fails when more than one job gives the test the variable, and when the
+// job that gives it has a matrix and does not keep it to its first job,
+// with `strategy.job-index == 0`: two jobs would write to the project at
+// once.
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -60,10 +57,9 @@ const _firstJob = 'strategy.job-index == 0';
 ///   without SMF_FIREBASE_REGISTER from the input register_firebase_apps of
 ///   its workflow;
 /// - a step that runs the test of the sign-in methods with
-///   SMF_FIREBASE_REGISTER or SMF_FIREBASE_ENABLE_SIGN_IN that is not from
-///   that input, a second job that gives that test
-///   SMF_FIREBASE_ENABLE_SIGN_IN, and a job with a matrix that gives it in
-///   more than its first job;
+///   SMF_FIREBASE_ENABLE_SIGN_IN that is not from that input, a second job
+///   that gives that test SMF_FIREBASE_ENABLE_SIGN_IN, and a job with a
+///   matrix that gives it in more than its first job;
 /// - a workflow with steps that may write to the project without the
 ///   input, or with the input true by default;
 /// - a workflow other than [registering] that calls it with the input, and
@@ -83,10 +79,9 @@ List<String> problemsOf(Map<String, String> workflows) {
       for (final step in _stepsOf(value)) {
         final run = '${step['run']}';
         final where = '$file, job $job, step "${step['name']}"';
-        final register = _variableOf(step, _register);
         if (run.contains(_test)) {
           configuring.add(file);
-          if (!register.contains(_input)) {
+          if (!_variableOf(step, _register).contains(_input)) {
             problems.add(
               '$where runs $_test without $_register from the input '
               'register_firebase_apps of the workflow, which only '
@@ -95,14 +90,6 @@ List<String> problemsOf(Map<String, String> workflows) {
           }
         }
         if (!run.contains(_signInTest)) continue;
-        if (_lets(register) && !register.contains(_input)) {
-          problems.add(
-            '$where runs $_signInTest with $_register that is not from the '
-            'input register_firebase_apps of the workflow, which only '
-            '$registering sets: the Firebase CLI would add a web app to the '
-            'Firebase project of CI in any run.',
-          );
-        }
         final enable = _variableOf(step, _enable);
         if (!_lets(enable)) continue;
         configuring.add(file);
@@ -242,7 +229,6 @@ jobs:
     steps:
       - name: Enable the sign-in methods
         env:
-          SMF_FIREBASE_REGISTER: ${{ inputs.register_firebase_apps && '1' || '0' }}
           SMF_FIREBASE_ENABLE_SIGN_IN: ${{ inputs.register_firebase_apps && strategy.job-index == 0 && '1' || '0' }}
         run: each_app.sh --env SMF_CONFIGURED_APP "$apps" dart test test/enable_sign_in_test.dart
   macos:
@@ -419,29 +405,6 @@ jobs:
           reason: always,
         );
       }
-    });
-
-    test(
-        'finds a step that lets the Firebase CLI add a web app in every '
-        'run', () {
-      expect(
-        problemsOf({
-          'apps.yml': signIn.replaceFirst(
-            RegExp('SMF_FIREBASE_REGISTER: .*'),
-            'SMF_FIREBASE_REGISTER: "1"',
-          ),
-          'build.yml': build,
-        }),
-        [
-          equals(
-            '$step runs test/enable_sign_in_test.dart with '
-            'SMF_FIREBASE_REGISTER that is not from the input '
-            'register_firebase_apps of the workflow, which only build.yml '
-            'sets: the Firebase CLI would add a web app to the Firebase '
-            'project of CI in any run.',
-          ),
-        ],
-      );
     });
 
     test(

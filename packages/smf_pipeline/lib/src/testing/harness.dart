@@ -64,13 +64,18 @@ final class ContractResult {
   /// The case.
   final ContractCase contractCase;
 
-  /// The errors and warnings found.
+  /// The errors and warnings found: those of the stages 3 to 5, of the
+  /// choices of the roles that the app is rendered with, and of the checks
+  /// of the rendered app.
   final List<SmfIssue> issues;
 
   /// The modules of the app, if the case resolved.
   final Resolution? resolution;
 
-  /// The contributions of the app, if the case resolved.
+  /// The contributions of the app, if the case resolved: as stage 4 makes
+  /// them, and once the harness rendered the [app], decided by the
+  /// [choices], so that a contribution with conditions on what the roles
+  /// chose applies only where they hold (see [Collection.decide]).
   final Collection? collection;
 
   /// The result of stage 5, with the order of every socket and the merged
@@ -106,10 +111,11 @@ final class ContractResult {
   /// provides it.
   final RoleHookRequest? hook;
 
-  /// This result with [more] issues, and with the [choices], the
-  /// [answers], the [app] and the [hook] if they are given.
+  /// This result with [more] issues, and with the [collection], the
+  /// [choices], the [answers], the [app] and the [hook] if they are given.
   ContractResult _with(
     List<SmfIssue> more, {
+    Collection? collection,
     Map<Role, Object?>? choices,
     Map<String, String>? answers,
     RenderedApp? app,
@@ -119,7 +125,7 @@ final class ContractResult {
         contractCase,
         [...issues, ...more],
         resolution: resolution,
-        collection: collection,
+        collection: collection ?? this.collection,
         validation: validation,
         choices: choices ?? this.choices,
         answers: answers ?? this.answers,
@@ -131,6 +137,19 @@ final class ContractResult {
   List<SmfIssue> get errors => [
         for (final issue in issues)
           if (issue.isError) issue,
+      ];
+
+  /// The warnings about what the app is made of among [issues], such as a
+  /// destination that no main navigation leads to, each with its code (see
+  /// [SmfIssue.code]).
+  ///
+  /// `smf create` reports them for the app of the case: those of the
+  /// validation, and those of the choices of the roles, which the harness
+  /// makes as `smf create` does. The harness fails no case for them, since
+  /// a case is an app with only some of the modules that an app would have.
+  List<SmfIssue> get warnings => [
+        for (final issue in issues)
+          if (issue.category == WarningCategory.composition) issue,
       ];
 
   /// The modules of the app with their variants, and the values that the
@@ -753,6 +772,16 @@ final class ContractHarness {
   /// [contractCase], then, if [render] is on and they found no error, the
   /// stages 7 and 8 and [checkRendered].
   ///
+  /// The stage 5 gets the options of the case and [roleOptions], which
+  /// `smf create` gets for the app of the case, so an option of a role
+  /// that the app lacks is a warning of the result, as in `smf create`.
+  ///
+  /// As the pipeline does, it renders the app with the contributions that
+  /// the choices of stage 7 decided (see [Collection.decide]), and the
+  /// result has them, with the [ContractResult.hook] of that app; the
+  /// stages before take a contribution with conditions on what the roles
+  /// chose as one that applies.
+  ///
   /// Before the stage 7, it reports a value that the case or [roleOptions]
   /// give an option that does not take it (see [RoleOption.allowed]), as
   /// the command line would refuse it, and makes no choice with it.
@@ -773,6 +802,14 @@ final class ContractHarness {
   ///   value for a mode option that the case leaves out;
   /// - the two choices of the role are equal, so that the run without a
   ///   terminal generates the app that the harness renders.
+  ///
+  /// The issues of the choices that the app is rendered with, those of the
+  /// run in a terminal, are issues of the result too: the warnings that the
+  /// hooks report with [RoleChoiceContext.warn] (see
+  /// [ContractResult.warnings]), and the errors of such warnings with a
+  /// code of another role. A hook that warns through the logger, in any of
+  /// the runs, is an error of the role's template, since its warning has
+  /// no code.
   ///
   /// An app with such an error is not rendered.
   Future<ContractResult> check(ContractCase contractCase) async {
@@ -797,11 +834,14 @@ final class ContractHarness {
       return ContractResult(contractCase, resolved.issues);
     }
     final collection = collect(resolution, context);
+    final options = {...roleOptions, ...contractCase.roleOptions};
     final validation = validate(
       registry: registry,
       resolution: resolution,
       collection: collection,
       context: context,
+      // The options that `smf create` gets for the app of the case.
+      optionValues: options,
       interactive: environment.interactive,
       skipExternalSetup: environment.skipExternalSetup,
     );
@@ -823,28 +863,31 @@ final class ContractHarness {
     );
     if (!render || checked.errors.isNotEmpty) return checked;
 
-    final options = {...roleOptions, ...contractCase.roleOptions};
     final refused = _refusedValues(options);
     if (refused.isNotEmpty) return checked._with(refused);
     final Map<Role, Object?> choices;
+    // The issues of the choices that the app is rendered with.
+    final List<SmfIssue> chosen;
+    final Collection decided;
     final RenderedApp app;
     final answering = _EnterPrompter();
+    final logged = _LoggedWarnings();
     // The choices of the roles that asked, which the harness answered.
     final answered = <Role, Object?>{};
     final Map<String, String> answers;
     try {
-      choices = await chooseRoles(
-        registry: registry,
+      (:choices, issues: chosen) = await chooseRoles(
         resolution: resolution,
         collection: collection,
         optionValues: options,
         environment: PipelineEnvironment(
-          _answeringHost(answering),
+          _answeringHost(answering, logged),
           interactive: true,
           skipExternalSetup: true,
         ),
         context: context,
         onChoice: (role, choice) {
+          logged.chose(role);
           if (!answering.asked) return;
           answering.asked = false;
           answered[role] = choice;
@@ -852,29 +895,44 @@ final class ContractHarness {
       );
       final (options: given, :problems) = await _answersOf(
         answered,
+        chosen: chosen,
         resolution: resolution,
         collection: collection,
         options: options,
+        logged: logged,
       );
       if (problems.isNotEmpty) {
-        return checked._with(problems, choices: choices);
+        return checked._with(
+          [...chosen, ...problems, ...logged.problems],
+          choices: choices,
+        );
       }
-      final ofModes = await _modeProblems(
+      final replayed = await _replayProblems(
         choices,
+        chosen: chosen,
         asked: {...answered.keys},
         resolution: resolution,
         collection: collection,
         options: options,
         answers: given,
+        logged: logged,
       );
-      if (ofModes.isNotEmpty) {
-        return checked._with(ofModes, choices: choices);
+      if (replayed.isNotEmpty) {
+        return checked._with(
+          [...chosen, ...replayed, ...logged.problems],
+          choices: choices,
+        );
+      }
+      final ofChoices = [...chosen, ...logged.problems];
+      if (ofChoices.any((issue) => issue.isError)) {
+        return checked._with(ofChoices, choices: choices);
       }
       answers = given;
+      decided = collection.decide(choices, resolution.presentRoles);
       app = renderApp(
         registry: registry,
         resolution: resolution,
-        collection: collection,
+        collection: decided,
         context: context,
         choices: choices,
         pubspec: validation.pubspec,
@@ -888,14 +946,15 @@ final class ContractHarness {
       ]);
     }
     final rendered = checked._with(
-      const [],
+      chosen,
+      collection: decided,
       choices: choices,
       answers: answers,
       app: app,
       hook: hookRequest(
         registry: registry,
         resolution: resolution,
-        collection: collection,
+        collection: decided,
         context: context,
         choices: choices,
       ),
@@ -926,13 +985,18 @@ final class ContractHarness {
   /// The options that the templates of the roles in [answered] give for the
   /// choices that the harness answered, and the problems of those options:
   /// a role that gives none, or one that it does not declare, and options
-  /// with which a run without a terminal, with [options] too, fails or
-  /// makes another choice.
+  /// with which a run without a terminal, with [options] too, fails, makes
+  /// another choice, or warns of other codes than the run in a terminal,
+  /// whose issues are [chosen] (see [_warningProblems]).
+  ///
+  /// [logged] notes what the hooks warn of through the logger in that run.
   Future<({Map<String, String> options, List<SmfIssue> problems})> _answersOf(
     Map<Role, Object?> answered, {
+    required List<SmfIssue> chosen,
     required Resolution resolution,
     required Collection collection,
     required Map<String, String?> options,
+    required _LoggedWarnings logged,
   }) async {
     final (options: given, :problems) = _optionsOfAnswers(answered);
     if (answered.isEmpty || problems.isNotEmpty) {
@@ -944,18 +1008,19 @@ final class ContractHarness {
       for (final MapEntry(:key, :value) in given.entries) '--$key $value',
     ].join(' ');
     final Map<Role, Object?> again;
+    final List<SmfIssue> warned;
     try {
-      again = await chooseRoles(
-        registry: registry,
+      (choices: again, issues: warned) = await chooseRoles(
         resolution: resolution,
         collection: collection,
         optionValues: {...options, ...given},
         environment: PipelineEnvironment(
-          _silentHost,
+          _silentHostWith(logged),
           interactive: false,
           skipExternalSetup: true,
         ),
         context: context,
+        onChoice: (role, _) => logged.chose(role),
       );
     } on SmfUsageException catch (error) {
       return (
@@ -979,6 +1044,14 @@ final class ContractHarness {
         );
       }
     }
+    problems.addAll(
+      _warningProblems(
+        resolution.presentRoles,
+        chosen: chosen,
+        again: warned,
+        run: 'a run without a terminal with $shown',
+      ),
+    );
     return (options: given, problems: problems);
   }
 
@@ -1022,35 +1095,43 @@ final class ContractHarness {
     return (options: given, problems: problems);
   }
 
-  /// The problems of the mode options of the roles of an app (see
-  /// [RoleOption.mode]), whose roles made [choices] in a terminal with
+  /// The problems of the run without a terminal in which the matrices
+  /// generate the app, whose roles made [choices] in a terminal with
   /// [options], where the harness answered the questions of the roles in
   /// [asked] as a user who presses Enter; see [check]. [answers] are the
-  /// options that make the choices that the harness answered.
+  /// options that make the choices that the harness answered, and [chosen]
+  /// the issues of the run in a terminal.
   ///
   /// It makes the choices again without a terminal, as the matrices
   /// generate every app, with [options] and [answers] but no answer for a
-  /// mode option: one that [options] give has that value, and no run needs
-  /// the others. Then it holds each role with a mode option to the option
-  /// in both runs, and the two choices of the role to one another:
-  /// - The value of a choice is what [RoleTemplate.optionsOf] gives the
-  ///   option for it, so a template that gives none is reported too. It is
-  ///   the value that [options] give, or the first value of the option.
-  ///   Both runs with the same other value are one problem.
-  /// - The choices of the two runs are equal. A role that asks is held to
-  ///   that by its answers already; this holds one that asks nothing, or
-  ///   that gets every answer from [options].
+  /// mode option (see [RoleOption.mode]): one that [options] give has that
+  /// value, and no run needs the others. Then:
   /// - A role that fails or asks in the run without a terminal is a
-  ///   problem of that role, also when it has no mode option: the apps of
-  ///   the case cannot be generated without a terminal. The roles that
-  ///   chose before it are still checked.
-  Future<List<SmfIssue>> _modeProblems(
+  ///   problem of that role: the apps of the case cannot be generated
+  ///   without a terminal. The roles that chose before it are still checked
+  ///   for their mode options.
+  /// - A role whose warnings about the app have other codes than in the run
+  ///   in a terminal is a problem of that role (see [_warningProblems]).
+  /// - It holds each role with a mode option to the option in both runs,
+  ///   and the two choices of the role to one another. The value of a
+  ///   choice is what [RoleTemplate.optionsOf] gives the option for it, so
+  ///   a template that gives none is reported too. It is the value that
+  ///   [options] give, or the first value of the option. Both runs with the
+  ///   same other value are one problem. The choices of the two runs are
+  ///   equal: a role that asks is held to that by its answers already, and
+  ///   this holds one that asks nothing, or that gets every answer from
+  ///   [options].
+  ///
+  /// [logged] notes what the hooks warn of through the logger in that run.
+  Future<List<SmfIssue>> _replayProblems(
     Map<Role, Object?> choices, {
+    required List<SmfIssue> chosen,
     required Set<Role> asked,
     required Resolution resolution,
     required Collection collection,
     required Map<String, String?> options,
     required Map<String, String> answers,
+    required _LoggedWarnings logged,
   }) async {
     final modes = <Role, List<RoleOption>>{};
     for (final role in resolution.presentRoles) {
@@ -1058,7 +1139,6 @@ final class ContractHarness {
         if (option.isMode) modes.putIfAbsent(role, () => []).add(option);
       }
     }
-    if (modes.isEmpty) return const [];
     final names = {
       for (final ofRole in modes.values)
         for (final option in ofRole) option.name,
@@ -1067,10 +1147,10 @@ final class ContractHarness {
     // The choices of the run without a terminal, of the roles that made
     // one before a role failed.
     final again = <Role, Object?>{};
+    List<SmfIssue>? warned;
     String? failure;
     try {
-      await chooseRoles(
-        registry: registry,
+      warned = (await chooseRoles(
         resolution: resolution,
         collection: collection,
         optionValues: {
@@ -1079,13 +1159,17 @@ final class ContractHarness {
             if (!names.contains(key)) key: value,
         },
         environment: PipelineEnvironment(
-          _silentHost,
+          _silentHostWith(logged),
           interactive: false,
           skipExternalSetup: true,
         ),
         context: context,
-        onChoice: (role, choice) => again[role] = choice,
-      );
+        onChoice: (role, choice) {
+          logged.chose(role);
+          again[role] = choice;
+        },
+      ))
+          .issues;
     } on SmfUsageException catch (error) {
       failure = error.message;
     } on GenerationFailedException catch (error) {
@@ -1096,14 +1180,20 @@ final class ContractHarness {
       if (failure != null)
         _failedWithoutTerminal(
           failure,
-          // The roles choose in the order of the present roles, so the
-          // first role with a template that has not chosen is the one
-          // that failed.
-          resolution.presentRoles.firstWhere(
-            (role) => role.template != null && !again.containsKey(role),
-          ),
+          // The first role in the order of the choices that has not chosen
+          // is the one that failed.
+          choiceOrder(resolution.presentRoles, collection.roleData)
+              .order
+              .firstWhere((role) => !again.containsKey(role)),
           modes: modes,
           options: options,
+        ),
+      if (warned != null)
+        ..._warningProblems(
+          resolution.presentRoles,
+          chosen: chosen,
+          again: warned,
+          run: 'a run without a terminal',
         ),
       for (final MapEntry(key: role, value: ofRole) in modes.entries)
         ..._choiceProblems(
@@ -1115,6 +1205,46 @@ final class ContractHarness {
           choseAgain: again.containsKey(role),
           again: again[role],
         ),
+    ];
+  }
+
+  /// The problems of the roles among [roles] whose warnings about the app
+  /// (see [ContractResult.warnings]) have other codes in [run], a run
+  /// without a terminal whose issues are [again], than in the run in a
+  /// terminal that the app is rendered with, whose issues are [chosen].
+  ///
+  /// A code names the role that reports it (see [SmfIssue.code]). The
+  /// matrices generate the app without a terminal, so a role that warns of
+  /// other codes there than when the harness renders the app would warn of
+  /// what no result of the harness says.
+  static List<SmfIssue> _warningProblems(
+    Iterable<Role> roles, {
+    required List<SmfIssue> chosen,
+    required List<SmfIssue> again,
+    required String run,
+  }) {
+    String codesOf(List<SmfIssue> issues, Role role) {
+      final codes = {
+        for (final issue in issues)
+          if (issue.code case final code? when code.startsWith('${role.id}.'))
+            code,
+      }.toList()
+        ..sort();
+      return codes.isEmpty ? 'nothing' : codes.join(', ');
+    }
+
+    return [
+      for (final role in roles)
+        if ((codesOf(chosen, role), codesOf(again, role))
+            case (final inTerminal, final without) when inTerminal != without)
+          SmfIssue(
+            'The $role warns of $without in $run, and of $inTerminal in a '
+            'terminal, where the harness answered as a user who presses '
+            'Enter.',
+            hint: 'The matrices generate the app without a terminal, so the '
+                'choice has to warn of the same in both runs.',
+            origin: RoleTemplateOrigin(role),
+          ),
     ];
   }
 
@@ -1146,7 +1276,7 @@ final class ContractHarness {
   /// The problems of the choices of [role], a role with the mode options
   /// [modes], with [options]: [inTerminal], where the harness answered a
   /// question of the role if it [asked], and [again], in the run without a
-  /// terminal, if the role chose there ([choseAgain]); see [_modeProblems].
+  /// terminal, if the role chose there ([choseAgain]); see [_replayProblems].
   static List<SmfIssue> _choiceProblems(
     Role role,
     List<RoleOption> modes, {
@@ -1312,12 +1442,19 @@ final class ContractHarness {
   /// Indexes the Dart files among [files], the text files of the rendered
   /// app of [result] by path, runs the structural rules of its present roles
   /// with the data it collected and the texts, and checks the symbols of
-  /// their interfaces.
+  /// their interfaces: those that the app needs, by the choices of its
+  /// roles, are declared, and the app has no file of one that it does not
+  /// need (see [RoleInterface.checkSymbols]).
   ///
   /// [owners] names who generated each file; the rules of the roles check
   /// only files with an owner.
   ///
-  /// Throws an [ArgumentError] if the case of [result] did not resolve.
+  /// Throws an [ArgumentError] if the case of [result] did not resolve, and
+  /// a [StateError] if the harness did not render its app, so that its
+  /// roles made no choice, while a present role has a symbol with a
+  /// condition of a role that the app has: whether the app needs the symbol
+  /// cannot be told. A condition of a role that the app lacks holds or
+  /// fails without a choice, so its symbol is checked as before.
   List<SmfIssue> checkStructure(
     ContractResult result, {
     required Map<String, String> files,
@@ -1431,13 +1568,34 @@ final class ContractHarness {
     Map<String, ContributionOrigin> owners,
   ) {
     final (:resolution, :collection) = _resolved(result);
+    final choices = result.choices;
+    if (choices == null) {
+      final present = resolution.presentRoles;
+      for (final role in present) {
+        final deciding = {
+          for (final symbol in role.interface.symbols)
+            for (final condition in symbol.whenChosen) condition.role,
+        };
+        // With no choices, a condition of a role of the app would hold or
+        // fail by a choice of null, which that role may never make. A
+        // condition of a role that the app lacks holds or fails without a
+        // choice.
+        if (deciding.any(present.contains)) {
+          throw StateError(
+            'The app of the case ${result.contractCase} was not rendered, so '
+            'the roles made no choice, and the $role has symbols that depend '
+            'on what roles chose.',
+          );
+        }
+      }
+    }
     final request = StructuralRuleRequest(
       hook: hookRequest(
         registry: registry,
         resolution: resolution,
         collection: collection,
         context: context,
-        choices: result.choices ?? const {},
+        choices: choices ?? const {},
       ),
       files: indexes,
       texts: texts,
@@ -1446,10 +1604,32 @@ final class ContractHarness {
     );
     return [
       for (final role in resolution.presentRoles) ...[
-        ...role.checkStructure(request),
-        ...role.interface.checkSymbols(indexes),
+        for (final issue in role.checkStructure(request))
+          _structuralIssue(issue, role),
+        ...role.interface.checkSymbols(indexes, request.hook),
       ],
     ];
+  }
+
+  /// [issue], which a structural rule of [role] reported, or an error for
+  /// it if it is a warning: `smf create` runs no structural rule, so nobody
+  /// who generates the app would see the warning.
+  static SmfIssue _structuralIssue(SmfIssue issue, Role role) {
+    final kind = switch (issue.category) {
+      null => null,
+      WarningCategory.composition => 'a warning',
+      WarningCategory.machine => 'a warning about the machine',
+    };
+    if (kind == null) return issue;
+    return SmfIssue(
+      'A structural rule of the $role reported $kind, which nobody who '
+      'generates the app sees: smf create runs no structural rule. '
+      '${issue.message}',
+      hint: 'Report it as an error, or as a warning of a validate hook or a '
+          'module rule.',
+      origin: issue.origin,
+      path: issue.path,
+    );
   }
 
   ({Resolution resolution, Collection collection}) _resolved(
@@ -2044,21 +2224,26 @@ int _bitCount(int mask) {
   return count;
 }
 
-final SmfHost _silentHost = SmfHost(
-  prompter: const _NoPrompter(),
-  processRunner: const _NoProcessRunner(),
-  logger: const _SilentLogger(),
-  fileSystem: MemoryFileSystem(),
-  environmentVariables: const {},
-  operatingSystem: HostOperatingSystem.other,
-  hasTerminal: false,
-);
+/// A host without a user, commands or output, for the stages before the
+/// choices: nothing reads what its logger notes.
+final SmfHost _silentHost = _silentHostWith(_LoggedWarnings());
 
-/// A host like [_silentHost] whose user answers with [prompter].
-SmfHost _answeringHost(SmfPrompter prompter) => SmfHost(
+/// A host without a user, commands or output, whose logger is [logged].
+SmfHost _silentHostWith(_LoggedWarnings logged) => SmfHost(
+      prompter: const _NoPrompter(),
+      processRunner: const _NoProcessRunner(),
+      logger: logged,
+      fileSystem: MemoryFileSystem(),
+      environmentVariables: const {},
+      operatingSystem: HostOperatingSystem.other,
+      hasTerminal: false,
+    );
+
+/// A host like [_silentHostWith] whose user answers with [prompter].
+SmfHost _answeringHost(SmfPrompter prompter, _LoggedWarnings logged) => SmfHost(
       prompter: prompter,
       processRunner: const _NoProcessRunner(),
-      logger: const _SilentLogger(),
+      logger: logged,
       fileSystem: MemoryFileSystem(),
       environmentVariables: const {},
       operatingSystem: HostOperatingSystem.other,
@@ -2165,8 +2350,44 @@ final class _NoProcessRunner implements SmfProcessRunner {
       throw StateError('The contract harness runs no commands: $executable');
 }
 
-final class _SilentLogger implements SmfLogger {
-  const _SilentLogger();
+/// A logger that prints nothing and notes the warnings, for the choices of
+/// the roles of an app: it tells what each hook warns of through it, which
+/// a [RoleTemplate.choose] hook reports with [RoleChoiceContext.warn]
+/// instead, with a code.
+///
+/// The choices run one after another, so the warnings since the previous
+/// choice are of the hook of the role that has just chosen ([chose]).
+/// Those of a hook that fails are not reported: its failure is.
+final class _LoggedWarnings implements SmfLogger {
+  final List<String> _pending = [];
+
+  /// The warnings of each role through the logger, each once.
+  final Map<Role, Set<String>> _byRole = {};
+
+  /// Notes that [role] has chosen, so that the warnings since the last
+  /// choice are of its hook.
+  void chose(Role role) {
+    if (_pending.isEmpty) return;
+    _byRole.putIfAbsent(role, () => {}).addAll(_pending);
+    _pending.clear();
+  }
+
+  /// An error of the template of each role for each warning of its hook
+  /// through the logger, which no run would see as a warning about the
+  /// app.
+  List<SmfIssue> get problems => [
+        for (final MapEntry(key: role, value: messages) in _byRole.entries)
+          for (final message in messages)
+            SmfIssue(
+              'The template of the $role warned through the logger in '
+              'choose(): $message',
+              hint: 'Report it with context.warn() and a code.',
+              origin: RoleTemplateOrigin(role),
+            ),
+      ];
+
+  @override
+  void warn(String message) => _pending.add(message);
 
   @override
   void detail(String message) {}
@@ -2182,9 +2403,6 @@ final class _SilentLogger implements SmfLogger {
 
   @override
   void success(String message) {}
-
-  @override
-  void warn(String message) {}
 }
 
 final class _SilentProgress implements SmfProgress {
