@@ -35,6 +35,7 @@ workspace:
   - packages/smf_modules/smf_gen_l10n
   - packages/smf_modules/smf_get_it
   - packages/smf_modules/smf_go_router
+  - packages/smf_modules/smf_google_sign_in
   - packages/smf_modules/smf_home_flutter
   - packages/smf_modules/smf_material_theme
   - packages/smf_modules/smf_onboarding
