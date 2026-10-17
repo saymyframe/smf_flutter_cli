@@ -56,11 +56,11 @@
 # neither file in 150 s after its start check passed, when the command
 # fails or takes more than 300 s, when the app gives no verdict in 150 s
 # after the command, when the app stops before it, and when the verdict is
-# not `passed`. It never prints a request, which may have what only the app
-# and CI are to know, such as the address of the device, and removes its
-# copy. Answers need a debug app, whose files the script reads; without
-# them, it is done once the start check passed. tools/start_app_test.dart
-# tests this protocol.
+# not `passed`. It prints no request and removes its copy, but the log of
+# the app that it prints shows what the app printed itself, such as the
+# address for push messages that a debug app prints. Answers need a debug
+# app, whose files the script reads; without them, it is done once the
+# start check passed. tools/start_app_test.dart tests this protocol.
 set -euo pipefail
 # shellcheck source=build_apk.sh
 source "$(dirname "${BASH_SOURCE[0]}")/build_apk.sh"
@@ -102,6 +102,8 @@ if [ "$mode" = release ] && [ ${#answers[@]} -gt 0 ]; then
 fi
 check=integration_test/start_check.dart
 result=smf_start_check
+# When the start check passed, by SECONDS.
+passed=
 # The copy of the request of the app that an answer is running for, which
 # the script removes when it ends, as when the step that runs it times out.
 copy=
@@ -229,6 +231,7 @@ wait_for_result() {
     exit 1
   fi
   echo "The start check of the app passed $((SECONDS - launched)) s after the app was launched, $SECONDS s after the script started."
+  passed=$SECONDS
 }
 
 # Runs the answers, one after another, once the start check passed.
@@ -255,7 +258,7 @@ asked_or_reported() {
 # Runs the answer $1, the command $2, for the request of the app, and fails
 # unless the verdict of the app on it is `passed` (see the top).
 answer() {
-  local name="$1" command="$2" passed=$SECONDS began code=0
+  local name="$1" command="$2" began code=0
   allow 150 "that the app has to ask for the answer $name"
   poll asked_or_reported "$name" || code=$?
   if [ "$code" -eq 1 ]; then
