@@ -159,9 +159,9 @@ void main() {
       'the app tests check the contract of the router role, of the layout '
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
-      'of the auth role and of the onboarding screen role with every '
-      'provider of each, which they tell apart by the roles of the app '
-      'only', () {
+      'of the auth role, of the onboarding screen role and of the '
+      'notifications role with every provider of each, which they tell apart '
+      'by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -175,10 +175,12 @@ void main() {
         appEntryRole,
         authRole,
         onboardingScreenRole,
+        notificationsRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
     expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
+    expect(named('notifications_role').roles, {notificationsRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -266,9 +268,9 @@ void main() {
 
   test(
       'the tests of the events role, of the preferences role, of the '
-      'localization role, of the theme role and of the walk of the routes '
-      'apply only to the apps with every module, which have the roles and '
-      'run flutter test for other tests already', () {
+      'localization role, of the theme role, of the notifications role and '
+      'of the walk of the routes apply only to the apps with every module, '
+      'which have the roles and run flutter test for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -286,6 +288,9 @@ void main() {
       'preferences_restorers',
       'theme_role',
       'theme_look',
+      // The test of the notifications that the CLI keeps, for the fixture
+      // notifications, which every such app has.
+      'notifications_role',
     ]) {
       expect(
         appsOf(named(name)),
@@ -323,12 +328,21 @@ void main() {
     for (final app in everyModule) {
       expect(
         app.hook!.presentRoles,
-        containsAll([eventsRole, preferencesRole, themeRole]),
+        containsAll([
+          eventsRole,
+          preferencesRole,
+          themeRole,
+          notificationsRole,
+        ]),
         reason: app.name,
       );
       expect(
         app.modules,
-        containsAll([FakePreferencesUserModule.id, FakeThemeModule.id]),
+        containsAll([
+          FakePreferencesUserModule.id,
+          FakeThemeModule.id,
+          FakeNotificationsModule.id,
+        ]),
         reason: app.name,
       );
       expect(appsOf(named('router_screens')), contains(app.name));
@@ -638,6 +652,36 @@ void main() {
         ),
       ),
     );
+  });
+
+  test(
+      'the test of the notifications role applies to the apps with every '
+      'module, where the fixture notifications provide the role, and not to '
+      'the apps of the fixture alone, which the matrix only analyzes', () {
+    final notificationsTest = named('notifications_role');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(notificationsRole)) app.name,
+    ];
+
+    expect(
+      withRole,
+      containsAll([
+        'fake_notifications with localization',
+        'fake_notifications',
+      ]),
+    );
+    expect(appsOf(notificationsTest), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps.where(notificationsTest.appliesTo)) {
+      expect(
+        notificationsTest.values!(app),
+        {'asked_key': NotificationsRole.askedKey},
+        reason: app.name,
+      );
+    }
   });
 
   test(

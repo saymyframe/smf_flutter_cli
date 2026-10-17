@@ -3264,6 +3264,79 @@ void main() {
   });
 
   test(
+      'the test of the notifications role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given, '
+      'gets the key of the role, and has a probe for the start check',
+      () async {
+    MatrixApp appWith(Role role, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'notifications',
+          const [ModuleId('notifications')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: {role, preferencesRole},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await notificationsRoleAppTest();
+
+    expect(p.basename(test.directory), 'notifications_role');
+    expect(Directory(test.directory).existsSync(), isTrue);
+    expect(test.roles, {notificationsRole});
+    expect(test.appliesTo(appWith(notificationsRole)), isTrue);
+    expect(test.appliesTo(appWith(authRole)), isFalse);
+    // The key under which the app remembers that it asked, as the role
+    // publishes it, the same in every app; the matrix writes no file for
+    // the test, which has no mocks either.
+    expect(test.values!(appWith(notificationsRole)), {
+      'asked_key': NotificationsRole.askedKey,
+    });
+    expect(test.generatedFiles, isNull);
+    expect(test.mocks, isNull);
+    // No module of the CLI provides the role yet, so its matrix does not
+    // run the test.
+    expect(apps.where(test.appliesTo), isEmpty);
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await notificationsRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(everyModule.appliesTo(appWith(notificationsRole)), isFalse);
+    expect(
+      everyModule.appliesTo(
+        appWith(notificationsRole, everyModuleWith: const []),
+      ),
+      isTrue,
+    );
+    expect(
+      everyModule.appliesTo(appWith(authRole, everyModuleWith: const [])),
+      isFalse,
+    );
+
+    // Its probe is a function of a file of the test that takes the one that
+    // waits until the screen settles, as the start check calls it.
+    final probe = test.startProbe!;
+    expect(probe.path, 'integration_test/notifications_role/probe.dart');
+    final file = File(p.joinAll([test.directory, ...probe.path.split('/')]));
+    final (:index, :errors) =
+        DartFileIndexer.parse(probe.path, file.readAsStringSync());
+    expect(errors, isEmpty);
+    final function = index.declarations
+        .singleWhere((declaration) => declaration.name == probe.function);
+    expect(function.name, 'probeNotifications');
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'Future<List<String>>');
+    expect(
+      [
+        for (final parameter in function.parameters)
+          '${parameter.kind.name} ${parameter.type}',
+      ],
+      ['requiredPositional Future<void> Function()'],
+    );
+  });
+
+  test(
       'the test of Firebase Authentication applies to the apps with the '
       'module, whatever else they have, in every mode of the auth role, '
       'declares the mocks of its platform side for the tests of every '

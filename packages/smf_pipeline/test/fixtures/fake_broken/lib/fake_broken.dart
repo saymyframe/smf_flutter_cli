@@ -678,6 +678,24 @@ final class BrokenModule extends SmfModule {
   /// The file of the fixture sign-in.
   static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
 
+  /// The fixture notifications whose function forgets the notifications
+  /// that are scheduled each time it opens them, as a provider does that
+  /// keeps them only in memory: the next start of the app has none of them,
+  /// and the system never shows them.
+  static const notificationsForgettingSchedules = BrokenModule._(
+    FakeNotificationsModule(),
+    ModuleId('broken_notifications_forget_schedules'),
+    'Notifications that forget what was scheduled at each start (fixture)',
+    'lib/core/fixture_notifications/fixture_notifications.dart',
+    [
+      (
+        '  await _answer();\n  return FixtureNotifications._();\n',
+        '  await _answer();\n  _scheduled.clear();\n'
+            '  return FixtureNotifications._();\n',
+      ),
+    ],
+  );
+
   /// The module with the bug.
   final SmfModule of;
 
