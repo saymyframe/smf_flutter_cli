@@ -46,7 +46,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | `-o`, `--output` | The directory in which the app's directory is created. |
 | `--no-input` | Ask nothing; everything comes from the options. |
 | `--explain` | Print what would be generated and whether the machine is ready, then stop. |
-| `--strict` | Stop instead of leaving out a module that cannot work in the app. |
+| `--strict` | Stop instead of leaving out a module that cannot work in the app, and stop on a warning about what the app is made of, such as a destination that no main navigation leads to. |
 | `--skip-external-setup` | Never install tools, log in or configure external services. |
 | `--on-conflict` | What to do when the app's directory exists and is not empty: `prompt`, `replace`, `copy` or `cancel`. |
 | `--start` | The full path of the screen the app starts on, such as `/home`. |
