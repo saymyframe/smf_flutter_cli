@@ -4,6 +4,8 @@ The SMF module of preferences with [shared_preferences](https://pub.dev/packages
 
 The preferences role generates the `AppPreferences` interface, whose reads are synchronous and whose writes complete once the value is saved, and opens the preferences in `bootstrap()`, before the first frame. This module adds `shared_preferences` to the app and implements the interface on `SharedPreferencesWithCache`, which keeps the values in DataStore on Android and in `UserDefaults` on iOS. With a module that provides dependency injection, the preferences are registered in its container.
 
+The module also keeps `shared_preferences_android`, the Android side of the package, below 2.5.0. With 2.5.0, a release build of the app fails to open the preferences on Android, because R8 renames Kotlin classes that the package looks up by name.
+
 Nothing in the preferences is encrypted, and a backup of the device carries them: never store a token, a password, an API key or an encryption key there.
 
 A read returns `null` when its key has no value of its type, and a number is read only as the type that it was saved as: `getDouble` returns `null` for a key with an `int`, and `getInt` for a key with a `double`.
