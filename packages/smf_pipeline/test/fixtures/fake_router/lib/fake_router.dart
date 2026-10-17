@@ -23,15 +23,17 @@
 /// is in its stack, or closes the pages on top and makes that request
 /// again, or drops it when they say so. A page is one that it can close on
 /// its own while the push that showed it waits, and so is a page that
-/// `replace()` showed in place of such a page. It keeps the fallback screen
-/// below the pages that pushes show over it. A location that the guards
-/// answer in place of the stack completes the pushes of the pages that
-/// leave, so no page of it is one that a push showed. Its pages have the
-/// location as their key, so it cannot show one location twice in a stack.
-/// When the main navigation leaves the stack, by an answer of the guards or
-/// by a navigation, the branches get new navigators, so that a main
-/// navigation that comes back before the transition to the page that took
-/// its place is over shares no key with the one that left.
+/// `replace()` showed in place of such a page. In an app that no route
+/// starts, it shows the fallback start screen of the app entry at `/` and
+/// keeps it below the pages that pushes show over it; in an app that a
+/// route starts, it neither shows nor imports that screen. A location that
+/// the guards answer in place of the stack completes the pushes of the
+/// pages that leave, so no page of it is one that a push showed. Its pages
+/// have the location as their key, so it cannot show one location twice in
+/// a stack. When the main navigation leaves the stack, by an answer of the
+/// guards or by a navigation, the branches get new navigators, so that a
+/// main navigation that comes back before the transition to the page that
+/// took its place is over shares no key with the one that left.
 library;
 
 import 'package:fake_router/bundles/fake_router_bundle.dart';
@@ -124,20 +126,33 @@ final class FakeRouterProvider extends RoleProvider<RoutesData> {
     }
 
     final start = routerRole.startIn(input);
+    const fallback = AppEntryRole.fallbackStartScreen;
     final destinations =
         input.has(layoutRole) ? facade.destinations : const <FacadeRoute>[];
     return RoleOutput(
       fragments: fragments,
       vars: {
         'start': start == null ? '' : 'const ${start.locationClass}()',
+        // The page of the fallback start screen, with the import of its
+        // file, only in an app that no route starts.
+        'fallback_page': start == null
+            ? Fragment(
+                'MaterialPage<Object?>(child: ${fallback.name}())',
+                imports: [fallback.importRef],
+              )
+            : const Fragment('null'),
         // The screens come with the imports of their files, which the
-        // pipeline adds to the file that reads the variable.
-        'screen': Fragment(
-          cases.isEmpty
-              ? 'const ${AppEntryRole.fallbackStartScreen.name}()'
-              : 'switch (location) {\n${cases.join('\n')}\n}',
-          imports: [...prefixes.values],
-        ),
+        // pipeline adds to the file that reads the variable. An app
+        // without routes has none, and no route starts it.
+        'screen': cases.isEmpty
+            ? Fragment(
+                'const ${fallback.name}()',
+                imports: [fallback.importRef],
+              )
+            : Fragment(
+                'switch (location) {\n${cases.join('\n')}\n}',
+                imports: [...prefixes.values],
+              ),
         'destinations': [
           for (final route in destinations) '${route.locationClass}()',
         ].join(', '),
