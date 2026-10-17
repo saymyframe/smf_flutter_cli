@@ -1,10 +1,10 @@
 // What a user of `smf create` sees of the step that enables the sign-in
-// methods: the check of the machine before generation, the step without a
-// question of its own once flutterfire configured the app, and the command
-// for later when the step does not run, which is a warning only when the
-// step could not run or failed. The machine is in
-// memory, so no command runs for real; the script of the step runs in
-// `enable_sign_in_script_test.dart`.
+// methods: the check of the machine before generation, the question before
+// the step, with what it does for Google sign-in, once flutterfire
+// configured the app, and the command for later when the step does not run,
+// which is a warning only when the step could not run or failed. The
+// machine is in memory, so no command runs for real; the script of the step
+// runs in `enable_sign_in_script_test.dart`.
 @TestOn('vm')
 library;
 
@@ -43,9 +43,22 @@ const _enableLater = 'dart tool/enable_firebase_sign_in.dart';
 const _enabling = 'Enabling the sign-in methods of the app in its Firebase '
     'project';
 
+/// What the user has to know before the step runs: what it does for Google
+/// sign-in.
+const _notice = 'For Google sign-in, it also gives Google the name of the '
+    'app and the email address of the account of the Firebase CLI for its '
+    'consent screen, registers the SHA-1 and SHA-256 of the Android debug '
+    'key of this machine, creating the key as the first debug build would if '
+    'there is none, downloads the Firebase files of the app again and writes '
+    'the URL scheme of the iOS app into ios/Runner/Info.plist.';
+
 /// The question whether to configure Firebase now.
 const _configureNow = 'Configuring Firebase with flutterfire '
     '($_configureLater), for firebase_core. Run it now?';
+
+/// The question whether to enable the sign-in methods now.
+const _enableNow = '$_enabling ($_enableLater), for firebase_auth. $_notice '
+    'Run it now?';
 
 /// The question whether to install the Firebase CLI, which the check of
 /// firebase_core asks.
@@ -59,16 +72,28 @@ const _update = 'Update it with "npm install -g firebase-tools" if npm '
 
 /// The warning that the sign-in methods are not enabled, because of
 /// [reason], which tells why the step could not run or how it failed, with
-/// the command for later.
+/// the command for later and the notice of the step.
 String _notEnabled(String reason) =>
     '$_enabling is not done, because $reason. Run it in the app: '
-    '$_enableLater';
+    '$_enableLater\n$_notice';
 
 /// The line that the app is created, and how to run it when no step is left
 /// for later, and when some are, as the logger of the machine got them.
 const _created = 'success: Created my_app in /work/my_app.';
 const _runIt = 'info: Run it:\n  cd /work/my_app\n  flutter run';
 const _thenRunIt = 'info: Then run the app:\n  cd /work/my_app\n  flutter run';
+
+/// How a run ends that left only the step of the module for later, because
+/// of [reason]: after the line of the app, the step with its command and
+/// the notice below it, and then how to run the app. None of it is a
+/// warning.
+List<String> _enableLeft(String reason) {
+  final step = 'info: One step is left for later. Run it in the app:\n'
+      '  $_enabling ($reason):\n'
+      '    $_enableLater\n'
+      '    $_notice';
+  return [_created, step, _thenRunIt];
+}
 
 /// How a run ends that left `flutterfire configure` for later, because of
 /// [reason], and the step of the module with it: the two in the order in
@@ -79,7 +104,8 @@ List<String> _bothLeft(String reason) {
       '  1. Configuring Firebase with flutterfire ($reason):\n'
       '     $_configureLater\n'
       '  2. $_enabling (it runs after step 1):\n'
-      '     $_enableLater';
+      '     $_enableLater\n'
+      '     $_notice';
   return [_created, steps, _thenRunIt];
 }
 
@@ -220,9 +246,10 @@ final class _Machine {
 void main() {
   group('smf create -m firebase_auth, in a terminal,', () {
     test(
-        'enables the sign-in methods once flutterfire configured the app, '
-        'without a question of its own', () async {
-      final machine = _Machine(confirmations: [true]);
+        'asks before it enables the sign-in methods, once flutterfire '
+        'configured the app, with what the script does for Google sign-in '
+        'in the question', () async {
+      final machine = _Machine(confirmations: [true, true]);
 
       final code = await machine.create();
 
@@ -231,9 +258,9 @@ void main() {
         SmfExitCodes.success,
         reason: machine.terminal.reports.join('\n'),
       );
-      // The step is part of flutterfire configure, which the user agreed
-      // to.
-      expect(machine.terminal.questions, [_configureNow]);
+      expect(machine.terminal.questions, [_configureNow, _enableNow]);
+      // The question is one line, and tells neither answer.
+      expect(_enableNow, isNot(contains('\n')));
       expect(
         machine.commands,
         containsAllInOrder([_configure, _enable]),
@@ -246,6 +273,27 @@ void main() {
       );
       expect(machine.warnings, isEmpty);
       expect(machine.end, [_created, _runIt]);
+      expect(machine.hasScript, isTrue);
+    });
+
+    test(
+        'leaves the methods for later when the user says so, with the '
+        'command and the notice', () async {
+      final machine = _Machine(confirmations: [true, false]);
+
+      final code = await machine.create();
+
+      expect(
+        code,
+        SmfExitCodes.success,
+        reason: machine.terminal.reports.join('\n'),
+      );
+      expect(machine.terminal.questions, [_configureNow, _enableNow]);
+      expect(machine.commands, contains(_configure));
+      expect(machine.commands, isNot(contains(_enable)));
+      // The user chose it, so nothing warns.
+      expect(machine.warnings, isEmpty);
+      expect(machine.end, _enableLeft('you chose to run it later'));
       expect(machine.hasScript, isTrue);
     });
 
@@ -271,7 +319,7 @@ void main() {
     test(
         'leaves the methods for later when the script fails, with what it '
         'printed', () async {
-      final machine = _Machine(confirmations: [true], enableCode: 2);
+      final machine = _Machine(confirmations: [true, true], enableCode: 2);
 
       final code = await machine.create();
 
@@ -307,7 +355,8 @@ void main() {
         SmfExitCodes.success,
         reason: machine.terminal.reports.join('\n'),
       );
-      // flutterfire configure runs with the older Firebase CLI.
+      // flutterfire configure runs with the older Firebase CLI, and the
+      // step that cannot run is not asked about.
       expect(machine.terminal.questions, [_configureNow]);
       expect(machine.commands, contains(_configure));
       expect(machine.commands, isNot(contains(_enable)));
@@ -324,7 +373,7 @@ void main() {
         'for firebase_core, which is the latest one', () async {
       final machine = _Machine(
         firebase: null,
-        confirmations: [true, true],
+        confirmations: [true, true, true],
       );
 
       final code = await machine.create();
@@ -336,7 +385,7 @@ void main() {
       );
       expect(
         machine.terminal.questions,
-        [_installFirebase, _configureNow],
+        [_installFirebase, _configureNow, _enableNow],
       );
       expect(
         machine.commands,
@@ -367,7 +416,7 @@ void main() {
 
     test(
         '--explain shows the check of the version of the Firebase CLI, and '
-        'the step under flutterfire configure, without a notice', () async {
+        'the step under flutterfire configure, with its notice', () async {
       final machine = _Machine();
 
       final code = await machine.create(['--explain']);
@@ -385,10 +434,12 @@ void main() {
       );
       final configure = lines.indexOf('  $_configureLater (firebase_core)');
       expect(configure, isNonNegative, reason: lines.join('\n'));
-      // The step has nothing under it: a run asks about flutterfire
-      // configure alone.
-      expect(lines.skip(configure + 1).take(2), [
+      const asks = 'A run asks before it runs this step, and leaves it for '
+          'later when it cannot ask.';
+      expect(lines.skip(configure + 1).take(4), [
         '    then $_enableLater (firebase_auth)',
+        '      $_notice',
+        '      $asks',
         '',
       ]);
       expect(machine.terminal.questions, isEmpty);
@@ -441,7 +492,7 @@ void main() {
 
   test('the step of the module is the one that the tests of a run name', () {
     expect(enableSignIn.description, _enabling);
-    expect(enableSignIn.notice, isNull);
+    expect(enableSignIn.notice, _notice);
     expect(enableSignInCommand, _enableLater);
   });
 }

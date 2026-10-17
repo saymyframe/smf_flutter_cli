@@ -23,8 +23,10 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
+import 'package:xml/xml.dart';
 
 import 'support/dart_app.dart';
+import 'support/sign_in_ways.dart';
 
 /// The stand-in for the Firebase CLI. It appends to the file that
 /// `STAND_IN_CALLS` names a line of JSON for each call: its arguments, the
@@ -38,11 +40,22 @@ import 'support/dart_app.dart';
 ///
 /// `--version` prints the lines of `STAND_IN_VERSION`, which `|` separates,
 /// or 15.34.0, and what `STAND_IN_VERSION_ERRORS` has on the standard
-/// error, and exits with `STAND_IN_VERSION_CODE`. Any other call prints a
-/// line on each stream and exits with `STAND_IN_DEPLOY_CODE`. With
+/// error, and exits with `STAND_IN_VERSION_CODE`. `deploy` prints a line on
+/// each stream and exits with `STAND_IN_DEPLOY_CODE`. With
 /// `STAND_IN_REMOVES_DIRECTORY`, it removes the directory it ran in first.
-/// When `STAND_IN_WAITS` names the call, `version` or `deploy`, it waits
-/// once it has noted the call, until a signal ends it.
+/// When `STAND_IN_WAITS` names the call, `version` or the command, such as
+/// `deploy`, it waits once it has noted the call, until a signal ends it.
+///
+/// `login:list` prints that it is logged in as `STAND_IN_ACCOUNT`, or warns
+/// that it has no account, as the Firebase CLI does. The commands for the
+/// apps answer with JSON, as with `--json`: `apps:android:sha:list` lists
+/// the hashes of `STAND_IN_SHAS`, which commas separate, as Firebase has
+/// them, `apps:android:sha:create` creates one, and `apps:sdkconfig` gives
+/// the Firebase file of its platform, `ANDROID` or `IOS`, from the
+/// directory that `STAND_IN_FILES` names: `<platform>.<n>` for its n-th
+/// call for the platform if there is one, or else `<platform>`. When
+/// `STAND_IN_FAILS` names the command, it fails with an error in JSON and
+/// the exit code 2.
 const _standIn = r"""
 import 'dart:convert';
 import 'dart:io';
@@ -50,8 +63,11 @@ import 'dart:io';
 Future<void> main(List<String> arguments) async {
   final environment = Platform.environment;
   final asksVersion = arguments.length == 1 && arguments.single == '--version';
+  final command = asksVersion ? 'version' : arguments.first;
   final directory = Directory.current;
-  File(environment['STAND_IN_CALLS']!).writeAsStringSync(
+  final calls = File(environment['STAND_IN_CALLS']!);
+  final earlier = calls.existsSync() ? calls.readAsLinesSync() : <String>[];
+  calls.writeAsStringSync(
     '${jsonEncode({
       'arguments': arguments,
       'directory': directory.resolveSymbolicLinksSync(),
@@ -65,15 +81,68 @@ Future<void> main(List<String> arguments) async {
     flush: true,
   );
   final log = File('firebase-debug.log')..writeAsStringSync('$arguments\n');
-  if (environment['STAND_IN_WAITS'] == (asksVersion ? 'version' : 'deploy')) {
+  if (environment['STAND_IN_WAITS'] == command) {
     await Future<void>.delayed(const Duration(minutes: 2));
   }
-  final int code;
-  if (asksVersion) {
+  void answer(Object? result) =>
+      stdout.write(jsonEncode({'status': 'success', 'result': result}));
+  var code = 0;
+  if (environment['STAND_IN_FAILS'] == command) {
+    stdout.write(
+      jsonEncode({'status': 'error', 'error': 'stand-in: $command failed'}),
+    );
+    code = 2;
+  } else if (asksVersion) {
     final version = environment['STAND_IN_VERSION'] ?? '15.34.0';
     stdout.writeln(version.split('|').join('\n'));
     stderr.write(environment['STAND_IN_VERSION_ERRORS'] ?? '');
     code = int.parse(environment['STAND_IN_VERSION_CODE'] ?? '0');
+  } else if (command == 'login:list') {
+    final account = environment['STAND_IN_ACCOUNT'];
+    if (account == null) {
+      stderr.writeln('No authorized accounts, run "firebase login"');
+    } else {
+      stdout.writeln('Logged in as $account');
+      stdout.writeln();
+      stdout.writeln(
+        'Other available accounts (switch with "firebase login:use")',
+      );
+      stdout.writeln(' - someone.else@example.com');
+    }
+  } else if (command == 'apps:android:sha:list') {
+    answer([
+      for (final (index, hash)
+          in (environment['STAND_IN_SHAS'] ?? '').split(',').indexed)
+        if (hash.isNotEmpty)
+          {
+            'name': 'projects/p/androidApps/${arguments[1]}/sha/$index',
+            'shaHash': hash,
+            'certType': hash.length == 40 ? 'SHA_1' : 'SHA_256',
+          },
+    ]);
+  } else if (command == 'apps:android:sha:create') {
+    answer({
+      'name': 'projects/p/androidApps/${arguments[1]}/sha/new',
+      'shaHash': arguments[2],
+    });
+  } else if (command == 'apps:sdkconfig') {
+    final platform = arguments[1];
+    final call = 1 +
+        earlier.where((line) {
+          final called = (jsonDecode(line) as Map)['arguments'] as List;
+          return called.length > 1 &&
+              called[0] == 'apps:sdkconfig' &&
+              called[1] == platform;
+        }).length;
+    final files = environment['STAND_IN_FILES']!;
+    final file = [File('$files/$platform.$call'), File('$files/$platform')]
+        .firstWhere((file) => file.existsSync());
+    answer({
+      'fileName': platform == 'IOS'
+          ? 'GoogleService-Info.plist'
+          : 'google-services.json',
+      'fileContents': file.readAsStringSync(),
+    });
   } else {
     stdout.writeln('stand-in: deploying');
     stderr.writeln('stand-in: on the standard error');
@@ -87,6 +156,60 @@ Future<void> main(List<String> arguments) async {
   exitCode = code;
 }
 """;
+
+/// The fingerprints of the debug key of the stand-in for keytool, as
+/// keytool prints them.
+const _sha1 = '5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25';
+const _sha256 = 'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:'
+    '9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C';
+
+/// The stand-in for keytool. It appends its arguments to the file that
+/// `STAND_IN_KEYTOOL_CALLS` names, as a line of JSON.
+///
+/// When its directory has a file named `broken`, it does not run, as the
+/// keytool of macOS on a machine without a JDK that macOS knows. Otherwise
+/// `-help` exits with 0, `-genkeypair` writes a file to its keystore, and
+/// `-list` prints the fingerprints [_sha1] and [_sha256] of a keystore that
+/// exists, among the other lines of keytool.
+const _keytoolStandIn = '''
+import 'dart:convert';
+import 'dart:io';
+
+void main(List<String> arguments) {
+  final environment = Platform.environment;
+  File(environment['STAND_IN_KEYTOOL_CALLS']!).writeAsStringSync(
+    '\${jsonEncode(arguments)}\\n',
+    mode: FileMode.append,
+    flush: true,
+  );
+  if (File.fromUri(Platform.script.resolve('broken')).existsSync()) {
+    stderr.writeln('Unable to locate a Java Runtime.');
+    exitCode = 1;
+    return;
+  }
+  if (arguments.first == '-help') {
+    stdout.writeln('Key and Certificate Management Tool');
+    return;
+  }
+  final keystore = File(arguments[arguments.indexOf('-keystore') + 1]);
+  if (arguments.first == '-genkeypair') {
+    keystore.writeAsStringSync('a debug key of the stand-in');
+    return;
+  }
+  if (!keystore.existsSync()) {
+    stdout.writeln('keytool error: Keystore file does not exist');
+    exitCode = 1;
+    return;
+  }
+  stdout
+    ..writeln('Alias name: androiddebugkey')
+    ..writeln('Owner: C=US, O=Android, CN=Android Debug')
+    ..writeln('Certificate fingerprints:')
+    ..writeln('\\t SHA1: $_sha1')
+    ..writeln('\\t SHA256: $_sha256')
+    ..writeln('Signature algorithm name: SHA256withRSA');
+}
+''';
 
 /// The command `firebase` of the tests on Windows, a batch file as npm
 /// installs one: it runs [_standIn], next to it, with the Dart VM that
@@ -199,6 +322,152 @@ const _emailPassword = '{"auth":{"providers":{"emailPassword":true}}}';
 const _withAnonymous =
     '{"auth":{"providers":{"emailPassword":true,"anonymous":true}}}';
 
+/// The file of the app with the URL schemes of the iOS app.
+const _infoPlist = 'ios/Runner/Info.plist';
+
+/// The Firebase files of the apps of the tests, where flutterfire writes
+/// them.
+const _androidFile = 'android/app/google-services.json';
+const _iosFile = 'ios/Runner/GoogleService-Info.plist';
+
+/// The URL scheme of the client of Google of the iOS app of the tests, its
+/// id reversed.
+const _scheme = 'com.googleusercontent.apps.1234567890-0a1b2c3d4e5f';
+
+/// The client of the server of Google, an OAuth client of the type 3.
+const _server = <String, Object>{
+  'client_id': '1234567890-server.apps.googleusercontent.com',
+  'client_type': 3,
+};
+
+/// `google-services.json` of the Android app of the tests as Firebase gives
+/// it: with the client of the server of Google once Google is enabled, if
+/// [withServer].
+String _googleServices({required bool withServer}) =>
+    '${const JsonEncoder.withIndent('  ').convert({
+          'project_info': {
+            'project_number': '1234567890',
+            'project_id': 'smf-app',
+          },
+          'client': [
+            {
+              'client_info': {
+                'mobilesdk_app_id': _androidApp,
+                'android_client_info': {
+                  'package_name': 'com.example.contract_app',
+                },
+              },
+              'oauth_client': [if (withServer) _server],
+              'api_key': [
+                {'current_key': 'AIzaKeyOfTheTests'},
+              ],
+            },
+          ],
+          'configuration_version': '1',
+        })}\n';
+
+/// The type of the document of a plist.
+const _doctype = '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+    '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">';
+
+/// `GoogleService-Info.plist` of the iOS app of the tests as Firebase gives
+/// it: with the client of Google of the iOS app once Google is enabled, if
+/// [withClient].
+String _serviceInfo({required bool withClient}) => [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      _doctype,
+      '<plist version="1.0">',
+      '<dict>',
+      if (withClient) ...[
+        '\t<key>CLIENT_ID</key>',
+        '\t<string>1234567890-0a1b2c3d4e5f.apps.googleusercontent.com</string>',
+        '\t<key>REVERSED_CLIENT_ID</key>',
+        '\t<string>$_scheme</string>',
+      ],
+      '\t<key>API_KEY</key>',
+      '\t<string>AIzaKeyOfTheTests</string>',
+      '\t<key>GOOGLE_APP_ID</key>',
+      '\t<string>$_iosApp</string>',
+      '</dict>',
+      '</plist>',
+      '',
+    ].join('\n');
+
+/// The URL type of [_scheme] as the script writes it into the Info.plist of
+/// an app, each line after [indent] and ending with [newline].
+String _urlType(String indent, {String newline = '\n'}) => [
+      '$indent<dict>',
+      '$indent\t<key>CFBundleTypeRole</key>',
+      '$indent\t<string>Editor</string>',
+      '$indent\t<key>CFBundleURLSchemes</key>',
+      '$indent\t<array>',
+      '$indent\t\t<string>$_scheme</string>',
+      '$indent\t</array>',
+      '$indent</dict>',
+    ].map((line) => '$line$newline').join();
+
+/// The entries of the dictionary of the plist [text], each key with its
+/// value as XML, in their order.
+Map<String, String> _plistOf(String text) {
+  final elements = XmlDocument.parse(text)
+      .rootElement
+      .childElements
+      .single
+      .childElements
+      .toList();
+  return {
+    for (var index = 0; index < elements.length; index += 2)
+      elements[index].innerText:
+          elements[index + 1].toXmlString().replaceAll(RegExp(r'\s'), ''),
+  };
+}
+
+/// The URL schemes of each URL type of the Info.plist [text], read as a
+/// plist.
+List<List<String>> _urlSchemesOf(String text) {
+  final elements = XmlDocument.parse(text)
+      .rootElement
+      .childElements
+      .single
+      .childElements
+      .toList();
+  final key = elements.indexWhere(
+    (element) =>
+        element.name.local == 'key' && element.innerText == 'CFBundleURLTypes',
+  );
+  if (key < 0) return const [];
+  final types = elements[key + 1];
+  expect(types.name.local, 'array');
+  return [
+    for (final type in types.childElements)
+      () {
+        expect(type.name.local, 'dict');
+        final entries = type.childElements.toList();
+        final schemes = entries.indexWhere(
+          (element) => element.innerText == 'CFBundleURLSchemes',
+        );
+        return [
+          for (final scheme in entries[schemes + 1].childElements)
+            scheme.innerText,
+        ];
+      }(),
+  ];
+}
+
+/// Where Android Studio has keytool on this system, which the script takes
+/// when the PATH and JAVA_HOME have none.
+String _androidStudioKeytool() => Platform.isMacOS
+    ? '/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool'
+    : Platform.isWindows
+        ? '${Platform.environment['ProgramFiles'] ?? r'C:\Program Files'}'
+            r'\Android\Android Studio\jbr\bin\keytool.exe'
+        : '/opt/android-studio/jbr/bin/keytool';
+
+/// The page of the Firebase console with the sign-in methods of [project].
+String _consoleOf(String project) =>
+    'https://console.firebase.google.com/project/$project/authentication/'
+    'providers';
+
 /// How the Firebase console enables the methods in [project], as the
 /// script tells after a failure.
 String _inConsole([String project = '_']) =>
@@ -269,9 +538,16 @@ void main() {
   /// The app of the module in each mode of the auth role.
   final rendered = <AuthMode, RenderedApp>{};
 
+  /// The apps of the module in the mode required with the ways to sign in
+  /// of the modules of the tests, by the names of those ways.
+  final withWays = <String, RenderedApp>{};
+
   /// A directory of the test, with links resolved: `bin` with the Firebase
-  /// CLI, `none` without it, `temp` for the temporary files of the script,
-  /// and `elsewhere`, which is no directory of an app.
+  /// CLI, `none` without it, `jdk` with keytool in `bin`, `broken` with a
+  /// keytool in `bin` that does not run, `files` with the Firebase files
+  /// that the Firebase CLI gives, `android` for the debug key, `home` for a
+  /// home directory, `temp` for the temporary files of the script, and
+  /// `elsewhere`, which is no directory of an app.
   late Directory machine;
   late DartApp app;
 
@@ -301,6 +577,24 @@ void main() {
       );
       rendered[mode] = result.app!;
     }
+    final harness = ContractHarness(
+      ModuleRegistry([...modules, ...WayOfTest.all]),
+    );
+    for (final (name, ways) in [
+      ('google', [WayOfTest.google]),
+      ('google alone', [WayOfTest.googleAlone]),
+      ('apple', [WayOfTest.apple]),
+      ('google and apple', [WayOfTest.google, WayOfTest.apple]),
+    ]) {
+      final result = await harness.check(
+        ContractCase(
+          'firebase_auth with $name',
+          requested: [FirebaseAuthModule.id, for (final way in ways) way.id],
+        ),
+      );
+      expect(result.errors, isEmpty, reason: name);
+      withWays[name] = result.app!;
+    }
   });
 
   setUp(() {
@@ -309,19 +603,37 @@ void main() {
           .createTempSync('smf_enable_sign_in_')
           .resolveSymbolicLinksSync(),
     );
-    for (final name in ['bin', 'none', 'temp', 'elsewhere']) {
-      Directory(inMachine(name)).createSync();
+    for (final name in [
+      'bin',
+      'none',
+      'jdk/bin',
+      'broken/bin',
+      'files',
+      'android',
+      'home',
+      'temp',
+      'elsewhere',
+    ]) {
+      Directory(inMachine(name)).createSync(recursive: true);
     }
-    // The Firebase CLI is a command of the shell on every system, as npm
-    // installs it, which runs the program next to it.
-    final bin = '${inMachine('bin')}${Platform.pathSeparator}';
-    File('${bin}stand_in.dart').writeAsStringSync(_standIn);
-    if (Platform.isWindows) {
-      File('${bin}firebase.cmd').writeAsStringSync(_batch, encoding: ascii);
-    } else {
-      File('${bin}firebase').writeAsStringSync(_shell);
-      expect(Process.runSync('chmod', ['+x', '${bin}firebase']).exitCode, 0);
+    // The Firebase CLI and keytool are commands of the shell on every
+    // system, as npm installs the Firebase CLI, each of which runs the
+    // program next to it.
+    for (final (directory, command, program) in [
+      ('bin', 'firebase', _standIn),
+      ('jdk/bin', 'keytool', _keytoolStandIn),
+      ('broken/bin', 'keytool', _keytoolStandIn),
+    ]) {
+      final at = '${inMachine(directory)}${Platform.pathSeparator}';
+      File('${at}stand_in.dart').writeAsStringSync(program);
+      if (Platform.isWindows) {
+        File('$at$command.cmd').writeAsStringSync(_batch, encoding: ascii);
+      } else {
+        File('$at$command').writeAsStringSync(_shell);
+        expect(Process.runSync('chmod', ['+x', '$at$command']).exitCode, 0);
+      }
     }
+    File(inMachine('broken/bin/broken')).createSync();
     app = DartApp.write(rendered[AuthMode.required]!);
   });
 
@@ -342,33 +654,53 @@ void main() {
           for (final line in calls().readAsLinesSync()) _callOf(line),
       ];
 
+  /// The file in which the stand-in for keytool notes its calls.
+  File keytoolCalls() => File(inMachine('keytool_calls'));
+
+  /// The arguments of each call of keytool so far, each on a line.
+  List<String> keytoolCallsSoFar() => [
+        if (keytoolCalls().existsSync())
+          for (final line in keytoolCalls().readAsLinesSync())
+            (jsonDecode(line) as List<Object?>).join(' '),
+      ];
+
   /// Starts the script of [of], or of the app of the test, with
   /// [arguments], as `dart tool/enable_firebase_sign_in.dart` in the
   /// directory of the app, or in [workingDirectory] with [script], the path
   /// of the script there, or its path in the app.
   ///
   /// The `PATH` of the script is the directory with the Firebase CLI, or an
-  /// empty one unless [withFirebase], and its temporary files go into a
-  /// directory of the test. [standIn] has the variables of the stand-in.
-  /// The script does not get `DEBUG` or `NO_UPDATE_NOTIFIER` of the machine
-  /// of the test: what the Firebase CLI gets of them is the test's and the
-  /// script's to say.
+  /// empty one unless [withFirebase], and the directories of [keytools],
+  /// and its temporary files go into a directory of the test. [standIn] has
+  /// the variables of the stand-ins. The script does not get `DEBUG` or
+  /// `NO_UPDATE_NOTIFIER` of the machine of the test: what the Firebase CLI
+  /// gets of them is the test's and the script's to say. Nor does it get
+  /// what tells where the machine has the debug key of Android or a JDK:
+  /// its debug key is in `android` of the test, unless [standIn] says
+  /// otherwise.
   Future<Process> start({
     DartApp? of,
     List<String> arguments = const [],
     Map<String, String> standIn = const {},
     bool withFirebase = true,
+    List<String> keytools = const [],
     String? workingDirectory,
     String? script,
   }) {
     final target = of ?? app;
     final changes = {
-      'PATH': inMachine(withFirebase ? 'bin' : 'none'),
+      'PATH': [
+        inMachine(withFirebase ? 'bin' : 'none'),
+        for (final keytool in keytools) inMachine(keytool),
+      ].join(Platform.isWindows ? ';' : ':'),
       'TMPDIR': inMachine('temp'),
       'TEMP': inMachine('temp'),
       'TMP': inMachine('temp'),
       'SMF_TEST_DART': Platform.resolvedExecutable,
       'STAND_IN_CALLS': calls().path,
+      'STAND_IN_KEYTOOL_CALLS': keytoolCalls().path,
+      'STAND_IN_FILES': inMachine('files'),
+      'ANDROID_USER_HOME': inMachine('android'),
       ...standIn,
     };
     // The names of the variables of Windows are in any case, such as
@@ -378,6 +710,11 @@ void main() {
       for (final name in changes.keys) name.toUpperCase(),
       'DEBUG',
       'NO_UPDATE_NOTIFIER',
+      'JAVA_HOME',
+      'ANDROID_PREFS_ROOT',
+      'ANDROID_SDK_HOME',
+      'TEST_TMPDIR',
+      'XDG_CONFIG_HOME',
     };
     return Process.start(
       Platform.resolvedExecutable,
@@ -421,6 +758,7 @@ void main() {
     List<String> arguments = const [],
     Map<String, String> standIn = const {},
     bool withFirebase = true,
+    List<String> keytools = const [],
     String? workingDirectory,
     String? script,
   }) async {
@@ -430,6 +768,7 @@ void main() {
         arguments: arguments,
         standIn: standIn,
         withFirebase: withFirebase,
+        keytools: keytools,
         workingDirectory: workingDirectory,
         script: script,
       ),
@@ -1368,6 +1707,744 @@ void main() {
           reason: version,
         );
       }
+    });
+  });
+
+  group('the script of an app with ways to sign in', () {
+    /// The app with the ways to sign in [ways], in place of the app of the
+    /// test, with its Info.plist, as flutterfire configured it for smf-app.
+    void useAppWith(String ways) {
+      app.delete();
+      final of = withWays[ways]!;
+      app = DartApp.write(of);
+      File('${app.path}/$_infoPlist')
+        ..createSync(recursive: true)
+        ..writeAsStringSync(of.files[_infoPlist]!.text);
+      File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
+    }
+
+    /// Has the Firebase CLI give the Firebase files of the apps: with the
+    /// clients of Google if [clients], and for Android without the client
+    /// of the server in its first [androidLate] answers.
+    void serveFiles({bool clients = true, int androidLate = 0}) {
+      File(inMachine('files/ANDROID'))
+          .writeAsStringSync(_googleServices(withServer: clients));
+      File(inMachine('files/IOS'))
+          .writeAsStringSync(_serviceInfo(withClient: clients));
+      for (var call = 1; call <= androidLate; call++) {
+        File(inMachine('files/ANDROID.$call'))
+            .writeAsStringSync(_googleServices(withServer: false));
+      }
+    }
+
+    /// The file of the app of the test at [path].
+    File fileOf(String path) => File('${app.path}/$path');
+
+    /// The debug key in `android` of the test, where the script finds it.
+    final keystore = '${Platform.pathSeparator}debug.keystore';
+
+    /// The hashes that Firebase lists for a debug key with the
+    /// fingerprints of the stand-in for keytool: in lower case and without
+    /// colons.
+    final registered =
+        [_sha1, _sha256].map((hash) => hash.replaceAll(':', '').toLowerCase());
+
+    /// What the script tells after a step failed once it enabled the
+    /// methods.
+    const rest = 'What this script did before that stays done, and running '
+        'it again does the rest: $enableSignInCommand';
+
+    /// The options of the calls of the Firebase CLI for the apps.
+    const json = '--project=smf-app --non-interactive --json';
+
+    test(
+        'enables Google with the name of the app and the email address of '
+        'the account of the Firebase CLI for its consent screen, registers '
+        'the SHA-1 and SHA-256 of the debug key, creating the key as the '
+        'Android Gradle plugin does, downloads the Firebase files and writes '
+        'the URL scheme of the iOS app; and then, run again, changes '
+        'nothing', () async {
+      useAppWith('google');
+      serveFiles();
+      final config = File(configOf(app)).readAsStringSync();
+      final plist = fileOf(_infoPlist).readAsStringSync();
+      final key = '${inMachine('android')}$keystore';
+
+      final result = await run(
+        keytools: ['jdk/bin'],
+        standIn: {'STAND_IN_ACCOUNT': 'dev@example.com'},
+      );
+
+      expect(result.code, 0, reason: result.errors);
+      expect(commandsOf(result), [
+        '--version',
+        'login:list',
+        'deploy --only auth --project=smf-app --non-interactive',
+        'apps:android:sha:list $_androidApp $json',
+        'apps:android:sha:create $_androidApp $_sha1 $json',
+        'apps:android:sha:create $_androidApp $_sha256 $json',
+        'apps:sdkconfig ANDROID $_androidApp $json',
+        'apps:sdkconfig IOS $_iosApp $json',
+      ]);
+      expect(
+        jsonDecode(result.calls[2].files['firebase.json']!),
+        {
+          'auth': {
+            'providers': {
+              'emailPassword': true,
+              'googleSignIn': {
+                'oAuthBrandDisplayName': 'Contract App',
+                'supportEmail': 'dev@example.com',
+              },
+            },
+          },
+        },
+        reason: 'Without the two fields, the Firebase CLI waited for Google '
+            'for 180 seconds and failed.',
+      );
+      expect(
+        [for (final call in result.calls) call.checksForUpdates],
+        everyElement(isFalse),
+      );
+      // As the Android Gradle plugin 9 creates the key.
+      final genkeypair = '-genkeypair -keystore $key -storepass android '
+          '-alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 '
+          '-sigalg SHA256withRSA -validity 10950 -dname CN=Android '
+          'Debug,O=Android,C=US';
+      final list =
+          '-list -v -keystore $key -alias androiddebugkey -storepass android';
+      expect(keytoolCallsSoFar(), ['-help', genkeypair, list]);
+      expect(File(key).existsSync(), isTrue);
+      expect(
+        result.output,
+        'Enabling Email/Password and Google in the Firebase project smf-app '
+        '(the mode of the app is required).\n'
+        'Google shows the name "Contract App" and the support email '
+        'dev@example.com on its consent screen.\n'
+        'stand-in: deploying\n'
+        'Registering the SHA-1 and SHA-256 of the Android debug key of this '
+        'machine, $key, for the Android app $_androidApp.\n'
+        'There is no debug key yet, so this script creates it, as the first '
+        'debug build would.\n'
+        'Registered them for the Android app $_androidApp.\n'
+        'Downloading the Firebase files of the app again, with the clients of '
+        'Google: $_androidFile and $_iosFile.\n'
+        'Wrote $_androidFile and $_iosFile.\n'
+        'Writing the URL scheme of Google, $_scheme, into $_infoPlist.\n',
+      );
+      expect(result.errors, 'stand-in: on the standard error\n');
+      // The files of Firebase as Firebase gives them, where flutterfire
+      // wrote them.
+      expect(
+        fileOf(_androidFile).readAsStringSync(),
+        _googleServices(withServer: true),
+      );
+      expect(
+        fileOf(_iosFile).readAsStringSync(),
+        _serviceInfo(withClient: true),
+      );
+      // The URL type of the scheme at the end of the dictionary of the
+      // file, and nothing else changed there.
+      final written = fileOf(_infoPlist).readAsStringSync();
+      expect(
+        written,
+        plist.replaceFirst(
+          '</dict>\n</plist>',
+          '\t<key>CFBundleURLTypes</key>\n'
+              '\t<array>\n'
+              '${_urlType('\t\t')}'
+              '\t</array>\n'
+              '</dict>\n</plist>',
+        ),
+      );
+      expect(_urlSchemesOf(written), [
+        [_scheme],
+      ]);
+      expect(
+        {..._plistOf(written)}..remove('CFBundleURLTypes'),
+        _plistOf(plist),
+      );
+      expect(File(configOf(app)).readAsStringSync(), config);
+      expect(File('${app.path}/.firebaserc').existsSync(), isFalse);
+
+      // Run again, with the hashes registered, which Firebase lists in its
+      // own form.
+      final modified = fileOf(_androidFile).lastModifiedSync();
+      final again = await run(
+        keytools: ['jdk/bin'],
+        standIn: {
+          'STAND_IN_ACCOUNT': 'dev@example.com',
+          'STAND_IN_SHAS': registered.join(','),
+        },
+      );
+
+      expect(again.code, 0, reason: again.errors);
+      expect(commandsOf(again), [
+        '--version',
+        'login:list',
+        'deploy --only auth --project=smf-app --non-interactive',
+        'apps:android:sha:list $_androidApp $json',
+        'apps:sdkconfig ANDROID $_androidApp $json',
+        'apps:sdkconfig IOS $_iosApp $json',
+      ]);
+      expect(keytoolCallsSoFar().skip(3), ['-help', list]);
+      expect(
+        again.output.split('\n').sublist(3).join('\n'),
+        'Registering the SHA-1 and SHA-256 of the Android debug key of this '
+        'machine, $key, for the Android app $_androidApp.\n'
+        'The Android app $_androidApp has them already.\n'
+        'Downloading the Firebase files of the app again, with the clients of '
+        'Google: $_androidFile and $_iosFile.\n'
+        'The files of the app are as Firebase has them already.\n'
+        '$_infoPlist has the URL scheme of Google already.\n',
+      );
+      expect(fileOf(_infoPlist).readAsStringSync(), written);
+      expect(fileOf(_androidFile).lastModifiedSync(), modified);
+    });
+
+    test(
+        'gives Google the account that the arguments name, and asks the '
+        'Firebase CLI for no account then', () async {
+      useAppWith('google alone');
+
+      final result = await run(
+        arguments: ['--account', 'named@example.com'],
+        standIn: {'STAND_IN_ACCOUNT': 'dev@example.com'},
+      );
+
+      expect(result.code, 0, reason: result.errors);
+      const deploy = 'deploy --only auth --project=smf-app --non-interactive';
+      expect(commandsOf(result), [
+        '--version',
+        '$deploy --account named@example.com',
+      ]);
+      expect(jsonDecode(result.calls.last.files['firebase.json']!), {
+        'auth': {
+          'providers': {
+            'emailPassword': true,
+            'googleSignIn': {
+              'oAuthBrandDisplayName': 'Contract App',
+              'supportEmail': 'named@example.com',
+            },
+          },
+        },
+      });
+      // A way to sign in of Google that needs nothing of the project: the
+      // script only enables it.
+      expect(
+          result.output.split('\n').skip(1).first,
+          'Google shows the name "Contract App" and the support email '
+          'named@example.com on its consent screen.');
+      expect(keytoolCallsSoFar(), isEmpty);
+    });
+
+    test(
+        'leaves Google out, says so and exits with 0 when the Firebase CLI '
+        'runs as no user account, as with a service account', () async {
+      useAppWith('google alone');
+
+      final result = await run();
+
+      expect(result.code, 0, reason: result.errors);
+      expect(commandsOf(result), [
+        '--version',
+        'login:list',
+        'deploy --only auth --project=smf-app --non-interactive',
+      ]);
+      expect(result.calls.last.files['firebase.json'], _emailPassword);
+      expect(
+        result.output,
+        'Google is left out: its consent screen needs a support email, the '
+        'email address of a user account of the Firebase CLI, and the '
+        'Firebase CLI runs as none here, as with a service account. To enable '
+        'Google, run: $enableSignInCommand --account <email>, or enable it in '
+        'the Firebase console: ${_consoleOf('smf-app')}\n'
+        '${_enabling('smf-app', AuthMode.required)}\n'
+        'stand-in: deploying\n',
+      );
+    });
+
+    test(
+        'with Google left out, writes the Firebase files and the URL scheme '
+        'once they have the clients of Google, as in a project in which '
+        'Google is enabled, and leaves them and exits with 0 when they do '
+        'not', () async {
+      useAppWith('google');
+      serveFiles(clients: false);
+      File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+      final plist = fileOf(_infoPlist).readAsStringSync();
+      final shas = {'STAND_IN_SHAS': registered.join(',')};
+
+      final without = await run(keytools: ['jdk/bin'], standIn: shas);
+
+      expect(without.code, 0, reason: without.errors);
+      // One download each, since this run did not enable Google.
+      expect(commandsOf(without).skip(3), [
+        'apps:android:sha:list $_androidApp $json',
+        'apps:sdkconfig ANDROID $_androidApp $json',
+        'apps:sdkconfig IOS $_iosApp $json',
+      ]);
+      expect(
+        without.output.split('\n').skip(6).join('\n'),
+        'The files of the app are as Firebase has them already.\n'
+        'Firebase has no clients of Google, as in a project in which Google is '
+        'not enabled, so this script has not written $_androidFile and '
+        '$_iosFile, and writes no URL scheme. Enable Google, and run this '
+        'script again.\n',
+      );
+      expect(fileOf(_androidFile).existsSync(), isFalse);
+      expect(fileOf(_iosFile).existsSync(), isFalse);
+      expect(fileOf(_infoPlist).readAsStringSync(), plist);
+
+      serveFiles();
+      final enabled = await run(keytools: ['jdk/bin'], standIn: shas);
+
+      expect(enabled.code, 0, reason: enabled.errors);
+      expect(enabled.output.split('\n').skip(6), [
+        'Wrote $_androidFile and $_iosFile.',
+        'Writing the URL scheme of Google, $_scheme, into $_infoPlist.',
+        '',
+      ]);
+      expect(_urlSchemesOf(fileOf(_infoPlist).readAsStringSync()), [
+        [_scheme],
+      ]);
+    });
+
+    test(
+        'downloads a Firebase file again right after it enabled Google, '
+        'until the file has the clients of Google', () async {
+      useAppWith('google');
+      serveFiles(androidLate: 1);
+      File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+
+      final result = await run(
+        keytools: ['jdk/bin'],
+        standIn: {
+          'STAND_IN_ACCOUNT': 'dev@example.com',
+          'STAND_IN_SHAS': registered.join(','),
+        },
+      );
+
+      expect(result.code, 0, reason: result.errors);
+      expect(commandsOf(result).skip(4), [
+        'apps:sdkconfig ANDROID $_androidApp $json',
+        'apps:sdkconfig IOS $_iosApp $json',
+        'apps:sdkconfig ANDROID $_androidApp $json',
+      ]);
+      expect(
+        fileOf(_androidFile).readAsStringSync(),
+        _googleServices(withServer: true),
+      );
+    });
+
+    test(
+        'fails once it has asked three times more for a file that still '
+        'lacks the clients of Google, and leaves that file', () async {
+      useAppWith('google');
+      serveFiles(androidLate: 4);
+      File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+
+      final result = await run(
+        keytools: ['jdk/bin'],
+        standIn: {
+          'STAND_IN_ACCOUNT': 'dev@example.com',
+          'STAND_IN_SHAS': registered.join(','),
+        },
+      );
+
+      expect(result.code, 1);
+      expect(
+        [
+          for (final command in commandsOf(result))
+            if (command.startsWith('apps:sdkconfig')) command.split(' ')[1],
+        ],
+        ['ANDROID', 'IOS', 'ANDROID', 'ANDROID', 'ANDROID'],
+      );
+      expect(
+        result.errors,
+        'stand-in: on the standard error\n'
+        'Firebase has not added the clients of Google yet, so this script '
+        'has not written $_androidFile.\n'
+        '$rest\n',
+      );
+      expect(fileOf(_androidFile).existsSync(), isFalse);
+      expect(fileOf(_iosFile).existsSync(), isTrue);
+    });
+
+    test(
+        'adds the URL scheme to the URL types that the Info.plist has, also '
+        'to none and in a file with the line breaks of Windows, and stops '
+        'with what to add by hand at one in another form', () async {
+      useAppWith('google');
+      serveFiles();
+      File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+      final plist = fileOf(_infoPlist).readAsStringSync();
+      const end = '</dict>\n</plist>';
+      const deepLink = '\t\t<dict>\n'
+          '\t\t\t<key>CFBundleURLSchemes</key>\n'
+          '\t\t\t<array>\n'
+          '\t\t\t\t<string>myapp</string>\n'
+          '\t\t\t</array>\n'
+          '\t\t</dict>\n';
+      final shas = {'STAND_IN_SHAS': registered.join(',')};
+
+      final added = <String, String>{};
+      for (final (name, before, after) in [
+        (
+          'a URL type of the app',
+          plist.replaceFirst(
+            end,
+            '\t<key>CFBundleURLTypes</key>\n\t<array>\n$deepLink\t</array>\n'
+            '$end',
+          ),
+          plist.replaceFirst(
+            end,
+            '\t<key>CFBundleURLTypes</key>\n\t<array>\n$deepLink'
+            '${_urlType('\t\t')}\t</array>\n$end',
+          ),
+        ),
+        (
+          'no URL type',
+          plist.replaceFirst(
+            end,
+            '\t<key>CFBundleURLTypes</key>\n\t<array/>\n$end',
+          ),
+          plist.replaceFirst(
+            end,
+            '\t<key>CFBundleURLTypes</key>\n\t<array>\n'
+            '${_urlType('\t\t')}\t</array>\n$end',
+          ),
+        ),
+        (
+          'line breaks of Windows',
+          plist.replaceAll('\n', '\r\n'),
+          plist
+              .replaceFirst(
+                end,
+                '\t<key>CFBundleURLTypes</key>\n\t<array>\n'
+                '${_urlType('\t\t')}\t</array>\n$end',
+              )
+              .replaceAll('\n', '\r\n'),
+        ),
+      ]) {
+        fileOf(_infoPlist).writeAsStringSync(before);
+
+        final result = await run(keytools: ['jdk/bin'], standIn: shas);
+
+        expect(result.code, 0, reason: '$name: ${result.errors}');
+        added[name] = fileOf(_infoPlist).readAsStringSync();
+        expect(added[name], after, reason: name);
+      }
+      expect(_urlSchemesOf(added['a URL type of the app']!), [
+        ['myapp'],
+        [_scheme],
+      ]);
+      expect(_urlSchemesOf(added['no URL type']!), [
+        [_scheme],
+      ]);
+
+      // A form that the script does not know.
+      final unknown = plist.replaceFirst(
+        end,
+        '\t<key>CFBundleURLTypes</key>\n\t<dict/>\n$end',
+      );
+      fileOf(_infoPlist).writeAsStringSync(unknown);
+
+      final stopped = await run(keytools: ['jdk/bin'], standIn: shas);
+
+      expect(stopped.code, 1);
+      expect(
+        stopped.errors,
+        'stand-in: on the standard error\n'
+        '$_infoPlist is not in a form in which this script can add the URL '
+        'scheme. Add this to CFBundleURLTypes there by hand:\n'
+        '${_urlType('')}'
+        '$rest\n',
+      );
+      expect(fileOf(_infoPlist).readAsStringSync(), unknown);
+    });
+
+    test(
+        'finds the debug key where the Android Gradle plugin keeps it: in '
+        'ANDROID_USER_HOME, or else in .android of ANDROID_SDK_HOME, of '
+        'XDG_CONFIG_HOME or of the home directory, the first that exists',
+        () async {
+      useAppWith('google');
+      final home = inMachine('home');
+      Directory(inMachine('xdg')).createSync();
+      Directory(inMachine('sdk')).createSync();
+      final noUserHome = {
+        'ANDROID_USER_HOME': '',
+        'HOME': home,
+        'USERPROFILE': home,
+        // The script stops right after keytool.
+        'STAND_IN_FAILS': 'apps:android:sha:list',
+      };
+      final sep = Platform.pathSeparator;
+
+      final found = <String>[];
+      for (final variables in [
+        {
+          'ANDROID_USER_HOME': inMachine('android'),
+          'STAND_IN_FAILS': 'apps:android:sha:list',
+        },
+        noUserHome,
+        {...noUserHome, 'XDG_CONFIG_HOME': inMachine('xdg')},
+        {...noUserHome, 'XDG_CONFIG_HOME': inMachine('nowhere')},
+        {
+          ...noUserHome,
+          'ANDROID_SDK_HOME': inMachine('sdk'),
+          'XDG_CONFIG_HOME': inMachine('xdg'),
+        },
+      ]) {
+        if (keytoolCalls().existsSync()) keytoolCalls().deleteSync();
+        final result = await run(keytools: ['jdk/bin'], standIn: variables);
+        expect(result.code, 1, reason: '$variables: ${result.errors}');
+        final list = keytoolCallsSoFar().last.split(' ');
+        found.add(list[list.indexOf('-keystore') + 1]);
+      }
+
+      expect(found, [
+        '${inMachine('android')}${sep}debug.keystore',
+        '$home$sep.android${sep}debug.keystore',
+        '${inMachine('xdg')}$sep.android${sep}debug.keystore',
+        '$home$sep.android${sep}debug.keystore',
+        '${inMachine('sdk')}$sep.android${sep}debug.keystore',
+      ]);
+      // The script created the key where it did not find one, with the
+      // directory of the preferences of the Android tools.
+      for (final key in found) {
+        expect(File(key).existsSync(), isTrue, reason: key);
+      }
+    });
+
+    test(
+      'takes keytool from JAVA_HOME when the PATH has none that runs, as on '
+      'macOS without a JDK that macOS knows',
+      () async {
+        useAppWith('google');
+
+        final result = await run(
+          keytools: ['broken/bin'],
+          standIn: {
+            'JAVA_HOME': inMachine('jdk'),
+            'STAND_IN_FAILS': 'apps:android:sha:list',
+          },
+        );
+
+        expect(result.code, 1);
+        expect(
+          result.errors,
+          contains(
+            'The Firebase CLI did not list the SHA certificate hashes of the '
+            'Android app $_androidApp (exit code 2): stand-in: '
+            'apps:android:sha:list failed\n',
+          ),
+        );
+        // The one on the PATH does not run, and the one of JAVA_HOME
+        // creates the key and reads it.
+        expect([
+          for (final call in keytoolCallsSoFar()) call.split(' ').first,
+        ], [
+          '-help',
+          '-help',
+          '-genkeypair',
+          '-list',
+        ]);
+      },
+      // keytool of JAVA_HOME is keytool.exe on Windows, which no stand-in
+      // of the tests is.
+      testOn: '!windows',
+    );
+
+    test(
+      'stops once it enabled the methods when no keytool runs, and tells '
+      'where it looked and that running it again does the rest',
+      () async {
+        useAppWith('google');
+
+        final result = await run(
+          keytools: ['broken/bin'],
+          standIn: {'STAND_IN_ACCOUNT': 'dev@example.com'},
+        );
+
+        expect(result.code, 1);
+        expect(commandsOf(result), [
+          '--version',
+          'login:list',
+          'deploy --only auth --project=smf-app --non-interactive',
+        ]);
+        expect(
+          result.errors,
+          'stand-in: on the standard error\n'
+          'keytool, which reads the debug key, was not found on the PATH, in '
+          'JAVA_HOME or in Android Studio at ${_androidStudioKeytool()}. '
+          'Install a JDK or Android Studio, or put keytool on the PATH, and '
+          'run this script again.\n'
+          '$rest\n',
+        );
+        expect(File('${inMachine('android')}$keystore').existsSync(), isFalse);
+      },
+      // Where Android Studio has keytool, the script takes it.
+      skip: File(_androidStudioKeytool()).existsSync()
+          ? 'This machine has keytool in Android Studio, which the script '
+              'takes.'
+          : null,
+    );
+
+    test(
+        'stops at a call of the Firebase CLI that fails once it enabled the '
+        'methods, with its error, the account and that running it again '
+        'does the rest', () async {
+      useAppWith('google');
+      File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+
+      final told = <String, String>{};
+      for (final arguments in [
+        <String>[],
+        ['--account', 'named@example.com'],
+      ]) {
+        final result = await run(
+          arguments: arguments,
+          keytools: ['jdk/bin'],
+          standIn: {
+            'STAND_IN_ACCOUNT': 'dev@example.com',
+            'STAND_IN_SHAS': registered.first,
+            'STAND_IN_FAILS': 'apps:android:sha:create',
+          },
+        );
+
+        expect(result.code, 1, reason: '$arguments');
+        told[arguments.join(' ')] = result.errors;
+        if (arguments.isNotEmpty) {
+          expect(
+            commandsOf(result).last,
+            'apps:android:sha:create $_androidApp $_sha256 $json '
+            '--account=named@example.com',
+          );
+        }
+      }
+
+      const failed = 'stand-in: on the standard error\n'
+          'The Firebase CLI did not register $_sha256 for the Android app '
+          '$_androidApp (exit code 2): stand-in: apps:android:sha:create '
+          'failed\n';
+      expect(told, {
+        '': '$failed$_maybeAnotherAccount\n$rest\n',
+        '--account named@example.com': '$failed- The arguments name the '
+            'account named@example.com for it. "firebase login:list" shows '
+            'the accounts that the Firebase CLI has.\n$rest\n',
+      });
+    });
+
+    test(
+        'enables the methods in a project that its arguments name, and sets '
+        'up nothing there for Google, which is for the project of '
+        'flutterfire configure', () async {
+      useAppWith('google');
+      final plist = fileOf(_infoPlist).readAsStringSync();
+
+      final result = await run(
+        arguments: ['--project', 'other-app'],
+        keytools: ['jdk/bin'],
+        standIn: {'STAND_IN_ACCOUNT': 'dev@example.com'},
+      );
+
+      expect(result.code, 0, reason: result.errors);
+      expect(commandsOf(result), [
+        '--version',
+        'login:list',
+        'deploy --only auth --project=other-app --non-interactive',
+      ]);
+      expect(
+        result.output.split('\n').skip(3).join('\n'),
+        'firebase.json of the app names no app of the project other-app that '
+        '"flutterfire configure" configured the app for, so this run registers '
+        'no debug key, downloads no Firebase file and writes no URL scheme '
+        'there. To set the app up for that project, run "flutterfire '
+        'configure" for it first, and then this script again.\n',
+      );
+      expect(keytoolCallsSoFar(), isEmpty);
+      expect(fileOf(_infoPlist).readAsStringSync(), plist);
+    });
+
+    test('stops at a Firebase file that firebase.json puts outside the app',
+        () async {
+      useAppWith('google');
+      serveFiles();
+      File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+      File(configOf(app)).writeAsStringSync(
+        _configuredFor('smf-app').replaceFirst(
+          '"android/app/google-services.json"',
+          '"../outside/google-services.json"',
+        ),
+      );
+
+      final result = await run(
+        keytools: ['jdk/bin'],
+        standIn: {
+          'STAND_IN_ACCOUNT': 'dev@example.com',
+          'STAND_IN_SHAS': registered.join(','),
+        },
+      );
+
+      expect(result.code, 1);
+      expect(
+        result.errors,
+        'stand-in: on the standard error\n'
+        'firebase.json of the app names "../outside/google-services.json" '
+        'as a Firebase file of the app, which is outside the app.\n'
+        '$rest\n',
+      );
+      expect(
+        File('${app.path}/../outside/google-services.json').existsSync(),
+        isFalse,
+      );
+    });
+
+    test(
+        'tells how to enable Apple in the Firebase console, which the '
+        'Firebase CLI cannot do, and asks it for no account', () async {
+      useAppWith('apple');
+
+      final result = await run();
+
+      expect(result.code, 0, reason: result.errors);
+      expect(commandsOf(result), [
+        '--version',
+        'deploy --only auth --project=smf-app --non-interactive',
+      ]);
+      expect(result.calls.last.files['firebase.json'], _emailPassword);
+      expect(
+        result.output,
+        '${_enabling('smf-app', AuthMode.required)}\n'
+        'stand-in: deploying\n'
+        'Apple is enabled in the Firebase console, which the Firebase CLI '
+        'cannot do: ${_consoleOf('smf-app')} The deletion of an account of '
+        'Apple also needs the Services ID and the OAuth code flow '
+        'configuration of Apple there; see the section Firebase '
+        'Authentication of README.md.\n',
+      );
+    });
+
+    test('is the script of the app without ways to sign in but for them', () {
+      final without = rendered[AuthMode.required]!.files[enableSignInScript]!;
+      final both = withWays['google and apple']!.files[enableSignInScript]!;
+
+      expect(
+        both.text,
+        without.text.replaceFirst(
+          'const Map<String, Set<_Need>> _methods = {};',
+          'const Map<String, Set<_Need>> _methods = {\n'
+              "  'google.com': {\n"
+              '    _Need.androidCertificate,\n'
+              '    _Need.iosClient,\n'
+              '    _Need.serverClient,\n'
+              '  },\n'
+              "  'apple.com': {},\n"
+              '};',
+        ),
+      );
     });
   });
 }

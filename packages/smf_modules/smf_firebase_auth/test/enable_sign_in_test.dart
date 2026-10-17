@@ -28,6 +28,14 @@
 // test tells a lack of a permission of the service account from the other
 // failures, with the permissions that the Firebase CLI printed as denied
 // or missing and a role to grant for them (see enablingFailure).
+//
+// The script changes no file of the app but those that the ways to sign in
+// of the app need: in an app with Google sign-in, the Firebase files that
+// it downloads again and ios/Runner/Info.plist, with the URL scheme of the
+// iOS app. Run as a service account, it leaves Google out, which is enabled
+// in the project of CI already, and sets up the rest: it registers the SHA
+// of the debug key of the runner, which the test deletes again, so that
+// the project does not collect one for each run.
 @TestOn('vm')
 library;
 
@@ -58,6 +66,57 @@ Future<ProcessResult> _run(
       stdoutEncoding: utf8,
       stderrEncoding: utf8,
     );
+
+/// Runs the Firebase CLI with [arguments] for the project [project] in a
+/// directory of its own, which keeps its log out of the app, with
+/// [environment].
+Future<ProcessResult> _firebase(
+  List<String> arguments,
+  String project,
+  Map<String, String> environment,
+) async {
+  final directory = Directory.systemTemp.createTempSync('smf_firebase_');
+  try {
+    return await _run(
+      'firebase',
+      [...arguments, '--project=$project', '--non-interactive'],
+      directory: directory.path,
+      environment: {...environment, 'NO_UPDATE_NOTIFIER': '1'},
+    );
+  } finally {
+    directory.deleteSync(recursive: true);
+  }
+}
+
+/// The SHA certificate hashes of the Android app [appId] in [project], by
+/// their ids.
+Future<Map<String, String>> _shaHashes(
+  String appId,
+  String project,
+  Map<String, String> environment,
+) async {
+  final listed = await _firebase(
+    ['apps:android:sha:list', appId, '--json'],
+    project,
+    environment,
+  );
+  expect(listed.exitCode, 0, reason: '${listed.stdout}${listed.stderr}');
+  return shaHashesOf('${listed.stdout}');
+}
+
+/// The files of the app [app], by their paths in it, each with its bytes,
+/// but for those of tools and builds, such as `.dart_tool` and `build`.
+Map<String, List<int>> _filesOf(String app) => {
+      for (final file
+          in Directory(app).listSync(recursive: true).whereType<File>().where(
+                (file) => !file.uri.pathSegments.any(
+                  const {'.dart_tool', 'build', '.gradle', 'Pods', '.symlinks'}
+                      .contains,
+                ),
+              ))
+        file.path.substring(app.length + 1).replaceAll(r'\', '/'):
+            file.readAsBytesSync(),
+    };
 
 /// The names of the files and directories right in the directory [app].
 Set<String> _entriesOf(String app) => {
@@ -153,6 +212,23 @@ void main() {
         final config = File('$app/firebase.json');
         final configured = config.readAsBytesSync();
         final entries = _entriesOf(app!);
+        final files = _filesOf(app);
+        // What the ways to sign in of the app need of the project, for its
+        // apps in the project.
+        final methods = scriptMethodsOf(
+          File('$app/$enableSignInScript').readAsStringSync(),
+        );
+        final needs = {for (final needs in methods.values) ...needs};
+        final apps = firebaseAppsOf(config.readAsStringSync(), project!);
+        final android = [
+          for (final app in apps)
+            if (app.platform == 'android') app,
+        ];
+        final shasBefore = {
+          if (needs.contains('androidCertificate'))
+            for (final app in android)
+              app.id: await _shaHashes(app.id, project, credentials),
+        };
 
         final [executable, ...arguments] = enableSignInCommand.split(' ');
         final enabled = await _run(
@@ -178,7 +254,7 @@ void main() {
               : null;
           fail(
             enablingFailure(
-              project: project!,
+              project: project,
               code: enabled.exitCode,
               output: output,
               debugOutput: withDebug == null
@@ -204,7 +280,8 @@ void main() {
             contains(enabledLineOf(mode)),
           ),
         );
-        // It left the app as flutterfire configured it.
+        // It left the app as flutterfire configured it, but for the files
+        // that the ways to sign in of the app need.
         expect(
           config.readAsBytesSync(),
           configured,
@@ -216,6 +293,77 @@ void main() {
           reason: 'The script, or the Firebase CLI, left a file in the app, '
               'such as .firebaserc or firebase-debug.log.',
         );
+        expect(
+          changedFilesOf(files, _filesOf(app)),
+          everyElement(
+            isIn({
+              if (needs.isNotEmpty) ...[
+                for (final app in apps) app.file,
+                'ios/Runner/Info.plist',
+              ],
+            }),
+          ),
+          reason: 'The script changed a file of the app that the ways to '
+              'sign in of the app do not need.',
+        );
+        // As a service account, it leaves Google out, which the project of
+        // CI has enabled already.
+        if (methods.containsKey('google.com')) {
+          expect('${enabled.stdout}', contains('Google is left out'));
+        }
+        // The SHA of the debug key of the runner, which the script
+        // registered, goes again.
+        for (final MapEntry(key: appId, value: before) in shasBefore.entries) {
+          final added = {
+            ...await _shaHashes(appId, project, credentials),
+          }..removeWhere((id, _) => before.containsKey(id));
+          try {
+            expect(
+              added,
+              '${enabled.stdout}'.contains(
+                'Registered them for the Android app $appId.',
+              )
+                  ? isNotEmpty
+                  : isEmpty,
+              reason: 'The script did not register the SHA of the debug key '
+                  'for $appId as it said.',
+            );
+          } finally {
+            for (final id in added.keys) {
+              final deleted = await _firebase(
+                ['apps:android:sha:delete', appId, id],
+                project,
+                credentials,
+              );
+              expect(
+                deleted.exitCode,
+                0,
+                reason: '${deleted.stdout}${deleted.stderr}',
+              );
+            }
+          }
+        }
+        for (final firebaseApp in apps) {
+          final file = File('$app/${firebaseApp.file}').readAsStringSync();
+          if (firebaseApp.platform == 'android' &&
+              needs.contains('serverClient')) {
+            expect(
+              hasServerClient(file),
+              isTrue,
+              reason: '${firebaseApp.file} has no client of the server of '
+                  'Google.',
+            );
+          }
+          if (firebaseApp.platform == 'ios' && needs.contains('iosClient')) {
+            final scheme = reversedClientIdOf(file);
+            expect(scheme, isNotNull, reason: firebaseApp.file);
+            expect(
+              File('$app/ios/Runner/Info.plist').readAsStringSync(),
+              contains('<string>$scheme</string>'),
+              reason: 'The script did not write the URL scheme of Google.',
+            );
+          }
+        }
       }
 
       final keys = apiKeysOf(options);

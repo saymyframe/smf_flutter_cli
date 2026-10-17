@@ -62,14 +62,18 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// The ways to sign in are enabled in the Firebase project, not in the
 /// code. The module generates `tool/enable_firebase_sign_in.dart`, a script
 /// of the app that enables those that the mode of the app needs with the
-/// Firebase CLI, and writes nothing into the app. After generation, once
-/// `flutterfire configure` of [FirebaseCoreModule] configured the app, the
-/// module runs the script: its step continues
-/// [FirebaseCoreModule.configureStep], so a run in a terminal asks only
-/// about `flutterfire configure`. Any other run prints the command to run
-/// later, and so does a run on a machine whose Firebase CLI is older than
-/// the version that the script needs, which the module checks before
-/// generation.
+/// Firebase CLI, and the ways to sign in of the app with an identity
+/// provider, which its provider renders into the script. For a way to sign
+/// in of Google, the script also sets up what it needs: the SHA of the
+/// debug key of the machine in the project, the Firebase files of the app
+/// with the clients of Google, and the URL scheme of the iOS app in
+/// `ios/Runner/Info.plist`. After generation, once `flutterfire configure`
+/// of [FirebaseCoreModule] configured the app, the module runs the script:
+/// its step continues [FirebaseCoreModule.configureStep], and a run in a
+/// terminal asks about it, with what it does for Google sign-in. Any other
+/// run prints the command to run later, and so does a run on a machine
+/// whose Firebase CLI is older than the version that the script needs,
+/// which the module checks before generation.
 ///
 /// The service also signs in, links an anonymous user and confirms a
 /// deletion with the credentials of the ways to sign in of Google and
@@ -97,13 +101,16 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// The provider of the module refuses an app with a way to sign in of
 /// another identity provider in its `validate` hook, as the role asks of a
 /// provider whose backend does not take the identity provider of a way to
-/// sign in.
+/// sign in, and one that needs of the project what the script does not set
+/// up for its identity provider.
 ///
 /// The README of the app tells how to enable the ways to sign in, with the
 /// script and in the Firebase console, and what the script does to the
-/// project. Its guide for coding agents tells which file is on Firebase
-/// Authentication, where a code of Firebase gets its reason, and that the
-/// script is run only when asked.
+/// project, and in an app with ways to sign in of Google and Apple what it
+/// does for them and what is left to the developer, such as the SHA of the
+/// key of a release and the key of Apple. Its guide for coding agents tells
+/// which file is on Firebase Authentication, where a code of Firebase gets
+/// its reason, and that the script is run only when asked.
 final class FirebaseAuthModule extends SmfModule {
   /// Creates the module.
   const FirebaseAuthModule();
@@ -175,7 +182,6 @@ final class FirebaseAuthModule extends SmfModule {
         ),
         const Preflight([firebaseCliWithSignIn]),
         enableSignIn,
-        AppEntryRole.readmeSections.entry(readmeHeading, readmeSection),
         AppEntryRole.agentSections.entry(
           authRole.description,
           AgentNote(agentNote),
@@ -184,10 +190,12 @@ final class FirebaseAuthModule extends SmfModule {
 }
 
 /// The provider of the auth role of [FirebaseAuthModule]: its bricks
-/// implement the role, and its `validate` hook reports each way to sign in
-/// with an identity provider that a module gives the role, whose credential
-/// the service of the module does not take: one of another identity
-/// provider than Google and Apple.
+/// implement the role, its `validate` hook reports each way to sign in with
+/// an identity provider that a module gives the role whose credential the
+/// service of the module does not take, or that needs of the Firebase
+/// project what the script does not set up, and its `render` hook gives
+/// the script the ways to sign in of the app and writes the section of the
+/// module in the README of the app.
 final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
   const _FirebaseAuthProvider();
 
@@ -198,21 +206,70 @@ final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
   List<SmfIssue> validate(RoleHookInput<AuthData> input) => [
         for (final AppSignInMethod(:owner, :method)
             in authRole.methodsIn(input))
-          if (!identityProviders.containsKey(method.issuer))
-            SmfIssue(
-              'The module $owner gives the app a way to sign in with '
-              '${method.issuer}, whose credential ${FirebaseAuthModule.id} '
-              'does not take: it signs in to Firebase Authentication with the '
-              'credentials of ${[
-                for (final MapEntry(key: issuer, value: name)
-                    in identityProviders.entries)
-                  '$name ($issuer)',
-              ].join(' and ')}, besides an email address and a password, '
-              'and as an anonymous user. A sign-in with it would fail with '
-              'notConfigured.',
-              hint: 'Leave $owner out of an app with '
-                  '${FirebaseAuthModule.id}.',
-              origin: owner,
-            ),
+          if (_problemOf(owner, method) case final problem?) problem,
       ];
+
+  /// Why the module cannot meet [method], the way to sign in that [owner]
+  /// gives the app, or `null` if it can: its identity provider is none of
+  /// [identityProviders], or it needs of the Firebase project what the
+  /// script does not set up for its identity provider.
+  static SmfIssue? _problemOf(ContributionOrigin owner, SignInMethod method) {
+    final hint = 'Leave $owner out of an app with ${FirebaseAuthModule.id}.';
+    final provider = identityProviders[method.issuer];
+    if (provider == null) {
+      final taken = [
+        for (final MapEntry(key: issuer, value: provider)
+            in identityProviders.entries)
+          '${provider.name} ($issuer)',
+      ];
+      return SmfIssue(
+        'The module $owner gives the app a way to sign in with '
+        '${method.issuer}, whose credential ${FirebaseAuthModule.id} does '
+        'not take: it signs in to Firebase Authentication with the '
+        'credentials of ${taken.join(' and ')}, besides an email address and '
+        'a password, and as an anonymous user. A sign-in with it would fail '
+        'with notConfigured.',
+        hint: hint,
+        origin: owner,
+      );
+    }
+    final unmet = method.needs.difference(provider.needs);
+    if (unmet.isEmpty) return null;
+    // In the order of the needs of the role.
+    final names = [
+      for (final need in SignInNeed.values)
+        if (unmet.contains(need)) need.name,
+    ];
+    return SmfIssue(
+      'The module $owner gives the app a way to sign in with '
+      '${provider.name} (${method.issuer}) that needs ${names.join(' and ')} '
+      'of the backend, which ${FirebaseAuthModule.id} does not set up for '
+      '${provider.name}. A sign-in with it would fail.',
+      hint: hint,
+      origin: owner,
+    );
+  }
+
+  /// The ways to sign in of the app for the script, the section of the
+  /// module in the README of the app, which tells what the script does for
+  /// them, and a second note for coding agents in an app with them.
+  @override
+  RoleOutput render(RoleHookInput<AuthData> input) {
+    final methods = firebaseMethodsOf(authRole.methodsIn(input));
+    final note = methodsAgentNote(methods);
+    return RoleOutput(
+      fragments: [
+        AppEntryRole.readmeSections.entry(
+          readmeHeading,
+          readmeSectionOf(methods),
+        ),
+        if (note != null)
+          AppEntryRole.agentSections.entry(
+            authRole.description,
+            AgentNote(note),
+          ),
+      ],
+      vars: {'methods': methodsCode(methods)},
+    );
+  }
 }

@@ -300,3 +300,122 @@ String _suchAs(List<String> permissions) {
       '$role for ${has.join(', ')}',
   ].join(' and ')},';
 }
+
+/// The ways to sign in that [script], the text of the script of an app that
+/// enables the sign-in methods, sets up, as its constant `_methods` has
+/// them: the id of the identity provider of each in Firebase
+/// Authentication, with the names of what its ways to sign in need of the
+/// project, such as `androidCertificate`. None in the script of an app
+/// without them, or of one in which that constant is missing.
+Map<String, Set<String>> scriptMethodsOf(String script) {
+  final constant = RegExp(
+    r'^const Map<String, Set<_Need>> _methods = \{(.*?)\};$',
+    multiLine: true,
+    dotAll: true,
+  ).firstMatch(script);
+  if (constant == null) return const {};
+  return {
+    for (final entry
+        in RegExp(r"'([^']+)': \{([^}]*)\}").allMatches(constant[1]!))
+      entry[1]!: {
+        for (final need in RegExp(r'_Need\.(\w+)').allMatches(entry[2]!))
+          need[1]!,
+      },
+  };
+}
+
+/// A Firebase app of an app, as `flutterfire configure` writes it into
+/// `firebase.json`: its platform, `android` or `ios`, its id, and the path
+/// of its Firebase file in the app.
+typedef FirebaseApp = ({String platform, String id, String file});
+
+/// The Firebase apps of the project [project] in [firebaseJson], the text
+/// of `firebase.json` of an app, each once: those of Android and of iOS,
+/// wherever flutterfire writes them, as the script of the app reads them.
+List<FirebaseApp> firebaseAppsOf(String firebaseJson, String project) {
+  final apps = <FirebaseApp>{};
+  void collect(String platform, Object? node) {
+    if (node is! Map) return;
+    if (node
+        case {
+          'projectId': final String id,
+          'appId': final String appId,
+          'fileOutput': final String file,
+        } when id == project) {
+      apps.add((platform: platform, id: appId, file: file));
+    }
+    for (final value in node.values) {
+      collect(platform, value);
+    }
+  }
+
+  if (jsonDecode(firebaseJson)
+      case {'flutter': {'platforms': final Map<Object?, Object?> platforms}}) {
+    for (final platform in const ['android', 'ios']) {
+      collect(platform, platforms[platform]);
+    }
+  }
+  return apps.toList();
+}
+
+/// The SHA certificate hashes in [printed], what
+/// `firebase apps:android:sha:list --json` printed: the id of each, the
+/// last part of its name, with its hash. Throws a [FormatException] when
+/// [printed] is no list of the Firebase CLI.
+Map<String, String> shaHashesOf(String printed) {
+  final start = printed.indexOf('{');
+  final answer = start < 0 ? null : jsonDecode(printed.substring(start));
+  if (answer case {'status': 'success', 'result': final List<Object?> list}) {
+    return {
+      for (final certificate in list)
+        if (certificate
+            case {'name': final String name, 'shaHash': final String hash})
+          name.split('/').last: hash,
+    };
+  }
+  throw FormatException('The Firebase CLI listed no hashes', printed);
+}
+
+/// Whether [googleServices], the text of `google-services.json` of an
+/// Android app, has the client of the server of Google: an OAuth client of
+/// the type 3, which Firebase adds once Google is enabled in the project.
+bool hasServerClient(String googleServices) {
+  bool among(Object? node) => switch (node) {
+        {'client_type': 3} => true,
+        Map() => node.values.any(among),
+        List() => node.any(among),
+        _ => false,
+      };
+  return among(jsonDecode(googleServices));
+}
+
+/// The client of Google of an iOS app reversed, `REVERSED_CLIENT_ID` of
+/// [serviceInfo], the text of its `GoogleService-Info.plist`, or `null` if
+/// it has none, as before Google is enabled in the project.
+String? reversedClientIdOf(String serviceInfo) => RegExp(
+      r'<key>REVERSED_CLIENT_ID</key>\s*<string>([^<]+)</string>',
+    ).firstMatch(serviceInfo)?[1];
+
+/// The paths of the files that differ between [before] and [after], the
+/// files of an app by their paths, each with its bytes, and of those that
+/// only one of them has, in order.
+List<String> changedFilesOf(
+  Map<String, List<int>> before,
+  Map<String, List<int>> after,
+) {
+  bool same(List<int> one, List<int> other) {
+    if (one.length != other.length) return false;
+    for (var index = 0; index < one.length; index++) {
+      if (one[index] != other[index]) return false;
+    }
+    return true;
+  }
+
+  return [
+    for (final path in {...before.keys, ...after.keys}.toList()..sort())
+      if (before[path] == null ||
+          after[path] == null ||
+          !same(before[path]!, after[path]!))
+        path,
+  ];
+}
