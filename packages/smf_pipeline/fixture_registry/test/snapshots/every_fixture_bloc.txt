@@ -136,7 +136,11 @@ To change the mode, change the value of `authMode`. The provider of sign-in has 
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
-Besides an email address and a password, the app signs in with no identity provider, such as the account of a user at another service. Such a way to sign in is a `SignInMethod` of `appSignInMethods` in `lib/core/auth/sign_in_methods.dart`, which the module of the way to sign in adds.
+Besides an email address and a password, the app signs in with these identity providers, the ways to sign in of `appSignInMethods` in `lib/core/auth/sign_in_methods.dart`:
+
+- Continue with the fixture, on Android and iOS. Deleting an account that signs in this way asks the identity provider for a credential again first, so that the provider of sign-in can revoke the tokens that it gave the app. If the user closes its sheet, nothing is deleted.
+
+A screen of sign-in shows the button of a way to sign in only on the platforms that it works on. When an anonymous user signs in this way and no account has the identity yet, the user gets the identity and keeps the id. Otherwise the user signs in to that account, as with a password, and `takeGuestData()` moves what the anonymous user had. The sign-in may also fail, because the address of the identity has an account that signs in in another way: the provider of sign-in decides which.
 
 ## Languages
 
@@ -1567,6 +1571,9 @@ typedef GiveGuestData = Future<void> Function(String accountUid);
 /// id, nor in an app without anonymous users.
 Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
 === lib/core/auth/sign_in_methods.dart (role:auth) ===
+import 'package:fixture_app/core/fixture_sign_in_method/fixture_sign_in_method.dart'
+    as method0;
+import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -1632,7 +1639,19 @@ final class SignInMethod {
 /// The ways to sign in with an identity provider of the app, in the order
 /// of their modules. An email address and a password are no such way:
 /// `appSession.signIn` and `appSession.signUp` take them.
-const List<SignInMethod> appSignInMethods = [];
+const List<SignInMethod> appSignInMethods = [
+  SignInMethod(
+    label: _fakeSignInMethodLabel,
+    icon: method0.FixtureSignInIcon(),
+    platforms: {TargetPlatform.android, TargetPlatform.iOS},
+    credential: method0.fixtureCredential,
+    issuer: 'https://accounts.fixture.example.com',
+    revokesOnDeletion: true,
+  ),
+];
+
+String _fakeSignInMethodLabel(BuildContext context) =>
+    context.l10n.fakeSignInMethodLabel;
 === lib/core/badge/badge.dart (role:badge) ===
 /// A badge of the app, a role of a third-party package (fixture).
 abstract interface class Badge {
@@ -2154,13 +2173,23 @@ final class FixtureAnalytics implements AnalyticsService {
 }
 === lib/core/fixture_auth/fixture_auth.dart (fake_auth) ===
 import 'dart:async';
+import 'dart:convert';
 
 import '../auth/auth_service.dart';
 
-/// The accounts of the fixture by their email addresses, each with the id
-/// of its user and its password. They stand for the server of a provider of
-/// sign-in, which every start of the app finds as the last one left it.
-final Map<String, ({String uid, String password})> _accounts = {};
+/// An account of the fixture: its email address and its password, if it has
+/// them, and the identity providers that it signs in with, each by the
+/// issuer of its tokens.
+typedef _Account = ({String? email, String? password, Set<String> issuers});
+
+/// The accounts of the fixture by the ids of their users. They stand for
+/// the server of a provider of sign-in, which every start of the app finds
+/// as the last one left it. An anonymous user has none.
+final Map<String, _Account> _accounts = {};
+
+/// The ids of the users of the identities of the fixture, by the issuer and
+/// the subject of each identity, as its tokens name it.
+final Map<(String, String), String> _identities = {};
 
 /// The user who is signed in on this device, or `null`. It stands for the
 /// storage of a device, which a start of the app reads.
@@ -2198,10 +2227,18 @@ Future<AuthService> openFixtureAuth() async {
 /// and any password, and sends no message to reset one. Each of its calls
 /// takes a moment, as one that asks a server does.
 ///
-/// It takes no credential of an identity provider: [signInWith],
-/// [linkWith] and a deletion with a fresh credential fail with
-/// [AuthFailureReason.notConfigured], as the role asks of a provider whose
-/// backend does not take the identity provider.
+/// It takes a credential of any identity provider whose token is a test
+/// token: a JSON Web Token without a signature whose payload has `iss`, the
+/// issuer of the credential, `sub`, the identity, and maybe `email`, the
+/// email address of the identity. It keeps each identity by its issuer and
+/// its subject, and refuses any other token with
+/// [AuthFailureReason.invalidCredentials]. An identity whose address has an
+/// account of another user, such as one with a password, signs in to
+/// nothing: [linkWith] and [signInWith] fail with
+/// [AuthFailureReason.accountExistsWithOtherMethod]. A refused link leaves
+/// nothing to keep, so [signInWith] takes the credential itself again. It
+/// has no tokens of an identity provider to revoke when it deletes an
+/// account.
 final class FixtureAuth implements AuthService {
   FixtureAuth._();
 
@@ -2244,10 +2281,72 @@ final class FixtureAuth implements AuthService {
     return user;
   }
 
+  /// The id of the user whose account has [email], or `null`.
+  String? _ownerOf(String email) => _accounts.entries
+      .where((account) => account.value.email == email)
+      .firstOrNull
+      ?.key;
+
   /// Fails when [email] has an account already.
   void _checkFree(String email) {
-    if (_accounts.containsKey(email)) {
+    if (_ownerOf(email) != null) {
       throw const AuthFailure(AuthFailureReason.emailInUse);
+    }
+  }
+
+  /// The user of the account of [uid], which has one.
+  AuthUser _userOf(String uid) {
+    final account = _accounts[uid]!;
+    return AuthUser(
+      uid: uid,
+      isAnonymous: false,
+      email: account.email,
+      issuers: {...account.issuers},
+    );
+  }
+
+  /// The identity of the test token of [credential]: its issuer, its
+  /// subject and its email address. Fails with
+  /// [AuthFailureReason.invalidCredentials] for a token that is no test
+  /// token of the issuer of the credential.
+  ({String issuer, String subject, String? email}) _identityOf(
+    SignInCredential credential,
+  ) {
+    final (issuer, idToken) = switch (credential) {
+      IdTokenCredential(:final issuer, :final idToken) => (issuer, idToken),
+    };
+    final parts = idToken.split('.');
+    final payload = parts.length == 3 ? _payloadOf(parts[1]) : null;
+    if (payload == null ||
+        payload['iss'] != issuer ||
+        payload['sub'] is! String ||
+        payload['email'] is! String?) {
+      throw AuthFailure(
+        AuthFailureReason.invalidCredentials,
+        developerHint:
+            'The fixture sign-in takes a test token, a JSON Web '
+            'Token whose payload has iss, the issuer of the credential, and '
+            'sub, which $credential does not have.',
+      );
+    }
+    return (
+      issuer: issuer,
+      subject: payload['sub']! as String,
+      email: payload['email'] as String?,
+    );
+  }
+
+  /// The payload of a JSON Web Token as an object, from [part], the second
+  /// part of the token, or `null` if it is none.
+  static Map<String, Object?>? _payloadOf(String part) {
+    try {
+      final json = utf8.decode(base64Url.decode(base64Url.normalize(part)));
+      return switch (jsonDecode(json)) {
+        final Map<String, Object?> payload => payload,
+        _ => null,
+      };
+    } on FormatException {
+      return null;
     }
   }
 
@@ -2260,11 +2359,11 @@ final class FixtureAuth implements AuthService {
   @override
   Future<void> signIn({required String email, required String password}) async {
     await _answer();
-    final account = _accounts[email];
-    if (account == null || account.password != password) {
+    final uid = _ownerOf(email);
+    if (uid == null || _accounts[uid]!.password != password) {
       throw const AuthFailure(AuthFailureReason.invalidCredentials);
     }
-    _set(AuthUser(uid: account.uid, isAnonymous: false, email: email));
+    _set(_userOf(uid));
   }
 
   @override
@@ -2272,8 +2371,8 @@ final class FixtureAuth implements AuthService {
     await _answer();
     _checkFree(email);
     final uid = _newUid();
-    _accounts[email] = (uid: uid, password: password);
-    _set(AuthUser(uid: uid, isAnonymous: false, email: email));
+    _accounts[uid] = (email: email, password: password, issuers: {});
+    _set(_userOf(uid));
   }
 
   @override
@@ -2292,31 +2391,66 @@ final class FixtureAuth implements AuthService {
     _checkFree(email);
     // The anonymous user keeps the id.
     final uid = user.uid;
-    _accounts[email] = (uid: uid, password: password);
-    _set(AuthUser(uid: uid, isAnonymous: false, email: email));
+    _accounts[uid] = (email: email, password: password, issuers: {});
+    _set(_userOf(uid));
   }
 
+  /// Signs in to the user of the identity of [credential], and creates that
+  /// user when the identity is new, unless the address of the identity has
+  /// an account of another user.
   @override
   Future<void> signInWith(SignInCredential credential) async {
     await _answer();
-    throw _refused(credential);
+    final identity = _identityOf(credential);
+    final key = (identity.issuer, identity.subject);
+    if (_identities[key] case final uid?) {
+      _set(_userOf(uid));
+      return;
+    }
+    if (identity.email case final email? when _ownerOf(email) != null) {
+      throw const AuthFailure(AuthFailureReason.accountExistsWithOtherMethod);
+    }
+    final uid = _newUid();
+    _accounts[uid] = (
+      email: identity.email,
+      password: null,
+      issuers: {identity.issuer},
+    );
+    _identities[key] = uid;
+    _set(_userOf(uid));
   }
 
   @override
   Future<void> linkWith(SignInCredential credential) async {
     await _answer();
-    _signedIn();
-    throw _refused(credential);
+    final user = _signedIn();
+    final identity = _identityOf(credential);
+    final key = (identity.issuer, identity.subject);
+    if (_identities[key] case final owner?) {
+      throw owner == user.uid
+          ? const AuthFailure(
+              AuthFailureReason.unknown,
+              developerHint:
+                  'The user who is signed in has the identity '
+                  'already.',
+            )
+          : const AuthFailure(AuthFailureReason.credentialInUse);
+    }
+    if (identity.email case final email?
+        when (_ownerOf(email) ?? user.uid) != user.uid) {
+      throw const AuthFailure(AuthFailureReason.accountExistsWithOtherMethod);
+    }
+    final account = _accounts.remove(user.uid);
+    // The user who is signed in keeps the id with the identity.
+    final uid = user.uid;
+    _accounts[uid] = (
+      email: account?.email ?? identity.email,
+      password: account?.password,
+      issuers: {...?account?.issuers, identity.issuer},
+    );
+    _identities[key] = uid;
+    _set(_userOf(uid));
   }
-
-  /// The failure of a call with [credential], which the fixture does not
-  /// take.
-  AuthFailure _refused(SignInCredential credential) => AuthFailure(
-    AuthFailureReason.notConfigured,
-    developerHint:
-        'The fixture sign-in takes no credential of an '
-        'identity provider, such as $credential.',
-  );
 
   @override
   Future<void> signInAnonymously() async {
@@ -2336,16 +2470,30 @@ final class FixtureAuth implements AuthService {
   /// An anonymous user has nothing to sign in with again, so the service
   /// deletes one whenever it is asked to. It deletes the user of an account
   /// only if that user signed in through this service, since the app
-  /// started.
+  /// started, or with [fresh], a credential of an identity of the user,
+  /// which signs the user in again. A credential of another identity fails
+  /// with [AuthFailureReason.invalidCredentials] and deletes nothing.
   @override
   Future<void> deleteAccount({SignInCredential? fresh}) async {
     await _answer();
     final user = _signedIn();
-    if (fresh != null) throw _refused(fresh);
+    if (fresh != null) {
+      final identity = _identityOf(fresh);
+      if (_identities[(identity.issuer, identity.subject)] != user.uid) {
+        throw const AuthFailure(
+          AuthFailureReason.invalidCredentials,
+          developerHint:
+              'The credential is not of the user who is signed '
+              'in.',
+        );
+      }
+      _signedInHere = true;
+    }
     if (!user.isAnonymous && !_signedInHere) {
       throw const AuthFailure(AuthFailureReason.recentSignInRequired);
     }
-    _accounts.removeWhere((email, account) => account.uid == user.uid);
+    _accounts.remove(user.uid);
+    _identities.removeWhere((identity, uid) => uid == user.uid);
     _set(null);
   }
 }
@@ -2773,6 +2921,52 @@ void restoreFixtureSetting(AppPreferences preferences) {
     );
   }
 }
+=== lib/core/fixture_sign_in_method/fixture_sign_in_method.dart (fake_sign_in_method) ===
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+
+import '../auth/app_session.dart';
+
+/// The issuer of the tokens of the identity provider of the fixture.
+const String fixtureIssuer = 'https://accounts.fixture.example.com';
+
+/// The subject of the identity of the user at the identity provider of the
+/// fixture, which every credential of [fixtureCredential] is of.
+const String fixtureSubject = 'fixture-identity';
+
+/// The email address of that identity.
+const String fixtureEmail = 'identity@sign-in.fixture.example.com';
+
+/// Asks the identity provider of the fixture for a credential, as the sheet
+/// of an identity provider does, and returns it a turn of the event loop
+/// later: a credential of the one identity of the fixture, each time.
+///
+/// Its token is a test token, a JSON Web Token without a signature whose
+/// payload has the issuer, the subject and the email address of the
+/// identity, which a provider of sign-in in the tests of an app takes.
+Future<SignInCredential?> fixtureCredential() async {
+  await Future<void>.delayed(Duration.zero);
+  String part(Map<String, Object?> json) =>
+      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+  final header = part({'alg': 'none', 'typ': 'JWT'});
+  final payload = part({
+    'iss': fixtureIssuer,
+    'sub': fixtureSubject,
+    'email': fixtureEmail,
+  });
+  return IdTokenCredential(issuer: fixtureIssuer, idToken: '$header.$payload.');
+}
+
+/// The icon of the button of the way to sign in of the fixture, which takes
+/// the colour of its label.
+class FixtureSignInIcon extends StatelessWidget {
+  /// Creates the icon.
+  const FixtureSignInIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Icon(Icons.key);
+}
 === lib/core/fixture_steps/fixture_steps.dart (fake_steps) ===
 import 'dart:async';
 
@@ -3008,6 +3202,12 @@ class FixtureTexts {
   String get fakeStepsConfirmAction => switch (language) {
     'uk' => 'Підтвердити',
     _ => 'Confirm',
+  };
+
+  /// The text label of the module fake_sign_in_method.
+  String get fakeSignInMethodLabel => switch (language) {
+    'uk' => 'Продовжити з фікстурою',
+    _ => 'Continue with the fixture',
   };
 }
 

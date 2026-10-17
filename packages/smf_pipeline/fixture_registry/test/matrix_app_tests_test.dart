@@ -644,6 +644,9 @@ void main() {
         'fake_auth (go_router) with router',
         'fake_auth with localization',
         'fake_auth',
+        // The fixture way to sign in requires the role.
+        'fake_sign_in_method with localization',
+        'fake_sign_in_method',
         for (final mode in ['guest', 'anonymous']) '$ofModes --auth-mode=$mode',
         for (final app in apps)
           if (app.everyModuleWith != null) app.name,
@@ -663,8 +666,9 @@ void main() {
       },
     );
     // The apps of each mode: those of the fixture alone, six in the
-    // default mode and one in each other mode, and each app with every
-    // module with a clock of 24 hours and with one of 12.
+    // default mode and one in each other mode, the two of the fixture way
+    // to sign in in the default mode, and each app with every module with
+    // a clock of 24 hours and with one of 12.
     expect(
       {
         for (final mode in AuthMode.values)
@@ -672,7 +676,7 @@ void main() {
               .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
               .length,
       },
-      {'required': 22, 'guest': 17, 'anonymous': 17},
+      {'required': 24, 'guest': 17, 'anonymous': 17},
     );
     // The mode comes from the choice of the role, which an app has without
     // the option too.

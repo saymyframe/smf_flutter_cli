@@ -15,6 +15,7 @@ import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
+import 'package:fake_infra/bundles/fake_sign_in_method_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
 import 'package:fake_infra/bundles/fake_steps_bundle.dart';
@@ -835,6 +836,14 @@ final class FakeThemeModule extends SmfModule {
 /// to sign in with again, so the fixture deletes one whenever it is asked
 /// to.
 ///
+/// It takes a credential of any identity provider whose token is a test
+/// token: a JSON Web Token without a signature whose payload has the issuer
+/// of the credential, the subject of the identity and maybe its email
+/// address, as [FakeSignInMethodModule] gives. It keeps each identity by
+/// its issuer and its subject: a link keeps the id of the user, an identity
+/// of another user is `credentialInUse`, and one whose address has an
+/// account of another user is `accountExistsWithOtherMethod`.
+///
 /// The template of the role does the rest in an app with it, whichever
 /// module provides the role: the session of the app, and the mode of the
 /// app, which the fixture has the same code for.
@@ -864,6 +873,71 @@ final class FakeAuthModule extends SmfModule {
             init: FactoryRef('openFixtureAuth', import: _file),
           ),
         ),
+      ];
+}
+
+/// A way to sign in with the identity provider of the fixture, which a
+/// module that requires the auth role gives the role: the template of the
+/// role lists it in `appSignInMethods` of the app, whichever module
+/// provides the role.
+///
+/// Its function asks no platform: it returns a credential a turn of the
+/// event loop later, as a sheet of an identity provider does, and each
+/// time of the one identity of the fixture, with a test token that the
+/// fixture sign-in takes. It works on Android and on iOS, the App Store
+/// takes it as the equivalent of a login service of a third party, and the
+/// deletion of an account that signs in with it asks it for a credential
+/// again. Its label is in English and in Ukrainian, a text that it gives
+/// the localization role, which it uses.
+final class FakeSignInMethodModule extends SmfModule {
+  /// Creates the module.
+  const FakeSignInMethodModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_sign_in_method');
+
+  /// The issuer of the tokens of the identity provider of the fixture.
+  static const issuer = 'https://accounts.fixture.example.com';
+
+  /// The label of the button of the way to sign in.
+  static const label = LocalizedText(
+    'label',
+    en: 'Continue with the fixture',
+    translations: {'uk': 'Продовжити з фікстурою'},
+  );
+
+  static const _file = ImportRef.app(
+    'core/fixture_sign_in_method/fixture_sign_in_method.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Sign-in with the identity provider of the fixture '
+            '(fixture)',
+        kind: ModuleKinds.infrastructure,
+        requires: {authRole},
+        uses: {localizationRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          fakeSignInMethodBundle,
+          vars: const {'issuer': issuer},
+        ),
+        authRole.data(
+          const SignInMethod(
+            label: label,
+            icon: TypeRef('FixtureSignInIcon', import: _file),
+            platforms: {AppPlatform.android, AppPlatform.ios},
+            credential: FunctionRef('fixtureCredential', import: _file),
+            issuer: issuer,
+            appStore: AppStoreLogin.privacyFocused,
+            revokesOnDeletion: true,
+          ),
+        ),
+        localizationRole.data(const TextsData([label])),
       ];
 }
 
