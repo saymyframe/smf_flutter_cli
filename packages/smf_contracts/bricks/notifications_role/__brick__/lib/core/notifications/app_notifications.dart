@@ -14,8 +14,10 @@ enum NotificationPermission {
   granted,
 
   /// The app asked, and the user did not allow it or turned the
-  /// notifications of the app off later. Only the settings of the system
-  /// turn them on again: [NotificationsController.openSettings].
+  /// notifications of the app off later. The system may ask no more: iOS
+  /// asks once, and Android after a second no. So the app opens its
+  /// settings, where the user turns the notifications on:
+  /// [NotificationsController.openSettings].
   denied,
 
   /// The app may not show notifications, and has not asked yet.
@@ -42,7 +44,13 @@ final appNotifications = NotificationsController._();
 /// of notifications, keeps the permission to show them up to date, and
 /// tells of the taps on them. The app has one, [appNotifications].
 ///
-/// A call made before the app started the service waits for it.
+/// A call made before the app started the service waits for it, and fails
+/// with the error of that start if it fails.
+///
+/// What the service throws reaches the code that called. An error of the
+/// service when the user comes back to the app, or one that its taps send,
+/// has no caller, so it reaches the handlers of the uncaught errors of the
+/// app, and the controller goes on.
 final class NotificationsController {
   NotificationsController._();
 
@@ -59,8 +67,10 @@ final class NotificationsController {
   StreamSubscription<NotificationTap>? _serviceTaps;
   NotificationTap? _launchTap;
 
-  /// Completes when the app has started for the first time.
-  final Completer<void> _started = Completer<void>();
+  /// Completes when the app has started for the first time, with the error
+  /// of that start if it failed. Nothing but a call that waits for the start
+  /// reports that error, which the start throws itself.
+  final Completer<void> _started = Completer<void>()..future.ignore();
 
   /// The preferences that remember that the app asked, once the app opened
   /// them.
@@ -92,15 +102,19 @@ final class NotificationsController {
 
   /// The tap on a notification of the app that launched the app, or `null`
   /// if the app was launched in another way: known once `bootstrap()` is
-  /// over. The tap is not among the [taps].
-  NotificationTap? get launchTap => _launchTapOf(null);
+  /// over. The tap is not among the [taps]. It is `null` for a tap on a
+  /// notification of an owner, as [taps] leaves those out.
+  NotificationTap? get launchTap => switch (_launchTap) {
+        final tap? when _isOfApp(tap) => tap,
+        _ => null,
+      };
 
   /// Tells of each tap on a notification of the app while the app runs,
   /// with the data of the notification: a broadcast stream, the same for
   /// the life of the app. It leaves out the taps on the notifications of an
-  /// owner, which [tapsOf] gives.
-  late final Stream<NotificationTap> taps =
-      _taps.stream.where((tap) => _ownerOf(tap) == null);
+  /// owner, which [tapsOf] gives, and those with a negative id: the
+  /// notification of an owner whose data the provider could not read.
+  late final Stream<NotificationTap> taps = _taps.stream.where(_isOfApp);
 
   /// Tells of each tap on a notification whose owner is [owner], as it is
   /// under [notificationOwnerKey] in its data: a broadcast stream.
@@ -109,7 +123,10 @@ final class NotificationsController {
 
   /// The tap on a notification whose owner is [owner] that launched the
   /// app, or `null`.
-  NotificationTap? launchTapOf(String owner) => _launchTapOf(owner);
+  NotificationTap? launchTapOf(String owner) => switch (_launchTap) {
+        final tap? when _ownerOf(tap) == owner => tap,
+        _ => null,
+      };
 
   /// Starts with [service]: takes the tap that launched the app, follows
   /// the taps, and asks whether the app may show notifications.
@@ -119,10 +136,16 @@ final class NotificationsController {
   /// with the service that the app has from then on: `initNotifications()`
   /// does so in a test of the next launch of the app, and a test gives it a
   /// service of its own.
+  ///
+  /// If the service fails to tell whether the app may show notifications,
+  /// the future fails with its error, and so do the calls that waited for
+  /// the first start. A call after that goes to the service.
   Future<void> start(NotificationsService service) async {
     unawaited(_serviceTaps?.cancel());
     _service = service;
     _launchTap = service.launchTap;
+    // An error of the taps has no caller: it reaches the handlers of the
+    // uncaught errors of the app, and the taps go on.
     _serviceTaps = service.taps.listen(_taps.add);
     if (_observer == null) {
       final observer = _observer = _ResumeObserver(
@@ -130,7 +153,12 @@ final class NotificationsController {
       );
       WidgetsBinding.instance.addObserver(observer);
     }
-    await _refresh();
+    try {
+      await _refresh();
+    } on Object catch (error, stackTrace) {
+      if (!_started.isCompleted) _started.completeError(error, stackTrace);
+      rethrow;
+    }
     if (!_started.isCompleted) _started.complete();
   }
 
@@ -138,8 +166,10 @@ final class NotificationsController {
   /// has it, and completes with the permission once the user answered.
   ///
   /// Ask where the user turns on something that notifies, so that the
-  /// question explains itself. After [NotificationPermission.denied] the
-  /// system asks no more, and only its settings turn the notifications on:
+  /// question explains itself. Where the platform has no question, the
+  /// service opens the settings of the system instead. After
+  /// [NotificationPermission.denied] the system may ask no more: iOS asks
+  /// once, and Android after a second no. So open its settings then:
   /// [openSettings].
   ///
   /// A request while another is on its way completes with that one. If the
@@ -183,7 +213,8 @@ final class NotificationsController {
   /// owner too.
   Future<void> cancelAll() async => (await _ready()).cancelAll();
 
-  /// The notifications that are scheduled and not shown yet.
+  /// The notifications that are scheduled and not shown yet, those of an
+  /// owner too.
   Future<List<AppNotification>> scheduled() async =>
       (await _ready()).scheduled();
 
@@ -228,13 +259,13 @@ final class NotificationsController {
           ? NotificationPermission.denied
           : NotificationPermission.notAsked;
 
-  NotificationTap? _launchTapOf(String? owner) {
-    final tap = _launchTap;
-    return tap != null && _ownerOf(tap) == owner ? tap : null;
-  }
-
   static String? _ownerOf(NotificationTap tap) =>
       tap.data[notificationOwnerKey];
+
+  /// Whether [tap] is on a notification of the app: one without an owner,
+  /// whose id is not negative.
+  static bool _isOfApp(NotificationTap tap) =>
+      tap.id >= 0 && _ownerOf(tap) == null;
 
   /// Throws an [ArgumentError] for an id of [notification] that the app
   /// does not take; see [show].

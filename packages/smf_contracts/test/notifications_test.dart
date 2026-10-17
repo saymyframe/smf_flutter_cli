@@ -213,6 +213,9 @@ List<String> takeCalls() {
 /// The calls that wait until their completer completes, by their names.
 final Map<String, Completer<void>> holds = {};
 
+/// What the calls throw, by their names.
+final Map<String, Object> failures = {};
+
 /// How many services were created.
 int created = 0;
 
@@ -243,9 +246,13 @@ final class FakeNotifications implements NotificationsService {
   /// The user taps a notification.
   void tap(NotificationTap tap) => _taps.add(tap);
 
+  /// Sends an error to those who follow the taps.
+  void fail(Object error) => _taps.addError(error);
+
   Future<void> _enter(String call) async {
     calls.add(call);
     await holds[call]?.future;
+    if (failures[call] case final failure?) throw failure;
   }
 
   @override
@@ -703,6 +710,8 @@ Future<void> main(List<String> arguments, SendPort port) async {
   service
     ..tap(const NotificationTap(id: 1, data: {'screen': 'news'}))
     ..tap(const NotificationTap(id: -5, data: {notificationOwnerKey: 'push'}))
+    // A notification of an owner whose data the provider could not read.
+    ..tap(const NotificationTap(id: -6))
     ..tap(const NotificationTap(id: 2));
   await pump();
   result['heard'] = {...heard};
@@ -727,6 +736,104 @@ Future<void> main(List<String> arguments, SendPort port) async {
       .tap(const NotificationTap(id: 4));
   await pump();
   result['heard after the next launch'] = {...heard};
+
+  launchedBy = const NotificationTap(id: -2);
+  await initNotifications();
+  result['the launch tap of an owner without its data'] =
+      shown(appNotifications.launchTap);
+  port.send(result);
+}
+''';
+
+/// A request after the user turned the notifications on in the settings of
+/// the system, while the app was not told of it.
+const _grantedMeanwhile = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  await initPreferences();
+  await initNotifications();
+  takeCalls();
+  final heard = <String>[];
+  appNotifications.permission.addListener(
+    () => heard.add(appNotifications.permission.value.name),
+  );
+  enabled = true;
+  result['the answer'] = (await appNotifications.request()).name;
+  result['the permission'] = appNotifications.permission.value.name;
+  result['heard'] = heard;
+  result['the calls'] = takeCalls();
+  result['saved'] = disk[askedKey];
+  port.send(result);
+}
+''';
+
+/// A first start whose service fails, with a call made before it.
+const _failedStart = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final early = appNotifications.show(
+    const AppNotification(id: 1, title: 'Early'),
+  );
+  failures['areEnabled'] = StateError('The platform broke.');
+  try {
+    await initNotifications();
+    result['the start'] = 'completed';
+  } on StateError catch (error) {
+    result['the start'] = error.message;
+  }
+  result['the call made before the start'] = await Future.any([
+    early.then(
+      (_) => 'completed',
+      onError: (Object error) => 'failed: $error',
+    ),
+    Future<String>.delayed(
+      const Duration(milliseconds: 200),
+      () => 'still waiting',
+    ),
+  ]);
+  result['the permission'] = appNotifications.permission.value.name;
+  failures.clear();
+  await appNotifications.show(const AppNotification(id: 2, title: 'Later'));
+  result['the calls'] = takeCalls();
+  port.send(result);
+}
+''';
+
+/// Errors of the service on the taps and when the user comes back to the
+/// app, which go to the handler of the uncaught errors of the zone of the
+/// app.
+const _errors = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final uncaught = <String>[];
+  final done = Completer<void>();
+  runZonedGuarded(
+    () async {
+      await initPreferences();
+      await initNotifications();
+      final service = createNotificationsService() as FakeNotifications;
+      final heard = <String>[];
+      appNotifications.taps.listen((tap) => heard.add(shown(tap)!));
+      service
+        ..fail(StateError('The taps broke.'))
+        ..tap(const NotificationTap(id: 1));
+      await pump();
+      result['the taps after an error'] = heard;
+
+      failures['areEnabled'] = StateError('The platform broke.');
+      resumeApp();
+      await pump();
+      failures.clear();
+      result['the permission after an error on resume'] =
+          appNotifications.permission.value.name;
+      enabled = true;
+      resumeApp();
+      await pump();
+      result['the permission on the next resume'] =
+          appNotifications.permission.value.name;
+      done.complete();
+    },
+    (error, stackTrace) => uncaught.add('$error'),
+  );
+  await done.future;
+  result['uncaught'] = uncaught;
   port.send(result);
 }
 ''';
@@ -746,6 +853,11 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
   result['the permission'] = appNotifications.permission.value.name;
   result['saved'] = disk.containsKey(askedKey);
+  // The preferences have nothing saved, so the restorer keeps what the app
+  // knows.
+  await initPreferences();
+  result['the permission once the preferences opened again'] =
+      appNotifications.permission.value.name;
   // The next request takes a turn of its own.
   writesFail = false;
   result['the answer of the next request'] =
@@ -1451,6 +1563,45 @@ void main() {
             'app': ['4 {}'],
             'app, a second listener': ['4 {}'],
           },
+          'the launch tap of an owner without its data': null,
+        });
+      });
+
+      test(
+          'takes a permission that the user gave in the settings of the '
+          'system meanwhile, tells its listeners, and asks nothing', () async {
+        expect(await app.run('$_notes$_grantedMeanwhile'), {
+          'the answer': 'granted',
+          'the permission': 'granted',
+          'heard': ['granted'],
+          'the calls': ['areEnabled'],
+          'saved': null,
+        });
+      });
+
+      test(
+          'fails a call made before a first start that fails, rather than '
+          'keep it waiting', () async {
+        expect(await app.run('$_notes$_failedStart'), {
+          'the start': 'The platform broke.',
+          'the call made before the start':
+              'failed: Bad state: The platform broke.',
+          'the permission': 'notAsked',
+          'the calls': ['areEnabled', 'show 2'],
+        });
+      });
+
+      test(
+          'leaves an error of the service on the taps or on a resume to the '
+          'handler of the uncaught errors, and goes on', () async {
+        expect(await app.run('$_notes$_errors'), {
+          'the taps after an error': ['1 {}'],
+          'the permission after an error on resume': 'notAsked',
+          'the permission on the next resume': 'granted',
+          'uncaught': [
+            'Bad state: The taps broke.',
+            'Bad state: The platform broke.',
+          ],
         });
       });
 
@@ -1461,6 +1612,7 @@ void main() {
           'the request': 'The write fails.',
           'the permission': 'denied',
           'saved': false,
+          'the permission once the preferences opened again': 'denied',
           'the answer of the next request': 'denied',
           'saved after it': true,
         });
