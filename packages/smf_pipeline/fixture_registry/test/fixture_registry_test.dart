@@ -2437,6 +2437,10 @@ const _cases = [
   'fake_notifications with onboarding_screen',
   'fake_notifications with localization',
   'fake_notifications',
+  // The fixture push messages, with the fixture notifications, which the
+  // push role requires, and the fixture preferences, which those require.
+  // The push role uses no role, so its provider has one case.
+  'fake_push',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',
