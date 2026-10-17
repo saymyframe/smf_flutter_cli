@@ -34,6 +34,7 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
@@ -173,7 +174,10 @@ List<ModuleId> everyFixture({
 /// The app asks for an account, as an app in the first mode of the auth
 /// role does, so the guards of the sign-in keep the user from every other
 /// screen until the mocks of that test sign an account up for the tests of
-/// the other modules.
+/// the other modules. Last comes local_notifications, the provider of the
+/// notifications role that the CLI has, for the app test that it keeps and
+/// for the test of that role that the CLI keeps, whose entry the settings
+/// screen shows too.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -212,4 +216,5 @@ List<SmfModule> severalProvidersModules() => const [
       BlocModule(),
       RiverpodModule(),
       SignInModule(),
+      LocalNotificationsModule(),
     ];

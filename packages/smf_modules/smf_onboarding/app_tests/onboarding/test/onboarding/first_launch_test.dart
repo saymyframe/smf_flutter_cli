@@ -314,13 +314,19 @@ void main() {
 
   /// Goes on from the page of [step], which the user sees, to the next
   /// page without its action: with its later if it has one, and with a
-  /// swipe otherwise.
+  /// swipe otherwise. The swipe is half as long as a page is wide, so that
+  /// it shows the next page and not the one after it, also on a small
+  /// phone.
   Future<void> passStep(WidgetTester tester, OnboardingStep step) async {
     if (step.later != null) {
       await tester.tap(later(tester, step));
     } else {
+      final pages = shown(find.byType(PageView));
       await tester.fling(
-          shown(find.byType(PageView)), const Offset(-400, 0), 1000);
+        pages,
+        Offset(-tester.getSize(pages).width / 2, 0),
+        1000,
+      );
     }
     await tester.pumpAndSettle();
   }

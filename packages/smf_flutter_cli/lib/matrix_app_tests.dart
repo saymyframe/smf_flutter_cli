@@ -10,6 +10,7 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -31,6 +32,9 @@ Future<MatrixAppTests> smfAppTests() async {
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
   final home = await appTestsDirectoryOf('smf_home_flutter');
+  final localNotifications = await appTestsDirectoryOf(
+    'smf_local_notifications',
+  );
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
@@ -211,6 +215,33 @@ Future<MatrixAppTests> smfAppTests() async {
           'probeSharedPreferences',
         ),
       ),
+      // The notifications service of the module on
+      // flutter_local_notifications: what each of its calls sends to the
+      // plugin, on Android and on iOS, such as the channel of the app with a
+      // high importance, the cancel of the scheduled notification of an id
+      // that is shown, and an inexact alarm at a time in UTC; a request that
+      // shows the question of the system, or opens the settings of the
+      // system where the system shows none; and the taps on a notification,
+      // the one that launched the app included, with the data of the
+      // notification. The tests use the service of the module, and leave
+      // what every provider of the notifications role does to the test of
+      // the role. The mocks are a device in memory on which the app may not
+      // show notifications and has not asked, and the matrix sets them up
+      // for the tests of every module of the app, since the start-up of the
+      // app opens the notifications. Its probe checks, on an Android
+      // device, the channel of the app that the service created.
+      MatrixAppTest(
+        '$localNotifications/local_notifications',
+        appliesTo: _has(LocalNotificationsModule.id),
+        mocks: const MatrixMocks(
+          'test/local_notifications_mocks.dart',
+          'mockLocalNotifications',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/local_notifications/probe.dart',
+          'probeLocalNotifications',
+        ),
+      ),
       // The start screen of the module, a welcome to the developer of the
       // app, wherever the app starts: it names the app, greets by the time
       // of the day and lists the next steps with their paths, with its
@@ -276,6 +307,13 @@ Future<MatrixAppTests> smfAppTests() async {
       // of the provider keeps its contract, and the session of the app
       // does what the mode says.
       await authRoleAppTest(),
+      // The notifications of the apps with the notifications role,
+      // whichever module provides it: the permission follows what the
+      // service says and what the app asked, a request asks once, the taps
+      // of the app and of an owner go apart, a scheduled notification is
+      // listed until it is cancelled or shown, and the next start keeps
+      // what was scheduled and the permission.
+      await notificationsRoleAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -328,8 +366,9 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the auth role, of the settings screen role, of the theme
-    // role and of the localization role gets the tests of its role. Each
+    // role, of the auth role, of the notifications role, of the settings
+    // screen role, of the theme role and of the localization role gets the
+    // tests of its role. Each
     // provider of the app entry role gets the test of the theme role, which
     // checks that its root rebuilds.
     testedRoles: {
@@ -338,6 +377,7 @@ Future<MatrixAppTests> smfAppTests() async {
       eventsRole,
       preferencesRole,
       authRole,
+      notificationsRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,

@@ -202,6 +202,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -217,6 +218,7 @@ void main() {
       'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -242,9 +244,10 @@ void main() {
     ]);
     // The roles come in the order in which the modules of the list bring
     // them: the layout, with the router, brings the localization, whose
-    // labels it shows. The theme follows, and then the preferences of both
-    // and the DI container, all before the state managers.
-    expect(run.asked[9].shown, [
+    // labels it shows. The theme and the notifications follow, and then the
+    // preferences of all three and the DI container, all before the state
+    // managers.
+    expect(run.asked[10].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -293,6 +296,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -308,6 +312,7 @@ void main() {
       'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -364,6 +369,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -454,6 +460,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -506,6 +513,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -521,6 +529,7 @@ void main() {
       'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -567,6 +576,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -583,6 +593,7 @@ void main() {
       'Router: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -621,6 +632,7 @@ void main() {
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -643,9 +655,10 @@ void main() {
     );
     // The preferences have one provider, so the run does not ask for them.
     expect(
-      messages.sublist(localization + 1, localization + 3),
+      messages.sublist(localization + 1, localization + 4),
       [
         'Theme: which module provides it?',
+        'Notifications: which module provides it?',
         'Dependency injection: which module provides it?',
       ],
     );
@@ -752,6 +765,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -819,6 +833,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -886,6 +901,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -898,15 +914,17 @@ void main() {
       'Preferences: which module provides it?',
     );
     // The roles come in the order in which the modules of the list bring
-    // them, and the localization and the theme, whose roles require the
-    // preferences, come before the preferences and before get_it. So the
-    // question of the preferences knows whether the answers on the
-    // localization and on the theme need them.
+    // them, and the localization, the theme and the notifications, whose
+    // roles require the preferences, come before the preferences and
+    // before get_it. So the question of the preferences knows whether the
+    // answers on the localization, on the theme and on the notifications
+    // need them.
     expect(
-      messages.sublist(preferences - 2, preferences + 1),
+      messages.sublist(preferences - 3, preferences + 1),
       [
         'Localization: which module provides it?',
         'Theme: which module provides it?',
+        'Notifications: which module provides it?',
         'Preferences: which module provides it?',
       ],
     );
@@ -971,6 +989,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1058,6 +1077,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1171,6 +1191,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1245,6 +1266,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1357,6 +1379,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1471,6 +1494,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1526,6 +1550,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1619,6 +1644,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],

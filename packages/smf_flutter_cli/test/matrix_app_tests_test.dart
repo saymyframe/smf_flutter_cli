@@ -130,6 +130,32 @@ const List<String> _signIn = [
   'sign_in (riverpod)',
 ];
 
+/// The apps of local_notifications, with and without each role that the
+/// notifications role uses: the settings screen, the onboarding screen and
+/// the localization.
+const List<String> _localNotifications = [
+  _lnAll,
+  _lnSettingsOnboarding,
+  _lnSettingsL10n,
+  _lnOnboardingL10n,
+  _lnSettings,
+  _lnOnboarding,
+  _lnL10n,
+  _ln,
+];
+
+/// The app of local_notifications alone, and its apps with the roles that
+/// its role uses: the settings screen, the onboarding screen and the
+/// localization.
+const _ln = 'local_notifications';
+const _lnAll = '$_ln with settings_screen, onboarding_screen, localization';
+const _lnSettingsOnboarding = '$_ln with settings_screen, onboarding_screen';
+const _lnSettingsL10n = '$_ln with settings_screen, localization';
+const _lnOnboardingL10n = '$_ln with onboarding_screen, localization';
+const _lnSettings = '$_ln with settings_screen';
+const _lnOnboarding = '$_ln with onboarding_screen';
+const _lnL10n = '$_ln with localization';
+
 /// Those of them with the localization.
 const _localizedSignIn = [
   'sign_in (bloc) with localization',
@@ -182,9 +208,10 @@ void main() {
   test(
       'the app tests check the contract of the router role, of the DI role, '
       'of the events role, of the preferences role, of the auth role, of '
-      'the settings screen role, of the theme role, of the localization '
-      'role and of the app entry role with every provider of each, which '
-      'they tell apart by the roles of the app only', () {
+      'the notifications role, of the settings screen role, of the theme '
+      'role, of the localization role and of the app entry role with every '
+      'provider of each, which they tell apart by the roles of the app '
+      'only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -193,6 +220,7 @@ void main() {
         eventsRole,
         preferencesRole,
         authRole,
+        notificationsRole,
         settingsScreenRole,
         themeRole,
         appEntryRole,
@@ -208,6 +236,9 @@ void main() {
     expect(named('auth_role').roles, {authRole});
     // The test of the provider of the role checks what only it does.
     expect(named('firebase_auth').roles, isEmpty);
+    expect(named('notifications_role').roles, {notificationsRole});
+    // So does the test of the provider of the notifications role.
+    expect(named('local_notifications').roles, isEmpty);
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
     // The test of the theme role checks that the root of the app, which the
@@ -892,6 +923,8 @@ void main() {
         // The onboarding requires the preferences.
         'onboarding with localization',
         'onboarding',
+        // So does the notifications role.
+        ..._localNotifications,
         // Firebase Authentication with the localization, which requires
         // the preferences, and the sign-in with it.
         'firebase_auth with localization, router',
@@ -1004,6 +1037,12 @@ void main() {
         'material_theme with settings_screen, localization',
         'material_theme with localization',
         'onboarding with localization',
+        // The notifications role, whose entry of the settings screen has
+        // texts.
+        _lnAll,
+        _lnSettingsL10n,
+        _lnOnboardingL10n,
+        _lnL10n,
         // Firebase Authentication, which asks for its messages in the
         // language of the app, and the sign-in, whose screens have texts.
         'firebase_auth with localization, router',
@@ -1037,6 +1076,8 @@ void main() {
         'material_theme with settings_screen, localization': ['en', 'uk'],
         'material_theme with localization': ['en', 'uk'],
         'onboarding with localization': ['en', 'uk'],
+        for (final app in [_lnAll, _lnSettingsL10n, _lnOnboardingL10n, _lnL10n])
+          app: ['en', 'uk'],
         'firebase_auth with localization, router': ['en', 'uk'],
         'firebase_auth with localization': ['en', 'uk'],
         'sign_in (bloc) with localization': ['en', 'uk'],
@@ -1370,6 +1411,8 @@ void main() {
       [
         'settings with localization',
         'material_theme with settings_screen, localization',
+        _lnAll,
+        _lnSettingsL10n,
         ..._localizedSignIn,
         ..._everyModule,
       ],
@@ -1654,7 +1697,9 @@ void main() {
       'with it, the walk of the routes, the services of the DI role, the '
       'preferences of the role, those of shared_preferences once they are '
       'opened again, the user of Firebase Authentication, the onboarding '
-      'of a first launch and the languages of the localization role, each '
+      'of a first launch, the languages of the localization role, the '
+      'permission of the notifications role and the channel of '
+      'local_notifications, each '
       'a function of a file of its tests that takes the one that waits '
       'until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
@@ -1670,9 +1715,14 @@ void main() {
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
+        'local_notifications':
+            'integration_test/local_notifications/probe.dart '
+                'probeLocalNotifications',
         'di_role': 'integration_test/di_role/probe.dart probeServices',
         'preferences_role':
             'integration_test/preferences_role/probe.dart probePreferences',
+        'notifications_role':
+            'integration_test/notifications_role/probe.dart probeNotifications',
         'router_walk': 'integration_test/router_walk/walk.dart probeRoutes',
         'localization_role':
             'integration_test/localization_role/probe.dart probeLanguages',
@@ -1702,8 +1752,9 @@ void main() {
     // all of them, which the list of the probes names. That of the
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
-    // the routes of the app past it. That of Firebase Authentication only
-    // reads, so it holds wherever it comes.
+    // the routes of the app past it. Those of Firebase Authentication, of
+    // the notifications role and of local_notifications only read, so they
+    // hold wherever they come.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
@@ -1713,8 +1764,10 @@ void main() {
         'firebase_auth',
         'onboarding',
         'shared_preferences',
+        'local_notifications',
         'di_role',
         'preferences_role',
+        'notifications_role',
         'router_walk',
         'localization_role',
       ],
@@ -1751,10 +1804,12 @@ void main() {
         'probe0: firebase_auth/probe.dart',
         'probe1: onboarding/probe.dart',
         'probe2: shared_preferences/probe.dart',
-        'probe3: di_role/probe.dart',
-        'probe4: preferences_role/probe.dart',
-        'probe5: router_walk/walk.dart',
-        'probe6: localization_role/probe.dart',
+        'probe3: local_notifications/probe.dart',
+        'probe4: di_role/probe.dart',
+        'probe5: preferences_role/probe.dart',
+        'probe6: notifications_role/probe.dart',
+        'probe7: router_walk/walk.dart',
+        'probe8: localization_role/probe.dart',
       ],
     );
     expect(list, contains("('firebase_auth', probe0.probeFirebaseAuth),"));
@@ -1763,10 +1818,18 @@ void main() {
       list,
       contains("('shared_preferences', probe2.probeSharedPreferences),"),
     );
-    expect(list, contains("('di_role', probe3.probeServices),"));
-    expect(list, contains("('preferences_role', probe4.probePreferences),"));
-    expect(list, contains("('router_walk', probe5.probeRoutes),"));
-    expect(list, contains("('localization_role', probe6.probeLanguages),"));
+    expect(
+      list,
+      contains("('local_notifications', probe3.probeLocalNotifications),"),
+    );
+    expect(list, contains("('di_role', probe4.probeServices),"));
+    expect(list, contains("('preferences_role', probe5.probePreferences),"));
+    expect(
+      list,
+      contains("('notifications_role', probe6.probeNotifications),"),
+    );
+    expect(list, contains("('router_walk', probe7.probeRoutes),"));
+    expect(list, contains("('localization_role', probe8.probeLanguages),"));
   });
 
   test(
@@ -1827,9 +1890,22 @@ void main() {
       screens[app.name] = '${import.uri}: '
           '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
     }
+    // The apps of the notifications with the onboarding screen, which the
+    // onboarding provides.
+    const notificationsWithOnboarding = [
+      _lnAll,
+      _lnSettingsOnboarding,
+      _lnOnboardingL10n,
+      _lnOnboarding,
+    ];
     expect(screens, {
-      // No route can start the app, since the onboarding cannot.
-      for (final name in ['onboarding with localization', 'onboarding'])
+      // No route can start the app, since the onboarding cannot, and
+      // neither can the settings screen.
+      for (final name in [
+        'onboarding with localization',
+        'onboarding',
+        ...notificationsWithOnboarding,
+      ])
         name: 'package:my_app/core/app/fallback_start_screen.dart: '
             'screen.FallbackStartScreen',
       // The start screen of home.
@@ -1842,6 +1918,8 @@ void main() {
     expect(languages, {
       'onboarding with localization': ['en', 'uk'],
       'onboarding': ['en'],
+      for (final app in notificationsWithOnboarding)
+        app: app.endsWith('localization') ? ['en', 'uk'] : ['en'],
       for (final app in _everyModule) app: ['en', 'uk'],
     });
     for (final app in apps.where(test.appliesTo)) {
@@ -2318,6 +2396,10 @@ void main() {
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
+        _lnAll,
+        _lnSettingsOnboarding,
+        _lnSettingsL10n,
+        _lnSettings,
         ..._signIn,
         ..._everyModule,
       ],
@@ -2330,10 +2412,13 @@ void main() {
     // of the account, which the sign-in module gives the role, in the apps
     // with that module, before the entries of the templates of the roles;
     // the entry of the theme mode, which the template of the theme role
-    // contributes, in the apps with the theme; and the setting of the
+    // contributes, in the apps with the theme; the setting of the
     // language, which the template of the localization role contributes, in
     // the apps with the localization, after that of the theme, as the
-    // modules that provide the two roles are in the list of the CLI.
+    // modules that provide the two roles are in the list of the CLI; and
+    // the entry of the notifications, which the template of the
+    // notifications role contributes, in the apps with the notifications,
+    // in the order of the templates of the roles of each app.
     List<SettingsEntry> entriesOf(MatrixApp app) =>
         settingsScreenRole.entriesIn(settingsScreenRole.hookInput(app.hook!));
     expect(
@@ -2349,12 +2434,21 @@ void main() {
           'LanguageSetting',
         ],
         'material_theme with settings_screen': ['ThemeModeSetting'],
+        for (final app in [_lnAll, _lnSettingsL10n])
+          app: ['NotificationsSetting', 'LanguageSetting'],
+        for (final app in [_lnSettingsOnboarding, _lnSettings])
+          app: ['NotificationsSetting'],
         for (final app in _localizedSignIn)
           app: ['AccountSetting', 'LanguageSetting'],
         'sign_in (bloc)': ['AccountSetting'],
         'sign_in (riverpod)': ['AccountSetting'],
         for (final app in _everyModule)
-          app: ['AccountSetting', 'ThemeModeSetting', 'LanguageSetting'],
+          app: [
+            'AccountSetting',
+            'ThemeModeSetting',
+            'LanguageSetting',
+            'NotificationsSetting',
+          ],
       },
     );
 
@@ -2799,6 +2893,10 @@ void main() {
         'settings',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
+        _lnAll,
+        _lnSettingsOnboarding,
+        _lnSettingsL10n,
+        _lnSettings,
         ..._signIn,
         ..._everyModule,
       ],
@@ -2819,6 +2917,8 @@ void main() {
       [
         'settings',
         'material_theme with settings_screen',
+        _lnSettingsOnboarding,
+        _lnSettings,
         'sign_in (bloc)',
         'sign_in (riverpod)',
       ],
@@ -2876,6 +2976,8 @@ void main() {
         [
           'settings with localization',
           'material_theme with settings_screen, localization',
+          _lnAll,
+          _lnSettingsL10n,
           ..._localizedSignIn,
           ..._everyModule,
         ],
@@ -3015,11 +3117,13 @@ void main() {
         'settings': (0, false),
         'material_theme with settings_screen, localization': (2, false),
         'material_theme with settings_screen': (1, false),
+        for (final app in [_lnAll, _lnSettingsL10n]) app: (2, false),
+        for (final app in [_lnSettingsOnboarding, _lnSettings]) app: (1, false),
         // The entry of the account, and the setting of the language.
         for (final app in _localizedSignIn) app: (2, false),
         'sign_in (bloc)': (1, false),
         'sign_in (riverpod)': (1, false),
-        for (final app in _everyModule) app: (3, true),
+        for (final app in _everyModule) app: (4, true),
       },
     );
     for (final app in apps.where(settings.appliesTo)) {
@@ -3294,9 +3398,34 @@ void main() {
     });
     expect(test.generatedFiles, isNull);
     expect(test.mocks, isNull);
-    // No module of the CLI provides the role yet, so its matrix does not
-    // run the test.
-    expect(apps.where(test.appliesTo), isEmpty);
+    // The matrix of the CLI runs it in every app with the role, which
+    // local_notifications provides there: the apps of the module with the
+    // settings screen, the onboarding screen and the localization, which
+    // its role uses, and without each, and the apps with every module.
+    final registered = named('notifications_role');
+    expect(registered.roles, test.roles);
+    expect(registered.values!(apps.first), test.values!(apps.first));
+    expect(registered.startProbe!.path, test.startProbe!.path);
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [
+        ..._localNotifications,
+        ..._everyModule,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(notificationsRole)) app.name,
+      ],
+    );
 
     // As the fixtures take it, only in the apps with every module.
     final everyModule = await notificationsRoleAppTest(
@@ -3403,6 +3532,67 @@ void main() {
           '${parameter.kind.name} ${parameter.type}',
       ],
       ['requiredPositional Future<void> Function()'],
+    );
+  });
+
+  test(
+      'the test of local_notifications applies to the apps with the module, '
+      'whatever else they have, declares the mocks of its platform side for '
+      'the tests of every module of those apps, and has a probe for the '
+      'start check', () {
+    final test = named('local_notifications');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        ..._localNotifications,
+        ..._everyModule,
+      ],
+    );
+    // It tests what only this provider of the notifications role does, so
+    // it names no role: the test of the role checks what every provider
+    // keeps to.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    // The mocks answer the method channel of the plugin, whose library the
+    // app has as a dependency already.
+    expect(test.devDependencies, isEmpty);
+    expect(test.mocks!.path, 'test/local_notifications_mocks.dart');
+    expect(test.mocks!.function, 'mockLocalNotifications');
+    expect(
+      test.startProbe!.path,
+      'integration_test/local_notifications/probe.dart',
+    );
+    expect(test.startProbe!.function, 'probeLocalNotifications');
+    for (final path in [test.mocks!.path, test.startProbe!.path]) {
+      expect(
+        File(p.joinAll([test.directory, ...path.split('/')])).existsSync(),
+        isTrue,
+        reason: path,
+      );
+    }
+    // The mocks are a function of their file that takes nothing and
+    // returns the device in memory, as the configuration of the tests of an
+    // app calls it.
+    final mocks = File(
+      p.joinAll([test.directory, ...test.mocks!.path.split('/')]),
+    ).readAsStringSync();
+    final (:index, :errors) = DartFileIndexer.parse(test.mocks!.path, mocks);
+    expect(errors, isEmpty);
+    final function = index.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'MockLocalNotifications');
+    expect(
+      [
+        for (final parameter in function.parameters)
+          if (parameter.kind.name.startsWith('required')) parameter.name,
+      ],
+      isEmpty,
     );
   });
 
