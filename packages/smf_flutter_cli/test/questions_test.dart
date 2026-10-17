@@ -230,6 +230,7 @@ void main() {
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
+      'apple_sign_in — Sign in with Apple on iOS with sign_in_with_apple',
     ]);
     expect(run.asked[2].shown, [
       'bottom_tabs — Tabs in a bar at the bottom of the app',
@@ -1547,6 +1548,67 @@ void main() {
         contains('\n## Sign-in\n'),
         contains('This app was generated in the mode `anonymous`'),
       ),
+    );
+  });
+
+  test(
+      'a run in a terminal offers Sign in with Apple among the '
+      'infrastructure, adds the only provider of the authentication, which '
+      'it requires, without a question, and gives the app its way to sign in '
+      'and the entitlement of its capability', () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': ['apple_sign_in'],
+        'Layout': ['None'],
+        'Settings screen': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Theme': ['None'],
+        'Localization': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+        'Preferences': ['None'],
+        'Crash reporting': [],
+        'Analytics': [],
+        'Who may use the app': ['Nobody'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // firebase_auth is the only module that provides the authentication,
+    // which Sign in with Apple requires, so there is nothing to ask.
+    expect(
+      [for (final question in run.asked) question.message],
+      isNot(contains(startsWith('Authentication:'))),
+    );
+    expect(
+      run.lines,
+      contains(
+        'Adding firebase_auth: the only provider of the authentication '
+        'role, which apple_sign_in requires.',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app.childFile('lib/core/auth/sign_in_methods.dart').readAsStringSync(),
+      allOf(
+        contains('credential: method0.appleCredential,'),
+        contains("issuer: 'https://appleid.apple.com',"),
+      ),
+    );
+    expect(
+      app.childFile('ios/Runner/Runner.entitlements').readAsStringSync(),
+      contains('<key>com.apple.developer.applesignin</key>'),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(contains('  sign_in_with_apple: '), contains('  crypto: ')),
+    );
+    expect(
+      app.childFile('README.md').readAsStringSync(),
+      contains('\n## Sign in with Apple\n'),
     );
   });
 

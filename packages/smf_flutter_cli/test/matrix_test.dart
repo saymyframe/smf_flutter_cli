@@ -273,6 +273,8 @@ void main() {
       'Firebase Analytics with and without the DI container and the router, '
       'which get Firebase, the apps of Firebase Authentication with and '
       'without the localization and the router, which get Firebase, the '
+      'apps of Sign in with Apple with the localization and without, which '
+      'get Firebase Authentication, the '
       'apps of the sign-in for each state manager with the localization '
       'and without, which get Firebase Authentication and the router, one '
       'of Firebase Authentication with the router for each other mode of '
@@ -288,7 +290,8 @@ void main() {
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, onboarding, firebase_core, '
-        'firebase_crashlytics, firebase_analytics, firebase_auth, sign_in)';
+        'firebase_crashlytics, firebase_analytics, firebase_auth, '
+        'apple_sign_in, sign_in)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -390,6 +393,14 @@ void main() {
         'flutter_core)',
       ),
       'firebase_auth (firebase_auth, firebase_core, flutter_core)',
+      equals(
+        'apple_sign_in with localization (apple_sign_in, gen_l10n, '
+        'flutter_core, firebase_auth, firebase_core, shared_preferences)',
+      ),
+      equals(
+        'apple_sign_in (apple_sign_in, flutter_core, firebase_auth, '
+        'firebase_core)',
+      ),
       signIn('bloc', localized: true),
       signIn('riverpod', localized: true),
       signIn('bloc'),

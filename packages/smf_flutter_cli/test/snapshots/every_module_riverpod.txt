@@ -186,6 +186,15 @@ With `go_router`:
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
+## Sign in with Apple
+
+With `sign_in_with_apple`:
+
+- `appleCredential()` in `lib/core/apple_sign_in/apple_sign_in.dart` is the function of the way to sign in with Apple in `appSignInMethods`, which works on iOS only. In `lib/`, only that file imports the package. It asks `SignInWithApple.getAppleIDCredential()` with the SHA-256 hash of a nonce of `generateNonce()`, and returns an `IdTokenCredential` with that nonce as its `rawNonce` and the `authorizationCode` of the request.
+- Apple gives `givenName` and `familyName` only the first time that a user signs in to the app. A later credential has none, so do not expect the name there.
+- A closed sheet, `AuthorizationErrorCode.canceled`, returns `null`. `AuthorizationErrorCode.unknown`, which Apple answers when the app is signed without the entitlement `com.apple.developer.applesignin` of `ios/Runner/Runner.entitlements`, fails with `notConfigured`, and any other error with `unknown`.
+- In a test, `appleCredential()` asks Apple only while `debugDefaultTargetPlatformOverride` is `TargetPlatform.iOS`. The package asks the platform on the method channel `com.aboutyou.dart_packages.sign_in_with_apple`, whose method `performAuthorizationRequest` a test answers with a map whose `type` is `appleid`, with `identityToken`, `authorizationCode`, `givenName` and `familyName`.
+
 ## Sign-in
 
 - The sign-in is three screens in `lib/features/sign_in/`: `SignInScreen`, the route `sign_in.signIn` at `/sign_in`, and over it `SignUpScreen` at `/sign_in/sign_up` and `ResetPasswordScreen` at `/sign_in/reset_password`. Two guards of `routeGuards` show them, with the functions of `lib/features/sign_in/sign_in_guards.dart`. `sign_in.gate` reads `appSession.allowsApp` and shows the sign-in in place of every other screen. `sign_in.hasAccount` reads `appSession.hasAccount` and shows it in place of a route that needs an account.
@@ -309,7 +318,23 @@ To change the mode, change the value of `authMode`. The provider of sign-in has 
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
-Besides an email address and a password, the app signs in with no identity provider, such as the account of a user at another service. Such a way to sign in is a `SignInMethod` of `appSignInMethods` in `lib/core/auth/sign_in_methods.dart`, which the module of the way to sign in adds.
+Besides an email address and a password, the app signs in with these identity providers, the ways to sign in of `appSignInMethods` in `lib/core/auth/sign_in_methods.dart`:
+
+- Continue with Apple, on iOS. Deleting an account that signs in this way asks the identity provider for a credential again first, so that the provider of sign-in can revoke the tokens that it gave the app. If the user closes its sheet, nothing is deleted.
+
+A screen of sign-in shows the button of a way to sign in only on the platforms that it works on. When an anonymous user signs in this way and no account has the identity yet, the user gets the identity and keeps the id. Otherwise the user signs in to that account, as with a password, and `takeGuestData()` moves what the anonymous user had. The sign-in may also fail, because the address of the identity has an account that signs in in another way: the provider of sign-in decides which.
+
+## Sign in with Apple
+
+The app signs in with Apple on iOS: `appleCredential()` in `lib/core/apple_sign_in/apple_sign_in.dart` asks Apple for a credential with the sheet of Sign in with Apple, and a screen of sign-in shows the button of Apple on iOS only. On Android the app has no Sign in with Apple.
+
+Sign in with Apple is a capability of the app. The key `com.apple.developer.applesignin` in `ios/Runner/Runner.entitlements` asks for it, and the App ID of the app needs it too: when Xcode manages the signing of the app, it adds the capability to the App ID. Signing with the capability needs a team of the paid Apple Developer Program. A free personal team cannot sign the app for an iPhone: to run the app there, remove the key from `ios/Runner/Runner.entitlements`, and signing in with Apple then fails with the reason `notConfigured`. Without the capability, Apple answers with an unknown error, which fails with `notConfigured` too.
+
+Apple gives the name of the user only the first time that the user signs in to the app: the credential has it then, and a later one has none. The user may also hide the email address. The account then gets an address of the private relay of Apple, which forwards messages to the user.
+
+The App Store asks an app with Sign in with Apple to revoke the tokens that Apple gave it when the user deletes the account (App Store Review Guideline 5.1.1(v)). So `appSession.deleteAccount()` asks Apple for a new authorization first, and the provider of sign-in revokes the tokens with its code. A backend that revokes them needs a key of Apple for that, and the section of the provider in this README tells where to set it. If the user closes the sheet of Apple, nothing is deleted.
+
+The icon of the button, `AppleSignInIcon` in `lib/core/apple_sign_in/apple_sign_in.dart`, is the Apple logo of the Material icons. Apple asks a custom button of Sign in with Apple to use the logo artwork of [Apple Design Resources](https://developer.apple.com/design/resources/), and App Review checks every such button. Before you submit the app, download that logo and show it in `AppleSignInIcon`.
 
 ## Languages
 
@@ -627,6 +652,10 @@ IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>
 === l10n.yaml (gen_l10n) ===
@@ -941,6 +970,106 @@ class StatusBarIcons extends StatelessWidget {
       child: child,
     );
   }
+}
+=== lib/core/apple_sign_in/apple_sign_in.dart (apple_sign_in) ===
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
+import '../auth/app_session.dart';
+
+/// The issuer of the ID tokens of Apple.
+const String _issuer = 'https://appleid.apple.com';
+
+/// Asks Apple for a credential with the sheet of Sign in with Apple, and
+/// returns it, or `null` when the user closed the sheet.
+///
+/// The request asks for the email address and the full name of the user,
+/// with the SHA-256 hash of a new random nonce, which Apple writes into the
+/// ID token. The credential has the nonce itself, with which the provider
+/// of sign-in checks the token, and the authorization code of this request,
+/// with which the provider can revoke the tokens that Apple gave the app
+/// when the account is deleted. Apple gives the name of the user only the
+/// first time that the user signs in to the app, so a later credential has
+/// none.
+///
+/// It works on iOS only. On another platform it fails with
+/// `notConfigured` without asking Apple. Apple answers an app without the
+/// capability Sign in with Apple with an unknown error, which fails with
+/// `notConfigured` too, and with a hint at the section of the README of the
+/// app on it, "Sign in with Apple". Any other error fails with `unknown`.
+Future<SignInCredential?> appleCredential() async {
+  if (defaultTargetPlatform != TargetPlatform.iOS) {
+    throw AuthFailure(
+      AuthFailureReason.notConfigured,
+      developerHint:
+          'Sign in with Apple works on iOS only, and the app runs on '
+          '${defaultTargetPlatform.name}.',
+    );
+  }
+  final rawNonce = generateNonce();
+  final AuthorizationCredentialAppleID apple;
+  try {
+    apple = await SignInWithApple.getAppleIDCredential(
+      scopes: const [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: sha256.convert(utf8.encode(rawNonce)).toString(),
+    );
+  } on SignInWithAppleAuthorizationException catch (error) {
+    switch (error.code) {
+      case AuthorizationErrorCode.canceled:
+        return null;
+      case AuthorizationErrorCode.unknown:
+        throw AuthFailure(
+          AuthFailureReason.notConfigured,
+          developerHint:
+              'Apple answered with an unknown error (${error.message}). It '
+              'does so when the app is not signed with the capability Sign '
+              'in with Apple, which needs a team of the paid Apple Developer '
+              'Program, and on a device without an Apple Account. See the '
+              'section "Sign in with Apple" of the README of the app.',
+        );
+      default:
+        throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+    }
+  } on Object catch (error) {
+    throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+  }
+  final idToken = apple.identityToken;
+  if (idToken == null) {
+    throw const AuthFailure(
+      AuthFailureReason.unknown,
+      developerHint: 'Apple gave no identity token.',
+    );
+  }
+  return IdTokenCredential(
+    issuer: _issuer,
+    idToken: idToken,
+    rawNonce: rawNonce,
+    authorizationCode: apple.authorizationCode,
+    givenName: apple.givenName,
+    familyName: apple.familyName,
+  );
+}
+
+/// The icon of the button of Sign in with Apple: the Apple logo of the
+/// Material icons, which takes the colour of the label of the button.
+///
+/// Apple asks a custom button of Sign in with Apple for its own logo
+/// artwork, which Apple Design Resources has, and App Review checks every
+/// such button: see the section of the README of the app on it,
+/// "Sign in with Apple".
+class AppleSignInIcon extends StatelessWidget {
+  /// Creates the icon.
+  const AppleSignInIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Icon(Icons.apple);
 }
 === lib/core/auth/app_session.dart (role:auth) ===
 import 'dart:async';
@@ -2433,6 +2562,8 @@ Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
 === lib/core/auth/sign_in_methods.dart (role:auth) ===
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:my_app/core/apple_sign_in/apple_sign_in.dart' as method0;
+import 'package:my_app/core/l10n/l10n.dart';
 
 import 'auth_service.dart' show SignInCredential;
 
@@ -2496,7 +2627,18 @@ final class SignInMethod {
 /// The ways to sign in with an identity provider of the app, in the order
 /// of their modules. An email address and a password are no such way:
 /// `appSession.signIn` and `appSession.signUp` take them.
-const List<SignInMethod> appSignInMethods = [];
+const List<SignInMethod> appSignInMethods = [
+  SignInMethod(
+    label: _appleSignInLabel,
+    icon: method0.AppleSignInIcon(),
+    platforms: {TargetPlatform.iOS},
+    credential: method0.appleCredential,
+    issuer: 'https://appleid.apple.com',
+    revokesOnDeletion: true,
+  ),
+];
+
+String _appleSignInLabel(BuildContext context) => context.l10n.appleSignInLabel;
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 
@@ -9248,6 +9390,7 @@ class DefaultFirebaseOptions {
   "onboardingSkip": "Skip",
   "onboardingNext": "Next",
   "onboardingDone": "Get started",
+  "appleSignInLabel": "Continue with Apple",
   "signInTitle": "Sign in",
   "signInIntro": "Enter the email and the password of your account.",
   "signInEmail": "Email",
@@ -9324,6 +9467,7 @@ class DefaultFirebaseOptions {
   "onboardingSkip": "Пропустити",
   "onboardingNext": "Далі",
   "onboardingDone": "Почати",
+  "appleSignInLabel": "Продовжити з Apple",
   "signInTitle": "Вхід",
   "signInIntro": "Введіть пошту й пароль свого акаунта.",
   "signInEmail": "Електронна пошта",
@@ -9411,6 +9555,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  crypto: "^3.0.7"
   event_bus: "^2.0.1"
   firebase_analytics: "^12.6.0"
   firebase_auth: "^6.7.0"
@@ -9422,6 +9567,7 @@ dependencies:
   intl: "any"
   shared_preferences: "^2.5.5"
   shared_preferences_android: ">=2.4.28 <2.5.0"
+  sign_in_with_apple: "^8.2.0"
 
 dev_dependencies:
   flutter_test:
