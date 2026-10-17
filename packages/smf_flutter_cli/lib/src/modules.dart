@@ -1,3 +1,4 @@
+import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/core.dart';
@@ -51,5 +52,6 @@ const List<SmfModule> smfModules = [
   FirebaseCrashlyticsModule(),
   FirebaseAnalyticsModule(),
   FirebaseAuthModule(),
+  AppleSignInModule(),
   SignInModule(),
 ];

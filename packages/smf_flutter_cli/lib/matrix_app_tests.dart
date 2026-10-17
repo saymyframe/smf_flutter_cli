@@ -3,6 +3,7 @@
 /// providers of the fixture registry. No library of the binary imports it.
 library;
 
+import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
@@ -30,6 +31,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
+  final appleSignIn = await appTestsDirectoryOf('smf_apple_sign_in');
   final home = await appTestsDirectoryOf('smf_home_flutter');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final settings = await appTestsDirectoryOf('smf_settings');
@@ -134,6 +136,29 @@ Future<MatrixAppTests> smfAppTests() async {
         startProbe: const MatrixStartProbe(
           'integration_test/firebase_auth/probe.dart',
           'probeFirebaseAuth',
+        ),
+      ),
+      // The way to sign in with Apple of the module, on the real
+      // sign_in_with_apple package: on iOS, the request has the SHA-256
+      // hash of a new raw nonce, and the credential is the ID token of
+      // Apple with that raw nonce, the authorization code of the request
+      // and the name, which only the first sign-in has; a closed sheet
+      // returns null, the unknown error of an app without the capability
+      // fails with notConfigured, and any other error with unknown; on
+      // another platform it fails with notConfigured without asking Apple;
+      // and the app lists it on iOS only, with an icon in the colour of the
+      // label. The mocks answer the method channel of the package as Apple
+      // does on iOS, for one user and with the nonce of the request in the
+      // ID token, and the matrix sets them up for the tests of every module
+      // of the app, such as the test of the ways to sign in of the auth
+      // role. The test has no probe for the start check: nobody can sign in
+      // on a device.
+      MatrixAppTest(
+        '$appleSignIn/apple_sign_in',
+        appliesTo: _has(AppleSignInModule.id),
+        mocks: const MatrixMocks(
+          'test/apple_sign_in_mocks.dart',
+          'mockSignInWithApple',
         ),
       ),
       // The onboarding of the module: on its first launch, the app shows
@@ -279,6 +304,13 @@ Future<MatrixAppTests> smfAppTests() async {
       // of the provider keeps its contract, and the session of the app
       // does what the mode says.
       await authRoleAppTest(),
+      // The ways to sign in of the apps whose modules give the auth role
+      // one, whichever modules provide the role and the ways to sign in:
+      // the service takes the credentials of identities of each issuer of
+      // the app as the role says, and the session signs in with the
+      // credential that the function of each way to sign in returns, under
+      // the mocks of its module, in each mode of the role.
+      await authMethodsAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -733,8 +765,11 @@ Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
 /// token with a nonce may be taken once, so each call gets a credential of
 /// its own, but for the sign-in with the identical object that `linkWith`
 /// refused just before. The mocks of the module of a way to sign in issue
-/// such tokens, of one identity of their own and the same each time, each
-/// with a new nonce, and a provider takes them in the tests of an app. It
+/// test tokens too, of one identity of their own and the same each time,
+/// each with the new nonce of its request: the raw nonce, or the SHA-256
+/// hash of that raw nonce for a way to sign in whose request has the hash,
+/// as Sign in with Apple. A provider takes both forms in the tests of an
+/// app, whatever the issuer. It
 /// uses the helpers of the test of the auth role ([authRoleAppTest]), which
 /// every app with the role has. It has no probe for the start check: nobody
 /// can sign in on a device.

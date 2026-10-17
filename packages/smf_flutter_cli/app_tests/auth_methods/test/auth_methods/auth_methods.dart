@@ -14,28 +14,35 @@
 // whose header has `alg` none and whose payload has `iss`, the issuer of
 // the way to sign in, `sub`, the identity at the identity provider, maybe
 // `email`, the email address of that identity, and `nonce`, a value of its
-// own. The `nonce` is the rawNonce of the credential itself, not its hash.
-// A credential of the issuer of a way to sign in that revokesOnDeletion
-// also has an authorizationCode of its own, as an identity provider that
-// revokes gives one with each token.
+// own: the nonce that the request for the token had. Whatever the issuer,
+// the nonce of a token is the rawNonce of its credential, as in the tokens
+// that these tests build, or the SHA-256 hash of that rawNonce in lowercase
+// hexadecimal, as a way to sign in whose request has the hash gets it, such
+// as Sign in with Apple. A credential of
+// the issuer of a way to sign in that revokesOnDeletion also has an
+// authorizationCode of its own, as an identity provider that revokes gives
+// one with each token.
 //
 // A token with a nonce may be taken once, as an identity provider that
 // checks a nonce takes it: a provider of the role refuses a token whose
 // nonce it took already with invalidCredentials, and, where its backend
-// checks the nonce, one whose rawNonce is not the nonce of its token. The
-// one exception is the credential object that linkWith refused just
-// before: signInWith takes the identical object, with what the provider
-// kept for it, as the role says. So every call here gets a credential of
-// its own, but for that one.
+// checks the nonce, one whose nonce is neither the rawNonce of its
+// credential nor the SHA-256 hash of that rawNonce. The fixture sign-in,
+// fake_auth, takes only the rawNonce, since no fixture way to sign in asks
+// with the hash. The one exception is the credential object
+// that linkWith refused just before: signInWith takes the identical
+// object, with what the provider kept for it, as the role says. So every
+// call here gets a credential of its own, but for that one.
 //
 // The mocks of the module of a way to sign in issue such tokens, of one
-// identity of their own and the same each time, each with a new nonce, so
-// that the function of the way to sign in returns a credential under them.
-// A provider of the role takes such a token in the tests of an app, its
-// mocks or a fixture, as the token of its identity, whatever its issuer
-// among those of the app. So the test of the service builds tokens of
-// identities of its own for each issuer of the app, and the test of the
-// session goes through the function of each way to sign in.
+// identity of their own and the same each time, each with the new nonce of
+// its request, so that the function of the way to sign in returns a
+// credential under them. A provider of the role takes such a token in the
+// tests of an app, its mocks or a fixture, as the token of its identity,
+// whatever its issuer among those of the app. So the test of the service
+// builds tokens of identities of its own for each issuer of the app, and
+// the test of the session goes through the function of each way to sign
+// in.
 import 'dart:convert';
 import 'dart:math';
 

@@ -23,6 +23,7 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
+import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -162,9 +163,13 @@ List<ModuleId> everyFixture({
 /// role that the CLI has, for the app test that it keeps and for the test
 /// of that role that the CLI keeps, which run there next to the other
 /// Firebase modules and with the fixture texts as the languages of the
-/// app; and the sign-in module of the CLI, for the app test that it keeps,
-/// with the two state managers of the CLI, bloc and riverpod, since a
-/// registry has every provider that one of its modules has a variant for.
+/// app; Sign in with Apple, the way to sign in that the CLI has, for the
+/// app test that it keeps and for the test of the ways to sign in of the
+/// auth role that the CLI keeps, which runs there on Firebase
+/// Authentication; and the sign-in module of the CLI, for the app test
+/// that it keeps, with the two state managers of the CLI, bloc and
+/// riverpod, since a registry has every provider that one of its modules
+/// has a variant for.
 /// The app asks for an account, as an app in the first mode of the auth
 /// role does, so the guards of the sign-in keep the user from every other
 /// screen until the mocks of that test sign an account up for the tests of
@@ -203,6 +208,7 @@ List<SmfModule> severalProvidersModules() => const [
       OnboardingModule(),
       HomeModule(),
       FirebaseAuthModule(),
+      AppleSignInModule(),
       BlocModule(),
       RiverpodModule(),
       SignInModule(),
