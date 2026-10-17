@@ -1130,11 +1130,11 @@ void main() {
         contains(
           'Dependencies\n'
           '  core_lib ^1.2.0 (core)\n'
-          '  flutter from the flutter SDK (scaffold)\n\n'
+          '  flutter from the flutter SDK (scaffold, role:app_entry)\n\n'
           'Dev dependencies\n'
           // Code generation needs build_runner, which the pipeline adds.
           '  build_runner ^2.10.0 (pipeline)\n'
-          '  flutter_test from the flutter SDK (core)',
+          '  flutter_test from the flutter SDK (core, role:app_entry)',
         ),
       );
       expect(

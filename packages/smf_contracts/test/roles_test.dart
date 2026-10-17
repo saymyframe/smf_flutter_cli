@@ -182,6 +182,8 @@ void main() {
 
   test('the role interfaces name files of the app', () {
     final dartFile = RegExp(r'^lib/[a-z0-9_/]+\.dart$');
+    // A test mirrors the file of lib/ that it tests.
+    final testFile = RegExp(r'^test/[a-z0-9_/]+_test\.dart$');
     // A file for those who work on the app, such as the guide for coding
     // agents, is at its root.
     final rootFile = RegExp(r'^[A-Z]+\.md$');
@@ -197,6 +199,7 @@ void main() {
           file,
           anyOf(
             matches(dartFile),
+            matches(testFile),
             matches(rootFile),
             matches(androidResource),
           ),
@@ -409,7 +412,10 @@ void main() {
 
     // A role's socket may also be tagged in its provider's files, as the
     // observers of the router are. The other names are the variables of the
-    // render hooks of the templates.
+    // render hooks of the templates, and the name of the app, which the
+    // pipeline gives every brick: a test reads it in two braces, as in the
+    // import of a file of the app, since a package name has nothing that
+    // mustache escapes.
     test('have tags only of their own sockets, and no other mustache', () {
       final known = {
         'facade',
@@ -442,6 +448,7 @@ void main() {
               in templatesOf(brick.bundle).entries) {
             for (final match in _mustache.allMatches(text)) {
               final name = match.group(1)!;
+              if (match.group(0) == '{{app_name}}') continue;
               final triple = match.group(0)!.startsWith('{{{');
               expect(triple, isTrue, reason: '$path: ${match.group(0)}');
               expect(

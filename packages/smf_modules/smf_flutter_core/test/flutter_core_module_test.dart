@@ -326,18 +326,17 @@ void main() {
       // below the root, with a context of its own.
       expect(
         _namedOf(root).singleWhere((named) => named.startsWith('builder: ')),
-        'builder: (context, child) => Builder(builder: (context) => '
-        'AnnotatedRegion<SystemUiOverlayStyle>(value: '
-        'SystemUiOverlayStyle(statusBarBrightness: '
-        'Theme.of(context).brightness, statusBarIconBrightness: '
-        'Theme.of(context).brightness == Brightness.dark ? '
-        'Brightness.light : Brightness.dark), child: child!))',
+        'builder: (context, child) => StatusBarIcons(child: child!)',
       );
       expect(
         app,
         contains(
-          "import 'package:flutter/services.dart' show SystemUiOverlayStyle;",
+          "import 'package:contract_app/core/app/status_bar_icons.dart';",
         ),
+      );
+      expect(
+        texts[AppEntryRole.statusBarIconsFile],
+        contains('class StatusBarIcons extends StatelessWidget'),
       );
       // The fallback start screen has no app bar, and leaves the status bar
       // to the root.
@@ -592,8 +591,8 @@ void main() {
         'flutter test',
       ]);
       // The two directories with the Dart code of the app, and a test for
-      // `flutter test` to run: what the role does not guarantee, and so
-      // does not say.
+      // `flutter test` to run, which the template of the role gives every
+      // app.
       expect(
         {
           for (final path in texts.keys)
@@ -826,13 +825,9 @@ void main() {
       ).singleWhere((named) => named.startsWith('builder: '));
       expect(
         builder,
-        startsWith(
-          'builder: (context, child) => MediaQuery.withNoTextScaling(child: '
-          'Builder(builder: (context) => '
-          'AnnotatedRegion<SystemUiOverlayStyle>(',
-        ),
+        'builder: (context, child) => MediaQuery.withNoTextScaling(child: '
+        'StatusBarIcons(child: child!))',
       );
-      expect(builder, endsWith('child: child!)))'));
     });
   });
 

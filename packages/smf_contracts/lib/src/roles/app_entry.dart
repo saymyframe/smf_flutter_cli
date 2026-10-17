@@ -54,13 +54,16 @@ const appEntryRole = AppEntryRole._();
 /// Dart files: each is a file or a directory of the app.
 ///
 /// The template also tells the system which icons of the status bar suit
-/// the theme of the app, on every screen: it puts a widget into
-/// [appBuilder] that reads the brightness of the theme below the root
-/// `MaterialApp`, and asks for dark icons on a light theme and for light
-/// ones on a dark theme. So a screen without an app bar tells nothing of
-/// the status bar itself, in an app with a module that provides the theme
-/// and in one without it; a screen with an `AppBar` gets the icons that
-/// suit its bar.
+/// the theme of the app, on every screen: it generates [statusBarIconsFile]
+/// with the widget `StatusBarIcons`, which reads the brightness of the
+/// theme below the root `MaterialApp` and asks for dark icons on a light
+/// theme and for light ones on a dark theme, and [statusBarIconsTestFile],
+/// a widget test of it, and puts the widget into [appBuilder]. So a screen
+/// without an app bar tells nothing of the status bar itself, in an app
+/// with a module that provides the theme and in one without it; a screen
+/// with an `AppBar` gets the icons that suit its bar. The test is in every
+/// app, so `flutter test` has a test to run in an app whose modules bring
+/// none.
 ///
 /// The keyed sockets of the native files and of the README, and
 /// [mainActivityIntentFilters], render complete lines, so their tags stand
@@ -114,6 +117,19 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The path of the file that gives [agentsFile] to the agents that read
   /// `CLAUDE.md` instead: its whole content is `@AGENTS.md`.
   static const claudeFile = 'CLAUDE.md';
+
+  /// The path of the file with `StatusBarIcons`, the widget that the
+  /// template of the role puts around the content of every route (see
+  /// [appBuilder]), which asks the system for the icons of the status bar
+  /// that suit the theme.
+  static const statusBarIconsFile = 'lib/core/app/status_bar_icons.dart';
+
+  /// The path of the widget test of `StatusBarIcons` (see
+  /// [statusBarIconsFile]), which the template of the role generates in
+  /// every app, so that `flutter test` has a test to run in an app whose
+  /// modules bring none.
+  static const statusBarIconsTestFile =
+      'test/core/app/status_bar_icons_test.dart';
 
   /// The screen an app shows when no router provides one, created as
   /// `const FallbackStartScreen()`; import it with
@@ -478,7 +494,12 @@ final class AppEntryRole extends Role<NoDsl> {
 
   @override
   RoleInterface get interface => const RoleInterface(
-        files: [agentsFile, claudeFile],
+        files: [
+          agentsFile,
+          claudeFile,
+          statusBarIconsFile,
+          statusBarIconsTestFile,
+        ],
         symbols: [main, bootstrap, fallbackStartScreen],
       );
 
