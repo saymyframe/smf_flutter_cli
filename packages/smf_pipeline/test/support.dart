@@ -283,8 +283,15 @@ plugins {
 {{{smf_app_entry__gradle_app_plugins}}}
 }
 
+android {
+    compileOptions {
+{{{smf_app_entry__android_core_library_desugaring_enabled}}}
+    }
+}
+
 dependencies {
 {{{smf_app_entry__gradle_app_dependencies}}}
+{{{smf_app_entry__android_core_library_desugaring_library}}}
 }
 ''',
   'ios/Podfile':

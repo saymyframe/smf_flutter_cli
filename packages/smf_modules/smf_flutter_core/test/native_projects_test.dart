@@ -268,11 +268,43 @@ void main() {
       );
       expect(
         _block(every[appGradle]!, 'dependencies'),
-        '\n    implementation("androidx.annotation:annotation:1.9.1")\n',
+        '\n    implementation("androidx.annotation:annotation:1.9.1")\n'
+        '    coreLibraryDesugaring("$_desugaring")\n',
+      );
+    });
+
+    test(
+        'enable core library desugaring only for a module that needs it, '
+        'with the switch and the library together', () {
+      const java17 = '        sourceCompatibility = JavaVersion.VERSION_17\n'
+          '        targetCompatibility = JavaVersion.VERSION_17\n';
+
+      // The compileOptions as flutter create writes them, and the empty
+      // dependencies block of the brick.
+      expect(_compileOptions(alone[appGradle]!), java17);
+      expect(alone[appGradle], isNot(contains('esugaring')));
+      expect(_block(alone[appGradle]!, 'dependencies'), '\n');
+
+      expect(
+        _compileOptions(every[appGradle]!),
+        '$java17        isCoreLibraryDesugaringEnabled = true\n',
+      );
+      expect(
+        _block(every[appGradle]!, 'dependencies'),
+        endsWith('    coreLibraryDesugaring("$_desugaring")\n'),
       );
     });
   });
 }
+
+/// The library of core library desugaring that the modules of the app ask
+/// for.
+const _desugaring = 'com.android.tools:desugar_jdk_libs:2.1.4';
+
+/// The text between the braces of the `compileOptions` of the `android`
+/// block of the Gradle script of the app, [text].
+String _compileOptions(String text) =>
+    RegExp(r'\n    compileOptions \{\n([^{}]*?)    \}\n').firstMatch(text)![1]!;
 
 /// The value elements of the top-level dictionary of the property list
 /// [text], by key.

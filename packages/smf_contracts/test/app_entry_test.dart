@@ -240,7 +240,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(19));
+      expect(sockets, hasLength(20));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -249,6 +249,13 @@ void main() {
       expect(tags, contains('smf_app_entry__bootstrap_platform'));
       expect(tags, contains('smf_app_entry__root_wrappers_open'));
       expect(tags, contains('smf_app_entry__agent_sections'));
+      expect(
+        tags,
+        containsAll([
+          'smf_app_entry__android_core_library_desugaring_enabled',
+          'smf_app_entry__android_core_library_desugaring_library',
+        ]),
+      );
     });
 
     test('bootstrap phases are separate sockets in start-up order', () {
@@ -1146,6 +1153,63 @@ void main() {
           AppEntryRole.gradleAppDependencies.tag:
               r'    implementation("com.example:lib\$x:1.2")',
         },
+      );
+    });
+
+    test(
+        'core library desugaring takes the highest version of its library, '
+        'and puts the switch and the library into the Gradle file', () {
+      const socket = AppEntryRole.androidCoreLibraryDesugaring;
+      const notifications = ModuleOrigin(ModuleId('notifications'));
+      const calendar = ModuleOrigin(ModuleId('calendar'));
+      const library = 'com.android.tools:desugar_jdk_libs:2.1.4';
+
+      expect(socket.kind.policy, isA<MaxPolicy>());
+      expect(socket.kind.required, isFalse);
+      expect(
+        socket.render([
+          socket.value('2.1.3').withOrigin(calendar),
+          socket.value('2.1.4').withOrigin(notifications),
+          socket.value('2.0.4').withOrigin(calendar),
+        ]),
+        {
+          'smf_app_entry__android_core_library_desugaring_enabled':
+              '        isCoreLibraryDesugaringEnabled = true',
+          'smf_app_entry__android_core_library_desugaring_library':
+              '    coreLibraryDesugaring("$library")',
+        },
+      );
+      // Without a module that needs it, the Gradle file has neither line.
+      expect(socket.render(const []), {
+        'smf_app_entry__android_core_library_desugaring_enabled': '',
+        'smf_app_entry__android_core_library_desugaring_library': '',
+      });
+      // The problems name the socket, whose tags are those of its places.
+      expect(
+        socket.problemsWith(socket.value('two')).single,
+        contains(
+          '"two" of "app_entry.android_core_library_desugaring" cannot be '
+          'compared',
+        ),
+      );
+      expect(
+        () => socket.render([
+          socket.value('2.1.4').withOrigin(notifications),
+          socket.value('2.1.4-beta').withOrigin(calendar),
+        ]),
+        throwsA(
+          isA<MergeConflict>().having(
+            (conflict) => '$conflict',
+            'description',
+            allOf(
+              startsWith(
+                'MergeConflict: "app_entry.android_core_library_desugaring" '
+                'has conflicting values',
+              ),
+              contains('(from notifications and calendar)'),
+            ),
+          ),
+        ),
       );
     });
 
@@ -2505,8 +2569,13 @@ Future<void> main() async {
               'plugins {\n{{{smf_app_entry__gradle_settings_plugins}}}\n}\n',
           AppEntryRole.gradleAppFile: 'plugins {\n'
               '{{{smf_app_entry__gradle_app_plugins}}}\n}\n\n'
+              'android {\n    compileOptions {\n'
+              '{{{smf_app_entry__android_core_library_desugaring_enabled}}}\n'
+              '    }\n}\n\n'
               'dependencies {\n'
-              '{{{smf_app_entry__gradle_app_dependencies}}}\n}\n',
+              '{{{smf_app_entry__gradle_app_dependencies}}}\n'
+              '{{{smf_app_entry__android_core_library_desugaring_library}}}\n'
+              '}\n',
           AppEntryRole.readmeFile: '# {{app_name}}\n\nAn app.\n'
               '{{{smf_app_entry__readme_sections}}}\n',
         }),
@@ -2744,6 +2813,14 @@ Future<void> main() async {
             '<dict>{{{smf_app_entry__ios_entitlements}}}</dict>\n',
         AppEntryRole.readmeFile:
             '# {{app_name}}\n\nAn app. {{{smf_app_entry__readme_sections}}}\n',
+        // Each place of the desugaring renders lines of the Gradle file of
+        // the app: the switch in compileOptions and the library in the
+        // dependencies.
+        AppEntryRole.gradleSettingsFile:
+            '{{{smf_app_entry__android_core_library_desugaring_enabled}}}\n',
+        AppEntryRole.gradleAppFile: 'dependencies {\n'
+            '    {{{smf_app_entry__android_core_library_desugaring_library}}}\n'
+            '}\n',
       });
 
       expect(issues.map((issue) => issue.message), [
@@ -2766,6 +2843,18 @@ Future<void> main() async {
           'The tag {{{smf_app_entry__ios_entitlements}}} must stand alone at '
           'the start of a line of ios/Runner/Runner.entitlements, because its '
           'contributions render as complete lines.',
+        ),
+        equals(
+          'The tag '
+          '{{{smf_app_entry__android_core_library_desugaring_enabled}}} is in '
+          'android/settings.gradle.kts, but its lines belong in '
+          'android/app/build.gradle.kts.',
+        ),
+        equals(
+          'The tag '
+          '{{{smf_app_entry__android_core_library_desugaring_library}}} must '
+          'stand alone at the start of a line of android/app/build.gradle.kts, '
+          'because its contributions render as complete lines.',
         ),
         equals(
           'The tag {{{smf_app_entry__readme_sections}}} must stand alone at '

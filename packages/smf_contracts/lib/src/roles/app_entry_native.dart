@@ -253,6 +253,15 @@ String _renderGradleDependencies(List<MapEntry<String, String>> entries) =>
       },
     ).join('\n');
 
+String _renderDesugaringEnabled(String version) =>
+    '        isCoreLibraryDesugaringEnabled = true';
+
+String _renderDesugaringLibrary(String version) {
+  final library =
+      'com.android.tools:desugar_jdk_libs:${_escapeKotlin(version)}';
+  return '    coreLibraryDesugaring("$library")';
+}
+
 String _escapeXml(String text) => text
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -263,7 +272,8 @@ String _escapeXml(String text) => text
 String _escapeKotlin(String text) =>
     text.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll(r'$', r'\$');
 
-/// The sockets that render complete lines of a file, with the file.
+/// The sockets that render complete lines of a file, with the file: every
+/// tag of such a socket stands alone on its lines.
 const _lineSockets = <(SocketRef, String)>[
   (
     AppEntryRole.androidManifestPermissions,
@@ -279,39 +289,47 @@ const _lineSockets = <(SocketRef, String)>[
   (AppEntryRole.gradleSettingsPlugins, AppEntryRole.gradleSettingsFile),
   (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
   (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),
+  (AppEntryRole.androidCoreLibraryDesugaring, AppEntryRole.gradleAppFile),
   (AppEntryRole.readmeSections, AppEntryRole.readmeFile),
 ];
 
 List<SmfIssue> _checkTagLines(ModuleRuleInput<NoDsl> input) {
   final origin = ModuleOrigin(input.module.id);
   final templates = _templatesOf(input.contributions);
-  final issues = <SmfIssue>[];
-  for (final (socket, path) in _lineSockets) {
-    final tag = '{{{${socket.tag}}}}';
-    for (final MapEntry(key: template, value: text) in templates.entries) {
-      if (!text.contains(tag)) continue;
-      if (template != path) {
-        issues.add(
-          SmfIssue(
-            'The tag $tag is in $template, but its lines belong in $path.',
-            origin: origin,
-            path: template,
-          ),
-        );
-      } else if (tag.allMatches(text).length !=
-          text.split('\n').where((line) => line.trimRight() == tag).length) {
-        issues.add(
-          SmfIssue(
-            'The tag $tag must stand alone at the start of a line of $path, '
-            'because its contributions render as complete lines.',
-            origin: origin,
-            path: path,
-          ),
-        );
-      }
+  return [
+    for (final (socket, path) in _lineSockets)
+      for (final name in socket.tags)
+        ..._tagLineIssues('{{{$name}}}', path, templates, origin),
+  ];
+}
+
+/// The problems of [tag], the tag of a socket whose lines belong in the
+/// file at [path], in the [templates] of a module of [origin]: it is in
+/// another template, or not alone at the start of its lines.
+Iterable<SmfIssue> _tagLineIssues(
+  String tag,
+  String path,
+  Map<String, String> templates,
+  ContributionOrigin origin,
+) sync* {
+  for (final MapEntry(key: template, value: text) in templates.entries) {
+    if (!text.contains(tag)) continue;
+    if (template != path) {
+      yield SmfIssue(
+        'The tag $tag is in $template, but its lines belong in $path.',
+        origin: origin,
+        path: template,
+      );
+    } else if (tag.allMatches(text).length !=
+        text.split('\n').where((line) => line.trimRight() == tag).length) {
+      yield SmfIssue(
+        'The tag $tag must stand alone at the start of a line of $path, '
+        'because its contributions render as complete lines.',
+        origin: origin,
+        path: path,
+      );
     }
   }
-  return issues;
 }
 
 List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
