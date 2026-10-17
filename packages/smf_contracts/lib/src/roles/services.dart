@@ -206,6 +206,116 @@ List<SmfIssue> _checkImplementationFactories(
   return issues;
 }
 
+/// Whether [owner], the owner of a file, reaches the service of the
+/// provider of [role] only through the controller that the template of
+/// [role] generates over it: a module, or the template of another role.
+bool _usesController(ContributionOrigin? owner, Role role) => switch (owner) {
+      ModuleOrigin() => true,
+      RoleTemplateOrigin(role: final other) => !identical(other, role),
+      _ => false,
+    };
+
+/// The problems with the service of the provider of a role whose code the
+/// app reaches only through a controller of the role's template, such as
+/// the session of the [authRole], in the files of modules and of the
+/// templates of other roles in [input]:
+/// - a file that calls [factory], the function in [controllerFile] that
+///   returns the service;
+/// - a file other than those of the implementation of the provider, the
+///   files of its class and of its function, that imports or exports
+///   [serviceFile], the file of [service]. So another file of the provider,
+///   such as a widget, is held to the rule too.
+///
+/// Such code would reach the service around the controller, which does what
+/// is the same with every provider. [hint] tells the owner of a file what
+/// to do instead.
+///
+/// The rule reads what a file itself imports and calls. It does not see a
+/// `part` file of a library that imports [controllerFile], nor a file that
+/// reaches it through an export of another file.
+List<SmfIssue> _checkServiceReach(
+  StructuralRuleInput<RoleImplementation> input, {
+  required String factory,
+  required String service,
+  required String serviceFile,
+  required String controllerFile,
+  required String hint,
+}) {
+  final role = input.roleInput.role;
+  final implementation = {
+    for (final data in input.roleInput.data)
+      for (final import in [data.value.type.import, data.value.factory.import])
+        if (import != null && import.isAppFile) 'lib/${import.uri}',
+  };
+  final issues = <SmfIssue>[];
+  for (final MapEntry(key: path, value: index) in input.files.entries) {
+    final owner = input.owners[path];
+    if (!_usesController(owner, role)) continue;
+    if (usesSymbols(index, {factory}, controllerFile)) {
+      issues.add(
+        SmfIssue(
+          '$path calls $factory(), which no module may call.',
+          hint: hint,
+          origin: owner,
+          path: path,
+        ),
+      );
+    }
+    if (!implementation.contains(path) && importsLibrary(index, serviceFile)) {
+      issues.add(
+        SmfIssue(
+          '$path imports $serviceFile, the file of $service, which only the '
+          'files of the implementation of the provider of the $role import.',
+          hint: hint,
+          origin: owner,
+          path: path,
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
+/// The problems with the start of the controller of a role, such as
+/// `appSession` of the [authRole], in [input]:
+/// - a call of [init] in any file of the app but that of `bootstrap()`,
+///   which awaits it once, before the first frame;
+/// - a call of `start()` on [controller] of [controllerFile] in a file of a
+///   module or of the template of another role: [init] starts the
+///   controller, and a test gives it a service of its own, but the code of
+///   an app has no reason to.
+///
+/// [hint] tells the owner of a file what to do instead. The rule reads what
+/// a file itself imports and calls, as [_checkServiceReach] does, and does
+/// not see [controller] under another name.
+List<SmfIssue> _checkControllerStart(
+  StructuralRuleInput<RoleImplementation> input, {
+  required String init,
+  required String controller,
+  required String controllerFile,
+  required String hint,
+}) =>
+    [
+      for (final MapEntry(key: path, value: index) in input.files.entries) ...[
+        if (path != AppEntryRole.bootstrapFile &&
+            usesSymbols(index, {init}, controllerFile))
+          SmfIssue(
+            '$path calls $init(), which only bootstrap() calls.',
+            hint: hint,
+            origin: input.owners[path],
+            path: path,
+          ),
+        if (_usesController(input.owners[path], input.roleInput.role) &&
+            invokesOn(index, controller, 'start', controllerFile))
+          SmfIssue(
+            '$path calls $controller.start(), which only $init() calls.',
+            hint: hint,
+            origin: input.owners[path],
+            path: path,
+          ),
+      ],
+    ];
+
 /// The template shared by the service roles: the brick with the service's
 /// interface, the implementations in the socket [implementations], and the
 /// registration of the service in the DI container, which the template of
