@@ -646,10 +646,22 @@ void main() {
         'mark, its route and its section in the guide for coding agents: '
         'it adds no package', () {
       final router = _providersOf(result, routerRole);
+      // The app with the router alone starts on the fallback start screen
+      // of the app entry, which the app with home, which starts on its
+      // screen, has not, nor the widget test of the screen.
+      final fallback = {
+        AppEntryRole.fallbackStartScreenFile,
+        'test/core/app/fallback_start_screen_test.dart',
+      };
+      expect(withRouter.files.keys, containsAll(fallback));
 
       expect(
         app.files.keys.toSet(),
-        {...withRouter.files.keys, _screen, ..._markFiles},
+        {
+          ...withRouter.files.keys.where((path) => !fallback.contains(path)),
+          _screen,
+          ..._markFiles,
+        },
       );
       for (final path in [_screen, ..._markFiles]) {
         expect(app.files[path]!.owner, _module, reason: path);
@@ -660,7 +672,8 @@ void main() {
       for (final MapEntry(key: path, value: file) in withRouter.files.entries) {
         if (path == RouterRole.navigationFile ||
             path == AppEntryRole.agentsFile ||
-            path == 'pubspec.yaml') {
+            path == 'pubspec.yaml' ||
+            fallback.contains(path)) {
           continue;
         }
         if (file.owner case ModuleOrigin(:final module)
