@@ -213,6 +213,48 @@ const _configure = PostGenStep(
   skippable: true,
 );
 
+/// The matrix of the modules of the CLI, which several tests read: built
+/// once, when a test reads it first, since the contract harness renders
+/// each of its apps.
+final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
+    matrixOf(smfModules);
+
+/// The apps of the matrix of the CLI that warn of what they are made of,
+/// by name, each with the codes of its warnings (see [MatrixApp.warnings]),
+/// but the apps with every module, of which none warns.
+///
+/// The harness builds the app of a module with only the modules that it
+/// needs: such an app has no route to start on, since only home has one,
+/// and the destination of its feature has no main navigation to lead to it,
+/// since the app has no layout.
+const _warningApps = <String, List<String>>{
+  'settings with localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'settings': ['router.no_main_navigation', 'router.no_start'],
+  'material_theme with settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'material_theme with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'onboarding with localization': ['router.no_start'],
+  'onboarding': ['router.no_start'],
+  'sign_in (bloc) with localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'sign_in (riverpod) with localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'sign_in (bloc)': ['router.no_main_navigation', 'router.no_start'],
+  'sign_in (riverpod)': ['router.no_main_navigation', 'router.no_start'],
+};
+
 void main() {
   test(
       'the matrix of the CLI has the app of flutter_core with and without the '
@@ -236,7 +278,7 @@ void main() {
       'of Firebase Authentication with the router for each other mode of '
       'the auth role, and one of every module for each state manager, each '
       'once more for each other mode', () async {
-    final (:apps, :failed) = await matrixOf(smfModules);
+    final (:apps, :failed) = await _cliMatrix;
     // The modules whose labels and titles are texts of the app, each with
     // the provider of the texts. The app of settings with it is the app of
     // the localization with the settings screen too.
@@ -398,6 +440,55 @@ void main() {
               {'auth-mode': mode},
               {'auth-mode': mode},
             ],
+      ],
+    );
+  });
+
+  test(
+      'no app with every module warns of what it is made of, those that CI '
+      'starts included, and the other apps of the matrix that warn are those '
+      'that the CLI declares, with the codes it declares', () async {
+    final (:apps, :failed) = await _cliMatrix;
+    final started = await everyModuleAppsOf(
+      smfModules,
+      withoutExternalSteps: true,
+    );
+
+    expect(failed, isEmpty);
+    expect(started.failed, isEmpty);
+    // They are the apps that CI builds for Android and iOS, starts on
+    // devices and generates with smf from pub.dev, and what a user gets
+    // with every module.
+    expect(
+      [
+        for (final app in apps)
+          if (app.everyModuleWith != null && app.warnings.isNotEmpty)
+            '${app.name}: ${app.warnings}',
+        for (final app in started.apps)
+          if (app.warnings.isNotEmpty)
+            '${app.name} without external steps: ${app.warnings}',
+      ],
+      isEmpty,
+    );
+    expect(
+      {
+        for (final app in apps)
+          if (app.everyModuleWith == null && app.warnings.isNotEmpty)
+            app.name: app.warnings,
+      },
+      _warningApps,
+      reason: 'smf create --strict allows these warnings in the apps of CI, '
+          'and stops on any other. A new warning of an app is a decision: '
+          'change the modules or the case so that the app does not warn, '
+          'or declare the actual map here.',
+    );
+    final settings = apps.singleWhere((app) => app.name == 'settings');
+    expect(
+      settings.createArguments('app_1', '/apps').reversed.take(3),
+      [
+        '--strict',
+        '--allow-warning=router.no_start',
+        '--allow-warning=router.no_main_navigation',
       ],
     );
   });
@@ -586,7 +677,7 @@ void main() {
   test(
       'an app of the matrix has the data and the roles of its case, and the '
       'choices of the roles, such as the route it starts on', () async {
-    final (:apps, :failed) = await matrixOf(smfModules);
+    final (:apps, :failed) = await _cliMatrix;
     MatrixApp named(String name) => apps.singleWhere((app) => app.name == name);
 
     expect(failed, isEmpty);
@@ -613,11 +704,14 @@ void main() {
     expect(const MatrixApp('home', [HomeModule.id]).hook, isNull);
   });
 
-  test('an app of the matrix names every module and asks nothing', () {
+  test(
+      'an app of the matrix names every module, asks nothing and allows the '
+      'warnings that it has on purpose', () {
     const app = MatrixApp(
       'home with router',
       [ModuleId('flutter_core'), ModuleId('router'), ModuleId('home')],
       roleOptions: {'start': '/home', 'unset': null},
+      warnings: ['router.no_main_navigation', 'router.no_start'],
     );
 
     expect(app.createArguments('app_1', '/apps'), [
@@ -633,8 +727,15 @@ void main() {
       '--no-input',
       '--skip-external-setup',
       '--no-dart-fix',
+      '--allow-warning=router.no_main_navigation',
+      '--allow-warning=router.no_start',
       '--strict',
     ]);
+    // An app without warnings allows none, so --strict stops on any.
+    expect(
+      const MatrixApp('home', [ModuleId('home')]).createArguments('a', '/b'),
+      isNot(contains(startsWith('--allow-warning'))),
+    );
   });
 
   group('the apps of the other values of a mode option of a role', () {
@@ -1228,7 +1329,7 @@ Type type() => Types;
       'those that, with another module in their place, change whether it '
       'applies to an app, the values of its files there or the files it '
       'generates', () async {
-    final (:apps, :failed) = await matrixOf(smfModules);
+    final (:apps, :failed) = await _cliMatrix;
     final withHome = [
       for (final app in apps)
         if (app.modules.contains(HomeModule.id)) app.name,

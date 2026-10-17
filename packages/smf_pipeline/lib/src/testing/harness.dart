@@ -772,6 +772,10 @@ final class ContractHarness {
   /// [contractCase], then, if [render] is on and they found no error, the
   /// stages 7 and 8 and [checkRendered].
   ///
+  /// The stage 5 gets the options of the case and [roleOptions], which
+  /// `smf create` gets for the app of the case, so an option of a role
+  /// that the app lacks is a warning of the result, as in `smf create`.
+  ///
   /// As the pipeline does, it renders the app with the contributions that
   /// the choices of stage 7 decided (see [Collection.decide]), and the
   /// result has them, with the [ContractResult.hook] of that app; the
@@ -830,11 +834,14 @@ final class ContractHarness {
       return ContractResult(contractCase, resolved.issues);
     }
     final collection = collect(resolution, context);
+    final options = {...roleOptions, ...contractCase.roleOptions};
     final validation = validate(
       registry: registry,
       resolution: resolution,
       collection: collection,
       context: context,
+      // The options that `smf create` gets for the app of the case.
+      optionValues: options,
       interactive: environment.interactive,
       skipExternalSetup: environment.skipExternalSetup,
     );
@@ -856,7 +863,6 @@ final class ContractHarness {
     );
     if (!render || checked.errors.isNotEmpty) return checked;
 
-    final options = {...roleOptions, ...contractCase.roleOptions};
     final refused = _refusedValues(options);
     if (refused.isNotEmpty) return checked._with(refused);
     final Map<Role, Object?> choices;
@@ -871,7 +877,6 @@ final class ContractHarness {
     final Map<String, String> answers;
     try {
       (:choices, issues: chosen) = await chooseRoles(
-        registry: registry,
         resolution: resolution,
         collection: collection,
         optionValues: options,
@@ -1006,7 +1011,6 @@ final class ContractHarness {
     final List<SmfIssue> warned;
     try {
       (choices: again, issues: warned) = await chooseRoles(
-        registry: registry,
         resolution: resolution,
         collection: collection,
         optionValues: {...options, ...given},
@@ -1147,7 +1151,6 @@ final class ContractHarness {
     String? failure;
     try {
       warned = (await chooseRoles(
-        registry: registry,
         resolution: resolution,
         collection: collection,
         optionValues: {

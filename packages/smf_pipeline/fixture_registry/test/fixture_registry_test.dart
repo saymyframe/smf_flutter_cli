@@ -8,6 +8,7 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
+import 'package:file/file.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_bloc/smf_bloc.dart';
@@ -2025,7 +2026,8 @@ void main() {
   group('smf create', () {
     test('generates an app of every fixture', () async {
       final runner = RecordingRunner();
-      final host = testHost(processRunner: runner);
+      final logger = RecordingLogger();
+      final host = testHost(processRunner: runner, logger: logger);
 
       GeneratedApp? created;
       final code = await runSmf(
@@ -2038,6 +2040,13 @@ void main() {
           '/fake_feature',
           '--no-input',
           '--skip-external-setup',
+          // The texts of fake_second have a language that no app can be
+          // in, and one without a translation, on purpose. The app has no
+          // layout, so no main navigation leads to the destination of
+          // fake_second.
+          '--allow-warning=${LocalizationRole.unsupportedLanguageWarning}',
+          '--allow-warning=${LocalizationRole.untranslatedWarning}',
+          '--allow-warning=${RouterRole.noMainNavigationWarning}',
           '--strict',
         ],
         modules: fixtureModules(),
@@ -2045,7 +2054,7 @@ void main() {
         onCreated: (app) => created = app,
       );
 
-      expect(code, SmfExitCodes.success);
+      expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
       expect(created?.path, '/work/fixture_app');
       expect(created?.skippedSteps, isEmpty);
       expect(runner.lines, [
@@ -2071,45 +2080,67 @@ void main() {
 
     test(
         'warns of a language of a text that no app can be in, and of a text '
-        'without a translation into a language of the app', () async {
-      final logger = RecordingLogger();
-      final host = testHost(processRunner: RecordingRunner(), logger: logger);
+        'without a translation into a language of the app, on which a run '
+        'with --strict stops', () async {
+      /// Runs `smf create` for the second fixture feature with the fixture
+      /// texts, with [options].
+      Future<(int, RecordingLogger, FileSystem)> create(
+        List<String> options,
+      ) async {
+        final logger = RecordingLogger();
+        final host = testHost(processRunner: RecordingRunner(), logger: logger);
+        final code = await runSmf(
+          [
+            'create',
+            'fixture_app',
+            '-m',
+            [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
+                .join(','),
+            '--no-input',
+            '--skip-external-setup',
+            ...options,
+          ],
+          modules: fixtureModules(),
+          hostFor: ({required verbose}) => host,
+        );
+        return (code, logger, host.fileSystem);
+      }
 
-      final code = await runSmf(
-        [
-          'create',
-          'fixture_app',
-          '-m',
-          [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
-              .join(','),
-          '--no-input',
-          '--skip-external-setup',
-          '--strict',
-        ],
-        modules: fixtureModules(),
-        hostFor: ({required verbose}) => host,
-      );
+      const leftOut = 'The app is not in mt, which the text title of the '
+          'module fake_second has a translation into: Flutter has no texts '
+          'for its own widgets in that language.';
+      const untranslated = 'No translation into uk of the text outside of '
+          'the module fake_second: the app shows it in English there.';
 
+      final (code, logger, files) = await create(const []);
       expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
       // The template of the localization role reports both.
-      expect(logger.warnings, hasLength(2));
+      expect(logger.warnings, [
+        '[role:localization]: $leftOut',
+        '[role:localization]: $untranslated',
+      ]);
       expect(
-        logger.warnings.first,
-        '[role:localization]: The app is not in mt, which the text title of '
-        'the module fake_second has a translation into: Flutter has no texts '
-        'for its own widgets in that language.',
-      );
-      expect(
-        logger.warnings.last,
-        '[role:localization]: No translation into uk of the text outside of '
-        'the module fake_second: the app shows it in English there.',
-      );
-      expect(
-        host.fileSystem
+        files
             .file('/work/fixture_app/${LocalizationRole.appLocaleFile}')
             .readAsStringSync(),
         contains("const appLocales = <Locale>[Locale('en'), Locale('uk')];"),
       );
+
+      final (strictCode, strict, strictFiles) =
+          await create(const ['--strict']);
+      expect(strictCode, SmfExitCodes.generationFailed);
+      const stopped = 'Generation stopped because of 2 warnings about the '
+          'app. Without --strict, the run goes on after them.';
+      // Each with its code, which --allow-warning names.
+      String cause(String code, String message) =>
+          '  warning [role:localization] $code: $message';
+      expect(strict.errors, [
+        stopped,
+        cause(LocalizationRole.unsupportedLanguageWarning, leftOut),
+        cause(LocalizationRole.untranslatedWarning, untranslated),
+      ]);
+      expect(strict.warnings, isEmpty);
+      expect(strictFiles.directory('/work/fixture_app').existsSync(), isFalse);
     });
 
     test('refuses in --locales a language that no app can be in', () async {

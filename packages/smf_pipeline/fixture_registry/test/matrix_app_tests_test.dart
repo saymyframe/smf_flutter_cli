@@ -31,6 +31,58 @@ List<String> _walkedRoutesOf(String file) {
   ];
 }
 
+/// What a test that declares the warnings of the apps of a matrix tells
+/// when they differ.
+const _declareWarnings = 'smf create --strict allows these warnings in the '
+    'apps of CI, and stops on any other. A new warning of an app is a '
+    'decision: change the modules or the case so that the app does not '
+    'warn, or declare the actual warnings here.';
+
+/// The codes of the warnings about what they are made of of every app with
+/// every module of the matrix of the fixtures (see [MatrixApp.warnings]):
+/// the texts of fake_second have a translation into a language that no app
+/// can be in, and a text without a translation, on purpose.
+const _everyModuleWarnings = [
+  'localization.unsupported_language',
+  'localization.untranslated',
+];
+
+/// The other apps of the matrix of the fixtures that warn of what they are
+/// made of, by name, each with the codes of its warnings: those with the
+/// texts of fake_second, and those of the fixture gates, whose apps have no
+/// route to start on.
+const _warningApps = <String, List<String>>{
+  'fake_second (fake_router) with localization, badge': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'fake_second (go_router) with localization, badge': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'fake_second (fake_router) with localization': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'fake_second (go_router) with localization': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'fake_late_gate (fake_router)': ['router.no_start'],
+  'fake_late_gate (go_router)': ['router.no_start'],
+  'fake_gate (fake_router)': ['router.no_start'],
+  'fake_gate (go_router)': ['router.no_start'],
+};
+
+/// The codes of the warnings about what it is made of of the app of
+/// several providers, which has the texts of fake_second, and destinations
+/// without a layout.
+const _severalProvidersWarnings = [
+  'localization.unsupported_language',
+  'localization.untranslated',
+  'router.no_main_navigation',
+];
+
 void main() {
   late MatrixAppTests appTests;
   late List<MatrixApp> apps;
@@ -56,6 +108,29 @@ void main() {
         for (final app in apps)
           if (test.appliesTo(app)) app.name,
       ];
+
+  test(
+      'the apps of the matrix of the fixtures that warn of what they are '
+      'made of are those that the fixtures declare, with the codes they '
+      'declare', () {
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+    expect(everyModule, isNotEmpty);
+    for (final app in everyModule) {
+      expect(app.warnings, _everyModuleWarnings, reason: app.name);
+    }
+    expect(
+      {
+        for (final app in apps)
+          if (app.everyModuleWith == null && app.warnings.isNotEmpty)
+            app.name: app.warnings,
+      },
+      _warningApps,
+      reason: _declareWarnings,
+    );
+  });
 
   test('each app test applies to an app of the matrix', () {
     expect(appTests.tests, isNotEmpty);
@@ -1125,6 +1200,16 @@ void main() {
         everyModuleApps: severalProvidersApps.everyModuleApps,
       );
       everyModule = severalProvidersApps.of(checked.apps).single.$2;
+    });
+
+    test(
+        'warns of what it is made of with the codes that the fixtures '
+        'declare', () {
+      expect(
+        everyModule.warnings,
+        _severalProvidersWarnings,
+        reason: _declareWarnings,
+      );
     });
 
     /// The app test of the app of several providers whose files are in the

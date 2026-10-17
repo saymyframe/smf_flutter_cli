@@ -1738,15 +1738,9 @@ void main() {
 
     test(
         'is given once, with the path and the module of each destination '
-        'that the app does not start in, also with --strict, and not in an '
-        'app with a layout', () async {
+        'that the app does not start in, and not in an app with a layout',
+        () async {
       expect(await warningsOf('home,settings'), [ofSettings]);
-      // --strict stops a run that would leave a module out, and the
-      // warning leaves none out.
-      expect(
-        await warningsOf('home,settings', options: ['--strict']),
-        [ofSettings],
-      );
       // The app starts on the settings screen, so the other destination is
       // the one that it has no main navigation for.
       expect(
@@ -1757,6 +1751,43 @@ void main() {
       expect(await warningsOf('home,settings,bottom_tabs'), isEmpty);
       // The only destination of the app is the screen that it starts on.
       expect(await warningsOf('home'), isEmpty);
+    });
+
+    test(
+        'stops a run with --strict, which names its code and creates '
+        'nothing, unless --allow-warning names the code', () async {
+      final strict = await _create(
+        {},
+        options: [
+          '--no-input',
+          '--skip-external-setup',
+          '-m',
+          'home,settings',
+          '--strict',
+        ],
+      );
+
+      const stopped = 'Generation stopped because of a warning about the '
+          'app. Without --strict, the run goes on after it.';
+      final cause = '  warning [role:router] router.no_main_navigation'
+          '${ofSettings.substring('[role:router]'.length)}';
+
+      expect(strict.code, SmfExitCodes.generationFailed);
+      // After the modules that the run added.
+      expect(strict.lines.skip(2), [stopped, cause]);
+      expect(strict.warnings, isEmpty);
+      expect(strict.files.directory('/work/my_app').existsSync(), isFalse);
+
+      expect(
+        await warningsOf(
+          'home,settings',
+          options: [
+            '--strict',
+            '--allow-warning=router.no_main_navigation',
+          ],
+        ),
+        [ofSettings],
+      );
     });
 
     test(

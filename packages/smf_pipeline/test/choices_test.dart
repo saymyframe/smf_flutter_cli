@@ -1,5 +1,4 @@
 import 'package:smf_contracts/smf_contracts.dart';
-import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -37,7 +36,6 @@ void main() {
     final reported = <(Role, Object?)>[];
 
     final (:choices, :issues) = await chooseRoles(
-      registry: ModuleRegistry(modules),
       resolution: resolution,
       collection: collect(resolution, testContext),
       optionValues: const {'start': '/home', 'ignored': 'x'},
@@ -56,17 +54,9 @@ void main() {
     expect(context.data.single.value, 'route');
     expect(context.environment.interactive, isTrue);
     expect(context.context, same(testContext));
-    // An option of a role that the app lacks is a warning about the app,
-    // which the pipeline reports.
-    expect(
-      [for (final issue in issues) '$issue'],
-      [
-        equals(
-          'warning pipeline.unused_option: --ignored has no effect: no module '
-          'of the app provides the absent role.',
-        ),
-      ],
-    );
+    // An option of a role that the app lacks is a warning of the
+    // validation, which comes before the choices.
+    expect(issues, isEmpty);
     expect(host.logger.warnings, isEmpty);
   });
 
@@ -110,7 +100,6 @@ void main() {
     final host = FakeHost();
 
     final (:choices, :issues) = await chooseRoles(
-      registry: ModuleRegistry(modules),
       resolution: resolution,
       collection: collect(resolution, testContext),
       optionValues: const {},
@@ -176,7 +165,6 @@ void main() {
 
       await expectLater(
         chooseRoles(
-          registry: ModuleRegistry(modules),
           resolution: resolution,
           collection: collect(resolution, testContext),
           optionValues: const {'ignored': 'x'},
@@ -185,13 +173,7 @@ void main() {
         ),
         throwsA(stops),
       );
-      expect(host.logger.warnings, [
-        equals(
-          '--ignored has no effect: no module of the app provides the absent '
-          'role.',
-        ),
-        '[role:first]: One.',
-      ]);
+      expect(host.logger.warnings, ['[role:first]: One.']);
       expect(host.logger.errors, [
         startsWith(
           '[role:first]: The template of the first role reported a warning '
@@ -210,7 +192,6 @@ void main() {
 
     await expectLater(
       chooseRoles(
-        registry: ModuleRegistry(modules),
         resolution: resolution,
         collection: collect(resolution, testContext),
         optionValues: const {},
@@ -236,7 +217,6 @@ void main() {
 
     await expectLater(
       chooseRoles(
-        registry: ModuleRegistry(modules),
         resolution: resolution,
         collection: collect(resolution, testContext),
         optionValues: const {},
@@ -291,7 +271,6 @@ void main() {
       Map<String, String?> options,
     ) async =>
         (await chooseRoles(
-          registry: ModuleRegistry(modules),
           resolution: resolution,
           collection: collect(resolution, testContext),
           optionValues: options,
@@ -362,7 +341,6 @@ void main() {
       final order = <Role>[];
 
       final (:choices, :issues) = await chooseRoles(
-        registry: ModuleRegistry(modules),
         resolution: resolution,
         collection: collect(resolution, testContext),
         optionValues: const {},
@@ -424,7 +402,6 @@ void main() {
       final resolution = resolutionOf(modules);
 
       final (:choices, :issues) = await chooseRoles(
-        registry: ModuleRegistry(modules),
         resolution: resolution,
         collection: collect(resolution, testContext),
         optionValues: const {},
@@ -488,7 +465,6 @@ void main() {
 
       await expectLater(
         chooseRoles(
-          registry: ModuleRegistry(modules),
           resolution: resolution,
           collection: collection,
           optionValues: const {},

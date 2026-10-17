@@ -39,6 +39,7 @@ final class MatrixApp {
     this.modes = const {},
     this.everyModuleWith,
     this.hook,
+    this.warnings = const [],
   });
 
   /// The case of the contract harness that the app comes from.
@@ -103,9 +104,23 @@ final class MatrixApp {
   /// its modules.
   final RoleHookRequest? hook;
 
+  /// The codes of the warnings about what the app is made of that
+  /// `smf create` reports for the app (see [SmfIssue.code]), such as
+  /// `router.no_start` for an app that no route starts, sorted and each
+  /// once: those that the contract harness found when it built the app
+  /// (see [ContractResult.warnings]). None for an app that the harness did
+  /// not build.
+  ///
+  /// The app has them on purpose, as a case of the harness with only some
+  /// of the modules of an app has. So [createArguments] allows each with
+  /// `--allow-warning`, and `smf create --strict` stops on any other
+  /// warning, such as one that the harness missed.
+  final List<String> warnings;
+
   /// The arguments of `smf create` that generate the app as [appName] in
   /// [directory], as CI does: without questions, external setup or the
-  /// full `dart fix`, and failing instead of leaving out a module.
+  /// full `dart fix`, and failing instead of leaving out a module and on a
+  /// warning about the app other than its [warnings].
   List<String> createArguments(String appName, String directory) => [
         'create',
         appName,
@@ -120,12 +135,13 @@ final class MatrixApp {
         '--no-input',
         '--skip-external-setup',
         '--no-dart-fix',
+        for (final code in warnings) '--allow-warning=$code',
         '--strict',
       ];
 
   /// This app with [name], [modules], [roleOptions], [modes] and
   /// [everyModuleWith], each as it is unless given: the same app of the
-  /// matrix otherwise, with its [hook].
+  /// matrix otherwise, with its [hook] and its [warnings].
   MatrixApp _with({
     String? name,
     List<ModuleId>? modules,
@@ -140,6 +156,7 @@ final class MatrixApp {
         modes: modes ?? this.modes,
         everyModuleWith: everyModuleWith ?? this.everyModuleWith,
         hook: hook,
+        warnings: warnings,
       );
 
   @override
@@ -163,7 +180,9 @@ final class MatrixApp {
 /// the harness checks. So `smf create` generates an app with the first
 /// value without the option, as for a user who does not give it, and an
 /// app of another value with the option of its case. Each app gets the
-/// choices too, with the data and roles of its case ([MatrixApp.hook]).
+/// choices too, with the data and roles of its case ([MatrixApp.hook]),
+/// and the codes of the warnings about it that the harness found
+/// ([MatrixApp.warnings]), which `smf create --strict` then allows.
 /// The harness renders each app in memory first, so a case that it finds
 /// errors in is among the `failed` ones, since its app could not be
 /// generated.
@@ -371,7 +390,8 @@ List<ModuleId> _everyModuleWith(
 /// option too, as the harness checks in a run without a terminal that gets
 /// none. So the app is generated without that option. The values that its
 /// case gives the mode options of the roles of the registry are its
-/// [MatrixApp.modes].
+/// [MatrixApp.modes], and the codes of the warnings about the app of the
+/// result are its [MatrixApp.warnings].
 MatrixApp? _appOf(
   ContractResult result,
   ContractHarness harness, {
@@ -400,6 +420,9 @@ MatrixApp? _appOf(
     },
     everyModuleWith: everyModuleWith,
     hook: result.hook,
+    warnings: List.unmodifiable(
+      {for (final warning in result.warnings) warning.code!}.toList()..sort(),
+    ),
   );
 }
 
