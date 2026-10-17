@@ -700,7 +700,8 @@ void main() {
       'to the apps with every module, where the fixture onboarding shows the '
       'step that the template of the notifications role gives it, and the '
       'test of the entry of the notifications on the settings screen to no '
-      'app, since no app of the fixtures has a settings screen', () {
+      'app, since no app of the matrix of the fixtures has both the '
+      'notifications role and the settings screen role', () {
     final step = named('notifications_step');
 
     expect(appsOf(step), [
@@ -725,9 +726,9 @@ void main() {
       );
     }
     // The test of the entry is not registered for the fixtures: it would
-    // apply to no app, which fails the run. A fixture provider of the
-    // settings screen role would bring the fixtures apps with both roles,
-    // and the test then belongs among those of the fixtures.
+    // apply to no app, which fails the run. Once an app of the matrix has
+    // both roles, such as with a fixture provider of the settings screen
+    // role, the test belongs among those of the fixtures.
     expect(
       [
         for (final test in appTests.tests)

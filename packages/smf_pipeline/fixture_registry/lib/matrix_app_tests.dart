@@ -381,9 +381,10 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // notifications, the test that the CLI keeps: only in the apps with
       // every module, which run flutter test for other tests already. There
       // the fixture notifications provide the role, and the fixture
-      // onboarding the onboarding screen. No app of the fixtures has a
-      // settings screen, so the test of the entry of the notifications on
-      // that screen, which the CLI keeps too, has none to run in.
+      // onboarding the onboarding screen. No app of the matrix of the
+      // fixtures has the notifications role and the settings screen role,
+      // so the test of the entry of the notifications on that screen, which
+      // the CLI keeps too, has none to run in.
       await notificationsStepAppTest(
         among: (app) => app.everyModuleWith != null,
       ),
