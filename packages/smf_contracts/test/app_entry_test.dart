@@ -1175,10 +1175,12 @@ void main() {
     test('is AGENTS.md, with a CLAUDE.md that reads it', () {
       expect(AppEntryRole.agentsFile, 'AGENTS.md');
       expect(AppEntryRole.claudeFile, 'CLAUDE.md');
-      expect(
-        appEntryRole.interface.files,
-        [AppEntryRole.agentsFile, AppEntryRole.claudeFile],
-      );
+      expect(appEntryRole.interface.files, [
+        AppEntryRole.agentsFile,
+        AppEntryRole.claudeFile,
+        AppEntryRole.statusBarIconsFile,
+        AppEntryRole.statusBarIconsTestFile,
+      ]);
       expect(socket.tag, 'smf_app_entry__agent_sections');
       expect(socket.kind.carriesImports, isFalse);
       // Its renderer orders the sections and their notes itself, so a note
@@ -1199,10 +1201,7 @@ void main() {
       };
 
       expect(brick.bundle.name, 'app_entry_role');
-      expect(
-        templates.keys,
-        [AppEntryRole.agentsFile, AppEntryRole.claudeFile],
-      );
+      expect(templates.keys, appEntryRole.interface.files);
       expect(templates[AppEntryRole.claudeFile], '@AGENTS.md\n');
       final lines = templates[AppEntryRole.agentsFile]!.split('\n');
       expect(lines.first, '# AGENTS.md');
@@ -1273,10 +1272,7 @@ void main() {
           .singleWhere((contribution) => contribution.socket == socket)
           .entryValue! as AgentNote;
 
-      expect(rendered.files.keys, [
-        AppEntryRole.agentsFile,
-        AppEntryRole.claudeFile,
-      ]);
+      expect(rendered.files.keys, appEntryRole.interface.files);
       expect(rendered.files[AppEntryRole.claudeFile], '@AGENTS.md\n');
       // The widget for the icons of the status bar goes into the builder of
       // the root, in a file of the provider.
@@ -1534,14 +1530,35 @@ void main() {
           (contribution) => contribution.socket == AppEntryRole.appBuilder,
         );
 
-    /// The calls of [name] in the code that the wrapper makes of `child`.
+    /// The files of the app that the template of the role renders, by path.
+    late Map<String, String> files;
+
+    setUpAll(() async {
+      files = (await renderTemplate(appEntryRole)).files;
+    });
+
+    /// The class `StatusBarIcons` in its file.
+    ClassDeclaration widget() =>
+        parseString(content: files[AppEntryRole.statusBarIconsFile]!)
+            .unit
+            .declarations
+            .whereType<ClassDeclaration>()
+            .singleWhere(
+              (declaration) =>
+                  declaration.namePart.typeName.lexeme == 'StatusBarIcons',
+            );
+
+    /// The method `build` of `StatusBarIcons`.
+    MethodDeclaration buildOfWidget() => widget()
+        .body
+        .members
+        .whereType<MethodDeclaration>()
+        .singleWhere((method) => method.name.lexeme == 'build');
+
+    /// The calls of [name] in the method `build` of `StatusBarIcons`.
     List<MethodInvocation> calls(String name) {
-      final fragment = wrapper().fragment!;
-      final unit = parseString(
-        content: 'final wrapped = ${fragment.code}child${fragment.closing};',
-      ).unit;
       final found = <MethodInvocation>[];
-      unit.accept(_Calls(name, found));
+      buildOfWidget().accept(_Calls(name, found));
       return found;
     }
 
@@ -1554,16 +1571,32 @@ void main() {
             .toSource();
 
     test(
-        'come from the template of the role, in every app, as a widget '
-        'around the content of every route', () {
+        'come from the template of the role, in every app, as a widget of '
+        'its file around the content of every route', () {
       final contribution = wrapper();
+      final fragment = contribution.fragment!;
 
       expect(contribution.when, isEmpty);
-      expect(contribution.fragment!.isWrapper, isTrue);
-      expect(contribution.fragment!.problems(), isEmpty);
+      expect(fragment.isWrapper, isTrue);
+      expect(fragment.problems(), isEmpty);
       expect(
-        [for (final import in contribution.fragment!.imports) import.uri],
-        ['package:flutter/material.dart', 'package:flutter/services.dart'],
+        '${fragment.code}child${fragment.closing}',
+        'StatusBarIcons(child: child)',
+      );
+      expect(
+        [for (final import in fragment.imports) import.resolveUri('my_app')],
+        ['package:my_app/core/app/status_bar_icons.dart'],
+      );
+      expect(
+        AppEntryRole.statusBarIconsFile,
+        'lib/${fragment.imports.single.uri}',
+      );
+      final constructor =
+          widget().body.members.whereType<ConstructorDeclaration>().single;
+      expect(constructor.constKeyword, isNotNull);
+      expect(
+        constructor.parameters.toSource(),
+        '({required this.child, super.key})',
       );
     });
 
@@ -1579,25 +1612,25 @@ void main() {
       expect(argument(region, 'child'), 'child');
       // The brightness of the bar, which iOS takes, and of its icons, which
       // Android takes.
-      expect(
-        argument(style, 'statusBarBrightness'),
-        'Theme.of(context).brightness',
-      );
+      expect(argument(style, 'statusBarBrightness'), 'brightness');
       expect(
         argument(style, 'statusBarIconBrightness'),
-        'Theme.of(context).brightness == Brightness.dark ? '
-        'Brightness.light : Brightness.dark',
+        'brightness == Brightness.dark ? Brightness.light : Brightness.dark',
       );
     });
 
     test(
-        'read the theme from a context of their own, and leave the '
+        'read the theme from the context of the widget, and leave the '
         'navigation bar of the system as it is', () {
-      final builder = calls('Builder').single;
+      final build = buildOfWidget();
       final style = calls('SystemUiOverlayStyle').single;
 
       // The widget names no parameter of the builder of the provider.
-      expect(argument(builder, 'builder'), startsWith('(context) => '));
+      expect(build.parameters!.toSource(), '(BuildContext context)');
+      expect(
+        build.toSource(),
+        contains('final brightness = Theme.of(context).brightness;'),
+      );
       expect(
         [
           for (final argument
@@ -1606,6 +1639,37 @@ void main() {
         ],
         ['statusBarBrightness', 'statusBarIconBrightness'],
       );
+    });
+
+    test(
+        'have a widget test in every app, which pumps the widget in a light '
+        'and in a dark theme, so that flutter test has a test to run in an '
+        'app whose modules bring none', () {
+      final test = files[AppEntryRole.statusBarIconsTestFile]!;
+      final unit = parseString(content: test).unit;
+      final tests = <MethodInvocation>[];
+      unit.accept(_Calls('testWidgets', tests));
+
+      expect(
+        [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ],
+        contains('package:my_app/core/app/status_bar_icons.dart'),
+      );
+      expect(
+        [
+          for (final call in tests)
+            call.argumentList.arguments.first.toSource(),
+        ],
+        [
+          "'asks for dark icons on a light theme'",
+          "'asks for light icons on a dark theme'",
+          "'leaves the navigation bar of the system as it is'",
+        ],
+      );
+      expect(test, contains('const StatusBarIcons(child: '));
+      expect(test, contains('ThemeData(brightness: Brightness.dark)'));
     });
   });
 
@@ -1890,6 +1954,7 @@ See `lib/missing.dart`.
           for (final path in [
             AppEntryRole.mainFile,
             AppEntryRole.bootstrapFile,
+            AppEntryRole.statusBarIconsFile,
           ])
             equals(
               'The section "App entry" of AGENTS.md names `$path`, but the '

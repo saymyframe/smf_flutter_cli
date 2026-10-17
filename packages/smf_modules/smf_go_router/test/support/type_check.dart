@@ -8,8 +8,13 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
 
-/// The owner of the files of the app entry.
-const _appEntry = ModuleOrigin(FlutterCoreModule.id);
+/// The owners of the files of the app entry: its provider, and the template
+/// of the role, which gives every app the widget of the icons of the status
+/// bar.
+const List<ContributionOrigin> _appEntry = [
+  ModuleOrigin(FlutterCoreModule.id),
+  RoleTemplateOrigin(appEntryRole),
+];
 
 /// Stand-ins for the parts of Flutter's widgets library that the checked
 /// files use, with the signatures of Flutter 3.44: its own, and what it
@@ -382,9 +387,10 @@ class GoException implements Exception {
 /// Flutter and go_router libraries they use, and returns the errors and
 /// warnings the analyzer finds, each with the path of its file.
 ///
-/// It checks the files of every owner but the app entry, which the app
-/// needs for the names they declare and whose code is its own module's to
-/// check, so the stand-ins have only what the router and the features use.
+/// It checks the files of every owner but the app entry, its provider and
+/// the template of its role, which the app needs for the names they declare
+/// and whose code is their own to check, so the stand-ins have only what
+/// the router and the features use.
 /// It checks the types of the generated code with the Dart SDK alone, as
 /// the tests of the package run without the Flutter SDK.
 Future<List<String>> analysisProblems(RenderedApp app) async {
@@ -431,7 +437,7 @@ Future<List<String>> analysisProblems(RenderedApp app) async {
     try {
       final problems = <String>[];
       for (final file in dartFiles) {
-        if (file.owner == _appEntry) continue;
+        if (_appEntry.contains(file.owner)) continue;
         // The analyzer takes only the paths of the system, such as
         // C:\app\lib\main.dart on Windows.
         final path = Uri.directory(appPath).resolve(file.path).toFilePath();

@@ -11,8 +11,13 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:yaml/yaml.dart';
 
-/// The owner of the files of the app entry.
-const _appEntry = ModuleOrigin(FlutterCoreModule.id);
+/// The owners of the files of the app entry: its provider, and the template
+/// of the role, which gives every app the widget of the icons of the status
+/// bar.
+const List<ContributionOrigin> _appEntry = [
+  ModuleOrigin(FlutterCoreModule.id),
+  RoleTemplateOrigin(appEntryRole),
+];
 
 /// The Dart files in `lib/` of a rendered app, written to a temporary
 /// directory with the packages that the tests of this package resolve, the
@@ -73,7 +78,7 @@ final class DartApp {
     try {
       final problems = <String>[];
       for (final file in _files) {
-        if (file.owner == _appEntry) continue;
+        if (_appEntry.contains(file.owner)) continue;
         // The analyzer takes only the paths of the system, such as
         // C:\app\lib\main.dart on Windows.
         final path = Uri.directory(appPath).resolve(file.path).toFilePath();
