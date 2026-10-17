@@ -10,6 +10,8 @@ import 'package:smf_contracts/bundles/notifications_role_step_bundle.dart';
 import 'package:smf_contracts/bundles/preferences_role_bundle.dart';
 import 'package:smf_contracts/bundles/push_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contracts/src/roles/brick_templates.dart';
+import 'package:smf_contracts/src/roles/contributors.dart';
 import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
 part 'services/analytics.dart';
