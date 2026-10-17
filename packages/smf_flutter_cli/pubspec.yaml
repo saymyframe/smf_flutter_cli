@@ -36,6 +36,7 @@ dependencies:
   smf_firebase_auth: ^0.5.0
   smf_firebase_core: ^0.4.1
   smf_firebase_crashlytics: ^0.4.1
+  smf_firebase_messaging: ^0.5.0
   smf_flutter_core: ^0.4.1
   smf_gen_l10n: ^0.4.1
   smf_get_it: ^0.4.1
