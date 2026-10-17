@@ -17,6 +17,7 @@ const List<Role> _roles = [
   analyticsRole,
   crashReportingRole,
   authRole,
+  notificationsRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -51,6 +52,7 @@ void main() {
       'analytics role',
       'crash reporting role',
       'authentication role',
+      'notifications role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -118,6 +120,14 @@ void main() {
       'requires': <String>{},
       'uses': {'router'},
     });
+    // The notifications role remembers in the preferences that it asked
+    // for the permission, and gives the settings screen and the onboarding
+    // an entry and a step that ask, with texts in the language of the app.
+    expect(shape(notificationsRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'preferences'},
+      'uses': {'settings_screen', 'onboarding_screen', 'localization'},
+    });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
@@ -175,12 +185,21 @@ void main() {
     // A file for those who work on the app, such as the guide for coding
     // agents, is at its root.
     final rootFile = RegExp(r'^[A-Z]+\.md$');
+    // A resource of the Android app that providers name, such as the small
+    // icon of a notification.
+    final androidResource = RegExp(
+      r'^android/app/src/main/res/[a-z]+/[a-z][a-z0-9_]*\.xml$',
+    );
     for (final role in _roles) {
       final interface = role.interface;
       for (final file in interface.files) {
         expect(
           file,
-          anyOf(matches(dartFile), matches(rootFile)),
+          anyOf(
+            matches(dartFile),
+            matches(rootFile),
+            matches(androidResource),
+          ),
           reason: file,
         );
       }
@@ -218,6 +237,7 @@ void main() {
           'analytics',
           'crash_reporting',
           'auth',
+          'notifications',
           'settings_screen',
           'onboarding_screen',
           'theme',
@@ -407,6 +427,13 @@ void main() {
         'text_light',
         'text_dark',
         'auth_mode',
+        'asked_key',
+        'owner_key',
+        'channel_id',
+        'channel_name',
+        'icon',
+        'text_on',
+        'text_off',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
