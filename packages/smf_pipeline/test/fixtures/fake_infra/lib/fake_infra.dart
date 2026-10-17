@@ -16,8 +16,8 @@ import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
-import 'package:fake_infra/bundles/fake_steps_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
+import 'package:fake_infra/bundles/fake_steps_bundle.dart';
 import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
