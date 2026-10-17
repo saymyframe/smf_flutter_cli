@@ -89,6 +89,12 @@ void main() {
             );
           }
 
+          final kept = keptSteps();
+          expect(
+            kept,
+            containsAll([ask, confirm]),
+            reason: 'The onboarding shows the two steps of the fixture steps.',
+          );
           await showNewScreen(tester);
           final pages = await swipeThrough(
             tester,
@@ -98,7 +104,7 @@ void main() {
           final steps = pages.whereType<int>().toList();
           expect(
             steps,
-            [for (var index = 0; index < appSteps.length; index++) index],
+            kept,
             reason: 'The onboarding shows each step whose showIf keeps it on '
                 'a page of its own, in the order of the role ($language).',
           );

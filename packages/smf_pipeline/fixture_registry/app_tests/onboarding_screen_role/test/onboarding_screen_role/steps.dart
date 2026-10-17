@@ -18,6 +18,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/onboarding/onboarding_steps.dart';
 import 'package:{{app_name}}/main.dart' as app;
 
 import 'of_app.dart';
@@ -40,6 +41,17 @@ int _indexOf(String name) {
   if (index < 0) fail('The app has no onboarding step $name.');
   return index;
 }
+
+/// The indices of the steps of the app that an onboarding screen that opens
+/// now shows, in the order of the role: those whose showIf returns `true`,
+/// and those without one. The step ask of the fixture steps is among them
+/// unless a test says otherwise; whether the onboarding shows a step of
+/// another module, such as one that asks for a permission, is up to that
+/// module.
+List<int> keptSteps() => [
+      for (final (index, step) in appOnboardingSteps.indexed)
+        if (step.showIf?.call() ?? true) index,
+    ];
 
 /// The most pages that the provider of the role may show besides the
 /// steps, such as a first page and a last page of its own.

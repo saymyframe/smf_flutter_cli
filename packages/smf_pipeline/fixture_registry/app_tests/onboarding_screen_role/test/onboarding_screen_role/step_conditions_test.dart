@@ -46,14 +46,17 @@ void main() {
       await closeScreen(tester);
 
       // A new screen asks the steps again.
+      final kept = keptSteps();
+      expect(
+        kept,
+        allOf(isNot(contains(ask)), contains(confirm)),
+        reason: 'The showIf of the step ask leaves it out now.',
+      );
       await showNewScreen(tester);
       final pages = await swipeThrough(tester, other);
       expect(
         pages.whereType<int>(),
-        [
-          for (var index = 0; index < appSteps.length; index++)
-            if (index != ask) index,
-        ],
+        kept,
         reason: 'A step whose condition does not hold when the onboarding '
             'starts is not shown.',
       );
