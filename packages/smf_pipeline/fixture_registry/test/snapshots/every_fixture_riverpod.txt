@@ -3063,7 +3063,7 @@ const _mainNavigation = _MainNavigation();
 
 /// The page of the fallback start screen of the app entry, which the
 /// router shows at `/` in an app that no route starts, or none in an app
-/// that a route starts, whose start route is at the bottom of the stack.
+/// that starts on its start route.
 const List<Page<Object?>> _fallbackPages = [];
 
 final class _MainNavigation {
