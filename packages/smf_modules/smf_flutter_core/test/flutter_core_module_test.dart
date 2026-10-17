@@ -605,6 +605,32 @@ void main() {
       expect(app, contains('routerConfig: appRouter.config,'));
       expect(app, isNot(contains('home:')));
     });
+
+    test(
+        'shows the screen of the start route, and imports no fallback '
+        'start screen, in an app that a route starts', () async {
+      final result = await renderedApp(const [TestStartModule.id]);
+      const factoryFile = RouterRole.appRouterFactoryFile;
+      final index = DartFileIndexer.index(
+        factoryFile,
+        result.app!.texts[factoryFile]!,
+      );
+
+      expect(
+        index.importsUri(
+          ImportRef.app(
+            'features/test_start/test_start_screen.dart',
+          ).resolveUri('contract_app'),
+        ),
+        isTrue,
+      );
+      expect(
+        index.importsUri(
+          AppEntryRole.fallbackStartScreen.importRef.resolveUri('contract_app'),
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('an app of flutter_core with the texts of the app', () {
