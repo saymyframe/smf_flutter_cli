@@ -5,15 +5,18 @@
 // language of the app, and the onboarding screen shows each step on a page
 // of its own, in the order of the role, with no other page between two
 // steps: its icon, its title as a header for a screen reader, its text, the
-// button of its action and, if it has one, that of later. The labels follow
-// the language of the app while a step shows (OnboardingScreenRole).
+// button of its action and, if it has one, that of later. A swipe past a
+// step calls no action. The labels follow the language of the app while a
+// step shows (OnboardingScreenRole).
 //
-// It uses what the tests of the role share (steps.dart), and the texts that
-// the matrix writes for each step in each language of the app. The app
+// It uses what the tests of the role share (steps.dart), the texts that the
+// matrix writes for each step in each language of the app, and the steps of
+// the fixture steps, whose actions note their calls. The app
 // starts once, since the start-up of an app runs once in a test file. Each
 // expectation gives its reason, which a provider of the role with a known
 // bug fails the test with (brokenProviders of the fixture registry).
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/fixture_steps/fixture_steps.dart';
 import 'package:{{app_name}}/core/onboarding/onboarding_steps.dart';
 
 import 'of_app.dart';
@@ -110,9 +113,17 @@ void main() {
           );
           expect(
             pages.sublist(
-                pages.indexOf(steps.first), pages.indexOf(steps.last)),
+              pages.indexOf(steps.first),
+              pages.lastIndexOf(steps.last),
+            ),
             everyElement(isNotNull),
             reason: 'The onboarding shows no other page between two steps '
+                '($language).',
+          );
+          expect(
+            fixtureStepCalls,
+            isEmpty,
+            reason: 'A swipe past a step calls no action of a step '
                 '($language).',
           );
           await closeScreen(tester);

@@ -3,9 +3,10 @@
 // module provides the role: the button of the action of a step calls the
 // action once, takes no tap on the buttons of the step until the future of
 // the action completes, and then shows the next page, also when the action
-// fails, whose error goes on to the handlers of the uncaught errors of the
-// app. The button of later shows the next page without the action
-// (OnboardingScreenRole).
+// fails. The error of such an action reaches the handlers of the errors of
+// the app: the provider leaves it uncaught or reports it with
+// FlutterError.reportError. The button of later shows the next page
+// without the action (OnboardingScreenRole).
 //
 // It uses the step `ask` of the fixture steps, whose action notes each call
 // in fixtureStepCalls, waits for fixtureAskHold and fails when
@@ -15,6 +16,7 @@
 // bug fails the test with (brokenProviders of the fixture registry).
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/fixture_steps/fixture_steps.dart';
 
@@ -111,21 +113,30 @@ void main() {
       );
       await closeScreen(tester);
 
-      // An action that fails: its error is uncaught, so it reaches the
-      // zone in which the tap called the action, rather than this test.
+      // An action that fails. Its error reaches the zone in which the tap
+      // called the action if the provider leaves it uncaught, or the
+      // handler of the errors of Flutter if the provider reports it there,
+      // rather than this test.
       fixtureAskFails = true;
       await showNewScreen(tester);
       await swipeToStep(tester, ask, language);
       fixtureStepCalls.clear();
       final at = tester.getCenter(shown(find.text(texts.action)));
       final uncaught = <Object>[];
-      late Future<void> tapped;
-      runZonedGuarded(
-        () => tapped = tester.tapAt(at),
-        (error, _) => uncaught.add(error),
-      );
-      await tapped;
-      await tester.pumpAndSettle();
+      final reported = <Object>[];
+      final onError = FlutterError.onError;
+      FlutterError.onError = (details) => reported.add(details.exception);
+      try {
+        late Future<void> tapped;
+        runZonedGuarded(
+          () => tapped = tester.tapAt(at),
+          (error, _) => uncaught.add(error),
+        );
+        await tapped;
+        await tester.pumpAndSettle();
+      } finally {
+        FlutterError.onError = onError;
+      }
       expect(
         fixtureStepCalls,
         ['ask'],
@@ -139,10 +150,11 @@ void main() {
             'onboarding shows the next page too.',
       );
       expect(
-        uncaught,
+        [...uncaught, ...reported],
         [isA<StateError>()],
-        reason: 'The error of the action of a step goes on to the handlers '
-            'of the uncaught errors of the app.',
+        reason: 'The error of the action of a step reaches the handlers of '
+            'the errors of the app once: the onboarding leaves it uncaught '
+            'or reports it with FlutterError.reportError.',
       );
     },
     timeout: const Timeout(Duration(minutes: 3)),

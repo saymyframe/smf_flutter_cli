@@ -169,14 +169,28 @@ Future<void> closeScreen(WidgetTester tester) async {
 /// built beside it.
 bool isOnScreen(WidgetTester tester, Finder finder) {
   final screen = tester.getRect(onboarding);
-  return finder.evaluate().any(
-        (element) => switch (element.renderObject) {
-          final RenderBox box when box.hasSize => screen.contains(
-              box.localToGlobal(box.size.center(Offset.zero)),
-            ),
-          _ => false,
-        },
-      );
+  return finder.evaluate().any((element) => _isWithin(screen, element));
+}
+
+/// Whether the centre of [element] is within [screen].
+bool _isWithin(Rect screen, Element element) => switch (element.renderObject) {
+      final RenderBox box when box.hasSize => screen.contains(
+          box.localToGlobal(box.size.center(Offset.zero)),
+        ),
+      _ => false,
+    };
+
+/// The elements of the texts that the onboarding screen shows on the page
+/// that the user sees, and around it, such as a button below the pages.
+/// A swipe that turns the page shows the texts of another page, which are
+/// other elements, also when they say the same; a swipe that does not turn
+/// it, as on the last page, leaves the same elements.
+Set<Element> _textsOnScreen(WidgetTester tester) {
+  final screen = tester.getRect(onboarding);
+  return {
+    for (final element in shown(find.byType(Text)).evaluate())
+      if (_isWithin(screen, element)) element,
+  };
 }
 
 /// The index of the step of the app whose title the page that the user
@@ -226,10 +240,12 @@ Future<void> swipeToStep(
 }
 
 /// Swipes through every page of the onboarding screen from the page that
-/// the user sees, and returns the index of each step that the pages show,
-/// in the order of the pages, with `null` for a page that is no step. A
-/// page counts once, also when a swipe does not leave it, as on the last
-/// page. [onStep] runs on each page of a step, while it shows.
+/// the user sees to the last one, and returns the index of the step that
+/// each page shows, in the order of the pages, with `null` for a page that
+/// is no step. The last page is the one that a swipe does not turn, which
+/// shows the same texts before and after it. [onStep] runs on each page of
+/// a step, while it shows. Fails if the screen has more pages than the
+/// steps of the app and the pages that a provider may show besides them.
 Future<List<int?>> swipeThrough(
   WidgetTester tester,
   String language, {
@@ -238,11 +254,14 @@ Future<List<int?>> swipeThrough(
   final pages = <int?>[];
   for (var swipes = 0; swipes <= appSteps.length + _otherPages; swipes++) {
     final step = stepShown(tester, language);
-    if (pages.isEmpty || pages.last != step) {
-      pages.add(step);
-      if (step != null) onStep?.call(step);
-    }
+    pages.add(step);
+    if (step != null) onStep?.call(step);
+    final before = _textsOnScreen(tester);
     await swipe(tester);
+    if (setEquals(before, _textsOnScreen(tester))) return pages;
   }
-  return pages;
+  fail(
+    'The onboarding screen has more than $_otherPages pages besides its '
+    'steps: a swipe still turns the page after ${pages.length} pages.',
+  );
 }
