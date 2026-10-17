@@ -2250,8 +2250,14 @@ final class FixtureNotifications implements NotificationsService {
     _enabled = true;
   }
 
+  /// Shows nothing, and takes the place of the scheduled notification of
+  /// its id, as the role asks of a provider: that one is no longer
+  /// scheduled.
   @override
-  Future<void> show(AppNotification notification) => _answer();
+  Future<void> show(AppNotification notification) async {
+    await _answer();
+    _scheduled.remove(notification.id);
+  }
 
   @override
   Future<void> schedule(AppNotification notification, DateTime at) async {

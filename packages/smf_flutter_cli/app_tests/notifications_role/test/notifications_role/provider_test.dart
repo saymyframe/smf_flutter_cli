@@ -38,17 +38,40 @@ void main() {
     (tester) async {
       await startUp(tester);
       late bool enabled;
+      late NotificationPermission permission;
+      late bool? saved;
 
       await inRealTime(tester, 'asking the service', () async {
         enabled = await createNotificationsService().areEnabled();
+        permission = appNotifications.permission.value;
+        saved = askedSaved;
+      });
+      Object? failure;
+      await inRealTime(tester, 'showing and scheduling', () async {
+        try {
+          await appNotifications.show(notificationOfTests(8));
+          await appNotifications.schedule(
+            notificationOfTests(9),
+            at: tomorrow,
+          );
+        } on Object catch (error) {
+          failure = error;
+        }
+        await appNotifications.cancelAll();
       });
 
       expect(
-        (enabled, appNotifications.permission.value, askedSaved),
+        (enabled, permission, saved),
         (false, NotificationPermission.notAsked, null),
         reason: 'The mocks of the platform side of a provider start as on a '
             'first launch, as the notifications role says: the app may not '
             'show notifications and has not asked.',
+      );
+      expect(
+        failure,
+        isNull,
+        reason: 'show() and schedule() complete whether the app may show '
+            'notifications or not, as the role says.',
       );
     },
     timeout: timeout,
@@ -66,6 +89,14 @@ void main() {
         answer = await appNotifications.request();
         enabled = await createNotificationsService().areEnabled();
       });
+      Object? failure;
+      await inRealTime(tester, 'opening the settings', () async {
+        try {
+          await appNotifications.openSettings();
+        } on Object catch (error) {
+          failure = error;
+        }
+      });
 
       expect(
         (answer, enabled, appNotifications.permission.value, askedSaved),
@@ -81,22 +112,30 @@ void main() {
             'the permission when the app asks, as the role says. The app '
             'remembers that it asked.',
       );
+      expect(
+        failure,
+        isNull,
+        reason: 'openSettings() completes: the mocks of a provider answer it, '
+            'as the role says.',
+      );
     },
     timeout: timeout,
   );
 
   testWidgets(
     'a scheduled notification is listed with what it has until it is '
-    'cancelled, and one with its id takes its place',
+    'cancelled or shown, and one with its id takes its place',
     (tester) async {
       await startUp(tester);
       final first = notificationOfTests(1);
       final second = notificationOfTests(2, withBody: false);
       final replacing = notificationOfTests(1, title: 'Another title');
+      final fourth = notificationOfTests(4);
       late Map<int, String> scheduled;
       late Map<int, String> replaced;
       late Map<int, String> cancelled;
       late Map<int, String> afterShow;
+      late Map<int, String> afterShowOfScheduled;
       late Map<int, String> none;
 
       await inRealTime(tester, 'scheduling', () async {
@@ -108,8 +147,11 @@ void main() {
         replaced = byId(await appNotifications.scheduled());
         await appNotifications.cancel(1);
         cancelled = byId(await appNotifications.scheduled());
+        await appNotifications.schedule(fourth, at: tomorrow);
         await appNotifications.show(notificationOfTests(3));
         afterShow = byId(await appNotifications.scheduled());
+        await appNotifications.show(notificationOfTests(4, title: 'Shown'));
+        afterShowOfScheduled = byId(await appNotifications.scheduled());
         await appNotifications.cancelAll();
         none = byId(await appNotifications.scheduled());
       });
@@ -134,9 +176,15 @@ void main() {
       );
       expect(
         afterShow,
-        byId([second]),
+        byId([second, fourth]),
         reason: 'A notification that is shown now is not among those that '
             'are scheduled.',
+      );
+      expect(
+        afterShowOfScheduled,
+        byId([second]),
+        reason: 'A notification that is shown with the id of a scheduled one '
+            'takes its place: the scheduled one is no longer scheduled.',
       );
       expect(
         none,

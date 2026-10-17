@@ -130,12 +130,14 @@ void main() {
 
   testWidgets(
     'a request while another is on its way asks the user nothing more and '
-    'completes with that one',
+    'completes with that one, and the app saves that it asked only once the '
+    'user answered',
     (tester) async {
       await startUp(tester);
       final service = ScriptedNotifications();
       await _startWith(tester, service);
       late List<NotificationPermission> answers;
+      late bool? savedWhileAsking;
 
       await inRealTime(tester, 'asking twice at once', () async {
         // The question of the system stays on the screen until the test
@@ -144,6 +146,7 @@ void main() {
         final first = appNotifications.request();
         final second = appNotifications.request();
         await Future<void>.delayed(const Duration(milliseconds: 10));
+        savedWhileAsking = askedSaved;
         service.held!.complete();
         answers = await Future.wait([first, second]);
       });
@@ -154,6 +157,14 @@ void main() {
             '${NotificationPermission.granted}], 1 request',
         reason: 'The system shows one question at a time, so a request '
             'while another is on its way completes with that one.',
+      );
+      expect(
+        savedWhileAsking,
+        isFalse,
+        reason: 'The app saves that it asked once the user answered, not '
+            'while the question is on the screen: a request that fails, or '
+            'an app that is closed while the question is up, leaves the app '
+            'as it was before.',
       );
     },
     timeout: timeout,
