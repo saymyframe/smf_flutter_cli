@@ -51,9 +51,9 @@ const _everyModuleWarnings = [
 /// made of, by name, each with the codes of its warnings: those with the
 /// texts of fake_second; those of the fixture gates and of the fixture
 /// onboarding, whose apps have no route to start on; and those of the
-/// fixture steps with the onboarding, which have no route to start on
-/// either, and with the texts of the fixture steps a text without a
-/// translation, on purpose.
+/// fixture steps and of the fixture notifications with the onboarding,
+/// which have no route to start on either, and with the texts of the
+/// fixture steps a text without a translation, on purpose.
 const _warningApps = <String, List<String>>{
   'fake_second (fake_router) with localization, badge': [
     'localization.unsupported_language',
@@ -84,6 +84,10 @@ const _warningApps = <String, List<String>>{
     'router.no_start',
   ],
   'fake_steps with onboarding_screen': ['router.no_start'],
+  'fake_notifications with onboarding_screen, localization': [
+    'router.no_start',
+  ],
+  'fake_notifications with onboarding_screen': ['router.no_start'],
 };
 
 /// The codes of the warnings about what it is made of of the app of
@@ -528,7 +532,10 @@ void main() {
     expect(valueOf(localized, 'stepLanguages'), "['en', 'uk']");
     // The steps of the fixture steps, in the order of the role: the text of
     // confirm without a translation reads in English in Ukrainian too, and
-    // confirm has no later.
+    // confirm has no later. Then the step that the template of the
+    // notifications role gives the onboarding, since the app has the
+    // fixture notifications: the steps of the templates of roles come after
+    // those of the modules.
     expect(stepsIn(localized), {
       'fake_steps.ask': {
         'en': {
@@ -558,8 +565,24 @@ void main() {
           'later': null,
         },
       },
+      'notifications.permission': {
+        for (final language in ['en', 'uk'])
+          language: {
+            for (final (field, text) in [
+              ('title', NotificationsRole.stepTitle),
+              ('text', NotificationsRole.stepText),
+              ('action', NotificationsRole.stepAction),
+              ('later', NotificationsRole.stepLater),
+            ])
+              field: text.textIn(language),
+          },
+      },
     });
-    expect(stepsIn(localized).keys, ['fake_steps.ask', 'fake_steps.confirm']);
+    expect(stepsIn(localized).keys, [
+      'fake_steps.ask',
+      'fake_steps.confirm',
+      'notifications.permission',
+    ]);
     expect(
       bodyOf(localized, 'chooseLanguage'),
       '=> appLocale.choose(Locale(language));',

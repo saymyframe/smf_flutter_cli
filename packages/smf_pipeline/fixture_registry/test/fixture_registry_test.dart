@@ -2429,6 +2429,14 @@ const _cases = [
   'fake_auth (fake_router) with router',
   'fake_auth (go_router) with router',
   'fake_auth',
+  // The fixture notifications with the fixture onboarding and without it,
+  // and with the localization and without: the notifications role uses the
+  // onboarding screen role and the localization role, and the settings
+  // screen role too, which no fixture provides.
+  'fake_notifications with onboarding_screen, localization',
+  'fake_notifications with onboarding_screen',
+  'fake_notifications with localization',
+  'fake_notifications',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',
