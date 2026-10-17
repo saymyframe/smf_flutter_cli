@@ -361,13 +361,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // the fixture steps, whose actions note their calls. Only in the apps
       // with every module whose modules give the role steps, which run
       // flutter test for other tests already.
-      MatrixAppTest(
-        '$appTests/onboarding_screen_role',
-        appliesTo: (app) =>
-            app.everyModuleWith != null && _stepsOf(app).isNotEmpty,
-        generatedFiles: _onboardingOf,
-        roles: {onboardingScreenRole},
-      ),
+      _onboardingScreenRoleTest(appTests),
       // Sign-in in the apps with the auth role, whichever module provides
       // it, the test that the CLI keeps: in every app with the role, since
       // it must hold in each mode of the role. Those are the apps of the
@@ -422,6 +416,17 @@ Future<MatrixAppTests> fixtureAppTests() async {
     },
   );
 }
+
+/// The test of the onboarding screen role, in [appTests], the directory of
+/// the app tests of the fixture registry: in the apps with every module
+/// whose modules give the role steps, whichever module provides the role.
+MatrixAppTest _onboardingScreenRoleTest(String appTests) => MatrixAppTest(
+      '$appTests/onboarding_screen_role',
+      appliesTo: (app) =>
+          app.everyModuleWith != null && _stepsOf(app).isNotEmpty,
+      generatedFiles: _onboardingOf,
+      roles: {onboardingScreenRole},
+    );
 
 /// The steps of the onboarding of [app], an app of the matrix, in the order
 /// of the role ([OnboardingScreenRole.stepsIn]), or none in an app without
@@ -788,7 +793,10 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// with every provider. The two tests of the localization role that the
 /// CLI keeps are among the first: that app has the fixture texts and the
 /// settings module of the CLI, so the role and the setting of the language
-/// are checked with a second provider of the role there.
+/// are checked with a second provider of the role there. The test of the
+/// onboarding screen role, which the fixture registry keeps, runs there
+/// too, with the onboarding of the CLI, which provides that role, and the
+/// fixture steps.
 ///
 /// A test of such a role checks that each call of the service of the role
 /// reaches every provider once, whatever the other providers do with it. So
@@ -821,8 +829,12 @@ Future<MatrixAppTests> severalProvidersAppTests() async {
         appliesTo: (app) => _withEveryModule(app, crashReportingRole),
         roles: {crashReportingRole},
       ),
+      // The steps of the onboarding, as in the apps of the fixtures, with
+      // the onboarding of the CLI, which provides the role there, and the
+      // fixture steps.
+      _onboardingScreenRoleTest(appTests),
     ],
-    testedRoles: {analyticsRole, crashReportingRole},
+    testedRoles: {analyticsRole, crashReportingRole, onboardingScreenRole},
   );
 }
 

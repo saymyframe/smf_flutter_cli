@@ -91,8 +91,8 @@ const _warningApps = <String, List<String>>{
 };
 
 /// The codes of the warnings about what it is made of of the app of
-/// several providers, which has the texts of fake_second, and destinations
-/// without a layout.
+/// several providers, which has the texts of fake_second and of the fixture
+/// steps, and destinations without a layout.
 const _severalProvidersWarnings = [
   'localization.unsupported_language',
   'localization.untranslated',
@@ -1596,8 +1596,9 @@ void main() {
         'gets the app tests of the modules of the CLI, the tests of the DI '
         'role, of the events role, of the preferences role, of the auth '
         'role, of the settings screen role and of the theme role, the mocks '
-        'of the fixture providers and the tests of the roles of several '
-        'providers, which all apply to it', () {
+        'of the fixture providers, the tests of the roles of several '
+        'providers and the test of the onboarding screen role, which all '
+        'apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -1624,6 +1625,7 @@ void main() {
           'crash_reporting_role',
           'localization_role',
           'language_setting',
+          'onboarding_screen_role',
         ]),
       );
       for (final test in severalProviders.tests) {
@@ -1690,7 +1692,10 @@ void main() {
         'checks the contract of the analytics role and of the crash reporting '
         'role with every provider of each, which it tells apart by the roles '
         'of the app only, in the app with every module only', () {
-      expect(severalProviders.testedRoles, {analyticsRole, crashReportingRole});
+      expect(
+        severalProviders.testedRoles,
+        {analyticsRole, crashReportingRole, onboardingScreenRole},
+      );
       for (final (name, role) in [
         ('analytics_role', analyticsRole),
         ('crash_reporting_role', crashReportingRole),
@@ -1720,6 +1725,44 @@ void main() {
         isEmpty,
       );
       expect(severalProviders.modeProblems(matrix), isEmpty);
+    });
+
+    test(
+        'checks the onboarding screen role with the onboarding of the CLI, '
+        'which provides it there, and with the steps of the fixture steps, '
+        'whose calls the test reads, in the apps with every module', () {
+      final test = ofSeveral('onboarding_screen_role');
+      final hook = everyModule.hook!;
+      final input = onboardingScreenRole.hookInput(hook);
+
+      expect(test.roles, {onboardingScreenRole});
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(onboardingScreenRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('onboarding')],
+      );
+      expect(hook.presentRoles, contains(onboardingScreenRole));
+      expect(
+        [
+          for (final step in onboardingScreenRole.stepsIn(input)) step.fullName,
+        ],
+        ['fake_steps.ask', 'fake_steps.confirm'],
+      );
+      expect(onboardingScreenRole.screenIn(input)!.fullPath, '/onboarding');
+      expect(
+        [
+          for (final app in matrix)
+            if (test.appliesTo(app)) app,
+        ],
+        [
+          for (final app in matrix)
+            if (app.everyModuleWith != null) app,
+        ],
+      );
+      expect(test.appliesTo(everyModule), isTrue);
     });
   });
 }
