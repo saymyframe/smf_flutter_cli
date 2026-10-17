@@ -16,8 +16,9 @@
 // its texts in each language. It opens the settings screen as the tests of
 // the settings screen role do, and takes the service of the tests, which
 // scripts what a provider answers, from the files of the test of the
-// notifications role, which every app with both roles has too. Each
-// expectation gives its reason.
+// notifications role. Both of those tests run in every app that this one
+// runs in. Each expectation gives its reason.
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/notifications/app_notifications.dart';
 
@@ -36,10 +37,16 @@ void main() {
     'follows what the user changed there',
     (tester) async {
       await openSettings(tester);
+      // The device asks for the first language of the app, which the app is
+      // in then.
+      tester.platformDispatcher.localesTestValue = [
+        Locale(settingTexts.keys.first),
+      ];
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+      await tester.pumpAndSettle();
 
       final entry = find.byType(notificationsSetting);
-      // The texts of the entry in the language of the app, the first of the
-      // app on the English device of the tests.
+      // The texts of the entry in that language.
       final texts = settingTexts.values.first;
       // What the entry shows of whether the app may show notifications:
       // On, Off, or both or neither of them.

@@ -5,8 +5,9 @@
 // with its title and whether the app may show notifications, Off or On, as
 // the value of its row, in each language of the app. On a first launch a
 // tap asks for the permission through the provider, and the entry shows
-// On. On a small phone with a large text size, the state is below the
-// title, and the texts stay in the row of the entry.
+// On. On a small phone with a large text size, once the list of the screen
+// scrolled to the entry, the state is below the title, and the texts stay
+// in the row of the entry.
 //
 // It knows only the two roles, and starts the app once, since the start-up
 // of an app may not run twice. The matrix writes setting.dart next to it,
@@ -14,8 +15,8 @@
 // localization role of the app: the type of the widget of the entry and
 // its texts in each language. It opens the settings screen as the tests of
 // the settings screen role do, and runs a call in real time as the test of
-// the notifications role does, which every app with both roles has too.
-// Each expectation gives its reason.
+// the notifications role does. Both of those tests run in every app that
+// this one runs in. Each expectation gives its reason.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/notifications/app_notifications.dart';
@@ -148,6 +149,20 @@ void main() {
         'On, since the app may show notifications,',
       );
 
+      // The list of the screen that holds the entry, the nearest scrollable
+      // above it on the tall surface, where the screen builds every row. On
+      // the small phone below, a screen that builds its rows only as they
+      // come into view may build none for the entry until this list
+      // scrolls to it.
+      final listOfEntry = find
+          .ancestor(of: entry, matching: find.byType(Scrollable))
+          .evaluate()
+          .first;
+      final list = find.byElementPredicate(
+        (element) => element == listOfEntry,
+        description: 'the list of the entry of the notifications',
+      );
+
       // A small phone with the text at three times its size, about the
       // largest that the settings of a device have.
       tester.view.physicalSize = const Size(320, 480);
@@ -160,12 +175,10 @@ void main() {
         reason: 'The settings screen with the entry of the notifications '
             'fits a small phone with a large text size.',
       );
-      // The screen scrolls to the entry, which the large title may have
-      // moved out of view: a list builds what is out of view too, but
-      // keeps it off the stage.
-      await tester.ensureVisible(
-        find.byType(notificationsSetting, skipOffstage: false),
-      );
+      // The list scrolls until the entry is in view, as a user scrolls to
+      // it: the large title and the entries above it may have moved it
+      // below the end of the screen.
+      await tester.scrollUntilVisible(entry, 100, scrollable: list);
       await tester.pumpAndSettle();
       final largeTitle = tester.getRect(inEntry(texts.title));
       final largeState = tester.getRect(inEntry(texts.on));

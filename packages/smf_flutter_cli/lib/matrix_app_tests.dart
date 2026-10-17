@@ -845,8 +845,9 @@ Map<String, String> _notificationsValuesOf(MatrixApp app) =>
 ///   the app may show notifications, Off or On, in each language of the
 ///   app; a tap on a first launch asks for the permission through the
 ///   provider, whose mocks grant it, and the entry shows On; and on a small
-///   phone with a large text size, the state goes below the title, and the
-///   texts stay in the row of the entry;
+///   phone with a large text size, once the list of the screen scrolled to
+///   the entry, the state is below the title, and the texts stay in the row
+///   of the entry;
 /// - over a service of the test that scripts what a provider answers: a tap
 ///   asks the user while the app has not asked, once, and the entry shows
 ///   what the user answered; once the app asked, or while it may show
@@ -860,8 +861,8 @@ Map<String, String> _notificationsValuesOf(MatrixApp app) =>
 /// entry in each language of the app, from the localization role. It opens
 /// the settings screen with the helper of the tests of the settings screen
 /// role, and takes the service of the test from the files of the test of the
-/// notifications role, which every app that it applies to has too. It has
-/// no probe for the start check: a tap would show the question of the
+/// notifications role, which runs in every app that this test runs in. It
+/// has no probe for the start check: a tap would show the question of the
 /// system on a device, and the walk of the routes goes to the settings
 /// screen there.
 Future<MatrixAppTest> notificationsSettingAppTest() async => MatrixAppTest(
@@ -968,9 +969,11 @@ $texts};
 /// - over a service of the test that scripts what a provider answers: the
 ///   condition holds only while the app may not show notifications and has
 ///   not asked, and reads the permission without a call of the service; the
-///   action asks once, also on a system without a question, and asks nothing
-///   while the app may show notifications; once the app asked, whatever the
-///   user answered, the condition holds no more, also at the next start;
+///   action makes one request and no other call, after a no and on a system
+///   without a question, whose request opens its settings, and while the app
+///   may show notifications it asks the user nothing; once the app asked,
+///   whatever the user answered, the condition holds no more, also at the
+///   next start;
 /// - the list of the steps of the onboarding of the app has the step once,
 ///   with those two functions.
 ///
@@ -979,8 +982,8 @@ $texts};
 /// only the two roles. The matrix writes the two functions of the step for
 /// it into [notificationsStepFile], from the data of the onboarding screen
 /// role of the app, and the test takes the service of the test from the
-/// files of the test of the notifications role, which every app that it
-/// applies to has too. It has no probe for the start check: the action
+/// files of the test of the notifications role, which runs in every app
+/// that this test runs in. It has no probe for the start check: the action
 /// would show the question of the system on a device. The matrix of the
 /// fixtures runs it only in its apps with every module, which run other
 /// tests already.

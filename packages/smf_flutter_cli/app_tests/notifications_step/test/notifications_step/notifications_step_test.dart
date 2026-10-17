@@ -6,9 +6,11 @@
 // shows it, and its action asks for the permission through the provider.
 // The condition holds only while the app may not show notifications and
 // has not asked, and once the app asked, whatever the user answered, it
-// holds no more, also at the next start. The action asks once, and nothing
-// while the app may show notifications. And the onboarding of the app has
-// the step with these functions.
+// holds no more, also at the next start. The action makes one request and
+// nothing more, which on a system without a question opens its settings,
+// and it opens no settings after a no; while the app may show
+// notifications it asks nothing. And the onboarding of the app has the
+// step with these functions.
 //
 // It knows only the two roles. How a provider of the onboarding shows a
 // step, and what its buttons do, is for the test of the onboarding screen
@@ -20,9 +22,9 @@
 // The test takes what runs a call in real time, what has the app forget
 // that it asked and the service of the tests, which scripts what a
 // provider answers, from the files of the test of the notifications role,
-// which every app with the role has. The tests of the file run in their
-// order, and the first looks at the app as the start-up left it, before
-// any request. Each expectation gives its reason.
+// which runs in every app that this test runs in. The tests of the file
+// run in their order, and the first looks at the app as the start-up left
+// it, before any request. Each expectation gives its reason.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/notifications/app_notifications.dart';
 import 'package:{{app_name}}/core/onboarding/onboarding_steps.dart';
@@ -43,6 +45,23 @@ Future<void> _startWith(WidgetTester tester, ScriptedNotifications service) =>
 /// does, and completes once its future completed.
 Future<void> _runAction(WidgetTester tester) =>
     inRealTime(tester, 'the action of the step', stepAction);
+
+/// Runs the action of the step as [_runAction] does, and returns the calls
+/// that it made to [service], those that it starts without waiting for
+/// them too.
+Future<List<String>> _callsOfAction(
+  WidgetTester tester,
+  ScriptedNotifications service,
+) async {
+  final before = service.calls.length;
+  await _runAction(tester);
+  await inRealTime(
+    tester,
+    'a moment for a call that the action would start',
+    () => Future<void>.delayed(const Duration(milliseconds: 20)),
+  );
+  return service.calls.sublist(before);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -101,7 +120,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 20));
         callsOfCondition = refuses.calls.sublist(before);
       });
-      await _runAction(tester);
+      final callsAfterNo = await _callsOfAction(tester, refuses);
       final afterNo = (
         stepShows(),
         appNotifications.permission.value,
@@ -125,7 +144,10 @@ void main() {
       );
       await _startWith(tester, withoutQuestion);
       final beforeSettings = stepShows();
-      await _runAction(tester);
+      final callsWithoutQuestion = await _callsOfAction(
+        tester,
+        withoutQuestion,
+      );
       final afterSettings = (
         stepShows(),
         appNotifications.permission.value,
@@ -145,6 +167,13 @@ void main() {
             'knows, at once: it calls no service.',
       );
       expect(
+        callsAfterNo,
+        ['areEnabled', 'request', 'areEnabled'],
+        reason: 'The action of the step makes the request alone: it asks the '
+            'user once and takes the answer from the service, and opens no '
+            'settings of the system after a no.',
+      );
+      expect(
         afterNo,
         (false, NotificationPermission.denied, 1, true),
         reason: 'The action of the step asks the user once, and once the '
@@ -156,6 +185,13 @@ void main() {
         isFalse,
         reason: 'At the next start, the onboarding does not show the step of '
             'an app that asked, though it may still not show notifications.',
+      );
+      expect(
+        callsWithoutQuestion,
+        ['areEnabled', 'request', 'areEnabled'],
+        reason: 'On a system without a question, the action of the step '
+            'makes the request alone, which opens the settings of the system '
+            'once: the action does not open them a second time.',
       );
       expect(
         (beforeSettings, afterSettings),
@@ -178,7 +214,7 @@ void main() {
       await _startWith(tester, enabled);
       final shows = stepShows();
 
-      await _runAction(tester);
+      final calls = await _callsOfAction(tester, enabled);
 
       expect(
         shows,
@@ -187,10 +223,16 @@ void main() {
             'show notifications, though it never asked.',
       );
       expect(
-        (enabled.requests, appNotifications.permission.value),
-        (0, NotificationPermission.granted),
+        calls,
+        ['areEnabled'],
         reason: 'The action of the step asks the user nothing while the app '
-            'may show notifications.',
+            'may show notifications: it only asks the service whether it may.',
+      );
+      expect(
+        appNotifications.permission.value,
+        NotificationPermission.granted,
+        reason: 'An app that may show notifications has the permission '
+            'granted.',
       );
     },
     timeout: timeout,
