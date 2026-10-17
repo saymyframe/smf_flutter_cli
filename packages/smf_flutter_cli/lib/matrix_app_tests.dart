@@ -763,15 +763,18 @@ Map<String, String> _notificationsValuesOf(MatrixApp app) =>
 ///   not `appNotifications.taps`; where the platform shows it, the app
 ///   shows none, and the taps of the service reach `appPush.taps`; and the
 ///   message whose tap launched the app is the launch message, whether the
-///   platform or the app showed it;
+///   platform or the app showed it, and not among the taps;
 /// - `appPush` over the service of the provider: the app gets the address
 ///   that the provider gives, which the mocks of a provider give the device
 ///   as the role asks, an app that the test launched has no launch message,
 ///   the service tells of the messages, the taps and the addresses on
 ///   broadcast streams, and the provider never asks for the permission to
-///   show notifications;
-/// - the next start, `initPush()` again, has the address that the device
-///   had.
+///   show notifications through the notifications of the app, while a
+///   request through its own SDK is for the tests of its module; the probe
+///   reports an app with a launch message and an address that the service
+///   does not give, and never the address;
+/// - the next start, `initPush()` again, creates a service that has the
+///   address that the device kept.
 ///
 /// The test knows only the role, and the notifications role that it
 /// requires. The matrix fills in the owner of the notifications that show

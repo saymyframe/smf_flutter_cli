@@ -1,7 +1,8 @@
 // A test that continuous integration runs in the apps with the push role,
-// whichever module provides it: the next start of the app has the address
-// that the device had, as a backend that keeps the address of the device
-// expects, unless the provider tells of a new one.
+// whichever module provides it: a service that the function of the
+// provider creates again has the address that the device kept, so the next
+// start of the app has the same address, as a backend that keeps the
+// address of the device expects.
 //
 // It knows only the role. The start-up of the app runs first, as on a
 // device, with the mocks of the platform side of every module of the app,
@@ -27,8 +28,8 @@ void main() {
   const timeout = Timeout(Duration(minutes: 2));
 
   testWidgets(
-    'the next start has the address that the device had, unless the '
-    'provider tells of a new one',
+    'a service that the function of the provider creates again has the '
+    'address that the device kept, so the next start has the same one',
     (tester) async {
       await startUp(tester);
       final first = await addressOfApp(tester);
@@ -59,8 +60,9 @@ void main() {
       expect(
         (next, answer),
         (first, first),
-        reason: 'A backend keeps the address of a device, so the next start '
-            'has the same one, unless the provider tells of a new one.',
+        reason: 'A backend keeps the address of a device, so a service that '
+            'the function of the provider creates again has the address that '
+            'the device kept, and the next start has the same one.',
       );
     },
     timeout: timeout,

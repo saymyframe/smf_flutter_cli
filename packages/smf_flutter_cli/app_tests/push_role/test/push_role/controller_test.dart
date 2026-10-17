@@ -10,7 +10,8 @@
 // reaches appPush.taps and not appNotifications.taps. Where the platform
 // shows it, the app shows none, and the taps of the service reach
 // appPush.taps. And the message whose tap launched the app is the launch
-// message, whether the platform or the app showed it.
+// message, whether the platform or the app showed it, and not among
+// appPush.taps.
 //
 // It knows only the role, and the notifications role that it requires. The
 // start-up of the app runs first, as on a device, with the mocks of the
@@ -255,10 +256,16 @@ void main() {
 
   testWidgets(
     'the message whose tap launched the app is its launch message, whether '
-    'the platform or the app showed it, and an app that no such tap '
-    'launched has none',
+    'the platform or the app showed it, and not among the taps, and an app '
+    'that no such tap launched has none',
     (tester) async {
       await startUp(tester);
+      final taps = <String>[];
+      late StreamSubscription<PushMessage> subscription;
+      await inRealTime(tester, 'listening to the taps', () async {
+        subscription = appPush.taps.listen((tap) => taps.add(describe(tap)));
+      });
+      addTearDown(() => subscription.cancel());
       final launched = messageOfTests('1');
       await startWith(
         tester,
@@ -307,6 +314,12 @@ void main() {
         reason: 'The message of a notification that the app showed, whose tap '
             'launched the app, is the launch message, and not the launch tap '
             'of the notifications of the app.',
+      );
+      expect(
+        taps,
+        isEmpty,
+        reason: 'The message whose tap launched the app is not among the taps '
+            'of the push messages, so the code of the app sees the tap once.',
       );
     },
     timeout: timeout,

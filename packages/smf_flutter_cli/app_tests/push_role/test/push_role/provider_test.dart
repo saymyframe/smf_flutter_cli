@@ -5,9 +5,11 @@
 // moment after the start-up. An app that the test launched has no launch
 // message, and the service tells of the messages, the taps and the
 // addresses on broadcast streams. The provider never asks for the
-// permission to show notifications, when it starts or when the app calls
-// it. And the probe of the role, which the start check runs on a device,
-// finds no problem.
+// permission to show notifications through the notifications of the app,
+// when it starts or when the app calls it: a request through its own SDK
+// is for the tests of its own module. And the probe of the role, which the
+// start check runs on a device, finds no problem, and reports what it
+// checks without the address of the device.
 //
 // It knows only the role, and the notifications role that it requires. The
 // start-up of the app runs first, as on a device, since it starts the push
@@ -92,8 +94,9 @@ void main() {
   );
 
   testWidgets(
-    'the provider never asks for the permission to show notifications, when '
-    'it starts or when the app calls it',
+    'the provider never asks for the permission to show notifications '
+    'through the notifications of the app, when it starts or when the app '
+    'calls it',
     (tester) async {
       await startUp(tester);
       late bool enabled;
@@ -120,10 +123,11 @@ void main() {
         (appNotifications.permission.value, enabled),
         (NotificationPermission.notAsked, false),
         reason: 'A provider of push messages never asks for the permission '
-            'to show notifications, which belongs to the notifications of '
-            'the app: the app starts as on a first launch, as the '
-            'notifications role asks of the mocks of a provider, and nothing '
-            'has asked.',
+            'to show notifications through the notifications of the app, '
+            'which the permission belongs to: the app starts as on a first '
+            'launch, as the notifications role asks of the mocks of a '
+            'provider, and nothing has asked. A request through the own SDK '
+            'of a provider is for the tests of its module.',
       );
     },
     timeout: timeout,
@@ -152,6 +156,49 @@ void main() {
         isEmpty,
         reason: 'The probe finds no problem with push messages that keep the '
             'contract of the role.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'the probe of the role reports a launch message of an app that the test '
+    'launched, and an address that the service does not give, and never '
+    'the address',
+    (tester) async {
+      await startUp(tester);
+      final ofDevice = await addressOfApp(tester);
+      const another = 'another address of the tests';
+      // A service of the test, whose address and launch message the probe
+      // finds in appPush; the service of the provider gives the address of
+      // the device.
+      await startWith(
+        tester,
+        ScriptedPush(answer: another, launch: messageOfTests('7')),
+      );
+      late List<String> problems;
+      await inRealTime(tester, 'the probe', () async {
+        problems = await probePush(() async {});
+      });
+
+      expect(
+        (appPush.address.value, problems.length),
+        (another, 2),
+        reason: 'The probe reports an app with a launch message, which the '
+            'start check launched without a tap on a message, and an address '
+            'of the app that is not the one that the service of the provider '
+            'gives.',
+      );
+      expect(
+        [
+          for (final problem in problems)
+            if (problem.contains(another) ||
+                (ofDevice != null && problem.contains(ofDevice)))
+              problem,
+        ],
+        isEmpty,
+        reason: 'The probe never writes the address of the device into a '
+            'problem: it is for the backend of the app alone.',
       );
     },
     timeout: timeout,

@@ -21,9 +21,9 @@ Future<List<String>> probePush(Future<void> Function() settle) async {
   // A failure of the service reaches the start check, which reports it.
   final answer = address == null ? null : await createPushService().address();
   return [
-    if (appPush.launchMessage case final message?)
-      'The app was launched without a tap on a message, but its launch '
-          'message is the message ${message.id}.',
+    if (appPush.launchMessage != null)
+      'The app was launched without a tap on a message, but it has a launch '
+          'message.',
     if (address != null && answer != address)
       'The address of the app is not the one that the service of the '
           'provider gives.',

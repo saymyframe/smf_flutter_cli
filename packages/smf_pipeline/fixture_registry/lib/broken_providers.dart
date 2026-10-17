@@ -1402,10 +1402,12 @@ List<BrokenProvider> brokenProviders() => const [
         failures: [
           MatrixExpectedFailure(
             'test/push_role/next_start_test.dart',
-            'the next start has the address that the device had, unless the '
-                'provider tells of a new one',
-            'A backend keeps the address of a device, so the next start has '
-                'the same one, unless the provider tells of a new one.',
+            'a service that the function of the provider creates again has '
+                'the address that the device kept, so the next start has the '
+                'same one',
+            'A backend keeps the address of a device, so a service that the '
+                'function of the provider creates again has the address that '
+                'the device kept, and the next start has the same one.',
           ),
         ],
       ),
