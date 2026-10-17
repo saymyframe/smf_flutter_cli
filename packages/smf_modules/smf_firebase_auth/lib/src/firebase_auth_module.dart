@@ -69,6 +69,12 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// the version that the script needs, which the module checks before
 /// generation.
 ///
+/// The service takes no credential of an identity provider yet, so the
+/// provider of the module refuses an app with a way to sign in that a
+/// module gives the auth role, in its `validate` hook, as the role asks of
+/// a provider whose backend does not take the identity provider of a way to
+/// sign in.
+///
 /// The README of the app tells how to enable the ways to sign in, with the
 /// script and in the Firebase console, and what the script does to the
 /// project. Its guide for coding agents tells which file is on Firebase
@@ -113,7 +119,7 @@ final class FirebaseAuthModule extends SmfModule {
         kind: ModuleKinds.infrastructure,
         dependsOn: {FirebaseCoreModule.id},
         uses: {localizationRole},
-        providers: [RoleProvider.plain(authRole)],
+        providers: [_FirebaseAuthProvider()],
       );
 
   @override
@@ -150,5 +156,31 @@ final class FirebaseAuthModule extends SmfModule {
           authRole.description,
           AgentNote(agentNote),
         ),
+      ];
+}
+
+/// The provider of the auth role of [FirebaseAuthModule]: its bricks
+/// implement the role, and its `validate` hook reports each way to sign in
+/// with an identity provider that a module gives the role, whose credential
+/// the service of the module does not take yet.
+final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
+  const _FirebaseAuthProvider();
+
+  @override
+  Role<AuthData> get role => authRole;
+
+  @override
+  List<SmfIssue> validate(RoleHookInput<AuthData> input) => [
+        for (final AppSignInMethod(:owner, :method)
+            in authRole.methodsIn(input))
+          SmfIssue(
+            'The module $owner gives the app a way to sign in with '
+            '${method.issuer}, but ${FirebaseAuthModule.id} signs in to '
+            'Firebase Authentication with an email address and a password, '
+            'and as an anonymous user, and takes no credential of an identity '
+            'provider yet: a sign-in with it would fail with notConfigured.',
+            hint: 'Leave $owner out of an app with ${FirebaseAuthModule.id}.',
+            origin: owner,
+          ),
       ];
 }

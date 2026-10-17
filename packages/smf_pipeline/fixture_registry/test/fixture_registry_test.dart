@@ -1909,14 +1909,16 @@ void main() {
             app,
       ];
       // The apps of the fixture alone, without a router and with each of
-      // the two, with the texts of the app and without them, and each app
-      // with every module, with a clock of 24 hours and with one of 12.
+      // the two, with the texts of the app and without them, the apps of
+      // the fixture way to sign in, with the texts and without them, and
+      // each app with every module, with a clock of 24 hours and with one
+      // of 12.
       expect(withoutMode, contains(named('fake_auth')));
       expect(
         named('fake_auth').hook!.presentRoles,
         isNot(contains(routerRole)),
       );
-      expect(withoutMode, hasLength(22));
+      expect(withoutMode, hasLength(24));
       for (final app in withoutMode) {
         expect(
           app.createArguments('app_1', '/apps'),
@@ -2444,6 +2446,11 @@ const _cases = [
   'fake_auth (go_router) with router',
   'fake_auth with localization',
   'fake_auth',
+  // The fixture way to sign in, with the fixture sign-in, which provides
+  // the auth role that it requires, and with the texts of the app, which
+  // have its label, and without them.
+  'fake_sign_in_method with localization',
+  'fake_sign_in_method',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',

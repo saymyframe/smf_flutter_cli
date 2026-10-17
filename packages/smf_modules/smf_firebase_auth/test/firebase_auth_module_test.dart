@@ -1,10 +1,12 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/bundles/firebase_auth_bundle.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
@@ -37,6 +39,71 @@ const List<SmfModule> _modules = [
   SharedPreferencesModule(),
   GenL10nModule(),
 ];
+
+/// A module of the tests that gives the auth role a way to sign in with an
+/// identity provider, which the module does not take yet.
+final class _WayOfTest extends SmfModule {
+  const _WayOfTest();
+
+  /// The id of the module.
+  static const id = ModuleId('way_of_test');
+
+  static const _path = 'core/way_of_test/way_of_test.dart';
+
+  static const _file = ImportRef.app(_path);
+
+  /// The way to sign in that it gives the role.
+  static const method = SignInMethod(
+    label: LocalizedText('label', en: 'Continue with the test'),
+    icon: TypeRef('WayOfTestIcon', import: _file),
+    platforms: {AppPlatform.android, AppPlatform.ios},
+    credential: FunctionRef('wayOfTestCredential', import: _file),
+    issuer: 'https://accounts.example.com',
+    appStore: AppStoreLogin.privacyFocused,
+  );
+
+  static const _source = '''
+import 'package:flutter/widgets.dart';
+
+import '../auth/app_session.dart';
+
+Future<SignInCredential?> wayOfTestCredential() async => null;
+
+class WayOfTestIcon extends StatelessWidget {
+  const WayOfTestIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+''';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A way to sign in of the tests',
+        kind: ModuleKinds.infrastructure,
+        requires: {authRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          MasonBundle(
+            name: id.value,
+            description: 'The function and the icon of the way to sign in',
+            version: '0.1.0',
+            files: [
+              MasonBundledFile(
+                'lib/$_path',
+                base64.encode(utf8.encode(_source)),
+                'text',
+              ),
+            ],
+          ),
+        ),
+        authRole.data(method),
+      ];
+}
 
 /// The path of the file of the module.
 const _implementation = 'lib/core/auth/firebase_auth_service.dart';
@@ -699,6 +766,47 @@ void main() {
         );
         expect(result.app, isNotNull, reason: '${result.contractCase}');
       }
+    });
+
+    test(
+        'refuses an app with a way to sign in with an identity provider, '
+        'whose credential the service does not take yet, in the validate '
+        'hook of its provider', () async {
+      final result = await ContractHarness(
+        ModuleRegistry([..._modules, const _WayOfTest()]),
+      ).check(
+        const ContractCase(
+          'firebase_auth with a way to sign in',
+          requested: [FirebaseAuthModule.id, _WayOfTest.id],
+        ),
+      );
+
+      expect(
+        [
+          for (final issue in result.errors)
+            (issue.origin, issue.message, issue.hint),
+        ],
+        [
+          (
+            const ModuleOrigin(_WayOfTest.id),
+            'The module way_of_test gives the app a way to sign in with '
+                'https://accounts.example.com, but firebase_auth signs in to '
+                'Firebase Authentication with an email address and a '
+                'password, and as an anonymous user, and takes no credential '
+                'of an identity provider yet: a sign-in with it would fail '
+                'with notConfigured.',
+            'Leave way_of_test out of an app with firebase_auth.',
+          ),
+        ],
+      );
+      // The apps of the module alone have no way to sign in, and no error.
+      expect(
+        [
+          for (final result in results)
+            for (final issue in result.errors) '${result.contractCase}: $issue',
+        ],
+        isEmpty,
+      );
     });
 
     test(

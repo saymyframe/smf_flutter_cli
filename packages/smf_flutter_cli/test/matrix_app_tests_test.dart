@@ -115,6 +115,71 @@ final class SignInOfTest implements AuthService {
       ];
 }
 
+/// A module for the test of the app test of the ways to sign in of the auth
+/// role, which applies to the apps whose modules give the role one: a way
+/// to sign in with an identity provider of the test.
+final class _WayOfTest extends SmfModule {
+  const _WayOfTest();
+
+  /// The id of the module.
+  static const id = ModuleId('way_of_test');
+
+  static const _path = 'core/way_of_test/way_of_test.dart';
+
+  static const _file = ImportRef.app(_path);
+
+  static const _source = '''
+import 'package:flutter/widgets.dart';
+
+import '../auth/app_session.dart';
+
+Future<SignInCredential?> wayOfTestCredential() async => null;
+
+class WayOfTestIcon extends StatelessWidget {
+  const WayOfTestIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+''';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A way to sign in of the test',
+        kind: ModuleKinds.infrastructure,
+        requires: {authRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          MasonBundle(
+            name: id.value,
+            description: 'The function and the icon of the way to sign in',
+            version: '0.1.0',
+            files: [
+              MasonBundledFile(
+                'lib/$_path',
+                base64.encode(utf8.encode(_source)),
+                'text',
+              ),
+            ],
+          ),
+        ),
+        authRole.data(
+          const SignInMethod(
+            label: LocalizedText('label', en: 'Continue with the test'),
+            icon: TypeRef('WayOfTestIcon', import: _file),
+            platforms: {AppPlatform.android, AppPlatform.ios},
+            credential: FunctionRef('wayOfTestCredential', import: _file),
+            issuer: 'https://accounts.example.com',
+            appStore: AppStoreLogin.privacyFocused,
+          ),
+        ),
+      ];
+}
+
 /// The apps with every module of the matrix of the CLI: one for each state
 /// manager, and each once more for each other mode of the auth role, which
 /// Firebase Authentication provides there.
@@ -3275,6 +3340,71 @@ void main() {
         for (final app in apps)
           if (app.hook!.presentRoles.contains(authRole)) app.name,
       ],
+    );
+  });
+
+  test(
+      'the test of the ways to sign in of the auth role applies to the apps '
+      'whose modules give the role a way to sign in, whichever modules '
+      'provide the role and the ways to sign in, in each mode of the role, '
+      'and to no app of the matrix of the CLI yet', () async {
+    final methodsTest = await authMethodsAppTest();
+    // No module of the CLI gives the role a way to sign in, and none
+    // provides the role in an app with one, so the registry has a provider
+    // of the test and a way to sign in of the test.
+    const modules = <SmfModule>[
+      FlutterCoreModule(),
+      _SignInOfTest(),
+      _WayOfTest(),
+    ];
+    final (apps: ofRole, :failed) = await matrixOf(modules);
+    expect(
+      [
+        for (final result in failed)
+          '${result.contractCase}: ${result.errors.join('; ')}',
+      ],
+      isEmpty,
+    );
+
+    expect(p.basename(methodsTest.directory), 'auth_methods');
+    expect(Directory(methodsTest.directory).existsSync(), isTrue);
+    expect(methodsTest.roles, {authRole});
+    // It reads the ways to sign in from the app, so the matrix writes no
+    // file for it, and it has no values, no mocks and no probe for the
+    // start check.
+    expect(methodsTest.generatedFiles, isNull);
+    expect(methodsTest.values, isNull);
+    expect(methodsTest.mocks, isNull);
+    expect(methodsTest.startProbe, isNull);
+    expect(
+      {for (final app in ofRole) app.name: methodsTest.appliesTo(app)},
+      {
+        // The app entry alone has no sign-in.
+        'flutter_core': false,
+        // The provider alone has the role and no way to sign in.
+        'sign_in_of_test': false,
+        // The way to sign in requires the role, so its app has the
+        // provider, and is the app with every module of the registry too.
+        'way_of_test': true,
+        'auth by sign_in_of_test --auth-mode=guest': false,
+        'auth by sign_in_of_test --auth-mode=anonymous': false,
+        'every module --auth-mode=guest': true,
+        'every module --auth-mode=anonymous': true,
+      },
+    );
+    // It selects its apps by the role and its data, and reads nothing of
+    // the name, the options or the modes of an app.
+    final tests = MatrixAppTests([methodsTest], testedRoles: {authRole});
+    expect(tests.roleProblems(modules, ofRole), isEmpty);
+    expect(tests.modeProblems(ofRole), isEmpty);
+    // The CLI has no module of a way to sign in yet, so the matrix of the
+    // fixtures runs it, with the fixture way to sign in.
+    expect(
+      [
+        for (final app in apps)
+          if (methodsTest.appliesTo(app)) app.name,
+      ],
+      isEmpty,
     );
   });
 

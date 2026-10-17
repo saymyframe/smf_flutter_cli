@@ -174,6 +174,7 @@ void main() {
       ]),
     );
     expect(named('auth_role').roles, {authRole});
+    expect(named('auth_methods').roles, {authRole});
     expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
@@ -644,6 +645,9 @@ void main() {
         'fake_auth (go_router) with router',
         'fake_auth with localization',
         'fake_auth',
+        // The fixture way to sign in requires the role.
+        'fake_sign_in_method with localization',
+        'fake_sign_in_method',
         for (final mode in ['guest', 'anonymous']) '$ofModes --auth-mode=$mode',
         for (final app in apps)
           if (app.everyModuleWith != null) app.name,
@@ -663,8 +667,9 @@ void main() {
       },
     );
     // The apps of each mode: those of the fixture alone, six in the
-    // default mode and one in each other mode, and each app with every
-    // module with a clock of 24 hours and with one of 12.
+    // default mode and one in each other mode, the two of the fixture way
+    // to sign in in the default mode, and each app with every module with
+    // a clock of 24 hours and with one of 12.
     expect(
       {
         for (final mode in AuthMode.values)
@@ -672,7 +677,7 @@ void main() {
               .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
               .length,
       },
-      {'required': 22, 'guest': 17, 'anonymous': 17},
+      {'required': 24, 'guest': 17, 'anonymous': 17},
     );
     // The mode comes from the choice of the role, which an app has without
     // the option too.
@@ -688,6 +693,50 @@ void main() {
     expect(authTest.generatedFiles, isNull);
     expect(authTest.mocks, isNull);
     expect(authTest.startProbe, isNull);
+  });
+
+  test(
+      'the test of the ways to sign in of the auth role applies to the apps '
+      'whose modules give the role a way to sign in, the apps of the fixture '
+      'way to sign in and the apps with every module, in each mode of the '
+      'role, by the data of the role', () {
+    final methodsTest = named('auth_methods');
+    final withMethods = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(authRole) &&
+            authRole.methodsIn(authRole.hookInput(app.hook!)).isNotEmpty)
+          app.name,
+    ];
+
+    expect(appsOf(methodsTest), withMethods);
+    expect(appsOf(methodsTest), [
+      'fake_sign_in_method with localization',
+      'fake_sign_in_method',
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    // The apps of the fixture sign-in alone, which have the role and no way
+    // to sign in, get no test of it, and neither do the apps without the
+    // role.
+    expect(
+      appsOf(methodsTest),
+      isNot(anyOf(contains('fake_auth'), contains(apps.first.name))),
+    );
+    expect(
+      {
+        for (final app in apps)
+          if (methodsTest.appliesTo(app))
+            authRole.modeIn(authRole.hookInput(app.hook!)),
+      },
+      AuthMode.values.toSet(),
+    );
+    // It reads the ways to sign in from the app, so the matrix writes no
+    // file for it, and it has no values, no mocks and no probe for the
+    // start check: nobody can sign in on a device.
+    expect(methodsTest.generatedFiles, isNull);
+    expect(methodsTest.values, isNull);
+    expect(methodsTest.mocks, isNull);
+    expect(methodsTest.startProbe, isNull);
   });
 
   /// The modules of the fixtures that provide the router role.

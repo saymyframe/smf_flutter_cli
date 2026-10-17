@@ -1373,6 +1373,39 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.authLinkingCredentialAsNewUser,
+        role: authRole,
+        bug: 'Its linkWith() creates a new user for the identity of the '
+            'credential, rather than giving it to the anonymous user who is '
+            'signed in: the user of the identity has another id.',
+        // The fixture way to sign in, whose function the test of the
+        // session calls, and whose issuer the test of the service builds
+        // credentials of. The session of an app in every mode gives an
+        // anonymous user the identity with linkWith(), so the test of the
+        // session fails on the bug too, next to the test of the service.
+        app: [FakeSignInMethodModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/auth_methods/credential_test.dart',
+            'linkWith gives the anonymous user who is signed in the identity, '
+                'and the user keeps the id',
+            'linkWith keeps the id of the anonymous user: the user who is '
+                'signed in gets the identity of the credential, is no longer '
+                'anonymous and lists its issuer.',
+          ),
+          MatrixExpectedFailure(
+            'test/auth_methods/session_test.dart',
+            'the session signs in with each way to sign in of the app: an '
+                'anonymous user gets the identity and keeps the id, a later '
+                'user signs in to its account, and once the account is '
+                'deleted the identity has a new user',
+            'An anonymous user who signs in with a way to sign in keeps the '
+                'id: the session gives that user the identity with linkWith, '
+                'and the user is no longer anonymous.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '

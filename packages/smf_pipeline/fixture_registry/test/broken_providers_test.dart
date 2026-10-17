@@ -551,8 +551,9 @@ void main() {
       );
       // The matrix gives the test of the role the mode that the role
       // chose, which the test expects the app to be in.
+      final ofRole = (await authRoleAppTest()).directory;
       final authTest = (await brokenProviderAppTests()).singleWhere(
-        (test) => test.roles.contains(authRole),
+        (test) => test.directory == ofRole,
       );
       expect(authTest.appliesTo(app), isTrue);
       expect(authTest.values!(app), {'auth_mode': mode.name});
