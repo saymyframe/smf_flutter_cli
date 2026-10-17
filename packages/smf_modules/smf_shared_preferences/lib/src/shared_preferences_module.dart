@@ -18,6 +18,11 @@ import 'package:smf_shared_preferences/src/agents.dart';
 /// encrypted, and a backup of the device carries them: never store a token,
 /// a password, an API key or an encryption key in the preferences.
 ///
+/// The module also keeps `shared_preferences_android`, the Android side of
+/// the package, below 2.5.0: the release build of an app with 2.5.0 fails
+/// to open the preferences, because R8 renames Kotlin classes that it looks
+/// up by name.
+///
 /// The implementation keeps what the role promises and the package does
 /// not: a read of a key with a value of another type returns `null` rather
 /// than throwing, and the preferences keep a copy of a list they are given.
@@ -36,8 +41,8 @@ import 'package:smf_shared_preferences/src/agents.dart';
 ///
 /// In the guide for coding agents, the module adds to the section of the
 /// preferences which file imports the package, how this provider reads a
-/// number, and what a test of the app sets in place of the platform side of
-/// the package.
+/// number, what a test of the app sets in place of the platform side of
+/// the package, and why the app keeps its Android side below 2.5.0.
 final class SharedPreferencesModule extends SmfModule {
   /// Creates the module.
   const SharedPreferencesModule();
@@ -61,6 +66,15 @@ final class SharedPreferencesModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(sharedPreferencesBundle),
         const PubspecContribution.hosted('shared_preferences', '^2.5.5'),
+        // 2.5.0 of the Android side calls its Kotlin code through JNI by
+        // the names of Kotlin classes that R8 renames in a release build,
+        // and ships no keep rules for them, so the release build of the app
+        // fails to open the preferences. Raise the constraint once a
+        // version keeps them.
+        const PubspecContribution.hosted(
+          'shared_preferences_android',
+          '>=2.4.28 <2.5.0',
+        ),
         preferencesRole.data(
           const RoleImplementation.async(
             type: TypeRef('SharedAppPreferences', import: _file),

@@ -1,3 +1,7 @@
+## 0.5.1
+
+ - **FIX**(shared_preferences): keep shared_preferences_android below 2.5.0, whose release builds fail to open the preferences ([#204](https://github.com/saymyframe/smf_flutter_cli/issues/204)). ([2ddbaed2](https://github.com/saymyframe/smf_flutter_cli/commit/2ddbaed27da0031c144abb606c6d192a94a3eda8))
+
 ## 0.5.0
 
 > Note: This release has breaking changes.
