@@ -31,6 +31,74 @@ List<String> _walkedRoutesOf(String file) {
   ];
 }
 
+/// What a test that declares the warnings of the apps of a matrix tells
+/// when they differ.
+const _declareWarnings = 'smf create --strict allows these warnings in the '
+    'apps of CI, and stops on any other. A new warning of an app is a '
+    'decision: change the modules or the case so that the app does not '
+    'warn, or declare the actual warnings here.';
+
+/// The codes of the warnings about what they are made of of every app with
+/// every module of the matrix of the fixtures (see [MatrixApp.warnings]):
+/// the texts of fake_second have a translation into a language that no app
+/// can be in, and a text without a translation, on purpose.
+const _everyModuleWarnings = [
+  'localization.unsupported_language',
+  'localization.untranslated',
+];
+
+/// The other apps of the matrix of the fixtures that warn of what they are
+/// made of, by name, each with the codes of its warnings: those with the
+/// texts of fake_second; those of the fixture gates and of the fixture
+/// onboarding, whose apps have no route to start on; and those of the
+/// fixture steps and of the fixture notifications with the onboarding,
+/// which have no route to start on either, and with the texts of the
+/// fixture steps a text without a translation, on purpose.
+const _warningApps = <String, List<String>>{
+  'fake_second (fake_router) with localization, badge': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'fake_second (go_router) with localization, badge': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'fake_second (fake_router) with localization': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'fake_second (go_router) with localization': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'fake_late_gate (fake_router)': ['router.no_start'],
+  'fake_late_gate (go_router)': ['router.no_start'],
+  'fake_gate (fake_router)': ['router.no_start'],
+  'fake_gate (go_router)': ['router.no_start'],
+  'fake_onboarding (fake_router) with localization': ['router.no_start'],
+  'fake_onboarding (go_router) with localization': ['router.no_start'],
+  'fake_onboarding (fake_router)': ['router.no_start'],
+  'fake_onboarding (go_router)': ['router.no_start'],
+  'fake_steps with onboarding_screen, localization': [
+    'localization.untranslated',
+    'router.no_start',
+  ],
+  'fake_steps with onboarding_screen': ['router.no_start'],
+  'fake_notifications with onboarding_screen, localization': [
+    'router.no_start',
+  ],
+  'fake_notifications with onboarding_screen': ['router.no_start'],
+};
+
+/// The codes of the warnings about what it is made of of the app of
+/// several providers, which has the texts of fake_second and of the fixture
+/// steps, and destinations without a layout.
+const _severalProvidersWarnings = [
+  'localization.unsupported_language',
+  'localization.untranslated',
+  'router.no_main_navigation',
+];
+
 void main() {
   late MatrixAppTests appTests;
   late List<MatrixApp> apps;
@@ -57,6 +125,29 @@ void main() {
           if (test.appliesTo(app)) app.name,
       ];
 
+  test(
+      'the apps of the matrix of the fixtures that warn of what they are '
+      'made of are those that the fixtures declare, with the codes they '
+      'declare', () {
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+    expect(everyModule, isNotEmpty);
+    for (final app in everyModule) {
+      expect(app.warnings, _everyModuleWarnings, reason: app.name);
+    }
+    expect(
+      {
+        for (final app in apps)
+          if (app.everyModuleWith == null && app.warnings.isNotEmpty)
+            app.name: app.warnings,
+      },
+      _warningApps,
+      reason: _declareWarnings,
+    );
+  });
+
   test('each app test applies to an app of the matrix', () {
     expect(appTests.tests, isNotEmpty);
     for (final test in appTests.tests) {
@@ -67,8 +158,9 @@ void main() {
   test(
       'the app tests check the contract of the router role, of the layout '
       'role, of the DI role, of the events role, of the preferences role, '
-      'of the localization role, of the theme role, of the app entry role '
-      'and of the auth role with every provider of each, which they tell '
+      'of the localization role, of the theme role, of the app entry role, '
+      'of the auth role, of the onboarding screen role, of the notifications '
+      'role and of the push role with every provider of each, which they tell '
       'apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
@@ -82,9 +174,15 @@ void main() {
         themeRole,
         appEntryRole,
         authRole,
+        onboardingScreenRole,
+        notificationsRole,
+        pushRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
+    expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
+    expect(named('notifications_role').roles, {notificationsRole});
+    expect(named('push_role').roles, {pushRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -172,9 +270,10 @@ void main() {
 
   test(
       'the tests of the events role, of the preferences role, of the '
-      'localization role, of the theme role and of the walk of the routes '
-      'apply only to the apps with every module, which have the roles and '
-      'run flutter test for other tests already', () {
+      'localization role, of the theme role, of the notifications role, of '
+      'the push role and of the walk of the routes apply only to the apps '
+      'with every module, which have the roles and run flutter test for '
+      'other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -192,6 +291,12 @@ void main() {
       'preferences_restorers',
       'theme_role',
       'theme_look',
+      // The test of the notifications that the CLI keeps, for the fixture
+      // notifications, which every such app has.
+      'notifications_role',
+      // The test of the push messages that the CLI keeps, for the fixture
+      // push messages, which every such app has.
+      'push_role',
     ]) {
       expect(
         appsOf(named(name)),
@@ -229,12 +334,23 @@ void main() {
     for (final app in everyModule) {
       expect(
         app.hook!.presentRoles,
-        containsAll([eventsRole, preferencesRole, themeRole]),
+        containsAll([
+          eventsRole,
+          preferencesRole,
+          themeRole,
+          notificationsRole,
+          pushRole,
+        ]),
         reason: app.name,
       );
       expect(
         app.modules,
-        containsAll([FakePreferencesUserModule.id, FakeThemeModule.id]),
+        containsAll([
+          FakePreferencesUserModule.id,
+          FakeThemeModule.id,
+          FakeNotificationsModule.id,
+          FakePushModule.id,
+        ]),
         reason: app.name,
       );
       expect(appsOf(named('router_screens')), contains(app.name));
@@ -299,6 +415,303 @@ void main() {
         clockHours.appliesTo(apps.singleWhere((app) => app.name == name)),
         isFalse,
         reason: name,
+      );
+    }
+  });
+
+  test(
+      'the test of the onboarding screen role applies to the apps with '
+      'every module, whose modules give the role steps, those of the fixture '
+      'steps among them, and not to the apps of the fixture steps alone', () {
+    final onboarding = named('onboarding_screen_role');
+    List<String> stepsOf(MatrixApp app) {
+      final hook = app.hook!;
+      return hook.presentRoles.contains(onboardingScreenRole)
+          ? [
+              for (final step in onboardingScreenRole
+                  .stepsIn(onboardingScreenRole.hookInput(hook)))
+                step.fullName,
+            ]
+          : const [];
+    }
+
+    expect(appsOf(onboarding), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    // The tests use the two steps of the fixture steps, ask and then
+    // confirm, the step after it.
+    for (final app in apps.where(onboarding.appliesTo)) {
+      expect(
+        stepsOf(app).join(' '),
+        contains('fake_steps.ask fake_steps.confirm'),
+        reason: app.name,
+      );
+    }
+    // The apps of the fixture steps with the role have the steps too, and
+    // run no flutter test for them.
+    final alone = apps.singleWhere(
+      (app) => app.name == 'fake_steps with onboarding_screen, localization',
+    );
+    expect(stepsOf(alone), ['fake_steps.ask', 'fake_steps.confirm']);
+    expect(onboarding.appliesTo(alone), isFalse);
+    // An app without steps has no test of the role.
+    for (final app in apps) {
+      if (stepsOf(app).isEmpty) {
+        expect(onboarding.appliesTo(app), isFalse, reason: app.name);
+      }
+    }
+  });
+
+  test(
+      'the tests of the onboarding screen role get the screen of the '
+      'provider of the role and the texts of each step in each language of '
+      'the app, as the template of the role reads them, and in English alone '
+      'in an app without the localization role', () {
+    final onboarding = named('onboarding_screen_role');
+
+    /// The file that the matrix writes for the app named [name], whose
+    /// package is `my_app`, parsed.
+    CompilationUnit fileOf(String name) {
+      final files = onboarding.generatedFiles!(
+        apps.singleWhere((app) => app.name == name),
+        'my_app',
+      );
+      expect(files.keys, [onboardingOfAppFile]);
+      return parseString(content: files[onboardingOfAppFile]!).unit;
+    }
+
+    List<String?> importsOf(CompilationUnit unit) => [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ];
+
+    /// The source of the value of the top-level constant [name] of [unit].
+    String valueOf(CompilationUnit unit, String name) => unit.declarations
+        .whereType<TopLevelVariableDeclaration>()
+        .expand((declaration) => declaration.variables.variables)
+        .singleWhere((variable) => variable.name.lexeme == name)
+        .initializer!
+        .toSource();
+
+    /// The steps of `appSteps` of [unit], each by its name, with its texts
+    /// by the code of each language, each text by the name of its field.
+    Map<String, Map<String, Map<String, String?>>> stepsIn(
+      CompilationUnit unit,
+    ) {
+      final list = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .expand((declaration) => declaration.variables.variables)
+          .singleWhere((variable) => variable.name.lexeme == 'appSteps')
+          .initializer! as ListLiteral;
+      Map<String, Expression> fieldsOf(Expression record) => {
+            for (final field in (record as RecordLiteral)
+                .fields
+                .cast<RecordLiteralNamedField>())
+              field.name.lexeme: field.fieldExpression,
+          };
+      String? stringOf(Expression value) =>
+          value is NullLiteral ? null : (value as StringLiteral).stringValue;
+      return {
+        for (final step in list.elements.cast<Expression>())
+          stringOf(fieldsOf(step)['name']!)!: {
+            for (final entry in (fieldsOf(step)['texts']! as SetOrMapLiteral)
+                .elements
+                .cast<MapLiteralEntry>())
+              stringOf(entry.key)!: {
+                for (final MapEntry(key: field, :value)
+                    in fieldsOf(entry.value).entries)
+                  field: stringOf(value),
+              },
+          },
+      };
+    }
+
+    /// The source of the body of the function [name] of [unit].
+    String bodyOf(CompilationUnit unit, String name) => unit.declarations
+        .whereType<FunctionDeclaration>()
+        .singleWhere((function) => function.name.lexeme == name)
+        .functionExpression
+        .body
+        .toSource();
+
+    const screen = 'package:my_app/features/fake_onboarding/'
+        'fixture_onboarding_screen.dart';
+    final localized = fileOf('every module (fake_router, fake_di, fake_bloc)');
+    expect(importsOf(localized), [
+      'package:flutter/widgets.dart',
+      'package:my_app/core/l10n/app_locale.dart',
+      screen,
+    ]);
+    expect(
+      valueOf(localized, 'onboardingScreen'),
+      'screen.FixtureOnboardingScreen',
+    );
+    expect(
+      bodyOf(localized, 'newOnboardingScreen'),
+      '=> screen.FixtureOnboardingScreen();',
+    );
+    expect(valueOf(localized, 'stepLanguages'), "['en', 'uk']");
+    // The steps of the fixture steps, in the order of the role: the text of
+    // confirm without a translation reads in English in Ukrainian too, and
+    // confirm has no later. Then the step that the template of the
+    // notifications role gives the onboarding, since the app has the
+    // fixture notifications: the steps of the templates of roles come after
+    // those of the modules.
+    expect(stepsIn(localized), {
+      'fake_steps.ask': {
+        'en': {
+          'title': 'A step that asks',
+          'text': 'The fixture asks for something here.',
+          'action': 'Ask',
+          'later': 'Not now',
+        },
+        'uk': {
+          'title': 'Крок, що питає',
+          'text': 'Тут фікстура про щось питає.',
+          'action': 'Спитати',
+          'later': 'Не зараз',
+        },
+      },
+      'fake_steps.confirm': {
+        'en': {
+          'title': 'A step that confirms',
+          'text': 'The fixture confirms something here.',
+          'action': 'Confirm',
+          'later': null,
+        },
+        'uk': {
+          'title': 'Крок, що підтверджує',
+          'text': 'The fixture confirms something here.',
+          'action': 'Підтвердити',
+          'later': null,
+        },
+      },
+      'notifications.permission': {
+        for (final language in ['en', 'uk'])
+          language: {
+            for (final (field, text) in [
+              ('title', NotificationsRole.stepTitle),
+              ('text', NotificationsRole.stepText),
+              ('action', NotificationsRole.stepAction),
+              ('later', NotificationsRole.stepLater),
+            ])
+              field: text.textIn(language),
+          },
+      },
+    });
+    expect(stepsIn(localized).keys, [
+      'fake_steps.ask',
+      'fake_steps.confirm',
+      'notifications.permission',
+    ]);
+    expect(
+      bodyOf(localized, 'chooseLanguage'),
+      '=> appLocale.choose(Locale(language));',
+    );
+
+    // Without the localization role, the steps are in English, and the app
+    // has no language to choose.
+    final english = fileOf('fake_steps with onboarding_screen');
+    expect(importsOf(english), ['package:flutter/widgets.dart', screen]);
+    expect(valueOf(english, 'stepLanguages'), "['en']");
+    expect(
+      {
+        for (final MapEntry(key: name, value: texts)
+            in stepsIn(english).entries)
+          name: texts.keys,
+      },
+      {
+        'fake_steps.ask': ['en'],
+        'fake_steps.confirm': ['en'],
+      },
+    );
+    expect(
+      stepsIn(english)['fake_steps.ask']!['en'],
+      stepsIn(localized)['fake_steps.ask']!['en'],
+    );
+    expect(bodyOf(english, 'chooseLanguage'), 'async {}');
+
+    // An app whose provider names no route of its own is no app of the
+    // matrix: the rules of the role report it first.
+    final steps = apps.singleWhere(
+      (app) => app.name == 'fake_steps with onboarding_screen',
+    );
+    final withoutRoute = MatrixApp(
+      'steps',
+      steps.modules,
+      hook: RoleHookRequest(
+        data: [
+          for (final data in steps.hook!.data)
+            if (data.value is! OnboardingScreenRoute) data,
+        ],
+        presentRoles: steps.hook!.presentRoles,
+        context: steps.hook!.context,
+      ),
+    );
+    expect(
+      () => onboarding.generatedFiles!(withoutRoute, 'my_app'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'No module of steps names a route of its own as the onboarding '
+              'screen.',
+        ),
+      ),
+    );
+  });
+
+  test(
+      'the test of the notifications role applies to the apps with every '
+      'module, where the fixture notifications provide the role, and not to '
+      'the apps of the fixture alone, which the matrix only analyzes', () {
+    final notificationsTest = named('notifications_role');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(notificationsRole)) app.name,
+    ];
+
+    expect(
+      withRole,
+      containsAll([
+        'fake_notifications with localization',
+        'fake_notifications',
+      ]),
+    );
+    expect(appsOf(notificationsTest), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps.where(notificationsTest.appliesTo)) {
+      expect(
+        notificationsTest.values!(app),
+        {'asked_key': NotificationsRole.askedKey},
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the test of the push role applies to the apps with every module, '
+      'where the fixture push messages provide the role, and not to the app '
+      'of the fixture alone, which the matrix only analyzes', () {
+    final pushTest = named('push_role');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(pushRole)) app.name,
+    ];
+
+    expect(withRole, contains('fake_push'));
+    expect(appsOf(pushTest), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps.where(pushTest.appliesTo)) {
+      expect(
+        pushTest.values!(app),
+        {'push_owner': pushRole.id},
+        reason: app.name,
       );
     }
   });
@@ -756,6 +1169,7 @@ void main() {
           'fake_gate.gate',
           'fake_gate.step',
           'fake_gate.second',
+          'fake_onboarding.onboarding',
         ],
         reason: app.name,
       );
@@ -956,7 +1370,9 @@ void main() {
       // route below it needs a value. With one, both are in it, and so is
       // the destination of the second fixture feature, whose route outside
       // the main navigation is left. The routes of the flows of the guards,
-      // and those that ask for a condition, are none either.
+      // and those that ask for a condition, are none either. The screen of
+      // the fixture onboarding, which has no guard, is one in an app with
+      // it.
       expect(
         locationsOf(app),
         [
@@ -964,6 +1380,8 @@ void main() {
             'FakeSecondOutsideLocation()'
           else
             'FakeFeatureHomeLocation()',
+          if (app.modules.contains(FakeOnboardingModule.id))
+            'FakeOnboardingOnboardingLocation()',
         ],
         reason: app.name,
       );
@@ -1127,6 +1545,16 @@ void main() {
       everyModule = severalProvidersApps.of(checked.apps).single.$2;
     });
 
+    test(
+        'warns of what it is made of with the codes that the fixtures '
+        'declare', () {
+      expect(
+        everyModule.warnings,
+        _severalProvidersWarnings,
+        reason: _declareWarnings,
+      );
+    });
+
     /// The app test of the app of several providers whose files are in the
     /// directory [name].
     MatrixAppTest ofSeveral(String name) =>
@@ -1168,8 +1596,9 @@ void main() {
         'gets the app tests of the modules of the CLI, the tests of the DI '
         'role, of the events role, of the preferences role, of the auth '
         'role, of the settings screen role and of the theme role, the mocks '
-        'of the fixture providers and the tests of the roles of several '
-        'providers, which all apply to it', () {
+        'of the fixture providers, the tests of the roles of several '
+        'providers and the test of the onboarding screen role, which all '
+        'apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -1196,6 +1625,7 @@ void main() {
           'crash_reporting_role',
           'localization_role',
           'language_setting',
+          'onboarding_screen_role',
         ]),
       );
       for (final test in severalProviders.tests) {
@@ -1262,7 +1692,10 @@ void main() {
         'checks the contract of the analytics role and of the crash reporting '
         'role with every provider of each, which it tells apart by the roles '
         'of the app only, in the app with every module only', () {
-      expect(severalProviders.testedRoles, {analyticsRole, crashReportingRole});
+      expect(
+        severalProviders.testedRoles,
+        {analyticsRole, crashReportingRole, onboardingScreenRole},
+      );
       for (final (name, role) in [
         ('analytics_role', analyticsRole),
         ('crash_reporting_role', crashReportingRole),
@@ -1292,6 +1725,48 @@ void main() {
         isEmpty,
       );
       expect(severalProviders.modeProblems(matrix), isEmpty);
+    });
+
+    test(
+        'checks the onboarding screen role with the onboarding of the CLI, '
+        'which provides it there, and with the steps of the fixture steps, '
+        'whose calls the test reads, in the apps with every module', () {
+      final test = ofSeveral('onboarding_screen_role');
+      final hook = everyModule.hook!;
+      final input = onboardingScreenRole.hookInput(hook);
+
+      expect(test.roles, {onboardingScreenRole});
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(onboardingScreenRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('onboarding')],
+      );
+      expect(hook.presentRoles, contains(onboardingScreenRole));
+      // The two steps of the fixture steps, and then the step of the
+      // notifications role, whose provider of the CLI the registry has: the
+      // steps of one stage come in the order of their contributors, the
+      // modules before the templates of the roles.
+      expect(
+        [
+          for (final step in onboardingScreenRole.stepsIn(input)) step.fullName,
+        ],
+        ['fake_steps.ask', 'fake_steps.confirm', 'notifications.permission'],
+      );
+      expect(onboardingScreenRole.screenIn(input)!.fullPath, '/onboarding');
+      expect(
+        [
+          for (final app in matrix)
+            if (test.appliesTo(app)) app,
+        ],
+        [
+          for (final app in matrix)
+            if (app.everyModuleWith != null) app,
+        ],
+      );
+      expect(test.appliesTo(everyModule), isTrue);
     });
   });
 }

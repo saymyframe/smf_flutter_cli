@@ -110,10 +110,13 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
     ];
     if (candidates.isEmpty) {
       if (facade.routes.isNotEmpty) {
-        context.environment.logger.warn(
-          'No route is marked as a start candidate, so the app starts on '
-          'its fallback screen. Choose a start route with '
-          '--${RouterRole.startOption.name}.',
+        context.warn(
+          SmfIssue.warning(
+            'No route is marked as a start candidate, so the app starts on '
+            'its fallback screen. Choose a start route with '
+            '--${RouterRole.startOption.name}.',
+            code: RouterRole.noStartWarning,
+          ),
         );
       }
       return null;
@@ -166,11 +169,14 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
     ];
     if (others.isEmpty) return;
     final one = others.length == 1;
-    context.environment.logger.warn(
-      'No module provides the $layoutRole, so the app has no main navigation '
-      'to lead to the ${one ? 'destination' : 'destinations'} '
-      '${others.join(', ')}. Choose a provider of the role, or open '
-      '${one ? 'it' : 'them'} from a screen of yours with context.nav.',
+    context.warn(
+      SmfIssue.warning(
+        'No module provides the $layoutRole, so the app has no main '
+        'navigation to lead to the ${one ? 'destination' : 'destinations'} '
+        '${others.join(', ')}. Choose a provider of the role, or open '
+        '${one ? 'it' : 'them'} from a screen of yours with context.nav.',
+        code: RouterRole.noMainNavigationWarning,
+      ),
     );
   }
 

@@ -10,7 +10,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
-- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
 
 After a change, run:
 
@@ -26,6 +26,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
+- The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
 
 ## Authentication
 
@@ -103,19 +104,19 @@ The app signs in with [Firebase Authentication](https://firebase.google.com/docs
 
 The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, and Anonymous when the mode of the app is `anonymous` (see the section Sign-in). Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
 
-`smf create` offers to enable them right after `flutterfire configure` configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
+`smf create` enables them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart
 ```
 
-The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.6.0 or later. It never disables a method, and it changes no file of the app. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
+The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart --account <email>
 ```
 
-The Firebase CLI adds a web app named "Default Web App" to a project that has no web app, because it enables the methods through one (see [issue 11250 of firebase-tools](https://github.com/firebase/firebase-tools/issues/11250)). If you do not want that web app, enable the methods in the Firebase console instead: [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) of the project that the app is configured for.
+You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in the project that the app is configured for.
 
 Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
 
@@ -282,6 +283,23 @@ include(":app")
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/AppDelegate.swift (flutter_core) ===
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
 === ios/Runner/Info.plist (flutter_core) ===
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -358,6 +376,13 @@ IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 	</array>
 </dict>
 </plist>
+=== ios/Runner/Runner.entitlements (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+</dict>
+</plist>
 === l10n.yaml (gen_l10n) ===
 arb-dir: lib/l10n
 template-arb-file: app_en.arb
@@ -366,8 +391,8 @@ nullable-getter: false
 use-escaping: false
 === lib/app.dart (flutter_core) ===
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
 import 'package:my_app/core/l10n/app_locale.dart';
 import 'package:my_app/l10n/app_localizations.dart';
 
@@ -390,18 +415,7 @@ class App extends StatelessWidget {
     ],
     supportedLocales: [...appLocales],
     home: const FallbackStartScreen(),
-    builder: (context, child) => Builder(
-      builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle(
-          statusBarBrightness: Theme.of(context).brightness,
-          statusBarIconBrightness:
-              Theme.of(context).brightness == Brightness.dark
-              ? Brightness.light
-              : Brightness.dark,
-        ),
-        child: child!,
-      ),
-    ),
+    builder: (context, child) => StatusBarIcons(child: child!),
   );
 }
 === lib/bootstrap.dart (flutter_core) ===
@@ -660,6 +674,40 @@ class FallbackStartView extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+=== lib/core/app/status_bar_icons.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Asks the system for the icons of the status bar that suit the theme,
+/// around [child]: dark icons on a light theme, light ones on a dark theme.
+///
+/// The root of the app puts it around the content of every route, below
+/// the `MaterialApp` whose theme it reads. It leaves the navigation bar of
+/// the system as the platform has it. A screen with an `AppBar` gets the
+/// icons that suit its bar, since the bar tells them for the top of the
+/// screen itself.
+class StatusBarIcons extends StatelessWidget {
+  /// Creates the widget around [child].
+  const StatusBarIcons({required this.child, super.key});
+
+  /// What the icons suit: the content of a route.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // iOS takes the brightness of the bar, and Android that of its icons.
+      value: SystemUiOverlayStyle(
+        statusBarBrightness: brightness,
+        statusBarIconBrightness: brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+      child: child,
     );
   }
 }
@@ -2221,6 +2269,61 @@ void main() {
     expect(scalerOf(find.text('A hint')).scale(10), 30);
   });
 }
+=== test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+/// What the widget asks the system for on a screen in [theme].
+Future<SystemUiOverlayStyle> _styleIn(
+  WidgetTester tester,
+  ThemeData theme,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: theme,
+      home: const StatusBarIcons(child: Text('A screen')),
+    ),
+  );
+  return tester
+      .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.descendant(
+          of: find.byType(StatusBarIcons),
+          matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        ),
+      )
+      .value;
+}
+
+void main() {
+  testWidgets('asks for dark icons on a light theme', (tester) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.statusBarIconBrightness, Brightness.dark);
+    expect(style.statusBarBrightness, Brightness.light);
+    expect(find.text('A screen'), findsOneWidget);
+  });
+
+  testWidgets('asks for light icons on a dark theme', (tester) async {
+    final style = await _styleIn(
+      tester,
+      ThemeData(brightness: Brightness.dark),
+    );
+
+    expect(style.statusBarIconBrightness, Brightness.light);
+    expect(style.statusBarBrightness, Brightness.dark);
+  });
+
+  testWidgets('leaves the navigation bar of the system as it is', (
+    tester,
+  ) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.systemNavigationBarColor, isNull);
+    expect(style.systemNavigationBarIconBrightness, isNull);
+  });
+}
 === tool/enable_firebase_sign_in.dart (firebase_auth) ===
 // Enables the sign-in methods of the app in its Firebase project:
 // Email/Password, and Anonymous when the app is in the mode `anonymous`,
@@ -2246,11 +2349,6 @@ void main() {
 // with `kill`, leaves the directory among the temporary files of the
 // system, and so does Ctrl+C where the script cannot watch for it.
 //
-// The Firebase CLI adds a web app named "Default Web App" to a project that
-// has no web app, because it enables the methods through one
-// (https://github.com/firebase/firebase-tools/issues/11250). The Firebase
-// console enables them without it, under Authentication > Sign-in method.
-//
 // The other arguments go to the Firebase CLI as they are. An account that
 // `firebase login:use` chose for the directory of the app does not apply in
 // the temporary directory: `--account <email>` names the account.
@@ -2259,8 +2357,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-/// The first version of the Firebase CLI that has `deploy --only auth`.
-const _firstCli = '15.6.0';
+/// The first version of the Firebase CLI whose `deploy --only auth` adds no
+/// web app to a project that has Android and iOS apps.
+const _firstCli = '15.34.0';
 
 /// The file of the app with `authMode`, the sign-in mode of the app.
 const _sessionFile = 'lib/core/auth/app_session.dart';

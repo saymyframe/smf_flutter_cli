@@ -22,11 +22,6 @@
 // with `kill`, leaves the directory among the temporary files of the
 // system, and so does Ctrl+C where the script cannot watch for it.
 //
-// The Firebase CLI adds a web app named "Default Web App" to a project that
-// has no web app, because it enables the methods through one
-// (https://github.com/firebase/firebase-tools/issues/11250). The Firebase
-// console enables them without it, under Authentication > Sign-in method.
-//
 // The other arguments go to the Firebase CLI as they are. An account that
 // `firebase login:use` chose for the directory of the app does not apply in
 // the temporary directory: `--account <email>` names the account.
@@ -35,7 +30,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-/// The first version of the Firebase CLI that has `deploy --only auth`.
+/// The first version of the Firebase CLI whose `deploy --only auth` adds no
+/// web app to a project that has Android and iOS apps.
 const _firstCli = '{{{minimum_firebase_cli}}}';
 
 /// The file of the app with `authMode`, the sign-in mode of the app.

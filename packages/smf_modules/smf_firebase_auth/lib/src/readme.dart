@@ -22,7 +22,7 @@ The app signs in with [Firebase Authentication](https://firebase.google.com/docs
 
 The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, and Anonymous when the mode of the app is `${AuthMode.anonymous.name}` (see the section ${AuthRole.readmeHeading}). Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `${AuthMode.anonymous.name}`, the app also starts without a user.
 
-`smf create` offers to enable them right after `flutterfire configure` configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `${AuthMode.anonymous.name}`, run in the directory of the app:
+`smf create` enables them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `${AuthMode.anonymous.name}`, run in the directory of the app:
 
 ```bash
 $enableSignInCommand
@@ -34,7 +34,7 @@ The script reads the project from `firebase.json`, where `flutterfire configure`
 $enableSignInCommand --account <email>
 ```
 
-The Firebase CLI adds a web app named "Default Web App" to a project that has no web app, because it enables the methods through one (see [issue 11250 of firebase-tools](https://github.com/firebase/firebase-tools/issues/11250)). If you do not want that web app, enable the methods in the Firebase console instead: [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) of the project that the app is configured for.
+You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in the project that the app is configured for.
 
 Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
 

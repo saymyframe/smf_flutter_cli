@@ -428,9 +428,10 @@ final class _BrickScanner {
     _checkPaths(brick, origin);
     // The presence flags the pipeline sets for the brick.
     final flagged = rolesOf(origin, registry, resolution).access;
+    final conditional = brick.whenChosen.isNotEmpty;
     for (final MapEntry(key: path, value: text)
         in templateFilesOf(brick).entries) {
-      _scanFile(path, text, origin, flagged);
+      _scanFile(path, text, origin, flagged, conditional: conditional);
     }
   }
 
@@ -480,13 +481,15 @@ final class _BrickScanner {
 
   /// Checks [text], the template at [path] of [origin], whose presence
   /// flags are those of the [flagged] roles, and records the places of the
-  /// tags of sockets that it holds.
+  /// tags of sockets that it holds; its brick has conditions on what roles
+  /// chose if it is [conditional].
   void _scanFile(
     String path,
     String text,
     ContributionOrigin origin,
-    Set<Role> flagged,
-  ) {
+    Set<Role> flagged, {
+    required bool conditional,
+  }) {
     if (masonTag.hasMatch(text)) {
       try {
         text.render(const {});
@@ -536,7 +539,12 @@ final class _BrickScanner {
       }
     }
     for (final tag in scan.tags) {
-      for (final problem in _tagProblems(tag, origin, flagged)) {
+      for (final problem in _tagProblems(
+        tag,
+        origin,
+        flagged,
+        conditional: conditional,
+      )) {
         _issues.add(
           SmfIssue(
             'The tag ${tag.name} in ${tag.path}:${tag.line} of $origin '
@@ -550,13 +558,15 @@ final class _BrickScanner {
   }
 
   /// The problems with [tag] in a template of [origin], whose presence
-  /// flags are those of the [flagged] roles; the place of the tag of a
+  /// flags are those of the [flagged] roles, and whose brick has conditions
+  /// on what roles chose if it is [conditional]; the place of the tag of a
   /// socket that [origin] may hold is recorded.
   List<String> _tagProblems(
     TemplateTag tag,
     ContributionOrigin origin,
-    Set<Role> flagged,
-  ) {
+    Set<Role> flagged, {
+    required bool conditional,
+  }) {
     final problems = <String>[
       if (_flagProblem(tag.name, origin, flagged) case final problem?) problem,
     ];
@@ -568,6 +578,13 @@ final class _BrickScanner {
     }
     if (tag.isSocketTag) {
       problems.addAll(_socketTagProblems(tag));
+      if (conditional) {
+        problems.add(
+          'is in a brick with conditions on what roles chose, which an app '
+          'where they do not hold leaves out, and what the socket gets would '
+          'be lost with it; put the tag into a brick without conditions',
+        );
+      }
       final known = _socketOf(tag.name);
       if (known == null) {
         if (_tagName.hasMatch(tag.name)) problems.add('names no socket');
@@ -600,11 +617,17 @@ final class _BrickScanner {
 /// - a presence flag, `has_<role>`, is of a role that the brick's owner
 ///   provides, requires or uses, or of a role open to all modules: the
 ///   pipeline sets no other;
+/// - a brick with conditions on what roles chose
+///   ([Contribution.whenChosen]) holds no tag of a socket, since an app
+///   where they do not hold leaves it out with what the socket gets;
 /// - only the tag of a socket for one value, such as a minimum version, may
 ///   appear several times; a socket whose contributions carry imports has
 ///   its tag in a Dart file, and a socket of the pipeline at the start of a
-///   line of `pubspec.yaml`; both tags of a wrapper are in the same file,
-///   the opening one first.
+///   line of `pubspec.yaml`;
+/// - the templates hold every tag of a socket with several or none of them:
+///   both tags of a wrapper, in the same file, the opening one first, and
+///   the tag of each place of a socket for one value at several places
+///   ([ValueSocket.places]).
 ///
 /// Stage 5 runs it; the contract harness adds [missingTemplateTags].
 List<SmfIssue> checkTemplateTags({
@@ -624,6 +647,10 @@ List<SmfIssue> checkTemplateTags({
 /// bricks; and of every socket of the pipeline. Stage 5 checks the sockets
 /// that get contributions, members of socket families included.
 ///
+/// Only bricks without conditions on what roles chose count, since an app
+/// may leave out a brick with conditions ([Contribution.whenChosen]);
+/// stage 5 reports a tag of a socket in such a brick.
+///
 /// The contract harness runs it; the pipeline leaves it to the contract
 /// tests of the modules.
 List<SmfIssue> missingTemplateTags({
@@ -637,7 +664,10 @@ List<SmfIssue> missingTemplateTags({
       scanBricks(
         registry: registry,
         resolution: resolution,
-        collection: collection,
+        collection: Collection([
+          for (final collected in collection.all)
+            if (collected.contribution.whenChosen.isEmpty) collected,
+        ]),
       ).found,
     ).toList();
 
@@ -664,7 +694,38 @@ Iterable<SmfIssue> _placeIssues(
   Map<String, List<(TemplateTag, ContributionOrigin)>> tags,
 ) sync* {
   yield* _tagPlaceIssues(socket, tags);
-  if (socket.kind is WrapperSocket) yield* _wrapperIssues(socket, tags);
+  if (_partialTagsIssue(socket, tags) case final issue?) {
+    yield issue;
+  } else if (socket.kind is WrapperSocket) {
+    yield* _wrapperIssues(socket, tags);
+  }
+}
+
+/// The problem of [socket] when the templates hold some of its tags but
+/// not all, among [tags], those found, by tag name, with who holds each: a
+/// wrapper needs both, and a socket for one value at several places (see
+/// [ValueSocket.places]) puts its value at each, so a part of it would be
+/// lost.
+SmfIssue? _partialTagsIssue(
+  SocketRef socket,
+  Map<String, List<(TemplateTag, ContributionOrigin)>> tags,
+) {
+  final found = [
+    for (final name in socket.tags)
+      if (tags[name] case [final place, ...]) place,
+  ];
+  if (found.length == socket.tags.length) return null;
+  final names = found.map((place) => place.$1.name).join(' and ');
+  final paths = {for (final (tag, _) in found) tag.path}.join(' and ');
+  final needs = socket.kind is WrapperSocket
+      ? 'a wrapper needs both ${socket.tags.join(' and ')}'
+      : 'its value goes to each of its tags, ${socket.tags.join(' and ')}, so '
+          'the templates hold all of them';
+  return SmfIssue(
+    'The $socket has only $names of its tags, in $paths; $needs.',
+    origin: found.first.$2,
+    path: found.first.$1.path,
+  );
 }
 
 /// The problems with the places of each of [tags], the tags of [socket]:
@@ -708,25 +769,18 @@ Iterable<SmfIssue> _tagPlaceIssues(
   }
 }
 
-/// The problems with [tags], the tags of [socket], a wrapper: both are in
-/// the same file, the opening one first.
+/// The problems with [tags], the tags of [socket], a wrapper, which the
+/// templates hold both of: both are in the same file, the opening one
+/// first.
 Iterable<SmfIssue> _wrapperIssues(
   SocketRef socket,
   Map<String, List<(TemplateTag, ContributionOrigin)>> tags,
 ) sync* {
   final open = socket.tags.first;
   final close = socket.tags.last;
-  final opening = tags[open];
-  final closing = tags[close];
-  if (opening == null || closing == null) {
-    final (tag, origin) = (opening ?? closing)!.first;
-    yield SmfIssue(
-      'The $socket has only its tag ${tag.name} in ${tag.path}; a wrapper '
-      'needs both $open and $close.',
-      origin: origin,
-      path: tag.path,
-    );
-  } else if (opening.first.$1.path != closing.first.$1.path) {
+  final opening = tags[open]!;
+  final closing = tags[close]!;
+  if (opening.first.$1.path != closing.first.$1.path) {
     yield SmfIssue(
       'The tags of the $socket are in different files: '
       '${opening.first.$1.path} and ${closing.first.$1.path}.',

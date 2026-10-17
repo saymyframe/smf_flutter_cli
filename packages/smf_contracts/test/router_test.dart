@@ -777,18 +777,28 @@ void main() {
 
     test('has no start route without candidates, and warns', () async {
       final environment = PromptingEnvironment();
-      final choice = await choose(
-        [
-          dataOf(
-            routerRole,
-            RoutesData([Route('/', name: 'root', screen: _screen('A', 'a'))]),
-          ),
-        ],
-        environment: environment,
+      final context = routerRole.choiceContext(
+        RoleChoiceRequest(
+          data: [
+            dataOf(
+              routerRole,
+              RoutesData([Route('/', name: 'root', screen: _screen('A', 'a'))]),
+            ),
+          ],
+          presentRoles: {routerRole, layoutRole},
+          optionValues: const {'start': null},
+          environment: environment,
+          context: testContext,
+        ),
       );
+      final choice = await routerRole.template.choose(context);
 
       expect(pathOf(choice), isNull);
-      expect(environment.warnings.single, contains('--start'));
+      final warning = context.warnings.single;
+      expect(warning.message, contains('--start'));
+      expect(warning.code, RouterRole.noStartWarning);
+      expect(RouterRole.noStartWarning, 'router.no_start');
+      expect(environment.warnings, isEmpty);
       expect(pathOf(await choose(const [])), isNull);
     });
 
@@ -928,6 +938,47 @@ void main() {
       );
       expect(routerRole.startIn(inputOf(routerRole, data: _data)), isNull);
     });
+
+    test(
+        'has the condition that no route starts the app, which holds where '
+        'startIn is null and in an app without a router', () {
+      const condition = RouterRole.noStartRoute;
+
+      /// Whether [condition] holds in an app with [data], whose router
+      /// chose [choice], and whether startIn of that app is null.
+      (bool, bool) withRouter(Object? choice) {
+        final request = RoleHookRequest(
+          data: _data,
+          presentRoles: const {routerRole},
+          context: testContext,
+          choices: {routerRole: choice},
+        );
+        return (
+          condition.holdsIn(request),
+          routerRole.startIn(routerRole.hookInput(request)) == null,
+        );
+      }
+
+      expect(condition.role, routerRole);
+      expect('$condition', 'no route starts the app');
+      expect(
+        withRouter(const RouterChoice(startPath: '/settings')),
+        (false, false),
+      );
+      expect(withRouter(const RouterChoice()), (true, true));
+      // Before the choice, or with a template that made none.
+      expect(withRouter(null), (true, true));
+      expect(
+        condition.holdsIn(
+          const RoleHookRequest(
+            data: [],
+            presentRoles: {appEntryRole},
+            context: testContext,
+          ),
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('the warning of the destinations of an app without a layout', () {
@@ -991,28 +1042,32 @@ void main() {
         'provider of the role, or open it from a screen of yours with '
         'context.nav.';
 
-    /// What the hook warned of, and the path of the route that it chose,
-    /// for an app with [data] that has a layout only with [layout].
-    Future<({List<String> warnings, String? start})> choose(
+    /// The messages of what the hook warned of, their codes, and the path
+    /// of the route that it chose, for an app with [data] that has a layout
+    /// only with [layout].
+    Future<({List<String> warnings, List<String?> codes, String? start})>
+        choose(
       List<RoleData<Object>> data, {
       String? start,
       bool layout = false,
       int pick = 0,
     }) async {
       final environment = PromptingEnvironment(pick: pick);
-      final choice = await routerRole.template.choose(
-        routerRole.choiceContext(
-          RoleChoiceRequest(
-            data: data,
-            presentRoles: {routerRole, if (layout) layoutRole},
-            optionValues: {'start': start},
-            environment: environment,
-            context: testContext,
-          ),
+      final context = routerRole.choiceContext(
+        RoleChoiceRequest(
+          data: data,
+          presentRoles: {routerRole, if (layout) layoutRole},
+          optionValues: {'start': start},
+          environment: environment,
+          context: testContext,
         ),
       );
+      final choice = await routerRole.template.choose(context);
+      // The hook reports through the context, not through the logger.
+      expect(environment.warnings, isEmpty);
       return (
-        warnings: environment.warnings,
+        warnings: [for (final warning in context.warnings) warning.message],
+        codes: [for (final warning in context.warnings) warning.code],
         start: (choice! as RouterChoice).startPath,
       );
     }
@@ -1022,6 +1077,8 @@ void main() {
       final run = await choose([quarry, kiln]);
 
       expect(run.start, '/quarry');
+      expect(run.codes, [RouterRole.noMainNavigationWarning]);
+      expect(RouterRole.noMainNavigationWarning, 'router.no_main_navigation');
       expect(
         run.warnings.single,
         'No module provides the layout role, so the app has no main '
@@ -1113,6 +1170,10 @@ void main() {
       expect(run.warnings, hasLength(2));
       expect(run.warnings.first, ofStart);
       expect(run.warnings.last, ofKiln);
+      expect(
+        run.codes,
+        [RouterRole.noStartWarning, RouterRole.noMainNavigationWarning],
+      );
 
       // An app with a layout gets the warning of its start alone.
       expect((await choose([kiln], layout: true)).warnings, [ofStart]);
@@ -1153,24 +1214,22 @@ void main() {
     });
 
     test('is not given for a start that the hook refuses', () async {
-      Future<List<String>> warningsFor(String start) async {
-        final environment = PromptingEnvironment();
+      Future<List<SmfIssue>> warningsFor(String start) async {
+        final context = routerRole.choiceContext(
+          RoleChoiceRequest(
+            data: [quarry, kiln],
+            presentRoles: {routerRole},
+            optionValues: {'start': start},
+            environment: PromptingEnvironment(),
+            context: testContext,
+          ),
+        );
         try {
-          await routerRole.template.choose(
-            routerRole.choiceContext(
-              RoleChoiceRequest(
-                data: [quarry, kiln],
-                presentRoles: {routerRole},
-                optionValues: {'start': start},
-                environment: environment,
-                context: testContext,
-              ),
-            ),
-          );
+          await routerRole.template.choose(context);
         } on SmfUsageException {
           // The run stops with the message of the exception alone.
         }
-        return environment.warnings;
+        return context.warnings;
       }
 
       expect(await warningsFor('/quarry'), hasLength(1));
@@ -1578,6 +1637,8 @@ void main() {
         );
 
         expect(issues.single.isError, isFalse);
+        expect(issues.single.code, RouterRole.ambiguousRoutesWarning);
+        expect(RouterRole.ambiguousRoutesWarning, 'router.ambiguous_routes');
         expect(
           issues.single.message,
           'The routes "about" (/:section/about) and "page" (/docs/:page) both '

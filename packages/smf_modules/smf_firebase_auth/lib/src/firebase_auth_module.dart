@@ -63,11 +63,11 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// Firebase CLI, and writes nothing into the app. After generation, once
 /// `flutterfire configure` of [FirebaseCoreModule] configured the app, the
 /// module runs the script: its step continues
-/// [FirebaseCoreModule.configureStep]. The Firebase CLI adds a web app to a
-/// project that has none, so a run in a terminal asks first, and tells of
-/// the Firebase console as the other way. Any other run prints the command
-/// to run later, and so does a run on a machine whose Firebase CLI is older
-/// than the command, which the module checks before generation.
+/// [FirebaseCoreModule.configureStep], so a run in a terminal asks only
+/// about `flutterfire configure`. Any other run prints the command to run
+/// later, and so does a run on a machine whose Firebase CLI is older than
+/// the version that the script needs, which the module checks before
+/// generation.
 ///
 /// The README of the app tells how to enable the ways to sign in, with the
 /// script and in the Firebase console, and what the script does to the

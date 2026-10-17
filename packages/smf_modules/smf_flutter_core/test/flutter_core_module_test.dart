@@ -2,6 +2,8 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
+import 'package:smf_flutter_core/bundles/flutter_core_fallback_bundle.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_flutter_core/src/agents.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -172,6 +174,30 @@ void main() {
       expect(descriptor.requires, isEmpty);
     });
 
+    test(
+        'contributes the fallback start screen and its texts only to an app '
+        'that no route starts, and the rest of the app to every app', () {
+      final contributions = module.contribute(ContractHarness.defaultContext);
+      final bricks = {
+        for (final brick in contributions.whereType<BrickContribution>())
+          brick.bundle.name: brick.whenChosen,
+      };
+
+      expect(bricks, {
+        'flutter_core': isEmpty,
+        'flutter_core_fallback': {RouterRole.noStartRoute},
+      });
+      expect(
+        [
+          for (final data in contributions.whereType<RoleData<Object>>())
+            if (data.role == localizationRole) data.whenChosen,
+        ],
+        [
+          {RouterRole.noStartRoute},
+        ],
+      );
+    });
+
     test('forms a valid registry on its own and with other modules', () {
       expect(ModuleRegistry.problemsOf(const [module]), isEmpty);
       expect(ModuleRegistry.problemsOf(testRegistry().modules), isEmpty);
@@ -181,7 +207,7 @@ void main() {
       final brick = module
           .contribute(ContractHarness.defaultContext)
           .whereType<BrickContribution>()
-          .single;
+          .firstWhere((brick) => brick.bundle == flutterCoreBundle);
 
       expect(
         {
@@ -214,7 +240,7 @@ void main() {
         final brick = module
             .contribute(_contextOf(name))
             .whereType<BrickContribution>()
-            .single;
+            .firstWhere((brick) => brick.bundle == flutterCoreFallbackBundle);
 
         expect(brick.vars['app_symbol'], symbol);
         expect(brick.vars['app_number'], number);
@@ -231,7 +257,7 @@ void main() {
 
     test(
         'builds the app with and without a router, each with and without '
-        'the texts of the app', () {
+        'the texts of the app, and an app that a route starts', () {
       expect(
         results.map((result) => result.contractCase.name),
         containsAll([
@@ -239,6 +265,7 @@ void main() {
           'flutter_core with router',
           'flutter_core with localization',
           'flutter_core',
+          TestStartModule.id.value,
         ]),
       );
     });
@@ -325,18 +352,17 @@ void main() {
       // below the root, with a context of its own.
       expect(
         _namedOf(root).singleWhere((named) => named.startsWith('builder: ')),
-        'builder: (context, child) => Builder(builder: (context) => '
-        'AnnotatedRegion<SystemUiOverlayStyle>(value: '
-        'SystemUiOverlayStyle(statusBarBrightness: '
-        'Theme.of(context).brightness, statusBarIconBrightness: '
-        'Theme.of(context).brightness == Brightness.dark ? '
-        'Brightness.light : Brightness.dark), child: child!))',
+        'builder: (context, child) => StatusBarIcons(child: child!)',
       );
       expect(
         app,
         contains(
-          "import 'package:flutter/services.dart' show SystemUiOverlayStyle;",
+          "import 'package:contract_app/core/app/status_bar_icons.dart';",
         ),
+      );
+      expect(
+        texts[AppEntryRole.statusBarIconsFile],
+        contains('class StatusBarIcons extends StatelessWidget'),
       );
       // The fallback start screen has no app bar, and leaves the status bar
       // to the root.
@@ -561,6 +587,23 @@ void main() {
     });
 
     test(
+        'names in its note the entitlements of the iOS app, which every '
+        'build configuration of the app target signs with', () {
+      const path = AppEntryRole.iosEntitlementsFile;
+
+      expect(agentNote, contains('`$path`'));
+      expect(texts.keys, contains(path));
+      // The file is the provider's, and each of the three build
+      // configurations of the app target signs with it.
+      expect(app.files[path]!.owner, const ModuleOrigin(FlutterCoreModule.id));
+      expect(
+        'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'
+            .allMatches(texts[AppEntryRole.xcodeProjectFile]!),
+        hasLength(3),
+      );
+    });
+
+    test(
         'names in its note the commands that check a change, which format '
         'only the code of the app and run its tests', () {
       final commands = RegExp(r'```bash\n([^`]+)```').firstMatch(agentNote);
@@ -574,8 +617,8 @@ void main() {
         'flutter test',
       ]);
       // The two directories with the Dart code of the app, and a test for
-      // `flutter test` to run: what the role does not guarantee, and so
-      // does not say.
+      // `flutter test` to run, which the template of the role gives every
+      // app, also one that no fallback start screen comes with.
       expect(
         {
           for (final path in texts.keys)
@@ -603,6 +646,87 @@ void main() {
       expect(app, contains('MaterialApp.router(\n'));
       expect(app, contains('routerConfig: appRouter.config,'));
       expect(app, isNot(contains('home:')));
+    });
+
+    test(
+        'shows the screen of the start route, and imports no fallback '
+        'start screen, in an app that a route starts', () async {
+      final result = await renderedApp(const [TestStartModule.id]);
+      // The Dart files of the test router, by their owner.
+      final router = [
+        for (final MapEntry(key: path, value: file)
+            in result.app!.files.entries)
+          if (file.owner == const ModuleOrigin(TestRouterModule.id) &&
+              path.endsWith('.dart'))
+            DartFileIndexer.index(path, result.app!.texts[path]!),
+      ];
+      final start = const ImportRef.app(
+        'features/test_start/test_start_screen.dart',
+      ).resolveUri('contract_app');
+      final fallback = AppEntryRole.fallbackStartScreen.importRef.resolveUri(
+        'contract_app',
+      );
+
+      expect(router, isNotEmpty);
+      expect(router.where((file) => file.importsUri(start)), isNotEmpty);
+      expect(router.where((file) => file.importsUri(fallback)), isEmpty);
+    });
+
+    test(
+        'has neither the fallback start screen nor its widget test nor its '
+        'texts in an app that a route starts', () async {
+      final result = await renderedApp(const [
+        TestStartModule.id,
+        TestTextsModule.id,
+        TestPreferencesModule.id,
+      ]);
+      final input = localizationRole.hookInput(result.hook!);
+
+      expect(routerRole.startIn(routerRole.hookInput(result.hook!)), isNotNull);
+      expect(result.app!.texts.keys, isNot(contains(_screenFile)));
+      expect(result.app!.texts.keys, isNot(contains(_screenTestFile)));
+      // flutter test still has a test to run: that of the template of the
+      // role.
+      expect(
+        result.app!.texts.keys,
+        contains(AppEntryRole.statusBarIconsTestFile),
+      );
+      expect(
+        [
+          for (final text in localizationRole.textsIn(input))
+            if (text.owner == const ModuleOrigin(FlutterCoreModule.id)) text,
+        ],
+        isEmpty,
+      );
+      // Without a text of its own, the app is in English alone.
+      expect(localizationRole.localesIn(input), ['en']);
+    });
+
+    test(
+        'has the fallback start screen, its widget test and its texts in an '
+        'app whose router has no route to start on', () async {
+      final result = await renderedApp(const [
+        FlutterCoreModule.id,
+        TestRouterModule.id,
+        TestTextsModule.id,
+        TestPreferencesModule.id,
+      ]);
+
+      expect(routerRole.startIn(routerRole.hookInput(result.hook!)), isNull);
+      expect(
+        result.app!.texts.keys,
+        containsAll(const [_screenFile, _screenTestFile]),
+      );
+      expect(
+        [
+          for (final text in localizationRole.textsIn(
+            localizationRole.hookInput(result.hook!),
+          ))
+            if (text.owner == const ModuleOrigin(FlutterCoreModule.id))
+              text.getter,
+        ],
+        ['flutterCoreFallbackHint', 'flutterCoreFallbackCopied'],
+      );
     });
   });
 
@@ -784,13 +908,9 @@ void main() {
       ).singleWhere((named) => named.startsWith('builder: '));
       expect(
         builder,
-        startsWith(
-          'builder: (context, child) => MediaQuery.withNoTextScaling(child: '
-          'Builder(builder: (context) => '
-          'AnnotatedRegion<SystemUiOverlayStyle>(',
-        ),
+        'builder: (context, child) => MediaQuery.withNoTextScaling(child: '
+        'StatusBarIcons(child: child!))',
       );
-      expect(builder, endsWith('child: child!)))'));
     });
   });
 

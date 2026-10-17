@@ -1,0 +1,13 @@
+name: flutter_core_fallback
+description: "The fallback start screen of an SMF app that no route starts, with its widget test."
+
+# A brick of the module model, which only an app that no route starts gets.
+# Its files are relative to the root of the generated app. The pipeline
+# renders it with app_name, org_name and the has_<role> flags; the module
+# adds app_symbol and app_number, the symbol and the number of the cell of
+# the app, and text_fallback_hint and text_fallback_copied, the code that
+# reads each of the two texts of the screen.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

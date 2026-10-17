@@ -14,18 +14,26 @@ part of '../contributions.dart';
 /// to it unconditionally; hooks and rules never see data that does not
 /// apply.
 ///
+/// Data can depend on what other roles chose ([whenChosen]), but not on
+/// what [role] chooses, since [role] chooses from its data. The `choose`
+/// hook of [role] then runs after those of the roles of the conditions, and
+/// gets the data only where every condition holds, as the render hooks do;
+/// validation and the module rules take it as data that applies.
+///
 /// Prefer [Role.data] to the constructor: it takes a value of the role's
 /// data type only, while the constructor also accepts a wider type argument
 /// that fails only at run time.
 final class RoleData<D extends Object> extends Contribution {
   /// Creates the data [value] for [role].
-  const RoleData(this.role, this.value, {super.when}) : origin = null;
+  const RoleData(this.role, this.value, {super.when, super.whenChosen})
+      : origin = null;
 
   const RoleData._(
     this.role,
     this.value, {
     required this.origin,
     required super.when,
+    required super.whenChosen,
   });
 
   /// The role the data is for.
@@ -42,6 +50,11 @@ final class RoleData<D extends Object> extends Contribution {
   final ContributionOrigin? origin;
 
   /// Returns a copy of this data contributed by [origin].
-  RoleData<D> withOrigin(ContributionOrigin origin) =>
-      RoleData<D>._(role, value, origin: origin, when: when);
+  RoleData<D> withOrigin(ContributionOrigin origin) => RoleData<D>._(
+        role,
+        value,
+        origin: origin,
+        when: when,
+        whenChosen: whenChosen,
+      );
 }

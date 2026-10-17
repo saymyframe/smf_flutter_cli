@@ -117,6 +117,8 @@ void main() {
       analyticsRole,
       crashReportingRole,
       authRole,
+      notificationsRole,
+      pushRole,
     ]) {
       test('lets each provider of the ${role.id} contribute one implementation',
           () {
@@ -152,11 +154,21 @@ void main() {
   group('the templates of the service roles', () {
     test(
         'register the service in the DI container, but for the auth role, '
-        'whose service is not for the code of the app', () {
+        'the notifications role and the push role, whose services are not '
+        'for the code of the app', () {
       expect(
         authRole.template.contribute(testContext).whereType<RoleData<Object>>(),
         isEmpty,
       );
+      for (final role in [notificationsRole, pushRole]) {
+        expect(
+          role.template!
+              .contribute(testContext)
+              .whereType<RoleData<DiRegistration>>(),
+          isEmpty,
+          reason: role.id,
+        );
+      }
       for (final (role, service, factory) in [
         (eventsRole, 'CommunicationService', 'createCommunicationService'),
         (preferencesRole, 'AppPreferences', 'createAppPreferences'),

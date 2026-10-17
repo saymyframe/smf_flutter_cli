@@ -235,12 +235,15 @@ void main() {
 
       // What code that knows only the role reads: context.l10n.
       List<String> problems(IndexedDeclaration declaration) => _messages(
-            localizationRole.interface.checkSymbols({
-              LocalizationRole.textsFile: DartFileIndex(
-                path: LocalizationRole.textsFile,
-                declarations: [declaration],
-              ),
-            }),
+            localizationRole.interface.checkSymbols(
+              {
+                LocalizationRole.textsFile: DartFileIndex(
+                  path: LocalizationRole.textsFile,
+                  declarations: [declaration],
+                ),
+              },
+              appWith({localizationRole}),
+            ),
           );
       const where = 'extension AppTexts in lib/core/l10n/l10n.dart';
 
@@ -411,26 +414,33 @@ void main() {
       ]),
     ];
 
+    /// The choice for [data], whose warnings go to [warnings].
     Future<Object?> choose(
       List<RoleData<Object>> data, {
       String? locales,
       SmfEnvironment? environment,
       bool settingsScreen = false,
-    }) =>
-        localizationRole.template.choose(
-          localizationRole.choiceContext(
-            RoleChoiceRequest(
-              data: data,
-              presentRoles: {
-                localizationRole,
-                if (settingsScreen) settingsScreenRole,
-              },
-              optionValues: {'locales': locales},
-              environment: environment ?? FakeEnvironment(),
-              context: testContext,
-            ),
-          ),
-        );
+      List<SmfIssue>? warnings,
+    }) async {
+      final context = localizationRole.choiceContext(
+        RoleChoiceRequest(
+          data: data,
+          presentRoles: {
+            localizationRole,
+            if (settingsScreen) settingsScreenRole,
+          },
+          optionValues: {'locales': locales},
+          environment: environment ?? FakeEnvironment(),
+          context: testContext,
+        ),
+      );
+      final choice = await localizationRole.template.choose(context);
+      warnings?.addAll(context.warnings);
+      return choice;
+    }
+
+    List<String> messagesOf(List<SmfIssue> warnings) =>
+        [for (final warning in warnings) warning.message];
 
     Matcher failsWith(String message) => throwsA(
           isA<SmfUsageException>().having((e) => e.message, 'message', message),
@@ -467,33 +477,42 @@ void main() {
 
     test('warns of the texts without a translation into a language', () async {
       final environment = PromptingEnvironment();
+      final warnings = <SmfIssue>[];
 
-      await choose(data, environment: environment);
+      await choose(data, environment: environment, warnings: warnings);
 
-      expect(environment.warnings, hasLength(3));
+      final messages = messagesOf(warnings);
+      expect(messages, hasLength(3));
       expect(
-        environment.warnings[0],
+        messages[0],
         'No translation into uk of the texts empty, more of the module feed: '
         'the app shows them in English there.',
       );
       expect(
-        environment.warnings[1],
+        messages[1],
         'No translation into de of the text title of the module home: the '
         'app shows it in English there.',
       );
       expect(
-        environment.warnings[2],
+        messages[2],
         'No translation into de of the texts empty, retry, more of the '
         'module feed: the app shows them in English there.',
       );
+      expect(
+        {for (final warning in warnings) warning.code},
+        {LocalizationRole.untranslatedWarning},
+      );
+      expect(LocalizationRole.untranslatedWarning, 'localization.untranslated');
+      // The hook reports through the context, not through the logger.
+      expect(environment.warnings, isEmpty);
     });
 
     test('warns only of the languages of the app', () async {
-      final environment = PromptingEnvironment();
+      final warnings = <SmfIssue>[];
 
-      await choose(data, locales: 'en', environment: environment);
+      await choose(data, locales: 'en', warnings: warnings);
 
-      expect(environment.warnings, isEmpty);
+      expect(warnings, isEmpty);
     });
 
     group('in an app with a settings screen', () {
@@ -504,16 +523,17 @@ void main() {
         String? locales,
         bool settingsScreen = true,
       }) async {
-        final environment = PromptingEnvironment();
+        final warnings = <SmfIssue>[];
         await choose(
           [_of('home', texts)],
           locales: locales,
-          environment: environment,
           settingsScreen: settingsScreen,
+          warnings: warnings,
         );
         return [
-          for (final warning in environment.warnings)
-            if (!warning.startsWith('No translation into ')) warning,
+          for (final warning in warnings)
+            if (warning.code != LocalizationRole.untranslatedWarning)
+              '${warning.code}: ${warning.message}',
         ];
       }
 
@@ -534,7 +554,12 @@ void main() {
           'their codes, and tells where their names go', () async {
         expect(LocalizationRole.languageNames.keys, ['en', 'uk']);
         expect(
+          LocalizationRole.unnamedLanguageWarning,
+          'localization.unnamed_language',
+        );
+        expect(
           (await warningsOf(inFour)).single,
+          '${LocalizationRole.unnamedLanguageWarning}: '
           'The setting of the language shows de, fr by their codes: SMF has '
           'the names of en, uk only. Add the name of each language to _names '
           'in ${LocalizationRole.languageSettingFile} of the app.',
@@ -542,6 +567,7 @@ void main() {
         // One language, and only the languages of the app.
         expect(
           (await warningsOf(inFour, locales: 'en,de')).single,
+          '${LocalizationRole.unnamedLanguageWarning}: '
           'The setting of the language shows de by its code: SMF has the '
           'names of en, uk only. Add the name of the language to _names in '
           '${LocalizationRole.languageSettingFile} of the app.',
@@ -603,34 +629,46 @@ void main() {
 
       test('leaves the language out, and tells whose texts are in it',
           () async {
-        final environment = PromptingEnvironment();
+        final warnings = <SmfIssue>[];
 
         expect(
-          await choose(data, environment: environment),
+          await choose(data, warnings: warnings),
           const LocalizationChoice(['en', 'uk']),
         );
-        expect(environment.warnings, hasLength(4));
+        final messages = messagesOf(warnings);
+        expect(messages, hasLength(4));
         expect(
-          environment.warnings[0],
+          [for (final warning in warnings) warning.code],
+          [
+            ...List.filled(3, LocalizationRole.unsupportedLanguageWarning),
+            LocalizationRole.untranslatedWarning,
+          ],
+        );
+        expect(
+          LocalizationRole.unsupportedLanguageWarning,
+          'localization.unsupported_language',
+        );
+        expect(
+          messages[0],
           'The app is not in mt, which the texts title, back of the module '
           'home have translations into: Flutter has no texts for its own '
           'widgets in that language.',
         );
         expect(
-          environment.warnings[1],
+          messages[1],
           'The app is not in ps, which the text empty of the module feed has '
           'a translation into: Flutter has no texts for its own widgets in '
           'that language.',
         );
         expect(
-          environment.warnings[2],
+          messages[2],
           'The app is not in mt, which the text empty of the module feed has '
           'a translation into: Flutter has no texts for its own widgets in '
           'that language.',
         );
         // The module still works in the languages that the app is in.
         expect(
-          environment.warnings[3],
+          messages[3],
           'No translation into uk of the text back of the module home: the '
           'app shows it in English there.',
         );
@@ -656,13 +694,13 @@ void main() {
       });
 
       test('says nothing of it when --locales names the languages', () async {
-        final environment = PromptingEnvironment();
+        final warnings = <SmfIssue>[];
 
         expect(
-          await choose(data, locales: 'en', environment: environment),
+          await choose(data, locales: 'en', warnings: warnings),
           const LocalizationChoice(['en']),
         );
-        expect(environment.warnings, isEmpty);
+        expect(warnings, isEmpty);
       });
     });
 

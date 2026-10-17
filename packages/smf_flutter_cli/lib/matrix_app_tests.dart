@@ -10,6 +10,7 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -31,6 +32,9 @@ Future<MatrixAppTests> smfAppTests() async {
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
   final home = await appTestsDirectoryOf('smf_home_flutter');
+  final localNotifications = await appTestsDirectoryOf(
+    'smf_local_notifications',
+  );
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
@@ -211,6 +215,33 @@ Future<MatrixAppTests> smfAppTests() async {
           'probeSharedPreferences',
         ),
       ),
+      // The notifications service of the module on
+      // flutter_local_notifications: what each of its calls sends to the
+      // plugin, on Android and on iOS, such as the channel of the app with a
+      // high importance, the cancel of the scheduled notification of an id
+      // that is shown, and an inexact alarm at a time in UTC; a request that
+      // shows the question of the system, or opens the settings of the
+      // system where the system shows none; and the taps on a notification,
+      // the one that launched the app included, with the data of the
+      // notification. The tests use the service of the module, and leave
+      // what every provider of the notifications role does to the test of
+      // the role. The mocks are a device in memory on which the app may not
+      // show notifications and has not asked, and the matrix sets them up
+      // for the tests of every module of the app, since the start-up of the
+      // app opens the notifications. Its probe checks, on an Android
+      // device, the channel of the app that the service created.
+      MatrixAppTest(
+        '$localNotifications/local_notifications',
+        appliesTo: _has(LocalNotificationsModule.id),
+        mocks: const MatrixMocks(
+          'test/local_notifications_mocks.dart',
+          'mockLocalNotifications',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/local_notifications/probe.dart',
+          'probeLocalNotifications',
+        ),
+      ),
       // The start screen of the module, a welcome to the developer of the
       // app, wherever the app starts: it names the app, greets by the time
       // of the day and lists the next steps with their paths, with its
@@ -276,6 +307,13 @@ Future<MatrixAppTests> smfAppTests() async {
       // of the provider keeps its contract, and the session of the app
       // does what the mode says.
       await authRoleAppTest(),
+      // The notifications of the apps with the notifications role,
+      // whichever module provides it: the permission follows what the
+      // service says and what the app asked, a request asks once, the taps
+      // of the app and of an owner go apart, a scheduled notification is
+      // listed until it is cancelled or shown, and the next start keeps
+      // what was scheduled and the permission.
+      await notificationsRoleAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -328,8 +366,9 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the auth role, of the settings screen role, of the theme
-    // role and of the localization role gets the tests of its role. Each
+    // role, of the auth role, of the notifications role, of the settings
+    // screen role, of the theme role and of the localization role gets the
+    // tests of its role. Each
     // provider of the app entry role gets the test of the theme role, which
     // checks that its root rebuilds.
     testedRoles: {
@@ -338,6 +377,7 @@ Future<MatrixAppTests> smfAppTests() async {
       eventsRole,
       preferencesRole,
       authRole,
+      notificationsRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,
@@ -690,6 +730,118 @@ Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
       },
       roles: {authRole},
     );
+
+/// The test of the notifications role that the CLI keeps in its
+/// `app_tests/notifications_role`, for the apps with the role, whichever
+/// module provides it, that [among] accepts, or all of them:
+/// - `appNotifications`, over a service of the test that scripts what a
+///   provider answers: the permission follows what the service says, and
+///   is denied once the app asked, which the preferences remember under
+///   [NotificationsRole.askedKey]; a request asks the user only while the
+///   app may not show notifications, once for two requests at once, and the
+///   app saves that it asked only once the user answered; on a system
+///   without a question, the request opens its settings, and the
+///   app sees what the user did there once the user comes back; each tap
+///   on a notification of the app reaches every listener of the taps, and
+///   a tap on a notification of an owner reaches only that owner; and an
+///   id that the app does not take, or a time that passed, never reaches
+///   the service;
+/// - `appNotifications` over the service of the provider: the app starts
+///   as on a first launch, as the role asks of the mocks of a provider, and
+///   `show()` and `schedule()` complete without the permission; one request
+///   turns the notifications on, and `openSettings()` completes; a
+///   scheduled notification is listed with what it has until it is
+///   cancelled or a notification of its id is shown, and one scheduled with
+///   its id takes its place; a notification of an owner, with a negative
+///   id, keeps its data
+///   and takes the place of no notification of the app; and the service
+///   tells of the taps on a broadcast stream;
+/// - the next start, `initNotifications()` again, keeps the notifications
+///   that the app scheduled and the permission that the user gave, and
+///   `initPreferences()` again the permission denied once the app asked.
+///
+/// The test knows only the role. The matrix fills in the key, which the
+/// role publishes. Its probe, `probeNotifications()` of
+/// `integration_test/notifications_role/probe.dart`, only reads, for the
+/// start check on a device: the permission of the app agrees with the
+/// service, the service lists the scheduled notifications, and the app has
+/// no tap that launched it. The test runs the probe too.
+Future<MatrixAppTest> notificationsRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/notifications_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(notificationsRole) &&
+          (among?.call(app) ?? true),
+      values: _notificationsValuesOf,
+      roles: {notificationsRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/notifications_role/probe.dart',
+        'probeNotifications',
+      ),
+    );
+
+/// The values of the files of the test of the notifications role, the same
+/// in every app: `asked_key`, the key under which the app remembers that it
+/// asked for the permission, as the role publishes it.
+Map<String, String> _notificationsValuesOf(MatrixApp app) =>
+    const {'asked_key': NotificationsRole.askedKey};
+
+/// The test of the push role that the CLI keeps in its `app_tests/push_role`,
+/// for the apps with the role, whichever module provides it, that [among]
+/// accepts, or all of them:
+/// - `appPush`, over a service of push messages of the test that scripts
+///   what a provider answers: the address is `null` until the service gives
+///   one, follows each address that the service tells of, the first one
+///   after none too, and is asked for again when the user comes back while
+///   the app has none; each message in the foreground reaches every
+///   listener of the messages once; where the platform does not show a
+///   message, the app shows each one with a title or a body as one
+///   notification whose owner is the role, through a service of
+///   notifications of the test, and a tap on it reaches `appPush.taps` and
+///   not `appNotifications.taps`; where the platform shows it, the app
+///   shows none, and the taps of the service reach `appPush.taps`; and the
+///   message whose tap launched the app is the launch message, whether the
+///   platform or the app showed it, and not among the taps;
+/// - `appPush` over the service of the provider: the app gets the address
+///   that the provider gives, which the mocks of a provider give the device
+///   as the role asks, an app that the test launched has no launch message,
+///   the service tells of the messages, the taps and the addresses on
+///   broadcast streams, and the provider never asks for the permission to
+///   show notifications through the notifications of the app, while a
+///   request through its own SDK is for the tests of its module; the probe
+///   reports an app with a launch message and an address that the service
+///   does not give, and never the address;
+/// - the next start, `initPush()` again, creates a service that has the
+///   address that the device kept.
+///
+/// The test knows only the role, and the notifications role that it
+/// requires. The matrix fills in the owner of the notifications that show
+/// messages, the id of the role. Its probe, `probePush()` of
+/// `integration_test/push_role/probe.dart`, only reads, for the start check
+/// on a device: the app has no launch message, and once it has an address,
+/// the service gives the same one. The test runs the probe too.
+Future<MatrixAppTest> pushRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/push_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(pushRole) &&
+          (among?.call(app) ?? true),
+      values: _pushValuesOf,
+      roles: {pushRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/push_role/probe.dart',
+        'probePush',
+      ),
+    );
+
+/// The values of the files of the test of the push role, the same in every
+/// app: `push_owner`, the owner of the notifications through which the app
+/// shows a message, which is the id of the role.
+Map<String, String> _pushValuesOf(MatrixApp app) => {'push_owner': pushRole.id};
 
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module

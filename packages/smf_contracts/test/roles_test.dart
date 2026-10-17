@@ -17,7 +17,10 @@ const List<Role> _roles = [
   analyticsRole,
   crashReportingRole,
   authRole,
+  notificationsRole,
+  pushRole,
   settingsScreenRole,
+  onboardingScreenRole,
   themeRole,
 ];
 
@@ -50,7 +53,10 @@ void main() {
       'analytics role',
       'crash reporting role',
       'authentication role',
+      'notifications role',
+      'push messages role',
       'settings screen role',
+      'onboarding screen role',
       'theme role',
     ]);
   });
@@ -116,10 +122,32 @@ void main() {
       'requires': <String>{},
       'uses': {'router'},
     });
+    // The notifications role remembers in the preferences that it asked
+    // for the permission, and gives the settings screen and the onboarding
+    // an entry and a step that ask, with texts in the language of the app.
+    expect(shape(notificationsRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'preferences'},
+      'uses': {'settings_screen', 'onboarding_screen', 'localization'},
+    });
+    // The push role shows a message that arrives in the foreground through
+    // the notifications, whose permission lets the app show messages.
+    expect(shape(pushRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'notifications'},
+      'uses': <String>{},
+    });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
       'uses': <String>{},
+    });
+    // The onboarding shows its screen at a route of the app, and the
+    // labels of its steps in the language of the app.
+    expect(shape(onboardingScreenRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'router'},
+      'uses': {'localization'},
     });
     expect(shape(themeRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -163,15 +191,27 @@ void main() {
 
   test('the role interfaces name files of the app', () {
     final dartFile = RegExp(r'^lib/[a-z0-9_/]+\.dart$');
+    // A test mirrors the file of lib/ that it tests.
+    final testFile = RegExp(r'^test/[a-z0-9_/]+_test\.dart$');
     // A file for those who work on the app, such as the guide for coding
     // agents, is at its root.
     final rootFile = RegExp(r'^[A-Z]+\.md$');
+    // A resource of the Android app that providers name, such as the small
+    // icon of a notification.
+    final androidResource = RegExp(
+      r'^android/app/src/main/res/[a-z]+/[a-z][a-z0-9_]*\.xml$',
+    );
     for (final role in _roles) {
       final interface = role.interface;
       for (final file in interface.files) {
         expect(
           file,
-          anyOf(matches(dartFile), matches(rootFile)),
+          anyOf(
+            matches(dartFile),
+            matches(testFile),
+            matches(rootFile),
+            matches(androidResource),
+          ),
           reason: file,
         );
       }
@@ -209,7 +249,10 @@ void main() {
           'analytics',
           'crash_reporting',
           'auth',
+          'notifications',
+          'push',
           'settings_screen',
+          'onboarding_screen',
           'theme',
         ],
       );
@@ -379,12 +422,16 @@ void main() {
 
     // A role's socket may also be tagged in its provider's files, as the
     // observers of the router are. The other names are the variables of the
-    // render hooks of the templates.
+    // render hooks of the templates, and the name of the app, which the
+    // pipeline gives every brick: a test reads it in two braces, as in the
+    // import of a file of the app, since a package name has nothing that
+    // mustache escapes.
     test('have tags only of their own sockets, and no other mustache', () {
       final known = {
         'facade',
         'guards',
         'destinations',
+        'steps',
         'labels',
         'locales',
         'locale_key',
@@ -396,6 +443,15 @@ void main() {
         'text_light',
         'text_dark',
         'auth_mode',
+        'asked_key',
+        'owner_key',
+        'channel_id',
+        'channel_name',
+        'icon',
+        'text_on',
+        'text_off',
+        'push_owner',
+        'message_key',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
@@ -404,6 +460,7 @@ void main() {
               in templatesOf(brick.bundle).entries) {
             for (final match in _mustache.allMatches(text)) {
               final name = match.group(1)!;
+              if (match.group(0) == '{{app_name}}') continue;
               final triple = match.group(0)!.startsWith('{{{');
               expect(triple, isTrue, reason: '$path: ${match.group(0)}');
               expect(

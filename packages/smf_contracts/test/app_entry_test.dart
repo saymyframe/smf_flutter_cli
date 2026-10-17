@@ -153,15 +153,19 @@ String _outsideBuild(String path) =>
 
 /// Checks [files] of an app whose app entry flutter_core provides; it owns
 /// each file, unless [owners] names another owner.
+///
+/// The app has no router unless [router] is the choice of its router.
 List<SmfIssue> _check(
   Map<String, DartFileIndex> files, {
   Map<String, ContributionOrigin> owners = const {},
+  RouterChoice? router,
 }) {
   final request = StructuralRuleRequest(
-    hook: const RoleHookRequest(
-      data: [],
-      presentRoles: {appEntryRole},
+    hook: RoleHookRequest(
+      data: const [],
+      presentRoles: {appEntryRole, if (router != null) routerRole},
       context: testContext,
+      choices: {if (router != null) routerRole: router},
     ),
     files: files,
     owners: {
@@ -184,7 +188,7 @@ List<SmfIssue> _check(
     ],
   );
   return [
-    ...appEntryRole.interface.checkSymbols(files),
+    ...appEntryRole.interface.checkSymbols(files, request.hook),
     ...appEntryRole.checkStructure(request),
   ];
 }
@@ -204,7 +208,8 @@ void main() {
       expect(appEntryRole.description, 'App entry');
       expect(appEntryRole.cardinality, RoleCardinality.exactlyOne);
       expect(appEntryRole.requires, isEmpty);
-      expect(appEntryRole.uses, isEmpty);
+      // The fallback start screen depends on what the router chose.
+      expect(appEntryRole.uses, {routerRole});
       expect(appEntryRole.options, isEmpty);
       expect(appEntryRole.presenceFlag, 'has_app_entry');
     });
@@ -223,6 +228,8 @@ void main() {
           AppEntryRole.gradleAppFile,
           AppEntryRole.infoPlistFile,
           AppEntryRole.xcodeProjectFile,
+          AppEntryRole.iosEntitlementsFile,
+          AppEntryRole.appDelegateFile,
         ])
           file.split('/').first,
       };
@@ -234,7 +241,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(18));
+      expect(sockets, hasLength(22));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -243,6 +250,15 @@ void main() {
       expect(tags, contains('smf_app_entry__bootstrap_platform'));
       expect(tags, contains('smf_app_entry__root_wrappers_open'));
       expect(tags, contains('smf_app_entry__agent_sections'));
+      expect(
+        tags,
+        containsAll([
+          'smf_app_entry__android_core_library_desugaring_enabled',
+          'smf_app_entry__android_core_library_desugaring_library',
+          'smf_app_entry__ios_app_delegate_launch',
+          'smf_app_entry__android_manifest_application_components',
+        ]),
+      );
     });
 
     test('bootstrap phases are separate sockets in start-up order', () {
@@ -271,6 +287,12 @@ void main() {
         'package:my_app/core/app/fallback_start_screen.dart',
       );
       expect(
+        AppEntryRole.fallbackStartScreen.whenChosen,
+        {RouterRole.noStartRoute},
+      );
+      expect(AppEntryRole.main.whenChosen, isEmpty);
+      expect(AppEntryRole.bootstrap.whenChosen, isEmpty);
+      expect(
         appEntryRole.structuralRules.map((rule) => rule.id),
         [
           'app_entry.bootstrap_without_material',
@@ -278,6 +300,7 @@ void main() {
           'app_entry.material_root',
           'app_entry.root_in_build',
           'app_entry.native_keys',
+          'app_entry.ios_entitlements_signed',
           'app_entry.agent_guide_paths',
         ],
       );
@@ -286,6 +309,8 @@ void main() {
         [
           'app_entry.bootstrap_phases',
           'app_entry.root_wrappers_in_main',
+          'app_entry.launch_code_place',
+          'app_entry.manifest_tag_places',
           'app_entry.tag_lines',
         ],
       );
@@ -304,6 +329,37 @@ void main() {
       expect(
         issues.every((issue) => issue.message.contains('is missing')),
         isTrue,
+      );
+    });
+
+    test(
+        'need the fallback start screen only in an app that no route '
+        'starts, and no file of it in any other app', () {
+      const start = RouterChoice(startPath: '/home');
+      final withoutScreen = _app()
+        ..remove(AppEntryRole.fallbackStartScreenFile);
+
+      expect(_check(_app(), router: const RouterChoice()), isEmpty);
+      expect(_check(withoutScreen, router: start), isEmpty);
+      expect(
+        [for (final issue in _check(_app(), router: start)) issue.message],
+        [
+          equals(
+            'The app has lib/core/app/fallback_start_screen.dart, the file of '
+            'class FallbackStartScreen, which only an app where no route '
+            'starts the app needs.',
+          ),
+        ],
+      );
+      expect(
+        [
+          for (final issue in _check(
+            withoutScreen,
+            router: const RouterChoice(),
+          ))
+            issue.message,
+        ],
+        [contains('lib/core/app/fallback_start_screen.dart is missing')],
       );
     });
 
@@ -970,6 +1026,38 @@ void main() {
       );
     });
 
+    test(
+        'components of the Android application are XML without imports, '
+        'those of one contribution after those of another', () {
+      const socket = AppEntryRole.androidManifestApplicationComponents;
+      const receiver = '        <receiver\n'
+          '            android:name="com.example.alarms.AlarmReceiver"\n'
+          '            android:exported="false" />';
+      const service = '        <service\n'
+          '            android:name="com.example.sync.SyncService"\n'
+          '            android:exported="false" />';
+
+      expect(socket.name, 'android_manifest_application_components');
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        socket.render(const [
+          SocketContribution.code(socket, Fragment(receiver)),
+          SocketContribution.code(socket, Fragment(service)),
+        ]),
+        {socket.tag: '$receiver\n$service'},
+      );
+      expect(socket.render(const []), {socket.tag: ''});
+      expect(
+        socket.problemsWith(
+          const SocketContribution.code(
+            socket,
+            Fragment(receiver, imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        isNotEmpty,
+      );
+    });
+
     test('Info.plist unites string arrays and keeps scalars unique', () {
       const socket = AppEntryRole.infoPlist;
 
@@ -1014,6 +1102,97 @@ void main() {
       );
     });
 
+    test(
+        'the entitlements of the iOS app unite string arrays and keep '
+        'scalars unique, as the keys of Info.plist', () {
+      const socket = AppEntryRole.iosEntitlements;
+      const sockets = ModuleOrigin(ModuleId('fake_sockets'));
+      const overlap = ModuleOrigin(ModuleId('fake_overlap'));
+      SocketContribution entry(
+        ContributionOrigin origin,
+        String key,
+        PlistValue value,
+      ) =>
+          socket.entry(key, value).withOrigin(origin);
+
+      expect(socket.name, 'ios_entitlements');
+      expect(socket.tag, 'smf_app_entry__ios_entitlements');
+      expect(socket.kind.policy, isA<PlistMergePolicy>());
+      expect(
+        socket.render([
+          entry(sockets, 'aps-environment', const PlistString('development')),
+          entry(
+            sockets,
+            'com.apple.developer.associated-domains',
+            const PlistStringArray(['applinks:example.com']),
+          ),
+          entry(overlap, 'aps-environment', const PlistString('development')),
+          entry(
+            overlap,
+            'com.apple.developer.associated-domains',
+            const PlistStringArray(['applinks:example.org']),
+          ),
+        ]),
+        {
+          socket.tag: [
+            '\t<key>aps-environment</key>',
+            '\t<string>development</string>',
+            '\t<key>com.apple.developer.associated-domains</key>',
+            '\t<array>',
+            '\t\t<string>applinks:example.com</string>',
+            '\t\t<string>applinks:example.org</string>',
+            '\t</array>',
+          ].join('\n'),
+        },
+      );
+      expect(
+        () => socket.render([
+          entry(sockets, 'aps-environment', const PlistString('development')),
+          entry(overlap, 'aps-environment', const PlistString('production')),
+        ]),
+        throwsA(
+          isA<MergeConflict>().having(
+            (conflict) => '$conflict',
+            'description',
+            contains('(from fake_sockets and fake_overlap)'),
+          ),
+        ),
+      );
+    });
+
+    test(
+        'the code at the launch of the iOS app is Swift without imports, the '
+        'statements of one contribution after those of another', () {
+      const socket = AppEntryRole.iosAppDelegateLaunch;
+      const delegate = '    UNUserNotificationCenter.current().delegate = self';
+      const shake = '    application.applicationSupportsShakeToEdit = true';
+
+      expect(socket.name, 'ios_app_delegate_launch');
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        socket.render(const [
+          SocketContribution.code(socket, Fragment(delegate)),
+          SocketContribution.code(socket, Fragment(shake)),
+        ]),
+        {socket.tag: '$delegate\n$shake'},
+      );
+      expect(socket.render(const []), {socket.tag: ''});
+      expect(
+        socket.problemsWith(
+          const SocketContribution.code(
+            socket,
+            Fragment(delegate, imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        [
+          equals(
+            'socket app_entry.ios_app_delegate_launch is not Dart code and '
+            'takes no imports.',
+          ),
+        ],
+      );
+    });
+
     test('Gradle plugins and dependencies take the highest version', () {
       expect(
         _render(AppEntryRole.gradleSettingsPlugins, const [
@@ -1044,6 +1223,63 @@ void main() {
           AppEntryRole.gradleAppDependencies.tag:
               r'    implementation("com.example:lib\$x:1.2")',
         },
+      );
+    });
+
+    test(
+        'core library desugaring takes the highest version of its library, '
+        'and puts the switch and the library into the Gradle file', () {
+      const socket = AppEntryRole.androidCoreLibraryDesugaring;
+      const notifications = ModuleOrigin(ModuleId('notifications'));
+      const calendar = ModuleOrigin(ModuleId('calendar'));
+      const library = 'com.android.tools:desugar_jdk_libs:2.1.4';
+
+      expect(socket.kind.policy, isA<MaxPolicy>());
+      expect(socket.kind.required, isFalse);
+      expect(
+        socket.render([
+          socket.value('2.1.3').withOrigin(calendar),
+          socket.value('2.1.4').withOrigin(notifications),
+          socket.value('2.0.4').withOrigin(calendar),
+        ]),
+        {
+          'smf_app_entry__android_core_library_desugaring_enabled':
+              '        isCoreLibraryDesugaringEnabled = true',
+          'smf_app_entry__android_core_library_desugaring_library':
+              '    coreLibraryDesugaring("$library")',
+        },
+      );
+      // Without a module that needs it, the Gradle file has neither line.
+      expect(socket.render(const []), {
+        'smf_app_entry__android_core_library_desugaring_enabled': '',
+        'smf_app_entry__android_core_library_desugaring_library': '',
+      });
+      // The problems name the socket, whose tags are those of its places.
+      expect(
+        socket.problemsWith(socket.value('two')).single,
+        contains(
+          '"two" of "app_entry.android_core_library_desugaring" cannot be '
+          'compared',
+        ),
+      );
+      expect(
+        () => socket.render([
+          socket.value('2.1.4').withOrigin(notifications),
+          socket.value('2.1.4-beta').withOrigin(calendar),
+        ]),
+        throwsA(
+          isA<MergeConflict>().having(
+            (conflict) => '$conflict',
+            'description',
+            allOf(
+              startsWith(
+                'MergeConflict: "app_entry.android_core_library_desugaring" '
+                'has conflicting values',
+              ),
+              contains('(from notifications and calendar)'),
+            ),
+          ),
+        ),
       );
     });
 
@@ -1115,10 +1351,12 @@ void main() {
     test('is AGENTS.md, with a CLAUDE.md that reads it', () {
       expect(AppEntryRole.agentsFile, 'AGENTS.md');
       expect(AppEntryRole.claudeFile, 'CLAUDE.md');
-      expect(
-        appEntryRole.interface.files,
-        [AppEntryRole.agentsFile, AppEntryRole.claudeFile],
-      );
+      expect(appEntryRole.interface.files, [
+        AppEntryRole.agentsFile,
+        AppEntryRole.claudeFile,
+        AppEntryRole.statusBarIconsFile,
+        AppEntryRole.statusBarIconsTestFile,
+      ]);
       expect(socket.tag, 'smf_app_entry__agent_sections');
       expect(socket.kind.carriesImports, isFalse);
       // Its renderer orders the sections and their notes itself, so a note
@@ -1139,10 +1377,7 @@ void main() {
       };
 
       expect(brick.bundle.name, 'app_entry_role');
-      expect(
-        templates.keys,
-        [AppEntryRole.agentsFile, AppEntryRole.claudeFile],
-      );
+      expect(templates.keys, appEntryRole.interface.files);
       expect(templates[AppEntryRole.claudeFile], '@AGENTS.md\n');
       final lines = templates[AppEntryRole.agentsFile]!.split('\n');
       expect(lines.first, '# AGENTS.md');
@@ -1213,10 +1448,7 @@ void main() {
           .singleWhere((contribution) => contribution.socket == socket)
           .entryValue! as AgentNote;
 
-      expect(rendered.files.keys, [
-        AppEntryRole.agentsFile,
-        AppEntryRole.claudeFile,
-      ]);
+      expect(rendered.files.keys, appEntryRole.interface.files);
       expect(rendered.files[AppEntryRole.claudeFile], '@AGENTS.md\n');
       // The widget for the icons of the status bar goes into the builder of
       // the root, in a file of the provider.
@@ -1474,14 +1706,35 @@ void main() {
           (contribution) => contribution.socket == AppEntryRole.appBuilder,
         );
 
-    /// The calls of [name] in the code that the wrapper makes of `child`.
+    /// The files of the app that the template of the role renders, by path.
+    late Map<String, String> files;
+
+    setUpAll(() async {
+      files = (await renderTemplate(appEntryRole)).files;
+    });
+
+    /// The class `StatusBarIcons` in its file.
+    ClassDeclaration widget() =>
+        parseString(content: files[AppEntryRole.statusBarIconsFile]!)
+            .unit
+            .declarations
+            .whereType<ClassDeclaration>()
+            .singleWhere(
+              (declaration) =>
+                  declaration.namePart.typeName.lexeme == 'StatusBarIcons',
+            );
+
+    /// The method `build` of `StatusBarIcons`.
+    MethodDeclaration buildOfWidget() => widget()
+        .body
+        .members
+        .whereType<MethodDeclaration>()
+        .singleWhere((method) => method.name.lexeme == 'build');
+
+    /// The calls of [name] in the method `build` of `StatusBarIcons`.
     List<MethodInvocation> calls(String name) {
-      final fragment = wrapper().fragment!;
-      final unit = parseString(
-        content: 'final wrapped = ${fragment.code}child${fragment.closing};',
-      ).unit;
       final found = <MethodInvocation>[];
-      unit.accept(_Calls(name, found));
+      buildOfWidget().accept(_Calls(name, found));
       return found;
     }
 
@@ -1494,16 +1747,32 @@ void main() {
             .toSource();
 
     test(
-        'come from the template of the role, in every app, as a widget '
-        'around the content of every route', () {
+        'come from the template of the role, in every app, as a widget of '
+        'its file around the content of every route', () {
       final contribution = wrapper();
+      final fragment = contribution.fragment!;
 
       expect(contribution.when, isEmpty);
-      expect(contribution.fragment!.isWrapper, isTrue);
-      expect(contribution.fragment!.problems(), isEmpty);
+      expect(fragment.isWrapper, isTrue);
+      expect(fragment.problems(), isEmpty);
       expect(
-        [for (final import in contribution.fragment!.imports) import.uri],
-        ['package:flutter/material.dart', 'package:flutter/services.dart'],
+        '${fragment.code}child${fragment.closing}',
+        'StatusBarIcons(child: child)',
+      );
+      expect(
+        [for (final import in fragment.imports) import.resolveUri('my_app')],
+        ['package:my_app/core/app/status_bar_icons.dart'],
+      );
+      expect(
+        AppEntryRole.statusBarIconsFile,
+        'lib/${fragment.imports.single.uri}',
+      );
+      final constructor =
+          widget().body.members.whereType<ConstructorDeclaration>().single;
+      expect(constructor.constKeyword, isNotNull);
+      expect(
+        constructor.parameters.toSource(),
+        '({required this.child, super.key})',
       );
     });
 
@@ -1519,25 +1788,25 @@ void main() {
       expect(argument(region, 'child'), 'child');
       // The brightness of the bar, which iOS takes, and of its icons, which
       // Android takes.
-      expect(
-        argument(style, 'statusBarBrightness'),
-        'Theme.of(context).brightness',
-      );
+      expect(argument(style, 'statusBarBrightness'), 'brightness');
       expect(
         argument(style, 'statusBarIconBrightness'),
-        'Theme.of(context).brightness == Brightness.dark ? '
-        'Brightness.light : Brightness.dark',
+        'brightness == Brightness.dark ? Brightness.light : Brightness.dark',
       );
     });
 
     test(
-        'read the theme from a context of their own, and leave the '
+        'read the theme from the context of the widget, and leave the '
         'navigation bar of the system as it is', () {
-      final builder = calls('Builder').single;
+      final build = buildOfWidget();
       final style = calls('SystemUiOverlayStyle').single;
 
       // The widget names no parameter of the builder of the provider.
-      expect(argument(builder, 'builder'), startsWith('(context) => '));
+      expect(build.parameters!.toSource(), '(BuildContext context)');
+      expect(
+        build.toSource(),
+        contains('final brightness = Theme.of(context).brightness;'),
+      );
       expect(
         [
           for (final argument
@@ -1546,6 +1815,37 @@ void main() {
         ],
         ['statusBarBrightness', 'statusBarIconBrightness'],
       );
+    });
+
+    test(
+        'have a widget test in every app, which pumps the widget in a light '
+        'and in a dark theme, so that flutter test has a test to run in an '
+        'app whose modules bring none', () {
+      final test = files[AppEntryRole.statusBarIconsTestFile]!;
+      final unit = parseString(content: test).unit;
+      final tests = <MethodInvocation>[];
+      unit.accept(_Calls('testWidgets', tests));
+
+      expect(
+        [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ],
+        contains('package:my_app/core/app/status_bar_icons.dart'),
+      );
+      expect(
+        [
+          for (final call in tests)
+            call.argumentList.arguments.first.toSource(),
+        ],
+        [
+          "'asks for dark icons on a light theme'",
+          "'asks for light icons on a dark theme'",
+          "'leaves the navigation bar of the system as it is'",
+        ],
+      );
+      expect(test, contains('const StatusBarIcons(child: '));
+      expect(test, contains('ThemeData(brightness: Brightness.dark)'));
     });
   });
 
@@ -1830,6 +2130,7 @@ See `lib/missing.dart`.
           for (final path in [
             AppEntryRole.mainFile,
             AppEntryRole.bootstrapFile,
+            AppEntryRole.statusBarIconsFile,
           ])
             equals(
               'The section "App entry" of AGENTS.md names `$path`, but the '
@@ -1923,6 +2224,97 @@ See `lib/missing.dart`.
       );
     });
 
+    test(
+        'report a component of the application that the manifest declares '
+        'twice', () {
+      String component(String element, String name) =>
+          '        <$element android:name="$name" '
+          'android:exported="false" />\n';
+      final manifest = _manifest.replaceFirst(
+        '    </application>',
+        '${component('receiver', 'com.example.AlarmReceiver')}'
+            '${component('service', 'com.example.SyncService')}'
+            '${component('provider', 'com.example.FilesProvider')}'
+            '${component('receiver', 'com.example.AlarmReceiver')}'
+            '${component('service', 'com.example.SyncService')}'
+            '${component('provider', 'com.example.FilesProvider')}'
+            '${component('activity', '.MainActivity')}'
+            // A component of another kind with the same name is another.
+            '${component('service', 'com.example.AlarmReceiver')}'
+            '    </application>',
+      );
+      const path = 'android/app/src/main/AndroidManifest.xml';
+
+      expect(
+        messages(checkTexts({AppEntryRole.androidManifestFile: manifest})),
+        [
+          equals('$path has the activity .MainActivity more than once.'),
+          equals('$path has the service com.example.SyncService more than '
+              'once.'),
+          equals('$path has the receiver com.example.AlarmReceiver more than '
+              'once.'),
+          equals('$path has the provider com.example.FilesProvider more than '
+              'once.'),
+        ],
+      );
+      expect(
+        checkTexts({AppEntryRole.androidManifestFile: manifest}).first.hint,
+        'One module declares a component, and none declares one that the '
+        'template of the app entry role has, such as its main activity.',
+      );
+    });
+
+    test(
+        'resolve the name of a component as Android does, against the '
+        'namespace of the app', () {
+      String component(String element, String name, {String quote = '"'}) =>
+          '        <$element android:name=$quote$name$quote '
+          'android:exported="false" />\n';
+      final manifest = _manifest.replaceFirst(
+        '    </application>',
+        '${component('receiver', '.Receiver')}'
+            '${component('receiver', 'com.example.app.Receiver')}'
+            // A module's main activity next to that of the provider.
+            '${component('activity', 'com.example.app.MainActivity')}'
+            // A name without a dot is relative too.
+            '${component('service', 'Sync')}'
+            '${component('service', 'com.example.app.Sync')}'
+            '${component('activity-alias', '.Launcher')}'
+            "${component('activity-alias', '.Launcher', quote: "'")}"
+            // Another package keeps its name.
+            '${component('provider', 'com.example.other.Files')}'
+            '${component('provider', 'com.example.app.Files')}'
+            '    </application>',
+      );
+      const path = 'android/app/src/main/AndroidManifest.xml';
+      const appGradle = 'android {\n    namespace = "com.example.app"\n}\n';
+
+      expect(
+        messages(
+          checkTexts({
+            AppEntryRole.androidManifestFile: manifest,
+            AppEntryRole.gradleAppFile: appGradle,
+          }),
+        ),
+        [
+          equals('$path has the activity com.example.app.MainActivity more '
+              'than once.'),
+          equals('$path has the activity-alias com.example.app.Launcher more '
+              'than once.'),
+          equals('$path has the service com.example.app.Sync more than once.'),
+          equals('$path has the receiver com.example.app.Receiver more than '
+              'once.'),
+        ],
+      );
+      // Without the namespace of the app, a name is taken as it is written.
+      expect(
+        messages(checkTexts({AppEntryRole.androidManifestFile: manifest})),
+        [
+          equals('$path has the activity-alias .Launcher more than once.'),
+        ],
+      );
+    });
+
     test('tell the meta-data of an activity from those of the application', () {
       final manifest = _manifest.replaceFirst(
         '        </activity>',
@@ -1980,6 +2372,308 @@ See `lib/missing.dart`.
       );
     });
 
+    test('report an entitlement that the entitlements have twice', () {
+      const path = AppEntryRole.iosEntitlementsFile;
+      final issues = checkTexts({
+        path: _entitlements.replaceFirst(
+          '</dict>',
+          '\t<key>aps-environment</key>\n\t<string>production</string>\n'
+              '</dict>',
+        ),
+      });
+
+      expect(messages(issues), [
+        equals(
+          'ios/Runner/Runner.entitlements has the key aps-environment more '
+          'than once.',
+        ),
+      ]);
+      expect(issues.single.path, path);
+    });
+
+    group('the signing of the iOS app with its entitlements', () {
+      const project = AppEntryRole.xcodeProjectFile;
+
+      List<SmfIssue> checkProject(String text) => checkTexts({
+            project: text,
+            AppEntryRole.iosEntitlementsFile: _entitlements,
+          });
+
+      test('accepts every build configuration of the app signing with them',
+          () {
+        expect(messages(checkProject(_xcodeProject)), isEmpty);
+        // As Xcode writes the settings when a value needs quotes.
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject
+                  .replaceAll(
+                    'INFOPLIST_FILE = Runner/Info.plist;',
+                    'INFOPLIST_FILE = "Runner/Info.plist";',
+                  )
+                  .replaceFirst(
+                    'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;',
+                    'CODE_SIGN_ENTITLEMENTS = "Runner/Runner.entitlements";',
+                  ),
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test(
+          'reports a build configuration of the app that does not sign with '
+          'them', () {
+        const signs = 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;';
+        const forDevices = '"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = '
+            'Runner/Runner.entitlements;';
+        final configurations = _xcodeProject.split(signs);
+        expect(configurations, hasLength(4));
+        // Profile without the setting, Debug with other entitlements, and
+        // Release with them for the devices only.
+        final text = [
+          configurations[0],
+          configurations[1],
+          'CODE_SIGN_ENTITLEMENTS = Runner/Other.entitlements;',
+          configurations[2],
+          forDevices,
+          configurations[3],
+        ].join();
+        final issues = checkProject(text);
+
+        expect(messages(issues), [
+          for (final name in [
+            'Profile (249021D4217E4FDB00AE95B9)',
+            'Debug (97C147061CF9000F007C117D)',
+            'Release (97C147071CF9000F007C117D)',
+          ])
+            equals(
+              'The build configuration $name of the app target in '
+              'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
+              'with ios/Runner/Runner.entitlements.',
+            ),
+        ]);
+        for (final issue in issues) {
+          expect(issue.path, project);
+          expect(issue.origin, const ModuleOrigin(ModuleId('flutter_core')));
+          expect(
+            issue.hint,
+            'Each build configuration with INFOPLIST_FILE = Runner/Info.plist '
+            'has CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements; and no '
+            'other CODE_SIGN_ENTITLEMENTS. Without it the app builds and '
+            'signs, but has none of the entitlements that the modules add.',
+          );
+        }
+
+        // A configuration whose name does not follow its settings.
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject.replaceFirst(signs, '').replaceFirst(
+                    '\t\t\tname = Profile;\n\t\t};\n\t\t331C',
+                    '\t\t};\n\t\t331C',
+                  ),
+            ),
+          ),
+          [
+            equals(
+              'The build configuration 249021D4217E4FDB00AE95B9 of the app '
+              'target in ios/Runner.xcodeproj/project.pbxproj does not sign '
+              'the app with ios/Runner/Runner.entitlements.',
+            ),
+          ],
+        );
+
+        // Twice in one configuration, once with a condition.
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject.replaceFirst(signs, '$signs\n\t\t\t\t$forDevices'),
+            ),
+          ),
+          [
+            equals(
+              'The build configuration Profile (249021D4217E4FDB00AE95B9) of '
+              'the app target in ios/Runner.xcodeproj/project.pbxproj does '
+              'not sign the app with ios/Runner/Runner.entitlements.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'reports the entitlements of the app in another target, and '
+          'entitlements in the build settings of the project', () {
+        String withSetting(String before, String value) =>
+            _xcodeProject.replaceFirst(
+              before,
+              'CODE_SIGN_ENTITLEMENTS = $value;\n\t\t\t\t$before',
+            );
+        const ofProject = 'ALWAYS_SEARCH_USER_PATHS = NO;';
+        const ofTests = 'CODE_SIGN_STYLE = Automatic;';
+
+        // The target of the tests signs with the file of the app.
+        final ofApp = checkProject(
+          withSetting(ofTests, 'Runner/Runner.entitlements'),
+        );
+        expect(messages(ofApp), [
+          equals(
+            'The build configuration Debug (331C8088294A63A400263BE5) in '
+            'ios/Runner.xcodeproj/project.pbxproj, which is not one of the '
+            'app target, signs with the entitlements of the app, '
+            'ios/Runner/Runner.entitlements.',
+          ),
+        ]);
+        expect(
+          ofApp.single.hint,
+          'Only the app target signs with ios/Runner/Runner.entitlements. '
+          'Another target, such as an app extension, signs with '
+          'entitlements of its own.',
+        );
+
+        // The project has a setting that every target inherits, whatever
+        // its file.
+        for (final value in [
+          'Runner/Runner.entitlements',
+          'Share/Share.entitlements',
+        ]) {
+          final inherited = checkProject(withSetting(ofProject, value));
+          expect(
+            messages(inherited),
+            [
+              equals(
+                'The build configuration Profile (249021D3217E4FDB00AE95B9) '
+                'of the project in ios/Runner.xcodeproj/project.pbxproj names '
+                'entitlements in CODE_SIGN_ENTITLEMENTS, which every target '
+                'without a setting of its own inherits, such as the tests.',
+              ),
+            ],
+            reason: value,
+          );
+          expect(
+            inherited.single.hint,
+            'Set CODE_SIGN_ENTITLEMENTS in the build configurations of each '
+            'target that signs with entitlements: Runner/Runner.entitlements '
+            'in those of the app target, which read Runner/Info.plist.',
+          );
+        }
+      });
+
+      test('reads what it can of a project that is cut off', () {
+        // A configuration without settings, and a comment, a string and a
+        // configuration that do not end.
+        const release = 'INFOPLIST_FILE = Runner/Info.plist;\n'
+            '\t\t\t};\n\t\t\tname = Release;';
+        final cut = _xcodeProject.substring(
+          0,
+          _xcodeProject.indexOf(release) + release.indexOf('\n'),
+        );
+        const empty = '\t\t00000000000000000000000A = '
+            '{isa = XCBuildConfiguration; name = Empty;};\n';
+        for (final end in ['', '\n/* cut', '\n// cut', '\n"cut']) {
+          expect(
+            messages(
+              checkProject(
+                cut.replaceFirst(
+                      '/* Begin XCBuildConfiguration section */\n',
+                      '/* Begin XCBuildConfiguration section */\n$empty',
+                    ) +
+                    end,
+              ),
+            ),
+            isEmpty,
+            reason: end,
+          );
+        }
+      });
+
+      test('reports a project without build settings of the app target', () {
+        final issues = checkProject(
+          _xcodeProject
+              .replaceAll(
+                'INFOPLIST_FILE = Runner/Info.plist;',
+                'GENERATE_INFOPLIST_FILE = YES;',
+              )
+              .replaceAll(
+                'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;',
+                '',
+              ),
+        );
+
+        expect(messages(issues), [
+          equals(
+            'ios/Runner.xcodeproj/project.pbxproj has no build configuration '
+            'of the app target, with INFOPLIST_FILE = Runner/Info.plist, '
+            'that signs the app with ios/Runner/Runner.entitlements.',
+          ),
+        ]);
+      });
+
+      test(
+          'reads build settings with braces in their strings, and none in '
+          'comments', () {
+        const signs = 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;';
+        final release = _xcodeProject.lastIndexOf(signs);
+        String releaseWith(String instead) => _xcodeProject.replaceRange(
+              release,
+              release + signs.length,
+              instead,
+            );
+
+        // Release does not sign with them, and has a brace in a string or in
+        // a comment, or the setting only in a comment.
+        for (final instead in [
+          r'OTHER_SWIFT_FLAGS = "-D FOO=${BAR}";',
+          '/* { */',
+          '/*\n\t\t\t\t$signs\n\t\t\t\t*/',
+          '// $signs',
+        ]) {
+          expect(
+            messages(checkProject(releaseWith(instead))),
+            [contains('Release')],
+            reason: instead,
+          );
+        }
+        // Release signs with them, next to a brace in a string and in a
+        // comment.
+        expect(
+          messages(
+            checkProject(
+              releaseWith(
+                '$signs\n\t\t\t\tOTHER_SWIFT_FLAGS = "-D FOO=\${BAR} \\"}\\"";'
+                '\n\t\t\t\t/* } { */',
+              ),
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test(
+          'accepts a target with entitlements of its own, such as an app '
+          'extension', () {
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject.replaceFirst(
+                'CODE_SIGN_STYLE = Automatic;',
+                'CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;\n'
+                    '\t\t\t\tCODE_SIGN_STYLE = Automatic;',
+              ),
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('checks nothing in an app without an iOS project', () {
+        expect(
+          messages(checkTexts({AppEntryRole.infoPlistFile: _plist})),
+          isEmpty,
+        );
+      });
+    });
+
     List<SmfIssue> checkModule(Map<String, String> templates) =>
         appEntryRole.checkModule(
           ModuleRuleRequest(
@@ -2030,12 +2724,20 @@ Future<void> main() async {
           AppEntryRole.androidManifestFile: _manifestTemplate,
           AppEntryRole.infoPlistFile:
               '<dict>\n{{{smf_app_entry__info_plist}}}\n</dict>\n',
+          AppEntryRole.iosEntitlementsFile:
+              '<dict>\n{{{smf_app_entry__ios_entitlements}}}\n</dict>\n',
+          AppEntryRole.appDelegateFile: _appDelegateTemplate,
           AppEntryRole.gradleSettingsFile:
               'plugins {\n{{{smf_app_entry__gradle_settings_plugins}}}\n}\n',
           AppEntryRole.gradleAppFile: 'plugins {\n'
               '{{{smf_app_entry__gradle_app_plugins}}}\n}\n\n'
+              'android {\n    compileOptions {\n'
+              '{{{smf_app_entry__android_core_library_desugaring_enabled}}}\n'
+              '    }\n}\n\n'
               'dependencies {\n'
-              '{{{smf_app_entry__gradle_app_dependencies}}}\n}\n',
+              '{{{smf_app_entry__gradle_app_dependencies}}}\n'
+              '{{{smf_app_entry__android_core_library_desugaring_library}}}\n'
+              '}\n',
           AppEntryRole.readmeFile: '# {{app_name}}\n\nAn app.\n'
               '{{{smf_app_entry__readme_sections}}}\n',
         }),
@@ -2267,8 +2969,26 @@ Future<void> main() async {
           '    {{{smf_app_entry__android_manifest_permissions}}}',
         ),
         'ios/Podfile': '{{{smf_app_entry__info_plist}}}\n',
+        AppEntryRole.infoPlistFile:
+            '<dict>\n{{{smf_app_entry__ios_entitlements}}}\n</dict>\n',
+        AppEntryRole.iosEntitlementsFile:
+            '<dict>{{{smf_app_entry__ios_entitlements}}}</dict>\n',
+        'ios/Runner/SceneDelegate.swift':
+            'class SceneDelegate: FlutterSceneDelegate {\n'
+                '{{{smf_app_entry__ios_app_delegate_launch}}}\n}\n',
+        'android/app/src/debug/AndroidManifest.xml': '<application>\n'
+            '{{{smf_app_entry__android_manifest_application_components}}}\n'
+            '</application>\n',
         AppEntryRole.readmeFile:
             '# {{app_name}}\n\nAn app. {{{smf_app_entry__readme_sections}}}\n',
+        // Each place of the desugaring renders lines of the Gradle file of
+        // the app: the switch in compileOptions and the library in the
+        // dependencies.
+        AppEntryRole.gradleSettingsFile:
+            '{{{smf_app_entry__android_core_library_desugaring_enabled}}}\n',
+        AppEntryRole.gradleAppFile: 'dependencies {\n'
+            '    {{{smf_app_entry__android_core_library_desugaring_library}}}\n'
+            '}\n',
       });
 
       expect(issues.map((issue) => issue.message), [
@@ -2279,8 +2999,41 @@ Future<void> main() async {
           'contributions render as complete lines.',
         ),
         equals(
+          'The tag '
+          '{{{smf_app_entry__android_manifest_application_components}}} is in '
+          'android/app/src/debug/AndroidManifest.xml, but its lines belong in '
+          'android/app/src/main/AndroidManifest.xml.',
+        ),
+        equals(
           'The tag {{{smf_app_entry__info_plist}}} is in ios/Podfile, but its '
           'lines belong in ios/Runner/Info.plist.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__ios_entitlements}}} is in '
+          'ios/Runner/Info.plist, but its lines belong in '
+          'ios/Runner/Runner.entitlements.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__ios_entitlements}}} must stand alone at '
+          'the start of a line of ios/Runner/Runner.entitlements, because its '
+          'contributions render as complete lines.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__ios_app_delegate_launch}}} is in '
+          'ios/Runner/SceneDelegate.swift, but its lines belong in '
+          'ios/Runner/AppDelegate.swift.',
+        ),
+        equals(
+          'The tag '
+          '{{{smf_app_entry__android_core_library_desugaring_enabled}}} is in '
+          'android/settings.gradle.kts, but its lines belong in '
+          'android/app/build.gradle.kts.',
+        ),
+        equals(
+          'The tag '
+          '{{{smf_app_entry__android_core_library_desugaring_library}}} must '
+          'stand alone at the start of a line of android/app/build.gradle.kts, '
+          'because its contributions render as complete lines.',
         ),
         equals(
           'The tag {{{smf_app_entry__readme_sections}}} must stand alone at '
@@ -2288,6 +3041,162 @@ Future<void> main() async {
           'as complete lines.',
         ),
       ]);
+    });
+
+    test(
+        'the code at the launch of the iOS app runs in '
+        'application(_:didFinishLaunchingWithOptions:), before Flutter takes '
+        'the launch', () {
+      const tag = '{{{smf_app_entry__ios_app_delegate_launch}}}';
+      const path = AppEntryRole.appDelegateFile;
+      const method = 'application(_:didFinishLaunchingWithOptions:)';
+      List<SmfIssue> issues(String template) => checkModule({path: template});
+      List<String> problems(String template) =>
+          [for (final issue in issues(template)) issue.message];
+      const notInBody = 'The tag $tag is in $path, but not in the body of '
+          '$method, where the code of the modules runs before the launch of '
+          'the app finishes.';
+      const call = 'super.application(_:didFinishLaunchingWithOptions:)';
+      const notFirst = 'The tag $tag is in the body of $method in $path, but '
+          'not before its call of $call, which hands the launch of the app to '
+          'Flutter: the code of the modules runs before it.';
+      const noCall = 'The tag $tag is in the body of $method in $path, which '
+          'has no call of $call: the method hands the launch of the app to '
+          'Flutter with that call, after the code of the modules.';
+      String moved(String to) =>
+          _appDelegateTemplate.replaceFirst('$tag\n', '').replaceFirst(
+                to,
+                '$tag\n$to',
+              );
+
+      expect(problems(_appDelegateTemplate), isEmpty);
+      // Braces in the comments and strings of the method do not end it.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            tag,
+            '    // A } of a comment.\n'
+            '    print("A } of a string")\n'
+            '$tag',
+          ),
+        ),
+        isEmpty,
+      );
+      // A call of super in a comment or a string before the tag is no call,
+      // and a space before the parenthesis of the call is.
+      expect(
+        problems(
+          _appDelegateTemplate
+              .replaceFirst(
+                'super.application(application',
+                'super.application (application',
+              )
+              .replaceFirst(
+                tag,
+                '    // super.application(application, '
+                'didFinishLaunchingWithOptions: launchOptions)\n'
+                '    print("super.application(")\n'
+                '$tag',
+              ),
+        ),
+        isEmpty,
+      );
+      // In the method that registers the plugins, which runs once the scene
+      // of the app connects: too late for a tap that launched the app.
+      expect(problems(moved('    GeneratedPluginRegistrant')), [notInBody]);
+      // In another method that the launch calls, or in no method at all.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            'didFinishLaunchingWithOptions launchOptions',
+            'willFinishLaunchingWithOptions launchOptions',
+          ),
+        ),
+        [notInBody],
+      );
+      expect(
+        problems('import UIKit\n\nclass AppDelegate: FlutterAppDelegate {\n'
+            '$tag\n}\n'),
+        [notInBody],
+      );
+      // After Flutter took the launch, or in a method that never hands it
+      // over.
+      expect(problems(moved('  }\n\n  func didInitialize')), [notFirst]);
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            'return super.application(application, '
+                'didFinishLaunchingWithOptions: launchOptions)',
+            'return true',
+          ),
+        ),
+        [noCall],
+      );
+      final issue = issues(moved('    GeneratedPluginRegistrant')).single;
+      expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
+      expect(issue.path, path);
+
+      // An app delegate without the tag: the rule of the lines of the
+      // native files reports a tag in another file.
+      expect(problems('import UIKit\n'), isEmpty);
+    });
+
+    test(
+        'the tags of the Android manifest are among the children of the '
+        'element that their contributions belong to', () {
+      const path = AppEntryRole.androidManifestFile;
+      const permissions = '{{{smf_app_entry__android_manifest_permissions}}}';
+      const meta = '{{{smf_app_entry__android_manifest_application_meta}}}';
+      const components =
+          '{{{smf_app_entry__android_manifest_application_components}}}';
+      const filters = '{{{smf_app_entry__main_activity_intent_filters}}}';
+      List<String> problems(String template) => [
+            for (final issue in checkModule({path: template})) issue.message,
+          ];
+      String notIn(String tag, String parent) =>
+          'The tag $tag is in $path, but not among the children of '
+          '<$parent>, where its contributions belong.';
+
+      // A comment with an element does not open it.
+      expect(
+        problems(
+          _manifestTemplate.replaceFirst(
+            '    <application>',
+            '    <!-- <application> <activity> -->\n    <application>',
+          ),
+        ),
+        isEmpty,
+      );
+      // Each of the four in the wrong element: the components after the
+      // application, which the Android build refuses.
+      expect(
+        problems('''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="{{app_name.titleCase()}}">
+$permissions
+        <activity android:name=".MainActivity">
+$meta
+        </activity>
+$filters
+    </application>
+$components
+</manifest>
+'''),
+        [
+          equals(notIn(permissions, 'manifest')),
+          equals(notIn(meta, 'application')),
+          equals(notIn(components, 'application')),
+          equals(notIn(filters, 'activity')),
+        ],
+      );
+      // Outside every element.
+      expect(
+        problems('</manifest>\n$permissions\n'),
+        [equals(notIn(permissions, 'manifest'))],
+      );
+      final issue = checkModule({path: '$components\n'}).single;
+      expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
+      expect(issue.path, path);
     });
 
     test('the Gradle sockets refuse the plugins every app declares', () {
@@ -2422,6 +3331,128 @@ const _plist = '''
 </plist>
 ''';
 
+/// The entitlements of an iOS app with one entitlement.
+const _entitlements = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
+''';
+
+/// The Xcode project of `flutter create` 3.44, shortened, whose app target
+/// signs with its entitlements: the project, whose list of build
+/// configurations has one of its own, and the build configurations, those
+/// of the app target, which read its `Info.plist`, and one of the target of
+/// its tests.
+const _xcodeProject = r'''
+// !$*UTF8*$!
+{
+	objects = {
+
+/* Begin PBXProject section */
+		97C146E61CF9000F007C117D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1510;
+				TargetAttributes = {
+					97C146ED1CF9000F007C117D = {
+						CreatedOnToolsVersion = 7.3.1;
+					};
+				};
+			};
+			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
+			targets = (
+				97C146ED1CF9000F007C117D /* Runner */,
+				331C8080294A63A400263BE5 /* RunnerTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin XCBuildConfiguration section */
+		249021D3217E4FDB00AE95B9 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+			};
+			name = Profile;
+		};
+		249021D4217E4FDB00AE95B9 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				INFOPLIST_FILE = Runner/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+			};
+			name = Profile;
+		};
+		331C8088294A63A400263BE5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+			};
+			name = Debug;
+		};
+		97C147061CF9000F007C117D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				INFOPLIST_FILE = Runner/Info.plist;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		97C147071CF9000F007C117D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				INFOPLIST_FILE = Runner/Info.plist;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				249021D3217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				97C147061CF9000F007C117D /* Debug */,
+				97C147071CF9000F007C117D /* Release */,
+				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 97C146E61CF9000F007C117D /* Project object */;
+}
+''';
+
 /// An Android manifest like the one of `flutter create`, shortened.
 const _manifest = r'''
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -2445,6 +3476,28 @@ const _manifest = r'''
 </manifest>
 ''';
 
+/// The app delegate of a provider, that of `flutter create` 3.44 with the
+/// tag of the code that runs before the launch of the app finishes.
+const _appDelegateTemplate = '''
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+{{{smf_app_entry__ios_app_delegate_launch}}}
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
+''';
+
 /// The manifest of a provider, with the tags of its sockets.
 const _manifestTemplate = '''
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -2454,6 +3507,7 @@ const _manifestTemplate = '''
 {{{smf_app_entry__main_activity_intent_filters}}}
         </activity>
 {{{smf_app_entry__android_manifest_application_meta}}}
+{{{smf_app_entry__android_manifest_application_components}}}
     </application>
 </manifest>
 ''';

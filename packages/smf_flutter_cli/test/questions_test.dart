@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
-import 'package:smf_contracts/core.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -195,12 +195,14 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['bloc'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -213,8 +215,10 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -225,7 +229,6 @@ void main() {
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
-      'onboarding — Onboarding on the first launch of the app',
       'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(run.asked[1].shown, [
@@ -241,9 +244,10 @@ void main() {
     ]);
     // The roles come in the order in which the modules of the list bring
     // them: the layout, with the router, brings the localization, whose
-    // labels it shows. The theme follows, and then the preferences of both
-    // and the DI container, all before the state managers.
-    expect(run.asked[8].shown, [
+    // labels it shows. The theme and the notifications follow, and then the
+    // preferences of all three and the DI container, all before the state
+    // managers.
+    expect(run.asked[10].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -285,12 +289,14 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['riverpod'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -303,8 +309,10 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -354,12 +362,14 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -383,7 +393,6 @@ void main() {
     // The module provides a role, so it is not among the features to pick.
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
-      'onboarding — Onboarding on the first launch of the app',
       'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(
@@ -444,12 +453,14 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -464,11 +475,14 @@ void main() {
     const added = 'Adding go_router: the only provider of the router role, '
         'which settings requires.';
     // The screen is a destination, which an app without a layout has no
-    // main navigation for, and the app starts on none of its routes.
-    const start = 'No route is marked as a start candidate, so the app starts '
-        'on its fallback screen. Choose a start route with --start.';
-    const destination = 'No module provides the layout role, so the app has '
-        'no main navigation to lead to the destination /settings (settings). '
+    // main navigation for, and the app starts on none of its routes. The
+    // template of the router role reports both.
+    const start = '[role:router]: No route is marked as a start candidate, '
+        'so the app starts on its fallback screen. Choose a start route with '
+        '--start.';
+    const destination = '[role:router]: No module provides the layout role, '
+        'so the app has no main navigation to lead to the destination '
+        '/settings (settings). '
         'Choose a provider of the role, or open it from a screen of yours '
         'with context.nav.';
     expect(run.lines, containsAllInOrder([added, start, destination]));
@@ -492,12 +506,14 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -510,8 +526,10 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -550,6 +568,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
@@ -557,6 +576,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -569,9 +589,11 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Router: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -580,7 +602,7 @@ void main() {
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
     ]);
-    expect(run.asked[4].shown, [
+    expect(run.asked[5].shown, [
       'go_router — Routes and navigation with go_router',
       'None',
     ]);
@@ -603,12 +625,14 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -627,13 +651,14 @@ void main() {
     // the modules of the list bring.
     expect(
       localization,
-      messages.indexOf('Settings screen: which module provides it?') + 1,
+      messages.indexOf('Onboarding screen: which module provides it?') + 1,
     );
     // The preferences have one provider, so the run does not ask for them.
     expect(
-      messages.sublist(localization + 1, localization + 3),
+      messages.sublist(localization + 1, localization + 4),
       [
         'Theme: which module provides it?',
+        'Notifications: which module provides it?',
         'Dependency injection: which module provides it?',
       ],
     );
@@ -643,9 +668,9 @@ void main() {
     ]);
     final app = run.files.directory('/work/my_app');
     // The texts of the app are those of the start screen, after the label
-    // of that screen in a main navigation, and then the two of the fallback
-    // start screen of the app entry, in English and in Ukrainian, so the
-    // app is in both.
+    // of that screen in a main navigation, in English and in Ukrainian, so
+    // the app is in both. The app starts on that screen, so it has no
+    // fallback start screen, and none of its texts.
     for (final (language, label) in [('en', 'Home'), ('uk', 'Головна')]) {
       final texts = jsonDecode(
         app.childFile('lib/l10n/app_$language.arb').readAsStringSync(),
@@ -655,14 +680,14 @@ void main() {
       expect(texts['homeLabel'], label);
       expect(
         texts.keys.skip(1),
-        [
-          ...texts.keys.where((key) => key.startsWith('home')),
-          'flutterCoreFallbackHint',
-          'flutterCoreFallbackCopied',
-        ],
+        texts.keys.where((key) => key.startsWith('home')),
         reason: language,
       );
     }
+    expect(
+      app.childFile(AppEntryRole.fallbackStartScreenFile).existsSync(),
+      isFalse,
+    );
     expect(
       [
         for (final file in app.childDirectory('lib/l10n').listSync())
@@ -733,12 +758,14 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -798,6 +825,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
@@ -805,6 +833,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
+      'Notifications': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -864,6 +893,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
@@ -871,6 +901,7 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -883,15 +914,17 @@ void main() {
       'Preferences: which module provides it?',
     );
     // The roles come in the order in which the modules of the list bring
-    // them, and the localization and the theme, whose roles require the
-    // preferences, come before the preferences and before get_it. So the
-    // question of the preferences knows whether the answers on the
-    // localization and on the theme need them.
+    // them, and the localization, the theme and the notifications, whose
+    // roles require the preferences, come before the preferences and
+    // before get_it. So the question of the preferences knows whether the
+    // answers on the localization, on the theme and on the notifications
+    // need them.
     expect(
-      messages.sublist(preferences - 2, preferences + 1),
+      messages.sublist(preferences - 3, preferences + 1),
       [
         'Localization: which module provides it?',
         'Theme: which module provides it?',
+        'Notifications: which module provides it?',
         'Preferences: which module provides it?',
       ],
     );
@@ -949,12 +982,14 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['material_theme'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1027,25 +1062,42 @@ void main() {
   });
 
   test(
-      'a run in a terminal offers the onboarding among the features, and '
-      'adds the preferences that it requires without a question; the app '
-      'still starts on the start screen', () async {
+      'a run in a terminal asks which module provides the onboarding screen '
+      'after the settings screen, offers onboarding, and adds the '
+      'preferences that it requires without a question; the app still '
+      'starts on the start screen', () async {
     final run = await _create({
-      'Features': ['home', 'onboarding'],
+      'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['onboarding'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final onboarding = messages.indexOf(
+      'Onboarding screen: which module provides it?',
+    );
+    // Both roles require the router, so their questions come one after the
+    // other, in the order of the roles of the registry.
+    expect(
+      onboarding,
+      messages.indexOf('Settings screen: which module provides it?') + 1,
+    );
+    expect(run.asked[onboarding].shown, [
+      'onboarding — Onboarding on the first launch of the app',
+      'None',
+    ]);
     // shared_preferences is the only module that provides the preferences,
     // which the onboarding requires, so there is nothing to ask.
     expect(
@@ -1060,6 +1112,24 @@ void main() {
       ),
     );
     final app = run.files.directory('/work/my_app');
+    // The screen shows the steps that the modules of the app add, of which
+    // this app has none.
+    expect(
+      app
+          .childFile('lib/core/onboarding/onboarding_steps.dart')
+          .readAsStringSync(),
+      // The run formats nothing: its commands only stand in for those of
+      // Flutter.
+      matches(
+        RegExp(r'const List<OnboardingStep> appOnboardingSteps = \[\s*\];'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/features/onboarding/onboarding_screen.dart')
+          .readAsStringSync(),
+      contains("import '../../core/onboarding/onboarding_steps.dart';"),
+    );
     expect(
       app
           .childFile('lib/features/onboarding/onboarding_pages.dart')
@@ -1113,6 +1183,7 @@ void main() {
         'Features': [],
         'Infrastructure': ['firebase_core'],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1120,6 +1191,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1186,6 +1258,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1193,6 +1266,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1298,12 +1372,14 @@ void main() {
         'Features': ['home'],
         'Infrastructure': [],
         'Layout': ['bottom_tabs'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1410,6 +1486,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1417,6 +1494,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1464,6 +1542,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1471,6 +1550,7 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1558,11 +1638,13 @@ void main() {
         'Features': ['home', 'sign_in'],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'State management': ['riverpod'],
         'Theme': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1727,22 +1809,17 @@ void main() {
       ];
     }
 
-    const ofSettings = 'No module provides the layout role, so the app has no '
-        'main navigation to lead to the destination /settings (settings). '
+    const ofSettings = '[role:router]: No module provides the layout role, '
+        'so the app has no main navigation to lead to the destination '
+        '/settings (settings). '
         'Choose a provider of the role, or open it from a screen of yours '
         'with context.nav.';
 
     test(
         'is given once, with the path and the module of each destination '
-        'that the app does not start in, also with --strict, and not in an '
-        'app with a layout', () async {
+        'that the app does not start in, and not in an app with a layout',
+        () async {
       expect(await warningsOf('home,settings'), [ofSettings]);
-      // --strict stops a run that would leave a module out, and the
-      // warning leaves none out.
-      expect(
-        await warningsOf('home,settings', options: ['--strict']),
-        [ofSettings],
-      );
       // The app starts on the settings screen, so the other destination is
       // the one that it has no main navigation for.
       expect(
@@ -1753,6 +1830,43 @@ void main() {
       expect(await warningsOf('home,settings,bottom_tabs'), isEmpty);
       // The only destination of the app is the screen that it starts on.
       expect(await warningsOf('home'), isEmpty);
+    });
+
+    test(
+        'stops a run with --strict, which names its code and creates '
+        'nothing, unless --allow-warning names the code', () async {
+      final strict = await _create(
+        {},
+        options: [
+          '--no-input',
+          '--skip-external-setup',
+          '-m',
+          'home,settings',
+          '--strict',
+        ],
+      );
+
+      const stopped = 'Generation stopped because of a warning about the '
+          'app. Without --strict, the run goes on after it.';
+      final cause = '  warning [role:router] router.no_main_navigation'
+          '${ofSettings.substring('[role:router]'.length)}';
+
+      expect(strict.code, SmfExitCodes.generationFailed);
+      // After the modules that the run added.
+      expect(strict.lines.skip(2), [stopped, cause]);
+      expect(strict.warnings, isEmpty);
+      expect(strict.files.directory('/work/my_app').existsSync(), isFalse);
+
+      expect(
+        await warningsOf(
+          'home,settings',
+          options: [
+            '--strict',
+            '--allow-warning=router.no_main_navigation',
+          ],
+        ),
+        [ofSettings],
+      );
     });
 
     test(
