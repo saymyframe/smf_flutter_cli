@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
@@ -64,12 +65,15 @@ Map<String, Object?> _yamlOf(String text) {
   return plain(loadYaml(text))! as Map<String, Object?>;
 }
 
-/// The pubspec of [app] without the dependency on shared_preferences.
+/// The pubspec of [app] without the dependencies on shared_preferences and
+/// on its Android side.
 Map<String, Object?> _pubspecWithoutPackage(RenderedApp app) {
   final pubspec = _yamlOf(app.files['pubspec.yaml']!.text);
   final dependencies = {
     ...pubspec['dependencies']! as Map<String, Object?>,
-  }..remove('shared_preferences');
+  }
+    ..remove('shared_preferences')
+    ..remove('shared_preferences_android');
   return {...pubspec, 'dependencies': dependencies};
 }
 
@@ -128,11 +132,11 @@ Set<String> _codeOf(String markdown) => {
     };
 
 /// Checks that [app] is [without] but for the files of the preferences, the
-/// dependency on shared_preferences, the section of the preferences in the
-/// guide for coding agents, and one file of each of the modules [changedBy],
-/// whichever they are: the provider of the app entry renders the start-up,
-/// which now opens the preferences, into a file of its own, and a DI
-/// container the registration of the preferences.
+/// dependencies on shared_preferences and on its Android side, the section
+/// of the preferences in the guide for coding agents, and one file of each
+/// of the modules [changedBy], whichever they are: the provider of the app
+/// entry renders the start-up, which now opens the preferences, into a file
+/// of its own, and a DI container the registration of the preferences.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
@@ -392,13 +396,13 @@ void main() {
     });
 
     test(
-        'contributes its brick, shared_preferences, its implementation of '
-        'the preferences, which opens asynchronously, and its note for '
-        'coding agents, and nothing else', () {
+        'contributes its brick, shared_preferences with its Android side, '
+        'its implementation of the preferences, which opens '
+        'asynchronously, and its note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(4));
-      final note = contributions[3] as SocketContribution;
+      expect(contributions, hasLength(5));
+      final note = contributions[4] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, preferencesRole.description);
       expect(note.entryValue, AgentNote(agentNote));
@@ -414,7 +418,11 @@ void main() {
       expect(dependency.package, 'shared_preferences');
       expect(dependency.constraint, '^2.5.5');
       expect(dependency.dev, isFalse);
-      final data = contributions[2] as RoleData<Object>;
+      final android = contributions[2] as PubspecDependency;
+      expect(android.package, 'shared_preferences_android');
+      expect(android.constraint, '>=2.4.28 <2.5.0');
+      expect(android.dev, isFalse);
+      final data = contributions[3] as RoleData<Object>;
       expect(data.role, preferencesRole);
       final implementation = data.value as RoleImplementation;
       expect(implementation.isAsync, isTrue);
@@ -493,7 +501,8 @@ void main() {
 
     test(
         'is the app without the preferences but for the role, its '
-        'implementation, shared_preferences and the start-up', () {
+        'implementation, shared_preferences with its Android side and the '
+        'start-up', () {
       // Its native files are those of the app without it: the module sets
       // up nothing of the platforms.
       _expectTheAppWithout(
@@ -506,8 +515,35 @@ void main() {
         {
           'flutter': {'sdk': 'flutter'},
           'shared_preferences': '^2.5.5',
+          'shared_preferences_android': '>=2.4.28 <2.5.0',
         },
       );
+    });
+
+    test(
+        'keeps shared_preferences_android below 2.5.0, whose release builds '
+        'crash on Android when the app opens the preferences', () {
+      final dependencies =
+          _yamlOf(withPreferences.files['pubspec.yaml']!.text)['dependencies']!
+              as Map<String, Object?>;
+      expect(
+        dependencies,
+        contains('shared_preferences_android'),
+        reason: 'Without a constraint of its own, the app gets the latest '
+            'shared_preferences_android that shared_preferences allows.',
+      );
+      final constraint = VersionConstraint.parse(
+        dependencies['shared_preferences_android']! as String,
+      );
+
+      // 2.5.0 calls its Kotlin code through JNI by the names of Kotlin
+      // classes, such as kotlin.coroutines.Continuation, which R8 renames in
+      // a release build: SharedPreferencesWithCache.create() then fails
+      // with a NoSuchMethodError, and the app never shows its first frame.
+      expect(constraint.allows(Version(2, 5, 0)), isFalse);
+      // The last version before it, whose release build opens the
+      // preferences.
+      expect(constraint.allows(Version(2, 4, 28)), isTrue);
     });
 
     test(
@@ -831,6 +867,29 @@ void main() {
           ).keys,
           containsAll(['getDouble', 'getInt']),
         );
+      });
+
+      test(
+          'tells why the pubspec of the app keeps the Android side of the '
+          'package below 2.5.0', () {
+        final dependencies = _yamlOf(
+          withPreferences.files['pubspec.yaml']!.text,
+        )['dependencies']! as Map<String, Object?>;
+
+        expect(
+          _codeOf(agentNote),
+          containsAll(['pubspec.yaml', 'shared_preferences_android']),
+        );
+        expect(
+          agentNote,
+          contains('`shared_preferences_android` below 2.5.0'),
+        );
+        // What the pubspec of the app has, as the note tells.
+        final constraint = VersionConstraint.parse(
+          dependencies['shared_preferences_android']! as String,
+        );
+        expect(constraint.allows(Version(2, 5, 0)), isFalse);
+        expect(constraint.allows(Version(2, 4, 28)), isTrue);
       });
 
       test(
