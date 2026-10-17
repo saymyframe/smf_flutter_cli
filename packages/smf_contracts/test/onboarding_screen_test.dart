@@ -40,6 +40,13 @@ final _alertsRole = TestRole<NoDsl>(
   uses: {onboardingScreenRole, localizationRole},
 );
 
+/// Another role whose template gives the onboarding a step, with its texts
+/// for the localization role.
+final _hintsRole = TestRole<NoDsl>(
+  'hints',
+  uses: {onboardingScreenRole, localizationRole},
+);
+
 /// A role whose template gives the onboarding a step, but which neither
 /// requires nor uses the localization role.
 final _mutedRole = TestRole<NoDsl>('muted', uses: {onboardingScreenRole});
@@ -1176,7 +1183,8 @@ void main() {
             ),
             _alertsRole,
           ),
-          // Another template may have a step of that name.
+          // Other templates may have a step of that name.
+          _stepOfRole(_step('alert'), _hintsRole),
           _stepOfRole(_step('alert'), _mutedRole),
           _stepOfRole(
             const OnboardingStep(
@@ -1208,6 +1216,22 @@ void main() {
           badName,
           'The text "title" has no English text.',
         ],
+      );
+      // The name is given twice by one template only: each template has
+      // names of its own.
+      expect(
+        [
+          for (final issue in issues)
+            if (issue.origin == RoleTemplateOrigin(_hintsRole)) issue.message,
+        ],
+        isEmpty,
+      );
+      expect(
+        [
+          for (final issue in issues)
+            if (issue.message.contains('two onboarding steps')) issue.origin,
+        ],
+        [RoleTemplateOrigin(_alertsRole)],
       );
     });
 
