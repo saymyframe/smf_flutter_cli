@@ -1,7 +1,8 @@
 // What a user of `smf create` sees of the step that enables the sign-in
-// methods: the check of the machine before generation, the question before
-// the step, and the command for later when the step does not run, which is
-// a warning only when the step could not run or failed. The machine is in
+// methods: the check of the machine before generation, the step without a
+// question of its own once flutterfire configured the app, and the command
+// for later when the step does not run, which is a warning only when the
+// step could not run or failed. The machine is in
 // memory, so no command runs for real; the script of the step runs in
 // `enable_sign_in_script_test.dart`.
 @TestOn('vm')
@@ -42,20 +43,9 @@ const _enableLater = 'dart tool/enable_firebase_sign_in.dart';
 const _enabling = 'Enabling the sign-in methods of the app in its Firebase '
     'project';
 
-/// What the user has to know before the step runs.
-const _notice = 'The Firebase CLI adds a web app named "Default Web App" to '
-    'a project that has no web app, because it enables the methods through '
-    'one (firebase/firebase-tools#11250). The page '
-    'https://console.firebase.google.com/project/_/authentication/providers '
-    'of the Firebase console enables them without it.';
-
 /// The question whether to configure Firebase now.
 const _configureNow = 'Configuring Firebase with flutterfire '
     '($_configureLater), for firebase_core. Run it now?';
-
-/// The question whether to enable the sign-in methods now.
-const _enableNow = '$_enabling ($_enableLater), for firebase_auth. $_notice '
-    'Run it now?';
 
 /// The question whether to install the Firebase CLI, which the check of
 /// firebase_core asks.
@@ -69,28 +59,16 @@ const _update = 'Update it with "npm install -g firebase-tools" if npm '
 
 /// The warning that the sign-in methods are not enabled, because of
 /// [reason], which tells why the step could not run or how it failed, with
-/// the command for later and the notice of the step.
+/// the command for later.
 String _notEnabled(String reason) =>
     '$_enabling is not done, because $reason. Run it in the app: '
-    '$_enableLater\n$_notice';
+    '$_enableLater';
 
 /// The line that the app is created, and how to run it when no step is left
 /// for later, and when some are, as the logger of the machine got them.
 const _created = 'success: Created my_app in /work/my_app.';
 const _runIt = 'info: Run it:\n  cd /work/my_app\n  flutter run';
 const _thenRunIt = 'info: Then run the app:\n  cd /work/my_app\n  flutter run';
-
-/// How a run ends that left only the step of the module for later, because
-/// of [reason]: after the line of the app, the step with its command and
-/// the notice below it, and then how to run the app. None of it is a
-/// warning.
-List<String> _enableLeft(String reason) {
-  final step = 'info: One step is left for later. Run it in the app:\n'
-      '  $_enabling ($reason):\n'
-      '    $_enableLater\n'
-      '    $_notice';
-  return [_created, step, _thenRunIt];
-}
 
 /// How a run ends that left `flutterfire configure` for later, because of
 /// [reason], and the step of the module with it: the two in the order in
@@ -101,8 +79,7 @@ List<String> _bothLeft(String reason) {
       '  1. Configuring Firebase with flutterfire ($reason):\n'
       '     $_configureLater\n'
       '  2. $_enabling (it runs after step 1):\n'
-      '     $_enableLater\n'
-      '     $_notice';
+      '     $_enableLater';
   return [_created, steps, _thenRunIt];
 }
 
@@ -115,11 +92,11 @@ final _script = RegExp(r'/[^ ]*/install_firebase_\w+\.sh$');
 ///
 /// Its Firebase CLI, with a login that Google accepts, is in the version
 /// given as `firebase`. Without one, the machine has no Firebase CLI until
-/// the install script puts `firebase` 15.14.0 into `/opt/npm/bin`. The
+/// the install script puts `firebase` 15.34.0 into `/opt/npm/bin`. The
 /// script of the step exits with [enableCode].
 final class _Machine {
   _Machine({
-    String? firebase = '15.14.0',
+    String? firebase = '15.34.0',
     List<bool> confirmations = const [],
     this.hasTerminal = true,
     this.enableCode = 0,
@@ -152,7 +129,7 @@ final class _Machine {
     final line = call.line;
     if (_script.hasMatch(line)) {
       files.file(_firebase).createSync(recursive: true);
-      _version = '15.14.0';
+      _version = '15.34.0';
       return const SmfProcessResult(
         exitCode: 0,
         stdout: 'smf-bin-dir=/opt/npm/bin\n',
@@ -243,10 +220,9 @@ final class _Machine {
 void main() {
   group('smf create -m firebase_auth, in a terminal,', () {
     test(
-        'asks before it enables the sign-in methods, once flutterfire '
-        'configured the app, with what the Firebase CLI does to the project '
-        'and the other way in the question', () async {
-      final machine = _Machine(confirmations: [true, true]);
+        'enables the sign-in methods once flutterfire configured the app, '
+        'without a question of its own', () async {
+      final machine = _Machine(confirmations: [true]);
 
       final code = await machine.create();
 
@@ -255,9 +231,9 @@ void main() {
         SmfExitCodes.success,
         reason: machine.terminal.reports.join('\n'),
       );
-      expect(machine.terminal.questions, [_configureNow, _enableNow]);
-      // The question is one line, and tells neither answer.
-      expect(_enableNow, isNot(contains('\n')));
+      // The step is part of flutterfire configure, which the user agreed
+      // to.
+      expect(machine.terminal.questions, [_configureNow]);
       expect(
         machine.commands,
         containsAllInOrder([_configure, _enable]),
@@ -270,27 +246,6 @@ void main() {
       );
       expect(machine.warnings, isEmpty);
       expect(machine.end, [_created, _runIt]);
-      expect(machine.hasScript, isTrue);
-    });
-
-    test(
-        'leaves the methods for later when the user says so, with the '
-        'command and the notice', () async {
-      final machine = _Machine(confirmations: [true, false]);
-
-      final code = await machine.create();
-
-      expect(
-        code,
-        SmfExitCodes.success,
-        reason: machine.terminal.reports.join('\n'),
-      );
-      expect(machine.terminal.questions, [_configureNow, _enableNow]);
-      expect(machine.commands, contains(_configure));
-      expect(machine.commands, isNot(contains(_enable)));
-      // The user chose it, so nothing warns.
-      expect(machine.warnings, isEmpty);
-      expect(machine.end, _enableLeft('you chose to run it later'));
       expect(machine.hasScript, isTrue);
     });
 
@@ -316,7 +271,7 @@ void main() {
     test(
         'leaves the methods for later when the script fails, with what it '
         'printed', () async {
-      final machine = _Machine(confirmations: [true, true], enableCode: 2);
+      final machine = _Machine(confirmations: [true], enableCode: 2);
 
       final code = await machine.create();
 
@@ -339,10 +294,11 @@ void main() {
 
     test(
         'holds back only the methods with a Firebase CLI that is older than '
-        'the command, and does not ask about them', () async {
-      const older = 'Firebase CLI 15.6.0 or later is needed, but $_firebase '
-          'is 15.5.1';
-      final machine = _Machine(firebase: '15.5.1', confirmations: [true]);
+        '15.34.0, such as 15.33.0, whose command adds a web app to a '
+        'project with only Android and iOS apps', () async {
+      const older = 'Firebase CLI 15.34.0 or later is needed, but '
+          '$_firebase is 15.33.0';
+      final machine = _Machine(firebase: '15.33.0', confirmations: [true]);
 
       final code = await machine.create();
 
@@ -365,10 +321,10 @@ void main() {
 
     test(
         'enables the methods with the Firebase CLI that the run installed '
-        'for firebase_core, which has the command', () async {
+        'for firebase_core, which is the latest one', () async {
       final machine = _Machine(
         firebase: null,
-        confirmations: [true, true, true],
+        confirmations: [true, true],
       );
 
       final code = await machine.create();
@@ -380,7 +336,7 @@ void main() {
       );
       expect(
         machine.terminal.questions,
-        [_installFirebase, _configureNow, _enableNow],
+        [_installFirebase, _configureNow],
       );
       expect(
         machine.commands,
@@ -411,7 +367,7 @@ void main() {
 
     test(
         '--explain shows the check of the version of the Firebase CLI, and '
-        'the step under flutterfire configure, with its notice', () async {
+        'the step under flutterfire configure, without a notice', () async {
       final machine = _Machine();
 
       final code = await machine.create(['--explain']);
@@ -424,26 +380,24 @@ void main() {
       final lines = machine.infos.expand((info) => info.split('\n')).toList();
       expect(
         lines,
-        contains('  ✓ Firebase CLI 15.6.0 or later (for firebase_auth)'),
+        contains('  ✓ Firebase CLI 15.34.0 or later (for firebase_auth)'),
         reason: lines.join('\n'),
       );
       final configure = lines.indexOf('  $_configureLater (firebase_core)');
       expect(configure, isNonNegative, reason: lines.join('\n'));
-      const asks = '      A run asks before it runs this step, and leaves it '
-          'for later when it cannot ask.';
-      expect(lines.skip(configure + 1).take(3), [
+      // The step has nothing under it: a run asks about flutterfire
+      // configure alone.
+      expect(lines.skip(configure + 1).take(2), [
         '    then $_enableLater (firebase_auth)',
-        '      $_notice',
-        asks,
+        '',
       ]);
       expect(machine.terminal.questions, isEmpty);
       expect(machine.commands, isNot(contains(_enable)));
       expect(machine.hasScript, isFalse);
     });
 
-    test('--explain shows a Firebase CLI that is older than the command',
-        () async {
-      final machine = _Machine(firebase: '15.5.1');
+    test('--explain shows a Firebase CLI that is older than 15.34.0', () async {
+      final machine = _Machine(firebase: '15.33.0');
 
       final code = await machine.create(['--explain']);
 
@@ -454,8 +408,8 @@ void main() {
       );
       final lines = machine.infos.expand((info) => info.split('\n')).toList();
       final check = lines.indexOf(
-        '  ✗ Firebase CLI 15.6.0 or later (for firebase_auth): $_firebase '
-        'is 15.5.1',
+        '  ✗ Firebase CLI 15.34.0 or later (for firebase_auth): $_firebase '
+        'is 15.33.0',
       );
       expect(check, isNonNegative, reason: lines.join('\n'));
       expect(lines[check + 1], '    $_update');
@@ -487,7 +441,7 @@ void main() {
 
   test('the step of the module is the one that the tests of a run name', () {
     expect(enableSignIn.description, _enabling);
-    expect(enableSignIn.notice, _notice);
+    expect(enableSignIn.notice, isNull);
     expect(enableSignInCommand, _enableLater);
   });
 }

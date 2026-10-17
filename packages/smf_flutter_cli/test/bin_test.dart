@@ -89,11 +89,6 @@ String _fakeSdk(Directory directory) {
   return bin;
 }
 
-/// The page of the Firebase console with the sign-in methods of a project
-/// that the user picks there.
-const _signInMethods =
-    'https://console.firebase.google.com/project/_/authentication/providers';
-
 /// The option of the platforms of `flutterfire configure` as the CLI prints
 /// a command for later: in double quotes on Windows, since PowerShell reads
 /// a comma as its own.
@@ -810,7 +805,7 @@ void main() {
       test(
         '--explain shows the module chosen for the sign-in, with Firebase, '
         'which it depends on, the Firebase CLI that its step needs, and the '
-        'step, which runs after flutterfire configure once the user agreed',
+        'step, which runs after flutterfire configure as part of it',
         () async {
           final result = await _smf(
             [
@@ -838,30 +833,22 @@ void main() {
                 ),
               ),
               // The check of the Firebase CLI itself, of firebase_core, and
-              // the check of the version that has the command of the step.
+              // the check of the version that the step needs.
               contains(
                 '  ✗ Firebase CLI (for firebase_core): missing\n',
               ),
               contains(
-                '  ✗ Firebase CLI 15.6.0 or later (for firebase_auth): '
+                '  ✗ Firebase CLI 15.34.0 or later (for firebase_auth): '
                 'missing\n',
               ),
-              // The step continues flutterfire configure, and has what the
-              // user has to know before it runs. The step of the other
-              // module that continues flutterfire configure comes after
-              // it, by the names of the two modules, and runs whatever
-              // becomes of this one.
+              // The step continues flutterfire configure, without a notice
+              // of its own. The step of the other module that continues
+              // flutterfire configure comes after it, by the names of the
+              // two modules, and runs whatever becomes of this one.
               contains(
                 '--android-package-name=com.example.my_app (firebase_core)\n'
                 '    then dart tool/enable_firebase_sign_in.dart '
                 '(firebase_auth)\n'
-                '      The Firebase CLI adds a web app named "Default Web '
-                'App" to a project that has no web app, because it enables '
-                'the methods through one (firebase/firebase-tools#11250). '
-                'The page $_signInMethods of the Firebase console enables '
-                'them without it.\n'
-                '      A run asks before it runs this step, and leaves it '
-                'for later when it cannot ask.\n'
                 "    then ruby -e 'f = ARGV[0]; ",
               ),
               contains(

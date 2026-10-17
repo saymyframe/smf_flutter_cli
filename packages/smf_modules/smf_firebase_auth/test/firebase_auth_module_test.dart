@@ -547,7 +547,8 @@ void main() {
         'gives its brick, for the script that enables the ways to sign in, '
         'what the auth role says of the mode of the app, its file, how a '
         'tool reads the mode there and the mode with anonymous users, and '
-        'the first Firebase CLI with the command', () {
+        'the first Firebase CLI whose command adds no web app to a project '
+        'with Android and iOS apps', () {
       final brick = module.contribute(ContractHarness.defaultContext).first
           as BrickContribution;
 
@@ -556,8 +557,8 @@ void main() {
       expect(modeDeclarationCode, rawStringsOf(AuthRole.modeDeclaration));
       expect(brick.vars['anonymous_mode'], 'anonymous');
       expect(AuthMode.anonymous.name, 'anonymous');
-      expect(brick.vars['minimum_firebase_cli'], '15.6.0');
-      expect(firstFirebaseCliWithSignIn, '15.6.0');
+      expect(brick.vars['minimum_firebase_cli'], '15.34.0');
+      expect(firstFirebaseCliWithSignIn, '15.34.0');
     });
 
     test(
@@ -597,17 +598,21 @@ void main() {
     });
 
     test(
-        'checks the machine for a Firebase CLI with the command that '
-        'enables the ways to sign in, with the check of firebase_core', () {
+        'checks the machine for a Firebase CLI whose command enables the '
+        'ways to sign in without a web app, with the check of firebase_core',
+        () {
       expect(firebaseCliWithSignIn, isA<FirebaseCliVersionCheck>());
-      expect(firebaseCliWithSignIn.minimum, '15.6.0');
-      expect(firebaseCliWithSignIn.description, 'Firebase CLI 15.6.0 or later');
+      expect(firebaseCliWithSignIn.minimum, '15.34.0');
+      expect(
+        firebaseCliWithSignIn.description,
+        'Firebase CLI 15.34.0 or later',
+      );
     });
 
     test(
         'continues the step of firebase_core that runs flutterfire '
         'configure with the script of the app that enables the ways to sign '
-        'in, which a run asks about first', () {
+        'in, which is part of that step', () {
       final step = module
           .contribute(ContractHarness.defaultContext)
           .whereType<PostGenStep>()
@@ -626,26 +631,10 @@ void main() {
         step.description,
         'Enabling the sign-in methods of the app in its Firebase project',
       );
-      // It changes the Firebase project, and the Firebase CLI adds a web
-      // app to a project without one: the user agrees first, and may
-      // decline, since the Firebase console enables the methods too.
-      expect(
-        step.notice,
-        'The Firebase CLI adds a web app named "Default Web App" to a '
-        'project that has no web app, because it enables the methods '
-        'through one (firebase/firebase-tools#11250). The page '
-        'https://console.firebase.google.com/project/_/authentication/'
-        'providers of the Firebase console enables them without it.',
-      );
-      expect(step.notice, isNot(contains('\n')));
-      // A terminal that makes a link of the address takes no punctuation
-      // into it: a space follows the address.
-      const page = 'https://console.firebase.google.com/project/_/'
-          'authentication/providers';
-      expect(
-        RegExp(r'https://\S+').allMatches(step.notice!).map((m) => m[0]),
-        [page],
-      );
+      // The Firebase CLI that the step needs adds no app to a project with
+      // the apps that flutterfire registered, so a run asks only about
+      // flutterfire configure.
+      expect(step.notice, isNull);
       expect(step.skippable, isTrue);
       expect(step.external, isTrue);
       // The script passes --non-interactive to the Firebase CLI, so the
@@ -1298,33 +1287,21 @@ void main() {
       });
 
       test(
-          'tells of the web app that the Firebase CLI adds to a project '
-          'without one, and of the Firebase console as the other way', () {
+          'tells of the Firebase console as the other way, and of no web '
+          'app, which the Firebase CLI that the script needs does not add', () {
         const page = 'https://console.firebase.google.com/project/_/'
             'authentication/providers';
         const console = '[Authentication > Sign-in method]($page)';
         expect(
           readmeSection,
           allOf(
-            contains(
-              'adds a web app named "Default Web App" to a project that has '
-              'no web app',
-            ),
-            contains('https://github.com/firebase/firebase-tools/issues/11250'),
-            contains('enable the methods in the Firebase console instead: '
+            contains('enable the methods in the Firebase console, under '
                 '$console'),
+            isNot(contains('web app')),
           ),
         );
-        // As the notice of the step tells of both, and as the service
-        // names the script and the page of the console in its hint.
-        expect(
-          enableSignInNotice,
-          allOf(
-            contains('a web app named "Default Web App"'),
-            contains('firebase/firebase-tools#11250'),
-            contains(page),
-          ),
-        );
+        // As the service names the script and the page of the console in
+        // its hint.
         expect(
           app.files[_implementation]!.text,
           allOf(
