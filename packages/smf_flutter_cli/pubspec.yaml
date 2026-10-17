@@ -41,6 +41,7 @@ dependencies:
   smf_gen_l10n: ^0.4.1
   smf_get_it: ^0.4.1
   smf_go_router: ^0.5.0
+  smf_google_sign_in: ^0.5.0
   smf_home_flutter: ^0.4.1
   smf_material_theme: ^0.4.1
   smf_onboarding: ^0.5.0

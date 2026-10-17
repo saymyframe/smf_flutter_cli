@@ -98,6 +98,15 @@ With `event_bus`:
 - `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
 - A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
 
+## Google sign-in
+
+With `google_sign_in`:
+
+- `googleCredential()` in `lib/core/google_sign_in/google_sign_in.dart` is the function of the way to sign in with Google in `appSignInMethods`, on Android and iOS. In `lib/`, only that file imports the package. It starts the package once with `GoogleSignIn.instance.initialize()`, without ids, so that the package reads the ids of the clients of Google from the files of the app, and then calls `GoogleSignIn.instance.authenticate()`. It returns an `IdTokenCredential` with the `idToken` of the account and no `rawNonce`.
+- A closed sheet, `GoogleSignInExceptionCode.canceled`, returns `null`. These fail with `notConfigured`: `clientConfigurationError`, `providerConfigurationError`, an `unknownError` whose description has `[28444]` (Credential Manager answers so when the Google project does not know the key that signed the Android app), and a `PlatformException` with the code `google_sign_in` (the plugin throws it on iOS without the iOS client or its URL scheme). Any other error fails with `unknown`.
+- `GoogleSignInIcon` shows the logo of Google, `lib/core/google_sign_in/assets/google_logo.png`, which `pubspec.yaml` declares among the assets of the app, at the size of the `IconTheme` around it. The branding guidelines of Google allow no other colours or shape of the logo.
+- In a test, the package asks `GoogleSignInPlatform.instance` of google_sign_in_platform_interface, which the test replaces with a subclass of `GoogleSignInPlatform` that answers `init` and `authenticate`, before the first call of `googleCredential()`: the app starts the package once in a test file.
+
 ## Home
 
 - `HomeScreen` in `lib/features/home/home_screen.dart`, the route `home.home` at `/home`, is a welcome to the developer of the app: it names the app and lists what to do next. Replace its content with the first screen of the app, and keep the route while the app starts there.
@@ -324,6 +333,7 @@ When an anonymous user signs in to an account that exists already, the user of t
 
 Besides an email address and a password, the app signs in with these identity providers, the ways to sign in of `appSignInMethods` in `lib/core/auth/sign_in_methods.dart`:
 
+- Continue with Google, on Android and iOS.
 - Continue with Apple, on iOS. Deleting an account that signs in this way asks the identity provider for a credential again first, so that the provider of sign-in can revoke the tokens that it gave the app. If the user closes its sheet, nothing is deleted.
 
 A screen of sign-in shows the button of a way to sign in only on the platforms that it works on. When an anonymous user signs in this way and no account has the identity yet, the user gets the identity and keeps the id. Otherwise the user signs in to that account, as with a password, and `takeGuestData()` moves what the anonymous user had. The sign-in may also fail, because the address of the identity has an account that signs in in another way: the provider of sign-in decides which.
@@ -339,6 +349,20 @@ Apple gives the name of the user only the first time that the user signs in to t
 The App Store asks an app with Sign in with Apple to revoke the tokens that Apple gave it when the user deletes the account (App Store Review Guideline 5.1.1(v)). So `appSession.deleteAccount()` asks Apple for a new authorization first, and the provider of sign-in revokes the tokens with its code. The backend of the app needs a key of Apple to revoke them, and the documentation of the provider of sign-in tells where to set it. If the user closes the sheet of Apple, nothing is deleted.
 
 The icon of the button, `AppleSignInIcon` in `lib/core/apple_sign_in/apple_sign_in.dart`, is the Apple logo of the Material icons. Apple asks a custom button of Sign in with Apple to use the logo artwork of [Apple Design Resources](https://developer.apple.com/design/resources/), and App Review checks every such button. Before you submit the app, download that logo and show it in `AppleSignInIcon`.
+
+## Google sign-in
+
+The app signs in with Google on Android and iOS: `googleCredential()` in `lib/core/google_sign_in/google_sign_in.dart` asks Google for a credential with the sheet of Google sign-in, and a screen of sign-in shows the button of Google.
+
+Google sign-in needs the Google project of the app to know the app, and the app to know the clients of Google:
+
+- On Android, Google knows the app by the name of its package and the SHA-1 of each key that signs it: the debug key of each machine that builds the app, the upload key, and the app signing key of Google Play.
+- On iOS, the app needs the id of its iOS client of Google, and the reversed id of that client as a URL scheme in `CFBundleURLTypes` of `ios/Runner/Info.plist`, through which the sheet of Google returns to the app.
+- On both, Google issues the ID token to the web client of the Google project, the server client, against which the backend of the provider of sign-in checks the token.
+
+`googleCredential()` starts google_sign_in with `GoogleSignIn.instance.initialize()` without ids, so google_sign_in reads them from the files of the app: on iOS `CLIENT_ID` of `GoogleService-Info.plist`, or `GIDClientID` of `ios/Runner/Info.plist`, and on Android the string resource `default_web_client_id`. The section of the provider of sign-in in this README tells which of these it sets up. To use ids of your own, pass them to `initialize()` there. Until Google sign-in is set up, signing in with Google fails with the reason `notConfigured`, and the `developerHint` of the failure tells what Google answered.
+
+The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_sign_in.dart`, shows the "G" of Google from `lib/core/google_sign_in/assets/google_logo.png`, the logo of the Google Sign-In SDK. The [branding guidelines of Sign in with Google](https://developers.google.com/identity/branding-guidelines) ask a custom button to show that logo in its own colours, on a light background, without a change: keep the image as it is.
 
 ## Languages
 
@@ -2572,7 +2596,8 @@ Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
 === lib/core/auth/sign_in_methods.dart (role:auth) ===
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:my_app/core/apple_sign_in/apple_sign_in.dart' as method0;
+import 'package:my_app/core/apple_sign_in/apple_sign_in.dart' as method1;
+import 'package:my_app/core/google_sign_in/google_sign_in.dart' as method0;
 import 'package:my_app/core/l10n/l10n.dart';
 
 import 'auth_service.dart' show SignInCredential;
@@ -2639,14 +2664,24 @@ final class SignInMethod {
 /// `appSession.signIn` and `appSession.signUp` take them.
 const List<SignInMethod> appSignInMethods = [
   SignInMethod(
+    label: _googleSignInLabel,
+    icon: method0.GoogleSignInIcon(),
+    platforms: {TargetPlatform.android, TargetPlatform.iOS},
+    credential: method0.googleCredential,
+    issuer: 'https://accounts.google.com',
+  ),
+  SignInMethod(
     label: _appleSignInLabel,
-    icon: method0.AppleSignInIcon(),
+    icon: method1.AppleSignInIcon(),
     platforms: {TargetPlatform.iOS},
-    credential: method0.appleCredential,
+    credential: method1.appleCredential,
     issuer: 'https://appleid.apple.com',
     revokesOnDeletion: true,
   ),
 ];
+
+String _googleSignInLabel(BuildContext context) =>
+    context.l10n.googleSignInLabel;
 
 String _appleSignInLabel(BuildContext context) => context.l10n.appleSignInLabel;
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
@@ -3002,6 +3037,113 @@ final class EventBusCommunicationService implements CommunicationService {
 
   @override
   Stream<T> on<T extends AppEvent>() => _eventBus.on<T>();
+}
+=== lib/core/google_sign_in/assets/2.0x/google_logo.png (google_sign_in) ===
+<987 bytes>
+=== lib/core/google_sign_in/assets/3.0x/google_logo.png (google_sign_in) ===
+<1622 bytes>
+=== lib/core/google_sign_in/assets/google_logo.png (google_sign_in) ===
+<572 bytes>
+=== lib/core/google_sign_in/google_sign_in.dart (google_sign_in) ===
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+import '../auth/app_session.dart';
+
+/// The issuer of the ID tokens of Google.
+const String _issuer = 'https://accounts.google.com';
+
+/// The logo of Google, the "G", an image that `pubspec.yaml` declares among
+/// the assets of the app. Flutter takes the file of the same name in
+/// `2.0x/` and `3.0x/` next to it for a screen with more pixels.
+const String _logo = 'lib/core/google_sign_in/assets/google_logo.png';
+
+/// The start of google_sign_in, which [googleCredential] waits for: the
+/// package is started once, before its first sign-in.
+Future<void>? _started;
+
+/// Asks Google for a credential with the sheet of Google sign-in, and
+/// returns it, or `null` when the user closed the sheet.
+///
+/// The first call starts google_sign_in with `GoogleSignIn.instance
+/// .initialize()`, without the ids of the clients of Google, so the package
+/// finds them in the files of the app where the provider of sign-in puts
+/// them. The credential is the ID token of the Google account that the user
+/// chose.
+///
+/// A client of Google that is missing in the app, or a Google project that
+/// does not know the app, fails with `notConfigured`, with a hint at the
+/// section of the README of the app on it, "Google sign-in". Any other error
+/// fails with `unknown`.
+Future<SignInCredential?> googleCredential() async {
+  final GoogleSignInAccount account;
+  try {
+    await (_started ??= GoogleSignIn.instance.initialize());
+    account = await GoogleSignIn.instance.authenticate();
+  } on GoogleSignInException catch (error) {
+    switch (error.code) {
+      case GoogleSignInExceptionCode.canceled:
+        return null;
+      case GoogleSignInExceptionCode.clientConfigurationError:
+      case GoogleSignInExceptionCode.providerConfigurationError:
+        throw _notConfigured(error.description ?? error.code.name);
+      // Credential Manager on Android answers so when the Google project
+      // has no Android client with the name of the package and the SHA-1
+      // of the key that signed the app.
+      case GoogleSignInExceptionCode.unknownError
+          when error.description?.contains('[28444]') ?? false:
+        throw _notConfigured(error.description!);
+      default:
+        throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+    }
+  } on PlatformException catch (error) {
+    // Google sign-in on iOS refuses an app without the id of its iOS
+    // client or without the URL scheme of that client so.
+    if (error.code == 'google_sign_in') {
+      throw _notConfigured(error.message ?? error.code);
+    }
+    throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+  } on Object catch (error) {
+    throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+  }
+  final idToken = account.authentication.idToken;
+  if (idToken == null) {
+    throw const AuthFailure(
+      AuthFailureReason.unknown,
+      developerHint: 'Google gave no ID token.',
+    );
+  }
+  return IdTokenCredential(issuer: _issuer, idToken: idToken);
+}
+
+/// The failure of a sign-in with Google that the app or the Google project
+/// is not set up for, with [message], what Google answered.
+AuthFailure _notConfigured(String message) => AuthFailure(
+  AuthFailureReason.notConfigured,
+  developerHint:
+      'Google sign-in is not set up for the app ($message). See the '
+      'section "Google sign-in" of the README of the app.',
+);
+
+/// The icon of the button of Google sign-in: the "G" of Google in its own
+/// colours, at the size of the icons of the button, as the branding
+/// guidelines of Google ask of a custom button.
+class GoogleSignInIcon extends StatelessWidget {
+  /// Creates the icon.
+  const GoogleSignInIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = IconTheme.of(context).size;
+    // The label of the button names Google.
+    return Image.asset(
+      _logo,
+      width: size,
+      height: size,
+      excludeFromSemantics: true,
+    );
+  }
 }
 === lib/core/l10n/app_locale.dart (role:localization) ===
 import 'package:flutter/widgets.dart';
@@ -9400,6 +9542,7 @@ class DefaultFirebaseOptions {
   "onboardingSkip": "Skip",
   "onboardingNext": "Next",
   "onboardingDone": "Get started",
+  "googleSignInLabel": "Continue with Google",
   "appleSignInLabel": "Continue with Apple",
   "signInTitle": "Sign in",
   "signInIntro": "Enter the email and the password of your account.",
@@ -9477,6 +9620,7 @@ class DefaultFirebaseOptions {
   "onboardingSkip": "Пропустити",
   "onboardingNext": "Далі",
   "onboardingDone": "Почати",
+  "googleSignInLabel": "Продовжити з Google",
   "appleSignInLabel": "Продовжити з Apple",
   "signInTitle": "Вхід",
   "signInIntro": "Введіть пошту й пароль свого акаунта.",
@@ -9574,6 +9718,7 @@ dependencies:
   flutter_riverpod: "^3.4.3"
   get_it: "^9.3.0"
   go_router: "^17.5.0"
+  google_sign_in: "^7.2.0"
   intl: "any"
   shared_preferences: "^2.5.5"
   shared_preferences_android: ">=2.4.28 <2.5.0"
@@ -9590,6 +9735,7 @@ flutter:
   assets:
     - "lib/features/home/assets/smf_mark.png"
     - "assets/fonts/geist/OFL.txt"
+    - "lib/core/google_sign_in/assets/google_logo.png"
   fonts:
     - family: "Geist"
       fonts:

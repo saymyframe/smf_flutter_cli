@@ -39,6 +39,9 @@ dependencies:
   smf_flutter_core: ^0.4.1
   smf_get_it: ^0.4.1
   smf_go_router: ^0.5.0
+  # The way to sign in with Google of the CLI, for its app test and the test
+  # of the ways to sign in of the auth role in the app of several providers.
+  smf_google_sign_in: ^0.5.0
   # The start screen of the CLI, for its app test in the app of several
   # providers, which starts on another screen.
   smf_home_flutter: ^0.4.1

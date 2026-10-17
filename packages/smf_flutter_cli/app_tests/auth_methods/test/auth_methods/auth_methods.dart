@@ -14,11 +14,12 @@
 // whose header has `alg` none and whose payload has `iss`, the issuer of
 // the way to sign in, `sub`, the identity at the identity provider, maybe
 // `email`, the email address of that identity, and `nonce`, a value of its
-// own: the nonce that the request for the token had. Whatever the issuer,
-// the nonce of a token is the rawNonce of its credential, as in the tokens
-// that these tests build, or the SHA-256 hash of that rawNonce in lowercase
-// hexadecimal, as a way to sign in whose request has the hash gets it, such
-// as Sign in with Apple. A credential of
+// own: the nonce that the request for the token had. A token of a request
+// without a nonce has none, as Google sign-in started without one gets it.
+// Whatever the issuer, the nonce of a token is the rawNonce of its
+// credential, as in the tokens that these tests build, or the SHA-256 hash
+// of that rawNonce in lowercase hexadecimal, as a way to sign in whose
+// request has the hash gets it, such as Sign in with Apple. A credential of
 // the issuer of a way to sign in that revokesOnDeletion also has an
 // authorizationCode of its own, as an identity provider that revokes gives
 // one with each token.
@@ -35,14 +36,14 @@
 // call here gets a credential of its own, but for that one.
 //
 // The mocks of the module of a way to sign in issue such tokens, of one
-// identity of their own and the same each time, each with the new nonce of
-// its request, so that the function of the way to sign in returns a
-// credential under them. A provider of the role takes such a token in the
-// tests of an app, its mocks or a fixture, as the token of its identity,
-// whatever its issuer among those of the app. So the test of the service
-// builds tokens of identities of its own for each issuer of the app, and
-// the test of the session goes through the function of each way to sign
-// in.
+// identity of their own and the same each time, each with the nonce of its
+// request, if it has one, so that the function of the way to sign in
+// returns a credential under them. A provider of the role takes such a
+// token in the tests of an app, its mocks or a fixture, as the token of its
+// identity, whatever its issuer among those of the app. So the test of the
+// service builds tokens of identities of its own for each issuer of the
+// app, and the test of the session goes through the function of each way
+// to sign in.
 import 'dart:convert';
 import 'dart:math';
 
