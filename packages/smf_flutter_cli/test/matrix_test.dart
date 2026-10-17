@@ -296,7 +296,9 @@ void main() {
       'app of Firebase, the app of Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
-      'which get Firebase, the apps of Firebase Authentication with and '
+      'which get Firebase, the app of Firebase Cloud Messaging, which gets '
+      'Firebase and the notifications with their preferences, the apps of '
+      'Firebase Authentication with and '
       'without the localization and the router, which get Firebase, the '
       'apps of the sign-in for each state manager with the localization '
       'and without, which get Firebase Authentication and the router, one '
@@ -313,7 +315,8 @@ void main() {
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, onboarding, local_notifications, firebase_core, '
-        'firebase_crashlytics, firebase_analytics, firebase_auth, sign_in)';
+        'firebase_crashlytics, firebase_analytics, firebase_messaging, '
+        'firebase_auth, sign_in)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -437,6 +440,10 @@ void main() {
       ),
       equals(
         'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_messaging (firebase_messaging, firebase_core, flutter_core, '
+        'local_notifications, shared_preferences)',
       ),
       equals(
         'firebase_auth with localization, router (firebase_auth, gen_l10n, '

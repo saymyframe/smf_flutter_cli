@@ -208,10 +208,10 @@ void main() {
   test(
       'the app tests check the contract of the router role, of the DI role, '
       'of the events role, of the preferences role, of the auth role, of '
-      'the notifications role, of the settings screen role, of the theme '
-      'role, of the localization role and of the app entry role with every '
-      'provider of each, which they tell apart by the roles of the app '
-      'only', () {
+      'the notifications role, of the push role, of the settings screen '
+      'role, of the theme role, of the localization role and of the app '
+      'entry role with every provider of each, which they tell apart by the '
+      'roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -221,6 +221,7 @@ void main() {
         preferencesRole,
         authRole,
         notificationsRole,
+        pushRole,
         settingsScreenRole,
         themeRole,
         appEntryRole,
@@ -239,6 +240,9 @@ void main() {
     expect(named('notifications_role').roles, {notificationsRole});
     // So does the test of the provider of the notifications role.
     expect(named('local_notifications').roles, isEmpty);
+    expect(named('push_role').roles, {pushRole});
+    // And the test of the provider of the push role.
+    expect(named('firebase_messaging').roles, isEmpty);
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
     // The test of the theme role checks that the root of the app, which the
@@ -925,6 +929,8 @@ void main() {
         'onboarding',
         // So does the notifications role.
         ..._localNotifications,
+        // And the push role requires the notifications.
+        'firebase_messaging',
         // Firebase Authentication with the localization, which requires
         // the preferences, and the sign-in with it.
         'firebase_auth with localization, router',
@@ -1699,7 +1705,8 @@ void main() {
       'opened again, the user of Firebase Authentication, the onboarding '
       'of a first launch, the languages of the localization role, the '
       'permission of the notifications role and the channel of '
-      'local_notifications, each '
+      'local_notifications, the push messages of the role and the address '
+      'of Firebase Cloud Messaging, each '
       'a function of a file of its tests that takes the one that waits '
       'until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
@@ -1712,6 +1719,8 @@ void main() {
       {
         'firebase_auth':
             'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
+        'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
+            'probeFirebaseMessaging',
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
@@ -1723,6 +1732,7 @@ void main() {
             'integration_test/preferences_role/probe.dart probePreferences',
         'notifications_role':
             'integration_test/notifications_role/probe.dart probeNotifications',
+        'push_role': 'integration_test/push_role/probe.dart probePush',
         'router_walk': 'integration_test/router_walk/walk.dart probeRoutes',
         'localization_role':
             'integration_test/localization_role/probe.dart probeLanguages',
@@ -1753,8 +1763,9 @@ void main() {
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
     // the routes of the app past it. Those of Firebase Authentication, of
-    // the notifications role and of local_notifications only read, so they
-    // hold wherever they come.
+    // Firebase Cloud Messaging, of the notifications role, of
+    // local_notifications and of the push role only read, so they hold
+    // wherever they come.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
@@ -1762,12 +1773,14 @@ void main() {
       [
         'start',
         'firebase_auth',
+        'firebase_messaging',
         'onboarding',
         'shared_preferences',
         'local_notifications',
         'di_role',
         'preferences_role',
         'notifications_role',
+        'push_role',
         'router_walk',
         'localization_role',
       ],
@@ -1802,34 +1815,41 @@ void main() {
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
         'probe0: firebase_auth/probe.dart',
-        'probe1: onboarding/probe.dart',
-        'probe2: shared_preferences/probe.dart',
-        'probe3: local_notifications/probe.dart',
-        'probe4: di_role/probe.dart',
-        'probe5: preferences_role/probe.dart',
-        'probe6: notifications_role/probe.dart',
-        'probe7: router_walk/walk.dart',
-        'probe8: localization_role/probe.dart',
+        'probe1: firebase_messaging/probe.dart',
+        'probe2: onboarding/probe.dart',
+        'probe3: shared_preferences/probe.dart',
+        'probe4: local_notifications/probe.dart',
+        'probe5: di_role/probe.dart',
+        'probe6: preferences_role/probe.dart',
+        'probe7: notifications_role/probe.dart',
+        'probe8: push_role/probe.dart',
+        'probe9: router_walk/walk.dart',
+        'probe10: localization_role/probe.dart',
       ],
     );
     expect(list, contains("('firebase_auth', probe0.probeFirebaseAuth),"));
-    expect(list, contains("('onboarding', probe1.probeOnboarding),"));
     expect(
       list,
-      contains("('shared_preferences', probe2.probeSharedPreferences),"),
+      contains("('firebase_messaging', probe1.probeFirebaseMessaging),"),
+    );
+    expect(list, contains("('onboarding', probe2.probeOnboarding),"));
+    expect(
+      list,
+      contains("('shared_preferences', probe3.probeSharedPreferences),"),
     );
     expect(
       list,
-      contains("('local_notifications', probe3.probeLocalNotifications),"),
+      contains("('local_notifications', probe4.probeLocalNotifications),"),
     );
-    expect(list, contains("('di_role', probe4.probeServices),"));
-    expect(list, contains("('preferences_role', probe5.probePreferences),"));
+    expect(list, contains("('di_role', probe5.probeServices),"));
+    expect(list, contains("('preferences_role', probe6.probePreferences),"));
     expect(
       list,
-      contains("('notifications_role', probe6.probeNotifications),"),
+      contains("('notifications_role', probe7.probeNotifications),"),
     );
-    expect(list, contains("('router_walk', probe7.probeRoutes),"));
-    expect(list, contains("('localization_role', probe8.probeLanguages),"));
+    expect(list, contains("('push_role', probe8.probePush),"));
+    expect(list, contains("('router_walk', probe9.probeRoutes),"));
+    expect(list, contains("('localization_role', probe10.probeLanguages),"));
   });
 
   test(
@@ -3401,7 +3421,9 @@ void main() {
     // The matrix of the CLI runs it in every app with the role, which
     // local_notifications provides there: the apps of the module with the
     // settings screen, the onboarding screen and the localization, which
-    // its role uses, and without each, and the apps with every module.
+    // its role uses, and without each, the app of Firebase Cloud
+    // Messaging, whose push role requires the notifications, and the apps
+    // with every module.
     final registered = named('notifications_role');
     expect(registered.roles, test.roles);
     expect(registered.values!(apps.first), test.values!(apps.first));
@@ -3413,6 +3435,7 @@ void main() {
       ],
       [
         ..._localNotifications,
+        'firebase_messaging',
         ..._everyModule,
       ],
     );
@@ -3495,9 +3518,30 @@ void main() {
     expect(test.values!(appWith(pushRole)), {'push_owner': 'push'});
     expect(test.generatedFiles, isNull);
     expect(test.mocks, isNull);
-    // No module of the CLI provides the role yet, so its matrix does not
-    // run the test.
-    expect(apps.where(test.appliesTo), isEmpty);
+    // The matrix of the CLI runs it in every app with the role, which
+    // firebase_messaging provides there: the app of the module and the
+    // apps with every module.
+    final registered = named('push_role');
+    expect(registered.roles, test.roles);
+    expect(registered.values!(apps.first), test.values!(apps.first));
+    expect(registered.startProbe!.path, test.startProbe!.path);
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      ['firebase_messaging', ..._everyModule],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(pushRole)) app.name,
+      ],
+    );
 
     // As the fixtures take it, only in the apps with every module.
     final everyModule = await pushRoleAppTest(
@@ -3549,6 +3593,7 @@ void main() {
       ],
       [
         ..._localNotifications,
+        'firebase_messaging',
         ..._everyModule,
       ],
     );
@@ -3587,6 +3632,68 @@ void main() {
         .singleWhere((declaration) => declaration.name == test.mocks!.function);
     expect(function.kind, DeclarationKind.function);
     expect(function.type, 'MockLocalNotifications');
+    expect(
+      [
+        for (final parameter in function.parameters)
+          if (parameter.kind.name.startsWith('required')) parameter.name,
+      ],
+      isEmpty,
+    );
+  });
+
+  test(
+      'the test of firebase_messaging applies to the apps with the module, '
+      'whatever else they have, declares the mocks of its platform side for '
+      'the tests of every module of those apps, and has a probe for the '
+      'start check', () {
+    final test = named('firebase_messaging');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      ['firebase_messaging', ..._everyModule],
+    );
+    // It tests what only this provider of the push role does, so it names
+    // no role: the test of the role checks what every provider keeps to.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    // The mocks answer the method channel of the plugin, whose library the
+    // app has as a dependency already, and use the mocks of Firebase Core,
+    // whose test adds what they need.
+    expect(test.devDependencies, isEmpty);
+    expect(named('firebase_core').appliesTo, isNotNull);
+    for (final app in apps.where(test.appliesTo)) {
+      expect(named('firebase_core').appliesTo(app), isTrue, reason: app.name);
+    }
+    expect(test.mocks!.path, 'test/firebase_messaging_mocks.dart');
+    expect(test.mocks!.function, 'mockFirebaseMessaging');
+    expect(
+      test.startProbe!.path,
+      'integration_test/firebase_messaging/probe.dart',
+    );
+    expect(test.startProbe!.function, 'probeFirebaseMessaging');
+    for (final path in [test.mocks!.path, test.startProbe!.path]) {
+      expect(
+        File(p.joinAll([test.directory, ...path.split('/')])).existsSync(),
+        isTrue,
+        reason: path,
+      );
+    }
+    // The mocks are a function of their file that takes nothing and
+    // returns the device in memory, as the configuration of the tests of an
+    // app calls it.
+    final mocks = File(
+      p.joinAll([test.directory, ...test.mocks!.path.split('/')]),
+    ).readAsStringSync();
+    final (:index, :errors) = DartFileIndexer.parse(test.mocks!.path, mocks);
+    expect(errors, isEmpty);
+    final function = index.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'MockFirebaseMessaging');
     expect(
       [
         for (final parameter in function.parameters)

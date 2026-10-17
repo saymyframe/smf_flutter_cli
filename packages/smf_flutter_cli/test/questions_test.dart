@@ -203,6 +203,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -218,6 +219,7 @@ void main() {
       'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Push messages: which module provides it?',
       'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -244,10 +246,11 @@ void main() {
     ]);
     // The roles come in the order in which the modules of the list bring
     // them: the layout, with the router, brings the localization, whose
-    // labels it shows. The theme and the notifications follow, and then the
-    // preferences of all three and the DI container, all before the state
-    // managers.
-    expect(run.asked[10].shown, [
+    // labels it shows. The theme follows, then the push messages before the
+    // notifications that their role requires, and then the preferences of
+    // the localization, the theme and the notifications and the DI
+    // container, all before the state managers.
+    expect(run.asked[11].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -297,6 +300,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -312,6 +316,7 @@ void main() {
       'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Push messages: which module provides it?',
       'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -370,6 +375,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -461,6 +467,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -514,6 +521,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -529,6 +537,7 @@ void main() {
       'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Push messages: which module provides it?',
       'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -577,6 +586,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -593,6 +603,7 @@ void main() {
       'Router: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Push messages: which module provides it?',
       'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
@@ -633,6 +644,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -655,9 +667,10 @@ void main() {
     );
     // The preferences have one provider, so the run does not ask for them.
     expect(
-      messages.sublist(localization + 1, localization + 4),
+      messages.sublist(localization + 1, localization + 5),
       [
         'Theme: which module provides it?',
+        'Push messages: which module provides it?',
         'Notifications: which module provides it?',
         'Dependency injection: which module provides it?',
       ],
@@ -766,6 +779,7 @@ void main() {
       'Dependency injection': ['get_it'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -834,6 +848,7 @@ void main() {
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -902,6 +917,7 @@ void main() {
       'Dependency injection': ['get_it'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -916,14 +932,16 @@ void main() {
     // The roles come in the order in which the modules of the list bring
     // them, and the localization, the theme and the notifications, whose
     // roles require the preferences, come before the preferences and
-    // before get_it. So the question of the preferences knows whether the
-    // answers on the localization, on the theme and on the notifications
-    // need them.
+    // before get_it, and the push messages, whose role requires the
+    // notifications, before the notifications. So the question of the
+    // preferences knows whether the answers on the localization, on the
+    // theme and on the notifications need them.
     expect(
-      messages.sublist(preferences - 3, preferences + 1),
+      messages.sublist(preferences - 4, preferences + 1),
       [
         'Localization: which module provides it?',
         'Theme: which module provides it?',
+        'Push messages: which module provides it?',
         'Notifications: which module provides it?',
         'Preferences: which module provides it?',
       ],
@@ -990,6 +1008,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1078,6 +1097,7 @@ void main() {
       'Dependency injection': ['None'],
       'Events': ['None'],
       'Notifications': ['None'],
+      'Push messages': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1192,6 +1212,7 @@ void main() {
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1267,6 +1288,7 @@ void main() {
         'Dependency injection': ['get_it'],
         'Events': ['None'],
         'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1380,6 +1402,7 @@ void main() {
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1478,6 +1501,102 @@ void main() {
   });
 
   test(
+      'a run in a terminal asks which module provides the push messages '
+      'before the notifications, and offers Firebase Cloud Messaging, which '
+      'brings Firebase and the only providers of the notifications and of '
+      'the preferences without a question', () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': [],
+        'Layout': ['None'],
+        'Onboarding screen': ['None'],
+        'Settings screen': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Theme': ['None'],
+        'Localization': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+        'Push messages': ['firebase_messaging'],
+        'Crash reporting': [],
+        'Analytics': [],
+        'Authentication': ['None'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // The push role requires the notifications, so the question of the
+    // push messages comes before theirs, which knows then that the app
+    // needs them. local_notifications is their only provider, and
+    // shared_preferences the only provider of the preferences that the
+    // notifications require, so the run asks for neither.
+    final messages = [for (final question in run.asked) question.message];
+    final push = messages.indexOf('Push messages: which module provides it?');
+    expect(
+      push,
+      messages.indexOf('Theme: which module provides it?') + 1,
+    );
+    expect(run.asked[push].shown, [
+      'firebase_messaging — Firebase Cloud Messaging with firebase_messaging',
+      'None',
+    ]);
+    expect(
+      messages,
+      isNot(
+        anyOf(
+          contains('Notifications: which module provides it?'),
+          contains('Preferences: which module provides it?'),
+        ),
+      ),
+    );
+    expect(
+      run.lines,
+      containsAll([
+        'Adding firebase_core: a dependency of firebase_messaging.',
+        equals(
+          'Adding local_notifications: the only provider of the '
+          'notifications role, which firebase_messaging requires.',
+        ),
+        equals(
+          'Adding shared_preferences: the only provider of the preferences '
+          'role, which local_notifications requires.',
+        ),
+      ]),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/push/firebase_push_service.dart')
+          .readAsStringSync(),
+      contains('FirebaseMessaging.instance'),
+    );
+    // Firebase starts first, then the preferences, the notifications and
+    // the push messages.
+    const bootstrap = 'lib/bootstrap.dart';
+    final calls = DartFileIndexer.index(
+      bootstrap,
+      app.childFile(bootstrap).readAsStringSync(),
+    ).invocations;
+    expect(
+      [
+        for (final call in calls)
+          if (call.enclosingDeclaration == 'bootstrap') call.name,
+      ],
+      ['initializeApp', 'initPreferences', 'initNotifications', 'initPush'],
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(
+        contains('  firebase_messaging: '),
+        contains('  firebase_core: '),
+        contains('  flutter_local_notifications: '),
+      ),
+    );
+  });
+
+  test(
       'a run in a terminal gives an app without a router Firebase Analytics '
       'without screen views, and registers its service in the DI container',
       () async {
@@ -1495,6 +1614,7 @@ void main() {
         'Dependency injection': ['get_it'],
         'Events': ['None'],
         'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1551,6 +1671,7 @@ void main() {
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1645,6 +1766,7 @@ void main() {
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],

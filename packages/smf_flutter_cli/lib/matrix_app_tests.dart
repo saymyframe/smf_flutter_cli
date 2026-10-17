@@ -8,6 +8,7 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
+import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
@@ -31,6 +32,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
+  final messaging = await appTestsDirectoryOf('smf_firebase_messaging');
   final home = await appTestsDirectoryOf('smf_home_flutter');
   final localNotifications = await appTestsDirectoryOf(
     'smf_local_notifications',
@@ -135,6 +137,33 @@ Future<MatrixAppTests> smfAppTests() async {
         startProbe: const MatrixStartProbe(
           'integration_test/firebase_auth/probe.dart',
           'probeFirebaseAuth',
+        ),
+      ),
+      // The push service of the module on Firebase Cloud Messaging: what
+      // each of its calls sends to Firebase, on Android and on iOS, such as
+      // the presentation options of iOS, which let a notification show in
+      // the foreground, and never a request for the permission to show
+      // notifications; the address, which is the registration token, and
+      // none where Firebase has none or fails; and a message in the
+      // foreground, a tap, a new token and the message whose tap launched
+      // the app, with the data of a message as texts, through the service
+      // and through appPush. The tests use the service of the module, and
+      // leave what every provider of the push role does to the test of the
+      // role. The mocks are a device in memory with a registration token
+      // that stays the same, and the matrix sets them up for the tests of
+      // every module of the app, since the start-up of the app starts the
+      // push messages. Its probe compares, on a device, the address of the
+      // app with the token that the Firebase SDK has there.
+      MatrixAppTest(
+        '$messaging/firebase_messaging',
+        appliesTo: _has(FirebaseMessagingModule.id),
+        mocks: const MatrixMocks(
+          'test/firebase_messaging_mocks.dart',
+          'mockFirebaseMessaging',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/firebase_messaging/probe.dart',
+          'probeFirebaseMessaging',
         ),
       ),
       // The onboarding of the module: on its first launch, the app shows
@@ -314,6 +343,11 @@ Future<MatrixAppTests> smfAppTests() async {
       // listed until it is cancelled or shown, and the next start keeps
       // what was scheduled and the permission.
       await notificationsRoleAppTest(),
+      // The push messages of the apps with the push role, whichever module
+      // provides it: the app follows the address of the service, shows a
+      // message in the foreground where the platform does not, gives each
+      // tap once, and the next start has the same address.
+      await pushRoleAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -366,11 +400,11 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the auth role, of the notifications role, of the settings
-    // screen role, of the theme role and of the localization role gets the
-    // tests of its role. Each
-    // provider of the app entry role gets the test of the theme role, which
-    // checks that its root rebuilds.
+    // role, of the auth role, of the notifications role, of the push role,
+    // of the settings screen role, of the theme role and of the
+    // localization role gets the tests of its role. Each provider of the
+    // app entry role gets the test of the theme role, which checks that its
+    // root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -378,6 +412,7 @@ Future<MatrixAppTests> smfAppTests() async {
       preferencesRole,
       authRole,
       notificationsRole,
+      pushRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,
