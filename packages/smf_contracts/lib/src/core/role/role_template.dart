@@ -15,10 +15,11 @@ part of '../role.dart';
 /// 4. [render], before the templates are rendered.
 ///
 /// All data is collected before [validate], so the hooks of different roles
-/// never depend on each other's results. Only data can depend on what
-/// another role chose (see [Contribution.whenChosen]): [choose] of a role
-/// with such data runs after the hook of the other role and gets the data
-/// whose conditions hold, and the render hooks get only that data too.
+/// never depend on each other's results. Of what the hooks get, only data
+/// can depend on what another role chose (see [Contribution.whenChosen]):
+/// [choose] of a role with such data runs after the hook of the other role
+/// and gets the data whose conditions hold, and the render hooks get only
+/// that data too.
 abstract base class RoleTemplate<D extends Object> {
   /// Allows subclasses to have constant constructors.
   const RoleTemplate();
