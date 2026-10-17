@@ -35,7 +35,8 @@ const routerRole = RouterRole._();
 ///   [screenListeners] get as the name of the screen and navigator
 ///   observers as the name of its page;
 /// - builds the start route of [startIn] at `/`, or the fallback screen of
-///   the app entry if there is none;
+///   the app entry if there is none, which an app has only then (see
+///   [noStartRoute]);
 /// - when a layout is present and the app has destinations, puts them into
 ///   the `AppShell` of the layout role, in the order of
 ///   [RouterFacade.destinations], each with the routes below it in its
@@ -626,6 +627,22 @@ final class RouterRole extends Role<RoutesData> {
   /// first.
   static const ambiguousRoutesWarning = 'router.ambiguous_routes';
 
+  /// The condition that no route starts the app: the router chose no start
+  /// route, since no route can start the app, or the app has no router.
+  ///
+  /// It holds exactly where [startIn] is `null`, where the app starts on the
+  /// fallback screen of the app entry, so only those apps have that screen
+  /// (see [AppEntryRole.fallbackStartScreen]). A provider of the app entry
+  /// contributes the screen, and what only the screen needs, such as its
+  /// texts, under it (see [Contribution.whenChosen]), and a provider of this
+  /// role imports the screen only where [startIn] is `null`.
+  static const noStartRoute = ChoiceCondition(
+    routerRole,
+    'no route starts the app',
+    holdsFor: _choosesNoStart,
+    withoutRole: true,
+  );
+
   @override
   String get id => 'router';
 
@@ -735,7 +752,8 @@ final class RouterRole extends Role<RoutesData> {
       RouterFacade.of(dataIn(input));
 
   /// The route the app starts on, as the template chose it, or `null` if
-  /// no route can start the app or [input] comes before the choice.
+  /// no route can start the app or [input] comes before the choice: where
+  /// [noStartRoute] holds.
   FacadeRoute? startIn(RoleHookInput<RoutesData> input) {
     final choice = input.choice;
     if (choice is! RouterChoice) return null;
@@ -743,6 +761,11 @@ final class RouterRole extends Role<RoutesData> {
     return path == null ? null : facadeOf(input).routeAt(path);
   }
 }
+
+/// Whether the router chose no start route with [choice], the result of
+/// its template's `choose`; see [RouterRole.noStartRoute].
+bool _choosesNoStart(Object? choice) =>
+    choice is! RouterChoice || choice.startPath == null;
 
 List<String> _screenSegments(ScreenKey key) =>
     [key.feature.value, SmfNames.snakeCaseOf(key.screen)];

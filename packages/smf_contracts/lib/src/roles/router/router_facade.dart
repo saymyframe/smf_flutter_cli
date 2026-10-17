@@ -19,7 +19,8 @@ final class RouterChoice {
   const RouterChoice({this.startPath});
 
   /// The full path of the start route, or `null` if no route can start the
-  /// app, which then starts on the fallback screen of the app entry.
+  /// app, which then starts on the fallback screen of the app entry (see
+  /// [RouterRole.noStartRoute]).
   final String? startPath;
 
   @override
