@@ -18,6 +18,7 @@ const List<Role> _roles = [
   crashReportingRole,
   authRole,
   settingsScreenRole,
+  onboardingScreenRole,
   themeRole,
 ];
 
@@ -51,6 +52,7 @@ void main() {
       'crash reporting role',
       'authentication role',
       'settings screen role',
+      'onboarding screen role',
       'theme role',
     ]);
   });
@@ -120,6 +122,13 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
       'uses': <String>{},
+    });
+    // The onboarding shows its screen at a route of the app, and the
+    // labels of its steps in the language of the app.
+    expect(shape(onboardingScreenRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'router'},
+      'uses': {'localization'},
     });
     expect(shape(themeRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -210,6 +219,7 @@ void main() {
           'crash_reporting',
           'auth',
           'settings_screen',
+          'onboarding_screen',
           'theme',
         ],
       );
@@ -385,6 +395,7 @@ void main() {
         'facade',
         'guards',
         'destinations',
+        'steps',
         'labels',
         'locales',
         'locale_key',
