@@ -639,8 +639,11 @@ esac''');
       expect(result.exitCode, 1);
       expect(
         '${result.stdout}',
-        endsWith('::error::The answer messages failed with the exit code '
-            '3.\n'),
+        allOf(
+          contains('What the app printed:'),
+          endsWith('::error::The answer messages failed with the exit code '
+              '3.\n'),
+        ),
       );
       expect(File(linesOf('messages.paths').single).existsSync(), isFalse);
     });
@@ -671,7 +674,16 @@ esac''');
         endsWith('::error::The answer messages did not finish in 300 s.\n'),
       );
       expect(long.exitCode, 0, reason: '${long.stdout}${long.stderr}');
-      expect('${long.stdout}', contains('The answer messages took 240 s.\n'));
+      final took =
+          RegExp(r'^The answer messages took ([0-9]+) s\.$', multiLine: true)
+              .firstMatch('${long.stdout}');
+      expect(took, isNotNull, reason: '${long.stdout}');
+      expect(
+        int.parse(took!.group(1)!),
+        greaterThanOrEqualTo(240),
+        reason: 'The answer takes 4 minutes by SECONDS, the clock of the '
+            'script, less than the 300 s that it has.',
+      );
     });
 
     test(

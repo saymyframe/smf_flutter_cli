@@ -274,11 +274,13 @@ answer() {
     within 300 env SMF_START_REQUEST="$copy" bash -c "$command" < /dev/null || code=$?
     rm -f "$copy"
     copy=
-    if [ "$code" -eq 142 ]; then
-      echo "::error::The answer $name did not finish in 300 s."
-      exit 1
-    elif [ "$code" -ne 0 ]; then
-      echo "::error::The answer $name failed with the exit code $code."
+    if [ "$code" -ne 0 ]; then
+      show_log
+      if [ "$code" -eq 142 ]; then
+        echo "::error::The answer $name did not finish in 300 s."
+      else
+        echo "::error::The answer $name failed with the exit code $code."
+      fi
       exit 1
     fi
     echo "The answer $name took $((SECONDS - began)) s."
