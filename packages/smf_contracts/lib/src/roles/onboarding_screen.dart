@@ -51,10 +51,12 @@ const onboardingScreenRole = OnboardingScreenRole._();
 /// - calls [OnboardingStep.run] once when the user taps the button of the
 ///   action, and takes no tap on the buttons of the step until the future
 ///   completes. Then it goes on to the next page, also when the future
-///   fails, and leaves the error to the handlers of the uncaught errors of
-///   the app. The button of `later` goes on without calling the function;
+///   fails, and leaves the error uncaught or reports it with
+///   `FlutterError.reportError`, so that it reaches the handlers of the
+///   errors of the app. The button of `later` goes on without calling the
+///   function;
 /// - turns its pages with a swipe too, and calls no [OnboardingStep.run]
-///   when the user skips the onboarding;
+///   when the user swipes past a step or skips the onboarding;
 /// - works also when code pushes it over the app as a new screen, as a
 ///   test of the role in a running app does.
 ///
@@ -341,9 +343,9 @@ final class OnboardingStep extends OnboardingData implements DataWithTexts {
 
   /// The function that says whether the onboarding shows the step, or
   /// `null` for a step that it always shows: a top-level function of a file
-  /// of the app that the contributor generates, which requires no arguments
-  /// and returns a `bool` at once, such as whether the app has not asked
-  /// for a permission yet.
+  /// of the app that the contributor generates, which requires no arguments,
+  /// returns a `bool` at once and has no side effects, such as whether the
+  /// app has not asked for a permission yet.
   ///
   /// The onboarding asks it once each time it shows, so it reads what the
   /// app knows already, such as what the start-up of the app restored.
