@@ -730,10 +730,13 @@ List<SmfIssue> _checkRoute(ModuleRuleInput<OnboardingData> input) =>
     );
 
 /// Whether [type], the return type of a function as written, is a
-/// `Future`, such as `Future<void>` or `Future<bool>`.
+/// `Future`, such as `Future<void>` or `Future<bool>`, and not one that may
+/// be `null`, such as `Future<void>?`, whose function the list of the steps
+/// cannot take as the action of a step.
 bool _isFuture(String? type) {
   final written = type?.replaceAll(RegExp(r'\s+'), '');
   return written != null &&
+      !written.endsWith('?') &&
       (written == 'Future' || written.startsWith('Future<'));
 }
 

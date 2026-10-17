@@ -1607,7 +1607,16 @@ void main() {
     test(
         'rejects an action that does not return a Future, and a condition '
         'that does not return a bool', () {
-      for (final type in ['void', 'FutureOr<void>', 'bool', null]) {
+      // A function that may return null cannot be torn off as a run of the
+      // list of the steps, whose type returns a Future.
+      for (final type in [
+        'void',
+        'FutureOr<void>',
+        'bool',
+        'Future<void>?',
+        'Future?',
+        null,
+      ]) {
         expect(
           messagesOf(
             [_stepOf(_step('ask'))],
