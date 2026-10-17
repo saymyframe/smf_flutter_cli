@@ -49,8 +49,11 @@ const _everyModuleWarnings = [
 
 /// The other apps of the matrix of the fixtures that warn of what they are
 /// made of, by name, each with the codes of its warnings: those with the
-/// texts of fake_second, and those of the fixture gates, whose apps have no
-/// route to start on.
+/// texts of fake_second; those of the fixture gates and of the fixture
+/// onboarding, whose apps have no route to start on; and those of the
+/// fixture steps with the onboarding, which have no route to start on
+/// either, and with the texts of the fixture steps a text without a
+/// translation, on purpose.
 const _warningApps = <String, List<String>>{
   'fake_second (fake_router) with localization, badge': [
     'localization.unsupported_language',
@@ -72,6 +75,15 @@ const _warningApps = <String, List<String>>{
   'fake_late_gate (go_router)': ['router.no_start'],
   'fake_gate (fake_router)': ['router.no_start'],
   'fake_gate (go_router)': ['router.no_start'],
+  'fake_onboarding (fake_router) with localization': ['router.no_start'],
+  'fake_onboarding (go_router) with localization': ['router.no_start'],
+  'fake_onboarding (fake_router)': ['router.no_start'],
+  'fake_onboarding (go_router)': ['router.no_start'],
+  'fake_steps with onboarding_screen, localization': [
+    'localization.untranslated',
+    'router.no_start',
+  ],
+  'fake_steps with onboarding_screen': ['router.no_start'],
 };
 
 /// The codes of the warnings about what it is made of of the app of

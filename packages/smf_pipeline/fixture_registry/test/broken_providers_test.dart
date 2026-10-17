@@ -314,6 +314,7 @@ const _warningApps = <String, List<String>>{
     'router.no_main_navigation',
   ],
   'fake_gate_stays_closed': ['router.no_start'],
+  'broken_onboarding_ignores_conditions': ['router.no_start'],
 };
 
 void main() {
