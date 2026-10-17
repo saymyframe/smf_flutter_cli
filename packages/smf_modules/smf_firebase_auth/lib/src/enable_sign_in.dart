@@ -61,7 +61,8 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   since the log is removed with the directory.
 /// - It asks the Firebase CLI for its version first, and stops with what to
 ///   do when the Firebase CLI is missing or older than
-///   [firstFirebaseCliWithSignIn], by the rule of [firebaseCliWithSignIn]:
+///   [firstFirebaseCliWithSignIn], which adds a web app to a project with
+///   only Android and iOS apps, by the rule of [firebaseCliWithSignIn]:
 ///   the last line that is a version counts, and a pre-release of that
 ///   version comes before it. A version that it cannot read passes, since
 ///   the Firebase CLI then tells itself what it cannot do.
@@ -71,31 +72,28 @@ const enableSignInScript = 'tool/enable_firebase_sign_in.dart';
 /// the app.
 const enableSignInCommand = 'dart $enableSignInScript';
 
-/// The first version of the Firebase CLI that has `deploy --only auth`.
-const firstFirebaseCliWithSignIn = '15.6.0';
+/// The first version of the Firebase CLI whose `deploy --only auth` adds
+/// no app to a project that has one.
+///
+/// `deploy --only auth` came with 15.6.0, and enables the methods through
+/// an app of the project. Before 15.34.0 that had to be a web app, and the
+/// Firebase CLI added one, named "Default Web App", to a project without
+/// one, also to a project with the Android and iOS apps that
+/// `flutterfire configure` registers. 15.34.0 takes an app of any platform,
+/// and adds a web app only to a project without any app
+/// (`lib/deploy/auth/prepare.js` of firebase-tools 15.34.0). The step runs
+/// after `flutterfire configure`, so the project has the apps of the app by
+/// then.
+const firstFirebaseCliWithSignIn = '15.34.0';
 
-/// The check of the machine that [enableSignIn] needs: a Firebase CLI that
-/// has `deploy --only auth`. The package of firebase_core knows how to ask
-/// the Firebase CLI for its version, and this module which version its
+/// The check of the machine that [enableSignIn] needs: a Firebase CLI whose
+/// `deploy --only auth` adds no app to the project of the app,
+/// [firstFirebaseCliWithSignIn]. The package of firebase_core knows how to
+/// ask the Firebase CLI for its version, and this module which version its
 /// command needs.
 const firebaseCliWithSignIn = FirebaseCliVersionCheck(
   minimum: firstFirebaseCliWithSignIn,
 );
-
-/// What the user has to know before [enableSignIn] runs: the Firebase CLI
-/// enables the methods through a web app of the project, and adds one,
-/// named "Default Web App", to a project that has none
-/// (`lib/deploy/auth/prepare.js` of firebase-tools 15.14.0, reported as
-/// issue 11250 of firebase/firebase-tools). The Firebase console enables
-/// the methods without it.
-///
-/// The address of that page is followed by a space, so that a terminal
-/// which makes a link of it takes no punctuation into the link.
-const enableSignInNotice = 'The Firebase CLI adds a web app named "Default '
-    'Web App" to a project that has no web app, because it enables the '
-    'methods through one (firebase/firebase-tools#11250). The page '
-    'https://console.firebase.google.com/project/_/authentication/providers '
-    'of the Firebase console enables them without it.';
 
 /// The expression of the auth role for the declaration of `authMode`
 /// ([AuthRole.modeDeclaration]) as code of the script; see [rawStringsOf].
@@ -130,12 +128,14 @@ String rawStringsOf(String pattern) {
 /// enables the sign-in methods of the app in the Firebase project that the
 /// user chose there, with [enableSignInScript].
 ///
-/// It changes the Firebase project, so it has a notice,
-/// [enableSignInNotice], and a run asks the user before it: a run that
-/// cannot ask, or that skips external setup, leaves the step for later
-/// with its command, and so does a run in which flutterfire did not
-/// configure the app. The Firebase CLI asks nothing, so the step runs
-/// without the terminal. It needs a Firebase CLI with the command,
+/// It is part of that step and has no notice, so a run asks the user only
+/// about `flutterfire configure`: once flutterfire configured the app, the
+/// run enables the methods without another question. A run that leaves
+/// `flutterfire configure` for later, such as one that cannot ask or that
+/// skips external setup, leaves this step for later with it, with its
+/// command, and so does a run in which flutterfire did not configure the
+/// app. The Firebase CLI asks nothing, so the step runs without the
+/// terminal. It needs a Firebase CLI that adds no app to the project,
 /// [firebaseCliWithSignIn].
 final PostGenStep enableSignIn = PostGenStep(
   const ToolRef('dart'),
@@ -143,7 +143,6 @@ final PostGenStep enableSignIn = PostGenStep(
   followUpOf: FirebaseCoreModule.configureStep,
   description: 'Enabling the sign-in methods of the app in its Firebase '
       'project',
-  notice: enableSignInNotice,
   skippable: true,
   external: true,
   needs: [firebaseCliWithSignIn.id],
