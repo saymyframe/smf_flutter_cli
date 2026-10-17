@@ -618,7 +618,7 @@ void main() {
 
       expect(
         index.importsUri(
-          ImportRef.app(
+          const ImportRef.app(
             'features/test_start/test_start_screen.dart',
           ).resolveUri('contract_app'),
         ),
