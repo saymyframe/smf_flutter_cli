@@ -426,16 +426,12 @@ final class _SocketCheck {
     }
   }
 
-  /// Checks the names of the socket families, and that their tags overlap
-  /// neither the tags of a socket nor those of another family.
+  /// Checks the names and the kinds of the socket families (see
+  /// [SocketFamily.problems]), and that their tags overlap neither the tags
+  /// of a socket nor those of another family.
   void checkFamilies() {
     for (final family in _families) {
-      if (!SmfNames.isSnakeCase(family.name)) {
-        problems.add(
-          'The socket family name "${family.name}" of ${family.ownerName} is '
-          'not lower snake_case.',
-        );
-      }
+      problems.addAll(family.problems());
       for (final MapEntry(key: tag, value: socket) in _owners.entries) {
         if (tag.startsWith(family.tagPrefix)) {
           problems.add(

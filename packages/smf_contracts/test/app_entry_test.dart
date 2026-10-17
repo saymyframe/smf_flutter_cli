@@ -1184,9 +1184,13 @@ void main() {
         'smf_app_entry__android_core_library_desugaring_enabled': '',
         'smf_app_entry__android_core_library_desugaring_library': '',
       });
+      // The problems name the socket, whose tags are those of its places.
       expect(
         socket.problemsWith(socket.value('two')).single,
-        contains('cannot be compared'),
+        contains(
+          '"two" of "app_entry.android_core_library_desugaring" cannot be '
+          'compared',
+        ),
       );
       expect(
         () => socket.render([
@@ -1197,7 +1201,13 @@ void main() {
           isA<MergeConflict>().having(
             (conflict) => '$conflict',
             'description',
-            contains('(from notifications and calendar)'),
+            allOf(
+              startsWith(
+                'MergeConflict: "app_entry.android_core_library_desugaring" '
+                'has conflicting values',
+              ),
+              contains('(from notifications and calendar)'),
+            ),
           ),
         ),
       );

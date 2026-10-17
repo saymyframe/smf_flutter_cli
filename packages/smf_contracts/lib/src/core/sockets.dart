@@ -41,17 +41,18 @@ sealed class SocketKind {
   /// its tags: nothing for a socket with one tag.
   List<String> get _tagSuffixes => const [''];
 
-  /// Describes what is wrong with the declaration of [socket], a socket of
-  /// this kind, other than its name.
-  List<String> _problems(SocketRef socket) => const [];
+  /// Describes what is wrong with the declaration of [owner], a socket of
+  /// this kind or a family of such sockets, other than its name; [owner]
+  /// describes it, as in `socket router.versions`.
+  List<String> _problems(String owner) => const [];
 
   /// Describes what is wrong with the payload of [c], a contribution to
   /// [socket], a socket of this kind.
   List<String> _payloadProblems(SocketRef socket, SocketContribution c);
 
   /// Renders [c], contributions already checked and in their final order,
-  /// into the text of each tag of the socket whose tag is [tag].
-  Map<String, String> _render(String tag, List<SocketContribution> c);
+  /// into the text of each tag of [socket].
+  Map<String, String> _render(SocketRef socket, List<SocketContribution> c);
 }
 
 /// A socket for code, one [Fragment] after another in the order of their
@@ -76,8 +77,10 @@ final class CodeSocket extends SocketKind {
       ];
 
   @override
-  Map<String, String> _render(String tag, List<SocketContribution> c) =>
-      {tag: c.map((contribution) => contribution.fragment!.code).join('\n')};
+  Map<String, String> _render(SocketRef socket, List<SocketContribution> c) => {
+        socket.tag:
+            c.map((contribution) => contribution.fragment!.code).join('\n'),
+      };
 }
 
 /// Whether an argument of an [ArgsSocket] takes one value or a list, and
@@ -135,7 +138,7 @@ final class ArgsSocket extends SocketKind {
   }
 
   @override
-  Map<String, String> _render(String tag, List<SocketContribution> c) {
+  Map<String, String> _render(SocketRef socket, List<SocketContribution> c) {
     final byName = <String, List<SocketContribution>>{};
     for (final contribution in c) {
       final name = contribution.argName!;
@@ -163,7 +166,7 @@ final class ArgsSocket extends SocketKind {
     String codes(List<SocketContribution> items) =>
         items.map((item) => item.fragment!.code).join(', ');
     return {
-      tag: [
+      socket.tag: [
         for (final MapEntry(key: name, value: shape) in args.entries)
           if (byName[name] case final items?)
             if (shape == ArgShape.scalar)
@@ -229,9 +232,9 @@ final class WrapperSocket extends SocketKind {
       _onlyFragment(socket, c, wrapper: true);
 
   @override
-  Map<String, String> _render(String tag, List<SocketContribution> c) => {
-        '${tag}_open': c.map((wrapper) => wrapper.fragment!.code).join(),
-        '${tag}_close':
+  Map<String, String> _render(SocketRef socket, List<SocketContribution> c) => {
+        '${socket.tag}_open': c.map((wrapper) => wrapper.fragment!.code).join(),
+        '${socket.tag}_close':
             c.reversed.map((wrapper) => wrapper.fragment!.closing!).join(),
       };
 }
@@ -254,8 +257,8 @@ final class FactoryListSocket extends SocketKind {
       _onlyFragment(socket, c, wrapper: false);
 
   @override
-  Map<String, String> _render(String tag, List<SocketContribution> c) => {
-        tag: c.map((factory) => '${factory.fragment!.code},').join('\n'),
+  Map<String, String> _render(SocketRef socket, List<SocketContribution> c) => {
+        socket.tag: c.map((factory) => '${factory.fragment!.code},').join('\n'),
       };
 }
 
@@ -350,8 +353,8 @@ final class KeyedSocket<V extends Object> extends SocketKind {
   }
 
   @override
-  Map<String, String> _render(String tag, List<SocketContribution> c) =>
-      {tag: _renderer(merge(c))};
+  Map<String, String> _render(SocketRef socket, List<SocketContribution> c) =>
+      {socket.tag: _renderer(merge(c))};
 }
 
 /// A socket for one value merged from all contributions, such as the
@@ -414,20 +417,28 @@ final class ValueSocket<V extends Object> extends SocketKind {
       : const [''];
 
   @override
-  List<String> _problems(SocketRef socket) {
+  List<String> _problems(String owner) {
     final problems = <String>[
       if (_renderer == null && _places.isEmpty)
-        'The $socket has no place for its value, so it has no tag.',
+        'The $owner has no place for its value, so it has no tag.',
     ];
     for (final place in _places.keys) {
       if (SmfNames.isSnakeCase(place)) continue;
       problems.add(
-        'The place "$place" of the value of the $socket is not lower '
+        'The place "$place" of the value of the $owner is not lower '
         'snake_case.',
       );
     }
     return problems;
   }
+
+  /// What names [socket], a socket of this kind, in a problem with a value
+  /// or in a [MergeConflict]: its tag, or, for a socket of several places,
+  /// which no template holds the tag of, its owner and name, such as
+  /// `app_entry.android_core_library_desugaring`.
+  String _keyOf(SocketRef socket) => _renderer == null
+      ? [socket.ownerName, socket.name, ...socket.familyKey].join('.')
+      : socket.tag;
 
   /// Whether [value] can be contributed to the socket.
   bool accepts(Object? value) => value is V;
@@ -440,7 +451,8 @@ final class ValueSocket<V extends Object> extends SocketKind {
     }
     if (value is! V) return ['$socket takes values of type $V, not $value.'];
     return [
-      if (policy.problemFrom(c.origin, socket.tag, value) case final problem?)
+      if (policy.problemFrom(c.origin, _keyOf(socket), value)
+          case final problem?)
         problem,
     ];
   }
@@ -476,21 +488,22 @@ final class ValueSocket<V extends Object> extends SocketKind {
   }
 
   @override
-  Map<String, String> _render(String tag, List<SocketContribution> c) {
-    final merged = merge(c, key: tag);
+  Map<String, String> _render(SocketRef socket, List<SocketContribution> c) {
+    final key = _keyOf(socket);
+    final merged = merge(c, key: key);
     if (merged == null && required) {
       throw StateError(
-        '$tag needs a value; the owner of its template contributes the base '
+        '$key needs a value; the owner of its template contributes the base '
         'one.',
       );
     }
     String text(String Function(V value) renderer) =>
         merged == null ? '' : renderer(merged);
     return switch (_renderer) {
-      final renderer? => {tag: text(renderer)},
+      final renderer? => {socket.tag: text(renderer)},
       null => {
           for (final MapEntry(key: place, value: renderer) in _places.entries)
-            '${tag}_$place': text(renderer),
+            '${socket.tag}_$place': text(renderer),
         },
     };
   }
@@ -512,8 +525,10 @@ final class PipelineSocket extends SocketKind {
       ['$socket is filled by the pipeline and takes no contributions.'];
 
   @override
-  Map<String, String> _render(String tag, List<SocketContribution> c) =>
-      throw StateError('The pipeline renders $tag from the merged pubspec.');
+  Map<String, String> _render(SocketRef socket, List<SocketContribution> c) =>
+      throw StateError(
+        'The pipeline renders ${socket.tag} from the merged pubspec.',
+      );
 }
 
 /// The value of the entries of a [KeyedSocket] whose entries are only keys,
@@ -654,7 +669,7 @@ final class SocketRef<K extends SocketKind> {
   List<String> problems() => [
         if (!SmfNames.isSnakeCase(name))
           'The socket name "$name" of $ownerName is not lower snake_case.',
-        ...kind._problems(this),
+        ...kind._problems('$this'),
       ];
 
   /// Describes what is wrong with [contribution] to this socket, or returns
@@ -689,7 +704,7 @@ final class SocketRef<K extends SocketKind> {
         );
       }
     }
-    final rendered = kind._render(tag, contributions);
+    final rendered = kind._render(this, contributions);
     for (final MapEntry(key: name, value: text) in rendered.entries) {
       if (Fragment.hasStrippedBackslash(text)) {
         throw ArgumentError.value(
@@ -792,6 +807,18 @@ final class SocketFamily<Key, K extends SocketKind> {
   /// The start of the tag of every member, such as
   /// `smf_router__screen_annotations__`.
   String get tagPrefix => 'smf_${ownerName}__${name}__';
+
+  /// Describes what is wrong with the name of this family, or with the
+  /// places of a [ValueSocket.places] that its members are, or returns an
+  /// empty list.
+  List<String> problems() {
+    final owner = 'socket family $ownerName.$name';
+    return [
+      if (!SmfNames.isSnakeCase(name))
+        'The socket family name "$name" of $ownerName is not lower snake_case.',
+      ...kind._problems(owner),
+    ];
+  }
 
   /// Returns the member of the family for [key].
   ///

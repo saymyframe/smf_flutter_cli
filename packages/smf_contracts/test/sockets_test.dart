@@ -286,6 +286,43 @@ void main() {
       ]);
     });
 
+    test(
+        'report a name that is not lower snake_case, and the places of a '
+        'kind for one value', () {
+      SocketFamily<String, ValueSocket<String>> versions(
+        String name,
+        Map<String, String Function(String)> places,
+      ) =>
+          SocketFamily<String, ValueSocket<String>>.role(
+            role,
+            name,
+            ValueSocket.places(policy: const MaxPolicy(), places: places),
+            keyOf: (module) => [module],
+          );
+
+      expect(family.problems(), isEmpty);
+      expect(
+        versions('versions', {'library': _renderLibrary}).problems(),
+        isEmpty,
+      );
+      expect(versions('Versions', {'On': _renderSwitch}).problems(), [
+        equals(
+          'The socket family name "Versions" of router is not lower '
+          'snake_case.',
+        ),
+        equals(
+          'The place "On" of the value of the socket family router.Versions '
+          'is not lower snake_case.',
+        ),
+      ]);
+      expect(versions('nowhere', {}).problems(), [
+        equals(
+          'The socket family router.nowhere has no place for its value, so '
+          'it has no tag.',
+        ),
+      ]);
+    });
+
     test('module families belong to the module', () {
       final moduleFamily = SocketFamily<int, CodeSocket>.module(
         module,
@@ -489,9 +526,11 @@ void main() {
         minIos.problemsWith(minIos.value('x')).single,
         contains('"x" of "smf_router__min_ios" cannot be compared'),
       );
+      // No template holds the tag of a socket of several places, so its
+      // problems name the socket.
       expect(
         desugaring.problemsWith(desugaring.value('two')).single,
-        contains('"two" of "smf_router__desugaring" cannot be compared'),
+        contains('"two" of "router.desugaring" cannot be compared'),
       );
     });
 
@@ -712,7 +751,26 @@ void main() {
         ),
       );
       expect(required.kind.required, isTrue);
-      expect(() => required.render(const []), throwsStateError);
+      expect(
+        () => required.render(const []),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            startsWith('router.required_places needs a value'),
+          ),
+        ),
+      );
+      expect(
+        () => desugaring.render([
+          desugaring.value('2.1.4'),
+          desugaring.value('2.1.4-beta'),
+        ]),
+        throwsA(
+          isA<MergeConflict>()
+              .having((conflict) => conflict.key, 'key', 'router.desugaring'),
+        ),
+      );
       expect(
         required.render([required.value('1')]),
         {

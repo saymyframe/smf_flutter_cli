@@ -279,7 +279,8 @@ void main() {
       const java17 = '        sourceCompatibility = JavaVersion.VERSION_17\n'
           '        targetCompatibility = JavaVersion.VERSION_17\n';
 
-      // As flutter create writes it.
+      // The compileOptions as flutter create writes them, and the empty
+      // dependencies block of the brick.
       expect(_compileOptions(alone[appGradle]!), java17);
       expect(alone[appGradle], isNot(contains('esugaring')));
       expect(_block(alone[appGradle]!, 'dependencies'), '\n');
