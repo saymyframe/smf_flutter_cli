@@ -92,6 +92,36 @@ void main() {
     expect(result.postGenOrder.contributions, isEmpty);
   });
 
+  test(
+      'warns of each option on the command line of a role that the app '
+      'lacks, since nothing reads it, and of no option of a present role', () {
+    TestRole<String> withOption(String id, String option) => TestRole<String>(
+          id,
+          options: [RoleOption(name: option, help: '')],
+          template: TestTemplate(),
+        );
+    final present = withOption('present', 'start');
+    final absent = withOption('absent', 'chime');
+    final modules = [
+      scaffold(),
+      TestModule('prov', providers: [RoleProvider.plain(present)]),
+      TestModule('other', providers: [RoleProvider.plain(absent)]),
+    ];
+    final resolution = resolutionOf(modules.take(2).toList());
+
+    final result = validate(
+      registry: ModuleRegistry(modules),
+      resolution: resolution,
+      collection: collect(resolution, testContext),
+      context: testContext,
+      optionValues: const {'start': '/home', 'chime': null, 'flavor': 'x'},
+    );
+
+    const unused = 'warning pipeline.unused_option: --chime has no effect: '
+        'no module of the app provides the absent role.';
+    expect([for (final issue in result.issues) '$issue'], [unused]);
+  });
+
   group('access', () {
     final nav = TestRole<String>('nav');
     final navSocket =

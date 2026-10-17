@@ -1206,15 +1206,16 @@ void main() {
       expect(result.errors, isEmpty);
       expect(result.app, isNotNull);
       // An option of every case that the app lacks the role of, which
-      // `smf create` warns of with the same options, comes first.
+      // `smf create` warns of with the same options in its validation,
+      // comes first.
       expect(
         [for (final warning in result.warnings) '$warning'],
         [
-          'warning [role:watch] watch.of_data: Of the data.',
           equals(
             'warning pipeline.unused_option: --chime has no effect: no '
             'module of the app provides the bells role.',
           ),
+          'warning [role:watch] watch.of_data: Of the data.',
           'warning [role:watch] watch.of_choice: Of the choice.',
         ],
       );

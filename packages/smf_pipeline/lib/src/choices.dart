@@ -2,7 +2,6 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/environment.dart';
 import 'package:smf_pipeline/src/errors.dart';
-import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 
 /// Stage 7 of the pipeline: runs the [RoleTemplate.choose] hook of every
@@ -20,13 +19,12 @@ import 'package:smf_pipeline/src/resolver.dart';
 /// that fails. Then the issues of the hooks before it are reported through
 /// the logger of [environment] first.
 ///
-/// The issues are:
-/// - a warning of each option in [optionValues] of a role that is not
-///   present, since nothing reads it (code [unusedOptionWarning]);
-/// - the warnings that each hook reported with [RoleChoiceContext.warn],
-///   each a warning of the role's template unless it names its own origin;
-/// - an error of the role's template for each of those warnings whose code
-///   is not a code of the role (see [reportedBy]).
+/// The issues are the warnings that each hook reported with
+/// [RoleChoiceContext.warn], each a warning of the role's template unless
+/// it names its own origin, and an error of the role's template for each of
+/// those warnings whose code is not a code of the role (see [reportedBy]).
+/// An option in [optionValues] of a role that is not present is a warning
+/// of stage 5, the validation, which comes before the choices.
 ///
 /// [onChoice] gets each role and its choice once the hook of the role has
 /// made it, before the next hook runs.
@@ -34,7 +32,6 @@ import 'package:smf_pipeline/src/resolver.dart';
 /// Throws a [StateError] if the roles cannot be ordered, which validation
 /// reports first.
 Future<({Map<Role, Object?> choices, List<SmfIssue> issues})> chooseRoles({
-  required ModuleRegistry registry,
   required Resolution resolution,
   required Collection collection,
   required Map<String, String?> optionValues,
@@ -43,7 +40,7 @@ Future<({Map<Role, Object?> choices, List<SmfIssue> issues})> chooseRoles({
   void Function(Role role, Object? choice)? onChoice,
 }) async {
   final present = resolution.presentRoles;
-  final issues = _absentRoleOptions(registry, present, optionValues);
+  final issues = <SmfIssue>[];
 
   final data = collection.roleData;
   final (:order, :cycle) = choiceOrder(present, data);
@@ -174,23 +171,3 @@ void _report(List<SmfIssue> issues, SmfLogger logger) {
     }
   }
 }
-
-/// A warning of each of the [optionValues] that is an option of a role of
-/// [registry] that is not among the [present] roles, since nothing reads
-/// it.
-List<SmfIssue> _absentRoleOptions(
-  ModuleRegistry registry,
-  Set<Role> present,
-  Map<String, String?> optionValues,
-) =>
-    [
-      for (final role in registry.roles)
-        if (!present.contains(role))
-          for (final option in role.options)
-            if (optionValues.containsKey(option.name))
-              SmfIssue.warning(
-                '--${option.name} has no effect: no module of the app '
-                'provides the $role.',
-                code: unusedOptionWarning,
-              ),
-    ];

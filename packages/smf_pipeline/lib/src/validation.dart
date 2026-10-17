@@ -184,6 +184,10 @@ List<Collected> _boundSteps(List<Collected> steps) {
 /// problems are those of every app that may have it.
 ///
 /// Checks, in this order:
+/// - the options in [optionValues], those given on the command line, of
+///   the roles of [registry]: each option of a role that the app lacks is a
+///   warning about the app, since nothing reads it (code
+///   [unusedOptionWarning]);
 /// - the rules of the pipeline for each contribution: who may use which
 ///   socket, role, [Contribution.when] and [Contribution.whenChosen], with
 ///   no data of a role that depends on what the role chose, bricks without
@@ -216,6 +220,7 @@ ValidationResult validate({
   required Resolution resolution,
   required Collection collection,
   required ModuleContext context,
+  Map<String, String?> optionValues = const {},
   bool interactive = true,
   bool skipExternalSetup = false,
 }) {
@@ -224,6 +229,7 @@ ValidationResult validate({
   final (issues: ofContributions, :broken) =
       _brokenContributions(collection, registry, resolution);
   final issues = <SmfIssue>[
+    ..._unusedOptions(registry, resolution.presentRoles, optionValues),
     ...collection.issues,
     ...ofContributions,
     ..._ownerIssues(collection),
@@ -1503,3 +1509,23 @@ Iterable<SmfIssue> _guarded(
     );
   }
 }
+
+/// A warning of each of the [optionValues] that is an option of a role of
+/// [registry] that is not among the [present] roles, since nothing reads
+/// it.
+List<SmfIssue> _unusedOptions(
+  ModuleRegistry registry,
+  Set<Role> present,
+  Map<String, String?> optionValues,
+) =>
+    [
+      for (final role in registry.roles)
+        if (!present.contains(role))
+          for (final option in role.options)
+            if (optionValues.containsKey(option.name))
+              SmfIssue.warning(
+                '--${option.name} has no effect: no module of the app '
+                'provides the $role.',
+                code: unusedOptionWarning,
+              ),
+    ];

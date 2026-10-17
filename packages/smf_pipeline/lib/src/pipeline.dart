@@ -353,6 +353,7 @@ extension CreatePlanning on CreatePipeline {
         resolution: resolution,
         collection: collection,
         context: context,
+        optionValues: request.roleOptions,
         // --explain asks nothing, but tells what a run with the same
         // terminal would do.
         interactive: host.hasTerminal && request.input,
@@ -396,7 +397,6 @@ extension CreatePlanning on CreatePipeline {
 
       _reportAdded(resolution, logger);
       final (:choices, issues: chosen) = await chooseRoles(
-        registry: registry,
         resolution: resolution,
         collection: collection,
         optionValues: request.roleOptions,

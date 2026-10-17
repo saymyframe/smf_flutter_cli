@@ -1144,13 +1144,22 @@ void main() {
     });
 
     test(
-        'an option of a role that the app lacks stops a strict run, since '
-        'the command line asks for a role that the app does not have',
-        () async {
+        'an option of a role that the app lacks stops a strict run before '
+        'the machine is checked, since the command line asks for a role that '
+        'the app does not have, and --explain tells of it', () async {
+      final tool = TestCheck(
+        'cli',
+        status: const PreflightMissing(instructions: 'Install it.'),
+      );
       final modules = [
         scaffold(),
         TestModule('go', providers: [RoleProvider.plain(nav)]),
-        TestModule('fine'),
+        TestModule(
+          'fine',
+          contributions: [
+            Preflight([tool]),
+          ],
+        ),
       ];
 
       const unused =
@@ -1161,11 +1170,25 @@ void main() {
         pipeline(modules, FakeHost()).plan(request(['fine'], strict: true)),
         stops(stoppedByOne, ['warning pipeline.unused_option: $unused']),
       );
+      // It depends only on the command line and the roles of the app, so
+      // the run stops with the validation.
+      expect(tool.checks, 0);
 
       final host = FakeHost();
       final plan = (await pipeline(modules, host).plan(request(['fine'])))!;
-      expect(host.logger.warnings, [unused]);
+      expect(host.logger.warnings, [
+        unused,
+        '[fine]: Tool cli is missing. Install it.',
+      ]);
       await plan.environment.dispose();
+
+      final explained = FakeHost();
+      expect(
+        await pipeline(modules, explained)
+            .plan(request(['fine'], explain: true)),
+        isNull,
+      );
+      expect(explained.logger.warnings, [unused]);
     });
 
     test('a warning about the machine never stops a strict run', () async {
