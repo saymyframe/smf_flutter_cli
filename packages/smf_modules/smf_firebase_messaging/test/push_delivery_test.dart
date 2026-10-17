@@ -10,11 +10,12 @@
 // took it. Whether the message reached the app, the app tells start_app.sh
 // itself.
 //
-// It needs the request, a Firebase project and a key of it, so it runs
-// only with the path of the request in SMF_START_REQUEST, which
-// start_app.sh gives the command of the answer, the id of the project in
-// SMF_FIREBASE_PROJECT and the path of the key in
-// SMF_FIREBASE_SERVICE_ACCOUNT, as CI gives them. It never prints the
+// It runs only with the path of the request in SMF_START_REQUEST, which
+// start_app.sh gives the command of the answer, and it needs the id of the
+// project in SMF_FIREBASE_PROJECT and the path of the key in
+// SMF_FIREBASE_SERVICE_ACCOUNT, as CI gives them: with a request and
+// without either of them, it fails and names what is missing, rather than
+// leave the app waiting for a message. It never prints the
 // address or the key, and a failure tells what it means and what to do
 // (see support/fcm_send.dart, whose tests run everywhere).
 @TestOn('vm')
@@ -35,6 +36,18 @@ void main() {
   test(
     'Firebase Cloud Messaging takes the push message that the app asked for',
     () async {
+      const keyIs = 'the path of the key of a service account of that project';
+      final missing = [
+        if (project == null)
+          'SMF_FIREBASE_PROJECT, the id of the Firebase project of the app',
+        if (key == null) 'SMF_FIREBASE_SERVICE_ACCOUNT, $keyIs',
+      ];
+      if (missing.isNotEmpty) {
+        fail(
+          'The app asked for a push message in SMF_START_REQUEST, but what '
+          'sends it is not set: ${missing.join('; ')}.',
+        );
+      }
       try {
         final asked = PushRequest.parse(File(request!).readAsStringSync());
         final client = await clientOf(File(key!).readAsStringSync());
@@ -51,7 +64,7 @@ void main() {
         fail(error.meaning);
       }
     },
-    skip: request == null || project == null || key == null
+    skip: request == null
         ? 'Sends a push message to the app that CI starts, with the request '
             'of the app in SMF_START_REQUEST, which start_app.sh gives its '
             'answer, the id of its Firebase project in SMF_FIREBASE_PROJECT '
