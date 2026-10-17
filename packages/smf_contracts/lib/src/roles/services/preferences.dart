@@ -203,7 +203,7 @@ List<SmfIssue> _checkPreferencesCalls(
           ),
     ];
 
-final class _PreferencesTemplate extends _ServiceTemplate {
+final class _PreferencesTemplate extends _ServiceTemplate<RoleImplementation> {
   const _PreferencesTemplate();
 
   @override

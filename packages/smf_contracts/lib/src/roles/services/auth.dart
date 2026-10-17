@@ -515,7 +515,7 @@ To change the mode, change the value of `authMode`. The provider of sign-in has 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `${AuthRole.guestDataFile}` says what moves to the account. As generated it moves nothing.
 ''';
 
-final class _AuthTemplate extends _ServiceTemplate {
+final class _AuthTemplate extends _ServiceTemplate<RoleImplementation> {
   const _AuthTemplate();
 
   @override

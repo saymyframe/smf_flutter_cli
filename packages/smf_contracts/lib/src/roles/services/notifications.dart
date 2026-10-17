@@ -518,7 +518,8 @@ const String _unaskedAgentNote = '''
 /// `bootstrap()`, the restorer of the permission, the entry of the settings
 /// screen and the step of the onboarding with their texts, the section of
 /// the role in the README of the app and its notes for coding agents.
-final class _NotificationsTemplate extends _ServiceTemplate {
+final class _NotificationsTemplate
+    extends _ServiceTemplate<RoleImplementation> {
   const _NotificationsTemplate();
 
   @override

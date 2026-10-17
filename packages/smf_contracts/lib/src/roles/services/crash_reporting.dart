@@ -102,7 +102,8 @@ List<SmfIssue> _checkCrashReportingFactory(
 ) =>
     _checkFactoryCalls(input, 'createCrashReporter', CrashReportingRole.file);
 
-final class _CrashReportingTemplate extends _ServiceTemplate {
+final class _CrashReportingTemplate
+    extends _ServiceTemplate<RoleImplementation> {
   const _CrashReportingTemplate();
 
   @override

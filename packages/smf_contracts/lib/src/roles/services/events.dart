@@ -83,7 +83,7 @@ List<SmfIssue> _checkEventsFactory(
 ) =>
     _checkFactoryCalls(input, 'createCommunicationService', EventsRole.file);
 
-final class _EventsTemplate extends _ServiceTemplate {
+final class _EventsTemplate extends _ServiceTemplate<RoleImplementation> {
   const _EventsTemplate();
 
   @override

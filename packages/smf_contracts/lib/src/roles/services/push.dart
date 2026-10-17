@@ -276,7 +276,7 @@ A message with data and no title or body reaches the app only while it is in the
 /// `bootstrap()`, the entitlement and the background mode of the iOS app,
 /// the section of the role in the README of the app and its note for coding
 /// agents.
-final class _PushTemplate extends _ServiceTemplate {
+final class _PushTemplate extends _ServiceTemplate<RoleImplementation> {
   const _PushTemplate();
 
   @override
