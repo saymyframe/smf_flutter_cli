@@ -377,6 +377,11 @@ class User {
     return UserCredential._(this);
   }
 
+  Future<void> reload() async {
+    await null;
+    _called('reload');
+  }
+
   /// The plugin keeps the user as its current one.
   Future<void> delete() async {
     await null;

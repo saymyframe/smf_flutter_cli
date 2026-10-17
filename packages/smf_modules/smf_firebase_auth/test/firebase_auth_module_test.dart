@@ -527,6 +527,23 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
   result['refused links'] = refused;
 
+  // A sign-in with another credential object between a refused link and
+  // the sign-in with the identical one, as after a sign-out when the
+  // session failed to move the data of the guest.
+  await service.signOut();
+  await service.signInAnonymously();
+  final refusedOne = appleOf('refused');
+  failNext['linkWithCredential'] = FirebaseAuthException(
+    code: 'credential-already-in-use',
+    credential: given,
+  );
+  result['another credential after a refused link'] = [
+    await step(() => service.linkWith(refusedOne)),
+    await step(service.signOut),
+    await step(() => service.signInWith(credentialOf(google, 'between'))),
+    await step(() => service.signInWith(refusedOne)),
+  ];
+
   // The same codes for a link of a password.
   final ofPassword = <String, Object?>{};
   for (final code in const [
@@ -591,13 +608,12 @@ Future<void> main(List<String> arguments, SendPort port) async {
     IdTokenCredential fresh, {
     TargetPlatform platform = TargetPlatform.android,
     IdTokenCredential? signedIn,
-    String? failing,
-    Object? failure,
+    Map<String, Object> failing = const {},
     void Function()? onReauthentication,
   }) async {
     await service.signOut();
     await service.signInWith(signedIn ?? appleOf('deleted'));
-    if (failing != null) failNext[failing] = failure!;
+    failNext.addAll(failing);
     if (onReauthentication != null) {
       onNext['reauthenticateWithCredential'] = onReauthentication;
     }
@@ -614,6 +630,12 @@ Future<void> main(List<String> arguments, SendPort port) async {
     'of Google': await deleting(
       credentialOf(google, 'deleted'),
       signedIn: credentialOf(google, 'deleted'),
+    ),
+    // A code of Google revokes nothing either.
+    'of Google on iOS': await deleting(
+      credentialOf(google, 'deleted', code: 'code-of-google'),
+      signedIn: credentialOf(google, 'deleted'),
+      platform: TargetPlatform.iOS,
     ),
     'of Apple on Android': await deleting(appleOf('fresh', code: code)),
     for (final platform in const [TargetPlatform.iOS, TargetPlatform.macOS])
@@ -633,27 +655,52 @@ Future<void> main(List<String> arguments, SendPort port) async {
           await deleting(
         appleOf('fresh', code: code),
         platform: TargetPlatform.iOS,
-        failing: 'reauthenticateWithCredential',
-        failure: FirebaseAuthException(code: reauthenticationCode),
+        failing: {
+          'reauthenticateWithCredential':
+              FirebaseAuthException(code: reauthenticationCode),
+        },
       ),
+    // A credential of the user, whose account was deleted on the server.
+    'when the account was deleted on the server': await deleting(
+      appleOf('fresh', code: code),
+      platform: TargetPlatform.iOS,
+      failing: {
+        'reauthenticateWithCredential':
+            FirebaseAuthException(code: 'user-not-found'),
+        'reload': FirebaseAuthException(code: 'user-not-found'),
+      },
+    ),
+    'when the reload after user-not-found fails with network-request-failed':
+        await deleting(
+      appleOf('fresh', code: code),
+      platform: TargetPlatform.iOS,
+      failing: {
+        'reauthenticateWithCredential':
+            FirebaseAuthException(code: 'user-not-found'),
+        'reload': FirebaseAuthException(code: 'network-request-failed'),
+      },
+    ),
     for (final (revocationCode, message) in const [
       ('invalid-credential', 'Code flow is not enabled for Apple.'),
       ('internal-error', 'An internal error has occurred.'),
       ('network-request-failed', 'Network error.'),
+      ('too-many-requests', 'Too many requests.'),
+      ('user-disabled', 'The user account has been disabled.'),
       ('user-token-expired', 'The user token has expired.'),
     ])
       'when Firebase answers the revocation with $revocationCode':
           await deleting(
         appleOf('fresh', code: code),
         platform: TargetPlatform.iOS,
-        failing: 'revokeTokenWithAuthorizationCode',
-        failure: FirebaseAuthException(code: revocationCode, message: message),
+        failing: {
+          'revokeTokenWithAuthorizationCode':
+              FirebaseAuthException(code: revocationCode, message: message),
+        },
       ),
     'when the revocation fails with no error of Firebase': await deleting(
       appleOf('fresh', code: code),
       platform: TargetPlatform.iOS,
-      failing: 'revokeTokenWithAuthorizationCode',
-      failure: StateError('broken'),
+      failing: {'revokeTokenWithAuthorizationCode': StateError('broken')},
     ),
     'when the platform signs out during the sign-in again': await deleting(
       appleOf('fresh', code: code),
@@ -1556,7 +1603,8 @@ void main() {
           const signInOfApple = 'signInWithCredential(apple.com of token-a, '
               'nonce nonce-a, name Ada Lovelace)';
           expect(credentials, {
-            // Firebase takes no nonce with a token of Google.
+            // GoogleAuthProvider takes no nonce, and Firebase does not check
+            // the nonce of a token of Google.
             'signInWith of Google': [
               'completed',
               ofGoogle,
@@ -1671,6 +1719,34 @@ void main() {
               first: 'token-refused',
             ),
           });
+          // A sign-in with another credential object between the two
+          // signs in with its own token, and leaves what Firebase gave to
+          // the identical object.
+          const between = 'uid of token-between <null> with $google';
+          const owner = 'uid of 7 <null> with $apple';
+          expect(sent['another credential after a refused link'], [
+            leaving('credentialInUse', 'guest 10 <null>, anonymous', [
+              'linkWithCredential($ofApple)',
+            ]),
+            [
+              'completed',
+              'nobody',
+              ['signOut()'],
+              ['nobody'],
+            ],
+            [
+              'completed',
+              between,
+              ['signInWithCredential(google.com of token-between)'],
+              [between],
+            ],
+            [
+              'completed',
+              owner,
+              ['signInWithCredential(apple.com credential 7)'],
+              [owner],
+            ],
+          ]);
           // The same codes for a link of a password are an email address
           // with an account.
           expect(sent['refused links of a password'], {
@@ -1718,6 +1794,7 @@ void main() {
             {
               for (final name in [
                 'of Google',
+                'of Google on iOS',
                 'of Apple on Android',
                 'of Apple on iOS',
                 'of Apple on macOS',
@@ -1725,12 +1802,13 @@ void main() {
                 name: deletions[name],
             },
             {
-              'of Google': [
-                'completed',
-                'nobody',
-                [ofGoogle, 'delete()', 'signOut()'],
-                ['nobody'],
-              ],
+              for (final name in ['of Google', 'of Google on iOS'])
+                name: [
+                  'completed',
+                  'nobody',
+                  [ofGoogle, 'delete()', 'signOut()'],
+                  ['nobody'],
+                ],
               // Firebase revokes nothing on Android.
               'of Apple on Android': [
                 'completed',
@@ -1769,8 +1847,7 @@ void main() {
           expect(
             {
               for (final MapEntry(:key, :value) in deletions.entries)
-                if (key != 'of Google' && !'$key'.startsWith('of Apple on '))
-                  key: value,
+                if (!'$key'.startsWith('of ')) key: value,
               'of Apple on iOS without a code':
                   deletions['of Apple on iOS without a code'],
             },
@@ -1783,19 +1860,34 @@ void main() {
                 'gives one with each credential.',
                 deleted,
               ),
-              // A credential of another user, and of an identity without a
-              // user, which Firebase answers as for a user whose session
-              // has ended.
-              for (final code in [
-                'user-mismatch',
-                'user-not-found',
-                'invalid-credential',
-              ])
+              // A credential of another user.
+              for (final code in ['user-mismatch', 'invalid-credential'])
                 'when Firebase answers the sign-in again with $code': leaving(
                   'invalidCredentials',
                   deleted,
                   [reauthentication],
                 ),
+              // A credential of an identity without a user, which Firebase
+              // answers as for a user whose session has ended: the reload
+              // of the user tells it from an account deleted on the server.
+              'when Firebase answers the sign-in again with user-not-found':
+                  leaving(
+                'invalidCredentials',
+                deleted,
+                [reauthentication, 'reload()'],
+              ),
+              'when the account was deleted on the server': [
+                'recentSignInRequired',
+                'nobody',
+                [reauthentication, 'reload()', 'signOut()'],
+                ['nobody'],
+              ],
+              'when the reload after user-not-found fails with '
+                  'network-request-failed': leaving(
+                'network',
+                deleted,
+                [reauthentication, 'reload()'],
+              ),
               'when Firebase answers the sign-in again with user-token-expired':
                   [
                 'recentSignInRequired',
@@ -1815,11 +1907,17 @@ void main() {
                 deleted,
                 [reauthentication, revocation],
               ),
-              '$byRevocation network-request-failed': leaving(
-                'network',
-                deleted,
-                [reauthentication, revocation],
-              ),
+              // An answer that is no matter of the setup.
+              for (final (code, reason) in [
+                ('network-request-failed', 'network'),
+                ('too-many-requests', 'tooManyAttempts'),
+                ('user-disabled', 'userDisabled'),
+              ])
+                '$byRevocation $code': leaving(
+                  reason,
+                  deleted,
+                  [reauthentication, revocation],
+                ),
               '$byRevocation user-token-expired': [
                 'recentSignInRequired',
                 'nobody',
@@ -1854,9 +1952,12 @@ void main() {
                 in (sent['refused links']! as Map<Object?, Object?>).values)
               for (final step in steps! as List<Object?>)
                 (step! as List<Object?>).first,
+            for (final step in sent['another credential after a refused link']!
+                as List<Object?>)
+              (step! as List<Object?>).first,
             ...(sent['refused sign-ins']! as Map<Object?, Object?>).values,
           ];
-          expect(outcomes, hasLength(44));
+          expect(outcomes, hasLength(53));
           expect(outcomes, everyElement(isNot(contains('token-'))));
           expect(outcomes, everyElement(isNot(contains('code-'))));
         });

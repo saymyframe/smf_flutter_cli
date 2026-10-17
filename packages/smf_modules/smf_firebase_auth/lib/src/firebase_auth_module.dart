@@ -86,9 +86,13 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   authorization code before the account is deleted, on iOS and macOS,
 ///   where Firebase does. A revocation that fails keeps the account and is
 ///   `notConfigured`, with a hint that names what the Apple sign-in method
-///   of the Firebase project needs for it. The service maps its failures
-///   itself, and asks Firebase only while a user is signed in, since the
-///   future of the call never completes without one.
+///   of the Firebase project needs for it, but for an answer that has
+///   nothing to do with the setup, such as a request that did not reach
+///   Firebase. The service maps its failures itself, and asks Firebase only
+///   while a user is signed in, since the future of the call never
+///   completes without one. Firebase answers a sign-in again with
+///   `user-not-found` for an identity without a user and for an account
+///   that the server deleted, which a reload of the user tells apart.
 ///
 /// The provider of the module refuses an app with a way to sign in of
 /// another identity provider in its `validate` hook, as the role asks of a
