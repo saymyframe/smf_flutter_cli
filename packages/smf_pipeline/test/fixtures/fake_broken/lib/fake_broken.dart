@@ -696,6 +696,24 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture push messages whose function drops the address of the
+  /// device each time it opens them, as a provider does that deletes the
+  /// address at each start: the device registers anew and gets a new
+  /// address a while after each start, so the backend of the app no longer
+  /// reaches it at the one that it kept.
+  static const pushRegisteringAtEachStart = BrokenModule._(
+    FakePushModule(),
+    ModuleId('broken_push_new_address'),
+    'Push messages with a new address at each start (fixture)',
+    'lib/core/fixture_push/fixture_push.dart',
+    [
+      (
+        '  await _answer();\n  if (_address == null)',
+        '  await _answer();\n  _address = null;\n  if (_address == null)',
+      ),
+    ],
+  );
+
   /// The module with the bug.
   final SmfModule of;
 

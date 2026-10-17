@@ -83,9 +83,10 @@ const pushRole = PushRole._();
 ///   never keeps the notifications of the app from showing while the app is
 ///   in the foreground;
 /// - `address` needs no permission, does not throw, and gives the same
-///   address from one launch of the app to the next, unless
-///   `addressChanges` tells of another. `addressChanges` also tells of the
-///   first address that the device gets after `address` gave none;
+///   address from one launch of the app to the next, unless the platform
+///   gives the device another, which `addressChanges` tells of.
+///   `addressChanges` also tells of the first address that the device gets
+///   after `address` gave none;
 /// - `messages` tells of each message in the foreground once, and a value
 ///   of its data that the platform gives as something other than a string
 ///   is its JSON;

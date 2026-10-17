@@ -12,6 +12,7 @@ import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
+import 'package:fake_infra/bundles/fake_push_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
@@ -910,6 +911,51 @@ final class FakeNotificationsModule extends SmfModule {
           const RoleImplementation.async(
             type: TypeRef('FixtureNotifications', import: _file),
             init: FactoryRef('openFixtureNotifications', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the push role, which has at most one provider, whose
+/// service opens asynchronously, as one does that asks the system for what
+/// it keeps. It keeps the address of the device in memory, where it stands
+/// for the registration of the device with the service of push messages,
+/// which each start of the app finds as the last one left it: the first
+/// start registers the device, which gets its address a while later, as an
+/// iPhone gets the token of APNs, and the next starts have the same
+/// address.
+///
+/// The device shows nothing itself, so the app shows a message that
+/// arrives in the foreground. No server sends a message and no user taps
+/// one, so the service tells of neither.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appPush`, which shows a message through the
+/// notifications of the app, the role that it requires.
+final class FakePushModule extends SmfModule {
+  /// Creates the module.
+  const FakePushModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_push');
+
+  static const _file = ImportRef.app('core/fixture_push/fixture_push.dart');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Push messages in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(pushRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakePushBundle),
+        pushRole.data(
+          const RoleImplementation.async(
+            type: TypeRef('FixturePush', import: _file),
+            init: FactoryRef('openFixturePush', import: _file),
           ),
         ),
       ];
