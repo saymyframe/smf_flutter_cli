@@ -231,7 +231,7 @@ void main() {
 
     test(
         'builds the app with and without a router, each with and without '
-        'the texts of the app', () {
+        'the texts of the app, and an app that a route starts', () {
       expect(
         results.map((result) => result.contractCase.name),
         containsAll([
@@ -239,6 +239,7 @@ void main() {
           'flutter_core with router',
           'flutter_core with localization',
           'flutter_core',
+          TestStartModule.id.value,
         ]),
       );
     });
@@ -620,6 +621,30 @@ void main() {
       expect(app, contains('MaterialApp.router(\n'));
       expect(app, contains('routerConfig: appRouter.config,'));
       expect(app, isNot(contains('home:')));
+    });
+
+    test(
+        'shows the screen of the start route, and imports no fallback '
+        'start screen, in an app that a route starts', () async {
+      final result = await renderedApp(const [TestStartModule.id]);
+      // The Dart files of the test router, by their owner.
+      final router = [
+        for (final MapEntry(key: path, value: file)
+            in result.app!.files.entries)
+          if (file.owner == const ModuleOrigin(TestRouterModule.id) &&
+              path.endsWith('.dart'))
+            DartFileIndexer.index(path, result.app!.texts[path]!),
+      ];
+      final start = const ImportRef.app(
+        'features/test_start/test_start_screen.dart',
+      ).resolveUri('contract_app');
+      final fallback = AppEntryRole.fallbackStartScreen.importRef.resolveUri(
+        'contract_app',
+      );
+
+      expect(router, isNotEmpty);
+      expect(router.where((file) => file.importsUri(start)), isNotEmpty);
+      expect(router.where((file) => file.importsUri(fallback)), isEmpty);
     });
   });
 

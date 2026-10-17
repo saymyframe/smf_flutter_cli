@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../app/fallback_start_screen.dart';
 import 'app_router.dart';
 import 'navigation.dart';
 
@@ -32,6 +31,11 @@ const List<AppLocation> _destinations = [{{{destinations}}}];
 
 /// The main navigation, as an entry of the stack of the root navigator.
 const _mainNavigation = _MainNavigation();
+
+/// The page of the fallback start screen of the app entry, which the
+/// router shows at `/` in an app that no route starts, or none in an app
+/// that starts on its start route.
+const List<Page<Object?>> _fallbackPages = [{{{fallback_page}}}];
 
 final class _MainNavigation {
   const _MainNavigation();
@@ -245,10 +249,11 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   bool get _onMainNavigation =>
       _stack.isNotEmpty && identical(_stack.last, _mainNavigation);
 
-  /// Whether the fallback screen is at the bottom of the root navigator:
-  /// when the stack is empty, and below the pages that pushes showed over
-  /// the fallback screen.
-  bool get _overFallback => _stack.every(_results.containsKey);
+  /// Whether the fallback screen is at the bottom of the root navigator, in
+  /// an app that no route starts: when the stack is empty, and below the
+  /// pages that pushes showed over the fallback screen.
+  bool get _overFallback =>
+      _fallbackPages.isNotEmpty && _stack.every(_results.containsKey);
 
   /// Tells the router of a change of the stacks, as each navigation does.
   ///
@@ -282,8 +287,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       key: _navigatorKey,
       observers: _observers,
       pages: [
-        if (_overFallback)
-          const MaterialPage<Object?>(child: FallbackStartScreen()),
+        if (_overFallback) ..._fallbackPages,
         for (final entry in _stack)
           if (entry case final AppLocation location)
             _page(location)
