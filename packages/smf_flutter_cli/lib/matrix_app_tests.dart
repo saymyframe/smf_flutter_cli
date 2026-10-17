@@ -343,6 +343,19 @@ Future<MatrixAppTests> smfAppTests() async {
       // listed until it is cancelled or shown, and the next start keeps
       // what was scheduled and the permission.
       await notificationsRoleAppTest(),
+      // The entry of the notifications on the settings screen of the apps
+      // with the notifications role and the settings screen role, whichever
+      // modules provide them: it shows whether the app may show
+      // notifications in the language of the app, a tap asks while the app
+      // has not asked and opens the settings of the system after that, and
+      // the entry follows what the user changed there.
+      await notificationsSettingAppTest(),
+      // The step of the onboarding that asks for the permission to show
+      // notifications, in the apps with the notifications role and the
+      // onboarding screen role, whichever modules provide them: the
+      // onboarding shows it only while the app has not asked, and its action
+      // asks.
+      await notificationsStepAppTest(),
       // The push messages of the apps with the push role, whichever module
       // provides it: the app follows the address of the service, shows a
       // message in the foreground where the platform does not, gives each
@@ -822,6 +835,243 @@ Future<MatrixAppTest> notificationsRoleAppTest({
 /// asked for the permission, as the role publishes it.
 Map<String, String> _notificationsValuesOf(MatrixApp app) =>
     const {'asked_key': NotificationsRole.askedKey};
+
+/// The test of the entry of the notifications on the settings screen, which
+/// the template of the notifications role contributes, that the CLI keeps in
+/// its `app_tests/notifications_setting`, for the apps with the
+/// notifications role and the settings screen role, whichever modules
+/// provide them:
+/// - the settings screen shows the entry once, with its title and whether
+///   the app may show notifications, Off or On, in each language of the
+///   app; a tap on a first launch asks for the permission through the
+///   provider, whose mocks grant it, and the entry shows On; and on a small
+///   phone with a large text size, once the list of the screen scrolled to
+///   the entry, the state is below the title, and the texts stay in the row
+///   of the entry;
+/// - over a service of the test that scripts what a provider answers: a tap
+///   asks the user while the app has not asked, once, and the entry shows
+///   what the user answered; once the app asked, or while it may show
+///   notifications, a tap opens the settings of the system and asks
+///   nothing; and the entry follows what the user changed there once the
+///   user comes back to the app.
+///
+/// The test knows only the two roles. The matrix writes the type of the
+/// widget of the entry for it into [notificationsSettingFile], from the
+/// entries of the settings screen role of the app, with the texts of the
+/// entry in each language of the app, from the localization role. It opens
+/// the settings screen with the helper of the tests of the settings screen
+/// role, and takes the service of the test from the files of the test of the
+/// notifications role, which runs in every app that this test runs in. It
+/// has no probe for the start check: a tap would show the question of the
+/// system on a device, and the walk of the routes goes to the settings
+/// screen there.
+Future<MatrixAppTest> notificationsSettingAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/notifications_setting',
+      appliesTo: (app) => app.hook!.presentRoles
+          .containsAll({notificationsRole, settingsScreenRole}),
+      generatedFiles: _notificationsSettingOf,
+      roles: {notificationsRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the entry
+/// of the notifications on the settings screen: `notificationsSetting`, the
+/// type of the widget of the entry that the template of the notifications
+/// role gives the settings screen role, and `settingTexts`, the texts of the
+/// entry in each language of the app, by the code of the language: its
+/// title ([NotificationsRole.settingTitle]) and what it shows while the app
+/// may show notifications and while it may not
+/// ([NotificationsRole.settingOn] and [NotificationsRole.settingOff]). The
+/// languages are those of the localization role of the app
+/// ([LocalizationRole.localesIn]), in its order, and English alone in an
+/// app without the role, whose entry has the English texts.
+const notificationsSettingFile = 'test/notifications_setting/setting.dart';
+
+/// The file at [notificationsSettingFile] of [app], an app of the matrix
+/// with the notifications role and the settings screen role, whose package
+/// is [packageName].
+///
+/// It imports the file of the entry with the prefix `entry`. A text without
+/// a translation into a language of the app is the English one there, as
+/// the localization role says of the texts of an app. Throws a
+/// [StateError] if the template of the notifications role gives the
+/// settings screen no entry or more than one: the test taps one entry.
+Map<String, String> _notificationsSettingOf(
+  MatrixApp app,
+  String packageName,
+) {
+  final hook = app.hook!;
+  final entries = [
+    for (final RoleData(:value, :origin)
+        in settingsScreenRole.hookInput(hook).data)
+      if (value is SettingsEntry &&
+          origin == const RoleTemplateOrigin(notificationsRole))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The template of the $notificationsRole gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry of the '
+      'notifications alone.',
+    );
+  }
+  final widget = entries.single.widget;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  String textOf(LocalizedText text, String language) =>
+      SmfNames.dartString(text.textIn(language) ?? text.en);
+  final texts = StringBuffer();
+  for (final language in languages) {
+    final fields = [
+      'title: ${textOf(NotificationsRole.settingTitle, language)}',
+      'on: ${textOf(NotificationsRole.settingOn, language)}',
+      'off: ${textOf(NotificationsRole.settingOff, language)}',
+    ];
+    texts.writeln(
+      '  ${SmfNames.dartString(language)}: (${fields.join(', ')}),',
+    );
+  }
+  return {
+    notificationsSettingFile: '''
+// The entry of the notifications on the settings screen and its texts,
+// which the matrix of SMF writes from the data of the settings screen role
+// and of the localization role of the app for the tests of the entry, in
+// test/notifications_setting.
+import '${widget.import!.resolveUri(packageName)}' as entry;
+
+/// The type of the widget of the entry of the notifications, an entry of the
+/// settings screen.
+const Type notificationsSetting = ${widget.codeWith('entry')};
+
+/// The texts of the entry in one language: its title, and what it shows
+/// while the app may show notifications and while it may not.
+typedef SettingTexts = ({String title, String on, String off});
+
+/// The texts of the entry by the code of each language of the app, the first
+/// of which the app uses when the device asks for none of them. An app
+/// without the localization role has the English texts alone.
+const Map<String, SettingTexts> settingTexts = {
+$texts};
+''',
+  };
+}
+
+/// The test of the step of the onboarding that asks for the permission to
+/// show notifications, which the template of the notifications role gives
+/// the onboarding screen role, that the CLI keeps in its
+/// `app_tests/notifications_step`, for the apps with the notifications role
+/// and the onboarding screen role, whichever modules provide them, that
+/// [among] accepts, or all of them. Its file runs the start-up of the app
+/// once, with `bootstrap()`:
+/// - on a first launch, the condition of the step holds, so the onboarding
+///   shows it, and its action asks for the permission through the provider,
+///   whose mocks grant it; then the condition holds no more;
+/// - over a service of the test that scripts what a provider answers: the
+///   condition holds only while the app may not show notifications and has
+///   not asked, and reads the permission without a call of the service; the
+///   action makes one request and no other call, after a no and on a system
+///   without a question, whose request opens its settings, and while the app
+///   may show notifications it asks the user nothing; once the app asked,
+///   whatever the user answered, the condition holds no more, also at the
+///   next start;
+/// - the list of the steps of the onboarding of the app has the step once,
+///   with those two functions.
+///
+/// The page of the step is for the test of the onboarding screen role, which
+/// checks how a provider of the onboarding shows any step. The test knows
+/// only the two roles. The matrix writes the two functions of the step for
+/// it into [notificationsStepFile], from the data of the onboarding screen
+/// role of the app, and the test takes the service of the test from the
+/// files of the test of the notifications role, which runs in every app
+/// that this test runs in. It has no probe for the start check: the action
+/// would show the question of the system on a device. The matrix of the
+/// fixtures runs it only in its apps with every module, which run other
+/// tests already.
+Future<MatrixAppTest> notificationsStepAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/notifications_step',
+      appliesTo: (app) =>
+          app.hook!.presentRoles
+              .containsAll({notificationsRole, onboardingScreenRole}) &&
+          (among?.call(app) ?? true),
+      generatedFiles: _notificationsStepOf,
+      roles: {notificationsRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the step of
+/// the onboarding that asks for the permission to show notifications:
+/// `stepShows`, the function that says whether the onboarding shows the step
+/// ([OnboardingStep.showIf]), and `stepAction`, the function that its button
+/// calls ([OnboardingStep.run]), both of the step [NotificationsRole.stepName]
+/// that the template of the notifications role gives the onboarding screen
+/// role ([OnboardingScreenRole.stepsIn]).
+const notificationsStepFile = 'test/notifications_step/step.dart';
+
+/// The file at [notificationsStepFile] of [app], an app of the matrix with
+/// the notifications role and the onboarding screen role, whose package is
+/// [packageName].
+///
+/// It imports the file of each function of the step once, with a prefix of
+/// its own, `step0`, `step1`, .... Throws a [StateError] unless the template
+/// of the notifications role gives the onboarding one step
+/// [NotificationsRole.stepName] with a condition, as it does in every app
+/// with both roles.
+Map<String, String> _notificationsStepOf(MatrixApp app, String packageName) {
+  final steps = [
+    for (final placed in onboardingScreenRole
+        .stepsIn(onboardingScreenRole.hookInput(app.hook!)))
+      if (placed.owner == const RoleTemplateOrigin(notificationsRole) &&
+          placed.step.name == NotificationsRole.stepName)
+        placed.step,
+  ];
+  if (steps.length != 1) {
+    throw StateError(
+      'The template of the $notificationsRole gives the onboarding of '
+      '${app.name} ${steps.length} steps "${NotificationsRole.stepName}", '
+      'rather than one.',
+    );
+  }
+  final showIf = steps.single.showIf;
+  if (showIf == null) {
+    throw StateError(
+      'The step "${NotificationsRole.stepName}" that the template of the '
+      '$notificationsRole gives the onboarding of ${app.name} has no '
+      'condition.',
+    );
+  }
+  final prefixes = <String, String>{};
+  String codeOf(FunctionRef function) => function.codeWith(
+        prefixes.putIfAbsent(
+          function.import.resolveUri(packageName),
+          () => 'step${prefixes.length}',
+        ),
+      );
+  final shows = codeOf(showIf);
+  final action = codeOf(steps.single.run);
+  final imports = [
+    for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
+      "import '$uri' as $prefix;",
+  ]..sort();
+  return {
+    notificationsStepFile: '''
+// The functions of the step of the onboarding that asks for the permission
+// to show notifications, which the matrix of SMF writes from the data of the
+// onboarding screen role of the app for the test of the step,
+// notifications_step_test.dart.
+${imports.join('\n')}
+
+/// Whether the onboarding shows the step: its condition, which the
+/// onboarding asks each time it shows.
+const bool Function() stepShows = $shows;
+
+/// What the button of the step does: its action, which asks for the
+/// permission.
+const Future<void> Function() stepAction = $action;
+''',
+  };
+}
 
 /// The test of the push role that the CLI keeps in its `app_tests/push_role`,
 /// for the apps with the role, whichever module provides it, that [among]

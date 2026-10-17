@@ -182,6 +182,7 @@ void main() {
     expect(named('auth_role').roles, {authRole});
     expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
     expect(named('notifications_role').roles, {notificationsRole});
+    expect(named('notifications_step').roles, {notificationsRole});
     expect(named('push_role').roles, {pushRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
@@ -292,8 +293,10 @@ void main() {
       'theme_role',
       'theme_look',
       // The test of the notifications that the CLI keeps, for the fixture
-      // notifications, which every such app has.
+      // notifications, which every such app has, and its test of the step
+      // that the template of their role gives the fixture onboarding.
       'notifications_role',
+      'notifications_step',
       // The test of the push messages that the CLI keeps, for the fixture
       // push messages, which every such app has.
       'push_role',
@@ -690,6 +693,60 @@ void main() {
         reason: app.name,
       );
     }
+  });
+
+  test(
+      'the test of the step of the notifications that the CLI keeps applies '
+      'to the apps with every module, where the fixture onboarding shows the '
+      'step that the template of the notifications role gives it, and the '
+      'test of the entry of the notifications on the settings screen to no '
+      'app, since no app of the matrix of the fixtures has both the '
+      'notifications role and the settings screen role', () {
+    final step = named('notifications_step');
+
+    expect(appsOf(step), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps.where(step.appliesTo)) {
+      // It takes the service of the test from the files of the test of the
+      // notifications role, which applies to each of its apps.
+      expect(
+        named('notifications_role').appliesTo(app),
+        isTrue,
+        reason: app.name,
+      );
+      expect(
+        step.generatedFiles!(app, 'my_app').values.single,
+        contains(
+          'const bool Function() stepShows = '
+          'step0.notificationsStepShows;\n',
+        ),
+        reason: app.name,
+      );
+    }
+    // The test of the entry is not registered for the fixtures: it would
+    // apply to no app, which fails the run. Once an app of the matrix has
+    // both roles, such as with a fixture provider of the settings screen
+    // role, the test belongs among those of the fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'notifications_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({notificationsRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register notificationsSettingAppTest() in fixtureAppTests() '
+          'for these apps.',
+    );
   });
 
   test(
@@ -1626,6 +1683,9 @@ void main() {
           'localization_role',
           'language_setting',
           'onboarding_screen_role',
+          'notifications_role',
+          'notifications_setting',
+          'notifications_step',
         ]),
       );
       for (final test in severalProviders.tests) {
@@ -1685,6 +1745,60 @@ void main() {
           isTrue,
           reason: app.name,
         );
+      }
+    });
+
+    test(
+        'has the entry of the notifications on the settings screen and the '
+        'step of the notifications in the onboarding, which the template of '
+        'the role gives them with the provider of the CLI, and the tests of '
+        'both, tests of the notifications role, apply to it with the helpers '
+        'of the tests of the settings screen and of the notifications', () {
+      final hook = everyModule.hook!;
+
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(notificationsRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('local_notifications')],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(hook)))
+            entry.file,
+        ],
+        contains(NotificationsRole.settingFile),
+      );
+      expect(
+        [
+          for (final step in onboardingScreenRole
+              .stepsIn(onboardingScreenRole.hookInput(hook)))
+            step.fullName,
+        ],
+        contains('notifications.${NotificationsRole.stepName}'),
+      );
+      for (final (name, helpers) in [
+        (
+          'notifications_setting',
+          ['settings_screen_role', 'notifications_role'],
+        ),
+        ('notifications_step', ['notifications_role']),
+      ]) {
+        final test = ofSeveral(name);
+        expect(test.roles, {notificationsRole}, reason: name);
+        expect(test.appliesTo(everyModule), isTrue, reason: name);
+        for (final app in matrix.where(test.appliesTo)) {
+          for (final helper in helpers) {
+            expect(
+              ofSeveral(helper).appliesTo(app),
+              isTrue,
+              reason: '$helper for $name in ${app.name}',
+            );
+          }
+        }
       }
     });
 
