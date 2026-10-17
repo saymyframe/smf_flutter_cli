@@ -2795,7 +2795,7 @@ String _notRunning(String why, String project) =>
 String _appleInConsole(String project) =>
     'Apple is enabled in the Firebase console, which the Firebase CLI '
     'cannot do: https://console.firebase.google.com/project/$project/'
-    'authentication/providers The deletion of an account of Apple also '
+    'authentication/providers\nThe deletion of an account of Apple also '
     'needs the Services ID and the OAuth code flow configuration of Apple '
     'there; see the section Firebase Authentication of README.md.';
 

@@ -163,6 +163,11 @@ const _sha1 = '5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25';
 const _sha256 = 'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:'
     '9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C';
 
+/// The line with which the script tells the fingerprints of the debug key,
+/// which the test that CI runs reads.
+const _keyHashes =
+    'The SHA-1 of the key is $_sha1, and its SHA-256 is $_sha256.';
+
 /// The stand-in for keytool. It appends its arguments to the file that
 /// `STAND_IN_KEYTOOL_CALLS` names, as a line of JSON.
 ///
@@ -170,7 +175,9 @@ const _sha256 = 'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:'
 /// keytool of macOS on a machine without a JDK that macOS knows. Otherwise
 /// `-help` exits with 0, `-genkeypair` writes a file to its keystore, and
 /// `-list` prints the fingerprints [_sha1] and [_sha256] of a keystore that
-/// exists, among the other lines of keytool.
+/// exists, among the other lines of keytool. When `STAND_IN_KEYTOOL_WAITS`
+/// names its first argument, it waits once it has noted the call, until a
+/// signal ends it.
 const _keytoolStandIn = '''
 import 'dart:convert';
 import 'dart:io';
@@ -186,6 +193,9 @@ void main(List<String> arguments) {
     stderr.writeln('Unable to locate a Java Runtime.');
     exitCode = 1;
     return;
+  }
+  if (environment['STAND_IN_KEYTOOL_WAITS'] == arguments.first) {
+    sleep(const Duration(minutes: 5));
   }
   if (arguments.first == '-help') {
     stdout.writeln('Key and Certificate Management Tool');
@@ -1826,6 +1836,7 @@ void main() {
         'machine, $key, for the Android app $_androidApp.\n'
         'There is no debug key yet, so this script creates it, as the first '
         'debug build would.\n'
+        '$_keyHashes\n'
         'Registered them for the Android app $_androidApp.\n'
         'Downloading the Firebase files of the app again, with the clients of '
         'Google: $_androidFile and $_iosFile.\n'
@@ -1892,6 +1903,7 @@ void main() {
         again.output.split('\n').sublist(3).join('\n'),
         'Registering the SHA-1 and SHA-256 of the Android debug key of this '
         'machine, $key, for the Android app $_androidApp.\n'
+        '$_keyHashes\n'
         'The Android app $_androidApp has them already.\n'
         'Downloading the Firebase files of the app again, with the clients of '
         'Google: $_androidFile and $_iosFile.\n'
@@ -1952,6 +1964,16 @@ void main() {
         'deploy --only auth --project=smf-app --non-interactive',
       ]);
       expect(result.calls.last.files['firebase.json'], _emailPassword);
+      final named = await run(arguments: ['--project', 'other-app']);
+
+      expect(named.code, 0, reason: named.errors);
+      expect(
+        named.output.split('\n').first,
+        contains(
+          'To enable Google, run: $enableSignInCommand --project other-app '
+          '--account <email>, ',
+        ),
+      );
       expect(
         result.output,
         'Google is left out: its consent screen needs a support email, the '
@@ -1985,7 +2007,7 @@ void main() {
         'apps:sdkconfig IOS $_iosApp $json',
       ]);
       expect(
-        without.output.split('\n').skip(6).join('\n'),
+        without.output.split('\n').skip(7).join('\n'),
         'The files of the app are as Firebase has them already.\n'
         'Firebase has no clients of Google, as in a project in which Google is '
         'not enabled, so this script has not written $_androidFile and '
@@ -2000,7 +2022,7 @@ void main() {
       final enabled = await run(keytools: ['jdk/bin'], standIn: shas);
 
       expect(enabled.code, 0, reason: enabled.errors);
-      expect(enabled.output.split('\n').skip(6), [
+      expect(enabled.output.split('\n').skip(7), [
         'Wrote $_androidFile and $_iosFile.',
         'Writing the URL scheme of Google, $_scheme, into $_infoPlist.',
         '',
@@ -2087,6 +2109,10 @@ void main() {
           '\t\t\t</array>\n'
           '\t\t</dict>\n';
       final shas = {'STAND_IN_SHAS': registered.join(',')};
+      final oldGoogle = _urlType('\t\t').replaceFirst(
+        _scheme,
+        'com.googleusercontent.apps.1234567890-of-another-client',
+      );
 
       final added = <String, String>{};
       for (final (name, before, after) in [
@@ -2100,6 +2126,21 @@ void main() {
           plist.replaceFirst(
             end,
             '\t<key>CFBundleURLTypes</key>\n\t<array>\n$deepLink'
+            '${_urlType('\t\t')}\t</array>\n$end',
+          ),
+        ),
+        (
+          // That of another client of Google, such as of another project,
+          // which the script keeps.
+          'a scheme of Google of another client',
+          plist.replaceFirst(
+            end,
+            '\t<key>CFBundleURLTypes</key>\n\t<array>\n$oldGoogle'
+            '\t</array>\n$end',
+          ),
+          plist.replaceFirst(
+            end,
+            '\t<key>CFBundleURLTypes</key>\n\t<array>\n$oldGoogle'
             '${_urlType('\t\t')}\t</array>\n$end',
           ),
         ),
@@ -2142,26 +2183,58 @@ void main() {
       expect(_urlSchemesOf(added['no URL type']!), [
         [_scheme],
       ]);
+      expect(_urlSchemesOf(added['a scheme of Google of another client']!), [
+        ['com.googleusercontent.apps.1234567890-of-another-client'],
+        [_scheme],
+      ]);
 
-      // A form that the script does not know.
-      final unknown = plist.replaceFirst(
-        end,
-        '\t<key>CFBundleURLTypes</key>\n\t<dict/>\n$end',
-      );
-      fileOf(_infoPlist).writeAsStringSync(unknown);
+      // Forms that the script does not know, which it leaves as they are.
+      const types = '\t<key>CFBundleURLTypes</key>\n\t<array>\n$deepLink'
+          '\t</array>\n';
+      for (final (name, unknown) in [
+        (
+          'URL types that are no array',
+          plist.replaceFirst(
+            end,
+            '\t<key>CFBundleURLTypes</key>\n\t<dict/>\n$end',
+          ),
+        ),
+        ('two keys of URL types', plist.replaceFirst(end, '$types$types$end')),
+        (
+          // Without the indent of the key, for the URL types that go into
+          // its empty array.
+          'a key of empty URL types that does not start its line',
+          plist.replaceFirst(
+            end,
+            '\t<key>A</key><true/><key>CFBundleURLTypes</key>\n\t<array/>\n'
+            '$end',
+          ),
+        ),
+        (
+          'no end of the dictionary of the file',
+          plist.substring(0, plist.indexOf(end)),
+        ),
+        (
+          'an end of the dictionary that does not start its line',
+          plist.replaceFirst(end, '<true/></dict>\n</plist>'),
+        ),
+      ]) {
+        fileOf(_infoPlist).writeAsStringSync(unknown);
 
-      final stopped = await run(keytools: ['jdk/bin'], standIn: shas);
+        final stopped = await run(keytools: ['jdk/bin'], standIn: shas);
 
-      expect(stopped.code, 1);
-      expect(
-        stopped.errors,
-        'stand-in: on the standard error\n'
-        '$_infoPlist is not in a form in which this script can add the URL '
-        'scheme. Add this to CFBundleURLTypes there by hand:\n'
-        '${_urlType('')}'
-        '$rest\n',
-      );
-      expect(fileOf(_infoPlist).readAsStringSync(), unknown);
+        expect(stopped.code, 1, reason: name);
+        expect(
+          stopped.errors,
+          'stand-in: on the standard error\n'
+          '$_infoPlist is not in a form in which this script can add the URL '
+          'scheme. Add this to CFBundleURLTypes there by hand:\n'
+          '${_urlType('')}'
+          '$rest\n',
+          reason: name,
+        );
+        expect(fileOf(_infoPlist).readAsStringSync(), unknown, reason: name);
+      }
     });
 
     test(
@@ -2368,39 +2441,167 @@ void main() {
       expect(fileOf(_infoPlist).readAsStringSync(), plist);
     });
 
-    test('stops at a Firebase file that firebase.json puts outside the app',
-        () async {
+    test(
+        'stops at a Firebase file that firebase.json puts outside the app, by '
+        'a relative path and by an absolute one', () async {
       useAppWith('google');
       serveFiles();
       File('${inMachine('android')}$keystore').writeAsStringSync('a key');
-      File(configOf(app)).writeAsStringSync(
-        _configuredFor('smf-app').replaceFirst(
-          '"android/app/google-services.json"',
-          '"../outside/google-services.json"',
-        ),
-      );
+      final absolute = '${inMachine('elsewhere')}'
+          '${Platform.pathSeparator}google-services.json';
 
-      final result = await run(
-        keytools: ['jdk/bin'],
-        standIn: {
-          'STAND_IN_ACCOUNT': 'dev@example.com',
-          'STAND_IN_SHAS': registered.join(','),
-        },
-      );
+      for (final outside in ['../outside/google-services.json', absolute]) {
+        File(configOf(app)).writeAsStringSync(
+          _configuredFor('smf-app').replaceFirst(
+            '"android/app/google-services.json"',
+            jsonEncode(outside),
+          ),
+        );
 
-      expect(result.code, 1);
-      expect(
-        result.errors,
-        'stand-in: on the standard error\n'
-        'firebase.json of the app names "../outside/google-services.json" '
-        'as a Firebase file of the app, which is outside the app.\n'
-        '$rest\n',
-      );
+        final result = await run(
+          keytools: ['jdk/bin'],
+          standIn: {
+            'STAND_IN_ACCOUNT': 'dev@example.com',
+            'STAND_IN_SHAS': registered.join(','),
+          },
+        );
+
+        expect(result.code, 1, reason: outside);
+        expect(
+          result.errors,
+          'stand-in: on the standard error\n'
+          'firebase.json of the app names "$outside" as a Firebase file of '
+          'the app, which is outside the app.\n'
+          '$rest\n',
+          reason: outside,
+        );
+      }
       expect(
         File('${app.path}/../outside/google-services.json').existsSync(),
         isFalse,
       );
+      expect(File(absolute).existsSync(), isFalse);
     });
+
+    test(
+        'stops at a file of the app that it cannot write, with what is done: '
+        'a directory where a Firebase file goes, and an Info.plist that is '
+        'read-only', () async {
+      useAppWith('google');
+      serveFiles();
+      File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+      final standIn = {
+        'STAND_IN_ACCOUNT': 'dev@example.com',
+        'STAND_IN_SHAS': registered.join(','),
+      };
+      Directory('${app.path}/$_androidFile').createSync(recursive: true);
+
+      final directory = await run(keytools: ['jdk/bin'], standIn: standIn);
+
+      expect(directory.code, 1);
+      expect(
+        directory.errors,
+        allOf(
+          startsWith(
+            'stand-in: on the standard error\n'
+            '$_androidFile could not be written (',
+          ),
+          endsWith(').\n$rest\n'),
+          isNot(contains('#0 ')),
+        ),
+      );
+
+      if (Platform.isWindows) return;
+      Directory('${app.path}/$_androidFile').deleteSync();
+      final plist = fileOf(_infoPlist);
+      final text = plist.readAsStringSync();
+      expect(Process.runSync('chmod', ['444', plist.path]).exitCode, 0);
+
+      final readOnly = await run(keytools: ['jdk/bin'], standIn: standIn);
+
+      expect(readOnly.code, 1);
+      expect(
+        readOnly.errors,
+        allOf(
+          startsWith(
+            'stand-in: on the standard error\n'
+            '$_infoPlist could not be written (',
+          ),
+          contains(
+            '). Add this to CFBundleURLTypes there by hand:\n'
+            '${_urlType('')}'
+            '$rest\n',
+          ),
+          isNot(contains('#0 ')),
+        ),
+      );
+      expect(plist.readAsStringSync(), text);
+    });
+
+    test(
+      'after Ctrl+C, lets the process that runs end, removes its temporary '
+      'directory and exits with 130, also while it registers the debug key, '
+      'downloads a Firebase file or reads the debug key with keytool',
+      () async {
+        useAppWith('google');
+        serveFiles();
+        File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+
+        for (final (variable, waits, isRunning) in [
+          (
+            'STAND_IN_WAITS',
+            'apps:android:sha:list',
+            () => callsSoFar().any(
+                  (call) => call.arguments.first == 'apps:android:sha:list',
+                ),
+          ),
+          (
+            'STAND_IN_WAITS',
+            'apps:sdkconfig',
+            () => callsSoFar().any(
+                  (call) => call.arguments.first == 'apps:sdkconfig',
+                ),
+          ),
+          (
+            'STAND_IN_KEYTOOL_WAITS',
+            '-list',
+            () => keytoolCallsSoFar().any((call) => call.startsWith('-list')),
+          ),
+        ]) {
+          if (keytoolCalls().existsSync()) keytoolCalls().deleteSync();
+          final process = await start(
+            keytools: ['jdk/bin'],
+            standIn: {
+              'STAND_IN_ACCOUNT': 'dev@example.com',
+              'STAND_IN_SHAS': registered.join(','),
+              variable: waits,
+            },
+          );
+          final ended = finish(process);
+          for (var tries = 0; !isRunning(); tries++) {
+            expect(tries, lessThan(600), reason: 'no call for $waits');
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+          final directory = Directory(callsSoFar().last.directory);
+          expect(directory.existsSync(), isTrue);
+
+          expect(process.kill(ProcessSignal.sigint), isTrue);
+          final result = await ended;
+
+          expect(result.code, 130, reason: '$waits: ${result.errors}');
+          expect(directory.existsSync(), isFalse, reason: waits);
+          // Nothing of a failure: the user knows what stopped the script.
+          expect(
+            result.errors,
+            'stand-in: on the standard error\n',
+            reason: waits,
+          );
+          calls().deleteSync();
+        }
+      },
+      // Windows has no signal that one process sends another.
+      testOn: '!windows',
+    );
 
     test(
         'tells in an app with Apple how to enable it in the Firebase console, '
@@ -2421,7 +2622,7 @@ void main() {
         '${_enabling('smf-app', AuthMode.required)}\n'
         'stand-in: deploying\n'
         'Apple is enabled in the Firebase console, which the Firebase CLI '
-        'cannot do: ${_consoleOf('smf-app')} The deletion of an account of '
+        'cannot do: ${_consoleOf('smf-app')}\nThe deletion of an account of '
         'Apple also needs the Services ID and the OAuth code flow '
         'configuration of Apple there; see the section Firebase '
         'Authentication of README.md.\n',

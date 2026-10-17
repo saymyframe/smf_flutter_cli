@@ -172,7 +172,25 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     final failed = process.stderr.transform(systemEncoding.decoder).join();
     final code = await process.exitCode;
     return (code, await printed, (await failed).trim());
-  }{{/google}}
+  }{{/google}}{{#setup}}
+  // Runs [executable], a tool such as keytool, with [arguments], in a shell
+  // on Windows when [inShell], and returns its exit code, what it printed
+  // and its errors. Ctrl+C reaches it as it reaches the Firebase CLI.
+  Future<(int, String, String)> tool(
+    String executable,
+    List<String> arguments, {
+    bool inShell = false,
+  }) async {
+    final process = firebase = await Process.start(
+      executable,
+      arguments,
+      runInShell: inShell && Platform.isWindows,
+    );
+    final printed = process.stdout.transform(systemEncoding.decoder).join();
+    final failed = process.stderr.transform(systemEncoding.decoder).join();
+    final code = await process.exitCode;
+    return (code, await printed, (await failed).trim());
+  }{{/setup}}
   try {
     final int asked;
     final String version;
@@ -211,7 +229,9 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     // else of the one that the Firebase CLI is logged in as here.
     final supportEmail = account ?? await _loggedInAs(run);
     if (interrupted) return 130;
-    if (supportEmail == null) stdout.writeln(_withoutGoogle(project));
+    if (supportEmail == null) {
+      stdout.writeln(_withoutGoogle(project, named: named != null));
+    }
     final google = supportEmail != null;{{/google}}
 
     File('${directory.path}/firebase.json').writeAsStringSync(
@@ -269,7 +289,7 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     try {
       await _setUp(
         app,
-        _Cli(run, project, account, () => interrupted),
+        _Cli(run, tool, project, account, () => interrupted),
         _needs,
         apps,
         waitForClients: google,
@@ -321,13 +341,25 @@ final class _Interrupted implements Exception {
 
 /// The Firebase CLI and the other tools as the script runs them to set up
 /// what the ways to sign in need: the Firebase CLI for [project], as
-/// [account] if the arguments of the script name one, with what tells
-/// whether the user pressed Ctrl+C.
+/// [account] if the arguments of the script name one, and the other tools,
+/// both so that Ctrl+C reaches them, with what tells whether the user
+/// pressed Ctrl+C.
 final class _Cli {
-  _Cli(this._firebase, this.project, this.account, this._interrupted);
+  _Cli(
+    this._firebase,
+    this._tool,
+    this.project,
+    this.account,
+    this._interrupted,
+  );
 
   final Future<(int, String, String)> Function(List<String> arguments)
       _firebase;
+  final Future<(int, String, String)> Function(
+    String executable,
+    List<String> arguments, {
+    bool inShell,
+  }) _tool;
   final String project;
   final String? account;
   final bool Function() _interrupted;
@@ -340,13 +372,9 @@ final class _Cli {
     List<String> arguments, {
     bool inShell = false,
   }) async {
-    final result = await Process.run(
-      executable,
-      arguments,
-      runInShell: inShell && Platform.isWindows,
-    );
+    final result = await _tool(executable, arguments, inShell: inShell);
     if (_interrupted()) throw const _Interrupted();
-    return (result.exitCode, '${result.stdout}', '${result.stderr}'.trim());
+    return result;
   }
 
   /// Runs the Firebase CLI with [arguments], for the project and as the
@@ -408,7 +436,7 @@ String _notRunning(String why, String project) =>
 String _appleInConsole(String project) =>
     'Apple is enabled in the Firebase console, which the Firebase CLI '
     'cannot do: https://console.firebase.google.com/project/$project/'
-    'authentication/providers The deletion of an account of Apple also '
+    'authentication/providers\nThe deletion of an account of Apple also '
     'needs the Services ID and the OAuth code flow configuration of Apple '
     'there; see the section Firebase Authentication of README.md.';{{/apple}}{{#google}}
 
@@ -423,13 +451,14 @@ String _consoleOf(String project) =>
     'providers';
 
 /// What the script tells when it leaves Google out in [project], since the
-/// Firebase CLI runs as no user account.
-String _withoutGoogle(String project) =>
+/// Firebase CLI runs as no user account, and how to run it again, with the
+/// project if its arguments [named] it.
+String _withoutGoogle(String project, {required bool named}) =>
     'Google is left out: its consent screen needs a support email, the '
     'email address of a user account of the Firebase CLI, and the Firebase '
     'CLI runs as none here, as with a service account. To enable Google, '
-    'run: $_command --account <email>, or enable it in the Firebase '
-    'console: ${_consoleOf(project)}';
+    'run: $_command${named ? ' --project $project' : ''} --account <email>, '
+    'or enable it in the Firebase console: ${_consoleOf(project)}';
 
 /// The account that [options], the arguments of the script for the Firebase
 /// CLI, name: the last one before `--`, as the Firebase CLI takes it, if
@@ -847,6 +876,9 @@ Future<void> _registerDebugKey(_Cli cli, Set<String> ids) async {
       '${errors.isEmpty ? '' : ': $errors'}',
     );
   }
+  stdout.writeln(
+    'The SHA-1 of the key is ${hashes[0]}, and its SHA-256 is ${hashes[1]}.',
+  );
   for (final id in ids) {
     final listed = await cli.json(
       ['apps:android:sha:list', id],
@@ -862,6 +894,8 @@ Future<void> _registerDebugKey(_Cli cli, Set<String> ids) async {
         if (!known.contains(_hashOf(hash))) hash,
     ];
     for (final hash in missing) {
+      // As keytool prints it, with colons, which the API of Firebase takes,
+      // as a check against a real project showed.
       await cli.json(
         ['apps:android:sha:create', id, hash],
         'register $hash for the Android app $id',
@@ -1055,7 +1089,8 @@ List<String>? _clientsOf(_App file, String text) {
 /// Writes [text] to [path] of [app], unless the file has it already, and
 /// returns whether it wrote it.
 ///
-/// Throws a [_Failed] when [path] is outside the app.
+/// Throws a [_Failed] when [path] is outside the app, and when the file
+/// cannot be read or written.
 bool _write(Directory app, String path, String text) {
   final segments = path.split(RegExp(r'[/\\]'));
   if (path.isEmpty ||
@@ -1069,10 +1104,14 @@ bool _write(Directory app, String path, String text) {
     );
   }
   final file = File('${app.path}/$path');
-  if (file.existsSync() && file.readAsStringSync() == text) return false;
-  file
-    ..createSync(recursive: true)
-    ..writeAsStringSync(text);
+  try {
+    if (file.existsSync() && file.readAsStringSync() == text) return false;
+    file
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+  } on FileSystemException catch (error) {
+    throw _Failed('$path could not be written (${error.message}).');
+  }
   return true;
 }
 
@@ -1081,7 +1120,7 @@ bool _write(Directory app, String path, String text) {
 /// as it is when it has them all.
 ///
 /// Throws a [_Failed] with what to add by hand when the file is not in a
-/// form that the script knows.
+/// form that the script knows, and when it cannot be read or written.
 void _writeUrlSchemes(Directory app, List<String> schemes) {
   final file = File('${app.path}/$_infoPlist');
   if (!file.existsSync()) {
@@ -1090,7 +1129,12 @@ void _writeUrlSchemes(Directory app, List<String> schemes) {
       'of Google, ${_listed(schemes)}, into it.',
     );
   }
-  final text = file.readAsStringSync();
+  final String text;
+  try {
+    text = file.readAsStringSync();
+  } on FileSystemException catch (error) {
+    throw _Failed('$_infoPlist could not be read (${error.message}).');
+  }
   final missing = [
     for (final scheme in {...schemes})
       if (!text.contains('<string>$scheme</string>')) scheme,
@@ -1104,15 +1148,23 @@ void _writeUrlSchemes(Directory app, List<String> schemes) {
     '$_infoPlist.',
   );
   final changed = _withUrlSchemes(text, missing);
+  final newline = text.contains('\r\n') ? '\r\n' : '\n';
   if (changed == null) {
-    final newline = text.contains('\r\n') ? '\r\n' : '\n';
     throw _Failed(
       '$_infoPlist is not in a form in which this script can add the URL '
       'scheme. Add this to CFBundleURLTypes there by hand:\n'
       '${_urlTypesOf(missing, '', newline).trimRight()}',
     );
   }
-  file.writeAsStringSync(changed);
+  try {
+    file.writeAsStringSync(changed);
+  } on FileSystemException catch (error) {
+    throw _Failed(
+      '$_infoPlist could not be written (${error.message}). Add this to '
+      'CFBundleURLTypes there by hand:\n'
+      '${_urlTypesOf(missing, '', newline).trimRight()}',
+    );
+  }
 }
 
 /// The URL types of [schemes] as the items of `CFBundleURLTypes`, each line
