@@ -84,10 +84,11 @@ perl() {
   /// download. The command of the device that has the word [slow] takes
   /// [slowSeconds] by that clock. The emulator has the ABI [abi], and with
   /// [stopped] the app does not run once it is launched, as when it
-  /// crashes at start-up. The temporary directory of the app has [files],
-  /// by their names, and the [answers] go after the mode. Each sleep of the
-  /// script stands for [sleepSeconds], so that a test of a wait of minutes
-  /// polls the device a dozen times rather than hundreds.
+  /// crashes at start-up. The app writes [files] into its temporary
+  /// directory, by their names, once it is launched, where [stale] files of
+  /// an earlier run are before that, and the [answers] go after the mode.
+  /// Each sleep of the script stands for [sleepSeconds], so that a test of
+  /// a wait of minutes polls the device a dozen times rather than hundreds.
   ProcessResult run({
     required int seconds,
     String platform = 'android',
@@ -101,6 +102,7 @@ perl() {
     String abi = 'x86_64',
     bool stopped = false,
     Map<String, String> files = const {},
+    Map<String, String> stale = const {},
     List<String> answers = const [],
     int sleepSeconds = 1,
   }) {
@@ -137,11 +139,12 @@ ${slow == null ? '' : slowCommand(slow, slowSeconds)}''');
     command('sdk/build-tools/35.0.0/aapt2', '''
 echo "package: name='com.example.app' versionCode='1'"
 echo "launchable-activity: name='com.example.app.MainActivity'"''');
-    // adb -s <device> <command>: the device installs the APK, and the app
-    // runs as the process 4242, but with [stopped]. Its start check wrote
-    // the result, if any, to its temporary directory, code_cache/ of the
-    // data of the app, whose files run-as reads only for a debug app, and
-    // printed it to the log of the device. The
+    // adb -s <device> <command>: the device installs the APK, pm clear
+    // removes the data of the app, and the app runs as the process 4242,
+    // but with [stopped]. Once launched, it writes its files, the result of
+    // its start check among them, to its temporary directory, code_cache/
+    // of its data, whose files run-as reads only for a debug app, and its
+    // start check prints the result to the log of the device. The
     // log also has the line of the start check of an earlier run, of
     // another process, as the debug app that CI starts before the release
     // one leaves it there: `logcat --pid=` leaves the lines of the other
@@ -153,6 +156,16 @@ case "\$1 \$2" in
   "install -r") echo "\$3" > "${temp.path}/installed" ;;
   "shell getprop") echo $abi ;;
   "shell pidof") ${stopped ? ':' : 'echo 4242'} ;;
+  "shell pm")
+    rm -rf "${temp.path}/device/code_cache"
+    mkdir -p "${temp.path}/device/code_cache"
+    ;;
+  "shell am")
+    if [ "\$3" = start ]; then
+      mkdir -p "${temp.path}/device/code_cache"
+      cp -R "${temp.path}/written/." "${temp.path}/device/code_cache/" 2> /dev/null || true
+    fi
+    ;;
   "shell run-as")
     case "\$(cat "${temp.path}/installed")" in
       *release*)
@@ -184,15 +197,22 @@ case "\$2" in
   launch) echo "com.example.app: $pid" ;;
   spawn) echo "flutter: printed by the app" ;;
 esac''');
+    // What the app writes once it is launched: on Android when adb starts
+    // it, and on an iOS simulator, whose install is a new one, already.
     for (final MapEntry(:key, :value) in {
       if (result != null) 'smf_start_check': result,
       ...files,
     }.entries) {
-      for (final directory in ['device/code_cache', 'data/tmp']) {
+      for (final directory in ['written', 'data/tmp']) {
         File('${temp.path}/$directory/$key')
           ..createSync(recursive: true)
           ..writeAsStringSync('$value\n');
       }
+    }
+    for (final MapEntry(:key, :value) in stale.entries) {
+      File('${temp.path}/device/code_cache/$key')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('$value\n');
     }
     return Process.runSync(
       'bash',
@@ -524,12 +544,15 @@ esac''');
     // the address of the device, which no line of the log may have.
     const asked = '{"address":"the-address-of-the-device"}';
 
-    /// The answer [name], a command of the shell that notes the path and
-    /// the text of the request that it gets, and that it ran, and then runs
-    /// [then], such as one that writes the verdict of the app.
+    /// The answer [name], a command of the shell that notes the path, the
+    /// text and the permissions of the request that it gets, the directory
+    /// that it runs in, and that it ran, and then runs [then], such as one
+    /// that writes the verdict of the app.
     String answer(String name, [String then = ':']) =>
         '$name=echo "\$SMF_START_REQUEST" >> "${temp.path}/$name.paths" && '
         'cat "\$SMF_START_REQUEST" >> "${temp.path}/$name.asked" && '
+        'ls -l "\$SMF_START_REQUEST" | cut -c 1-10 >> "${temp.path}/$name.mode" && '
+        'pwd -P >> "${temp.path}/$name.directory" && '
         'echo $name >> "${temp.path}/answered" && $then';
 
     /// A command that writes [verdict] into the file [name] of the
@@ -559,6 +582,13 @@ esac''');
       expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
       expect(linesOf('messages.asked'), [asked]);
       expect(linesOf('answered'), ['messages']);
+      expect(
+        linesOf('messages.mode'),
+        ['-rw-------'],
+        reason: 'Only the user of the script may read the copy of the '
+            'request.',
+      );
+      expect(linesOf('messages.directory'), [app]);
       final paths = linesOf('messages.paths');
       expect(paths, hasLength(1));
       expect(
@@ -648,42 +678,54 @@ esac''');
       expect(File(linesOf('messages.paths').single).existsSync(), isFalse);
     });
 
-    test(
-        'gives the answer 300 s by the clock of the script, and fails when it '
-        'does not finish in them', () {
-      final slow = run(
-        seconds: 240,
-        result: 'passed',
-        files: {request: asked},
-        answers: [answer('messages')],
-        slow: 'env',
-        slowSeconds: 3600,
-      );
-      final long = run(
-        seconds: 240,
-        result: 'passed',
-        files: {request: asked},
-        answers: [answer('messages', verdict(report, 'passed'))],
-        slow: 'env',
-        slowSeconds: 240,
-      );
+    test('gives the answer 300 s by the clock of the script, and no more', () {
+      ProcessResult taking(int seconds) => run(
+            seconds: 240,
+            result: 'passed',
+            files: {request: asked},
+            answers: [answer('messages', verdict(report, 'passed'))],
+            slow: 'env',
+            slowSeconds: seconds,
+          );
+      final inTime = taking(299);
+      final tooLong = taking(301);
 
-      expect(slow.exitCode, 1);
-      expect(
-        '${slow.stdout}',
-        endsWith('::error::The answer messages did not finish in 300 s.\n'),
-      );
-      expect(long.exitCode, 0, reason: '${long.stdout}${long.stderr}');
+      expect(inTime.exitCode, 0, reason: '${inTime.stdout}${inTime.stderr}');
       final took =
           RegExp(r'^The answer messages took ([0-9]+) s\.$', multiLine: true)
-              .firstMatch('${long.stdout}');
-      expect(took, isNotNull, reason: '${long.stdout}');
+              .firstMatch('${inTime.stdout}');
+      expect(took, isNotNull, reason: '${inTime.stdout}');
+      expect(int.parse(took!.group(1)!), greaterThanOrEqualTo(299));
+      expect(tooLong.exitCode, 1);
       expect(
-        int.parse(took!.group(1)!),
-        greaterThanOrEqualTo(240),
-        reason: 'The answer takes 4 minutes by SECONDS, the clock of the '
-            'script, less than the 300 s that it has.',
+        '${tooLong.stdout}',
+        allOf(
+          contains('What the app printed:'),
+          endsWith('::error::The answer messages did not finish in 300 s.\n'),
+        ),
       );
+    });
+
+    test(
+        'takes no verdict that an earlier run left, which pm clear removes '
+        'with the data of the app', () {
+      final result = run(
+        seconds: 240,
+        result: 'passed',
+        stale: {report: 'passed'},
+        files: {request: asked},
+        answers: [
+          answer('messages', verdict(report, 'failed: no message came')),
+        ],
+      );
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        endsWith('::error::The check of the answer messages in the app '
+            'failed: no message came\n'),
+      );
+      expect(linesOf('answered'), ['messages']);
     });
 
     test(
