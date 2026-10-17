@@ -359,7 +359,9 @@ void f() {{{{smf_after__brace}}}
 
     test('a role template holds the tags of families of the roles it sees', () {
       final families = <SocketFamily<Object?, SocketKind>>[];
-      final router = TestRole<NoDsl>('router', socketFamilies: families);
+      // Not the ids of the router role and the layout role, which every
+      // registry has, since the app entry uses the router.
+      final router = TestRole<NoDsl>('paths', socketFamilies: families);
       families.add(
         SocketFamily<String, CodeSocket>.role(
           router,
@@ -377,13 +379,13 @@ void f() {{{{smf_after__brace}}}
                 BrickContribution(
                   bundle(
                     id,
-                    files: {'lib/$id.dart': '{{{smf_router__screens__home}}}'},
+                    files: {'lib/$id.dart': '{{{smf_paths__screens__home}}}'},
                   ),
                 ),
               ],
             ),
           );
-      final layout = holding('layout', uses: {router});
+      final layout = holding('shell', uses: {router});
       final other = holding('other');
 
       expect(
@@ -398,7 +400,7 @@ void f() {{{{smf_after__brace}}}
         ),
         [
           contains('in lib/other.dart:1 of role:other is a tag of the socket '
-              'router.screens.home, which role:other may not hold'),
+              'paths.screens.home, which role:other may not hold'),
         ],
       );
     });

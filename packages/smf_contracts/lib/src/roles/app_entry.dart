@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/app_entry_role_bundle.dart';
-import 'package:smf_contracts/core.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 part 'app_entry_guide.dart';
 part 'app_entry_native.dart';
@@ -20,7 +20,8 @@ const appEntryRole = AppEntryRole._();
 /// - `lib/bootstrap.dart`, whose `Future<void> bootstrap()` runs the
 ///   start-up code of all modules and imports neither `material` nor
 ///   `cupertino`;
-/// - [fallbackStartScreen], the screen of an app without a router;
+/// - [fallbackStartScreen], the screen that an app starts on when no route
+///   starts it, in such an app only;
 /// - the project of each platform of the app ([AppIdentity.platforms]), at
 ///   the paths of Flutter's templates, such as [androidManifestFile] and
 ///   [xcodeProjectFile]; the iOS project also has [iosEntitlementsFile],
@@ -131,13 +132,22 @@ final class AppEntryRole extends Role<NoDsl> {
   static const statusBarIconsTestFile =
       'test/core/app/status_bar_icons_test.dart';
 
-  /// The screen an app shows when no router provides one, created as
+  /// The screen that an app starts on when no route starts it, created as
   /// `const FallbackStartScreen()`; import it with
   /// [RequiredSymbol.importRef].
+  ///
+  /// Only an app where [RouterRole.noStartRoute] holds has it: one without a
+  /// router, which shows the screen as the home of its root, and one whose
+  /// router has no route to start on, which builds the screen at `/`. Any
+  /// other app has no file at [fallbackStartScreenFile]. So the provider
+  /// contributes the file, and what only the screen needs, such as its
+  /// texts and its test, under that condition (see
+  /// [Contribution.whenChosen]).
   static const fallbackStartScreen = RequiredClass(
     'FallbackStartScreen',
     path: fallbackStartScreenFile,
     constConstructor: true,
+    whenChosen: {RouterRole.noStartRoute},
   );
 
   /// `Future<void> bootstrap()`, which runs the start-up code of all modules
@@ -465,6 +475,12 @@ final class AppEntryRole extends Role<NoDsl> {
 
   @override
   RoleCardinality get cardinality => RoleCardinality.exactlyOne;
+
+  /// The router, whose choice decides whether the app has the
+  /// [fallbackStartScreen]. Every provider of the role uses it too, so it
+  /// may contribute under [RouterRole.noStartRoute].
+  @override
+  Set<Role> get uses => {routerRole};
 
   @override
   bool get openToAllModules => true;

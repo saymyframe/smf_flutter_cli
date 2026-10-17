@@ -325,6 +325,34 @@ void main() {
     });
   });
 
+  test(
+      'writes an ARB file with its locale alone for an app without texts, '
+      'such as one that a route starts, which has no fallback start screen, '
+      'and whose modules have none', () {
+    final provider =
+        module.descriptor.providers.single as RoleProvider<TextsData>;
+    // The template of the role chooses English for such an app.
+    final output = provider.render(
+      localizationRole.hookInput(
+        const RoleHookRequest(
+          data: [],
+          presentRoles: {localizationRole, preferencesRole},
+          context: ContractHarness.defaultContext,
+          choices: {
+            localizationRole: LocalizationChoice(['en']),
+          },
+        ),
+      ),
+    );
+
+    // gen-l10n generates from it the class of the localizations without a
+    // getter.
+    expect(output.files, {
+      GenL10nModule.templateArbFile: '{\n  "@@locale": "en"\n}\n',
+    });
+    expect(output.vars, isEmpty);
+  });
+
   group('an app whose modules have texts', () {
     late ContractResult result;
     late RenderedApp app;

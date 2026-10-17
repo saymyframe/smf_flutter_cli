@@ -738,6 +738,7 @@ final class BrokenModule extends SmfModule {
                 name: value is RoleVar ? texts[name] ?? value : value,
             },
             when: contribution.when,
+            whenChosen: contribution.whenChosen,
           )
         else
           contribution,

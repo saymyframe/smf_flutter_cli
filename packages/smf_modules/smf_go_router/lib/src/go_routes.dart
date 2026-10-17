@@ -17,13 +17,14 @@ final class GoRoutes {
   /// navigation if [mainNavigation] is set, as a layout provides.
   ///
   /// The path `/` redirects to the start route, or shows the fallback
-  /// screen. Every route of the facade becomes a `GoRoute` named by its
-  /// full name, such as `home.details`, which the listeners of the screen
-  /// get as the name of the screen, and navigator observers as the name of
-  /// its page, with its children below it; a top-level route
-  /// has its full path, a child its path relative to its parent. The
-  /// screens are imported with prefixes of their own: `screen0`, `screen1`,
-  /// and so on.
+  /// screen, which only an app without a start route has (see
+  /// [RouterRole.noStartRoute]): the routes import it only then. Every
+  /// route of the facade becomes a `GoRoute` named by its full name, such
+  /// as `home.details`, which the listeners of the screen get as the name
+  /// of the screen, and navigator observers as the name of its page, with
+  /// its children below it; a top-level route has its full path, a child
+  /// its path relative to its parent. The screens are imported with
+  /// prefixes of their own: `screen0`, `screen1`, and so on.
   ///
   /// With a main navigation and destinations, the destinations go into a
   /// `StatefulShellRoute.indexedStack`, a branch for each, in their order,

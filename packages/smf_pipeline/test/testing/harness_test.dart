@@ -4360,19 +4360,152 @@ void main() {
           ),
         ),
       );
-      // Without such a symbol, the structure of an app that the harness did
-      // not render is checked as before.
+      // Without such a symbol, or with one whose conditions are of roles
+      // that the app lacks, the structure of an app that the harness did
+      // not render is checked as before. The fallback start screen depends
+      // on what the router chose, and an app without a router has it.
       final scaffolding = await harness.check(
         const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
       );
       expect(scaffolding.choices, isNull);
       expect(
-        harness.checkStructure(
-          scaffolding,
+        [
+          for (final issue in harness.checkStructure(
+            scaffolding,
+            files: const {},
+            owners: const {},
+          ))
+            issue.message,
+        ],
+        contains(
+          'lib/core/app/fallback_start_screen.dart is missing, so it cannot '
+          'declare class FallbackStartScreen.',
+        ),
+      );
+      final routed = ContractHarness(
+        ModuleRegistry([
+          ...modules,
+          TestModule(
+            'go',
+            kind: ModuleKinds.infrastructure,
+            providers: [const RoleProvider.plain(routerRole)],
+          ),
+        ]),
+        render: false,
+      );
+      final withRouter = await routed.check(
+        const ContractCase('go', requested: [ModuleId('go')]),
+      );
+      expect(
+        () => routed.checkStructure(
+          withRouter,
           files: const {},
           owners: const {},
         ),
-        isNotEmpty,
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'The app of the case go was not rendered, so the roles made no '
+                'choice, and the app entry role has symbols that depend on '
+                'what roles chose.',
+          ),
+        ),
+      );
+    });
+
+    test(
+        'reports the fallback start screen of a provider of the app entry '
+        'that gives it to every app, in an app that a route starts', () async {
+      // A feature whose route starts the app, and a router.
+      final start = TestModule(
+        'home',
+        kind: ModuleKinds.feature,
+        contributions: [
+          BrickContribution(
+            bundle(
+              'home',
+              files: {
+                'lib/features/home/home_screen.dart':
+                    '{{{smf_router__screen_annotations__home__home_screen}}}\n'
+                        'class HomeScreen {\n  const HomeScreen();\n}\n',
+              },
+            ),
+          ),
+          routerRole.data(
+            const RoutesData([
+              Route(
+                '/',
+                name: 'home',
+                screen: ScreenRef(
+                  'HomeScreen',
+                  import: ImportRef.app('features/home/home_screen.dart'),
+                ),
+                startCandidate: true,
+              ),
+            ]),
+          ),
+        ],
+      );
+      final router = TestModule(
+        'go',
+        kind: ModuleKinds.infrastructure,
+        providers: [const RoleProvider.plain(routerRole)],
+        contributions: [
+          BrickContribution(
+            bundle(
+              'go',
+              files: {
+                RouterRole.appRouterFactoryFile: '''
+import 'app_router.dart';
+
+final observers = [
+{{{${RouterRole.observers.tag}}}}
+];
+
+final listeners = [
+{{{${RouterRole.screenListeners.tag}}}}
+];
+
+AppRouter createAppRouter() => throw UnimplementedError();
+''',
+              },
+            ),
+          ),
+        ],
+      );
+      Future<List<SmfIssue>> fallbackIssues(TestModule entry) async {
+        final harness = ContractHarness(ModuleRegistry([entry, start, router]));
+        final result = await harness.check(
+          const ContractCase('home', requested: [ModuleId('home')]),
+        );
+        expect(
+          routerRole.startIn(routerRole.hookInput(result.hook!))?.fullPath,
+          '/home',
+        );
+        return [
+          for (final issue in result.errors)
+            if (issue.path == AppEntryRole.fallbackStartScreenFile) issue,
+        ];
+      }
+
+      expect(await fallbackIssues(scaffold()), isEmpty);
+      final always = scaffold(
+        bricks: false,
+        contributions: [
+          entryBrick(),
+          BrickContribution(bundle('fallback', files: fallbackFiles)),
+        ],
+      );
+      expect(
+        [for (final issue in await fallbackIssues(always)) issue.message],
+        [
+          equals(
+            'The app has lib/core/app/fallback_start_screen.dart, the file of '
+            'class FallbackStartScreen, which only an app where no route '
+            'starts the app needs.',
+          ),
+        ],
       );
     });
 

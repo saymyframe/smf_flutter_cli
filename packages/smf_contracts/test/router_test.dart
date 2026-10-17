@@ -938,6 +938,47 @@ void main() {
       );
       expect(routerRole.startIn(inputOf(routerRole, data: _data)), isNull);
     });
+
+    test(
+        'has the condition that no route starts the app, which holds where '
+        'startIn is null and in an app without a router', () {
+      const condition = RouterRole.noStartRoute;
+
+      /// Whether [condition] holds in an app with [data], whose router
+      /// chose [choice], and whether startIn of that app is null.
+      (bool, bool) withRouter(Object? choice) {
+        final request = RoleHookRequest(
+          data: _data,
+          presentRoles: const {routerRole},
+          context: testContext,
+          choices: {routerRole: choice},
+        );
+        return (
+          condition.holdsIn(request),
+          routerRole.startIn(routerRole.hookInput(request)) == null,
+        );
+      }
+
+      expect(condition.role, routerRole);
+      expect('$condition', 'no route starts the app');
+      expect(
+        withRouter(const RouterChoice(startPath: '/settings')),
+        (false, false),
+      );
+      expect(withRouter(const RouterChoice()), (true, true));
+      // Before the choice, or with a template that made none.
+      expect(withRouter(null), (true, true));
+      expect(
+        condition.holdsIn(
+          const RoleHookRequest(
+            data: [],
+            presentRoles: {appEntryRole},
+            context: testContext,
+          ),
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('the warning of the destinations of an app without a layout', () {

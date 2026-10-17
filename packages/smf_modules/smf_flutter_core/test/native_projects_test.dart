@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -21,7 +22,7 @@ void main() {
       final brick = const FlutterCoreModule()
           .contribute(ContractHarness.defaultContext)
           .whereType<BrickContribution>()
-          .single;
+          .firstWhere((brick) => brick.bundle == flutterCoreBundle);
       templates = templateFilesOf(brick);
     });
 

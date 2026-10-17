@@ -153,15 +153,19 @@ String _outsideBuild(String path) =>
 
 /// Checks [files] of an app whose app entry flutter_core provides; it owns
 /// each file, unless [owners] names another owner.
+///
+/// The app has no router unless [router] is the choice of its router.
 List<SmfIssue> _check(
   Map<String, DartFileIndex> files, {
   Map<String, ContributionOrigin> owners = const {},
+  RouterChoice? router,
 }) {
   final request = StructuralRuleRequest(
-    hook: const RoleHookRequest(
-      data: [],
-      presentRoles: {appEntryRole},
+    hook: RoleHookRequest(
+      data: const [],
+      presentRoles: {appEntryRole, if (router != null) routerRole},
       context: testContext,
+      choices: {if (router != null) routerRole: router},
     ),
     files: files,
     owners: {
@@ -204,7 +208,8 @@ void main() {
       expect(appEntryRole.description, 'App entry');
       expect(appEntryRole.cardinality, RoleCardinality.exactlyOne);
       expect(appEntryRole.requires, isEmpty);
-      expect(appEntryRole.uses, isEmpty);
+      // The fallback start screen depends on what the router chose.
+      expect(appEntryRole.uses, {routerRole});
       expect(appEntryRole.options, isEmpty);
       expect(appEntryRole.presenceFlag, 'has_app_entry');
     });
@@ -272,6 +277,12 @@ void main() {
         'package:my_app/core/app/fallback_start_screen.dart',
       );
       expect(
+        AppEntryRole.fallbackStartScreen.whenChosen,
+        {RouterRole.noStartRoute},
+      );
+      expect(AppEntryRole.main.whenChosen, isEmpty);
+      expect(AppEntryRole.bootstrap.whenChosen, isEmpty);
+      expect(
         appEntryRole.structuralRules.map((rule) => rule.id),
         [
           'app_entry.bootstrap_without_material',
@@ -306,6 +317,37 @@ void main() {
       expect(
         issues.every((issue) => issue.message.contains('is missing')),
         isTrue,
+      );
+    });
+
+    test(
+        'need the fallback start screen only in an app that no route '
+        'starts, and no file of it in any other app', () {
+      const start = RouterChoice(startPath: '/home');
+      final withoutScreen = _app()
+        ..remove(AppEntryRole.fallbackStartScreenFile);
+
+      expect(_check(_app(), router: const RouterChoice()), isEmpty);
+      expect(_check(withoutScreen, router: start), isEmpty);
+      expect(
+        [for (final issue in _check(_app(), router: start)) issue.message],
+        [
+          equals(
+            'The app has lib/core/app/fallback_start_screen.dart, the file of '
+            'class FallbackStartScreen, which only an app where no route '
+            'starts the app needs.',
+          ),
+        ],
+      );
+      expect(
+        [
+          for (final issue in _check(
+            withoutScreen,
+            router: const RouterChoice(),
+          ))
+            issue.message,
+        ],
+        [contains('lib/core/app/fallback_start_screen.dart is missing')],
       );
     });
 

@@ -209,6 +209,10 @@ String _list(List<String> items, [String conjunction = 'and']) =>
 /// have them, by path in the app, such as `lib/main.dart`, each with the
 /// name of its role: the files of the template of each role and those of
 /// the symbols that every provider of a role generates (`RoleInterface`).
+/// The file of a symbol with conditions on what roles chose, such as the
+/// fallback start screen of the app entry, counts too: the role guarantees
+/// it only where its conditions hold, so an app test that imports it must
+/// apply only to those apps, which this check does not see.
 ///
 /// The roles are the public top-level constants of the libraries of
 /// smf_contracts that are a `Role`, which mirrors find, so that a new role

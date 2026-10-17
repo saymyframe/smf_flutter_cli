@@ -1451,8 +1451,10 @@ final class ContractHarness {
   ///
   /// Throws an [ArgumentError] if the case of [result] did not resolve, and
   /// a [StateError] if the harness did not render its app, so that its
-  /// roles made no choice, while a present role has a symbol that depends
-  /// on what roles chose: whether the app needs the symbol cannot be told.
+  /// roles made no choice, while a present role has a symbol with a
+  /// condition of a role that the app has: whether the app needs the symbol
+  /// cannot be told. A condition of a role that the app lacks holds or
+  /// fails without a choice, so its symbol is checked as before.
   List<SmfIssue> checkStructure(
     ContractResult result, {
     required Map<String, String> files,
@@ -1568,10 +1570,17 @@ final class ContractHarness {
     final (:resolution, :collection) = _resolved(result);
     final choices = result.choices;
     if (choices == null) {
-      for (final role in resolution.presentRoles) {
-        if (role.interface.symbols.any((s) => s.whenChosen.isNotEmpty)) {
-          // With no choices, a condition would hold or fail by a choice of
-          // null, which the roles of the app may never make.
+      final present = resolution.presentRoles;
+      for (final role in present) {
+        final deciding = {
+          for (final symbol in role.interface.symbols)
+            for (final condition in symbol.whenChosen) condition.role,
+        };
+        // With no choices, a condition of a role of the app would hold or
+        // fail by a choice of null, which that role may never make. A
+        // condition of a role that the app lacks holds or fails without a
+        // choice.
+        if (deciding.any(present.contains)) {
           throw StateError(
             'The app of the case ${result.contractCase} was not rendered, so '
             'the roles made no choice, and the $role has symbols that depend '

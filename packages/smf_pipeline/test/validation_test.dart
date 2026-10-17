@@ -100,7 +100,7 @@ void main() {
           options: [RoleOption(name: option, help: '')],
           template: TestTemplate(),
         );
-    final present = withOption('present', 'start');
+    final present = withOption('present', 'entry');
     final absent = withOption('absent', 'chime');
     final modules = [
       scaffold(),
@@ -114,7 +114,7 @@ void main() {
       resolution: resolution,
       collection: collect(resolution, testContext),
       context: testContext,
-      optionValues: const {'start': '/home', 'chime': null, 'flavor': 'x'},
+      optionValues: const {'entry': '/home', 'chime': null, 'flavor': 'x'},
     );
 
     const unused = 'warning pipeline.unused_option: --chime has no effect: '
@@ -2521,7 +2521,10 @@ void main() {
 /// screen requires `nav`.
 List<SmfModule> _notesOnACycle() {
   final theme = TestRole<NoDsl>('theme');
-  final settingsScreen = TestRole<NoDsl>('settings_screen');
+  // Not the ids of the real roles, which every registry has: the app entry
+  // uses the router, which brings the settings screen with the roles that
+  // it uses.
+  final settingsScreen = TestRole<NoDsl>('options_screen');
   final nav = TestRole<NoDsl>(
     'nav',
     uses: {theme},
@@ -2541,7 +2544,7 @@ List<SmfModule> _notesOnACycle() {
   );
   return [
     scaffold(),
-    TestModule('router', providers: [RoleProvider.plain(nav)]),
+    TestModule('navigator', providers: [RoleProvider.plain(nav)]),
     TestModule(
       'material_theme',
       uses: {settingsScreen},

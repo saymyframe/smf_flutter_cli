@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
-import 'package:smf_contracts/core.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -646,9 +646,9 @@ void main() {
     ]);
     final app = run.files.directory('/work/my_app');
     // The texts of the app are those of the start screen, after the label
-    // of that screen in a main navigation, and then the two of the fallback
-    // start screen of the app entry, in English and in Ukrainian, so the
-    // app is in both.
+    // of that screen in a main navigation, in English and in Ukrainian, so
+    // the app is in both. The app starts on that screen, so it has no
+    // fallback start screen, and none of its texts.
     for (final (language, label) in [('en', 'Home'), ('uk', 'Головна')]) {
       final texts = jsonDecode(
         app.childFile('lib/l10n/app_$language.arb').readAsStringSync(),
@@ -658,14 +658,14 @@ void main() {
       expect(texts['homeLabel'], label);
       expect(
         texts.keys.skip(1),
-        [
-          ...texts.keys.where((key) => key.startsWith('home')),
-          'flutterCoreFallbackHint',
-          'flutterCoreFallbackCopied',
-        ],
+        texts.keys.where((key) => key.startsWith('home')),
         reason: language,
       );
     }
+    expect(
+      app.childFile(AppEntryRole.fallbackStartScreenFile).existsSync(),
+      isFalse,
+    );
     expect(
       [
         for (final file in app.childDirectory('lib/l10n').listSync())
