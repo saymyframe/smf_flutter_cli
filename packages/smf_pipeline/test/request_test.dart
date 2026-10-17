@@ -51,7 +51,8 @@ void main() {
       '--strict',
       '--allow-warning=router.no_start',
       '--allow-warning',
-      'localization.untranslated,router.no_start',
+      'localization.untranslated',
+      '--allow-warning=router.no_start',
       '--explain',
       '--skip-external-setup',
       '--no-input',
@@ -97,7 +98,14 @@ void main() {
 
   test('rejects a value of --allow-warning that is not a code of a warning',
       () {
-    for (final code in ['no_start', 'Router.no_start', 'router.', '.x']) {
+    // It is given once for each code, so a comma is no separator.
+    for (final code in [
+      'no_start',
+      'Router.no_start',
+      'router.',
+      '.x',
+      'router.no_start,localization.untranslated',
+    ]) {
       expect(
         () => parse(['--strict', '--allow-warning', code]),
         throwsA(

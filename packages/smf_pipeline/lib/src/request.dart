@@ -41,7 +41,7 @@ abstract final class CreateOptions {
   /// `--allow-warning`: the code of a warning about what the app is made
   /// of that does not stop a run with `--strict`, such as
   /// `router.no_start`; hidden, for CI, which generates apps that warn on
-  /// purpose. It may be given more than once.
+  /// purpose. It is given once for each code, and takes no list.
   static const allowWarning = 'allow-warning';
 
   /// `--explain`: print what would happen and stop.
@@ -116,7 +116,12 @@ abstract final class CreateOptions {
         help: 'Fail instead of leaving out modules that cannot work, and on '
             'warnings about what the app is made of.',
       )
-      ..addMultiOption(allowWarning, valueHelp: 'code', hide: true)
+      ..addMultiOption(
+        allowWarning,
+        valueHelp: 'code',
+        splitCommas: false,
+        hide: true,
+      )
       ..addFlag(
         explain,
         negatable: false,
