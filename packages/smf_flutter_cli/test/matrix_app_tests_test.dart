@@ -1013,14 +1013,14 @@ void main() {
         ..._everyModule,
       ],
     );
-    // What the test has to check there. Every app has the two texts of the
-    // fallback start screen of its app entry, in English and in Ukrainian.
-    // An app with a settings screen also has the texts of the setting of
-    // the language, which the role gives it in both languages. An app with
-    // the start screen or with the settings module has the label of its
-    // destination in both, and an app with the onboarding the texts of its
-    // pages. So the test reads texts in two languages in each app, with
-    // the provider of the CLI.
+    // What the test has to check there. An app that no route starts has
+    // the two texts of the fallback start screen of its app entry, in
+    // English and in Ukrainian. An app with a settings screen also has the
+    // texts of the setting of the language, which the role gives it in
+    // both languages. An app with the start screen or with the settings
+    // module has the label of its destination in both, and an app with the
+    // onboarding the texts of its pages. So the test reads texts in two
+    // languages in each app, with the provider of the CLI.
     List<String> languagesOf(MatrixApp app) =>
         localizationRole.localesIn(localizationRole.hookInput(app.hook!));
     expect(
