@@ -68,13 +68,15 @@ const appEntryRole = AppEntryRole._();
 /// none.
 ///
 /// The keyed sockets of the native files and of the README,
-/// [mainActivityIntentFilters], [iosAppDelegateLaunch] and both places of
-/// [androidCoreLibraryDesugaring] render complete lines, so their tags
-/// stand alone at the start of a line of their file, like the tags of
-/// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
-/// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module
-/// rules of the role check these tags in the templates of its provider,
-/// and the place of the tag of [iosAppDelegateLaunch] in its method, and
+/// [mainActivityIntentFilters], [androidManifestApplicationComponents],
+/// [iosAppDelegateLaunch] and both places of [androidCoreLibraryDesugaring]
+/// render complete lines, so their tags stand alone at the start of a line
+/// of their file, like the tags of [PipelineSockets]. The tag of
+/// [iosDeploymentTarget] stands where the version goes, as in
+/// `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module rules of the role
+/// check these tags in the templates of its provider, the element of the
+/// Android manifest that holds each tag of the manifest, and the place of
+/// the tag of [iosAppDelegateLaunch] in its method, and
 /// its structural rules check that the native files name every key once and
 /// that the app target signs with [iosEntitlementsFile].
 ///
@@ -324,14 +326,16 @@ final class AppEntryRole extends Role<NoDsl> {
   ///
   /// A component is for one that the app itself has to declare, such as a
   /// receiver of a library whose own manifest leaves it out. The manifest
-  /// declares a component of each kind, an `<activity>`, a `<service>`, a
-  /// `<receiver>` or a `<provider>`, under one `android:name` once: the
-  /// manifest merger of the Android build keeps both declarations of a
-  /// component, which may differ in their attributes and intent filters,
-  /// and the build does not fail. So one module declares a component, and
-  /// the provider's own, such as the main activity, cannot be contributed;
-  /// the structural rule `app_entry.native_keys` checks the names as the
-  /// manifest writes them.
+  /// declares a component of each kind, an `<activity>`, an
+  /// `<activity-alias>`, a `<service>`, a `<receiver>` or a `<provider>`,
+  /// under one `android:name` once. The Android build fails on two
+  /// declarations of a component that differ in their attributes or
+  /// children, and keeps both of two equal ones in the merged manifest. So
+  /// one module declares a component, and the provider's own, such as the
+  /// main activity, cannot be contributed. The structural rule
+  /// `app_entry.native_keys` checks the names before any build, resolved as
+  /// Android resolves them: a name that starts with a dot, or has none, is
+  /// relative to the `namespace` of [gradleAppFile].
   static const androidManifestApplicationComponents =
       SocketRef<CodeSocket>.role(
     appEntryRole,
@@ -637,6 +641,15 @@ final class AppEntryRole extends Role<NoDsl> {
               'ios/Runner/AppDelegate.swift, before its call of '
               'super.application, which hands the launch to Flutter.',
           check: _checkLaunchCodePlace,
+        ),
+        ModuleRule(
+          id: 'app_entry.manifest_tag_places',
+          description: 'The tag of each socket of the Android manifest is '
+              'among the children of the element that its contributions '
+              'belong to: the permissions of <manifest>, the meta-data and '
+              'the components of <application>, and the intent filters of an '
+              '<activity>.',
+          check: _checkManifestTagPlaces,
         ),
         ModuleRule(
           id: 'app_entry.tag_lines',

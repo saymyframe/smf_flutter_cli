@@ -310,6 +310,7 @@ void main() {
           'app_entry.bootstrap_phases',
           'app_entry.root_wrappers_in_main',
           'app_entry.launch_code_place',
+          'app_entry.manifest_tag_places',
           'app_entry.tag_lines',
         ],
       );
@@ -2263,6 +2264,57 @@ See `lib/missing.dart`.
       );
     });
 
+    test(
+        'resolve the name of a component as Android does, against the '
+        'namespace of the app', () {
+      String component(String element, String name, {String quote = '"'}) =>
+          '        <$element android:name=$quote$name$quote '
+          'android:exported="false" />\n';
+      final manifest = _manifest.replaceFirst(
+        '    </application>',
+        '${component('receiver', '.Receiver')}'
+            '${component('receiver', 'com.example.app.Receiver')}'
+            // A module's main activity next to that of the provider.
+            '${component('activity', 'com.example.app.MainActivity')}'
+            // A name without a dot is relative too.
+            '${component('service', 'Sync')}'
+            '${component('service', 'com.example.app.Sync')}'
+            '${component('activity-alias', '.Launcher')}'
+            "${component('activity-alias', '.Launcher', quote: "'")}"
+            // Another package keeps its name.
+            '${component('provider', 'com.example.other.Files')}'
+            '${component('provider', 'com.example.app.Files')}'
+            '    </application>',
+      );
+      const path = 'android/app/src/main/AndroidManifest.xml';
+      const appGradle = 'android {\n    namespace = "com.example.app"\n}\n';
+
+      expect(
+        messages(
+          checkTexts({
+            AppEntryRole.androidManifestFile: manifest,
+            AppEntryRole.gradleAppFile: appGradle,
+          }),
+        ),
+        [
+          equals('$path has the activity com.example.app.MainActivity more '
+              'than once.'),
+          equals('$path has the activity-alias com.example.app.Launcher more '
+              'than once.'),
+          equals('$path has the service com.example.app.Sync more than once.'),
+          equals('$path has the receiver com.example.app.Receiver more than '
+              'once.'),
+        ],
+      );
+      // Without the namespace of the app, a name is taken as it is written.
+      expect(
+        messages(checkTexts({AppEntryRole.androidManifestFile: manifest})),
+        [
+          equals('$path has the activity-alias .Launcher more than once.'),
+        ],
+      );
+    });
+
     test('tell the meta-data of an activity from those of the application', () {
       final manifest = _manifest.replaceFirst(
         '        </activity>',
@@ -3087,6 +3139,64 @@ Future<void> main() async {
       // An app delegate without the tag: the rule of the lines of the
       // native files reports a tag in another file.
       expect(problems('import UIKit\n'), isEmpty);
+    });
+
+    test(
+        'the tags of the Android manifest are among the children of the '
+        'element that their contributions belong to', () {
+      const path = AppEntryRole.androidManifestFile;
+      const permissions = '{{{smf_app_entry__android_manifest_permissions}}}';
+      const meta = '{{{smf_app_entry__android_manifest_application_meta}}}';
+      const components =
+          '{{{smf_app_entry__android_manifest_application_components}}}';
+      const filters = '{{{smf_app_entry__main_activity_intent_filters}}}';
+      List<String> problems(String template) => [
+            for (final issue in checkModule({path: template})) issue.message,
+          ];
+      String notIn(String tag, String parent) =>
+          'The tag $tag is in $path, but not among the children of '
+          '<$parent>, where its contributions belong.';
+
+      // A comment with an element does not open it.
+      expect(
+        problems(
+          _manifestTemplate.replaceFirst(
+            '    <application>',
+            '    <!-- <application> <activity> -->\n    <application>',
+          ),
+        ),
+        isEmpty,
+      );
+      // Each of the four in the wrong element: the components after the
+      // application, which the Android build refuses.
+      expect(
+        problems('''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="{{app_name.titleCase()}}">
+$permissions
+        <activity android:name=".MainActivity">
+$meta
+        </activity>
+$filters
+    </application>
+$components
+</manifest>
+'''),
+        [
+          equals(notIn(permissions, 'manifest')),
+          equals(notIn(meta, 'application')),
+          equals(notIn(components, 'application')),
+          equals(notIn(filters, 'activity')),
+        ],
+      );
+      // Outside every element.
+      expect(
+        problems('</manifest>\n$permissions\n'),
+        [equals(notIn(permissions, 'manifest'))],
+      );
+      final issue = checkModule({path: '$components\n'}).single;
+      expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
+      expect(issue.path, path);
     });
 
     test('the Gradle sockets refuse the plugins every app declares', () {
