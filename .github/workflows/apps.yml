@@ -482,10 +482,11 @@ jobs:
     name: Android start (${{ matrix.app }})
     needs: plan
     runs-on: ubuntu-latest
-    # About 12 minutes: the emulator boots while the app is generated, then
+    # About 8 minutes: the emulator boots while the app is generated, then
     # the app is built and starts, which start_app.sh gives 240 s once the
-    # emulator has the app.
-    timeout-minutes: 25
+    # emulator has the app. The first app of the plan then starts once more
+    # as a release app, which takes a few minutes more.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -596,6 +597,25 @@ jobs:
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
+
+      # The app as a user installs it: a release build, in which R8 shrinks
+      # the Java and Kotlin code and renames the classes that no rule keeps.
+      # A plugin that looks a class up by its name, as through JNI, then
+      # fails in a release app though it works in a debug one, as
+      # shared_preferences_android 2.5.0 did when the app opened the
+      # preferences. Such a plugin release breaks the apps without a change
+      # of SMF, and the nightly run starts the app with each version of
+      # Flutter, so it shows up within a day. Only the first app of the plan
+      # starts so, which keeps the other jobs as they are; start_app.sh
+      # builds it for the ABI of the emulator only. The timeout of the step
+      # limits the build with R8, a few minutes longer than that of a debug
+      # app.
+      - name: Start the app without external services as a release app on the Android emulator
+        if: strategy.job-index == 0
+        timeout-minutes: 15
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 release
 
       - *gradle_added
       - *save_gradle
