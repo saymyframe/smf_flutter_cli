@@ -53,6 +53,7 @@ With `shared_preferences`:
 - In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
 - A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
 - In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
+- `pubspec.yaml` keeps `shared_preferences_android` below 2.5.0. With 2.5.0, a release build fails to open the preferences on Android, because R8 renames Kotlin classes that the package looks up by name. Before you raise the constraint, check that a release build of the app starts on Android.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -1016,6 +1017,7 @@ dependencies:
     sdk: flutter
   intl: "any"
   shared_preferences: "^2.5.5"
+  shared_preferences_android: ">=2.4.28 <2.5.0"
 
 dev_dependencies:
   flutter_test:
