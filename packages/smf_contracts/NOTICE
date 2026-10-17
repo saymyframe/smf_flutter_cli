@@ -5,3 +5,7 @@ Licensed under the Apache License, Version 2.0.
 This product includes software developed by Say My Frame (https://saymyframe.com).
 
 If you use or redistribute this software, please retain this NOTICE file.
+
+This product includes the "notifications" icon of the Material Design icons
+by Google, under the Apache License 2.0. The apps it generates use it as the
+small icon of a notification on Android.
