@@ -556,9 +556,11 @@ final class AppEntryRole extends Role<NoDsl> {
           description: 'Every build configuration of the app target in '
               'ios/Runner.xcodeproj/project.pbxproj, which reads '
               'Runner/Info.plist, signs the app with '
-              'ios/Runner/Runner.entitlements (CODE_SIGN_ENTITLEMENTS), and '
-              'no other build configuration names entitlements, so the '
-              'entitlements that the modules add reach the app.',
+              'ios/Runner/Runner.entitlements (CODE_SIGN_ENTITLEMENTS), so '
+              'the entitlements that the modules add reach the app. No other '
+              'target signs with that file, and the build configurations of '
+              'the project, which every target inherits, name no '
+              'entitlements.',
           check: _checkIosEntitlementsSigned,
         ),
         StructuralRule(

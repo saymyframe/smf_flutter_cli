@@ -2110,7 +2110,11 @@ See `lib/missing.dart`.
         final issues = checkProject(text);
 
         expect(messages(issues), [
-          for (final name in ['Profile', 'Debug', 'Release'])
+          for (final name in [
+            'Profile (249021D4217E4FDB00AE95B9)',
+            'Debug (97C147061CF9000F007C117D)',
+            'Release (97C147071CF9000F007C117D)',
+          ])
             equals(
               'The build configuration $name of the app target in '
               'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
@@ -2141,9 +2145,9 @@ See `lib/missing.dart`.
           ),
           [
             equals(
-              'A build configuration of the app target in '
-              'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
-              'with ios/Runner/Runner.entitlements.',
+              'The build configuration 249021D4217E4FDB00AE95B9 of the app '
+              'target in ios/Runner.xcodeproj/project.pbxproj does not sign '
+              'the app with ios/Runner/Runner.entitlements.',
             ),
           ],
         );
@@ -2157,46 +2161,98 @@ See `lib/missing.dart`.
           ),
           [
             equals(
-              'The build configuration Profile of the app target in '
-              'ios/Runner.xcodeproj/project.pbxproj does not sign the app '
-              'with ios/Runner/Runner.entitlements.',
+              'The build configuration Profile (249021D4217E4FDB00AE95B9) of '
+              'the app target in ios/Runner.xcodeproj/project.pbxproj does '
+              'not sign the app with ios/Runner/Runner.entitlements.',
             ),
           ],
         );
       });
 
       test(
-          'reports entitlements in the build settings of another target or '
-          'of the project', () {
-        final issues = checkProject(
-          _xcodeProject
-              .replaceFirst(
-                'ALWAYS_SEARCH_USER_PATHS = NO;',
-                'ALWAYS_SEARCH_USER_PATHS = NO;\n'
-                    '\t\t\t\tCODE_SIGN_ENTITLEMENTS = '
-                    'Runner/Runner.entitlements;',
-              )
-              .replaceFirst(
-                'CODE_SIGN_STYLE = Automatic;',
-                'CODE_SIGN_ENTITLEMENTS = RunnerTests/RunnerTests.entitlements;'
-                    '\n\t\t\t\tCODE_SIGN_STYLE = Automatic;',
-              ),
-        );
+          'reports the entitlements of the app in another target, and '
+          'entitlements in the build settings of the project', () {
+        String withSetting(String before, String value) =>
+            _xcodeProject.replaceFirst(
+              before,
+              'CODE_SIGN_ENTITLEMENTS = $value;\n\t\t\t\t$before',
+            );
+        const ofProject = 'ALWAYS_SEARCH_USER_PATHS = NO;';
+        const ofTests = 'CODE_SIGN_STYLE = Automatic;';
 
-        expect(messages(issues), [
-          for (final name in ['Profile', 'Debug'])
-            equals(
-              'The build configuration $name in '
-              'ios/Runner.xcodeproj/project.pbxproj, which is not one of the '
-              'app target, names entitlements in CODE_SIGN_ENTITLEMENTS.',
-            ),
+        // The target of the tests signs with the file of the app.
+        final ofApp = checkProject(
+          withSetting(ofTests, 'Runner/Runner.entitlements'),
+        );
+        expect(messages(ofApp), [
+          equals(
+            'The build configuration Debug (331C8088294A63A400263BE5) in '
+            'ios/Runner.xcodeproj/project.pbxproj, which is not one of the '
+            'app target, signs with the entitlements of the app, '
+            'ios/Runner/Runner.entitlements.',
+          ),
         ]);
         expect(
-          issues.first.hint,
-          'Only the app target signs with ios/Runner/Runner.entitlements: '
-          'they are the entitlements of the app, and a setting of the '
-          'project reaches every target, such as the tests.',
+          ofApp.single.hint,
+          'Only the app target signs with ios/Runner/Runner.entitlements. '
+          'Another target, such as an app extension, signs with '
+          'entitlements of its own.',
         );
+
+        // The project has a setting that every target inherits, whatever
+        // its file.
+        for (final value in [
+          'Runner/Runner.entitlements',
+          'Share/Share.entitlements',
+        ]) {
+          final inherited = checkProject(withSetting(ofProject, value));
+          expect(
+            messages(inherited),
+            [
+              equals(
+                'The build configuration Profile (249021D3217E4FDB00AE95B9) '
+                'of the project in ios/Runner.xcodeproj/project.pbxproj names '
+                'entitlements in CODE_SIGN_ENTITLEMENTS, which every target '
+                'without a setting of its own inherits, such as the tests.',
+              ),
+            ],
+            reason: value,
+          );
+          expect(
+            inherited.single.hint,
+            'Set CODE_SIGN_ENTITLEMENTS in the build configurations of each '
+            'target that signs with entitlements: Runner/Runner.entitlements '
+            'in those of the app target, which read Runner/Info.plist.',
+          );
+        }
+      });
+
+      test('reads what it can of a project that is cut off', () {
+        // A configuration without settings, and a comment, a string and a
+        // configuration that do not end.
+        const release = 'INFOPLIST_FILE = Runner/Info.plist;\n'
+            '\t\t\t};\n\t\t\tname = Release;';
+        final cut = _xcodeProject.substring(
+          0,
+          _xcodeProject.indexOf(release) + release.indexOf('\n'),
+        );
+        const empty = '\t\t00000000000000000000000A = '
+            '{isa = XCBuildConfiguration; name = Empty;};\n';
+        for (final end in ['', '\n/* cut', '\n// cut', '\n"cut']) {
+          expect(
+            messages(
+              checkProject(
+                cut.replaceFirst(
+                      '/* Begin XCBuildConfiguration section */\n',
+                      '/* Begin XCBuildConfiguration section */\n$empty',
+                    ) +
+                    end,
+              ),
+            ),
+            isEmpty,
+            reason: end,
+          );
+        }
       });
 
       test('reports a project without build settings of the app target', () {
@@ -2219,6 +2275,63 @@ See `lib/missing.dart`.
             'that signs the app with ios/Runner/Runner.entitlements.',
           ),
         ]);
+      });
+
+      test(
+          'reads build settings with braces in their strings, and none in '
+          'comments', () {
+        const signs = 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;';
+        final release = _xcodeProject.lastIndexOf(signs);
+        String releaseWith(String instead) => _xcodeProject.replaceRange(
+              release,
+              release + signs.length,
+              instead,
+            );
+
+        // Release does not sign with them, and has a brace in a string or in
+        // a comment, or the setting only in a comment.
+        for (final instead in [
+          r'OTHER_SWIFT_FLAGS = "-D FOO=${BAR}";',
+          '/* { */',
+          '/*\n\t\t\t\t$signs\n\t\t\t\t*/',
+          '// $signs',
+        ]) {
+          expect(
+            messages(checkProject(releaseWith(instead))),
+            [contains('Release')],
+            reason: instead,
+          );
+        }
+        // Release signs with them, next to a brace in a string and in a
+        // comment.
+        expect(
+          messages(
+            checkProject(
+              releaseWith(
+                '$signs\n\t\t\t\tOTHER_SWIFT_FLAGS = "-D FOO=\${BAR} \\"}\\"";'
+                '\n\t\t\t\t/* } { */',
+              ),
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test(
+          'accepts a target with entitlements of its own, such as an app '
+          'extension', () {
+        expect(
+          messages(
+            checkProject(
+              _xcodeProject.replaceFirst(
+                'CODE_SIGN_STYLE = Automatic;',
+                'CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;\n'
+                    '\t\t\t\tCODE_SIGN_STYLE = Automatic;',
+              ),
+            ),
+          ),
+          isEmpty,
+        );
       });
 
       test('checks nothing in an app without an iOS project', () {
@@ -2699,14 +2812,34 @@ const _entitlements = '''
 </plist>
 ''';
 
-/// The build configurations of the Xcode project of `flutter create` 3.44,
-/// shortened, whose app target signs with its entitlements: one of the
-/// project, those of the app target, which read its `Info.plist`, and one
-/// of the target of its tests.
+/// The Xcode project of `flutter create` 3.44, shortened, whose app target
+/// signs with its entitlements: the project, whose list of build
+/// configurations has one of its own, and the build configurations, those
+/// of the app target, which read its `Info.plist`, and one of the target of
+/// its tests.
 const _xcodeProject = r'''
 // !$*UTF8*$!
 {
 	objects = {
+
+/* Begin PBXProject section */
+		97C146E61CF9000F007C117D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1510;
+				TargetAttributes = {
+					97C146ED1CF9000F007C117D = {
+						CreatedOnToolsVersion = 7.3.1;
+					};
+				};
+			};
+			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
+			targets = (
+				97C146ED1CF9000F007C117D /* Runner */,
+				331C8080294A63A400263BE5 /* RunnerTests */,
+			);
+		};
+/* End PBXProject section */
 
 /* Begin XCBuildConfiguration section */
 		249021D3217E4FDB00AE95B9 /* Profile */ = {
@@ -2763,6 +2896,27 @@ const _xcodeProject = r'''
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				249021D3217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				97C147061CF9000F007C117D /* Debug */,
+				97C147071CF9000F007C117D /* Release */,
+				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }
