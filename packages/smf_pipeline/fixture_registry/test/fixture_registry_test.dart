@@ -446,6 +446,19 @@ void main() {
       expect(plist, contains('<string>fetch</string>'));
       expect(plist, contains('<string>remote-notification</string>'));
       expect('<key>FixtureName</key>'.allMatches(plist), hasLength(1));
+      // fake_overlap contributes first, by its id.
+      expect(
+        rendered(result, AppEntryRole.iosEntitlements).values.single,
+        [
+          '\t<key>aps-environment</key>',
+          '\t<string>development</string>',
+          '\t<key>com.apple.developer.associated-domains</key>',
+          '\t<array>',
+          '\t\t<string>applinks:example.org</string>',
+          '\t\t<string>applinks:example.com</string>',
+          '\t</array>',
+        ].join('\n'),
+      );
       expect(
         rendered(result, AppEntryRole.gradleSettingsPlugins).values.single,
         '    id("io.github.ben-manes.versions") version("0.64.0") apply false',
