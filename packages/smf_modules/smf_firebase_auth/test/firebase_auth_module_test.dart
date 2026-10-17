@@ -1,12 +1,10 @@
 @TestOn('vm')
 library;
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
-import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/bundles/firebase_auth_bundle.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
@@ -25,6 +23,8 @@ import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
 import 'support/dart_app.dart';
+import 'support/sign_in_methods.dart';
+import 'support/sign_in_ways.dart';
 
 /// The modules of the tests: flutter_core, which creates the app,
 /// go_router, a provider of the router role, which the auth role uses,
@@ -40,100 +40,6 @@ const List<SmfModule> _modules = [
   SharedPreferencesModule(),
   GenL10nModule(),
 ];
-
-/// A module of the tests that gives the auth role a way to sign in with the
-/// identity provider [issuer].
-final class _WayOfTest extends SmfModule {
-  const _WayOfTest(this.id, this.issuer, this.appStore);
-
-  /// The way to sign in of Google, which the module takes.
-  static const google = _WayOfTest(
-    ModuleId('google_of_test'),
-    'https://accounts.google.com',
-    AppStoreLogin.thirdParty,
-  );
-
-  /// The way to sign in of Apple, which the module takes.
-  static const apple = _WayOfTest(
-    ModuleId('apple_of_test'),
-    'https://appleid.apple.com',
-    AppStoreLogin.privacyFocused,
-  );
-
-  /// A way to sign in of another identity provider, which the module does
-  /// not take.
-  static const other = _WayOfTest(
-    ModuleId('way_of_test'),
-    'https://accounts.example.com',
-    AppStoreLogin.privacyFocused,
-  );
-
-  /// The id of the module.
-  final ModuleId id;
-
-  /// The identity provider of the way to sign in.
-  final String issuer;
-
-  /// What the way to sign in is for the App Store.
-  final AppStoreLogin appStore;
-
-  String get _path => 'core/${id.value}/way_of_test.dart';
-
-  /// The way to sign in that it gives the role.
-  SignInMethod get method => SignInMethod(
-        label: const LocalizedText('label', en: 'Continue with the test'),
-        icon: TypeRef('WayOfTestIcon', import: ImportRef.app(_path)),
-        platforms: const {AppPlatform.android, AppPlatform.ios},
-        credential: FunctionRef(
-          'wayOfTestCredential',
-          import: ImportRef.app(_path),
-        ),
-        issuer: issuer,
-        appStore: appStore,
-      );
-
-  static const _source = '''
-import 'package:flutter/widgets.dart';
-
-import '../auth/app_session.dart';
-
-Future<SignInCredential?> wayOfTestCredential() async => null;
-
-class WayOfTestIcon extends StatelessWidget {
-  const WayOfTestIcon({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox();
-}
-''';
-
-  @override
-  ModuleDescriptor get descriptor => ModuleDescriptor(
-        id: id,
-        description: 'A way to sign in of the tests',
-        kind: ModuleKinds.infrastructure,
-        requires: const {authRole},
-      );
-
-  @override
-  List<Contribution> contribute(ModuleContext context) => [
-        BrickContribution(
-          MasonBundle(
-            name: id.value,
-            description: 'The function and the icon of the way to sign in',
-            version: '0.1.0',
-            files: [
-              MasonBundledFile(
-                'lib/$_path',
-                base64.encode(utf8.encode(_source)),
-                'text',
-              ),
-            ],
-          ),
-        ),
-        authRole.data(method),
-      ];
-}
 
 /// The path of the file of the module.
 const _implementation = 'lib/core/auth/firebase_auth_service.dart';
@@ -827,11 +733,12 @@ void main() {
     test(
         'contributes its brick, firebase_auth, its implementation of the '
         'service, created without waiting, the check and the step that '
-        'enable the ways to sign in, its section of the README and its note '
-        'for coding agents, and nothing else', () {
+        'enable the ways to sign in and its note for coding agents, and '
+        'nothing else: its provider writes its section of the README, from '
+        'the ways to sign in of the app', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(7));
+      expect(contributions, hasLength(6));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseAuthBundle));
       expect(brick.bundle.name, 'firebase_auth');
@@ -862,12 +769,7 @@ void main() {
       expect(preflight.checks, [same(firebaseCliWithSignIn)]);
       expect(preflight.when, isEmpty);
       expect(contributions[4], same(enableSignIn));
-      final readme = contributions[5] as SocketContribution;
-      expect(readme.socket, AppEntryRole.readmeSections);
-      expect(readme.entryKey, readmeHeading);
-      expect(readme.entryValue, readmeSection);
-      expect(readme.when, isEmpty);
-      final note = contributions[6] as SocketContribution;
+      final note = contributions[5] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, authRole.description);
       expect(note.entryValue, AgentNote(agentNote));
@@ -985,7 +887,7 @@ void main() {
     test(
         'continues the step of firebase_core that runs flutterfire '
         'configure with the script of the app that enables the ways to sign '
-        'in, which is part of that step', () {
+        'in, with a notice of what it does for Google sign-in', () {
       final step = module
           .contribute(ContractHarness.defaultContext)
           .whereType<PostGenStep>()
@@ -1004,10 +906,24 @@ void main() {
         step.description,
         'Enabling the sign-in methods of the app in its Firebase project',
       );
-      // The Firebase CLI that the step needs adds no app to a project with
-      // the apps that flutterfire registered, so a run asks only about
-      // flutterfire configure.
-      expect(step.notice, isNull);
+      // For Google sign-in, the script changes the project and files of the
+      // app, and a step is the same in every app, so a run asks about it in
+      // every app, with what it does for Google.
+      expect(step.notice, enableSignInNotice);
+      expect(
+        enableSignInNotice,
+        allOf(
+          startsWith('If the app signs in with Google, it also '),
+          contains("the app's name and the Firebase CLI account's email for "
+              'its consent screen'),
+          contains("the SHA-1 and SHA-256 of this machine's Android debug key "
+              '(creating the key if there is none, as the first debug build '
+              'would)'),
+          contains("downloads the app's Firebase files again"),
+          endsWith('writes the iOS URL scheme into ios/Runner/Info.plist.'),
+          isNot(contains('\n')),
+        ),
+      );
       expect(step.skippable, isTrue);
       expect(step.external, isTrue);
       // The script passes --non-interactive to the Firebase CLI, so the
@@ -1066,9 +982,9 @@ void main() {
       final harness = ContractHarness(
         ModuleRegistry([
           ..._modules,
-          _WayOfTest.google,
-          _WayOfTest.apple,
-          _WayOfTest.other,
+          WayOfTest.google,
+          WayOfTest.apple,
+          WayOfTest.other,
         ]),
       );
       final taken = await harness.check(
@@ -1076,8 +992,8 @@ void main() {
           'firebase_auth with the ways to sign in of Google and Apple',
           requested: [
             FirebaseAuthModule.id,
-            _WayOfTest.google.id,
-            _WayOfTest.apple.id,
+            WayOfTest.google.id,
+            WayOfTest.apple.id,
           ],
         ),
       );
@@ -1086,8 +1002,8 @@ void main() {
           'firebase_auth with a way to sign in of another identity provider',
           requested: [
             FirebaseAuthModule.id,
-            _WayOfTest.apple.id,
-            _WayOfTest.other.id,
+            WayOfTest.apple.id,
+            WayOfTest.other.id,
           ],
         ),
       );
@@ -1108,7 +1024,7 @@ void main() {
         ],
         [
           (
-            ModuleOrigin(_WayOfTest.other.id),
+            ModuleOrigin(WayOfTest.other.id),
             'The module way_of_test gives the app a way to sign in with '
                 'https://accounts.example.com, whose credential firebase_auth '
                 'does not take: it signs in to Firebase Authentication with '
@@ -1156,14 +1072,22 @@ void main() {
                 '${entry.value}',
         },
         {
-          'https://accounts.google.com': "(id: 'google.com', name: 'Google')",
-          'https://appleid.apple.com': "(id: 'apple.com', name: 'Apple')",
+          for (final MapEntry(key: issuer, value: provider)
+              in identityProviders.entries)
+            issuer: "(id: '${provider.id}', name: '${provider.name}')",
         },
       );
-      expect(identityProviders, {
-        'https://accounts.google.com': 'Google',
-        'https://appleid.apple.com': 'Apple',
-      });
+      expect(
+        {
+          for (final MapEntry(key: issuer, value: provider)
+              in identityProviders.entries)
+            issuer: (provider.id, provider.name),
+        },
+        {
+          'https://accounts.google.com': ('google.com', 'Google'),
+          'https://appleid.apple.com': ('apple.com', 'Apple'),
+        },
+      );
     });
 
     test(
@@ -1759,10 +1683,15 @@ void main() {
             'gives a sign-in with a credential the reason of the auth role '
             'for each code of Firebase, and names its way to sign in in the '
             'hint of one that is not enabled', () {
+          // The script of the app enables Google, and only the Firebase
+          // console Apple.
+          const script = 'run `$enableSignInCommand` in the directory of the '
+              'app, or ';
           String notEnabled(String method) =>
               'notConfigured: Sign-in with $method is not enabled in the '
               'Firebase project stand-in-project (Firebase answered '
-              'operation-not-allowed). To fix it, enable $method in the '
+              'operation-not-allowed). To fix it, '
+              "${method == 'Google' ? script : ''}enable $method in the "
               'Firebase console under Authentication > Sign-in method: $link';
           expect(sent['refused sign-ins'], {
             'account-exists-with-different-credential':
@@ -2111,14 +2040,14 @@ void main() {
 
         expect(
           readme,
-          contains('\n## $readmeHeading\n\n$readmeSection'),
+          contains('\n## $readmeHeading\n\n${readmeSectionOf(const {})}'),
         );
         // The section of firebase_core, which tells how the app gets its
         // Firebase project, comes first.
         expect(at('Firebase'), inExclusiveRange(0, at(readmeHeading)));
         expect(at(AuthRole.readmeHeading), isNonNegative);
         expect(
-          readmeSection,
+          readmeSectionOf(const {}),
           contains('(see the section ${AuthRole.readmeHeading})'),
         );
       });
@@ -2127,7 +2056,7 @@ void main() {
           'tells which ways to sign in the modes of the app need, and what '
           'the app does until they are enabled', () {
         expect(
-          readmeSection,
+          readmeSectionOf(const {}),
           allOf(
             contains(
               'Email/Password in every mode of the app, and Anonymous when '
@@ -2136,7 +2065,7 @@ void main() {
             contains('fail with the reason `notConfigured`'),
           ),
         );
-        expect(_codeOf(readmeSection), contains(_implementation));
+        expect(_codeOf(readmeSectionOf(const {})), contains(_implementation));
       });
 
       test(
@@ -2144,7 +2073,7 @@ void main() {
           'another account, and tells what the script reads, what it needs '
           'and what it leaves as it is', () {
         expect(
-          readmeSection,
+          readmeSectionOf(const {}),
           allOf(
             contains('```bash\n$enableSignInCommand\n```\n'),
             contains('```bash\n$enableSignInCommand --account <email>\n```\n'),
@@ -2154,10 +2083,16 @@ void main() {
             ),
             contains('It never disables a method, and it changes no file of '
                 'the app.'),
+            // The step has a notice, so a run asks about it.
+            contains('`smf create` asks to enable them right after '
+                '`flutterfire configure` has configured the app.'),
+            // Of no way to sign in with an identity provider.
+            isNot(contains('Google')),
+            isNot(contains('Apple')),
           ),
         );
         // What the script reads, each a file of the app or a name in it.
-        final code = _codeOf(readmeSection);
+        final code = _codeOf(readmeSectionOf(const {}));
         expect(
           code,
           containsAll([
@@ -2189,7 +2124,7 @@ void main() {
             'authentication/providers';
         const console = '[Authentication > Sign-in method]($page)';
         expect(
-          readmeSection,
+          readmeSectionOf(const {}),
           allOf(
             contains('enable the methods in the Firebase console, under '
                 '$console'),
@@ -2339,6 +2274,371 @@ void main() {
       expect(
         readme,
         contains('(https://doc.saymyframe.com/modules/firebase-auth)'),
+      );
+    });
+  });
+
+  group('an app with ways to sign in with an identity provider', () {
+    final harness = ContractHarness(
+      ModuleRegistry([..._modules, ...WayOfTest.all]),
+    );
+
+    /// What the contract harness finds for the app of this module with the
+    /// ways to sign in of [ways].
+    Future<ContractResult> withWays(List<WayOfTest> ways) => harness.check(
+          ContractCase(
+            'firebase_auth with ${[for (final way in ways) way.id].join(', ')}',
+            requested: [
+              FirebaseAuthModule.id,
+              for (final way in ways) way.id,
+            ],
+          ),
+        );
+
+    /// The declarations of the script of [app] for its ways to sign in:
+    /// `_appName`, the name of the app for the consent screen of Google,
+    /// `_Need` and `_needs`, what they need of the project, as written.
+    Map<String, String> declarationsOf(RenderedApp app) => {
+          for (final declaration
+              in _unitOf(app, enableSignInScript).declarations)
+            ...switch (declaration) {
+              TopLevelVariableDeclaration(:final variables) => {
+                  for (final variable in variables.variables)
+                    if (const {'_appName', '_needs'}
+                        .contains(variable.name.lexeme))
+                      variable.name.lexeme: '${variable.initializer}',
+                },
+              EnumDeclaration(:final namePart)
+                  when namePart.typeName.lexeme == '_Need' =>
+                {'_Need': 'enum'},
+              _ => const <String, String>{},
+            },
+        };
+
+    late ContractResult both;
+    late RenderedApp withBoth;
+
+    setUpAll(() async {
+      both = await withWays([WayOfTest.google, WayOfTest.apple]);
+      withBoth = both.app!;
+    });
+
+    test(
+        'refuses a way to sign in that needs of the backend what the script '
+        'does not set up for its identity provider, in the validate hook of '
+        'its provider, and takes one of Google with what it needs', () async {
+      final refused = await withWays([WayOfTest.appleWithServer]);
+
+      expect(both.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        [
+          for (final issue in refused.errors)
+            (issue.origin, issue.message, issue.hint),
+        ],
+        [
+          (
+            ModuleOrigin(WayOfTest.appleWithServer.id),
+            'The module apple_server_of_test gives the app a way to sign in '
+                'with Apple (https://appleid.apple.com) that needs '
+                'androidCertificate and serverClient of the backend, which '
+                'firebase_auth does not set up for Apple. A sign-in with it '
+                'would fail.',
+            'Leave apple_server_of_test out of an app with firebase_auth.',
+          ),
+        ],
+      );
+      expect(
+        identityProviders['https://accounts.google.com']!.needs,
+        SignInNeed.values.toSet(),
+        reason: 'The script sets up all that a way to sign in of Google may '
+            'need.',
+      );
+      expect(identityProviders['https://appleid.apple.com']!.needs, isEmpty);
+    });
+
+    test(
+        'gives the script the code that enables Google only in an app with a '
+        'way to sign in of Google, and what the ways to sign in need of the '
+        'project only in an app with one that needs something', () async {
+      final googleAlone = await withWays([WayOfTest.googleAlone]);
+      final apple = await withWays([WayOfTest.apple]);
+      final without = await _resultOf(const [FirebaseAuthModule.id]);
+
+      expect(declarationsOf(withBoth), {
+        '_appName': "'Contract App'",
+        '_Need': 'enum',
+        '_needs':
+            '{_Need.androidCertificate, _Need.iosClient, _Need.serverClient}',
+      });
+      // A way to sign in of Google that needs nothing of the project: the
+      // script enables Google and sets up nothing.
+      expect(declarationsOf(googleAlone.app!), {'_appName': "'Contract App'"});
+      // Apple is enabled in the Firebase console, and the script only tells
+      // what to set there.
+      expect(declarationsOf(apple.app!), isEmpty);
+      expect(declarationsOf(without.app!), isEmpty);
+      expect(
+        apple.app!.files[enableSignInScript]!.text,
+        allOf(
+          contains('String _appleInConsole(String project) =>'),
+          contains('stdout.writeln(_appleInConsole(project));'),
+        ),
+      );
+      expect(
+        without.app!.files[enableSignInScript]!.text,
+        isNot(contains('_appleInConsole')),
+      );
+      // As the test that CI runs against its Firebase project reads them.
+      final ofBoth = scriptWaysOf(withBoth.files[enableSignInScript]!.text);
+      expect(ofBoth.google, isTrue);
+      expect(ofBoth.needs, {'androidCertificate', 'iosClient', 'serverClient'});
+      final ofNone = scriptWaysOf(without.app!.files[enableSignInScript]!.text);
+      expect(ofNone.google, isFalse);
+      expect(ofNone.needs, isEmpty);
+      // The values of `_Need` are named after the needs of the auth role.
+      final script = _unitOf(withBoth, enableSignInScript);
+      final needs =
+          script.declarations.whereType<EnumDeclaration>().singleWhere(
+                (declaration) =>
+                    declaration.namePart.typeName.lexeme == '_Need',
+              );
+      expect(
+        [for (final value in needs.body.constants) value.name.lexeme],
+        [for (final need in SignInNeed.values) need.name],
+      );
+      // Google gets the name of the app for its consent screen, as
+      // flutter_core names the app on the devices.
+      expect(
+        withBoth.files[enableSignInScript]!.text,
+        contains("const _appName = 'Contract App';"),
+      );
+      expect(
+        withBoth.files['ios/Runner/Info.plist']!.text,
+        contains('<string>Contract App</string>'),
+      );
+    });
+
+    test(
+        'renders a script that type-checks with the Dart SDK alone, with '
+        'ways to sign in, with what they need and without it', () async {
+      for (final result in [
+        both,
+        await withWays([WayOfTest.googleAlone, WayOfTest.apple]),
+        await withWays([WayOfTest.apple]),
+      ]) {
+        final app = DartApp.write(result.app!);
+        try {
+          expect(
+            await app.analysisProblems(
+              {const ModuleOrigin(FirebaseAuthModule.id)},
+            ),
+            isEmpty,
+            reason: '${result.contractCase}',
+          );
+        } finally {
+          app.delete();
+        }
+      }
+    });
+
+    test(
+        'gives the brick of the script the section that enables Google, the '
+        'section that sets up what the ways to sign in need, and the needs',
+        () {
+      expect(scriptVarsOf(const {}), {
+        'google': false,
+        'apple': false,
+        'setup': false,
+        'needs': '{}',
+      });
+      expect(
+        scriptVarsOf(const {
+          'google.com': {
+            SignInNeed.serverClient,
+            SignInNeed.androidCertificate,
+          },
+          'apple.com': {},
+        }),
+        {
+          'google': true,
+          'apple': true,
+          'setup': true,
+          'needs': '{_Need.androidCertificate, _Need.serverClient}',
+        },
+      );
+      expect(scriptVarsOf(const {'apple.com': {}}), {
+        'google': false,
+        'apple': true,
+        'setup': false,
+        'needs': '{}',
+      });
+      expect(scriptVarsOf(const {'google.com': {}}), {
+        'google': true,
+        'apple': false,
+        'setup': false,
+        'needs': '{}',
+      });
+      expect(
+        firebaseMethodsOf(
+          authRole.methodsIn(authRole.hookInput(both.hook!)),
+        ),
+        {
+          'google.com': WayOfTest.google.needs,
+          'apple.com': <SignInNeed>{},
+        },
+      );
+    });
+
+    test(
+        'tells in its section of the README what the script does for Google '
+        'and what is left for a release, and how Apple is enabled', () {
+      final readme = withBoth.files[AppEntryRole.readmeFile]!.text;
+      final section = readmeSectionOf(const {
+        'google.com': {
+          SignInNeed.androidCertificate,
+          SignInNeed.iosClient,
+          SignInNeed.serverClient,
+        },
+        'apple.com': {},
+      });
+
+      const page = 'https://console.firebase.google.com/project/_/'
+          'authentication/providers';
+
+      expect(readme, contains('\n## $readmeHeading\n\n$section'));
+      expect(
+        section,
+        allOf([
+          contains('Email/Password in every mode of the app, Anonymous when '
+              'the mode of the app is `anonymous` (see the section '
+              '${AuthRole.readmeHeading}), and Google and Apple for the ways '
+              'to sign in of the app.'),
+          contains('It never disables a method, and it changes no file of '
+              'the app but those that Google needs, as told below.'),
+          // The brand goes to whichever project the script enables the
+          // methods in, and the rest only to the project of firebase.json.
+          contains('\n\nFor Google sign-in, the script also gives Google the '
+              'name of the app and the email address of the account of the '
+              'Firebase CLI for the consent screen that users see when they '
+              'sign in.'),
+          contains('\n\nThe script sets up the rest of what Google needs only '
+              'for the project that `firebase.json` names, not for one that '
+              '`--project` names:\n\n- It registers'),
+          contains('run it with `--account <email>`, or enable Google in the '
+              'Firebase console.'),
+          contains('\n- It registers the SHA-1 and SHA-256 of the Android '
+              'debug key of the machine that runs it'),
+          contains('the script creates it, as the first debug build would.'),
+          contains('\n- It downloads the Firebase files of the app again'),
+          contains('\n- It writes the URL scheme of the iOS app, '
+              '`REVERSED_CLIENT_ID` of `ios/Runner/GoogleService-Info.plist`, '
+              'into `CFBundleURLTypes` of `ios/Runner/Info.plist`.'),
+          contains('\n\nRun the script again after `flutterfire configure` '
+              'for another project.\n'),
+          contains('under Test and release > App integrity in the Play '
+              'Console.'),
+          contains('```bash\nfirebase apps:android:sha:create <appId> <sha>\n'
+              '```\n'),
+          contains('\n\nApple is enabled in the Firebase console, which the '
+              'Firebase CLI cannot do:'),
+          contains('(App Store Review Guideline 5.1.1(v))'),
+          contains('Apple is enabled in the Firebase console, which the '
+              'Firebase CLI cannot do: add Apple under [Authentication > '
+              'Sign-in method]($page).'),
+          contains('the Services ID and the OAuth code flow configuration, '
+              'which you enter in the settings of the Apple provider there: '
+              'your Apple team ID, and the Key ID and the private key of a key '
+              'for Sign in with Apple.'),
+          contains('never put it into the app or its repository.'),
+          contains('fails with `notConfigured`, and the account stays.'),
+          // Each block is a paragraph of its own.
+          isNot(contains('\n\n\n')),
+        ]),
+      );
+      // Google alone, which needs nothing of the project: the script only
+      // enables it, and changes no file of the app.
+      final alone = readmeSectionOf(const {'google.com': {}});
+      expect(
+        alone,
+        allOf([
+          contains('and Google for the ways to sign in of the app.'),
+          contains('it changes no file of the app.'),
+          contains('For Google sign-in, the script also gives Google the '
+              'name of the app'),
+          isNot(contains('the rest of what Google needs')),
+          isNot(contains('SHA')),
+          isNot(contains('Info.plist')),
+          isNot(contains('Apple')),
+          isNot(contains('\n\n\n')),
+        ]),
+      );
+      // The app without a way to sign in has the section of before, but
+      // that a run asks about the step.
+      expect(readmeSectionOf(const {}), isNot(contains('\n\n\n')));
+      expect(
+        readmeSectionOf(const {'apple.com': {}}),
+        allOf(
+          contains('and Apple for the ways to sign in of the app.'),
+          contains('Apple is enabled in the Firebase console'),
+          isNot(contains('For Google sign-in')),
+        ),
+      );
+    });
+
+    test(
+        'adds a note for coding agents on what the script does for Google '
+        'and on the key of Apple, only in an app with them', () async {
+      List<String> notesOf(RenderedApp app) => [
+            for (final (origin, heading, note)
+                in app.entriesOf(AppEntryRole.agentSections))
+              if (origin == const ModuleOrigin(FirebaseAuthModule.id))
+                '$heading: ${note.text}',
+          ];
+      final without = await _resultOf(const [FirebaseAuthModule.id]);
+      final note = methodsAgentNote(
+        firebaseMethodsOf(authRole.methodsIn(authRole.hookInput(both.hook!))),
+      )!;
+
+      final heading = authRole.description;
+
+      expect(notesOf(without.app!), ['$heading: ${AgentNote(agentNote).text}']);
+      expect(notesOf(withBoth), [
+        '$heading: ${AgentNote(agentNote).text}',
+        '$heading: ${AgentNote(note).text}',
+      ]);
+      // In the guide, right after the first note of the module.
+      expect(
+        withBoth.files[AppEntryRole.agentsFile]!.text,
+        contains('${agentNote.trim()}\n\n${note.trim()}\n'),
+      );
+      expect(
+        note,
+        allOf(
+          startsWith('- For Google sign-in, `$enableSignInScript` also '
+              'registers the SHA of the Android debug key'),
+          contains('run it only when asked.'),
+          contains('\n- Apple is enabled in the Firebase console by hand'),
+          contains('never put it into the app or its repository.\n'),
+        ),
+      );
+      // The paths that it names are files of the app.
+      expect(
+        _codeOf(note),
+        containsAll([enableSignInScript, 'ios/Runner/Info.plist']),
+      );
+      for (final path in [enableSignInScript, 'ios/Runner/Info.plist']) {
+        expect(withBoth.files.keys, contains(path));
+      }
+      expect(methodsAgentNote(const {}), isNull);
+      expect(
+        methodsAgentNote(const {'apple.com': {}}),
+        startsWith('- Apple is enabled'),
+      );
+      expect(
+        methodsAgentNote(const {'google.com': {}}),
+        isNull,
+        reason: 'The script only enables a way to sign in of Google that '
+            'needs nothing of the project, as the note of the module says.',
       );
     });
   });

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_firebase_auth/src/enable_sign_in.dart';
 import 'package:test/test.dart';
 
 import 'support/sign_in_methods.dart';
@@ -594,6 +595,240 @@ class DefaultFirebaseOptions {
           'the Firebase CLI did not take.\n\n$other',
         );
       });
+    });
+  });
+
+  group('the ways to sign in of an app with Google sign-in', () {
+    test(
+        'are those of the script: whether it enables Google, and what the '
+        'ways to sign in need, and none without them', () {
+      String scriptWith(Map<String, Set<SignInNeed>> methods) {
+        final vars = scriptVarsOf(methods);
+        return [
+          "const _anonymous = 'anonymous';",
+          if (vars['google']! as bool) "const _appName = 'My App';",
+          if (vars['setup']! as bool) 'const _needs = ${vars['needs']};',
+          "const _command = 'dart tool/enable_firebase_sign_in.dart';",
+        ].join('\n\n');
+      }
+
+      final google = scriptWaysOf(
+        scriptWith(const {
+          'google.com': {
+            SignInNeed.androidCertificate,
+            SignInNeed.iosClient,
+            SignInNeed.serverClient,
+          },
+          'apple.com': {},
+        }),
+      );
+      expect(google.google, isTrue);
+      expect(google.needs, {'androidCertificate', 'iosClient', 'serverClient'});
+      final apple = scriptWaysOf(scriptWith(const {'apple.com': {}}));
+      expect(apple.google, isFalse);
+      expect(apple.needs, isEmpty);
+      // As dart format may write a set that does not fit on a line.
+      expect(
+        scriptWaysOf(
+          'const _needs = {\n'
+          '  _Need.androidCertificate,\n'
+          '  _Need.serverClient,\n'
+          '};\n',
+        ).needs,
+        {'androidCertificate', 'serverClient'},
+      );
+      final without = scriptWaysOf(scriptWith(const {}));
+      expect(without.google, isFalse);
+      expect(without.needs, isEmpty);
+    });
+
+    test(
+        'are set up for the apps of the project in firebase.json, wherever '
+        'flutterfire writes them, and for no app of another project', () {
+      final firebaseJson = jsonEncode({
+        'hosting': {'public': 'build/web'},
+        'flutter': {
+          'platforms': {
+            'android': {
+              'default': {
+                'projectId': _project,
+                'appId': '1:1:android:a',
+                'fileOutput': 'android/app/google-services.json',
+              },
+              'buildConfigurations': {
+                'src/staging': {
+                  'projectId': 'smf-staging',
+                  'appId': '1:2:android:b',
+                  'fileOutput': 'android/app/src/staging/google-services.json',
+                },
+              },
+            },
+            'ios': {
+              'targets': {
+                'Runner': {
+                  'projectId': _project,
+                  'appId': '1:1:ios:c',
+                  'uploadDebugSymbols': false,
+                  'fileOutput': 'ios/Runner/GoogleService-Info.plist',
+                },
+              },
+            },
+            'dart': {
+              'lib/firebase_options.dart': {
+                'projectId': _project,
+                'configurations': {'android': '1:1:android:a'},
+              },
+            },
+          },
+        },
+      });
+
+      expect(firebaseAppsOf(firebaseJson, _project), [
+        (
+          platform: 'android',
+          id: '1:1:android:a',
+          file: 'android/app/google-services.json',
+        ),
+        (
+          platform: 'ios',
+          id: '1:1:ios:c',
+          file: 'ios/Runner/GoogleService-Info.plist',
+        ),
+      ]);
+      expect(firebaseAppsOf(firebaseJson, 'smf-staging'), [
+        (
+          platform: 'android',
+          id: '1:2:android:b',
+          file: 'android/app/src/staging/google-services.json',
+        ),
+      ]);
+      expect(firebaseAppsOf('{"hosting": {}}', _project), isEmpty);
+    });
+
+    test(
+        'have the hashes of an Android app as the Firebase CLI lists them, '
+        'by their ids', () {
+      final listed = const JsonEncoder.withIndent('  ').convert({
+        'status': 'success',
+        'result': [
+          {
+            'name': 'projects/$_project/androidApps/1:1:android:a/sha/'
+                'a1b2c3',
+            'shaHash': '5e8f16062ea3cd2c4a0d547876baa6f38cabf625',
+            'certType': 'SHA_1',
+          },
+          {
+            'name': 'projects/$_project/androidApps/1:1:android:a/sha/'
+                'd4e5f6',
+            'shaHash': 'fac61745dc0903786fb9ede62a962b39'
+                '9f7348f0bb6f899b8332667591033b9c',
+            'certType': 'SHA_256',
+          },
+        ],
+      });
+
+      expect(shaHashesOf(listed), {
+        'a1b2c3': '5e8f16062ea3cd2c4a0d547876baa6f38cabf625',
+        'd4e5f6':
+            'fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c',
+      });
+      expect(shaHashesOf('{"status": "success", "result": []}'), isEmpty);
+      expect(
+        () => shaHashesOf('{"status": "error", "error": "Failed to list"}'),
+        throwsFormatException,
+      );
+      expect(() => shaHashesOf(''), throwsFormatException);
+    });
+
+    test(
+        'have the hashes of the debug key of the machine that the script '
+        'prints, as the project lists them', () {
+      const sha1 =
+          '5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25';
+      const sha256 = 'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:'
+          '48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C';
+      expect(
+        debugKeyHashesIn(
+          'Registering the SHA-1 and SHA-256 of the Android debug key of this '
+          'machine, /home/runner/.android/debug.keystore, for the Android app '
+          '1:1:android:a.\n'
+          'The SHA-1 of the key is $sha1, and its SHA-256 is $sha256.\n'
+          'Registered them for the Android app 1:1:android:a.\n',
+        ),
+        {
+          '5e8f16062ea3cd2c4a0d547876baa6f38cabf625',
+          'fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c',
+        },
+      );
+      expect(debugKeyHashesIn('Enabling Email/Password.'), isEmpty);
+      expect(normalizedHashOf('5E:8F:16'), '5e8f16');
+      expect(normalizedHashOf('5e8f16'), '5e8f16');
+    });
+
+    test(
+        'have the clients of Google in the Firebase files once Google is '
+        'enabled: the client of the server for Android, and the reversed '
+        'client of the iOS app', () {
+      String googleServices(List<int> types) => jsonEncode({
+            'client': [
+              {
+                'client_info': {'mobilesdk_app_id': '1:1:android:a'},
+                'oauth_client': [
+                  for (final type in types)
+                    {'client_id': 'client-$type', 'client_type': type},
+                ],
+              },
+            ],
+          });
+      const ios = '<plist version="1.0">\n<dict>\n'
+          '\t<key>CLIENT_ID</key>\n'
+          '\t<string>1-a.apps.googleusercontent.com</string>\n'
+          '\t<key>REVERSED_CLIENT_ID</key>\n'
+          '\t<string>com.googleusercontent.apps.1-a</string>\n'
+          '</dict>\n</plist>\n';
+
+      // Once Google is enabled and the SHA-1 registered, the file has the
+      // client of the Android app too, of the type 1.
+      expect(hasServerClient(googleServices([1, 3])), isTrue);
+      expect(hasServerClient(googleServices([3])), isTrue);
+      expect(hasServerClient(googleServices([1])), isFalse);
+      expect(hasServerClient(googleServices([])), isFalse);
+      expect(reversedClientIdOf(ios), 'com.googleusercontent.apps.1-a');
+      expect(
+        reversedClientIdOf('<plist version="1.0">\n<dict>\n</dict>\n</plist>'),
+        isNull,
+      );
+    });
+
+    test(
+        'change the files of the app that differ, that are new and that are '
+        'gone, and no other', () {
+      expect(
+        changedFilesOf(
+          {
+            'a': [1, 2],
+            'b': [3],
+            'c': [4],
+          },
+          {
+            'a': [1, 2],
+            'b': [3, 0],
+            'd': [5],
+          },
+        ),
+        ['b', 'c', 'd'],
+      );
+      expect(
+        changedFilesOf(
+          {
+            'a': [1],
+          },
+          {
+            'a': [1],
+          },
+        ),
+        isEmpty,
+      );
     });
   });
 

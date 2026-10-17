@@ -108,7 +108,7 @@ The app signs in with [Firebase Authentication](https://firebase.google.com/docs
 
 The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, and Anonymous when the mode of the app is `anonymous` (see the section Sign-in). Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
 
-`smf create` enables them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
+`smf create` asks to enable them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart
@@ -1664,7 +1664,7 @@ const _linkReasons = {
 /// The ways to sign in are enabled in the Firebase project, not here:
 /// Email/Password, Anonymous for an app that signs in anonymous users, and
 /// Google and Apple for an app with their ways to sign in.
-/// `tool/enable_firebase_sign_in.dart` enables the first two. Until they
+/// `tool/enable_firebase_sign_in.dart` enables all but Apple. Until they
 /// are, a call fails with [AuthFailureReason.notConfigured], and its
 /// [AuthFailure.developerHint] tells how to enable them.
 ///
@@ -2087,15 +2087,21 @@ final class FirebaseAuthService implements AuthService {
       IdTokenCredential(:final issuer) => _providers[issuer]?.name,
       null => null,
     };
-    // The way to sign in, after "sign-in", and what enables it.
-    final (withMethod, enable) = method == null
-        ? (
-            '',
-            'run `dart tool/enable_firebase_sign_in.dart` in the directory '
-                'of the app, or enable Email/Password, and Anonymous for an '
-                'app that signs in anonymous users, in $console',
-          )
-        : (' with $method', 'enable $method in $console');
+    const script =
+        'run `dart tool/enable_firebase_sign_in.dart` in the '
+        'directory of the app';
+    // The way to sign in, after "sign-in", and what enables it: the script
+    // of the app enables Email/Password, Anonymous and Google, and the
+    // Firebase console every way to sign in.
+    final (withMethod, enable) = switch (method) {
+      null => (
+        '',
+        '$script, or enable Email/Password, and Anonymous for an app that '
+            'signs in anonymous users, in $console',
+      ),
+      'Google' => (' with Google', '$script, or enable Google in $console'),
+      _ => (' with $method', 'enable $method in $console'),
+    };
     // A way to sign in that is not enabled, which Firebase tells by its
     // code, and a project in which Authentication was never set up, which
     // it tells only in its message.
