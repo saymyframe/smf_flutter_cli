@@ -11,12 +11,12 @@
 #
 # The app has the start check that the CLI keeps in app_tests/start,
 # integration_test/start_check.dart, which its matrix tool adds with
-# --add-app-tests. The script builds a debug app with the check as its
-# entry, for Android with build_apk.sh, which builds it again when a
-# package of the Android SDK did not download. It installs the app anew,
-# launches it with adb or simctl, and waits for the line that the check
-# writes to the file smf_start_check in the temporary directory of the
-# app: `passed`, or `failed: ` and the problems.
+# --add-app-tests. The script builds an app with the check as its entry,
+# for Android with build_apk.sh, which builds it again when a package of
+# the Android SDK did not download. It installs the app anew, launches it
+# with adb or simctl, and waits for the line that the check writes to the
+# file smf_start_check in the temporary directory of the app: `passed`, or
+# `failed: ` and the problems.
 # Nothing connects to the app, unlike flutter test, which must reach the VM
 # service of the app and sometimes never does on the emulators and
 # simulators of CI (on an iOS simulator, a race of flutter_tools:
@@ -25,17 +25,36 @@
 # stops before the check writes its result, as when it crashes at start-up,
 # and when the result does not come in time, and then prints the log of
 # the app.
+#
+# $4 is the build mode of the app: debug, as when it is left out, or
+# release, on Android only, since Flutter builds no release app for an iOS
+# simulator. A release app is what a user installs: R8 shrinks its Java
+# and Kotlin code and renames the classes that no rule keeps, so a plugin
+# that looks a class up by its name, as through JNI, may work in a debug
+# app and fail in a release one. It is built for the ABI of the device
+# only, since the machine code of each ABI takes a build of its own. A
+# release app is not debuggable, so run-as cannot read its files: the
+# script reads the line that the check prints after `SMF_START_CHECK: ` to
+# the log of the device instead, from the process that it launched, so
+# that a line of an earlier run, which the log may still have, does not
+# count.
 set -euo pipefail
 # shellcheck source=build_apk.sh
 source "$(dirname "${BASH_SOURCE[0]}")/build_apk.sh"
 
-if [ $# -ne 3 ] || [[ ! "$1" =~ ^(android|ios)$ ]] || [[ ! "$3" =~ ^[0-9]+$ ]]; then
-  echo "Usage: $0 <android|ios> <device> <seconds>" >&2
+if [ $# -lt 3 ] || [ $# -gt 4 ] || [[ ! "$1" =~ ^(android|ios)$ ]] ||
+  [[ ! "$3" =~ ^[0-9]+$ ]] || [[ ! "${4:-debug}" =~ ^(debug|release)$ ]]; then
+  echo "Usage: $0 <android|ios> <device> <seconds> [debug|release]" >&2
   exit 64
 fi
 platform="$1"
 device="$2"
 seconds="$3"
+mode="${4:-debug}"
+if [ "$platform" = ios ] && [ "$mode" = release ]; then
+  echo "Flutter builds no release app for an iOS simulator: start it in debug." >&2
+  exit 64
+fi
 check=integration_test/start_check.dart
 result=smf_start_check
 # The seconds that the commands of `step` have since the last `allow`, what
@@ -117,12 +136,12 @@ attempt() {
 wait_for_result() {
   local launched=$SECONDS line
   while :; do
-    if line="$(within 30 "$@" 2> /dev/null)" && [ -n "$line" ]; then
+    if line="$("$@" 2> /dev/null)" && [ -n "$line" ]; then
       break
     fi
     if ! alive; then
       # The result may have come just before the app stopped.
-      if line="$(within 30 "$@" 2> /dev/null)" && [ -n "$line" ]; then
+      if line="$("$@" 2> /dev/null)" && [ -n "$line" ]; then
         break
       fi
       show_log
@@ -155,10 +174,15 @@ android() {
     fi
   fi
   adb=("$sdk/platform-tools/adb" -s "$device")
-  build 'flutter build apk' build_apk --debug -t "$check"
+  if [ "$mode" = release ]; then
+    android_target
+    build 'flutter build apk' build_apk --release --target-platform "$target" -t "$check"
+  else
+    build 'flutter build apk' build_apk --debug -t "$check"
+  fi
   # The application id and the activity that starts the app, from the APK,
   # with aapt2 of the newest build tools of the Android SDK.
-  local apk=build/app/outputs/flutter-apk/app-debug.apk build_tools badging activity
+  local apk="build/app/outputs/flutter-apk/app-$mode.apk" build_tools badging activity
   build_tools="$(ls "$sdk/build-tools" | sort -t . -k1,1n -k2,2n -k3,3n | tail -n 1)"
   badging="$("$sdk/build-tools/$build_tools/aapt2" dump badging "$apk")"
   id="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
@@ -179,12 +203,46 @@ android() {
   within 30 "${adb[@]}" logcat -c || true
   allow "$seconds" 'of the start of the app'
   step 'adb shell am start' "${adb[@]}" shell am start -W -n "$id/$activity"
-  # The files of a debug app can be read with run-as, which starts in the
-  # directory of its data. The temporary directory of Dart is code_cache/
-  # there: Flutter gives the engine the code cache of the app as its cache
-  # directory (--cache-dir-path), which the Dart VM takes as systemTemp.
-  wait_for_result "${adb[@]}" shell run-as "$id" cat "code_cache/$result"
+  if [ "$mode" = release ]; then
+    # The process that the script launched, whose lines of the log count.
+    pid="$(within 30 "${adb[@]}" shell pidof "$id" 2> /dev/null | tr -d '\r')" || pid=
+    pid="${pid%% *}"
+    wait_for_result android_logged_result
+  else
+    # The files of a debug app can be read with run-as, which starts in the
+    # directory of its data. The temporary directory of Dart is code_cache/
+    # there: Flutter gives the engine the code cache of the app as its cache
+    # directory (--cache-dir-path), which the Dart VM takes as systemTemp.
+    wait_for_result within 30 "${adb[@]}" shell run-as "$id" cat "code_cache/$result"
+  fi
   android_printed
+}
+
+# Sets target to the target platform of Flutter for the ABI of the device,
+# such as android-arm64 for arm64-v8a, the one ABI that a release app is
+# built for.
+android_target() {
+  local abi
+  abi="$(within 30 "${adb[@]}" shell getprop ro.product.cpu.abi 2> /dev/null | tr -d '\r')" || abi=
+  case "$abi" in
+    arm64-v8a) target=android-arm64 ;;
+    x86_64) target=android-x64 ;;
+    armeabi-v7a) target=android-arm ;;
+    *)
+      echo "::error::Flutter builds no release app for the ABI '$abi' of the device $device."
+      exit 1
+      ;;
+  esac
+}
+
+# The result that the check printed to the log of the device after
+# `SMF_START_CHECK: `, with the tag flutter, from the process $pid. A line
+# longer than the log takes is cut short there, which leaves a failure a
+# failure.
+android_logged_result() {
+  [ -n "$pid" ] || return 1
+  within 30 "${adb[@]}" logcat -d --pid="$pid" -s flutter |
+    sed -n 's/^.*SMF_START_CHECK: //p' | tail -n 1
 }
 
 # What the app printed: the lines of Flutter in the log of the device.
@@ -236,7 +294,7 @@ ios() {
   }
   # The app runs as a process of the Mac: simctl prints `<id>: <pid>`.
   pid="${launched##*: }"
-  wait_for_result cat "$data/tmp/$result"
+  wait_for_result within 30 cat "$data/tmp/$result"
   ios_printed
 }
 
