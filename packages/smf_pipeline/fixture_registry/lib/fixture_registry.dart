@@ -30,6 +30,7 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
+import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
@@ -174,10 +175,13 @@ List<ModuleId> everyFixture({
 /// The app asks for an account, as an app in the first mode of the auth
 /// role does, so the guards of the sign-in keep the user from every other
 /// screen until the mocks of that test sign an account up for the tests of
-/// the other modules. Last comes local_notifications, the provider of the
+/// the other modules. Then comes local_notifications, the provider of the
 /// notifications role that the CLI has, for the app test that it keeps and
 /// for the test of that role that the CLI keeps, whose entry the settings
-/// screen shows too.
+/// screen shows too. Last comes Firebase Cloud Messaging, the provider of
+/// the push role that the CLI has, for the app test that it keeps and for
+/// the test of that role that the CLI keeps, which run there next to the
+/// other Firebase modules and show a message through those notifications.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -217,4 +221,5 @@ List<SmfModule> severalProvidersModules() => const [
       RiverpodModule(),
       SignInModule(),
       LocalNotificationsModule(),
+      FirebaseMessagingModule(),
     ];

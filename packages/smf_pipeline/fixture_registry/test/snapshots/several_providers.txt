@@ -149,6 +149,25 @@ With `shared_preferences`:
 - A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
 - In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
 
+## Push messages
+
+- `appPush` in `lib/core/push/app_push.dart` receives the push messages of the app. A message is a `PushMessage` with `data`, and with an `id`, a `title` and a `body` when it has them.
+- `appPush.address` is the address of this device for the backend that sends the messages. It is `null` until the platform gives one. Listen to it and send each new address to the backend: it may come late, and it may change. Never wait for it before the first frame.
+- `appPush.messages` tells of each message that arrives while the app is in the foreground. A message with a title or a body also shows as a notification there, which needs the permission of the notifications of the app. `appNotifications.request()` asks for it.
+- A tap on a message reaches `appPush.taps`, and the message whose tap launched the app is `appPush.launchMessage`. Handle both once the first screen is shown, and navigate as the rest of the app does. Such a tap does not reach `appNotifications.taps`.
+- A message with data and no title or body reaches the app only while it is in the foreground.
+- A new provider implements `PushService` of `lib/core/push/push_service.dart`, and only the files of that implementation import it. The code of the app imports `lib/core/push/app_push.dart`, which exports `PushMessage`, and calls neither `initPush()` nor `createPushService()` nor `appPush.start()`.
+
+With `firebase_messaging`:
+
+- `FirebasePushService` in `lib/core/push/firebase_push_service.dart` implements `PushService` on `FirebaseMessaging`. In `lib/`, only that file imports the package: other code receives push messages through `appPush`.
+- The address of the device is its registration token of Firebase Cloud Messaging, from `getToken()`, and a new token comes on `onTokenRefresh`. On iOS there is none until the token of the Apple Push Notification service comes.
+- On iOS, `createFirebasePushService()` calls `setForegroundNotificationPresentationOptions()` with an alert, a badge and a sound. Keep it: the package answers iOS for every notification in the foreground, those of `appNotifications` too, and without these options iOS shows none of them.
+- Never call `requestPermission()` of the package: the permission to show notifications belongs to `appNotifications.request()`.
+- `android/app/src/main/AndroidManifest.xml` names the channel and the icon with which Android shows a message that arrives in the background, those of the notifications of the app. Change them together.
+- The section Firebase Cloud Messaging of the README tells how to upload the key of the Apple Push Notification service and how to send this device a test message.
+- The package has no platform side for tests. A test that runs `bootstrap()` answers the method channel `plugins.flutter.io/firebase_messaging` itself, with `setMockMethodCallHandler` of `TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger`.
+
 ## Router
 
 - Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
@@ -321,6 +340,39 @@ The app shows notifications through `appNotifications` in `lib/core/notification
 The app needs the permission of the user to show notifications. `appNotifications.permission` is `granted`, `denied` once the user said no or turned them off, or `notAsked`, and `appNotifications.request()` asks. Where the system has no question to show, as on Android before 13, the request opens the settings of the system for the notifications of the app instead. The onboarding asks on a page of its own, with the functions of `lib/core/notifications/notifications_step.dart`. A user who skips the onboarding does not see that page. The entry `NotificationsSetting` of the settings screen, in `lib/core/notifications/notifications_setting.dart`, shows whether the app may show notifications. A tap asks while the app has not asked, and opens the settings of the system after that. After `denied` the system may not ask again: iOS asks only once, and Android stops asking after a second no. `appNotifications.openSettings()` opens the settings of the system, where the user turns the notifications on.
 
 On Android a notification shows `android/app/src/main/res/drawable/ic_notification.xml` as its small icon. Replace the bell there with the icon of the app, a shape on a transparent background, and keep the name of the file: `android/app/src/main/res/raw/notifications_keep.xml` keeps the icon in a release build. In the settings of the system, the channel of the notifications has the name of the app.
+
+## Firebase Cloud Messaging
+
+The app receives its push messages with [firebase_messaging](https://pub.dev/packages/firebase_messaging): `lib/core/push/firebase_push_service.dart` implements the push service of the app on it (see the section Push messages). The address of this device is its registration token of Firebase Cloud Messaging.
+
+Firebase sends messages to iOS through the Apple Push Notification service (APNs), with an APNs key of your team, which you upload by hand once for the project:
+
+1. In your Apple Developer account, under Certificates, Identifiers & Profiles, create a key under Keys with the Apple Push Notifications service (APNs) enabled. Download its `.p8` file, and note its Key ID and your Team ID.
+2. In the Firebase console, open the settings of the project, then Cloud Messaging, and upload the key under the configuration of the Apple app, with its Key ID and your Team ID.
+
+A key sends only to the apps of its team, so register the bundle id of the app as an App ID in that team, with Push Notifications. The key matters only for sending: the iOS app gets its address without it, but Firebase cannot send to that address.
+
+To send this device a test message, run the app in debug mode and copy the address that it prints. In the Firebase console, open Messaging, create a notification campaign, choose Send test message and paste the address. A server sends a message with the HTTP v1 API of Firebase Cloud Messaging: `POST https://fcm.googleapis.com/v1/projects/<project-id>/messages:send`, with an OAuth token of a service account of the project and the address as the `token` of the message.
+
+`android/app/src/main/AndroidManifest.xml` names the channel `default` of the notifications of the app (`com.google.firebase.messaging.default_notification_channel_id`) and their small icon `@drawable/ic_notification` (`com.google.firebase.messaging.default_notification_icon`). Android shows a message that arrives in the background with them.
+
+On iOS, firebase_messaging answers the system for every notification that arrives while the app is in the foreground, the notifications that the app shows itself too. So the service sets its presentation options to an alert, a badge and a sound when the app starts (`setForegroundNotificationPresentationOptions()`): without them, iOS would show none of these notifications in the foreground.
+
+The app runs no code for a message that arrives in the background. To handle one, register a top-level function with `FirebaseMessaging.onBackgroundMessage()` in `main()`. It runs in an isolate of its own, without what `bootstrap()` sets up.
+
+## Push messages
+
+The app receives push messages through `appPush` in `lib/core/push/app_push.dart`.
+
+`appPush.address` is the address of this device. The backend of the app sends its messages there. It is `null` until the platform gives one, and the app works without it. Send each new address to the backend: it may come late, and it may change. In debug mode the app prints it, so you can send this device a message by hand.
+
+On iOS the address needs a token of the Apple Push Notification service (APNs). iOS gives one only to a build signed with the entitlement `aps-environment`, which `ios/Runner/Runner.entitlements` has. The iOS simulator on a Mac gets a token. One on a macOS virtual machine, such as a hosted CI runner, never does. On an iPhone, signing with the entitlement needs a team of the paid Apple Developer Program. With a free personal team, Xcode cannot sign the app: to run it on an iPhone, remove the key `aps-environment` from `ios/Runner/Runner.entitlements`, and the app runs there without an address. The simulator needs no change. The value `development` suits the builds that you run from Xcode. When Xcode exports the app for distribution, it takes the value of the provisioning profile (production for a distribution profile).
+
+A message that arrives while the app is in the foreground reaches `appPush.messages`. One with a title or a body also shows as a notification, as it does in the background. Where the system does not show it, the app shows it with `appNotifications`. Either way the user has to allow the notifications of the app, as the section Notifications tells. In the background the system shows the message, on Android in the channel of the notifications of the app.
+
+`appPush.taps` tells of each tap on a message while the app runs, and `appPush.launchMessage` is the message whose tap launched the app. Read both once the first screen is shown, and navigate as the rest of the app does. A tap on a message does not reach `appNotifications.taps`, so the code of the app sees each tap once.
+
+A message with data and no title or body reaches the app only while it is in the foreground. In the background, or when the app is closed, it runs no code of the app. Images in a message do not show on iOS, which needs an extension of the app for them.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -406,6 +458,8 @@ dependencies {
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="default"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_notification"/>
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
@@ -682,6 +736,10 @@ import UIKit
 		<string>en</string>
 		<string>uk</string>
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>
 === ios/Runner/Runner.entitlements (flutter_core) ===
@@ -689,6 +747,8 @@ import UIKit
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>aps-environment</key>
+	<string>development</string>
 </dict>
 </plist>
 === lib/app.dart (flutter_core) ===
@@ -735,6 +795,7 @@ import 'package:fixture_app/core/events/communication_service.dart';
 import 'package:fixture_app/core/fixture_start/fixture_start.dart';
 import 'package:fixture_app/core/notifications/app_notifications.dart';
 import 'package:fixture_app/core/preferences/app_preferences.dart';
+import 'package:fixture_app/core/push/app_push.dart';
 import 'package:fixture_app/firebase_options.dart';
 
 /// Runs the start-up code of the app before its first frame: first what
@@ -749,6 +810,7 @@ Future<void> bootstrap() async {
   await initEvents();
   await initPreferences();
   await initNotifications();
+  await initPush();
   await registerDependencies();
   await startFixture();
 }
@@ -4737,6 +4799,488 @@ final class SharedAppPreferences implements AppPreferences {
         ? List<String>.from(items)
         : null;
   }
+}
+=== lib/core/push/app_push.dart (role:push) ===
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:fixture_app/core/push/firebase_push_service.dart' as impl0;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import '../notifications/app_notifications.dart';
+import 'push_service.dart';
+
+export 'push_service.dart' show PushMessage;
+
+/// The push messages of the app: the address of the device, the messages
+/// that arrive while the app is in the foreground, and the taps of the user
+/// on them.
+final appPush = AppPushController._();
+
+/// Receives the push messages of the app through the service of the
+/// provider of push messages. The app has one, [appPush].
+///
+/// It shows a message with a title or a body that arrives while the app is
+/// in the foreground as a notification of the app, through
+/// [appNotifications], where the platform does not show it itself. Such a
+/// notification has [appPush] as its owner, so a tap on it reaches [taps]
+/// and not [NotificationsController.taps].
+///
+/// An error of the service on its streams, of a notification that the
+/// controller shows, of an address that it asks for, or of the message that
+/// launched the app, has no caller, so it reaches the handlers of the
+/// uncaught errors of the app, and the controller goes on.
+final class AppPushController {
+  AppPushController._();
+
+  /// The owner of the notifications that show the messages, under
+  /// [notificationOwnerKey] in their data.
+  static const _owner = 'push';
+
+  /// The key under which such a notification keeps its message in its data.
+  static const _messageKey = 'push.message';
+
+  PushService? _service;
+  StreamSubscription<PushMessage>? _serviceMessages;
+  StreamSubscription<PushMessage>? _serviceTaps;
+  StreamSubscription<String>? _serviceAddresses;
+  StreamSubscription<NotificationTap>? _notificationTaps;
+  PushMessage? _launchMessage;
+
+  /// The service whose address the controller is asking for, if any.
+  PushService? _asking;
+
+  /// Tells when the user comes back to the app.
+  _ResumeObserver? _observer;
+
+  final ValueNotifier<String?> _address = ValueNotifier(null);
+
+  final StreamController<PushMessage> _messages =
+      StreamController<PushMessage>.broadcast();
+
+  final StreamController<PushMessage> _taps =
+      StreamController<PushMessage>.broadcast();
+
+  /// The address of the device, to which the backend of the app sends the
+  /// messages for it, or `null` while the platform gives none. Send each new
+  /// one to the backend: it may come late, such as on iOS, and it may
+  /// change. A widget follows it with a `ValueListenableBuilder`.
+  ///
+  /// The controller asks for it when it starts, without waiting for it, and
+  /// again each time the user comes back to the app while it has none.
+  ValueListenable<String?> get address => _address;
+
+  /// The message whose tap launched the app, or `null` if the app was
+  /// launched in another way: known once `bootstrap()` is over. The message
+  /// is not among the [taps].
+  PushMessage? get launchMessage => _launchMessage;
+
+  /// Tells of each message that arrives while the app is in the foreground:
+  /// a broadcast stream, the same for the life of the app.
+  late final Stream<PushMessage> messages = _messages.stream;
+
+  /// Tells of each tap of the user on a message while the app runs, whether
+  /// the platform or the app showed it: a broadcast stream, the same for the
+  /// life of the app.
+  late final Stream<PushMessage> taps = _taps.stream;
+
+  /// Starts with [service]: follows its messages, its taps and its address,
+  /// asks for the address without waiting for it, and takes the message
+  /// whose tap launched the app.
+  ///
+  /// `initPush()` calls it in `bootstrap()`, after the notifications of the
+  /// app started, so [launchMessage] is known before the first frame. It may
+  /// be called again, with the service that the app has from then on:
+  /// `initPush()` does so in a test of the next launch of the app, and a
+  /// test gives it a service of its own. The address is then that of the
+  /// new service, and `null` until it gives one.
+  ///
+  /// If the service fails to give the message that launched the app, the
+  /// app still starts: the error reaches the handlers of the uncaught errors
+  /// of the app, and [launchMessage] is the message of a notification that
+  /// the app showed, if its tap launched the app, or `null`.
+  Future<void> start(PushService service) async {
+    unawaited(_serviceMessages?.cancel());
+    unawaited(_serviceTaps?.cancel());
+    unawaited(_serviceAddresses?.cancel());
+    _service = service;
+    _launchMessage = null;
+    _address.value = null;
+    // An error of these streams has no caller: it reaches the handlers of
+    // the uncaught errors of the app, and the streams go on.
+    _serviceMessages = service.messages.listen(_onMessage);
+    _serviceTaps = service.taps.listen(_taps.add);
+    _serviceAddresses = service.addressChanges.listen(_setAddress);
+    _notificationTaps ??= appNotifications
+        .tapsOf(_owner)
+        .listen((tap) => _taps.add(_messageIn(tap.data)));
+    if (_observer == null) {
+      final observer = _observer = _ResumeObserver(_askForAddress);
+      WidgetsBinding.instance.addObserver(observer);
+    }
+    _askForAddress();
+    PushMessage? launched;
+    try {
+      launched = await service.launchMessage();
+    } on Object catch (error, stackTrace) {
+      // A provider that fails here would otherwise keep the app from
+      // starting.
+      Zone.current.handleUncaughtError(error, stackTrace);
+    }
+    final tap = appNotifications.launchTapOf(_owner);
+    _launchMessage = launched ?? (tap == null ? null : _messageIn(tap.data));
+  }
+
+  /// Asks the service for the address while the controller has none, unless
+  /// it is asking already.
+  void _askForAddress() {
+    final service = _service!;
+    if (_address.value != null || identical(_asking, service)) return;
+    _asking = service;
+    unawaited(_answer(service));
+  }
+
+  Future<void> _answer(PushService service) async {
+    try {
+      final address = await service.address();
+      // An answer of a service that the controller no longer has, or one
+      // after the service told of an address, changes nothing.
+      if (address != null &&
+          identical(service, _service) &&
+          _address.value == null) {
+        _setAddress(address);
+      }
+    } finally {
+      if (identical(_asking, service)) _asking = null;
+    }
+  }
+
+  void _setAddress(String address) {
+    if (address == _address.value) return;
+    _address.value = address;
+    if (kDebugMode) {
+      debugPrint('The address of this device for push messages: $address');
+    }
+  }
+
+  /// Tells of [message], and shows it as a notification of the app if the
+  /// platform does not show it and it has a title or a body. An empty title
+  /// or body counts as none.
+  void _onMessage(PushMessage message) {
+    _messages.add(message);
+    final title = _textOf(message.title);
+    final body = _textOf(message.body);
+    final text = title ?? body;
+    if (text == null || _service!.platformShowsInForeground) return;
+    final json = jsonEncode({
+      'id': message.id,
+      'title': message.title,
+      'body': message.body,
+      'data': message.data,
+    });
+    unawaited(
+      appNotifications.show(
+        AppNotification(
+          // An equal message takes the same id, so its notification takes
+          // the place of the one that showed it before rather than adding
+          // another, and a negative one, so it never takes the place of a
+          // notification of the app.
+          id: -1 - (json.hashCode & 0x7FFFFFFF),
+          // A message with a body alone shows it as its title.
+          title: text,
+          body: title == null ? null : body,
+          data: {
+            ...message.data,
+            notificationOwnerKey: _owner,
+            _messageKey: json,
+          },
+        ),
+      ),
+    );
+  }
+
+  /// [text], or `null` if it is empty.
+  static String? _textOf(String? text) =>
+      text == null || text.isEmpty ? null : text;
+
+  /// The message that [data], the data of a notification that showed a
+  /// message, keeps under [_messageKey], or a message with the rest of the
+  /// data if the notification lost it.
+  static PushMessage _messageIn(Map<String, String> data) =>
+      switch (_decoded(data[_messageKey])) {
+        {
+          'id': final String? id,
+          'title': final String? title,
+          'body': final String? body,
+          'data': final Map<String, Object?> values,
+        }
+            when values.values.every((value) => value is String) =>
+          PushMessage(
+            id: id,
+            title: title,
+            body: body,
+            data: Map<String, String>.from(values),
+          ),
+        _ => PushMessage(
+          data: {
+            for (final MapEntry(:key, :value) in data.entries)
+              if (key != notificationOwnerKey && key != _messageKey) key: value,
+          },
+        ),
+      };
+
+  /// What the JSON [text] holds, or `null` for no text or one that is no
+  /// JSON.
+  static Object? _decoded(String? text) {
+    if (text == null) return null;
+    try {
+      return jsonDecode(text);
+    } on FormatException {
+      return null;
+    }
+  }
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// Returns the service of the provider of push messages, which [initPush]
+/// created: `bootstrap()` awaits it before the first frame, and there is
+/// none to return before that.
+///
+/// The code of the app does not call it: it uses [appPush].
+PushService createPushService() => _pushService;
+
+late PushService _pushService;
+
+/// Creates the service of the provider of push messages and starts
+/// [appPush] with it; `bootstrap()` awaits it before the first frame, after
+/// the notifications of the app started, and nothing else in the app calls
+/// it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with what the device kept, and
+/// starts [appPush] with it.
+Future<void> initPush() async {
+  _pushService = impl0.createFirebasePushService();
+  await appPush.start(_pushService);
+}
+=== lib/core/push/firebase_push_service.dart (firebase_messaging) ===
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+
+import 'push_service.dart';
+
+/// Returns the push messages of the app on Firebase Cloud Messaging. It asks
+/// the user nothing.
+///
+/// Firebase is initialized first, as `bootstrap()` does. On iOS it sets the
+/// presentation options of a notification that arrives while the app is in
+/// the foreground to an alert, a badge and a sound. firebase_messaging
+/// answers iOS for every such notification, the local notifications of the
+/// app too, with those options: without them, iOS would show none of them.
+PushService createFirebasePushService() {
+  final service = FirebasePushService(FirebaseMessaging.instance);
+  if (service.platformShowsInForeground) {
+    unawaited(
+      FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      ),
+    );
+  }
+  return service;
+}
+
+/// [message] as a push message of the app: its id, the title and the body
+/// of its notification, and its data, with a value that is no string as its
+/// JSON.
+PushMessage _messageOf(RemoteMessage message) => PushMessage(
+  id: message.messageId,
+  title: message.notification?.title,
+  body: message.notification?.body,
+  data: {
+    for (final MapEntry(:key, :value) in message.data.entries)
+      key: value is String ? value : jsonEncode(value),
+  },
+);
+
+/// The push messages of the app on
+/// [Firebase Cloud Messaging](https://firebase.google.com/docs/cloud-messaging).
+///
+/// The code of the app does not use it: it receives push messages through
+/// `appPush` of `app_push.dart`.
+///
+/// The address of the device is the registration token of Firebase Cloud
+/// Messaging. On iOS it needs the token of the Apple Push Notification
+/// service, which may come a while after the app started, or never, as on a
+/// build that is not signed for push messages: [address] is `null` until
+/// then, and [addressChanges] tells of the token once Firebase has it.
+///
+/// On Android, the system shows a message that arrives in the background,
+/// in the channel and with the icon that the manifest of the app names, and
+/// the app shows one that arrives in the foreground. On iOS, the system
+/// shows both, with the presentation options of
+/// [createFirebasePushService].
+final class FirebasePushService implements PushService {
+  /// Creates the service on [messaging].
+  ///
+  /// It reads the stream of the new tokens at once, which sets up the
+  /// plugin, so that the messages and the taps that the platform tells of
+  /// from then on reach the streams of the service.
+  FirebasePushService(this._messaging)
+    : addressChanges = _messaging.onTokenRefresh;
+
+  final FirebaseMessaging _messaging;
+
+  @override
+  bool get platformShowsInForeground =>
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  @override
+  final Stream<String> addressChanges;
+
+  @override
+  final Stream<PushMessage> messages = FirebaseMessaging.onMessage.map(
+    _messageOf,
+  );
+
+  @override
+  final Stream<PushMessage> taps = FirebaseMessaging.onMessageOpenedApp.map(
+    _messageOf,
+  );
+
+  @override
+  Future<String?> address() async {
+    try {
+      return await _messaging.getToken();
+    } on Object catch (error) {
+      // iOS has no token before the one of the Apple Push Notification
+      // service comes, and Android none without Google Play services or a
+      // network. The token comes on addressChanges once Firebase has it.
+      if (kDebugMode) {
+        debugPrint('Firebase Cloud Messaging has no address yet: $error');
+      }
+      return null;
+    }
+  }
+
+  @override
+  Future<PushMessage?> launchMessage() async {
+    try {
+      final message = await _messaging.getInitialMessage();
+      return message == null ? null : _messageOf(message);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('Firebase Cloud Messaging has no launch message: $error');
+      }
+      return null;
+    }
+  }
+}
+=== lib/core/push/push_service.dart (role:push) ===
+/// A push message: a message that a server sends to this device through the
+/// provider of push messages.
+final class PushMessage {
+  /// Creates the message with its [id], [title], [body] and [data], each if
+  /// it has one.
+  const PushMessage({this.id, this.title, this.body, this.data = const {}});
+
+  /// The id that the provider gives the message, or `null` if it gives none.
+  final String? id;
+
+  /// The title of the message, or `null` for a message without one.
+  final String? title;
+
+  /// The text of the message, or `null` for a message without one.
+  final String? body;
+
+  /// What the server sent for the app to read, such as the screen that a
+  /// tap opens. A value that the platform gives as something other than a
+  /// string is its JSON.
+  final Map<String, String> data;
+}
+
+/// The push messages of the platform, which the provider of push messages
+/// implements: the address of the device, the messages that arrive while
+/// the app is in the foreground, and the taps of the user on the messages
+/// that the platform shows.
+///
+/// The code of the app does not use it: it uses `appPush` of
+/// `app_push.dart`, which calls this service, shows a message in the
+/// foreground where the platform does not, and tells of the taps on the
+/// messages that it showed.
+///
+/// Every implementation keeps to this:
+/// - The function that creates the service asks the user nothing. It may be
+///   called again, and the service that it returns then has the address
+///   that the device kept.
+/// - The service never asks for the permission to show notifications, which
+///   the notifications of the app ask for, and never keeps the notifications
+///   of the app from showing while the app is in the foreground.
+/// - [address] completes with the address of the device, or with `null`
+///   while the platform gives none, and does not throw. It needs no
+///   permission. The address stays the same from one launch of the app to
+///   the next, unless the platform gives the device another, which
+///   [addressChanges] tells of.
+/// - [addressChanges] tells of each new address, and of the first address
+///   that the device gets after [address] completed with `null`, such as
+///   one that comes late on iOS.
+/// - [messages] tells of each message that arrives while the app is in the
+///   foreground, once.
+/// - A value of the data of a message that the platform gives as something
+///   other than a string becomes its JSON, as `jsonEncode` writes it.
+/// - A message with a title or a body that arrives while the app is in the
+///   background, or closed, is shown by the platform, on Android in the
+///   channel of the notifications of the app. [taps] tells of each tap on
+///   such a message while the app runs, and [launchMessage] is the message
+///   whose tap launched the app, which is not among the [taps].
+/// - In the foreground, the platform or the provider shows such a message
+///   where [platformShowsInForeground] is true, and [taps] then tells of a
+///   tap on it too. Where it is false, the service shows nothing of the
+///   message, and the app shows it as a notification of its own.
+/// - [launchMessage] completes without the network, and does not throw.
+abstract interface class PushService {
+  /// Whether the platform or the provider shows a message with a title or a
+  /// body that arrives while the app is in the foreground. The app shows it
+  /// otherwise.
+  bool get platformShowsInForeground;
+
+  /// The address of the device, to which a server sends the messages for
+  /// this app, or `null` while the platform gives none.
+  Future<String?> address();
+
+  /// Tells of each new address of the device, and of the first one after
+  /// [address] gave none: a broadcast stream.
+  Stream<String> get addressChanges;
+
+  /// Tells of each message that arrives while the app is in the foreground:
+  /// a broadcast stream.
+  Stream<PushMessage> get messages;
+
+  /// Tells of each tap of the user on a message that the platform showed,
+  /// while the app runs: a broadcast stream. The tap that launched the app
+  /// is not among them.
+  Stream<PushMessage> get taps;
+
+  /// The message whose tap launched the app, or `null` if the app was
+  /// launched in another way.
+  Future<PushMessage?> launchMessage();
 }
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:fixture_app/features/onboarding/onboarding_status.dart'
@@ -10705,6 +11249,7 @@ dependencies:
   firebase_auth: "^6.7.0"
   firebase_core: "^4.15.0"
   firebase_crashlytics: "^5.4.0"
+  firebase_messaging: "^16.7.0"
   flutter_bloc: "^9.1.1"
   flutter_local_notifications: "^22.3.2"
   get_it: "^9.3.0"
