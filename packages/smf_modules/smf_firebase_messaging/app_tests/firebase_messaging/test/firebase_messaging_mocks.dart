@@ -31,6 +31,8 @@
 //
 // It differs from a device in this: it shows nothing, sends nothing to a
 // server, and needs no network.
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -67,6 +69,7 @@ final class MockFirebaseMessaging {
   final List<MethodCall> calls = [];
 
   final Map<String, PlatformException> _failures = {};
+  final Set<String> _held = {};
   Map<String, Object?>? _launch;
 
   /// The names of the methods of the calls that reached the platform side,
@@ -88,6 +91,10 @@ final class MockFirebaseMessaging {
         message: message,
         details: {'code': code, 'message': message},
       );
+
+  /// Never answers the next call of [method], such as `getToken`, as a
+  /// platform that hangs.
+  void holdNext(String method) => _held.add('Messaging#$method');
 
   /// Has the device give [message], a message as the platform sends it
   /// (see [messageOfPlatform]), as the one whose tap launched the app, once.
@@ -126,6 +133,7 @@ final class MockFirebaseMessaging {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_channel, (call) async {
       calls.add(call);
+      if (_held.remove(call.method)) return Completer<Object?>().future;
       if (_failures.remove(call.method) case final failure?) throw failure;
       return _answer(call);
     });

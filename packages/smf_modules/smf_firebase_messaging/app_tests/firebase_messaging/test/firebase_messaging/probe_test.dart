@@ -6,7 +6,8 @@
 // is the registration token that Firebase has, or while the app has no
 // address, as on an iOS device without the token of the Apple Push
 // Notification service. It tells when Firebase has another token, or none,
-// for an app with an address, and never writes a token into a problem.
+// for an app with an address, or gives none in time, and never writes a
+// token into a problem.
 //
 // The probe reads appPush, so the start-up of the app runs first, as on a
 // device, with the mocks of the platform side of every module of the app,
@@ -36,6 +37,7 @@ void main() {
       late List<String> withAddress;
       late List<String> behindTheApp;
       late List<String> failing;
+      late List<String> hanging;
       late List<String> withoutAddress;
       late List<String> withoutApnsToken;
       String? addressOfApp;
@@ -56,6 +58,10 @@ void main() {
           message: 'java.io.IOException: SERVICE_NOT_AVAILABLE',
         );
         failing = await probeFirebaseMessaging(() async {});
+        device.holdNext('getToken');
+        hanging = await problemsOfAddress(
+          timeout: const Duration(milliseconds: 200),
+        );
         // The next start, on a device that Firebase gives no token.
         device.token = null;
         await initPush();
@@ -107,8 +113,17 @@ void main() {
         ],
       );
       expect(
+        hanging,
         [
-          for (final problem in [...behindTheApp, ...failing])
+          'The app has an address, but Firebase Cloud Messaging gave no '
+              'registration token on this device within 0:00:00.200000.',
+        ],
+        reason: 'The probes of the start check share a minute, so the probe '
+            'waits for a hanging platform only as long as it says.',
+      );
+      expect(
+        [
+          for (final problem in [...behindTheApp, ...failing, ...hanging])
             if (problem.contains(tokenOfTests) ||
                 problem.contains('a token that the app was not told of'))
               problem,
