@@ -298,11 +298,11 @@ void main() {
           'firebase_auth, firebase_core, settings, go_router, $stateManager',
           '${localized ? ', shared_preferences' : ''})',
         ].join();
-    // The app of Firebase Authentication with the router in another mode of
-    // the auth role.
-    String inMode(String mode) => 'auth by firebase_auth with router '
-        '--auth-mode=$mode (firebase_auth, go_router, firebase_core, '
-        'flutter_core)';
+    // The app of Firebase Authentication with the router and the
+    // localization in another mode of the auth role, which uses both.
+    String inMode(String mode) => 'auth by firebase_auth with router, '
+        'localization --auth-mode=$mode (firebase_auth, go_router, gen_l10n, '
+        'firebase_core, flutter_core, shared_preferences)';
     // An app with every module in another mode of the auth role.
     String everyModuleIn(String stateManager, String mode) =>
         everyModule(stateManager).replaceFirst(
@@ -430,7 +430,7 @@ void main() {
       ],
       [
         for (final name in const [
-          'auth by firebase_auth with router',
+          'auth by firebase_auth with router, localization',
           'every module (bloc)',
           'every module (riverpod)',
         ])
