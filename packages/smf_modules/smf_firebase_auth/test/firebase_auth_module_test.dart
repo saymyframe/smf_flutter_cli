@@ -913,7 +913,7 @@ void main() {
       expect(
         enableSignInNotice,
         allOf(
-          startsWith('For Google sign-in, it also '),
+          startsWith('For a way to sign in of Google, it also '),
           contains('the name of the app and the email address of the '
               'account of the Firebase CLI for its consent screen'),
           contains('the SHA-1 and SHA-256 of the Android debug key of this '
@@ -2108,7 +2108,7 @@ void main() {
           allOf(
             contains("const _sessionFile = '${AuthRole.sessionFile}';"),
             contains(r"File('${app.path}/firebase.json')"),
-            contains("'deploy',\n        '--only',\n        'auth',"),
+            contains("'deploy',\n      '--only',\n      'auth',"),
           ),
         );
       });
@@ -2291,28 +2291,25 @@ void main() {
           ),
         );
 
-    /// The value of the constant `_methods` of the script of [app]: the id
-    /// of each identity provider with what its ways to sign in need.
-    Map<String, List<String>> methodsOf(RenderedApp app) {
-      final declaration = _unitOf(app, enableSignInScript)
-          .declarations
-          .whereType<TopLevelVariableDeclaration>()
-          .singleWhere(
-            (declaration) =>
-                declaration.variables.variables.single.name.lexeme ==
-                '_methods',
-          );
-      expect('${declaration.variables.type}', 'Map<String, Set<_Need>>');
-      final value = declaration.variables.variables.single.initializer!
-          as SetOrMapLiteral;
-      return {
-        for (final entry in value.elements.cast<MapLiteralEntry>())
-          (entry.key as SimpleStringLiteral).value: [
-            for (final need in (entry.value as SetOrMapLiteral).elements)
-              '$need',
-          ],
-      };
-    }
+    /// The declarations of the script of [app] for its ways to sign in:
+    /// `_appName`, the name of the app for the consent screen of Google,
+    /// `_Need` and `_needs`, what they need of the project, as written.
+    Map<String, String> declarationsOf(RenderedApp app) => {
+          for (final declaration
+              in _unitOf(app, enableSignInScript).declarations)
+            ...switch (declaration) {
+              TopLevelVariableDeclaration(:final variables) => {
+                  for (final variable in variables.variables)
+                    if (const {'_appName', '_needs'}
+                        .contains(variable.name.lexeme))
+                      variable.name.lexeme: '${variable.initializer}',
+                },
+              EnumDeclaration(:final namePart)
+                  when namePart.typeName.lexeme == '_Need' =>
+                {'_Need': 'enum'},
+              _ => const <String, String>{},
+            },
+        };
 
     late ContractResult both;
     late RenderedApp withBoth;
@@ -2356,33 +2353,37 @@ void main() {
     });
 
     test(
-        'gives the script the ways to sign in of the app, by the id of their '
-        'identity provider in Firebase Authentication, each with what they '
-        'need of the project, and none in an app without them', () async {
+        'gives the script the code that enables Google only in an app with a '
+        'way to sign in of Google, and what the ways to sign in need of the '
+        'project only in an app with one that needs something', () async {
       final googleAlone = await withWays([WayOfTest.googleAlone]);
       final apple = await withWays([WayOfTest.apple]);
       final without = await _resultOf(const [FirebaseAuthModule.id]);
 
-      expect(methodsOf(withBoth), {
-        'google.com': [
-          '_Need.androidCertificate',
-          '_Need.iosClient',
-          '_Need.serverClient',
-        ],
-        'apple.com': <String>[],
+      expect(declarationsOf(withBoth), {
+        '_appName': "'Contract App'",
+        '_Need': 'enum',
+        '_needs':
+            '{_Need.androidCertificate, _Need.iosClient, _Need.serverClient}',
       });
-      expect(methodsOf(googleAlone.app!), {'google.com': <String>[]});
-      expect(methodsOf(apple.app!), {'apple.com': <String>[]});
-      expect(methodsOf(without.app!), isEmpty);
-      // As the test that CI runs against its Firebase project reads them.
-      expect(scriptMethodsOf(withBoth.files[enableSignInScript]!.text), {
-        'google.com': {'androidCertificate', 'iosClient', 'serverClient'},
-        'apple.com': <String>{},
-      });
+      // A way to sign in of Google that needs nothing of the project: the
+      // script enables Google and sets up nothing.
+      expect(declarationsOf(googleAlone.app!), {'_appName': "'Contract App'"});
+      // Apple is enabled in the Firebase console, and the script has no code
+      // for it.
+      expect(declarationsOf(apple.app!), isEmpty);
+      expect(declarationsOf(without.app!), isEmpty);
       expect(
-        scriptMethodsOf(without.app!.files[enableSignInScript]!.text),
-        isEmpty,
+        apple.app!.files[enableSignInScript]!.text,
+        without.app!.files[enableSignInScript]!.text,
       );
+      // As the test that CI runs against its Firebase project reads them.
+      final ofBoth = scriptWaysOf(withBoth.files[enableSignInScript]!.text);
+      expect(ofBoth.google, isTrue);
+      expect(ofBoth.needs, {'androidCertificate', 'iosClient', 'serverClient'});
+      final ofNone = scriptWaysOf(without.app!.files[enableSignInScript]!.text);
+      expect(ofNone.google, isFalse);
+      expect(ofNone.needs, isEmpty);
       // The values of `_Need` are named after the needs of the auth role.
       final script = _unitOf(withBoth, enableSignInScript);
       final needs =
@@ -2408,10 +2409,11 @@ void main() {
 
     test(
         'renders a script that type-checks with the Dart SDK alone, with '
-        'ways to sign in and with what they need', () async {
+        'ways to sign in, with what they need and without it', () async {
       for (final result in [
         both,
         await withWays([WayOfTest.googleAlone, WayOfTest.apple]),
+        await withWays([WayOfTest.apple]),
       ]) {
         final app = DartApp.write(result.app!);
         try {
@@ -2429,25 +2431,38 @@ void main() {
     });
 
     test(
-        'writes the code of the ways to sign in for the script, an empty map '
-        'without them', () {
-      expect(methodsCode(const {}), '{}');
+        'gives the brick of the script the section that enables Google, the '
+        'section that sets up what the ways to sign in need, and the needs',
+        () {
+      expect(scriptVarsOf(const {}), {
+        'google': false,
+        'setup': false,
+        'needs': '{}',
+      });
       expect(
-        methodsCode(const {
+        scriptVarsOf(const {
           'google.com': {
             SignInNeed.serverClient,
             SignInNeed.androidCertificate,
           },
           'apple.com': {},
         }),
-        '{\n'
-        "  'google.com': {\n"
-        '    _Need.androidCertificate,\n'
-        '    _Need.serverClient,\n'
-        '  },\n'
-        "  'apple.com': {},\n"
-        '}',
+        {
+          'google': true,
+          'setup': true,
+          'needs': '{_Need.androidCertificate, _Need.serverClient}',
+        },
       );
+      expect(scriptVarsOf(const {'apple.com': {}}), {
+        'google': false,
+        'setup': false,
+        'needs': '{}',
+      });
+      expect(scriptVarsOf(const {'google.com': {}}), {
+        'google': true,
+        'setup': false,
+        'needs': '{}',
+      });
       expect(
         firebaseMethodsOf(
           authRole.methodsIn(authRole.hookInput(both.hook!)),

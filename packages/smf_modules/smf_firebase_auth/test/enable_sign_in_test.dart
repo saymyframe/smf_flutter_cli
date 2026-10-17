@@ -215,10 +215,9 @@ void main() {
         final files = _filesOf(app);
         // What the ways to sign in of the app need of the project, for its
         // apps in the project.
-        final methods = scriptMethodsOf(
+        final (:google, :needs) = scriptWaysOf(
           File('$app/$enableSignInScript').readAsStringSync(),
         );
-        final needs = {for (final needs in methods.values) ...needs};
         final apps = firebaseAppsOf(config.readAsStringSync(), project!);
         final android = [
           for (final app in apps)
@@ -308,7 +307,7 @@ void main() {
         );
         // As a service account, it leaves Google out, which the project of
         // CI has enabled already.
-        if (methods.containsKey('google.com')) {
+        if (google) {
           expect('${enabled.stdout}', contains('Google is left out'));
         }
         // The SHA of the debug key of the runner, which the script

@@ -19,11 +19,13 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   cannot load a file that imports Flutter. So the script is the same in
 ///   every mode, and follows a mode that changed. It stops when the file
 ///   does not tell the mode, rather than guess.
-/// - It has the ways to sign in of the app in its constant `_methods`,
-///   which the provider of the module renders from the ways to sign in of
-///   the app ([methodsCode]): by the id of their identity provider in
-///   Firebase Authentication, each with what it needs of the project
-///   ([SignInNeed]).
+/// - The code for the ways to sign in of Google is in sections of the brick
+///   that the provider of the module fills from the ways to sign in of the
+///   app (see [scriptVarsOf]). So the script of an app without one is the
+///   script of Email/Password and Anonymous alone: the code that enables
+///   Google comes with a way to sign in of Google, and what such a way
+///   needs of the project, `_needs` ([SignInNeed]), with the code that sets
+///   it up, comes with one that needs something.
 /// - It reads the id of the project from `firebase.json` of the app, where
 ///   `flutterfire configure` of flutterfire_cli 1.4.1 writes it for each
 ///   platform (`lib/src/common/utils.dart` there): flutterfire writes no
@@ -86,8 +88,9 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   as text with the libraries of Dart. It adds a scheme and removes none,
 ///   and leaves a file that has it as it is. It stops at a file in any
 ///   other form, with what to add there by hand.
-/// - It tells how to enable Apple in the Firebase console, which no command
-///   of the Firebase CLI does.
+/// - Apple is enabled in the Firebase console, which no command of the
+///   Firebase CLI does, as the README of the app tells; the script has no
+///   code for it.
 /// - It runs the Firebase CLI with `NO_UPDATE_NOTIFIER`, without its check
 ///   for a newer version: that check runs on as a process of its own in
 ///   the same directory (`update-notifier-cjs` of firebase-tools 15.14.0),
@@ -147,15 +150,19 @@ const firebaseCliWithSignIn = FirebaseCliVersionCheck(
 /// What the user has to know before [enableSignIn] runs, beyond enabling
 /// the sign-in methods: what the script does in the Firebase project and
 /// in the app for a way to sign in of Google (see [enableSignInScript]).
-/// The step is the same in every app, whatever its ways to sign in, so the
-/// notice tells it of Google sign-in, and a run asks about the step in
+///
+/// The step is the same in every app, whatever its ways to sign in: a step
+/// takes no condition on what a role chose, which the pipeline needs before
+/// any role chooses, and a step that continues another takes no condition
+/// at all. So the notice tells what the script does for a way to sign in
+/// of Google, which is true in every app, and a run asks about the step in
 /// every app.
-const enableSignInNotice = 'For Google sign-in, it also gives Google the '
-    'name of the app and the email address of the account of the Firebase '
-    'CLI for its consent screen, registers the SHA-1 and SHA-256 of the '
-    'Android debug key of this machine, creating the key as the first debug '
-    'build would if there is none, downloads the Firebase files of the app '
-    'again and writes the URL scheme of the iOS app into '
+const enableSignInNotice = 'For a way to sign in of Google, it also gives '
+    'Google the name of the app and the email address of the account of the '
+    'Firebase CLI for its consent screen, registers the SHA-1 and SHA-256 of '
+    'the Android debug key of this machine, creating the key as the first '
+    'debug build would if there is none, downloads the Firebase files of the '
+    'app again and writes the URL scheme of the iOS app into '
     'ios/Runner/Info.plist.';
 
 /// The ways to sign in of the app in [methods] as the script of the app
@@ -176,25 +183,30 @@ Map<String, Set<SignInNeed>> firebaseMethodsOf(
   return byId;
 }
 
-/// [methods], by [firebaseMethodsOf], as the value of the constant
-/// `_methods` of the script, a map of the ids of their identity providers
-/// to the values of its enum `_Need`, which are named after the
-/// [SignInNeed]s, in their order.
-String methodsCode(Map<String, Set<SignInNeed>> methods) {
-  if (methods.isEmpty) return '{}';
-  final code = StringBuffer('{\n');
-  for (final MapEntry(key: id, value: needs) in methods.entries) {
-    if (needs.isEmpty) {
-      code.writeln("  '$id': {},");
-      continue;
-    }
-    code.writeln("  '$id': {");
-    for (final need in SignInNeed.values) {
-      if (needs.contains(need)) code.writeln('    _Need.${need.name},');
-    }
-    code.writeln('  },');
-  }
-  return '$code}';
+/// The variables of the brick for the script of an app with the ways to
+/// sign in [methods], by [firebaseMethodsOf]:
+/// - `google`, whether the app has a way to sign in of Google, which gives
+///   the script the code that enables Google;
+/// - `setup`, whether a way to sign in needs something of the project,
+///   which gives the script the code that sets it up and the needs,
+///   `needs`, the value of its constant `_needs`: the values of its enum
+///   `_Need`, which are named after the [SignInNeed]s, in their order, on
+///   one line, as `dart format` writes a set that fits on it.
+///
+/// `setup` comes only with `google`: the module sets up what a way to sign
+/// in needs for Google alone (see [identityProviders]), and its provider
+/// refuses an app with another one that needs something.
+Map<String, Object> scriptVarsOf(Map<String, Set<SignInNeed>> methods) {
+  final needs = [
+    for (final need in SignInNeed.values)
+      if (methods.values.any((needs) => needs.contains(need)))
+        '_Need.${need.name}',
+  ];
+  return {
+    'google': methods.containsKey('google.com'),
+    'setup': needs.isNotEmpty,
+    'needs': '{${needs.join(', ')}}',
+  };
 }
 
 /// The expression of the auth role for the declaration of `authMode`

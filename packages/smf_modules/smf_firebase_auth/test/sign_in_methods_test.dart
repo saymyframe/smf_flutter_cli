@@ -600,32 +600,46 @@ class DefaultFirebaseOptions {
 
   group('the ways to sign in of an app with Google sign-in', () {
     test(
-        'are those of the constant of the script, by the ids of their '
-        'identity providers, with what they need, and none without them', () {
-      String scriptWith(Map<String, Set<SignInNeed>> methods) =>
-          '/// The ways to sign in.\n'
-          'const Map<String, Set<_Need>> _methods = ${methodsCode(methods)};\n'
-          '\n'
-          "const _google = 'google.com';\n";
+        'are those of the script: whether it enables Google, and what the '
+        'ways to sign in need, and none without them', () {
+      String scriptWith(Map<String, Set<SignInNeed>> methods) {
+        final vars = scriptVarsOf(methods);
+        return [
+          "const _anonymous = 'anonymous';",
+          if (vars['google']! as bool) "const _appName = 'My App';",
+          if (vars['setup']! as bool) 'const _needs = ${vars['needs']};',
+          "const _command = 'dart tool/enable_firebase_sign_in.dart';",
+        ].join('\n\n');
+      }
 
-      expect(
-        scriptMethodsOf(
-          scriptWith(const {
-            'google.com': {
-              SignInNeed.androidCertificate,
-              SignInNeed.iosClient,
-              SignInNeed.serverClient,
-            },
-            'apple.com': {},
-          }),
-        ),
-        {
-          'google.com': {'androidCertificate', 'iosClient', 'serverClient'},
-          'apple.com': <String>{},
-        },
+      final google = scriptWaysOf(
+        scriptWith(const {
+          'google.com': {
+            SignInNeed.androidCertificate,
+            SignInNeed.iosClient,
+            SignInNeed.serverClient,
+          },
+          'apple.com': {},
+        }),
       );
-      expect(scriptMethodsOf(scriptWith(const {})), isEmpty);
-      expect(scriptMethodsOf("const _google = 'google.com';"), isEmpty);
+      expect(google.google, isTrue);
+      expect(google.needs, {'androidCertificate', 'iosClient', 'serverClient'});
+      final apple = scriptWaysOf(scriptWith(const {'apple.com': {}}));
+      expect(apple.google, isFalse);
+      expect(apple.needs, isEmpty);
+      // As dart format may write a set that does not fit on a line.
+      expect(
+        scriptWaysOf(
+          'const _needs = {\n'
+          '  _Need.androidCertificate,\n'
+          '  _Need.serverClient,\n'
+          '};\n',
+        ).needs,
+        {'androidCertificate', 'serverClient'},
+      );
+      final without = scriptWaysOf(scriptWith(const {}));
+      expect(without.google, isFalse);
+      expect(without.needs, isEmpty);
     });
 
     test(

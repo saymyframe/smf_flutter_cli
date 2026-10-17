@@ -302,26 +302,22 @@ String _suchAs(List<String> permissions) {
 }
 
 /// The ways to sign in that [script], the text of the script of an app that
-/// enables the sign-in methods, sets up, as its constant `_methods` has
-/// them: the id of the identity provider of each in Firebase
-/// Authentication, with the names of what its ways to sign in need of the
-/// project, such as `androidCertificate`. None in the script of an app
-/// without them, or of one in which that constant is missing.
-Map<String, Set<String>> scriptMethodsOf(String script) {
-  final constant = RegExp(
-    r'^const Map<String, Set<_Need>> _methods = \{(.*?)\};$',
-    multiLine: true,
-    dotAll: true,
-  ).firstMatch(script);
-  if (constant == null) return const {};
-  return {
-    for (final entry
-        in RegExp(r"'([^']+)': \{([^}]*)\}").allMatches(constant[1]!))
-      entry[1]!: {
-        for (final need in RegExp(r'_Need\.(\w+)').allMatches(entry[2]!))
-          need[1]!,
-      },
-  };
+/// enables the sign-in methods, sets up: whether it enables Google, which
+/// only the script of an app with a way to sign in of Google has the code
+/// for, with the name of the app for the consent screen of Google,
+/// `_appName`, and the names of what the ways to sign in need of the
+/// project, as its constant `_needs` has them, such as
+/// `androidCertificate`. Neither in the script of an app without them.
+({bool google, Set<String> needs}) scriptWaysOf(String script) {
+  final needs = RegExp(r'^const _needs = \{([^}]*)\};$', multiLine: true)
+      .firstMatch(script)?[1];
+  return (
+    google: RegExp('^const _appName = ', multiLine: true).hasMatch(script),
+    needs: {
+      for (final need in RegExp(r'_Need\.(\w+)').allMatches(needs ?? ''))
+        need[1]!,
+    },
+  );
 }
 
 /// A Firebase app of an app, as `flutterfire configure` writes it into

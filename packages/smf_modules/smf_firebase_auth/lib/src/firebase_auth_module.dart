@@ -269,7 +269,7 @@ final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
             AgentNote(note),
           ),
       ],
-      vars: {'methods': methodsCode(methods)},
+      vars: scriptVarsOf(methods),
     );
   }
 }
