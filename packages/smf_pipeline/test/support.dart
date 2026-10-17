@@ -41,6 +41,7 @@ final class TestRole<D extends Object> extends Role<D> {
     this.moduleRules = const [],
     this.structuralRules = const [],
     this.openToAllModules = false,
+    this.interface = const RoleInterface(),
   })  : _requires = requires,
         _uses = uses;
 
@@ -82,6 +83,9 @@ final class TestRole<D extends Object> extends Role<D> {
 
   @override
   final List<StructuralRule<D>> structuralRules;
+
+  @override
+  final RoleInterface interface;
 }
 
 /// A template for tests that returns what it is given and records its

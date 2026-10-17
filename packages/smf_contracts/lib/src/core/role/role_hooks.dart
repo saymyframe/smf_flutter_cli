@@ -16,6 +16,9 @@ final class RoleHookRequest {
   /// The data of all roles, each with its origin: that of the modules, in
   /// the order the modules were selected, and then that of the templates of
   /// roles, in the order of the first provider of each role.
+  ///
+  /// Once the roles have chosen, it has only the data whose conditions on
+  /// their choices hold (see [Contribution.whenChosen]).
   final List<RoleData<Object>> data;
 
   /// The roles present in the app.
@@ -100,6 +103,10 @@ final class RoleChoiceRequest {
   /// The data of all roles, each with its origin: that of the modules, in
   /// the order the modules were selected, and then that of the templates of
   /// roles, in the order of the first provider of each role.
+  ///
+  /// Of the data of the role that chooses, it has only the data whose
+  /// conditions on what other roles chose hold (see
+  /// [Contribution.whenChosen]).
   final List<RoleData<Object>> data;
 
   /// The roles present in the app.

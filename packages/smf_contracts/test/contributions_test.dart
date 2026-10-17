@@ -37,7 +37,27 @@ void main() {
 
     for (final contribution in contributions) {
       expect(contribution.when, isEmpty, reason: '$contribution');
+      expect(contribution.whenChosen, isEmpty, reason: '$contribution');
     }
+  });
+
+  test('a brick and role data depend on what roles chose', () {
+    final twelve = ChoiceCondition(
+      role,
+      'the router shows 12 routes',
+      holdsFor: (choice) => choice == 12,
+      withoutRole: false,
+    );
+    final bundle = MasonBundle.fromJson(_bundleJson);
+
+    expect(
+      BrickContribution(bundle, whenChosen: {twelve}).whenChosen,
+      {twelve},
+    );
+    expect(
+      RoleData<String>(role, 'routes', whenChosen: {twelve}).whenChosen,
+      {twelve},
+    );
   });
 
   test('when lists the roles a contribution needs', () {
@@ -168,6 +188,22 @@ void main() {
       expect(stamped.value, 'routes');
       expect(stamped.when, {role});
       expect(stamped.role, same(role));
+    });
+
+    test('keeps its conditions on choices when it gets an origin', () {
+      final other = TestRole<String>('other');
+      final chosen = ChoiceCondition(
+        other,
+        'the other role chose',
+        holdsFor: (choice) => choice != null,
+        withoutRole: false,
+      );
+      final data = RoleData<String>(role, 'routes', whenChosen: {chosen});
+
+      expect(
+        data.withOrigin(const ModuleOrigin(ModuleId('home'))).whenChosen,
+        {chosen},
+      );
     });
   });
 

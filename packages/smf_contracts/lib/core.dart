@@ -6,6 +6,7 @@
 /// which adds the built-in roles.
 library;
 
+export 'src/core/choice_condition.dart';
 export 'src/core/contributions.dart';
 export 'src/core/environment.dart';
 export 'src/core/file_index.dart';

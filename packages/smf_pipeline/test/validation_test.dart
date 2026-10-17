@@ -369,6 +369,224 @@ void main() {
     });
   });
 
+  group('conditions on what roles chose', () {
+    final clock = TestRole<String>('clock', template: TestTemplate());
+    final twelve = ChoiceCondition(
+      clock,
+      'the clock shows 12 hours',
+      holdsFor: (choice) => choice == '12',
+      withoutRole: false,
+    );
+    ChoiceCondition chose(Role role) => ChoiceCondition(
+          role,
+          'the ${role.id} role chose',
+          holdsFor: (choice) => true,
+          withoutRole: false,
+        );
+
+    test(
+        'make no contribution apply less: validation checks it as one of '
+        'every app that may have it', () {
+      final template = TestTemplate<String>();
+      final labels = TestRole<String>(
+        'labels',
+        template: template,
+        moduleRules: const [
+          ModuleRule(id: 'labels.count', description: 'Counts', check: _count),
+        ],
+      );
+      final result = _validate([
+        entry,
+        TestModule(
+          'face',
+          uses: {clock, labels},
+          contributions: [
+            labels.data('noon', whenChosen: {twelve}),
+            BrickContribution(
+              bundle('dial', paths: ['lib/dial.dart']),
+              whenChosen: {twelve},
+            ),
+          ],
+        ),
+        TestModule(
+          'other',
+          contributions: [
+            BrickContribution(bundle('other', paths: ['lib/dial.dart'])),
+          ],
+        ),
+        TestModule(
+          'prov',
+          providers: [RoleProvider.plain(clock), RoleProvider.plain(labels)],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'other: Both face and other generate lib/dial.dart; every file has '
+          'one brick.',
+        ),
+        'face: face has 1 data',
+      ]);
+      expect(template.validated.single.data.single.value, 'noon');
+    });
+
+    test('are of the roles of their contributor', () {
+      final hidden = TestRole<String>('hidden', template: TestTemplate());
+      final ofTemplate = <Contribution>[];
+      final labels = TestRole<String>(
+        'labels',
+        uses: {clock},
+        template: TestTemplate(contributions: ofTemplate),
+      );
+      ofTemplate.addAll([
+        // The template of a role names its role and its visible roles.
+        BrickContribution(
+          bundle('own', paths: ['lib/own.dart']),
+          whenChosen: {chose(labels)},
+        ),
+        BrickContribution(
+          bundle('visible', paths: ['lib/visible.dart']),
+          whenChosen: {twelve},
+        ),
+        BrickContribution(
+          bundle('hidden', paths: ['lib/hidden.dart']),
+          whenChosen: {chose(hidden)},
+        ),
+      ]);
+      final result = _validate([
+        entry,
+        TestModule(
+          'face',
+          uses: {labels},
+          contributions: [
+            labels.data('noon', whenChosen: {twelve}),
+            BrickContribution(
+              bundle('dial', paths: ['lib/dial.dart']),
+              whenChosen: {twelve},
+            ),
+          ],
+        ),
+        TestModule(
+          'prov',
+          providers: [
+            RoleProvider.plain(clock),
+            RoleProvider.plain(labels),
+            RoleProvider.plain(hidden),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        for (var i = 0; i < 2; i++)
+          equals(
+            'face: face makes a contribution depend on what the clock role '
+            'chose (the clock shows 12 hours), but does not provide, require '
+            'or use it.',
+          ),
+        equals(
+          'role:labels: role:labels makes a contribution depend on what the '
+          'hidden role chose (the hidden role chose), but does not provide, '
+          'require or use it.',
+        ),
+      ]);
+      expect(result.issues.first.hint, contains('uses of the module'));
+    });
+
+    test('of a role are not on its own data, which it chooses from', () {
+      final result = _validate([
+        entry,
+        TestModule(
+          'face',
+          uses: {clock},
+          contributions: [
+            clock.data('noon', whenChosen: {twelve}),
+            // A brick may depend on what a role of the module chose.
+            BrickContribution(
+              bundle('dial', paths: ['lib/dial.dart']),
+              whenChosen: {twelve},
+            ),
+          ],
+        ),
+        TestModule('prov', providers: [RoleProvider.plain(clock)]),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'face: face gives the clock role data that depends on what the '
+          'clock role chose (the clock shows 12 hours), but the clock role '
+          'chooses from its data.',
+        ),
+      ]);
+      expect(result.issues.single.hint, contains('without the condition'));
+    });
+
+    test('on the data of roles may not form a cycle', () {
+      final a = TestRole<String>('a', template: TestTemplate());
+      final b = TestRole<String>('b', template: TestTemplate());
+      final c = TestRole<String>('c', template: TestTemplate());
+      final result = _validate([
+        entry,
+        TestModule(
+          'face',
+          uses: {a, b, c},
+          contributions: [
+            a.data('of a', whenChosen: {chose(b)}),
+            c.data('of c', whenChosen: {chose(a)}),
+          ],
+        ),
+        TestModule(
+          'more',
+          uses: {a, b},
+          contributions: [
+            b.data('of b', whenChosen: {chose(a)}),
+          ],
+        ),
+        TestModule(
+          'prov',
+          providers: [
+            RoleProvider.plain(a),
+            RoleProvider.plain(b),
+            RoleProvider.plain(c),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'null: The roles cannot choose one after another, because the data '
+          'of each depends on what the next one chose: a role → b role → a '
+          'role. The data with these conditions comes from face, more.',
+        ),
+      ]);
+      expect(result.hasErrors, isTrue);
+      expect(result.issues.single.hint, 'Leave one of the conditions out.');
+
+      // The order of the choices, which the data allows without the cycle.
+      expect(
+        _validate([
+          entry,
+          TestModule(
+            'face',
+            uses: {a, b, c},
+            contributions: [
+              a.data('of a', whenChosen: {chose(b)}),
+              c.data('of c', whenChosen: {chose(a)}),
+            ],
+          ),
+          TestModule(
+            'prov',
+            providers: [
+              RoleProvider.plain(a),
+              RoleProvider.plain(b),
+              RoleProvider.plain(c),
+            ],
+          ),
+        ]).issues,
+        isEmpty,
+      );
+    });
+  });
+
   group('bricks', () {
     test('without hooks, reserved variables or files outside the kind', () {
       const feature = ModuleKind(

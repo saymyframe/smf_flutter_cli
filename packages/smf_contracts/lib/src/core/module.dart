@@ -19,8 +19,10 @@ abstract base class SmfModule {
   /// Returns the module's contributions to an app described by [context].
   ///
   /// It must not branch on anything but [context]: what depends on other
-  /// roles goes into contributions with [Contribution.when], and what
-  /// depends on the provider of a role goes into [Variants].
+  /// roles goes into contributions with [Contribution.when], what depends
+  /// on what a role chose into contributions with
+  /// [Contribution.whenChosen], and what depends on the provider of a role
+  /// goes into [Variants].
   List<Contribution> contribute(ModuleContext context) => const [];
 }
 

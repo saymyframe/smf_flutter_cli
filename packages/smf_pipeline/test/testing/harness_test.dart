@@ -3936,6 +3936,300 @@ void main() {
       });
     });
   });
+
+  group('conditions on what roles chose', () {
+    /// The harness of the hours of `lock`, which contributes
+    /// [contributions], and of [more] modules.
+    ContractHarness harnessWith(
+      List<Contribution> contributions, {
+      List<SmfModule> more = const [],
+    }) =>
+        ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'lock',
+              providers: [const RoleProvider.plain(_hoursRole)],
+              contributions: contributions,
+            ),
+            ...more,
+          ]),
+        );
+
+    BrickContribution dial({Set<ChoiceCondition> whenChosen = const {}}) =>
+        BrickContribution(
+          bundle('dial', files: {'lib/dial.dart': 'class Dial {}\n'}),
+          whenChosen: whenChosen,
+        );
+
+    /// The result of the case of the hours by `lock` whose clock shows
+    /// [hours].
+    Future<ContractResult> checkHours(ContractHarness harness, String hours) {
+      final cases = harness.casesOfRole(_hoursRole);
+      expect(cases.map((c) => '$c'), [
+        'hours by lock',
+        'hours by lock --hours=12',
+      ]);
+      return harness.check(cases[hours == '24' ? 0 : 1]);
+    }
+
+    test(
+        'a provider passes that gives a symbol which depends on a choice '
+        'only to the apps where the condition holds', () async {
+      final harness = harnessWith([
+        dial(whenChosen: {_HoursRole.twelve}),
+      ]);
+
+      final twelve = await checkHours(harness, '12');
+      expect(twelve.errors, isEmpty);
+      expect(twelve.app!.files['lib/dial.dart']!.text, 'class Dial {}\n');
+
+      final twentyFour = await checkHours(harness, '24');
+      expect(twentyFour.errors, isEmpty);
+      expect(twentyFour.app!.files.containsKey('lib/dial.dart'), isFalse);
+    });
+
+    test(
+        'reports the file of such a symbol in an app where its condition '
+        'does not hold, and its lack where it holds', () async {
+      final always = harnessWith([dial()]);
+      expect((await checkHours(always, '12')).errors, isEmpty);
+      final extra = (await checkHours(always, '24')).errors.single;
+      expect(
+        extra.message,
+        'The app has lib/dial.dart, the file of class Dial, which only an '
+        'app where the clock shows 12 hours needs.',
+      );
+      expect(extra.path, 'lib/dial.dart');
+
+      final never = harnessWith(const []);
+      expect((await checkHours(never, '24')).errors, isEmpty);
+      expect(
+        (await checkHours(never, '12')).errors.single.message,
+        'lib/dial.dart is missing, so it cannot declare class Dial.',
+      );
+    });
+
+    test(
+        'checks no structure of an app that it did not render when a symbol '
+        'depends on a choice, which it cannot tell', () async {
+      final modules = [
+        scaffold(),
+        TestModule(
+          'lock',
+          providers: [const RoleProvider.plain(_hoursRole)],
+          contributions: [
+            dial(whenChosen: {_HoursRole.twelve}),
+          ],
+        ),
+      ];
+      final harness = ContractHarness(ModuleRegistry(modules), render: false);
+
+      final unrendered = await harness.check(
+        const ContractCase('lock', requested: [ModuleId('lock')]),
+      );
+      expect(unrendered.choices, isNull);
+      expect(
+        () => harness.checkStructure(
+          unrendered,
+          files: const {},
+          owners: const {},
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'The app of the case lock was not rendered, so the roles made no '
+                'choice, and the hours role has symbols that depend on what '
+                'roles chose.',
+          ),
+        ),
+      );
+      // Without such a symbol, the structure of an app that the harness did
+      // not render is checked as before.
+      final scaffolding = await harness.check(
+        const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
+      );
+      expect(scaffolding.choices, isNull);
+      expect(
+        harness.checkStructure(
+          scaffolding,
+          files: const {},
+          owners: const {},
+        ),
+        isNotEmpty,
+      );
+    });
+
+    test(
+        'the result has the contributions and the hook of the app as the '
+        'choices decided them', () async {
+      final labels = TestRole<String>('labels', template: TestTemplate());
+      final harness = harnessWith(
+        [
+          dial(whenChosen: {_HoursRole.twelve}),
+        ],
+        more: [
+          TestModule(
+            'face',
+            uses: {_hoursRole, labels},
+            contributions: [
+              labels.data('always'),
+              labels.data('noon', whenChosen: {_HoursRole.twelve}),
+            ],
+          ),
+          TestModule('tags', providers: [RoleProvider.plain(labels)]),
+        ],
+      );
+      Future<ContractResult> checkFace(String hours) => harness.check(
+            ContractCase(
+              'face',
+              requested: const [
+                ModuleId('face'),
+                ModuleId('tags'),
+                ModuleId('lock'),
+              ],
+              roleOptions: {'hours': hours},
+            ),
+          );
+
+      final twelve = await checkFace('12');
+      expect(twelve.errors, isEmpty);
+      expect(
+        labels.hookInput(twelve.hook!).data.map((data) => data.value),
+        ['always', 'noon'],
+      );
+      expect(
+        twelve.collection!.roleData.map((data) => data.value),
+        ['always', 'noon'],
+      );
+
+      final twentyFour = await checkFace('24');
+      expect(twentyFour.errors, isEmpty);
+      expect(
+        labels.hookInput(twentyFour.hook!).data.map((data) => data.value),
+        ['always'],
+      );
+      expect(
+        twentyFour.collection!.roleData.map((data) => data.value),
+        ['always'],
+      );
+      // Every contribution stays, as it is or left out.
+      expect(
+        twentyFour.collection!.ofModule(const ModuleId('face')).map(
+              (collected) => collected.applies,
+            ),
+        [true, false],
+      );
+    });
+
+    test(
+        'names the role that cannot choose without a terminal by the order '
+        'in which the roles choose', () async {
+      // The labels come first among the roles of the app, but their data
+      // waits for the choice of the colors, which needs --color without a
+      // terminal.
+      final colors = TestRole<String>(
+        'colors',
+        options: const [RoleOption(name: 'color', help: 'The color.')],
+        template: _TerminalOnlyTemplate(),
+      );
+      final green = ChoiceCondition(
+        colors,
+        'the colors are green',
+        holdsFor: (choice) => choice == 'green',
+        withoutRole: false,
+      );
+      final labels = TestRole<String>('labels', template: TestTemplate());
+      final harness = harnessWith(
+        const [],
+        more: [
+          TestModule(
+            'face',
+            uses: {colors},
+            providers: [RoleProvider.plain(labels)],
+            contributions: [
+              labels.data('green', whenChosen: {green}),
+            ],
+          ),
+          TestModule('painter', providers: [RoleProvider.plain(colors)]),
+        ],
+      );
+
+      final result = await harness.check(
+        const ContractCase(
+          'all',
+          requested: [ModuleId('face'), ModuleId('painter'), ModuleId('lock')],
+        ),
+      );
+
+      expect(result.resolution!.presentRoles.take(2), [labels, colors]);
+      expect(
+        result.errors.single.message,
+        'The colors role cannot choose in a run without a terminal: Give '
+        '--color.',
+      );
+      expect(
+        result.errors.single.origin,
+        isA<RoleTemplateOrigin>()
+            .having((origin) => origin.role, 'role', same(colors)),
+      );
+    });
+  });
+}
+
+/// The role of a clock that shows 24 hours or 12, as `--hours` says, with a
+/// class of the dial of 12 hours that only the apps of 12 hours need.
+const _hoursRole = _HoursRole();
+
+final class _HoursRole extends Role<String> {
+  const _HoursRole();
+
+  /// That the clock shows 12 hours.
+  static const twelve = ChoiceCondition(
+    _hoursRole,
+    'the clock shows 12 hours',
+    holdsFor: _showsTwelve,
+    withoutRole: false,
+  );
+
+  @override
+  String get id => 'hours';
+
+  @override
+  String get description => 'Hours';
+
+  @override
+  RoleCardinality get cardinality => RoleCardinality.atMostOne;
+
+  @override
+  List<RoleOption> get options => const [
+        RoleOption.mode(name: 'hours', help: 'Hours', values: ['24', '12']),
+      ];
+
+  @override
+  RoleInterface get interface => const RoleInterface(
+        symbols: [
+          RequiredClass('Dial', path: 'lib/dial.dart', whenChosen: {twelve}),
+        ],
+      );
+
+  @override
+  RoleTemplate<String> get template => const _HoursTemplate();
+}
+
+bool _showsTwelve(Object? choice) => choice == '12';
+
+/// Chooses the value of `--hours`, or its first value.
+final class _HoursTemplate extends RoleTemplate<String> {
+  const _HoursTemplate();
+
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async =>
+      context.option('hours') ?? '24';
+
+  @override
+  Map<String, String> optionsOf(Object? choice) => {'hours': '$choice'};
 }
 
 /// A template that picks what the option `--pick` says, and renders it
