@@ -62,8 +62,7 @@ final class MockGoogleSignIn extends GoogleSignInPlatform {
   /// Fails the next sign-in with [error], as the plugin of a platform
   /// throws it: a [GoogleSignInException], such as one with the code
   /// [GoogleSignInExceptionCode.canceled] for a closed sheet, or another
-  /// error, such as the PlatformException with which the plugin on iOS
-  /// refuses an app without its client.
+  /// error, such as a PlatformException of the plugin.
   void failNext(Object error) => _failures.add(error);
 
   @override

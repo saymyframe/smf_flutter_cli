@@ -159,7 +159,6 @@ import 'dart:isolate';
 
 import 'package:contract_app/core/auth/app_session.dart';
 import 'package:contract_app/core/google_sign_in/google_sign_in.dart';
-import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 /// What a call of googleCredential() ended with: the fields of the
@@ -215,23 +214,6 @@ Future<void> main(List<String> arguments, SendPort port) async {
       const GoogleSignInException(
         code: GoogleSignInExceptionCode.clientConfigurationError,
       ),
-    ),
-    (
-      'an exception of Google sign-in on iOS',
-      PlatformException(
-        code: 'google_sign_in',
-        message: 'Your app is missing support for the following URL schemes: '
-            'com.googleusercontent.apps.123',
-        details: 'NSInvalidArgumentException',
-      ),
-    ),
-    (
-      'an exception of Google sign-in on iOS without a message',
-      PlatformException(code: 'google_sign_in'),
-    ),
-    (
-      'another exception of the platform',
-      PlatformException(code: 'channel-error', message: 'No plugin.'),
     ),
     ('another error', StateError('broken')),
     ('no ID token', const GoogleAnswer(null)),
@@ -656,6 +638,7 @@ void main() {
               'The section of the provider of sign-in in this README tells '
               'which of these it sets up.'),
           contains('fails with the reason `notConfigured`'),
+          contains('On iOS, the Google Sign-In SDK stops the app instead'),
           contains('keep the image as it is'),
         ]),
       );
@@ -698,8 +681,6 @@ void main() {
           'providerConfigurationError',
           'unknownError',
           '[28444]',
-          'PlatformException',
-          'google_sign_in',
           'notConfigured',
           'unknown',
           'GoogleSignInIcon',
@@ -735,7 +716,7 @@ void main() {
       }
       expect(
         _caughtTypesOf(app.files[googleSignInFile]!.text),
-        ['GoogleSignInException', 'PlatformException', 'Object'],
+        ['GoogleSignInException', 'Object'],
       );
       expect(file.uses('rawNonce'), isFalse);
       expect(
@@ -815,19 +796,11 @@ void main() {
         ),
         'clientConfigurationError without a description':
             notConfigured('clientConfigurationError'),
-        'an exception of Google sign-in on iOS': notConfigured(
-          'Your app is missing support for the following URL schemes: '
-          'com.googleusercontent.apps.123',
-        ),
-        'an exception of Google sign-in on iOS without a message':
-            notConfigured('google_sign_in'),
-        'another exception of the platform': 'failed: unknown: '
-            'PlatformException(channel-error, No plugin., null, null)',
         'another error': 'failed: unknown: Bad state: broken',
         'no ID token': 'failed: unknown: Google gave no ID token.',
       });
       // Each of them asked Google once.
-      expect(calls['sign-ins of the errors'], 14);
+      expect(calls['sign-ins of the errors'], 11);
     });
   });
 }

@@ -165,15 +165,6 @@ void main() {
           ),
         ),
         (
-          'the exception of Google sign-in on iOS',
-          PlatformException(
-            code: 'google_sign_in',
-            message: 'Your app is missing support for the following URL '
-                'schemes: com.googleusercontent.apps.123',
-            details: 'NSInvalidArgumentException',
-          ),
-        ),
-        (
           'interrupted',
           const GoogleSignInException(
             code: GoogleSignInExceptionCode.interrupted,
@@ -207,7 +198,6 @@ void main() {
           'providerConfigurationError': 'failed: notConfigured',
           'unknownError of a key that Google does not know':
               'failed: notConfigured',
-          'the exception of Google sign-in on iOS': 'failed: notConfigured',
           'interrupted': 'failed: unknown',
           'another unknownError': 'failed: unknown',
           'another exception of the platform': 'failed: unknown',

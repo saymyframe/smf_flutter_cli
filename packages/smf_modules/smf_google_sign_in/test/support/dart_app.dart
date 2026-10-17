@@ -172,28 +172,6 @@ class WidgetsBinding {
 }
 ''';
 
-/// A stand-in for the part of Flutter's services library that the file of
-/// the module uses: the error of a call of a platform channel, with the
-/// signatures of Flutter 3.44.
-const _services = r'''
-class PlatformException implements Exception {
-  PlatformException({
-    required this.code,
-    this.message,
-    this.details,
-    this.stacktrace,
-  });
-
-  final String code;
-  final String? message;
-  final Object? details;
-  final String? stacktrace;
-
-  @override
-  String toString() => 'PlatformException($code, $message, $details, $stacktrace)';
-}
-''';
-
 /// A stand-in for the part of google_sign_in that the module uses, with
 /// the signatures of google_sign_in 7.2: the start of the package, a
 /// sign-in with the sheet of Google, and what it fails with.
@@ -323,7 +301,6 @@ final class DartApp {
     }
     write('flutter/lib/foundation.dart', _foundation);
     write('flutter/lib/widgets.dart', _widgets);
-    write('flutter/lib/services.dart', _services);
     write('google_sign_in/lib/google_sign_in.dart', _googleSignIn);
     write('app/pubspec.yaml', 'name: contract_app\n');
     // The stand-ins are in the language of the app too.

@@ -99,7 +99,7 @@ With `get_it`:
 With `google_sign_in`:
 
 - `googleCredential()` in `lib/core/google_sign_in/google_sign_in.dart` is the function of the way to sign in with Google in `appSignInMethods`, on Android and iOS. In `lib/`, only that file imports the package. It starts the package once with `GoogleSignIn.instance.initialize()`, without ids, so that the package reads the ids of the clients of Google from the files of the app, and then calls `GoogleSignIn.instance.authenticate()`. It returns an `IdTokenCredential` with the `idToken` of the account and no `rawNonce`.
-- A closed sheet, `GoogleSignInExceptionCode.canceled`, returns `null`. These fail with `notConfigured`: `clientConfigurationError`, `providerConfigurationError`, an `unknownError` whose description has `[28444]` (Credential Manager answers so when the Google project does not know the key that signed the Android app), and a `PlatformException` with the code `google_sign_in` (the plugin throws it on iOS without the iOS client or its URL scheme). Any other error fails with `unknown`.
+- A closed sheet, `GoogleSignInExceptionCode.canceled`, returns `null`. These fail with `notConfigured`: `clientConfigurationError`, `providerConfigurationError`, and an `unknownError` whose description has `[28444]`, which Credential Manager answers when the Google project does not know the key that signed the Android app. Any other error fails with `unknown`. On iOS, an app without its iOS client of Google or its URL scheme stops at the sign-in: the Google Sign-In SDK throws a native exception there, which the package does not catch.
 - `GoogleSignInIcon` shows the logo of Google, `lib/core/google_sign_in/assets/google_logo.png`, which `pubspec.yaml` declares among the assets of the app, at the size of the `IconTheme` around it. The branding guidelines of Google allow no other colours or shape of the logo.
 - In a test, the package asks `GoogleSignInPlatform.instance` of google_sign_in_platform_interface, which the test replaces with a subclass of `GoogleSignInPlatform` that answers `init` and `authenticate`, before the first call of `googleCredential()`: the app starts the package once in a test file.
 
@@ -320,6 +320,8 @@ Google sign-in needs the Google project of the app to know the app, and the app 
 - On both, Google issues the ID token to the web client of the Google project, the server client, against which the backend of the provider of sign-in checks the token.
 
 `googleCredential()` starts google_sign_in with `GoogleSignIn.instance.initialize()` without ids, so google_sign_in reads them from the files of the app: on iOS `CLIENT_ID` of `GoogleService-Info.plist`, or `GIDClientID` of `ios/Runner/Info.plist`, and on Android the string resource `default_web_client_id`. The section of the provider of sign-in in this README tells which of these it sets up. To use ids of your own, pass them to `initialize()` there. Until Google sign-in is set up, signing in with Google fails with the reason `notConfigured`, and the `developerHint` of the failure tells what Google answered.
+
+On iOS, the Google Sign-In SDK stops the app instead when the app has no iOS client of Google or not its URL scheme: google_sign_in does not catch the exception that the SDK throws then. Set both up before you try the button on iOS.
 
 The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_sign_in.dart`, shows the "G" of Google from `lib/core/google_sign_in/assets/google_logo.png`, the logo of the Google Sign-In SDK. The [branding guidelines of Sign in with Google](https://developers.google.com/identity/branding-guidelines) ask a custom button to show that logo in its own colours, on a light background, without a change: keep the image as it is.
 
@@ -3416,7 +3418,6 @@ Future<void> startFixture() async {
 === lib/core/google_sign_in/assets/google_logo.png (google_sign_in) ===
 <572 bytes>
 === lib/core/google_sign_in/google_sign_in.dart (google_sign_in) ===
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -3446,7 +3447,9 @@ Future<void>? _started;
 /// A client of Google that is missing in the app, or a Google project that
 /// does not know the app, fails with `notConfigured`, with a hint at the
 /// section of the README of the app on it, "Google sign-in". Any other error
-/// fails with `unknown`.
+/// fails with `unknown`. On iOS, the Google Sign-In SDK stops the app
+/// instead when the app has no iOS client of Google or not its URL scheme,
+/// since the package does not catch what the SDK throws then.
 Future<SignInCredential?> googleCredential() async {
   final GoogleSignInAccount account;
   try {
@@ -3468,13 +3471,6 @@ Future<SignInCredential?> googleCredential() async {
       default:
         throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
     }
-  } on PlatformException catch (error) {
-    // Google sign-in on iOS refuses an app without the id of its iOS
-    // client or without the URL scheme of that client so.
-    if (error.code == 'google_sign_in') {
-      throw _notConfigured(error.message ?? error.code);
-    }
-    throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
   } on Object catch (error) {
     throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
   }

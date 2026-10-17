@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -28,7 +27,9 @@ Future<void>? _started;
 /// A client of Google that is missing in the app, or a Google project that
 /// does not know the app, fails with `notConfigured`, with a hint at the
 /// section of the README of the app on it, "{{{readme}}}". Any other error
-/// fails with `unknown`.
+/// fails with `unknown`. On iOS, the Google Sign-In SDK stops the app
+/// instead when the app has no iOS client of Google or not its URL scheme,
+/// since the package does not catch what the SDK throws then.
 Future<SignInCredential?> googleCredential() async {
   final GoogleSignInAccount account;
   try {
@@ -50,13 +51,6 @@ Future<SignInCredential?> googleCredential() async {
       default:
         throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
     }
-  } on PlatformException catch (error) {
-    // Google sign-in on iOS refuses an app without the id of its iOS
-    // client or without the URL scheme of that client so.
-    if (error.code == 'google_sign_in') {
-      throw _notConfigured(error.message ?? error.code);
-    }
-    throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
   } on Object catch (error) {
     throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
   }
