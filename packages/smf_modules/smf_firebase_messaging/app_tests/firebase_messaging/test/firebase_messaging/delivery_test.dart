@@ -101,6 +101,7 @@ void main() {
     (tester) async {
       await startUp(tester);
       late List<String> problems;
+      var problemsAgain = const <String>[];
       String? requested;
       String? verdict;
       var askedAgain = true;
@@ -119,15 +120,29 @@ void main() {
         await device.deliver(asked(requested!));
         verdict = await written(report());
         request().deleteSync();
-        await IOOverrides.runZoned(
+        // The probe returns what problemsOfAddress finds, also once the
+        // check of a push message started: Firebase now has a token that
+        // the app was not told of.
+        device.token = 'a token that the app was not told of';
+        problemsAgain = await IOOverrides.runZoned(
           () => probeFirebaseMessaging(() async {}),
           getSystemTempDirectory: () => temporary,
         );
+        device.token = tokenOfTests;
         await Future<void>.delayed(const Duration(milliseconds: 200));
         askedAgain = request().existsSync();
       });
 
       expect(problems, isEmpty);
+      expect(
+        problemsAgain,
+        [
+          'The address of the app is not the registration token that '
+              'Firebase Cloud Messaging has on this device.',
+        ],
+        reason: 'The probe returns the problems of the address of the app, '
+            'as probe_test.dart finds them through problemsOfAddress.',
+      );
       expect(
         requested,
         isNotNull,

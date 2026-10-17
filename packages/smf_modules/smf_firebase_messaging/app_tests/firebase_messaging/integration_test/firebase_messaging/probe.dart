@@ -4,13 +4,13 @@
 // address of the device, it is the registration token that Firebase Cloud
 // Messaging has on the device, the one to which a server sends.
 //
-// It returns at once and only reads: it asks for no permission, sends
-// nothing and waits for no address, which a device may get late or never,
-// as an iOS simulator on a macOS virtual machine never does. An app without
-// an address is no problem then. It never writes the address into what it
+// It returns at once: it asks for no permission, sends nothing itself and
+// waits for no address, which a device may get late or never, as an iOS
+// simulator on a macOS virtual machine never does. An app without an
+// address is no problem then. It never writes the address into what it
 // returns, since the address of a device is for the backend of the app
-// alone. It uses no test framework. The test of the module runs it too
-// (probe_test.dart).
+// alone. It uses no test framework. The tests of the module run it too
+// (probe_test.dart and delivery_test.dart).
 //
 // The probe also starts a check that outlives it and the start check, once
 // in a run of the app: whether a push message that a server sends to the
