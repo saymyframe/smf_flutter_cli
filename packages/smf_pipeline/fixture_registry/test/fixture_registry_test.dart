@@ -2091,17 +2091,18 @@ void main() {
       );
 
       expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
+      // The template of the localization role reports both.
       expect(logger.warnings, hasLength(2));
       expect(
         logger.warnings.first,
-        'The app is not in mt, which the text title of the module '
-        'fake_second has a translation into: Flutter has no texts for its '
-        'own widgets in that language.',
+        '[role:localization]: The app is not in mt, which the text title of '
+        'the module fake_second has a translation into: Flutter has no texts '
+        'for its own widgets in that language.',
       );
       expect(
         logger.warnings.last,
-        'No translation into uk of the text outside of the module '
-        'fake_second: the app shows it in English there.',
+        '[role:localization]: No translation into uk of the text outside of '
+        'the module fake_second: the app shows it in English there.',
       );
       expect(
         host.fileSystem

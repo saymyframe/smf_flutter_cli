@@ -1443,6 +1443,7 @@ Iterable<SmfIssue> _hookIssues(
     final template = role.template;
     if (template != null) {
       yield* _guarded(
+        role,
         RoleTemplateOrigin(role),
         () => template.validate(input),
       );
@@ -1450,6 +1451,7 @@ Iterable<SmfIssue> _hookIssues(
     for (final module in resolution.providersOf(role)) {
       final provider = Resolution.providerObject(module, role);
       yield* _guarded(
+        role,
         module.origin,
         () => provider.validate(input),
       );
@@ -1457,6 +1459,7 @@ Iterable<SmfIssue> _hookIssues(
     for (final module in resolution.modules) {
       if (!module.descriptor.roles.contains(role)) continue;
       yield* _guarded(
+        role,
         module.origin,
         () => role.checkModule(
           ModuleRuleRequest(
@@ -1473,9 +1476,12 @@ Iterable<SmfIssue> _hookIssues(
   }
 }
 
-/// The issues of [check], each with [origin] unless it names its own; a
-/// hook that throws becomes an issue of [origin].
+/// The issues of [check], a hook or the module rules of [role], each with
+/// [origin] unless it names its own; a hook that throws becomes an issue
+/// of [origin], and so does a warning that it may not report (see
+/// [reportedBy]).
 Iterable<SmfIssue> _guarded(
+  Role role,
   ContributionOrigin origin,
   List<SmfIssue> Function() check,
 ) sync* {
@@ -1487,6 +1493,13 @@ Iterable<SmfIssue> _guarded(
     return;
   }
   for (final issue in issues) {
-    yield issueWithOrigin(issue, origin);
+    yield reportedBy(
+      issue,
+      role: role,
+      who: origin is RoleTemplateOrigin
+          ? 'The template of the $role'
+          : 'A check of $origin',
+      origin: origin,
+    );
   }
 }

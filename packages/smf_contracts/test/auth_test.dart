@@ -2014,6 +2014,8 @@ void main() {
 
       // A warning: an app whose developer writes the guard later is an app.
       expect(issue.isError, isFalse);
+      expect(issue.code, AuthRole.openAccountRoutesWarning);
+      expect(AuthRole.openAccountRoutesWarning, 'auth.open_account_routes');
       expect(
         issue.message,
         'The routes profile.account, profile.email, shop.orders are for '

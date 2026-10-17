@@ -229,6 +229,20 @@ final class LocalizationRole extends Role<TextsData> {
         'asks for none of them. All of them by default, English first.',
   );
 
+  /// The code of the warning that the app is not in a language that a text
+  /// of a module has a translation into, because no app can be in it (see
+  /// [supportedLanguages]).
+  static const unsupportedLanguageWarning = 'localization.unsupported_language';
+
+  /// The code of the warning that texts of a module have no translation
+  /// into a language of the app, which shows them in English there.
+  static const untranslatedWarning = 'localization.untranslated';
+
+  /// The code of the warning that the setting of the language shows
+  /// languages of the app by their codes, since the role has no names for
+  /// them (see [languageNames]).
+  static const unnamedLanguageWarning = 'localization.unnamed_language';
+
   @override
   String get id => 'localization';
 

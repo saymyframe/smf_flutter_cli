@@ -194,16 +194,13 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
     final option = context.option(LocalizationRole.localesOption.name);
     final locales =
         option == null ? available : _chosen(option, available, texts);
-    final warnings = [
+    [
       // With the option, the user chose the languages, and the option
       // takes none that an app cannot be in.
       if (option == null) ..._leftOut(texts),
       for (final language in locales) ..._untranslated(texts, language),
       if (context.has(settingsScreenRole)) ..._unnamed(locales),
-    ];
-    if (warnings.isNotEmpty) {
-      warnings.forEach(context.environment.logger.warn);
-    }
+    ].forEach(context.warn);
     return LocalizationChoice(List.unmodifiable(locales));
   }
 
@@ -263,7 +260,7 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
 
   /// A warning for each owner and each language of its texts among [texts]
   /// that no app can be in, which names the texts.
-  List<String> _leftOut(List<AppText> texts) {
+  List<SmfIssue> _leftOut(List<AppText> texts) {
     final byOwner = <(ContributionOrigin, String), List<String>>{};
     for (final text in texts) {
       for (final language in text.text.translations.keys) {
@@ -273,16 +270,19 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
         }
       }
     }
-    String warning(
+    SmfIssue warning(
       ContributionOrigin owner,
       String language,
       List<String> names,
     ) =>
-        'The app is not in $language, which '
-        '${names.length == 1 ? 'the text' : 'the texts'} ${names.join(', ')} '
-        'of ${_named(owner)} '
-        '${names.length == 1 ? 'has a translation' : 'have translations'} '
-        'into: Flutter has no texts for its own widgets in that language.';
+        SmfIssue.warning(
+          'The app is not in $language, which '
+          '${names.length == 1 ? 'the text' : 'the texts'} '
+          '${names.join(', ')} of ${_named(owner)} '
+          '${names.length == 1 ? 'has a translation' : 'have translations'} '
+          'into: Flutter has no texts for its own widgets in that language.',
+          code: LocalizationRole.unsupportedLanguageWarning,
+        );
     return [
       for (final MapEntry(key: (owner, language), value: names)
           in byOwner.entries)
@@ -293,35 +293,42 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
   /// A warning of the languages among [locales], those of an app with the
   /// setting of the language, that the setting shows by their codes, since
   /// the role has no names for them; none if it names each.
-  List<String> _unnamed(List<String> locales) {
+  List<SmfIssue> _unnamed(List<String> locales) {
     final codes = [
       for (final code in locales)
         if (!LocalizationRole.languageNames.containsKey(code)) code,
     ];
     if (codes.isEmpty) return const [];
     final one = codes.length == 1;
-    final warning = 'The setting of the language shows ${codes.join(', ')} '
-        'by ${one ? 'its code' : 'their codes'}: SMF has the names of '
+    return [
+      SmfIssue.warning(
+        'The setting of the language shows ${codes.join(', ')} by '
+        '${one ? 'its code' : 'their codes'}: SMF has the names of '
         '${LocalizationRole.languageNames.keys.join(', ')} only. Add the '
         'name of ${one ? 'the language' : 'each language'} to _names in '
-        '${LocalizationRole.languageSettingFile} of the app.';
-    return [warning];
+        '${LocalizationRole.languageSettingFile} of the app.',
+        code: LocalizationRole.unnamedLanguageWarning,
+      ),
+    ];
   }
 
   /// A warning for each owner with texts among [texts] that have no
   /// translation into [language].
-  List<String> _untranslated(List<AppText> texts, String language) {
+  List<SmfIssue> _untranslated(List<AppText> texts, String language) {
     final byOwner = <ContributionOrigin, List<String>>{};
     for (final text in texts) {
       if (text.text.textIn(language) == null) {
         byOwner.putIfAbsent(text.owner, () => []).add(text.text.name);
       }
     }
-    String warning(ContributionOrigin owner, List<String> names) =>
-        'No translation into $language of '
-        '${names.length == 1 ? 'the text' : 'the texts'} ${names.join(', ')} '
-        'of ${_named(owner)}: the app shows '
-        '${names.length == 1 ? 'it' : 'them'} in English there.';
+    SmfIssue warning(ContributionOrigin owner, List<String> names) =>
+        SmfIssue.warning(
+          'No translation into $language of '
+          '${names.length == 1 ? 'the text' : 'the texts'} '
+          '${names.join(', ')} of ${_named(owner)}: the app shows '
+          '${names.length == 1 ? 'it' : 'them'} in English there.',
+          code: LocalizationRole.untranslatedWarning,
+        );
     return [
       for (final MapEntry(key: owner, value: names) in byOwner.entries)
         warning(owner, names),

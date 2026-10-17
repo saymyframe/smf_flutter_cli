@@ -288,6 +288,10 @@ final class AuthRole extends Role<RoleImplementation> {
   /// the app is generated; see [AuthRole].
   static const account = RouteCondition(authRole, 'account');
 
+  /// The code of the warning that routes of the app ask for [account] while
+  /// no guard of the app stands for it, so every user gets to them.
+  static const openAccountRoutesWarning = 'auth.open_account_routes';
+
   /// The implementation of `AuthService`, which the template renders from
   /// the provider's [RoleImplementation]; modules do not contribute to it.
   static const implementations = SocketRef<CodeSocket>.role(
@@ -544,6 +548,7 @@ List<SmfIssue> _openAccountRoutes(RoleHookInput<RoleImplementation> input) {
       'with an account (${one ? 'it asks' : 'they ask'} for the condition '
       '${AuthRole.account}), but no module of the app has a guard for that '
       'condition, so every user gets to ${one ? 'it' : 'them'}.',
+      code: AuthRole.openAccountRoutesWarning,
       hint: 'Add a module with the screens of sign-in to the app, or keep '
           'the other users away later with a guard of your own that reads '
           'appSession.hasAccount.',

@@ -169,6 +169,12 @@ List<String> _roleIdProblems(List<Role> roles, List<SmfModule> modules) {
         'their sockets would have the same tags.',
       );
     }
+    if (role.id == 'pipeline') {
+      problems.add(
+        'The role id pipeline names the pipeline in the codes of warnings, '
+        'such as $unusedOptionWarning.',
+      );
+    }
   }
   return problems;
 }

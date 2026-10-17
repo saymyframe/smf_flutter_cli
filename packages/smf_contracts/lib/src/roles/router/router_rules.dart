@@ -208,7 +208,13 @@ final class _RoutesCheck {
       problems.add(unreachable);
     }
     if (ambiguous != null) {
-      warnings.add(SmfIssue.warning(ambiguous, origin: origin));
+      warnings.add(
+        SmfIssue.warning(
+          ambiguous,
+          code: RouterRole.ambiguousRoutesWarning,
+          origin: origin,
+        ),
+      );
     }
   }
 
