@@ -610,26 +610,24 @@ void main() {
         'shows the screen of the start route, and imports no fallback '
         'start screen, in an app that a route starts', () async {
       final result = await renderedApp(const [TestStartModule.id]);
-      const factoryFile = RouterRole.appRouterFactoryFile;
-      final index = DartFileIndexer.index(
-        factoryFile,
-        result.app!.texts[factoryFile]!,
+      // The Dart files of the test router, by their owner.
+      final router = [
+        for (final MapEntry(key: path, value: file)
+            in result.app!.files.entries)
+          if (file.owner == const ModuleOrigin(TestRouterModule.id) &&
+              path.endsWith('.dart'))
+            DartFileIndexer.index(path, result.app!.texts[path]!),
+      ];
+      final start = const ImportRef.app(
+        'features/test_start/test_start_screen.dart',
+      ).resolveUri('contract_app');
+      final fallback = AppEntryRole.fallbackStartScreen.importRef.resolveUri(
+        'contract_app',
       );
 
-      expect(
-        index.importsUri(
-          const ImportRef.app(
-            'features/test_start/test_start_screen.dart',
-          ).resolveUri('contract_app'),
-        ),
-        isTrue,
-      );
-      expect(
-        index.importsUri(
-          AppEntryRole.fallbackStartScreen.importRef.resolveUri('contract_app'),
-        ),
-        isFalse,
-      );
+      expect(router, isNotEmpty);
+      expect(router.where((file) => file.importsUri(start)), isNotEmpty);
+      expect(router.where((file) => file.importsUri(fallback)), isEmpty);
     });
   });
 
