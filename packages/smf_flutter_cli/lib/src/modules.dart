@@ -11,6 +11,7 @@ import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
@@ -47,6 +48,7 @@ const List<SmfModule> smfModules = [
   EventBusModule(),
   SharedPreferencesModule(),
   OnboardingModule(),
+  LocalNotificationsModule(),
   FirebaseCoreModule(),
   FirebaseCrashlyticsModule(),
   FirebaseAnalyticsModule(),

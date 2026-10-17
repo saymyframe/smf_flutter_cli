@@ -39,6 +39,10 @@ dependencies:
   # The start screen of the CLI, for its app test in the app of several
   # providers, which starts on another screen.
   smf_home_flutter: ^0.4.1
+  # The provider of the notifications role in the registry of several
+  # providers, for the app test that it keeps and the test of the role that
+  # the CLI keeps.
+  smf_local_notifications: ^0.5.0
   # The provider of the theme role in the registry of several providers, for
   # the tests of the role that the CLI keeps.
   smf_material_theme: ^0.4.1

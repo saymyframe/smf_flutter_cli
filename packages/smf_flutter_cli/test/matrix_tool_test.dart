@@ -155,10 +155,10 @@ void main() {
         contains("import 'package:start_app/main.dart' as app;"),
       );
       // The probes of the tests of the app, in the order of the tests, those
-      // of the preferences and of the onboarding among them: the apps
-      // without external steps have their modules too. They lack Firebase,
-      // whose configuration needs an account, and so Firebase
-      // Authentication, which depends on it, with its probe.
+      // of the preferences, of the onboarding and of the notifications among
+      // them: the apps without external steps have their modules too. They
+      // lack Firebase, whose configuration needs an account, and so
+      // Firebase Authentication, which depends on it, with its probe.
       final list = read(app, startProbesFile);
       expect(
         [
@@ -171,8 +171,10 @@ void main() {
             if (!withoutExternalSteps) ('firebase_auth', 'probeFirebaseAuth'),
             ('onboarding', 'probeOnboarding'),
             ('shared_preferences', 'probeSharedPreferences'),
+            ('local_notifications', 'probeLocalNotifications'),
             ('di_role', 'probeServices'),
             ('preferences_role', 'probePreferences'),
+            ('notifications_role', 'probeNotifications'),
             ('router_walk', 'probeRoutes'),
             ('localization_role', 'probeLanguages'),
           ].indexed)

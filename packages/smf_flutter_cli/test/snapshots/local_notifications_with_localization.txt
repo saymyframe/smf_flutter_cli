@@ -1,0 +1,1974 @@
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+- The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+
+## Localization
+
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+
+With `gen-l10n` of Flutter:
+
+- The texts of the app are in the ARB files of `lib/l10n`. `lib/l10n/app_en.arb` has every text in English, and `lib/l10n/app_<code>.arb` the translations into another language. A text that such a file lacks reads in English there.
+- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files.
+- After every change of the ARB files, a new file included, run `flutter gen-l10n`, which generates `context.l10n.<name>`. Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says.
+- Write an apostrophe in a text once: `l10n.yaml` turns the escapes of `gen-l10n` off (`use-escaping: false`).
+
+## Notifications
+
+- `appNotifications` in `lib/core/notifications/app_notifications.dart` shows the notifications of the app. `show()` shows one now, `schedule(notification, at: time)` at about that time, not to the minute, even if the app is closed by then. `cancel()` and `cancelAll()` remove them, and `scheduled()` lists those still to come, those of an owner too. A notification is an `AppNotification` with an `id`, a `title`, a `body` and `data`, and one with the id of a notification that is shown or scheduled takes its place. Give it an id from 0 up: a negative id is for a notification with an owner, which names it under `notificationOwnerKey` in its `data`, and whose taps go to `tapsOf(owner)` and `launchTapOf(owner)`.
+- `appNotifications.permission` is `granted`, `denied` or `notAsked`. Ask with `appNotifications.request()` where the user turns on something that notifies, so that the question explains itself. Where the system has no question to show, as on Android before 13, the request opens its settings instead. After `denied` the system may not ask again (iOS asks only once, and Android stops after a second no), so open its settings with `appNotifications.openSettings()`. The app remembers that it asked under `notifications.asked`, so write nothing under that key.
+- A tap on a notification reaches `appNotifications.taps` with the `data` of the notification, and the tap that launched the app is `appNotifications.launchTap`. Handle both once the first screen is shown, and navigate as the rest of the app does. A notification runs no code of the app when it shows.
+- On Android a notification shows `android/app/src/main/res/drawable/ic_notification.xml` as its small icon. Change the drawing there and keep the name of the file.
+- A new provider implements `NotificationsService` of `lib/core/notifications/notifications_service.dart`, and only the files of that implementation import it. The code of the app imports `lib/core/notifications/app_notifications.dart`, which exports `AppNotification` and `NotificationTap`, and calls neither `initNotifications()` nor `createNotificationsService()` nor `appNotifications.start()`.
+
+- Nothing in this app asks for the permission yet: call `appNotifications.request()` where the user turns on something that notifies.
+
+With `flutter_local_notifications`:
+
+- `LocalNotificationsService` in `lib/core/notifications/local_notifications_service.dart` implements `NotificationsService` on `FlutterLocalNotificationsPlugin`. In `lib/`, only that file imports the package: other code shows notifications through `appNotifications`.
+- Every notification goes to the channel `notificationChannelId` with the details in `_details` of that file. For another channel, such as one with another sound, create it with `createNotificationChannel()` of `AndroidFlutterLocalNotificationsPlugin` in `openLocalNotifications()`, and show a notification in it with details of its own.
+- A scheduled notification uses an inexact alarm (`AndroidScheduleMode.inexactAllowWhileIdle`). Exact alarms need the permission `SCHEDULE_EXACT_ALARM`, which Google Play allows only for an app whose main feature needs them: change the mode only when asked.
+- `android/app/src/main/AndroidManifest.xml` declares the receivers of the package, `android/app/build.gradle.kts` turns on core library desugaring, and `ios/Runner/AppDelegate.swift` sets the delegate of the notification center. Keep them: scheduled notifications, the Android build and the taps on iOS need them.
+- The package has no platform side for tests. A test that runs `bootstrap()` answers the method channel `dexterous.com/flutter/local_notifications` itself, with `setMockMethodCallHandler` of `TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger`, after `AndroidFlutterLocalNotificationsPlugin.registerWith()`.
+
+## Preferences
+
+- `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- In the code of the app, do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences. A test may call both: `initPreferences()` opens the preferences again, as the next launch of the app does, and `createAppPreferences()` returns them.
+
+With `shared_preferences`:
+
+- In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
+- A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
+- In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+
+## Texts
+
+The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
+
+To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. Then run `flutter gen-l10n`. A text without a translation into a language reads in English there.
+
+The texts of a new language, such as German, go into a file of their own:
+
+1. Add `lib/l10n/app_de.arb` with `"@@locale": "de"` and the translations.
+2. Run `flutter gen-l10n`.
+
+The section "Languages" tells where else the new language goes.
+
+## flutter_local_notifications
+
+The app shows its notifications with [flutter_local_notifications](https://pub.dev/packages/flutter_local_notifications): `lib/core/notifications/local_notifications_service.dart` implements the notifications service of the app on it (see the section Notifications).
+
+The module set up what the package needs in the native projects:
+
+- `android/app/build.gradle.kts` turns on core library desugaring with `desugar_jdk_libs` 2.1.4, without which the Android build fails.
+- `android/app/src/main/AndroidManifest.xml` declares the receivers of the package that show a scheduled notification at its time and set the scheduled ones again after a restart of the device or an update of the app, and the permission `android.permission.RECEIVE_BOOT_COMPLETED` for the restart.
+- `ios/Runner/AppDelegate.swift` makes the app delegate the delegate of the notification center of iOS, so that a notification shows while the app is in the foreground and a tap reaches the app, also the tap that launched it.
+
+Every notification goes to the channel `default`, with a high importance, which the service creates when the app starts. A scheduled notification uses an inexact alarm on Android, which needs no permission: Android may show it a few minutes late. To show notifications to the minute, declare `android.permission.SCHEDULE_EXACT_ALARM` in the manifest, ask for it with `requestExactAlarmsPermission()` of `AndroidFlutterLocalNotificationsPlugin`, and schedule with `AndroidScheduleMode.exactAllowWhileIdle`. Google Play allows exact alarms only for apps whose main feature needs them, such as an alarm clock or a calendar.
+
+The app does not set up the actions of a notification, its buttons. They need the receiver `ActionBroadcastReceiver` on Android and, on iOS, a callback that registers the plugins for the isolate in which an action runs: see the README of the package.
+
+## Languages
+
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`, one locale for each language, since the app tells its languages apart by their codes.
+2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
+
+## Notifications
+
+The app shows notifications through `appNotifications` in `lib/core/notifications/app_notifications.dart`. `show()` shows one now and `schedule()` at a time to come, `cancel()` and `cancelAll()` remove them, and `scheduled()` lists those still to come. A scheduled notification shows at about its time, not to the minute, even if the app is closed by then, and after the device restarts. A tap on a notification reaches `appNotifications.taps` with the `data` of the notification, and `appNotifications.launchTap` is the tap that launched the app.
+
+The app needs the permission of the user to show notifications. `appNotifications.permission` is `granted`, `denied` once the user said no or turned them off, or `notAsked`, and `appNotifications.request()` asks. Where the system has no question to show, as on Android before 13, the request opens the settings of the system for the notifications of the app instead. Nothing in this app asks yet. Call `appNotifications.request()` where the user turns on something that notifies, so that the question of the system explains itself. After `denied` the system may not ask again: iOS asks only once, and Android stops asking after a second no. `appNotifications.openSettings()` opens the settings of the system, where the user turns the notifications on.
+
+On Android a notification shows `android/app/src/main/res/drawable/ic_notification.xml` as its small icon. Replace the bell there with the icon of the app, a shape on a transparent background, and keep the name of the file: `android/app/src/main/res/raw/notifications_keep.xml` keeps the icon in a release build. In the settings of the system, the channel of the notifications has the name of the app.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <application
+        android:label="My App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/app/src/main/res/drawable/ic_notification.xml (role:notifications) ===
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The small icon of a notification of the app: the bell of the Material
+    Design icons, which are under the Apache License 2.0. Replace the drawing
+    with the icon of the app, a shape on a transparent background, which
+    Android shows in one colour, and keep the name of this file.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.89,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32L13.5,4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z" />
+</vector>
+=== android/app/src/main/res/raw/notifications_keep.xml (role:notifications) ===
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Keeps the small icon of a notification in a release build. The code
+    names the icon by its name alone, so the shrinking of the resources of a
+    release build would remove it, and the app could not show a
+    notification.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification" />
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/AppDelegate.swift (flutter_core) ===
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    UNUserNotificationCenter.current().delegate = self
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>My App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>uk</string>
+	</array>
+</dict>
+</plist>
+=== ios/Runner/Runner.entitlements (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+</dict>
+</plist>
+=== l10n.yaml (gen_l10n) ===
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+nullable-getter: false
+use-escaping: false
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/l10n/app_localizations.dart';
+
+import 'core/app/fallback_start_screen.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'My App',
+    locale: AppLocaleScope.of(context),
+    localizationsDelegates: [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: [...appLocales],
+    home: const FallbackStartScreen(),
+    builder: (context, child) => StatusBarIcons(child: child!),
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:my_app/core/notifications/app_notifications.dart';
+import 'package:my_app/core/preferences/app_preferences.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  await initPreferences();
+  await initNotifications();
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => FallbackStartView(
+    hint: context.l10n.flutterCoreFallbackHint,
+    copied: context.l10n.flutterCoreFallbackCopied,
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '5',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Ma',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'My App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/app/status_bar_icons.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Asks the system for the icons of the status bar that suit the theme,
+/// around [child]: dark icons on a light theme, light ones on a dark theme.
+///
+/// The root of the app puts it around the content of every route, below
+/// the `MaterialApp` whose theme it reads. It leaves the navigation bar of
+/// the system as the platform has it. A screen with an `AppBar` gets the
+/// icons that suit its bar, since the bar tells them for the top of the
+/// screen itself.
+class StatusBarIcons extends StatelessWidget {
+  /// Creates the widget around [child].
+  const StatusBarIcons({required this.child, super.key});
+
+  /// What the icons suit: the content of a route.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // iOS takes the brightness of the bar, and Android that of its icons.
+      value: SystemUiOverlayStyle(
+        statusBarBrightness: brightness,
+        statusBarIconBrightness: brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+      child: child,
+    );
+  }
+}
+=== lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/widgets.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The languages of the app. The app shows its texts in the language that
+/// the device prefers among them, and in the first of the list when the
+/// device asks for none of them.
+///
+/// A language has one locale here. The app tells its languages apart by
+/// their codes alone, so of two locales of one language, such as
+/// `Locale('pt', 'BR')` and `Locale('pt', 'PT')`, `appLocale.choose()`
+/// takes the first, whichever of them it is given.
+const appLocales = <Locale>[Locale('en'), Locale('uk')];
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the code of the language, such as `uk`.
+/// Nothing is saved under it while the app follows the languages of the
+/// device.
+const _key = 'localization.locale';
+
+/// The language that the user chose for the app, which the app remembers
+/// between its launches.
+///
+/// The root of the app reads it through [AppLocaleScope], and rebuilds in
+/// the new language when the choice changes.
+final appLocale = AppLocaleController._();
+
+/// Keeps the language that the user chose for the app, and saves each
+/// choice in the preferences of the app.
+final class AppLocaleController extends ChangeNotifier {
+  AppLocaleController._();
+
+  Locale? _locale;
+
+  /// The preferences of the app, once it opened them.
+  AppPreferences? _preferences;
+
+  /// The language that the user chose, one of [appLocales], or `null` while
+  /// the app follows the languages of the device.
+  Locale? get value => _locale;
+
+  /// Chooses the language of [locale] as the language of the app, or with
+  /// `null` lets the app follow the languages of the device again.
+  ///
+  /// The choice is the one of [appLocales] with the language of [locale],
+  /// so `Locale('uk', 'UA')` chooses `Locale('uk')`. A locale of a language
+  /// that the app is not in is refused: the future completes with an
+  /// [ArgumentError], and nothing changes.
+  ///
+  /// The language of the app changes at once, and the choice is then saved
+  /// in the preferences once the app opened them: before that, it changes
+  /// only memory. When saving fails, the future completes with the error of
+  /// the preferences. The app stays in the new language while it runs, and
+  /// its next launch starts with what was saved before; choosing the
+  /// language again saves it again.
+  Future<void> choose(Locale? locale) async {
+    final chosen = locale == null ? null : _ofApp(locale.languageCode);
+    if (locale != null && chosen == null) {
+      throw ArgumentError.value(
+        '$locale',
+        'locale',
+        'The app is not in the language of this locale',
+      );
+    }
+    _set(chosen);
+    final preferences = _preferences;
+    if (preferences == null) return;
+    if (chosen == null) {
+      await preferences.remove(_key);
+    } else {
+      await preferences.setString(_key, chosen.languageCode);
+    }
+  }
+
+  void _set(Locale? locale) {
+    if (locale == _locale) return;
+    _locale = locale;
+    notifyListeners();
+  }
+}
+
+/// The one of [appLocales] with the language of the code [code], or `null`.
+Locale? _ofApp(String? code) {
+  for (final locale in appLocales) {
+    if (locale.languageCode == code) return locale;
+  }
+  return null;
+}
+
+/// Restores the language that the user chose from [preferences], which the
+/// app opened, and keeps them for the choices to come: a restorer of the
+/// preferences, which the app calls before its first frame.
+///
+/// When nothing is saved, or what is saved is not the code of one of
+/// [appLocales], the choice stays as it is.
+void restoreAppLocale(AppPreferences preferences) {
+  appLocale._preferences = preferences;
+  final saved = _ofApp(preferences.getString(_key));
+  if (saved != null) appLocale._set(saved);
+}
+
+/// Gives the root of the app the language that the user chose, and rebuilds
+/// the root when the choice changes.
+class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppLocaleScope({
+    required AppLocaleController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The language that the user chose, or `null` to follow the device; the
+  /// widget of [context] rebuilds when the choice changes.
+  static Locale? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppLocaleScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/l10n/l10n.dart (gen_l10n) ===
+import 'package:flutter/widgets.dart';
+
+import '../../l10n/app_localizations.dart';
+
+/// The texts of the app in the language of a context: `context.l10n`.
+extension AppTexts on BuildContext {
+  /// The texts of the app in the language of this context, which is below
+  /// the root of the app.
+  ///
+  /// gen-l10n of Flutter generates [AppLocalizations] from the ARB files in
+  /// `lib/l10n`: run `flutter gen-l10n` after every change of those files.
+  AppLocalizations get l10n => AppLocalizations.of(this);
+}
+=== lib/core/notifications/app_notifications.dart (role:notifications) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/notifications/local_notifications_service.dart'
+    as impl0;
+
+import '../preferences/app_preferences.dart';
+import 'notifications_service.dart';
+
+export 'notifications_service.dart' show AppNotification, NotificationTap;
+
+/// Whether the app may show notifications.
+enum NotificationPermission {
+  /// The user allowed it.
+  granted,
+
+  /// The app asked, and the user did not allow it or turned the
+  /// notifications of the app off later. The system may ask no more: iOS
+  /// asks once, and Android after a second no. So the app opens its
+  /// settings, where the user turns the notifications on:
+  /// [NotificationsController.openSettings].
+  denied,
+
+  /// The app may not show notifications, and has not asked yet.
+  notAsked,
+}
+
+/// The key under which a notification with an owner names its owner in its
+/// [AppNotification.data], such as a push message that the app shows itself.
+///
+/// [NotificationsController.taps] and [NotificationsController.launchTap]
+/// leave out the taps on such a notification, which
+/// [NotificationsController.tapsOf] and
+/// [NotificationsController.launchTapOf] give to the owner. A notification
+/// with an owner has a negative id, so that it never takes the place of a
+/// notification of the app.
+const String notificationOwnerKey = 'notifications.owner';
+
+/// The notifications of the app: the permission to show them, the
+/// notifications that the app shows now or at a time to come, and the taps
+/// of the user on them.
+final appNotifications = NotificationsController._();
+
+/// Shows the notifications of the app through the service of the provider
+/// of notifications, keeps the permission to show them up to date, and
+/// tells of the taps on them. The app has one, [appNotifications].
+///
+/// A call made before the app started the service waits for it, and fails
+/// with the error of that start if it fails.
+///
+/// What the service throws reaches the code that called. An error of the
+/// service when the user comes back to the app, or one that its taps send,
+/// has no caller, so it reaches the handlers of the uncaught errors of the
+/// app, and the controller goes on.
+final class NotificationsController {
+  NotificationsController._();
+
+  /// The key under which the preferences remember that the app asked for
+  /// the permission.
+  static const _askedKey = 'notifications.asked';
+
+  /// The smallest and the largest id of a notification: the platforms keep
+  /// it in 32 bits.
+  static const _smallestId = -0x80000000;
+  static const _largestId = 0x7FFFFFFF;
+
+  NotificationsService? _service;
+  StreamSubscription<NotificationTap>? _serviceTaps;
+  NotificationTap? _launchTap;
+
+  /// Completes when the app has started for the first time, with the error
+  /// of that start if it failed. Nothing but a call that waits for the start
+  /// reports that error, which the start throws itself.
+  final Completer<void> _started = Completer<void>()..future.ignore();
+
+  /// The preferences that remember that the app asked, once the app opened
+  /// them.
+  AppPreferences? _preferences;
+
+  /// Whether the app asked for the permission.
+  bool _asked = false;
+
+  /// Whether the service last said that the app may show notifications.
+  bool _enabled = false;
+
+  /// The request for the permission that is on its way, if any.
+  Future<NotificationPermission>? _request;
+
+  /// Tells when the user comes back to the app.
+  _ResumeObserver? _observer;
+
+  final StreamController<NotificationTap> _taps =
+      StreamController<NotificationTap>.broadcast();
+
+  final ValueNotifier<NotificationPermission> _permission = ValueNotifier(
+    NotificationPermission.notAsked,
+  );
+
+  /// Whether the app may show notifications. It follows what the user
+  /// answers, and what the user changed in the settings of the system once
+  /// the user comes back to the app. A widget follows it with a
+  /// `ValueListenableBuilder`.
+  ValueListenable<NotificationPermission> get permission => _permission;
+
+  /// The tap on a notification of the app that launched the app, or `null`
+  /// if the app was launched in another way: known once `bootstrap()` is
+  /// over. The tap is not among the [taps]. It is `null` for a tap on a
+  /// notification of an owner, as [taps] leaves those out.
+  NotificationTap? get launchTap => switch (_launchTap) {
+    final tap? when _isOfApp(tap) => tap,
+    _ => null,
+  };
+
+  /// Tells of each tap on a notification of the app while the app runs,
+  /// with the data of the notification: a broadcast stream, the same for
+  /// the life of the app. It leaves out the taps on the notifications of an
+  /// owner, which [tapsOf] gives, and those with a negative id: the
+  /// notification of an owner whose data the provider could not read.
+  late final Stream<NotificationTap> taps = _taps.stream.where(_isOfApp);
+
+  /// Tells of each tap on a notification whose owner is [owner], as it is
+  /// under [notificationOwnerKey] in its data: a broadcast stream.
+  Stream<NotificationTap> tapsOf(String owner) =>
+      _taps.stream.where((tap) => _ownerOf(tap) == owner);
+
+  /// The tap on a notification whose owner is [owner] that launched the
+  /// app, or `null`.
+  NotificationTap? launchTapOf(String owner) => switch (_launchTap) {
+    final tap? when _ownerOf(tap) == owner => tap,
+    _ => null,
+  };
+
+  /// Starts with [service]: takes the tap that launched the app, follows
+  /// the taps, and asks whether the app may show notifications.
+  ///
+  /// `initNotifications()` calls it in `bootstrap()`, so [permission] and
+  /// [launchTap] are known before the first frame. It may be called again,
+  /// with the service that the app has from then on: `initNotifications()`
+  /// does so in a test of the next launch of the app, and a test gives it a
+  /// service of its own.
+  ///
+  /// If the service fails to tell whether the app may show notifications,
+  /// the future fails with its error, and so do the calls that waited for
+  /// the first start. A call after that goes to the service.
+  Future<void> start(NotificationsService service) async {
+    unawaited(_serviceTaps?.cancel());
+    _service = service;
+    _launchTap = service.launchTap;
+    // An error of the taps has no caller: it reaches the handlers of the
+    // uncaught errors of the app, and the taps go on.
+    _serviceTaps = service.taps.listen(_taps.add);
+    if (_observer == null) {
+      final observer = _observer = _ResumeObserver(() => unawaited(_refresh()));
+      WidgetsBinding.instance.addObserver(observer);
+    }
+    try {
+      await _refresh();
+    } on Object catch (error, stackTrace) {
+      if (!_started.isCompleted) _started.completeError(error, stackTrace);
+      rethrow;
+    }
+    if (!_started.isCompleted) _started.complete();
+  }
+
+  /// Asks the user for the permission to show notifications, unless the app
+  /// has it, and completes with the permission once the user answered.
+  ///
+  /// Ask where the user turns on something that notifies, so that the
+  /// question explains itself. Where the platform has no question, the
+  /// service opens the settings of the system instead. After
+  /// [NotificationPermission.denied] the system may ask no more: iOS asks
+  /// once, and Android after a second no. So open its settings then:
+  /// [openSettings].
+  ///
+  /// A request while another is on its way completes with that one. If the
+  /// preferences fail to save that the app asked, the future completes with
+  /// their error: [permission] is up to date by then, but the next launch
+  /// of the app takes it that the app has not asked.
+  Future<NotificationPermission> request() =>
+      _request ??= _ask().whenComplete(() => _request = null);
+
+  /// Opens the settings of the system for the notifications of the app.
+  Future<void> openSettings() async => (await _ready()).openSettings();
+
+  /// Shows [notification] now.
+  ///
+  /// Its id is a 32-bit integer, 0 or more unless the notification has an
+  /// owner under [notificationOwnerKey] in its data, which takes a negative
+  /// id. Its future fails with an [ArgumentError] for another id.
+  Future<void> show(AppNotification notification) async {
+    _check(notification);
+    await (await _ready()).show(notification);
+  }
+
+  /// Shows [notification] at about [at], not to the minute, also when the
+  /// app is closed then. Its future fails with an [ArgumentError] when [at]
+  /// is not in the future, and for an id that [show] does not take.
+  Future<void> schedule(
+    AppNotification notification, {
+    required DateTime at,
+  }) async {
+    _check(notification);
+    if (!at.isAfter(DateTime.now())) {
+      throw ArgumentError.value(at, 'at', 'The time is not in the future');
+    }
+    await (await _ready()).schedule(notification, at);
+  }
+
+  /// Removes the notification [id], whether it is shown or scheduled.
+  Future<void> cancel(int id) async => (await _ready()).cancel(id);
+
+  /// Removes every notification of the app, shown or scheduled, those of an
+  /// owner too.
+  Future<void> cancelAll() async => (await _ready()).cancelAll();
+
+  /// The notifications that are scheduled and not shown yet, those of an
+  /// owner too.
+  Future<List<AppNotification>> scheduled() async =>
+      (await _ready()).scheduled();
+
+  /// The service, once the app has started for the first time.
+  Future<NotificationsService> _ready() async {
+    if (!_started.isCompleted) await _started.future;
+    return _service!;
+  }
+
+  Future<NotificationPermission> _ask() async {
+    final service = await _ready();
+    if (await service.areEnabled()) {
+      _enabled = true;
+      _update();
+      return _permission.value;
+    }
+    await service.request();
+    _asked = true;
+    _enabled = await service.areEnabled();
+    _update();
+    await _preferences?.setBool(_askedKey, true);
+    return _permission.value;
+  }
+
+  /// Asks the service whether the app may show notifications.
+  Future<void> _refresh() async {
+    _enabled = await _service!.areEnabled();
+    _update();
+  }
+
+  /// Takes that the app asked from [preferences], and keeps it as it is when
+  /// they have nothing saved. It keeps [preferences] for the next request.
+  void _restore(AppPreferences preferences) {
+    _preferences = preferences;
+    _asked = preferences.getBool(_askedKey) ?? _asked;
+    _update();
+  }
+
+  void _update() => _permission.value = _enabled
+      ? NotificationPermission.granted
+      : _asked
+      ? NotificationPermission.denied
+      : NotificationPermission.notAsked;
+
+  static String? _ownerOf(NotificationTap tap) =>
+      tap.data[notificationOwnerKey];
+
+  /// Whether [tap] is on a notification of the app: one without an owner,
+  /// whose id is not negative.
+  static bool _isOfApp(NotificationTap tap) =>
+      tap.id >= 0 && _ownerOf(tap) == null;
+
+  /// Throws an [ArgumentError] for an id of [notification] that the app
+  /// does not take; see [show].
+  static void _check(AppNotification notification) {
+    final AppNotification(:id, :data) = notification;
+    if (id < _smallestId || id > _largestId) {
+      throw ArgumentError.value(id, 'id', 'The id is no 32-bit integer');
+    }
+    final owned = data.containsKey(notificationOwnerKey);
+    if (id < 0 && !owned) {
+      throw ArgumentError.value(
+        id,
+        'id',
+        'A negative id is for a notification with an owner, which names it '
+            'under notificationOwnerKey in its data',
+      );
+    }
+    if (id >= 0 && owned) {
+      throw ArgumentError.value(
+        id,
+        'id',
+        'A notification with an owner has a negative id',
+      );
+    }
+  }
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// Restores from [preferences] whether the app asked for the permission to
+/// show notifications, and keeps them for the next request: a restorer of
+/// the preferences, which the app calls before its first frame.
+void restoreNotifications(AppPreferences preferences) =>
+    appNotifications._restore(preferences);
+
+/// Returns the service of the provider of notifications, which
+/// [initNotifications] created: `bootstrap()` awaits it before the first
+/// frame, and there is none to return before that.
+///
+/// The code of the app does not call it: it uses [appNotifications].
+NotificationsService createNotificationsService() => _notificationsService;
+
+late NotificationsService _notificationsService;
+
+/// Creates the service of the provider of notifications and starts
+/// [appNotifications] with it; `bootstrap()` awaits it before the first
+/// frame, and nothing else in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with what the device kept, and
+/// starts [appNotifications] with it.
+Future<void> initNotifications() async {
+  _notificationsService = await impl0.openLocalNotifications();
+  await appNotifications.start(_notificationsService);
+}
+=== lib/core/notifications/local_notifications_service.dart (local_notifications) ===
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/widgets.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+
+import 'notifications_service.dart';
+
+/// How the app shows each notification: in its channel, with a high
+/// importance, so that Android shows it as a banner, also while the app is
+/// in the foreground, as iOS does with the settings of [_settings].
+const _details = NotificationDetails(
+  android: AndroidNotificationDetails(
+    notificationChannelId,
+    notificationChannelName,
+    importance: Importance.high,
+    priority: Priority.high,
+  ),
+  iOS: DarwinNotificationDetails(),
+);
+
+/// The settings of the plugin: the small icon of a notification on Android,
+/// and on iOS no question for the permission when the app starts, which
+/// the plugin asks by default. The app asks when the user turns on
+/// something that notifies, through `appNotifications.request()`.
+const _settings = InitializationSettings(
+  android: AndroidInitializationSettings(notificationIcon),
+  iOS: DarwinInitializationSettings(
+    requestAlertPermission: false,
+    requestBadgePermission: false,
+    requestSoundPermission: false,
+  ),
+);
+
+/// Opens the notifications of the app on flutter_local_notifications: sets
+/// up the plugin, creates the channel of the app on Android, and reads the
+/// tap on a notification that launched the app. It asks the user nothing.
+///
+/// It may run again, as a test of the next launch of the app does: the
+/// service then has what the device kept, such as the notifications that
+/// are scheduled, and the taps go to the new service.
+Future<NotificationsService> openLocalNotifications() async {
+  final plugin = FlutterLocalNotificationsPlugin();
+  final taps = StreamController<NotificationTap>.broadcast();
+  await plugin.initialize(
+    settings: _settings,
+    onDidReceiveNotificationResponse: (response) {
+      if (_tapOf(response) case final tap?) taps.add(tap);
+    },
+  );
+  await plugin
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          notificationChannelId,
+          notificationChannelName,
+          importance: Importance.high,
+        ),
+      );
+  final launch = await plugin.getNotificationAppLaunchDetails();
+  final launchResponse = launch != null && launch.didNotificationLaunchApp
+      ? launch.notificationResponse
+      : null;
+  return LocalNotificationsService._(
+    plugin,
+    taps,
+    launchResponse == null ? null : _tapOf(launchResponse),
+  );
+}
+
+/// The tap of [response], with the data that its notification had, or none
+/// when the payload is no data of the app; `null` without an id.
+NotificationTap? _tapOf(NotificationResponse response) {
+  final id = response.id;
+  if (id == null) return null;
+  return NotificationTap(id: id, data: _dataOf(response.payload));
+}
+
+/// The data in [payload], the JSON of a map of texts, as the app gives the
+/// plugin a notification, or none for anything else.
+Map<String, String> _dataOf(String? payload) {
+  if (payload == null || payload.isEmpty) return const {};
+  try {
+    final decoded = jsonDecode(payload);
+    if (decoded is Map<String, Object?> &&
+        decoded.values.every((value) => value is String)) {
+      return decoded.cast<String, String>();
+    }
+  } on FormatException {
+    // A payload that the app did not write.
+  }
+  return const {};
+}
+
+/// The notifications of the app on
+/// [flutter_local_notifications](https://pub.dev/packages/flutter_local_notifications).
+///
+/// The code of the app does not use it: it shows notifications through
+/// `appNotifications` of `app_notifications.dart`.
+///
+/// A scheduled notification shows at about its time, also when the app is
+/// closed then: on Android the plugin sets an inexact alarm, which needs no
+/// permission for exact alarms, and sets it again after a restart of the
+/// device. Times go to the plugin in UTC, so no database of time zones is
+/// needed.
+///
+/// Where the system shows a question for the permission, [request] asks
+/// it. Where the system shows none and the app may not show notifications,
+/// as on Android before 13, and once the system asks no more (iOS asks
+/// once, Android 13 and later twice), [request] opens the settings of the
+/// system for the notifications of the app instead. The plugin does not
+/// tell whether the system showed its question, so the service watches the
+/// app: the question takes the app out of the foreground until the user
+/// answers.
+final class LocalNotificationsService implements NotificationsService {
+  LocalNotificationsService._(this._plugin, this._taps, this.launchTap);
+
+  final FlutterLocalNotificationsPlugin _plugin;
+  final StreamController<NotificationTap> _taps;
+
+  @override
+  final NotificationTap? launchTap;
+
+  @override
+  Stream<NotificationTap> get taps => _taps.stream;
+
+  AndroidFlutterLocalNotificationsPlugin? get _android => _plugin
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >();
+
+  IOSFlutterLocalNotificationsPlugin? get _ios => _plugin
+      .resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin
+      >();
+
+  @override
+  Future<bool> areEnabled() async {
+    if (_android case final android?) {
+      return await android.areNotificationsEnabled() ?? false;
+    }
+    final permissions = await _ios?.checkPermissions();
+    return permissions?.isEnabled ?? false;
+  }
+
+  @override
+  Future<void> request() async {
+    final question = _Question();
+    WidgetsBinding.instance.addObserver(question);
+    final bool allowed;
+    try {
+      allowed = await _ask();
+    } finally {
+      WidgetsBinding.instance.removeObserver(question);
+    }
+    if (!allowed && !question.shown) await openSettings();
+  }
+
+  /// Asks the system for the permission, and returns whether the app may
+  /// show notifications then.
+  Future<bool> _ask() async {
+    if (_android case final android?) {
+      return await android.requestNotificationsPermission() ?? false;
+    }
+    final allowed = await _ios?.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    return allowed ?? false;
+  }
+
+  @override
+  Future<void> openSettings() async {
+    await _plugin.openAppNotificationSettings();
+  }
+
+  @override
+  Future<void> show(AppNotification notification) async {
+    // Android keeps the alarm of a scheduled notification when one with its
+    // id is shown, so it would show again later.
+    final pending = await _plugin.pendingNotificationRequests();
+    if (pending.any((request) => request.id == notification.id)) {
+      await _plugin.cancel(id: notification.id);
+    }
+    await _plugin.show(
+      id: notification.id,
+      title: notification.title,
+      body: notification.body,
+      notificationDetails: _details,
+      payload: jsonEncode(notification.data),
+    );
+  }
+
+  @override
+  Future<void> schedule(AppNotification notification, DateTime at) =>
+      _plugin.zonedSchedule(
+        id: notification.id,
+        title: notification.title,
+        body: notification.body,
+        scheduledDate: tz.TZDateTime.from(at, tz.UTC),
+        notificationDetails: _details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: jsonEncode(notification.data),
+      );
+
+  @override
+  Future<void> cancel(int id) => _plugin.cancel(id: id);
+
+  @override
+  Future<void> cancelAll() => _plugin.cancelAll();
+
+  @override
+  Future<List<AppNotification>> scheduled() async => [
+    for (final request in await _plugin.pendingNotificationRequests())
+      AppNotification(
+        id: request.id,
+        title: request.title ?? '',
+        body: request.body,
+        data: _dataOf(request.payload),
+      ),
+  ];
+}
+
+/// Tells whether the system showed something over the app while it was
+/// watched, such as its question for the permission: the app leaves the
+/// foreground then, and comes back once the user answered.
+final class _Question with WidgetsBindingObserver {
+  bool shown = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) shown = true;
+  }
+}
+=== lib/core/notifications/notifications_service.dart (role:notifications) ===
+/// The id of the channel of Android in which the app shows its
+/// notifications. Android shows a notification only in a channel, and the
+/// user turns each channel of an app on or off in the settings of the
+/// system.
+const String notificationChannelId = 'default';
+
+/// The name of that channel, which the settings of the system show: the
+/// name of the app.
+const String notificationChannelName = 'My App';
+
+/// The name of the drawable of Android that a notification of the app shows
+/// as its small icon:
+/// `android/app/src/main/res/drawable/ic_notification.xml`.
+const String notificationIcon = 'ic_notification';
+
+/// A notification of the app.
+final class AppNotification {
+  /// Creates the notification [id] with [title], and with [body] and [data]
+  /// if they are given.
+  const AppNotification({
+    required this.id,
+    required this.title,
+    this.body,
+    this.data = const {},
+  });
+
+  /// The id of the notification. A notification with the id of one that is
+  /// shown or scheduled takes its place, a scheduled one when it shows.
+  final int id;
+
+  /// The title of the notification.
+  final String title;
+
+  /// The text below the title, or `null` for a notification with a title
+  /// alone.
+  final String? body;
+
+  /// What the app needs to know when the user taps the notification, such
+  /// as the screen that the tap opens.
+  final Map<String, String> data;
+}
+
+/// A tap of the user on a notification of the app.
+final class NotificationTap {
+  /// Creates the tap on the notification [id] with [data].
+  const NotificationTap({required this.id, this.data = const {}});
+
+  /// The id of the notification.
+  final int id;
+
+  /// The data of the notification.
+  final Map<String, String> data;
+}
+
+/// The notifications of the platform, which the provider of notifications
+/// implements: the permission to show them, the notifications that the app
+/// shows now or at a time to come, and the taps of the user on them.
+///
+/// The code of the app does not use it: it uses `appNotifications` of
+/// `app_notifications.dart`, which calls this service, remembers that the
+/// app asked for the permission and tells the taps of the app from those of
+/// an owner.
+///
+/// Every implementation keeps to this:
+/// - The function that creates the service asks the user nothing. It may be
+///   called again, and the service that it returns then has what the device
+///   kept, such as the notifications that are scheduled.
+/// - [show] and [schedule] complete whether the app may show notifications
+///   or not. Without the permission the system shows nothing, and may drop
+///   a notification that is scheduled.
+/// - Every notification goes to the channel [notificationChannelId] with a
+///   high importance and, on Android, [notificationIcon] as its small icon.
+///   It shows also while the app is in the foreground.
+/// - [schedule] shows the notification at about the time that it is given,
+///   not to the minute, also when the app is closed then, and after a
+///   restart of the device. A notification with the id of one that is shown
+///   or scheduled takes its place: [show] cancels the scheduled
+///   notification of its id, if there is one, so that it does not show
+///   later, and a notification scheduled with the id of one that is shown
+///   takes its place when it shows. [cancel] removes the notification of
+///   its id, shown or scheduled.
+/// - [taps] tells of each tap on a notification of the app while the app
+///   runs, and [launchTap] is the tap that launched the app. Each has the
+///   data that the notification had, or none if the service cannot read it.
+/// - [request] shows the question of the system where the platform has one,
+///   and completes once the user answered, also with a no, for which it does
+///   not throw. Where the platform has no question to show and the app may
+///   not show notifications, as on Android before 13, it opens the settings
+///   of the system for the notifications of the app instead, as
+///   [openSettings] does, and completes. So the user needs only one request
+///   to turn the notifications on, whatever the platform.
+abstract interface class NotificationsService {
+  /// The tap on a notification that launched the app, or `null` if the app
+  /// was launched in another way: known when the service is created.
+  NotificationTap? get launchTap;
+
+  /// Tells of each tap of the user on a notification of the app while the
+  /// app runs: a broadcast stream.
+  Stream<NotificationTap> get taps;
+
+  /// Whether the app may show notifications.
+  Future<bool> areEnabled();
+
+  /// Asks the user for the permission to show notifications, or opens the
+  /// settings of the system where the platform has no question to show.
+  Future<void> request();
+
+  /// Opens the settings of the system for the notifications of the app.
+  Future<void> openSettings();
+
+  /// Shows [notification] now, in place of the notification of its id that
+  /// is shown, and cancels the scheduled notification of its id.
+  Future<void> show(AppNotification notification);
+
+  /// Shows [notification] at about [at].
+  Future<void> schedule(AppNotification notification, DateTime at);
+
+  /// Removes the notification [id], whether it is shown or scheduled.
+  Future<void> cancel(int id);
+
+  /// Removes every notification of the app, shown or scheduled.
+  Future<void> cancelAll();
+
+  /// The notifications that are scheduled and not shown yet.
+  Future<List<AppNotification>> scheduled();
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/notifications/app_notifications.dart';
+import 'package:my_app/core/preferences/shared_app_preferences.dart' as impl0;
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting. A key has one
+/// value: a write replaces what the key had, a value of another type too.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame, and nothing else
+/// in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = await impl0.openSharedAppPreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It is synchronous and awaits nothing: nothing waits for an
+/// asynchronous one, and what such a one throws is not caught. It may run
+/// again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [
+  restoreAppLocale,
+  restoreNotifications,
+];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws, an error or an exception, keeps no other from restoring and does
+/// not stop the start-up of the app, which goes on with the defaults of
+/// that part. In debug mode it is printed, so that a restorer that fails
+/// shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
+}
+=== lib/core/preferences/shared_app_preferences.dart (shared_preferences) ===
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
+
+/// Opens the preferences of the app with the shared_preferences package: it
+/// reads what is saved into memory, which the reads then answer from.
+///
+/// The app has one object of its preferences, which
+/// `createAppPreferences()` returns once `initPreferences()` opened them.
+Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
+  await SharedPreferencesWithCache.create(
+    cacheOptions: const SharedPreferencesWithCacheOptions(),
+  ),
+);
+
+/// The settings of the app that are no secret, with the shared_preferences
+/// package, which keeps them in DataStore on Android and in `UserDefaults`
+/// on iOS.
+///
+/// Neither is encrypted, and a backup of the device carries them: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A number is read only as the type that it was saved as: `getDouble`
+/// returns `null` for a key with an `int`, and `getInt` for a key with a
+/// `double`, a whole number too.
+///
+/// A write puts its value into memory before it saves it. If the platform
+/// refuses the save, as Android does for a text that starts with the prefix
+/// that shared_preferences marks a list with, the write fails, and the
+/// reads of this run return the value all the same. The next launch reads
+/// what was saved before the write, or nothing if the key had no value.
+final class SharedAppPreferences implements AppPreferences {
+  /// Creates the preferences on [SharedPreferencesWithCache], which has
+  /// read what is saved.
+  SharedAppPreferences(this._preferences);
+
+  final SharedPreferencesWithCache _preferences;
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_preferences.get(key)) {
+    final List<Object?> list => _textsOf(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) =>
+      _preferences.setBool(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _preferences.setInt(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) =>
+      _preferences.setDouble(key, value);
+
+  /// shared_preferences keeps the list that it is given, so it gets a copy.
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _preferences.setStringList(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) => _preferences.remove(key);
+
+  /// The value of [key] if it is a [T], or `null`. The reads of
+  /// shared_preferences cast the value instead, and throw on a value of
+  /// another type.
+  T? _read<T>(String key) => switch (_preferences.get(key)) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// A copy of [list] as a list of texts, or `null` if an item of it is no
+  /// text.
+  ///
+  /// When the preferences are opened, the platform returns a list in a form
+  /// of its own: a list of objects on iOS, and on Android a list that casts
+  /// each item to a text as it is read, and so throws on an item that is
+  /// none. Cast to objects, either gives its items as they are.
+  static List<String>? _textsOf(List<Object?> list) {
+    final items = list.cast<Object?>();
+    return items.every((item) => item is String)
+        ? List<String>.from(items)
+        : null;
+  }
+}
+=== lib/l10n/app_en.arb (gen_l10n) ===
+{
+  "@@locale": "en",
+  "flutterCoreFallbackHint": "No start screen yet. Add a feature with a route, or replace this screen.",
+  "flutterCoreFallbackCopied": "Copied"
+}
+=== lib/l10n/app_uk.arb (gen_l10n) ===
+{
+  "@@locale": "uk",
+  "flutterCoreFallbackHint": "Стартового екрана ще немає. Додайте фічу з маршрутом або замініть цей екран.",
+  "flutterCoreFallbackCopied": "Скопійовано"
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(AppLocaleScope(notifier: appLocale, child: const App()));
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_local_notifications: "^22.3.2"
+  intl: "any"
+  shared_preferences: "^2.5.5"
+  timezone: "^0.11.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  uses-material-design: true
+  generate: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
+void main() {
+  testWidgets('names the app, and tells where its first screen goes', (
+    tester,
+  ) async {
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
+
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('5'), findsNothing);
+    final name = find.bySemanticsLabel('My App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Ma').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
+  });
+}
+=== test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+/// What the widget asks the system for on a screen in [theme].
+Future<SystemUiOverlayStyle> _styleIn(
+  WidgetTester tester,
+  ThemeData theme,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: theme,
+      home: const StatusBarIcons(child: Text('A screen')),
+    ),
+  );
+  return tester
+      .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.descendant(
+          of: find.byType(StatusBarIcons),
+          matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        ),
+      )
+      .value;
+}
+
+void main() {
+  testWidgets('asks for dark icons on a light theme', (tester) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.statusBarIconBrightness, Brightness.dark);
+    expect(style.statusBarBrightness, Brightness.light);
+    expect(find.text('A screen'), findsOneWidget);
+  });
+
+  testWidgets('asks for light icons on a dark theme', (tester) async {
+    final style = await _styleIn(
+      tester,
+      ThemeData(brightness: Brightness.dark),
+    );
+
+    expect(style.statusBarIconBrightness, Brightness.light);
+    expect(style.statusBarBrightness, Brightness.dark);
+  });
+
+  testWidgets('leaves the navigation bar of the system as it is', (
+    tester,
+  ) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.systemNavigationBarColor, isNull);
+    expect(style.systemNavigationBarIconBrightness, isNull);
+  });
+}
