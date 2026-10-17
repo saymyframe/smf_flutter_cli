@@ -268,6 +268,41 @@ Future<void> _expectFailuresAmongTests(MatrixFailingApp failing) async {
   }
 }
 
+/// The apps of the broken providers, and those of [brokenModuleApps], that
+/// warn of what they are made of, by name, each with the codes of its
+/// warnings (see [MatrixApp.warnings]): an app has only the modules that
+/// its tests need, so the destination of a feature may have no main
+/// navigation, or the app no route to start on, and the texts of
+/// fake_second have a translation into a language that no app can be in,
+/// and a text without a translation, on purpose.
+const _warningApps = <String, List<String>>{
+  'broken_router_asks_guards_at_start': ['router.no_main_navigation'],
+  'broken_router_ignores_guard_changes': ['router.no_main_navigation'],
+  'broken_router_keeps_page_on_guarded_replace': [
+    'router.no_main_navigation',
+  ],
+  'broken_router_names_pushed_pages_after_page_below': [
+    'router.no_main_navigation',
+  ],
+  'broken_router_asks_about_top_level_route': ['router.no_main_navigation'],
+  'broken_router_forgets_waiting_request': ['router.no_main_navigation'],
+  'broken_go_router_asks_within_its_calls': ['router.no_main_navigation'],
+  'broken_layout_keeps_labels': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'broken_texts_delegate_for_english_only': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'broken_texts_in_first_language': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+    'router.no_main_navigation',
+  ],
+  'fake_gate_stays_closed': ['router.no_start'],
+};
+
 void main() {
   final providers = brokenProviders();
 
@@ -697,6 +732,30 @@ void main() {
             'remove the exemption.',
       );
     }
+  });
+
+  test(
+      'the apps of the broken providers that warn of what they are made of '
+      'are those that the fixtures declare, with the codes they declare',
+      () async {
+    final warnings = <String, List<String>>{};
+    for (final failing in [
+      for (final provider in providers) provider.failingApp,
+      ...brokenModuleApps(),
+    ]) {
+      final (:app, :problems) = await failing.check();
+      expect(problems, isEmpty, reason: failing.name);
+      if (app!.warnings.isNotEmpty) warnings[app.name] = app.warnings;
+    }
+
+    expect(
+      warnings,
+      _warningApps,
+      reason: 'smf create --strict allows these warnings in the apps of CI, '
+          'and stops on any other. A new warning of an app is a decision: '
+          'change the modules of the app so that it does not warn, or '
+          'declare the actual map here.',
+    );
   });
 
   test('no broken provider is in a registry of apps that must work', () {
