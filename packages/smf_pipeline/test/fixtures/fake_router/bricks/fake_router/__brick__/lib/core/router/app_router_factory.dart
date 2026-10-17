@@ -33,9 +33,9 @@ const List<AppLocation> _destinations = [{{{destinations}}}];
 const _mainNavigation = _MainNavigation();
 
 /// The page of the fallback start screen of the app entry, which the
-/// router shows at `/` in an app that no route starts, or `null` in an app
+/// router shows at `/` in an app that no route starts, or none in an app
 /// that a route starts, whose start route is at the bottom of the stack.
-const Page<Object?>? _fallbackPage = {{{fallback_page}}};
+const List<Page<Object?>> _fallbackPages = [{{{fallback_page}}}];
 
 final class _MainNavigation {
   const _MainNavigation();
@@ -253,7 +253,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// an app that no route starts: when the stack is empty, and below the
   /// pages that pushes showed over the fallback screen.
   bool get _overFallback =>
-      _fallbackPage != null && _stack.every(_results.containsKey);
+      _fallbackPages.isNotEmpty && _stack.every(_results.containsKey);
 
   /// Tells the router of a change of the stacks, as each navigation does.
   ///
@@ -287,7 +287,7 @@ final class _FixtureDelegate extends RouterDelegate<Object>
       key: _navigatorKey,
       observers: _observers,
       pages: [
-        if (_overFallback) ?_fallbackPage,
+        if (_overFallback) ..._fallbackPages,
         for (final entry in _stack)
           if (entry case final AppLocation location)
             _page(location)

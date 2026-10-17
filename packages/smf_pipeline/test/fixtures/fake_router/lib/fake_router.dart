@@ -140,7 +140,7 @@ final class FakeRouterProvider extends RoleProvider<RoutesData> {
                 'MaterialPage<Object?>(child: ${fallback.name}())',
                 imports: [fallback.importRef],
               )
-            : const Fragment('null'),
+            : const Fragment(''),
         // The screens come with the imports of their files, which the
         // pipeline adds to the file that reads the variable. An app
         // without routes has none, and no route starts it.
