@@ -3,6 +3,42 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 2026-10-17
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
+ - [`smf_flutter_cli` - `v0.5.1`](#smf_flutter_cli---v051)
+ - [`smf_pipeline` - `v0.5.1`](#smf_pipeline---v051)
+ - [`smf_shared_preferences` - `v0.4.2`](#smf_shared_preferences---v042)
+ - [`smf_sign_in` - `v0.5.1`](#smf_sign_in---v051)
+
+---
+
+#### `smf_flutter_cli` - `v0.5.1`
+
+ - **FIX**(shared_preferences): keep shared_preferences_android below 2.5.0, whose release builds fail to open the preferences ([#204](https://github.com/saymyframe/smf_flutter_cli/issues/204)). ([2ddbaed2](https://github.com/saymyframe/smf_flutter_cli/commit/2ddbaed27da0031c144abb606c6d192a94a3eda8))
+
+#### `smf_pipeline` - `v0.5.1`
+
+ - **FIX**(shared_preferences): keep shared_preferences_android below 2.5.0, whose release builds fail to open the preferences ([#204](https://github.com/saymyframe/smf_flutter_cli/issues/204)). ([2ddbaed2](https://github.com/saymyframe/smf_flutter_cli/commit/2ddbaed27da0031c144abb606c6d192a94a3eda8))
+
+#### `smf_shared_preferences` - `v0.4.2`
+
+ - **FIX**(shared_preferences): keep shared_preferences_android below 2.5.0, whose release builds fail to open the preferences ([#204](https://github.com/saymyframe/smf_flutter_cli/issues/204)). ([2ddbaed2](https://github.com/saymyframe/smf_flutter_cli/commit/2ddbaed27da0031c144abb606c6d192a94a3eda8))
+
+#### `smf_sign_in` - `v0.5.1`
+
+ - **FIX**(shared_preferences): keep shared_preferences_android below 2.5.0, whose release builds fail to open the preferences ([#204](https://github.com/saymyframe/smf_flutter_cli/issues/204)). ([2ddbaed2](https://github.com/saymyframe/smf_flutter_cli/commit/2ddbaed27da0031c144abb606c6d192a94a3eda8))
+
+
 ## 2026-10-12
 
 ### Changes
