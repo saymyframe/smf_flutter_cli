@@ -35,7 +35,9 @@
 // iOS app. Run as a service account, it leaves Google out, which is enabled
 // in the project of CI already, and sets up the rest: it registers the SHA
 // of the debug key of the runner, which the test deletes again, so that
-// the project does not collect one for each run.
+// the project does not collect one for each run. It deletes the hashes of
+// that key alone, which the script prints, so that two runs at the same
+// time do not delete each other's.
 @TestOn('vm')
 library;
 
@@ -310,25 +312,44 @@ void main() {
         if (google) {
           expect('${enabled.stdout}', contains('Google is left out'));
         }
-        // The SHA of the debug key of the runner, which the script
-        // registered, goes again.
+        // The SHA-1 and SHA-256 of the debug key of the runner, which the
+        // script prints and registered, go again. Only those: a run at the
+        // same time registers the hashes of its own runner.
+        final ofRunner = debugKeyHashesIn('${enabled.stdout}');
+        if (shasBefore.isNotEmpty) {
+          expect(
+            ofRunner,
+            hasLength(2),
+            reason: 'The script did not print the hashes of the debug key.',
+          );
+        }
         for (final MapEntry(key: appId, value: before) in shasBefore.entries) {
-          final added = {
-            ...await _shaHashes(appId, project, credentials),
-          }..removeWhere((id, _) => before.containsKey(id));
+          final listed = await _shaHashes(appId, project, credentials);
+          final registered = {
+            for (final MapEntry(key: id, value: hash) in listed.entries)
+              if (!before.containsKey(id) &&
+                  ofRunner.contains(normalizedHashOf(hash)))
+                id,
+          };
           try {
             expect(
-              added,
+              {for (final hash in listed.values) normalizedHashOf(hash)},
+              containsAll(ofRunner),
+              reason: 'The project has not the hashes of the debug key of the '
+                  'runner for $appId.',
+            );
+            expect(
+              registered,
               '${enabled.stdout}'.contains(
                 'Registered them for the Android app $appId.',
               )
                   ? isNotEmpty
                   : isEmpty,
-              reason: 'The script did not register the SHA of the debug key '
-                  'for $appId as it said.',
+              reason: 'The script did not register the hashes of the debug '
+                  'key for $appId as it said.',
             );
           } finally {
-            for (final id in added.keys) {
+            for (final id in registered) {
               final deleted = await _firebase(
                 ['apps:android:sha:delete', appId, id],
                 project,

@@ -741,6 +741,31 @@ class DefaultFirebaseOptions {
     });
 
     test(
+        'have the hashes of the debug key of the machine that the script '
+        'prints, as the project lists them', () {
+      const sha1 =
+          '5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25';
+      const sha256 = 'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:'
+          '48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C';
+      expect(
+        debugKeyHashesIn(
+          'Registering the SHA-1 and SHA-256 of the Android debug key of this '
+          'machine, /home/runner/.android/debug.keystore, for the Android app '
+          '1:1:android:a.\n'
+          'The SHA-1 of the key is $sha1, and its SHA-256 is $sha256.\n'
+          'Registered them for the Android app 1:1:android:a.\n',
+        ),
+        {
+          '5e8f16062ea3cd2c4a0d547876baa6f38cabf625',
+          'fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c',
+        },
+      );
+      expect(debugKeyHashesIn('Enabling Email/Password.'), isEmpty);
+      expect(normalizedHashOf('5E:8F:16'), '5e8f16');
+      expect(normalizedHashOf('5e8f16'), '5e8f16');
+    });
+
+    test(
         'have the clients of Google in the Firebase files once Google is '
         'enabled: the client of the server for Android, and the reversed '
         'client of the iOS app', () {

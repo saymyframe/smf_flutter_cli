@@ -372,6 +372,25 @@ Map<String, String> shaHashesOf(String printed) {
   throw FormatException('The Firebase CLI listed no hashes', printed);
 }
 
+/// [hash], a hash of a certificate as keytool or Firebase writes it, in
+/// the form in which the test compares it: its hexadecimal digits in lower
+/// case, without colons.
+String normalizedHashOf(String hash) => hash.replaceAll(':', '').toLowerCase();
+
+/// The SHA-1 and SHA-256 of the debug key of the machine in [output], what
+/// the script of an app printed, in the form of [normalizedHashOf], or none
+/// if it printed them not.
+Set<String> debugKeyHashesIn(String output) {
+  final printed = RegExp(
+    'The SHA-1 of the key is ([0-9A-Fa-f:]+), and its SHA-256 is '
+    r'([0-9A-Fa-f:]+)\.',
+  ).firstMatch(output);
+  return {
+    if (printed != null)
+      for (final hash in [printed[1]!, printed[2]!]) normalizedHashOf(hash),
+  };
+}
+
 /// Whether [googleServices], the text of `google-services.json` of an
 /// Android app, has the client of the server of Google: an OAuth client of
 /// the type 3, which Firebase adds once Google is enabled in the project.
