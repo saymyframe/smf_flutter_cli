@@ -56,6 +56,9 @@ sealed class Contribution {
   ///   from its data;
   /// - conditions on the data of roles that form a cycle, such as data of
   ///   one role that depends on what a second role chose, while data of the
-  ///   second depends on what the first chose: neither could choose first.
+  ///   second depends on what the first chose: neither could choose first;
+  /// - a tag of a socket in a brick with conditions: an app where they do
+  ///   not hold leaves the brick out, and what the socket gets would be
+  ///   lost with it.
   final Set<ChoiceCondition> whenChosen;
 }
