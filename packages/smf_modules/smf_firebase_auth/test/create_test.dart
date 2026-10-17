@@ -45,13 +45,12 @@ const _enabling = 'Enabling the sign-in methods of the app in its Firebase '
 
 /// What the user has to know before the step runs: what it does for Google
 /// sign-in.
-const _notice = 'For a way to sign in of Google, it also gives Google the '
-    'name of the app and the email address of the account of the Firebase '
-    'CLI for its consent screen, registers the SHA-1 and SHA-256 of the '
-    'Android debug key of this machine, creating the key as the first debug '
-    'build would if there is none, downloads the Firebase files of the app '
-    'again and writes the URL scheme of the iOS app into '
-    'ios/Runner/Info.plist.';
+const _notice = 'If the app signs in with Google, it also gives Google the '
+    "app's name and the Firebase CLI account's email for its consent screen, "
+    "registers the SHA-1 and SHA-256 of this machine's Android debug key "
+    '(creating the key if there is none, as the first debug build would), '
+    "downloads the app's Firebase files again and writes the iOS URL scheme "
+    'into ios/Runner/Info.plist.';
 
 /// The question whether to configure Firebase now.
 const _configureNow = 'Configuring Firebase with flutterfire '

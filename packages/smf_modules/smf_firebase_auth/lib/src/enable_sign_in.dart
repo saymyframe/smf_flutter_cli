@@ -154,16 +154,15 @@ const firebaseCliWithSignIn = FirebaseCliVersionCheck(
 /// The step is the same in every app, whatever its ways to sign in: a step
 /// takes no condition on what a role chose, which the pipeline needs before
 /// any role chooses, and a step that continues another takes no condition
-/// at all. So the notice tells what the script does for a way to sign in
-/// of Google, which is true in every app, and a run asks about the step in
-/// every app.
-const enableSignInNotice = 'For a way to sign in of Google, it also gives '
-    'Google the name of the app and the email address of the account of the '
-    'Firebase CLI for its consent screen, registers the SHA-1 and SHA-256 of '
-    'the Android debug key of this machine, creating the key as the first '
-    'debug build would if there is none, downloads the Firebase files of the '
-    'app again and writes the URL scheme of the iOS app into '
-    'ios/Runner/Info.plist.';
+/// at all. So the notice tells what the script does if the app signs in
+/// with Google, which is true in every app, and a run asks about the step
+/// in every app.
+const enableSignInNotice = 'If the app signs in with Google, it also gives '
+    "Google the app's name and the Firebase CLI account's email for its "
+    'consent screen, registers the SHA-1 and SHA-256 of this '
+    "machine's Android debug key (creating the key if there is none, as the "
+    "first debug build would), downloads the app's Firebase files again and "
+    'writes the iOS URL scheme into ios/Runner/Info.plist.';
 
 /// The ways to sign in of the app in [methods] as the script of the app
 /// sets them up: by the id of their identity provider in Firebase

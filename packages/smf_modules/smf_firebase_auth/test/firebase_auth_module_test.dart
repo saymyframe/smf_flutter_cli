@@ -913,15 +913,14 @@ void main() {
       expect(
         enableSignInNotice,
         allOf(
-          startsWith('For a way to sign in of Google, it also '),
-          contains('the name of the app and the email address of the '
-              'account of the Firebase CLI for its consent screen'),
-          contains('the SHA-1 and SHA-256 of the Android debug key of this '
-              'machine, creating the key as the first debug build would if '
-              'there is none'),
-          contains('downloads the Firebase files of the app again'),
-          endsWith('writes the URL scheme of the iOS app into '
-              'ios/Runner/Info.plist.'),
+          startsWith('If the app signs in with Google, it also '),
+          contains("the app's name and the Firebase CLI account's email for "
+              'its consent screen'),
+          contains("the SHA-1 and SHA-256 of this machine's Android debug key "
+              '(creating the key if there is none, as the first debug build '
+              'would)'),
+          contains("downloads the app's Firebase files again"),
+          endsWith('writes the iOS URL scheme into ios/Runner/Info.plist.'),
           isNot(contains('\n')),
         ),
       );
@@ -2516,11 +2515,15 @@ void main() {
               'to sign in of the app.'),
           contains('It never disables a method, and it changes no file of '
               'the app but those that Google needs, as told below.'),
-          contains('For Google sign-in, the script also sets up the project '
-              'that `firebase.json` names, and does none of this for one '
-              'that `--project` names:\n\n- It gives Google the name of the '
-              'app and the email address of the account of the Firebase CLI '
-              'for the consent screen that users see when they sign in.'),
+          // The brand goes to whichever project the script enables the
+          // methods in, and the rest only to the project of firebase.json.
+          contains('\n\nFor Google sign-in, the script also gives Google the '
+              'name of the app and the email address of the account of the '
+              'Firebase CLI for the consent screen that users see when they '
+              'sign in.'),
+          contains('\n\nThe script sets up the rest of what Google needs only '
+              'for the project that `firebase.json` names, not for one that '
+              '`--project` names:\n\n- It registers'),
           contains('run it with `--account <email>`, or enable Google in the '
               'Firebase console.'),
           contains('\n- It registers the SHA-1 and SHA-256 of the Android '
@@ -2560,7 +2563,9 @@ void main() {
         allOf([
           contains('and Google for the ways to sign in of the app.'),
           contains('it changes no file of the app.'),
-          contains('- It gives Google the name of the app'),
+          contains('For Google sign-in, the script also gives Google the '
+              'name of the app'),
+          isNot(contains('the rest of what Google needs')),
           isNot(contains('SHA')),
           isNot(contains('Info.plist')),
           isNot(contains('Apple')),

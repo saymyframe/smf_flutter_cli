@@ -850,14 +850,13 @@ void main() {
                 '--android-package-name=com.example.my_app (firebase_core)\n'
                 '    then dart tool/enable_firebase_sign_in.dart '
                 '(firebase_auth)\n'
-                '      For a way to sign in of Google, it also gives Google '
-                'the name of the app and the email address of the account of '
-                'the Firebase CLI for its consent screen, registers the SHA-1 '
-                'and SHA-256 of the Android debug key of this machine, '
-                'creating the key as the first debug build would if there is '
-                'none, downloads the Firebase files of the app again and '
-                'writes the URL scheme of the iOS app into '
-                'ios/Runner/Info.plist.\n'
+                '      If the app signs in with Google, it also gives '
+                "Google the app's name and the Firebase CLI account's email "
+                'for its consent screen, registers the SHA-1 and SHA-256 of '
+                "this machine's Android debug key (creating the key if there "
+                'is none, as the first debug build would), downloads the '
+                "app's Firebase files again and writes the iOS URL scheme "
+                'into ios/Runner/Info.plist.\n'
                 '      A run asks before it runs this step, and leaves it '
                 'for later when it cannot ask.\n'
                 "    then ruby -e 'f = ARGV[0]; ",

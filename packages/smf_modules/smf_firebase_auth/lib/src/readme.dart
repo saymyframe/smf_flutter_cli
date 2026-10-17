@@ -61,14 +61,13 @@ When an anonymous user signs in to an account that exists already, the anonymous
 }
 
 /// What the README tells of the way to sign in of Google, if [google], and
-/// of what the script sets up in the project and in the app for [needs].
+/// of what the script sets up in the project and in the app for [needs],
+/// which it does only for the project that `firebase.json` names.
 String _googleOf(bool google, Set<SignInNeed> needs) {
-  const brand = 'It gives Google the name of the app and the email address of '
-      'the account of the Firebase CLI for the consent screen that users see '
-      'when they sign in. The address is the support email there. When the '
-      'Firebase CLI runs as no user account, as with a service account, the '
-      'script leaves Google out and says so: run it with '
-      '`--account <email>`, or enable Google in the Firebase console.';
+  const brand = '''
+
+For Google sign-in, the script also gives Google the name of the app and the email address of the account of the Firebase CLI for the consent screen that users see when they sign in. The address is the support email there. When the Firebase CLI runs as no user account, as with a service account, the script leaves Google out and says so: run it with `--account <email>`, or enable Google in the Firebase console.
+''';
   const debugKey = 'It registers the SHA-1 and SHA-256 of the Android debug '
       'key of the machine that runs it, which Google uses to recognize the '
       'Android app. When the machine has no debug key yet, the script creates '
@@ -86,31 +85,35 @@ String _googleOf(bool google, Set<SignInNeed> needs) {
       'removes none: after a change of the project, remove the scheme of the '
       'former project there by hand.';
   final steps = [
-    if (google) brand,
     if (needs.contains(SignInNeed.androidCertificate)) debugKey,
     if (needs.contains(SignInNeed.serverClient) ||
         needs.contains(SignInNeed.iosClient))
       files,
     if (needs.contains(SignInNeed.iosClient)) scheme,
   ];
-  final release = needs.contains(SignInNeed.androidCertificate)
-      ? '''
+  final setup = steps.isEmpty
+      ? ''
+      : '''
+
+The script sets up the rest of what Google needs only for the project that `firebase.json` names, not for one that `--project` names:
+
+${[for (final step in steps) '- $step'].join('\n')}
+
+Run the script again after `flutterfire configure` for another project.
+''';
+  const release = '''
 
 A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, with the id of the Android app from `firebase.json`:
 
 ```bash
 firebase apps:android:sha:create <appId> <sha>
 ```
-'''
-      : '';
-  return '''
-
-For Google sign-in, the script also sets up the project that `firebase.json` names, and does none of this for one that `--project` names:
-
-${[for (final step in steps) '- $step'].join('\n')}
-
-Run the script again after `flutterfire configure` for another project.
-$release''';
+''';
+  return [
+    if (google) brand,
+    setup,
+    if (needs.contains(SignInNeed.androidCertificate)) release,
+  ].join();
 }
 
 /// What the README tells of the way to sign in of Apple, which no command
