@@ -113,7 +113,9 @@ Map<String, String> _dataOf(String? payload) {
 /// system for the notifications of the app instead. The plugin does not
 /// tell whether the system showed its question, so the service watches the
 /// app: the question takes the app out of the foreground until the user
-/// answers.
+/// answers. A request that starts while the app is out of the foreground,
+/// such as under the control center of iOS, opens no settings, since the
+/// question then takes nothing away from the app.
 final class LocalNotificationsService implements NotificationsService {
   LocalNotificationsService._(this._plugin, this._taps, this.launchTap);
 
@@ -145,7 +147,7 @@ final class LocalNotificationsService implements NotificationsService {
 
   @override
   Future<void> request() async {
-    final question = _Question();
+    final question = _Question(WidgetsBinding.instance.lifecycleState);
     WidgetsBinding.instance.addObserver(question);
     final bool allowed;
     try {
@@ -222,11 +224,21 @@ final class LocalNotificationsService implements NotificationsService {
       ];
 }
 
-/// Tells whether the system showed something over the app while it was
-/// watched, such as its question for the permission: the app leaves the
+/// Tells whether the system may have shown something over the app while it
+/// was watched, such as its question for the permission: the app leaves the
 /// foreground then, and comes back once the user answered.
+///
+/// An app that is out of the foreground when the watch starts, such as one
+/// under the control center of iOS, sees no change when the question shows,
+/// so the system may have shown it.
 final class _Question with WidgetsBindingObserver {
-  bool shown = false;
+  /// Starts the watch of an app in the lifecycle [state], which is `null`
+  /// while the platform has not told it, as in a test: the app is in the
+  /// foreground then.
+  _Question(AppLifecycleState? state)
+      : shown = state != null && state != AppLifecycleState.resumed;
+
+  bool shown;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

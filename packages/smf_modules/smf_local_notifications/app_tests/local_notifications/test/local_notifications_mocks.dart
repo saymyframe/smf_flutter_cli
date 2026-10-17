@@ -23,7 +23,10 @@
 // for the permission twice at most, and iOS once; after that a request
 // shows no question and answers at once, as Android before 13 always does.
 // A question takes the app out of the foreground until the user answered,
-// as on a device.
+// as on a device, and changes nothing of an app that is out of it already,
+// such as one under the control center of iOS. On iOS the user may allow
+// the notifications of the app and turn its alerts off, which iOS tells
+// apart.
 //
 // It differs from a device in this: it shows nothing, a scheduled
 // notification never comes due, and the settings of the system that it
@@ -78,6 +81,11 @@ final class MockLocalNotifications {
   /// Whether the app may show notifications, as the settings of the system
   /// have it: a test changes it as the user does there.
   bool enabled = false;
+
+  /// Whether the user turned the alerts of the app off in the settings of
+  /// iOS while allowing its notifications: the app may still show
+  /// notifications, which iOS keeps in the notification center.
+  bool alertsOff = false;
 
   /// What the user does with the next question of the system.
   QuestionAnswer answer = QuestionAnswer.allows;
@@ -196,7 +204,7 @@ final class MockLocalNotifications {
       case 'checkPermissions':
         return {
           'isEnabled': enabled,
-          'isAlertEnabled': enabled,
+          'isAlertEnabled': enabled && !alertsOff,
           'isBadgeEnabled': enabled,
           'isSoundEnabled': enabled,
         };
@@ -237,15 +245,24 @@ final class MockLocalNotifications {
   }
 
   /// Answers a request for the permission: the question of the system,
-  /// while the system shows it, takes the app out of the foreground until
-  /// the user answered [answer].
+  /// while the system shows it, takes an app in the foreground out of it
+  /// until the user answered [answer]. An app whose state the platform has
+  /// not told yet, as in a test, is in the foreground.
   bool _request() {
     if (enabled || questionsLeft == 0) return enabled;
     questionsLeft--;
-    final binding = TestWidgetsFlutterBinding.instance
-      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    final binding = TestWidgetsFlutterBinding.instance;
+    final inForeground = switch (binding.lifecycleState) {
+      null || AppLifecycleState.resumed => true,
+      _ => false,
+    };
+    if (inForeground) {
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    }
     if (answer == QuestionAnswer.allows) enabled = true;
-    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    if (inForeground) {
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    }
     return enabled;
   }
 }

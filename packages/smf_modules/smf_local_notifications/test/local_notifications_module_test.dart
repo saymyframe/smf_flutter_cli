@@ -146,6 +146,7 @@ import 'dart:isolate';
 import 'package:contract_app/core/notifications/local_notifications_service.dart';
 import 'package:contract_app/core/notifications/notifications_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart';
 
@@ -291,6 +292,16 @@ Future<void> main(List<String> arguments, SendPort port) async {
   platformEnabled = true;
   systemAnswer = 'none';
   requests['enabled'] = await step(service.request);
+  // A request that starts while the app is out of the foreground, as
+  // under the control center.
+  platformEnabled = false;
+  systemAnswer = 'refuses';
+  WidgetsBinding.instance
+      .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  requests['out of the foreground'] = await step(service.request);
+  WidgetsBinding.instance
+      .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  platformEnabled = true;
   result['requests on Android'] = requests;
   result['enabled on Android'] = await step(service.areEnabled);
 
@@ -310,6 +321,9 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
   result['requests on iOS'] = requestsOnIOS;
   result['enabled on iOS'] = await step(service.areEnabled);
+  platformEnabled = true;
+  platformAlertsOff = true;
+  result['enabled on iOS without alerts'] = await step(service.areEnabled);
   port.send(result);
 }
 ''';
@@ -920,6 +934,8 @@ void main() {
             '= threw Bad state: The platform broke.',
           ],
           'enabled': ['requestNotificationsPermission'],
+          // The question may have shown without a change that the app sees.
+          'out of the foreground': ['requestNotificationsPermission'],
         });
         expect(sent['enabled on Android'], [
           'areNotificationsEnabled',
@@ -935,6 +951,12 @@ void main() {
           ],
         });
         expect(sent['enabled on iOS'], ['checkPermissions', '= false']);
+        // iOS keeps the notifications of an app with its alerts off in the
+        // notification center.
+        expect(
+          sent['enabled on iOS without alerts'],
+          ['checkPermissions', '= true'],
+        );
       });
     });
 

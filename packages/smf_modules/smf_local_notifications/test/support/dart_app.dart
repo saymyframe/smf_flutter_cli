@@ -21,9 +21,9 @@ TargetPlatform defaultTargetPlatform = TargetPlatform.android;
 ''';
 
 /// A stand-in for the part of Flutter's widgets library that the file of
-/// the module uses, with the signatures of Flutter 3.44: the binding tells
-/// its observers of each state of the lifecycle of the app that a test
-/// gives it.
+/// the module uses, with the signatures of Flutter 3.44: the binding has the
+/// state of the lifecycle of the app, `null` until a test gives it one, and
+/// tells its observers of each change.
 const _widgets = '''
 export 'foundation.dart';
 
@@ -40,12 +40,18 @@ class WidgetsBinding {
 
   final List<WidgetsBindingObserver> _observers = [];
 
+  AppLifecycleState? _state;
+
+  AppLifecycleState? get lifecycleState => _state;
+
   void addObserver(WidgetsBindingObserver observer) => _observers.add(observer);
 
   bool removeObserver(WidgetsBindingObserver observer) =>
       _observers.remove(observer);
 
   void handleAppLifecycleStateChanged(AppLifecycleState state) {
+    if (state == _state) return;
+    _state = state;
     for (final observer in List.of(_observers)) {
       observer.didChangeAppLifecycleState(state);
     }
@@ -102,6 +108,10 @@ final List<String> pluginCalls = [];
 /// Whether the app may show notifications.
 bool platformEnabled = false;
 
+/// Whether the user turned the alerts of the app off in the settings of
+/// iOS while allowing its notifications.
+bool platformAlertsOff = false;
+
 /// What the system does when the app asks for the permission: `allows` or
 /// `refuses` once it showed its question, `none` without one, or `fails`
 /// once it showed it, with an error of the platform.
@@ -124,14 +134,21 @@ void platformTaps(int? id, String? payload) => _onTap?.call(
       ),
     );
 
+/// Answers a request: a question takes an app in the foreground out of it
+/// until the user answered, and changes nothing of an app out of it.
 bool _request() {
   if (platformEnabled || systemAnswer == 'none') return platformEnabled;
-  WidgetsBinding.instance
-      .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  final binding = WidgetsBinding.instance;
+  final inForeground = binding.lifecycleState == null ||
+      binding.lifecycleState == AppLifecycleState.resumed;
+  if (inForeground) {
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  }
   if (systemAnswer == 'fails') throw StateError('The platform broke.');
   if (systemAnswer == 'allows') platformEnabled = true;
-  WidgetsBinding.instance
-      .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  if (inForeground) {
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  }
   return platformEnabled;
 }
 
@@ -366,7 +383,7 @@ class IOSFlutterLocalNotificationsPlugin
     pluginCalls.add('checkPermissions');
     return NotificationsEnabledOptions(
       isEnabled: platformEnabled,
-      isAlertEnabled: platformEnabled,
+      isAlertEnabled: platformEnabled && !platformAlertsOff,
       isBadgeEnabled: platformEnabled,
       isSoundEnabled: platformEnabled,
     );

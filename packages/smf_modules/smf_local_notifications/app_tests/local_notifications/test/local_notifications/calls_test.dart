@@ -20,6 +20,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/notifications/local_notifications_service.dart';
@@ -358,13 +359,46 @@ void main() {
           'the system.',
     );
     expect(await service.areEnabled(), isFalse);
-    device.enabled = true;
+    device
+      ..enabled = true
+      ..alertsOff = true;
     expect(
       await service.areEnabled(),
       isTrue,
       reason: 'On iOS the service reads the permission from the settings of '
-          'the app.',
+          'the app: an app that the user allows to show notifications may '
+          'show them also with its alerts turned off, in the notification '
+          'center.',
     );
+  });
+
+  test(
+      'a request that starts while the app is out of the foreground, as '
+      'under the control center, opens no settings after a no: the question '
+      'of the system may have shown without a change that the app sees',
+      () async {
+    final binding = TestWidgetsFlutterBinding.instance;
+    addTearDown(
+      () => binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed),
+    );
+    final (androidDevice, androidService) = await openOnNewDevice();
+    androidDevice.answer = QuestionAnswer.refuses;
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await androidService.request();
+    final (iOSDevice, iOSService) =
+        await openOnNewDevice(platform: TargetPlatform.iOS);
+    iOSDevice.answer = QuestionAnswer.refuses;
+    await iOSService.request();
+
+    expect(
+      androidDevice.methods,
+      ['requestNotificationsPermission'],
+      reason: 'The question of the system takes no app out of the foreground '
+          'that is out of it already, so the service cannot tell a question '
+          'that the user said no to from none, and opens no settings over '
+          'the answer of the user.',
+    );
+    expect(iOSDevice.methods, ['requestPermissions']);
   });
 
   test(
