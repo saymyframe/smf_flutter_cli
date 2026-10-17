@@ -1447,7 +1447,7 @@ final class ContractHarness {
     return [
       for (final role in resolution.presentRoles) ...[
         ...role.checkStructure(request),
-        ...role.interface.checkSymbols(indexes),
+        ...role.interface.checkSymbols(indexes, request.hook),
       ],
     ];
   }

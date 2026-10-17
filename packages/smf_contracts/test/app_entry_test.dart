@@ -184,7 +184,7 @@ List<SmfIssue> _check(
     ],
   );
   return [
-    ...appEntryRole.interface.checkSymbols(files),
+    ...appEntryRole.interface.checkSymbols(files, request.hook),
     ...appEntryRole.checkStructure(request),
   ];
 }

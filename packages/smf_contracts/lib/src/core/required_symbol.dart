@@ -11,12 +11,18 @@ import 'package:smf_contracts/core.dart';
 /// The contract test harness checks it structurally against the
 /// [DartFileIndex] of that file with [checkIn]; types are checked by
 /// compiling the generated app.
+///
+/// A symbol that only some apps need depends on what roles chose
+/// ([whenChosen]). The harness then checks it only in the apps where its
+/// conditions hold, and checks that the other apps have no file at [path]
+/// (see [RoleInterface.checkSymbols]).
 sealed class RequiredSymbol {
   const RequiredSymbol(
     this.name, {
     required this.path,
     required this.namedParameters,
     required this.positionalArguments,
+    required this.whenChosen,
   });
 
   /// The name of the symbol.
@@ -32,6 +38,18 @@ sealed class RequiredSymbol {
 
   /// How many positional arguments callers pass.
   final int positionalArguments;
+
+  /// Conditions on what roles chose that must all hold in an app for it to
+  /// need the symbol, such as that no route starts the app; see
+  /// [ChoiceCondition].
+  ///
+  /// An app where they hold has the symbol, as an unconditional one, and
+  /// an app where one does not has no file at [path]: so the symbol has a
+  /// file of its own, and the providers of the role contribute it under the
+  /// same conditions (see [Contribution.whenChosen]). A condition is of the
+  /// role of the symbol or of a role that it requires or uses, which every
+  /// provider of the role uses too and so may name.
+  final Set<ChoiceCondition> whenChosen;
 
   /// The import of [path], for code that uses the symbol.
   ImportRef get importRef => ImportRef.app(
@@ -96,6 +114,7 @@ final class RequiredFunction extends RequiredSymbol {
     this.returnType,
     super.namedParameters = const [],
     super.positionalArguments = 0,
+    super.whenChosen = const {},
   });
 
   /// The return type as written, such as `Future<void>`, or `null` to allow
@@ -131,6 +150,7 @@ final class RequiredClass extends RequiredSymbol {
     required super.path,
     super.namedParameters = const [],
     super.positionalArguments = 0,
+    super.whenChosen = const {},
     this.constConstructor = false,
     this.getters = const [],
   });
@@ -186,6 +206,7 @@ final class RequiredExtension extends RequiredSymbol {
     required super.path,
     required this.on,
     this.getters = const [],
+    super.whenChosen = const {},
   }) : super(namedParameters: const [], positionalArguments: 0);
 
   /// The type that the extension is on, as written, such as `BuildContext`.

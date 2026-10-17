@@ -28,7 +28,7 @@ part 'contributions/socket_contribution.dart';
 /// - [PostGenStep]: a command to run in the generated app.
 @immutable
 sealed class Contribution {
-  const Contribution({this.when = const {}});
+  const Contribution({this.when = const {}, this.whenChosen = const {}});
 
   /// Roles that must all be present for the contribution to apply.
   ///
@@ -37,4 +37,25 @@ sealed class Contribution {
   /// generated only in apps that have them. Every role in [when] must be one
   /// of the contributor's roles.
   final Set<Role> when;
+
+  /// Conditions on what roles chose, which must all hold for the
+  /// contribution to apply, besides [when]; see [ChoiceCondition].
+  ///
+  /// Only a [BrickContribution] and [RoleData] take them. The pipeline needs
+  /// the other kinds before any role chooses: the pubspec, the checks of
+  /// the machine and the steps after generation when it validates the app,
+  /// and the code for sockets when it orders their contributors.
+  ///
+  /// Validation treats a contribution with conditions as one that applies,
+  /// and the app has it once the roles have chosen only if every condition
+  /// holds. The pipeline reports, as errors:
+  /// - a condition of a role that the contributor does not provide, require
+  ///   or use, as for [when]; for the template of a role, the role itself
+  ///   or a role that it requires or uses;
+  /// - data of a role with a condition of the same role, which chooses
+  ///   from its data;
+  /// - conditions on the data of roles that form a cycle, such as data of
+  ///   one role that depends on what a second role chose, while data of the
+  ///   second depends on what the first chose: neither could choose first.
+  final Set<ChoiceCondition> whenChosen;
 }

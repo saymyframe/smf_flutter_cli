@@ -235,12 +235,15 @@ void main() {
 
       // What code that knows only the role reads: context.l10n.
       List<String> problems(IndexedDeclaration declaration) => _messages(
-            localizationRole.interface.checkSymbols({
-              LocalizationRole.textsFile: DartFileIndex(
-                path: LocalizationRole.textsFile,
-                declarations: [declaration],
-              ),
-            }),
+            localizationRole.interface.checkSymbols(
+              {
+                LocalizationRole.textsFile: DartFileIndex(
+                  path: LocalizationRole.textsFile,
+                  declarations: [declaration],
+                ),
+              },
+              appWith({localizationRole}),
+            ),
           );
       const where = 'extension AppTexts in lib/core/l10n/l10n.dart';
 
