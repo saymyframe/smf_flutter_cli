@@ -98,38 +98,6 @@ String _errorOf(String body) {
   }
 }
 
-/// The app ids of the web apps in [listed], what
-/// `firebase apps:list WEB --project=<project> --json` prints. The Firebase
-/// CLI may print other lines before the JSON.
-List<String> webAppIdsOf(String listed) {
-  final json = jsonDecode(listed.substring(listed.indexOf('{')));
-  final apps = (json as Map<String, Object?>)['result']! as List<Object?>;
-  return [
-    for (final app in apps.cast<Map<String, Object?>>()) '${app['appId']}',
-  ];
-}
-
-/// Why a run may not enable the sign-in methods in the Firebase project
-/// [project], whose web apps are [webApps], with the Firebase CLI; `null`
-/// if it may.
-///
-/// The Firebase CLI enables the methods through a web app of the project,
-/// and adds one, named "Default Web App", to a project that has none. That
-/// registers an app in the project, which only a run that may [register]
-/// does, of the workflow Build, as for the Android and iOS apps of CI.
-String? webAppProblem({
-  required List<String> webApps,
-  required String project,
-  required bool register,
-}) =>
-    webApps.isEmpty && !register
-        ? 'The Firebase project $project has no web app, and the Firebase CLI '
-            'would add one, named "Default Web App", to enable the sign-in '
-            'methods through it. Only the runs of the workflow Build register '
-            'an app in the project, with SMF_FIREBASE_REGISTER=1. Run Build '
-            'first, such as by hand on this branch.'
-        : null;
-
 /// The line with which the Firebase CLI says that it enabled the sign-in
 /// methods of an app in [mode]: it names Anonymous before Email/Password,
 /// whatever the order of its configuration (`lib/deploy/auth/deploy.js` of
@@ -145,12 +113,12 @@ String enabledLineOf(AuthMode mode) {
 /// The permissions that `firebase deploy --only auth` is known to ask of
 /// its account, for a failure in which the Firebase CLI names none.
 ///
-/// The first is for the request that sets up the web app through which the
-/// Firebase CLI enables the methods: Google enables the APIs of Firebase in
-/// the project for it, and asks for the permission also where an API is
-/// enabled already. The others are the one that every command asks and
-/// those of the command (`TARGET_PERMISSIONS` in `lib/commands/deploy.js`
-/// of firebase-tools 15.14.0).
+/// The first is for the request that provisions the app of the project
+/// through which the Firebase CLI enables the methods: Google enables the
+/// APIs of Firebase in the project for it, and asks for the permission also
+/// where an API is enabled already. The others are the one that every
+/// command asks and those of the command (`TARGET_PERMISSIONS` in
+/// `lib/commands/deploy.js` of firebase-tools 15.14.0).
 const deployPermissions = [
   'serviceusage.services.enable',
   'firebase.projects.get',
@@ -184,8 +152,8 @@ const Map<String, String> rolesWith = {
 ///
 /// firebase-tools 15.14.0 only notes the permissions that its own check
 /// finds missing, in its debug output (`lib/requirePermissions.js`), and
-/// fails later, when Google refuses the request that sets up the web app
-/// of the project, with `Failed to provision Firebase app` and either the
+/// fails later, when Google refuses the request that provisions the app of
+/// the project, with `Failed to provision Firebase app` and either the
 /// HTTP error 403 or the permission that Google denied. A version that
 /// stops at the check prints `Authorization failed`.
 bool lacksPermission(String output) =>
