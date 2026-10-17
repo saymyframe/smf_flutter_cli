@@ -738,9 +738,9 @@ void main() {
         'unknown': 'failed: notConfigured: Apple answered with an unknown '
             'error (The operation of unknown failed.). It does so when the '
             'app is not signed with the capability Sign in with Apple, which '
-            'needs a team of the paid Apple Developer Program, and on a '
-            'device without an Apple Account. See the section "Sign in with '
-            'Apple" of the README of the app.',
+            'needs a team of the paid Apple Developer Program, and may do so '
+            'on a device without an Apple Account. See the section "Sign in '
+            'with Apple" of the README of the app.',
         'credentialExport': unknownOf('credentialExport'),
         'credentialImport': unknownOf('credentialImport'),
         'matchedExcludedCredential': unknownOf('matchedExcludedCredential'),

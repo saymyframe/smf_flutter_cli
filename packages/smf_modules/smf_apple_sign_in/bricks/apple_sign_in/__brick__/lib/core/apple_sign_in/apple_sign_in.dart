@@ -57,8 +57,8 @@ Future<SignInCredential?> appleCredential() async {
               'Apple answered with an unknown error (${error.message}). It '
               'does so when the app is not signed with the capability Sign '
               'in with Apple, which needs a team of the paid Apple Developer '
-              'Program, and on a device without an Apple Account. See the '
-              'section "{{{readme}}}" of the README of the app.',
+              'Program, and may do so on a device without an Apple Account. '
+              'See the section "{{{readme}}}" of the README of the app.',
         );
       default:
         throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');

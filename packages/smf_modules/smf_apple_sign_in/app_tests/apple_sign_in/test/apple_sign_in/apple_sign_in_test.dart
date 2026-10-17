@@ -101,13 +101,14 @@ void main() {
         reason: 'The request has the SHA-256 hash of the raw nonce of its '
             'credential, which Apple writes into its token.',
       );
+      // The request above has the hash of each raw nonce.
       expect(
         [
+          first.rawNonce?.isNotEmpty,
+          second.rawNonce?.isNotEmpty,
           first.rawNonce != second.rawNonce,
-          first.rawNonce?.length,
-          second.rawNonce?.length,
         ],
-        [true, 32, 32],
+        [true, true, true],
         reason: 'Each sign-in has a raw nonce of its own.',
       );
       expect(

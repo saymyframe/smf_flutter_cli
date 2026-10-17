@@ -25,7 +25,7 @@ Sign in with Apple is a capability of the app. The key `$appleSignInEntitlement`
 
 Apple gives the name of the user only the first time that the user signs in to the app: the credential has it then, and a later one has none. The user may also hide the email address. The account then gets an address of the private relay of Apple, which forwards messages to the user.
 
-The App Store asks an app with Sign in with Apple to revoke the tokens that Apple gave it when the user deletes the account (App Store Review Guideline 5.1.1(v)). So `appSession.deleteAccount()` asks Apple for a new authorization first, and the provider of sign-in revokes the tokens with its code. A backend that revokes them needs a key of Apple for that, and the section of the provider in this README tells where to set it. If the user closes the sheet of Apple, nothing is deleted.
+The App Store asks an app with Sign in with Apple to revoke the tokens that Apple gave it when the user deletes the account (App Store Review Guideline 5.1.1(v)). So `appSession.deleteAccount()` asks Apple for a new authorization first, and the provider of sign-in revokes the tokens with its code. The backend of the app needs a key of Apple to revoke them, and the documentation of the provider of sign-in tells where to set it. If the user closes the sheet of Apple, nothing is deleted.
 
 The icon of the button, `AppleSignInIcon` in `$appleSignInFile`, is the Apple logo of the Material icons. Apple asks a custom button of Sign in with Apple to use the logo artwork of [Apple Design Resources](https://developer.apple.com/design/resources/), and App Review checks every such button. Before you submit the app, download that logo and show it in `AppleSignInIcon`.
 ''';
