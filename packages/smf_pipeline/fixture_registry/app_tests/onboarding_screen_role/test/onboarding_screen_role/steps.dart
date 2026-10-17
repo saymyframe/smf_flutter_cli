@@ -179,8 +179,8 @@ int? stepShown(WidgetTester tester, String language) {
 
 /// Shows the frames of [duration], one every 50 milliseconds, as a device
 /// does: an animation that the screen starts, such as one that turns its
-/// page, runs to its end if it is shorter, and one that runs on, such as a
-/// spinner, keeps the test from no frame.
+/// page, runs to its end if it is shorter, and one that does not end, such
+/// as a spinner, does not keep the test waiting as pumpAndSettle would.
 Future<void> pumpFor(WidgetTester tester, Duration duration) async {
   const frame = Duration(milliseconds: 50);
   for (var shown = Duration.zero; shown < duration; shown += frame) {
@@ -216,8 +216,8 @@ Future<void> swipeToStep(
 /// Swipes through every page of the onboarding screen from the page that
 /// the user sees, and returns the index of each step that the pages show,
 /// in the order of the pages, with `null` for a page that is no step. A
-/// page counts once, also when a swipe leaves it, as on the last page.
-/// [onStep] runs on each page of a step, while it shows.
+/// page counts once, also when a swipe does not leave it, as on the last
+/// page. [onStep] runs on each page of a step, while it shows.
 Future<List<int?>> swipeThrough(
   WidgetTester tester,
   String language, {
