@@ -60,6 +60,12 @@ const Duration addressTimeout = Duration(seconds: 90);
 /// script tells what it waited for when nothing comes.
 const Duration messageTimeout = Duration(minutes: 10);
 
+/// How often the check prints that it still waits for the message, with
+/// the state of the app, so that the log of a start whose message does not
+/// come tells whether the app was in the foreground, where the platform
+/// gives a message to the app rather than showing it.
+const Duration reminderInterval = Duration(seconds: 30);
+
 /// The title and the text of the message that the check asks for.
 const String messageTitle = 'SMF start check';
 const String messageBody = 'A push message that the start check asked for.';
@@ -115,8 +121,9 @@ Future<List<String>> problemsOfAddress({
 /// app reaches `appPush.messages` with what was sent, with start_app.sh as
 /// the server: waits at most [addressWait] for the address, asks for a
 /// message with a nonce of its own in a request in [directory], and waits
-/// at most [messageWait] for it. Then writes its verdict there, `passed` or
-/// `failed: ` and the problem, prints it and returns it.
+/// at most [messageWait] for it, printing every [reminder] that it still
+/// waits. Then writes its verdict there, `passed` or `failed: ` and the
+/// problem, prints it and returns it.
 ///
 /// The [directory] is the temporary directory of the app unless a test
 /// gives another.
@@ -124,11 +131,17 @@ Future<String> checkDelivery({
   Directory? directory,
   Duration addressWait = addressTimeout,
   Duration messageWait = messageTimeout,
+  Duration reminder = reminderInterval,
 }) async {
   final files = directory ?? Directory.systemTemp;
   String verdict;
   try {
-    final problem = await _problemOfDelivery(files, addressWait, messageWait);
+    final problem = await _problemOfDelivery(
+      files,
+      addressWait,
+      messageWait,
+      reminder,
+    );
     verdict = problem == null ? 'passed' : 'failed: $problem';
   } on Object catch (error) {
     verdict = 'failed: the check threw ${'$error'.trim().split('\n').first}';
@@ -148,6 +161,7 @@ Future<String?> _problemOfDelivery(
   Directory directory,
   Duration addressWait,
   Duration messageWait,
+  Duration reminder,
 ) async {
   final address = await _addressWithin(addressWait);
   if (address == null) {
@@ -161,6 +175,13 @@ Future<String?> _problemOfDelivery(
       arrived.complete(message);
     }
   });
+  final reminders = Timer.periodic(
+    reminder,
+    (_) => debugPrint(
+      'The check of a push message still waits for it, in the state '
+      '${WidgetsBinding.instance.lifecycleState} of the app.',
+    ),
+  );
   try {
     _write(
       directory,
@@ -193,6 +214,7 @@ Future<String?> _problemOfDelivery(
         '${_timeOf(messageWait)}, in the state '
         '${WidgetsBinding.instance.lifecycleState} of the app';
   } finally {
+    reminders.cancel();
     await subscription.cancel();
   }
 }

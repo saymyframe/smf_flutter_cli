@@ -183,6 +183,7 @@ void main() {
               directory: temporary,
               addressWait: const Duration(milliseconds: 300),
               messageWait: const Duration(milliseconds: 300),
+              reminder: const Duration(milliseconds: 100),
             );
 
         final wrongTexts = check();
@@ -218,6 +219,16 @@ void main() {
         withoutAddress,
         'failed: the app got no address of the device in 300 ms, so no push '
         'message can reach it',
+      );
+      expect(
+        printedOnFailures,
+        contains(
+          startsWith(
+            'The check of a push message still waits for it, in the state ',
+          ),
+        ),
+        reason: 'The log of a start whose message does not come tells the '
+            'state of the app while the check waited.',
       );
       expect(requestedWithoutAddress, isNull);
       expect(reported, '$withoutAddress\n');
