@@ -793,8 +793,8 @@ void main() {
                 'https://accounts.example.com, but firebase_auth signs in to '
                 'Firebase Authentication with an email address and a '
                 'password, and as an anonymous user, and takes no credential '
-                'of an identity provider yet: its button would fail with '
-                'notConfigured.',
+                'of an identity provider yet: a sign-in with it would fail '
+                'with notConfigured.',
             'Leave way_of_test out of an app with firebase_auth.',
           ),
         ],

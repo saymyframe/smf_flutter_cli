@@ -178,7 +178,7 @@ final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
             '${method.issuer}, but ${FirebaseAuthModule.id} signs in to '
             'Firebase Authentication with an email address and a password, '
             'and as an anonymous user, and takes no credential of an identity '
-            'provider yet: its button would fail with notConfigured.',
+            'provider yet: a sign-in with it would fail with notConfigured.',
             hint: 'Leave $owner out of an app with ${FirebaseAuthModule.id}.',
             origin: owner,
           ),
