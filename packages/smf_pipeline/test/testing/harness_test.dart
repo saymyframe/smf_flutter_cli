@@ -4011,6 +4011,57 @@ void main() {
     });
 
     test(
+        'checks no structure of an app that it did not render when a symbol '
+        'depends on a choice, which it cannot tell', () async {
+      final modules = [
+        scaffold(),
+        TestModule(
+          'lock',
+          providers: [const RoleProvider.plain(_hoursRole)],
+          contributions: [
+            dial(whenChosen: {_HoursRole.twelve}),
+          ],
+        ),
+      ];
+      final harness = ContractHarness(ModuleRegistry(modules), render: false);
+
+      final unrendered = await harness.check(
+        const ContractCase('lock', requested: [ModuleId('lock')]),
+      );
+      expect(unrendered.choices, isNull);
+      expect(
+        () => harness.checkStructure(
+          unrendered,
+          files: const {},
+          owners: const {},
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'The app of the case lock was not rendered, so the roles made no '
+                'choice, and the hours role has symbols that depend on what '
+                'roles chose.',
+          ),
+        ),
+      );
+      // Without such a symbol, the structure of an app that the harness did
+      // not render is checked as before.
+      final scaffolding = await harness.check(
+        const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
+      );
+      expect(scaffolding.choices, isNull);
+      expect(
+        harness.checkStructure(
+          scaffolding,
+          files: const {},
+          owners: const {},
+        ),
+        isNotEmpty,
+      );
+    });
+
+    test(
         'the result has the contributions and the hook of the app as the '
         'choices decided them', () async {
       final labels = TestRole<String>('labels', template: TestTemplate());
