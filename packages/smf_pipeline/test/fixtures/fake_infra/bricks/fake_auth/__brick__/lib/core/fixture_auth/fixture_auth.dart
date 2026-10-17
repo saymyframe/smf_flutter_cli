@@ -17,6 +17,14 @@ final Map<String, _Account> _accounts = {};
 /// the subject of each identity, as its tokens name it.
 final Map<(String, String), String> _identities = {};
 
+/// The identity of a test token: its issuer, its subject and its email
+/// address.
+typedef _Identity = ({String issuer, String subject, String? email});
+
+/// The nonces of the tokens that the fixture took. An identity provider that
+/// checks a nonce takes a token with it once, and so does the fixture.
+final Set<String> _spentNonces = {};
+
 /// The user who is signed in on this device, or `null`. It stands for the
 /// storage of a device, which a start of the app reads.
 AuthUser? _onDevice;
@@ -55,18 +63,23 @@ Future<AuthService> openFixtureAuth() async {
 ///
 /// It takes a credential of any identity provider whose token is a test
 /// token: a JSON Web Token without a signature whose payload has `iss`, the
-/// issuer of the credential, `sub`, the identity, and maybe `email`, the
-/// email address of the identity. It keeps each identity by its issuer and
-/// its subject, and refuses any other token with
-/// [AuthFailureReason.invalidCredentials]. An identity whose address has an
-/// account of another user, such as one with a password, signs in to
-/// nothing: [linkWith] and [signInWith] fail with
-/// [AuthFailureReason.accountExistsWithOtherMethod]. A refused link leaves
-/// nothing to keep, so [signInWith] takes the credential itself again. It
-/// has no tokens of an identity provider to revoke when it deletes an
-/// account.
+/// issuer of the credential, `sub`, the identity, maybe `email`, the email
+/// address of the identity, and maybe `nonce`, which is then the rawNonce of
+/// the credential. It keeps each identity by its issuer and its subject, and
+/// refuses any other token with [AuthFailureReason.invalidCredentials], as
+/// it refuses a token whose nonce it took already. An identity whose
+/// address has an account of another user, such as one with a password,
+/// signs in to nothing: [linkWith] and [signInWith] fail with
+/// [AuthFailureReason.accountExistsWithOtherMethod]. A refused link takes
+/// the token too, and keeps the identity for the credential object, which
+/// [signInWith] of the identical object then signs in with. It has no
+/// tokens of an identity provider to revoke when it deletes an account.
 final class FixtureAuth implements AuthService {
   FixtureAuth._();
+
+  /// The identity of each credential object that [linkWith] refused, until
+  /// [signInWith] of the identical object takes it.
+  final Expando<_Identity> _refused = Expando('refused links');
 
   final StreamController<AuthUser?> _changes = StreamController.broadcast();
 
@@ -131,27 +144,47 @@ final class FixtureAuth implements AuthService {
     );
   }
 
-  /// The identity of the test token of [credential]: its issuer, its
-  /// subject and its email address. Fails with
-  /// [AuthFailureReason.invalidCredentials] for a token that is no test
-  /// token of the issuer of the credential.
-  ({String issuer, String subject, String? email}) _identityOf(
-    SignInCredential credential,
-  ) {
-    final (issuer, idToken) = switch (credential) {
-      IdTokenCredential(:final issuer, :final idToken) => (issuer, idToken),
+  /// The identity of [credential], whose token the call takes: what the
+  /// fixture kept for the identical object when [linkWith] refused it just
+  /// before, or else the identity of its test token, whose nonce is then
+  /// spent. Fails with [AuthFailureReason.invalidCredentials] for a token
+  /// that is no test token of the issuer of the credential, one whose nonce
+  /// is not the rawNonce of the credential, and one whose nonce the fixture
+  /// took already.
+  _Identity _take(SignInCredential credential) {
+    if (_refused[credential] case final kept?) {
+      _refused[credential] = null;
+      return kept;
+    }
+    final (issuer, idToken, rawNonce) = switch (credential) {
+      IdTokenCredential(:final issuer, :final idToken, :final rawNonce) => (
+          issuer,
+          idToken,
+          rawNonce,
+        ),
     };
     final parts = idToken.split('.');
     final payload = parts.length == 3 ? _payloadOf(parts[1]) : null;
     if (payload == null ||
         payload['iss'] != issuer ||
         payload['sub'] is! String ||
-        payload['email'] is! String?) {
+        payload['email'] is! String? ||
+        payload['nonce'] is! String? ||
+        payload['nonce'] != rawNonce) {
       throw AuthFailure(
         AuthFailureReason.invalidCredentials,
         developerHint: 'The fixture sign-in takes a test token, a JSON Web '
-            'Token whose payload has iss, the issuer of the credential, and '
-            'sub, which $credential does not have.',
+            'Token whose payload has iss, the issuer of the credential, sub, '
+            'and maybe nonce, the rawNonce of the credential, which '
+            '$credential does not have.',
+      );
+    }
+    if (payload['nonce'] case final String nonce
+        when !_spentNonces.add(nonce)) {
+      throw AuthFailure(
+        AuthFailureReason.invalidCredentials,
+        developerHint: 'The fixture sign-in took the token of $credential '
+            'already, and takes a token with a nonce once.',
       );
     }
     return (
@@ -226,7 +259,7 @@ final class FixtureAuth implements AuthService {
   @override
   Future<void> signInWith(SignInCredential credential) async {
     await _answer();
-    final identity = _identityOf(credential);
+    final identity = _take(credential);
     final key = (identity.issuer, identity.subject);
     if (_identities[key] case final uid?) {
       _set(_userOf(uid));
@@ -249,19 +282,23 @@ final class FixtureAuth implements AuthService {
   Future<void> linkWith(SignInCredential credential) async {
     await _answer();
     final user = _signedIn();
-    final identity = _identityOf(credential);
+    final identity = _take(credential);
     final key = (identity.issuer, identity.subject);
     if (_identities[key] case final owner?) {
-      throw owner == user.uid
-          ? const AuthFailure(
-              AuthFailureReason.unknown,
-              developerHint: 'The user who is signed in has the identity '
-                  'already.',
-            )
-          : const AuthFailure(AuthFailureReason.credentialInUse);
+      if (owner == user.uid) {
+        throw const AuthFailure(
+          AuthFailureReason.unknown,
+          developerHint: 'The user who is signed in has the identity already.',
+        );
+      }
+      // The token is spent, so the sign-in that follows takes what the
+      // fixture keeps for the credential object.
+      _refused[credential] = identity;
+      throw const AuthFailure(AuthFailureReason.credentialInUse);
     }
     if (identity.email case final email?
         when (_ownerOf(email) ?? user.uid) != user.uid) {
+      _refused[credential] = identity;
       throw const AuthFailure(AuthFailureReason.accountExistsWithOtherMethod);
     }
     final account = _accounts.remove(user.uid);
@@ -302,7 +339,7 @@ final class FixtureAuth implements AuthService {
     await _answer();
     final user = _signedIn();
     if (fresh != null) {
-      final identity = _identityOf(fresh);
+      final identity = _take(fresh);
       if (_identities[(identity.issuer, identity.subject)] != user.uid) {
         throw const AuthFailure(
           AuthFailureReason.invalidCredentials,

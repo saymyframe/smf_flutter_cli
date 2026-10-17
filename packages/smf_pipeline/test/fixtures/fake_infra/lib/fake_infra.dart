@@ -838,11 +838,16 @@ final class FakeThemeModule extends SmfModule {
 ///
 /// It takes a credential of any identity provider whose token is a test
 /// token: a JSON Web Token without a signature whose payload has the issuer
-/// of the credential, the subject of the identity and maybe its email
-/// address, as [FakeSignInMethodModule] gives. It keeps each identity by
+/// of the credential, the subject of the identity, maybe its email address
+/// and maybe a nonce, the `rawNonce` of the credential, as
+/// [FakeSignInMethodModule] gives. It takes a token with a nonce once, as an
+/// identity provider that checks a nonce does. It keeps each identity by
 /// its issuer and its subject: a link keeps the id of the user, an identity
 /// of another user is `credentialInUse`, and one whose address has an
-/// account of another user is `accountExistsWithOtherMethod`.
+/// account of another user is `accountExistsWithOtherMethod`. A refused
+/// link takes the token too, and keeps the identity for the credential
+/// object in an `Expando`, which a sign-in with the identical object then
+/// takes, as the role asks of a provider.
 ///
 /// The template of the role does the rest in an app with it, whichever
 /// module provides the role: the session of the app, and the mode of the
@@ -884,11 +889,12 @@ final class FakeAuthModule extends SmfModule {
 /// Its function asks no platform: it returns a credential a turn of the
 /// event loop later, as a sheet of an identity provider does, and each
 /// time of the one identity of the fixture, with a test token that the
-/// fixture sign-in takes. It works on Android and on iOS, the App Store
-/// takes it as the equivalent of a login service of a third party, and the
-/// deletion of an account that signs in with it asks it for a credential
-/// again. Its label is in English and in Ukrainian, a text that it gives
-/// the localization role, which it uses.
+/// fixture sign-in takes, a new nonce and a new authorization code. It
+/// works on Android and on iOS, the App Store takes it as the equivalent
+/// of a login service of a third party, and the deletion of an account
+/// that signs in with it asks it for a credential again. Its label is in
+/// English and in Ukrainian, a text that it gives the localization role,
+/// which it uses.
 final class FakeSignInMethodModule extends SmfModule {
   /// Creates the module.
   const FakeSignInMethodModule();
