@@ -51,9 +51,9 @@ const _everyModuleWarnings = [
 /// made of, by name, each with the codes of its warnings: those with the
 /// texts of fake_second; those of the fixture gates and of the fixture
 /// onboarding, whose apps have no route to start on; and those of the
-/// fixture steps with the onboarding, which have no route to start on
-/// either, and with the texts of the fixture steps a text without a
-/// translation, on purpose.
+/// fixture steps and of the fixture notifications with the onboarding,
+/// which have no route to start on either, and with the texts of the
+/// fixture steps a text without a translation, on purpose.
 const _warningApps = <String, List<String>>{
   'fake_second (fake_router) with localization, badge': [
     'localization.unsupported_language',
@@ -84,6 +84,10 @@ const _warningApps = <String, List<String>>{
     'router.no_start',
   ],
   'fake_steps with onboarding_screen': ['router.no_start'],
+  'fake_notifications with onboarding_screen, localization': [
+    'router.no_start',
+  ],
+  'fake_notifications with onboarding_screen': ['router.no_start'],
 };
 
 /// The codes of the warnings about what it is made of of the app of
@@ -155,9 +159,9 @@ void main() {
       'the app tests check the contract of the router role, of the layout '
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
-      'of the auth role and of the onboarding screen role with every '
-      'provider of each, which they tell apart by the roles of the app '
-      'only', () {
+      'of the auth role, of the onboarding screen role and of the '
+      'notifications role with every provider of each, which they tell apart '
+      'by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -171,10 +175,12 @@ void main() {
         appEntryRole,
         authRole,
         onboardingScreenRole,
+        notificationsRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
     expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
+    expect(named('notifications_role').roles, {notificationsRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -262,9 +268,9 @@ void main() {
 
   test(
       'the tests of the events role, of the preferences role, of the '
-      'localization role, of the theme role and of the walk of the routes '
-      'apply only to the apps with every module, which have the roles and '
-      'run flutter test for other tests already', () {
+      'localization role, of the theme role, of the notifications role and '
+      'of the walk of the routes apply only to the apps with every module, '
+      'which have the roles and run flutter test for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -282,6 +288,9 @@ void main() {
       'preferences_restorers',
       'theme_role',
       'theme_look',
+      // The test of the notifications that the CLI keeps, for the fixture
+      // notifications, which every such app has.
+      'notifications_role',
     ]) {
       expect(
         appsOf(named(name)),
@@ -319,12 +328,21 @@ void main() {
     for (final app in everyModule) {
       expect(
         app.hook!.presentRoles,
-        containsAll([eventsRole, preferencesRole, themeRole]),
+        containsAll([
+          eventsRole,
+          preferencesRole,
+          themeRole,
+          notificationsRole,
+        ]),
         reason: app.name,
       );
       expect(
         app.modules,
-        containsAll([FakePreferencesUserModule.id, FakeThemeModule.id]),
+        containsAll([
+          FakePreferencesUserModule.id,
+          FakeThemeModule.id,
+          FakeNotificationsModule.id,
+        ]),
         reason: app.name,
       );
       expect(appsOf(named('router_screens')), contains(app.name));
@@ -528,7 +546,10 @@ void main() {
     expect(valueOf(localized, 'stepLanguages'), "['en', 'uk']");
     // The steps of the fixture steps, in the order of the role: the text of
     // confirm without a translation reads in English in Ukrainian too, and
-    // confirm has no later.
+    // confirm has no later. Then the step that the template of the
+    // notifications role gives the onboarding, since the app has the
+    // fixture notifications: the steps of the templates of roles come after
+    // those of the modules.
     expect(stepsIn(localized), {
       'fake_steps.ask': {
         'en': {
@@ -558,8 +579,24 @@ void main() {
           'later': null,
         },
       },
+      'notifications.permission': {
+        for (final language in ['en', 'uk'])
+          language: {
+            for (final (field, text) in [
+              ('title', NotificationsRole.stepTitle),
+              ('text', NotificationsRole.stepText),
+              ('action', NotificationsRole.stepAction),
+              ('later', NotificationsRole.stepLater),
+            ])
+              field: text.textIn(language),
+          },
+      },
     });
-    expect(stepsIn(localized).keys, ['fake_steps.ask', 'fake_steps.confirm']);
+    expect(stepsIn(localized).keys, [
+      'fake_steps.ask',
+      'fake_steps.confirm',
+      'notifications.permission',
+    ]);
     expect(
       bodyOf(localized, 'chooseLanguage'),
       '=> appLocale.choose(Locale(language));',
@@ -615,6 +652,36 @@ void main() {
         ),
       ),
     );
+  });
+
+  test(
+      'the test of the notifications role applies to the apps with every '
+      'module, where the fixture notifications provide the role, and not to '
+      'the apps of the fixture alone, which the matrix only analyzes', () {
+    final notificationsTest = named('notifications_role');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(notificationsRole)) app.name,
+    ];
+
+    expect(
+      withRole,
+      containsAll([
+        'fake_notifications with localization',
+        'fake_notifications',
+      ]),
+    );
+    expect(appsOf(notificationsTest), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps.where(notificationsTest.appliesTo)) {
+      expect(
+        notificationsTest.values!(app),
+        {'asked_key': NotificationsRole.askedKey},
+        reason: app.name,
+      );
+    }
   });
 
   test(

@@ -8,6 +8,7 @@ import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
+import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
@@ -862,6 +863,53 @@ final class FakeAuthModule extends SmfModule {
           const RoleImplementation.async(
             type: TypeRef('FixtureAuth', import: _file),
             init: FactoryRef('openFixtureAuth', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the notifications role, which has at most one provider,
+/// whose service opens asynchronously, as one does that asks the system for
+/// what it keeps. It keeps in memory whether the app may show notifications
+/// and the notifications that are scheduled, where they stand for the
+/// settings and the alarms of the system, which each start of the app reads
+/// anew.
+///
+/// Its system has no question for the permission, as Android before 13, so
+/// a request opens the settings of the system, where the user of the tests
+/// turns the notifications on, as the mocks of a provider grant the
+/// permission when the app asks. Through the role, that looks like a
+/// question that the user allows. It shows nothing, and tells of no tap.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appNotifications`, which remembers in the
+/// preferences that the app asked.
+final class FakeNotificationsModule extends SmfModule {
+  /// Creates the module.
+  const FakeNotificationsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_notifications');
+
+  static const _file = ImportRef.app(
+    'core/fixture_notifications/fixture_notifications.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Notifications in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(notificationsRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeNotificationsBundle),
+        notificationsRole.data(
+          const RoleImplementation.async(
+            type: TypeRef('FixtureNotifications', import: _file),
+            init: FactoryRef('openFixtureNotifications', import: _file),
           ),
         ),
       ];

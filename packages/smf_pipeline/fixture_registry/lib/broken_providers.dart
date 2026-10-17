@@ -1373,6 +1373,23 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.notificationsForgettingSchedules,
+        role: notificationsRole,
+        bug: 'Its function forgets the notifications that are scheduled each '
+            'time it opens them, so the next start of the app has none of '
+            'them.',
+        // The fixture preferences, since the role requires the preferences.
+        app: [FakePreferencesModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/notifications_role/next_start_test.dart',
+            'a scheduled notification is still scheduled after the next '
+                'start, until it is cancelled',
+            'The next start keeps the notifications that the app scheduled.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '
