@@ -2188,6 +2188,7 @@ void main() {
               'go_router',
               'intl',
               'shared_preferences',
+              'shared_preferences_android',
             }),
             {variant.package},
             reason: '${variant.id}',

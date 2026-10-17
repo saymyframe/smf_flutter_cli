@@ -19,6 +19,8 @@ dependencies:
 
 dev_dependencies:
   analyzer: ^14.4.0
+  # Reads the version constraints of the apps that the tests render.
+  pub_semver: ^2.2.0
   # The app entry of the apps that the tests render.
   smf_flutter_core: ^0.4.1
   # The DI container that registers the preferences in apps of the tests.
