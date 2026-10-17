@@ -11,20 +11,26 @@
 // identity whose email address has an account that signs in with a
 // password, linkWith fails with accountExistsWithOtherMethod, and
 // signInWith fails so too or signs in to that account. A call for the user
-// who is signed in fails when nobody is. And deleteAccount with a fresh
+// who is signed in fails when nobody is. deleteAccount with a fresh
 // credential deletes the user whom a start found on the device, and one of
-// another user fails with invalidCredentials and deletes nothing.
+// another user fails with invalidCredentials and deletes nothing. And the
+// stream of the changes tells every listener of each change of the user
+// that these calls make.
 //
 // It knows only the role, and calls the service itself, through
 // createAuthService(), as the test of the service of the role does. It
 // builds test tokens of identities of its own for each issuer of the app
 // (see auth_methods.dart), which the provider takes in the tests of an app.
+// A token may be taken once, so each call gets a credential of its own, but
+// for the sign-in after a refused link, which gets the identical object.
 // The start-up of the app runs first, as on a device, with the mocks of the
 // platform side of every module of the app, which the matrix sets up before
 // the tests of each test file (flutter_test_config.dart). Each test signs
 // out first, and uses identities and email addresses of its own. Each
 // expectation gives its reason, which a provider of the role with a known
 // bug fails the test with (brokenProviders of the fixture registry).
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
 import 'package:{{app_name}}/core/auth/auth_service.dart';
@@ -62,22 +68,24 @@ void main() {
       await inRealTime(tester, 'signing in with credentials', () async {
         final service = createAuthService();
         for (final (index, issuer) in issuersOfApp.indexed) {
-          final credential = credentialOf(issuer, 'sign-in-$index');
+          // A new credential of the identity for each call.
+          IdTokenCredential credential() =>
+              credentialOf(issuer, 'sign-in-$index');
           await service.signOut();
-          await service.signInWith(credential);
+          await service.signInWith(credential());
           created[issuer] = service.currentUser;
           await service.signOut();
-          await service.signInWith(credential);
+          await service.signInWith(credential());
           final again = service.currentUser?.uid;
           await service.signUp(
             email: addressOf('methods-password-$index'),
             password: password,
           );
-          await service.signInWith(credential);
+          await service.signInWith(credential());
           final afterAccount = service.currentUser?.uid;
           await service.signOut();
           await service.signInAnonymously();
-          await service.signInWith(credential);
+          await service.signInWith(credential());
           later[issuer] = [again, afterAccount, service.currentUser?.uid];
         }
       });
@@ -127,14 +135,15 @@ void main() {
       await inRealTime(tester, 'linking credentials', () async {
         final service = createAuthService();
         for (final (index, issuer) in issuersOfApp.indexed) {
-          final credential = credentialOf(issuer, 'linked-$index');
+          IdTokenCredential credential() =>
+              credentialOf(issuer, 'linked-$index');
           await service.signOut();
           await service.signInAnonymously();
           anonymous[issuer] = service.currentUser;
-          await service.linkWith(credential);
+          await service.linkWith(credential());
           linked[issuer] = service.currentUser;
           await service.signOut();
-          await service.signInWith(credential);
+          await service.signInWith(credential());
           again[issuer] = service.currentUser;
         }
       });
@@ -196,13 +205,15 @@ void main() {
       await inRealTime(tester, 'linking credentials in use', () async {
         final service = createAuthService();
         for (final (index, issuer) in issuersOfApp.indexed) {
-          final credential = credentialOf(issuer, 'in-use-$index');
           await service.signOut();
-          await service.signInWith(credential);
+          await service.signInWith(credentialOf(issuer, 'in-use-$index'));
           final owner = service.currentUser?.uid;
           await service.signOut();
           await service.signInAnonymously();
           final guest = service.currentUser?.uid;
+          // The one credential object that two calls get: the sign-in after
+          // the link that refused it.
+          final credential = credentialOf(issuer, 'in-use-$index');
           final link = await errorOf(() => service.linkWith(credential));
           links[issuer] = (
             outcomeOf(link),
@@ -266,6 +277,8 @@ void main() {
           await service.signOut();
           await service.signInAnonymously();
           final guest = service.currentUser?.uid;
+          // The one credential object that two calls get: the sign-in after
+          // the link that refused it.
           final credential = credentialOf(
             issuer,
             'other-method-$index',
@@ -337,11 +350,12 @@ void main() {
       await inRealTime(tester, 'calling without a user', () async {
         final service = createAuthService();
         for (final (index, issuer) in issuersOfApp.indexed) {
-          final credential = credentialOf(issuer, 'nobody-$index');
+          IdTokenCredential credential() =>
+              credentialOf(issuer, 'nobody-$index');
           await service.signOut();
-          final link = await errorOf(() => service.linkWith(credential));
+          final link = await errorOf(() => service.linkWith(credential()));
           final deletion = await errorOf(
-            () => service.deleteAccount(fresh: credential),
+            () => service.deleteAccount(fresh: credential()),
           );
           calls[issuer] = (
             outcomeOf(link),
@@ -386,20 +400,21 @@ void main() {
 
       await inRealTime(tester, 'deleting users after a start', () async {
         for (final (index, issuer) in issuersOfApp.indexed) {
-          final other = credentialOf(issuer, 'other-user-$index');
-          final mine = credentialOf(issuer, 'deleted-$index');
+          IdTokenCredential other() =>
+              credentialOf(issuer, 'other-user-$index');
+          IdTokenCredential mine() => credentialOf(issuer, 'deleted-$index');
           var service = createAuthService();
           await service.signOut();
-          await service.signInWith(other);
+          await service.signInWith(other());
           await service.signOut();
-          await service.signInWith(mine);
+          await service.signInWith(mine());
           final uid = service.currentUser?.uid;
           // The next start of the app, which finds the user on the device,
           // and loses that the user signed in a short while ago.
           await initAuth();
           service = createAuthService();
           final ofOther = await errorOf(
-            () => service.deleteAccount(fresh: other),
+            () => service.deleteAccount(fresh: other()),
           );
           wrong[issuer] = (
             outcomeOf(ofOther),
@@ -407,17 +422,17 @@ void main() {
             service.currentUser?.uid == uid,
           );
           final ofUser = await errorOf(
-            () => service.deleteAccount(fresh: mine),
+            () => service.deleteAccount(fresh: mine()),
           );
           right[issuer] = (
             outcomeOf(ofUser),
             userWithIssuers(service.currentUser),
           );
-          await service.signInWith(mine);
+          await service.signInWith(mine());
           gone[issuer] = service.currentUser?.uid != uid;
           // What the deletion of that user ends with, the expectations
           // below tell.
-          await errorOf(() => service.deleteAccount(fresh: mine));
+          await errorOf(() => service.deleteAccount(fresh: mine()));
         }
       });
 
@@ -447,6 +462,106 @@ void main() {
         {for (final issuer in issuersOfApp) issuer: true},
         reason: 'The deletion takes the identity with the user: signing in '
             'with it again creates another user.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'the stream of the changes tells every listener of each change of the '
+    'user that a call with a credential makes, once the user of the service '
+    'has changed',
+    (tester) async {
+      await startUp(tester);
+      final service = createAuthService();
+      // The user that each of two listeners heard of last.
+      final heard = <String?>[null, null];
+      // Each event that came while the service had another user.
+      final early = <String>[];
+      final subscriptions = <StreamSubscription<AuthUser?>>[];
+      // After each step, the user of the service, and then the user that
+      // each listener heard of last.
+      final steps = <String, List<String?>>{};
+
+      Future<void> step(String name, Future<void> Function() call) async {
+        heard.fillRange(0, heard.length);
+        await inRealTime(tester, name, call);
+        final user = userWithIssuers(service.currentUser);
+        await waitUntil(tester, () => heard.every((last) => last == user));
+        steps[name] = [user, ...heard];
+      }
+
+      await inRealTime(tester, 'signing out and listening', () async {
+        await service.signOut();
+        for (var listener = 0; listener < heard.length; listener++) {
+          subscriptions.add(
+            service.userChanges.listen((user) {
+              final told = userWithIssuers(user);
+              final current = userWithIssuers(service.currentUser);
+              heard[listener] = told;
+              if (told != current) {
+                early.add('told of $told while the service had $current');
+              }
+            }),
+          );
+        }
+      });
+      addTearDown(() async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      });
+
+      final expected = <String, List<String?>>{};
+      for (final (index, issuer) in issuersOfApp.indexed) {
+        IdTokenCredential first() => credentialOf(issuer, 'changes-$index');
+        IdTokenCredential linked() =>
+            credentialOf(issuer, 'changes-linked-$index');
+        final account = accountWith(issuer);
+        for (final (name, call, user) in [
+          (
+            'signInWith() of a new identity',
+            () => service.signInWith(first()),
+            account
+          ),
+          ('signOut()', service.signOut, 'nobody'),
+          (
+            'signInAnonymously()',
+            service.signInAnonymously,
+            'an anonymous user'
+          ),
+          ('linkWith()', () => service.linkWith(linked()), account),
+          ('signOut() again', service.signOut, 'nobody'),
+          (
+            'signInWith() of an identity with a user',
+            () => service.signInWith(first()),
+            account
+          ),
+          (
+            'deleteAccount() with a fresh credential',
+            () => service.deleteAccount(fresh: first()),
+            'nobody'
+          ),
+        ]) {
+          await step('$name ($issuer)', call);
+          expected['$name ($issuer)'] = [user, user, user];
+        }
+      }
+
+      expect(
+        steps,
+        expected,
+        reason: 'userChanges tells each of its listeners of every change of '
+            'the user that signInWith(), linkWith() and deleteAccount() with '
+            'a fresh credential make: after each call, the user that a '
+            'listener heard of last is the user of the service.',
+      );
+      expect(
+        early,
+        isEmpty,
+        reason: 'userChanges tells of a change once the user of the service '
+            'has changed: when a listener hears of a user, currentUser is '
+            'that user.',
       );
     },
     timeout: timeout,

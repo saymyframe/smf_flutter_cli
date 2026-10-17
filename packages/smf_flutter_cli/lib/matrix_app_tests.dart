@@ -724,12 +724,17 @@ Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
 /// from `appSignInMethods`, which the template of the role generates, so the
 /// matrix writes no file for it. It builds test tokens of identities of its
 /// own for each issuer: JSON Web Tokens without a signature, whose payload
-/// has `iss`, `sub` and `email`. The mocks of the module of a way to sign in
-/// issue such tokens, of one identity of their own and the same each time,
-/// and a provider takes them in the tests of an app. It uses the helpers of
-/// the test of the auth role ([authRoleAppTest]), which every app with the
-/// role has. It has no probe for the start check: nobody can sign in on a
-/// device.
+/// has `iss`, `sub`, maybe `email`, and a `nonce` of its own, which is the
+/// `rawNonce` of the credential. A credential of the issuer of a way to sign
+/// in with `revokesOnDeletion` has an `authorizationCode` of its own too. A
+/// token with a nonce may be taken once, so each call gets a credential of
+/// its own, but for the sign-in with the identical object that `linkWith`
+/// refused just before. The mocks of the module of a way to sign in issue
+/// such tokens, of one identity of their own and the same each time, each
+/// with a new nonce, and a provider takes them in the tests of an app. It
+/// uses the helpers of the test of the auth role ([authRoleAppTest]), which
+/// every app with the role has. It has no probe for the start check: nobody
+/// can sign in on a device.
 Future<MatrixAppTest> authMethodsAppTest() async => MatrixAppTest(
       '${await appTestsDirectoryOf('smf_flutter_cli')}/auth_methods',
       appliesTo: (app) {

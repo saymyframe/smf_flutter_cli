@@ -17,7 +17,7 @@
 // under the mocks of the module of the way to sign in, which the matrix
 // sets up before the tests of each test file (flutter_test_config.dart):
 // they return a credential of one identity of their own, the same each
-// time (see auth_methods.dart). An anonymous user comes from the service,
+// time, with a new nonce (see auth_methods.dart). An anonymous user comes from the service,
 // through createAuthService(), in the modes in which the session signs in
 // none itself. The start-up of the app runs first, as on a device. Each
 // expectation gives its reason, which a provider of the role with a known
