@@ -80,8 +80,12 @@ final class NotificationTap {
 ///   runs, and [launchTap] is the tap that launched the app. Each has the
 ///   data that the notification had, or none if the service cannot read it.
 /// - [request] shows the question of the system where the platform has one,
-///   and completes once the user answered. It completes when the user says
-///   no, too, or when the system asks no more.
+///   and completes once the user answered, also with a no, for which it does
+///   not throw. Where the platform has no question to show and the app may
+///   not show notifications, as on Android before 13, it opens the settings
+///   of the system for the notifications of the app instead, as
+///   [openSettings] does, and completes. So the user needs only one request
+///   to turn the notifications on, whatever the platform.
 abstract interface class NotificationsService {
   /// The tap on a notification that launched the app, or `null` if the app
   /// was launched in another way: known when the service is created.
@@ -94,7 +98,8 @@ abstract interface class NotificationsService {
   /// Whether the app may show notifications.
   Future<bool> areEnabled();
 
-  /// Asks the user for the permission to show notifications.
+  /// Asks the user for the permission to show notifications, or opens the
+  /// settings of the system where the platform has no question to show.
   Future<void> request();
 
   /// Opens the settings of the system for the notifications of the app.

@@ -46,10 +46,15 @@ const notificationsRole = NotificationsRole._();
 /// are scheduled and not shown yet. A notification is an `AppNotification`
 /// with an id, a title, a body and data. Its id is a 32-bit integer, which
 /// the platforms keep, and a notification with the id of one that is shown
-/// or scheduled takes its place. The calls of the controller fail with an
+/// or scheduled takes its place. `show()` and `schedule()` fail with an
 /// `ArgumentError` for an id that the app does not take, and `schedule()`
 /// for a time that is not in the future, before they reach the provider.
-/// What the provider throws reaches the code that called.
+/// `scheduled()` and `cancelAll()` take the notifications of an owner too.
+/// What the provider throws reaches the code that called. An error of the
+/// provider when the user comes back to the app, or one that its taps send,
+/// has no caller, so it reaches the handlers of the uncaught errors of the
+/// app, and the controller goes on. A call made before the first start of
+/// the controller waits for it, and fails with its error if it fails.
 ///
 /// `appNotifications.permission` is a `ValueListenable` of the
 /// `NotificationPermission` of the app:
@@ -64,14 +69,16 @@ const notificationsRole = NotificationsRole._();
 /// request, and each time the user comes back to the app, as after a change
 /// in the settings of the system. `appNotifications.request()` asks the
 /// user, unless the app may show notifications already: it calls the
-/// service, which shows the question of the system, then asks the service
-/// again whether the app may show them, then saves [askedKey]. A request
-/// while another is on its way completes with that one, since Android shows
-/// one question at a time. `appNotifications.openSettings()` opens the
-/// settings of the system for the notifications of the app, where the user
-/// turns them on after `denied`. The role has no state of a permission that
-/// is granted for a while, or of one that the system asks no more for: the
-/// answer to both is the settings of the system.
+/// service, which shows the question of the system, or opens its settings
+/// where the platform has no question, then asks the service again whether
+/// the app may show them, then saves [askedKey]. A request while another is
+/// on its way completes with that one, since Android shows one question at
+/// a time. After `denied` the system may not ask again: iOS asks only once,
+/// and Android stops after a second no. `appNotifications.openSettings()`
+/// opens the settings of the system for the notifications of the app, where
+/// the user turns them on. The role has no state of a permission that is
+/// granted for a while, or of one that the system will not ask for again:
+/// the answer to both is the settings of the system.
 ///
 /// `restoreNotifications`, the restorer that the template puts into
 /// [PreferencesRole.restorers], takes [askedKey] from the preferences, so
@@ -97,7 +104,9 @@ const notificationsRole = NotificationsRole._();
 /// not negative.
 ///
 /// `appNotifications.taps` and `launchTap` leave out the taps on a
-/// notification with an owner. `appNotifications.tapsOf(owner)` and
+/// notification with an owner, and those with a negative id, as of a
+/// notification of an owner whose data the provider could not read.
+/// `appNotifications.tapsOf(owner)` and
 /// `launchTapOf(owner)` give them to their owner, so the code of the app
 /// sees each tap once, from the owner or from the role.
 ///
@@ -108,7 +117,10 @@ const notificationsRole = NotificationsRole._();
 /// screen. It shows whether the app may show notifications, as the texts
 /// [settingOn] and [settingOff] after the title [settingTitle]. A tap asks
 /// for the permission while it is `notAsked`, and opens the settings of the
-/// system after that.
+/// system after that. The entry does not wait for what a tap starts, so an
+/// error of the request, such as preferences that fail to save that the app
+/// asked, reaches the handlers of the uncaught errors of the app, as with
+/// the entries of the theme mode and of the language.
 ///
 /// In an app with the [OnboardingScreenRole], the template gives the
 /// onboarding the step [stepName], of the stage
@@ -144,7 +156,11 @@ const notificationsRole = NotificationsRole._();
 ///   place, and `cancel` removes the one of its id, shown or scheduled;
 /// - `taps` and `launchTap` have the data that the notification had;
 /// - `request` completes once the user answered, also with a no, and never
-///   throws for it.
+///   throws for it. Where the platform has no question to show and the app
+///   may not show notifications, as on Android before 13, it opens the
+///   settings of the system for the notifications of the app instead, as
+///   `openSettings` does, so the user needs only one request to turn them
+///   on.
 ///
 /// Only a running app shows whether a provider keeps to it.
 ///
@@ -281,7 +297,7 @@ final class NotificationsRole extends Role<RoleImplementation> {
   /// The text of the step of the onboarding, below its title.
   static const stepText = LocalizedText(
     'stepText',
-    en: 'The app tells you when something needs your attention, also while '
+    en: 'The app tells you when something needs your attention, even when '
         'it is closed.',
     translations: {
       'uk': 'Застосунок повідомить, коли щось потребує вашої уваги, навіть '
@@ -473,7 +489,7 @@ String _notificationsReadme({
     '''
 The app shows notifications through `appNotifications` in `${NotificationsRole.controllerFile}`. `show()` shows one now and `schedule()` at a time to come, `cancel()` and `cancelAll()` remove them, and `scheduled()` lists those still to come. A scheduled notification shows at about its time, not to the minute, even if the app is closed by then, and after the device restarts. A tap on a notification reaches `appNotifications.taps` with the `data` of the notification, and `appNotifications.launchTap` is the tap that launched the app.
 
-The app needs the permission of the user to show notifications. `appNotifications.permission` is `granted`, `denied` once the user said no or turned them off, or `notAsked`, and `appNotifications.request()` asks. ${_whereAsked(settings: settings, onboarding: onboarding)} After `denied` the system asks no more, and `appNotifications.openSettings()` opens its settings, where the user turns the notifications on.
+The app needs the permission of the user to show notifications. `appNotifications.permission` is `granted`, `denied` once the user said no or turned them off, or `notAsked`, and `appNotifications.request()` asks. Where the system has no question to show, as on Android before 13, the request opens the settings of the system for the notifications of the app instead. ${_whereAsked(settings: settings, onboarding: onboarding)} After `denied` the system may not ask again: iOS asks only once, and Android stops asking after a second no. `appNotifications.openSettings()` opens the settings of the system, where the user turns the notifications on.
 
 On Android a notification shows `${NotificationsRole.androidIconFile}` as its small icon. Replace the bell there with the icon of the app, a shape on a transparent background, and keep the name of the file: `${NotificationsRole.androidKeepFile}` keeps the icon in a release build. In the settings of the system, the channel of the notifications has the name of the app.
 ''';
@@ -537,8 +553,8 @@ final class _NotificationsTemplate extends _ServiceTemplate {
   /// the app.
   @override
   String get agentNote => '''
-- `appNotifications` in `$file` shows the notifications of the app. `show()` shows one now, `schedule(notification, at: time)` at about that time, not to the minute, even if the app is closed by then. `cancel()` and `cancelAll()` remove them, and `scheduled()` lists those still to come. A notification is an `AppNotification` with an `id`, a `title`, a `body` and `data`, and one with the id of a notification that is shown or scheduled takes its place. Give it an id from 0 up: a negative id is for a notification with an owner, which names it under `notificationOwnerKey` in its `data`, and whose taps go to `tapsOf(owner)` and `launchTapOf(owner)`.
-- `appNotifications.permission` is `granted`, `denied` or `notAsked`. Ask with `appNotifications.request()` where the user turns on something that notifies, so that the question explains itself. After `denied` the system asks no more: `appNotifications.openSettings()` opens its settings. The app remembers that it asked under `${NotificationsRole.askedKey}`, so write nothing under that key.
+- `appNotifications` in `$file` shows the notifications of the app. `show()` shows one now, `schedule(notification, at: time)` at about that time, not to the minute, even if the app is closed by then. `cancel()` and `cancelAll()` remove them, and `scheduled()` lists those still to come, those of an owner too. A notification is an `AppNotification` with an `id`, a `title`, a `body` and `data`, and one with the id of a notification that is shown or scheduled takes its place. Give it an id from 0 up: a negative id is for a notification with an owner, which names it under `notificationOwnerKey` in its `data`, and whose taps go to `tapsOf(owner)` and `launchTapOf(owner)`.
+- `appNotifications.permission` is `granted`, `denied` or `notAsked`. Ask with `appNotifications.request()` where the user turns on something that notifies, so that the question explains itself. Where the system has no question to show, as on Android before 13, the request opens its settings instead. After `denied` the system may not ask again (iOS asks only once, and Android stops after a second no), so open its settings with `appNotifications.openSettings()`. The app remembers that it asked under `${NotificationsRole.askedKey}`, so write nothing under that key.
 - A tap on a notification reaches `appNotifications.taps` with the `data` of the notification, and the tap that launched the app is `appNotifications.launchTap`. Handle both once the first screen is shown, and navigate as the rest of the app does. A notification runs no code of the app when it shows.
 - On Android a notification shows `${NotificationsRole.androidIconFile}` as its small icon. Change the drawing there and keep the name of the file.
 - A new provider implements `$service` of `${NotificationsRole.serviceFile}`, and only the files of that implementation import it. The code of the app imports `$file`, which exports `AppNotification` and `NotificationTap`, and calls neither `$initFunction()` nor `$factory()` nor `appNotifications.start()`.

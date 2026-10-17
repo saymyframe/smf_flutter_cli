@@ -9,6 +9,11 @@ import 'app_notifications.dart';
 ///
 /// It follows the permission, also when the user changed it in the settings
 /// of the system and came back to the app.
+///
+/// The entry does not wait for what a tap starts. If the preferences fail
+/// to save that the app asked, or the service of the provider fails,
+/// nothing here catches the error: it reaches the handlers of the uncaught
+/// errors of the app.
 class NotificationsSetting extends StatelessWidget {
   /// Creates the setting.
   const NotificationsSetting({super.key});
