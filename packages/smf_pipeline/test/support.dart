@@ -304,6 +304,21 @@ dependencies {
 </dict>
 </plist>
 ''',
+  'ios/Runner/AppDelegate.swift': '''
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+{{{smf_app_entry__ios_app_delegate_launch}}}
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}
+''',
   'ios/Runner/Runner.entitlements': '''
 <plist version="1.0">
 <dict>

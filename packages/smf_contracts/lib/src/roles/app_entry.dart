@@ -25,7 +25,8 @@ const appEntryRole = AppEntryRole._();
 /// - the project of each platform of the app ([AppIdentity.platforms]), at
 ///   the paths of Flutter's templates, such as [androidManifestFile] and
 ///   [xcodeProjectFile]; the iOS project also has [iosEntitlementsFile],
-///   which the app target signs with;
+///   which the app target signs with, and its app delegate in Swift,
+///   [appDelegateFile];
 /// - [readmeFile], the README of the app.
 ///
 /// The provider builds the root of the app, inside the [rootWrappers], as a
@@ -67,12 +68,13 @@ const appEntryRole = AppEntryRole._();
 /// none.
 ///
 /// The keyed sockets of the native files and of the README,
-/// [mainActivityIntentFilters] and both places of
+/// [mainActivityIntentFilters], [iosAppDelegateLaunch] and both places of
 /// [androidCoreLibraryDesugaring] render complete lines, so their tags
 /// stand alone at the start of a line of their file, like the tags of
 /// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
 /// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module
-/// rules of the role check these tags in the templates of its provider, and
+/// rules of the role check these tags in the templates of its provider,
+/// and the place of the tag of [iosAppDelegateLaunch] in its method, and
 /// its structural rules check that the native files name every key once and
 /// that the app target signs with [iosEntitlementsFile].
 ///
@@ -108,6 +110,10 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the entitlements of the iOS app; see [iosEntitlements].
   static const iosEntitlementsFile = 'ios/Runner/Runner.entitlements';
+
+  /// The path of the app delegate of the iOS app, in Swift; see
+  /// [iosAppDelegateLaunch].
+  static const appDelegateFile = 'ios/Runner/AppDelegate.swift';
 
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
@@ -348,6 +354,33 @@ final class AppEntryRole extends Role<NoDsl> {
     KeyedSocket(policy: PlistMergePolicy(), renderer: _renderPlistEntries),
   );
 
+  /// Swift statements that run in
+  /// `application(_:didFinishLaunchingWithOptions:)` of the app delegate in
+  /// [appDelegateFile], before its call of `super.application`, which hands
+  /// the launch of the app to Flutter: what has to be set before the launch
+  /// finishes, such as the delegate of the notification center of the
+  /// system, so that a tap on a notification that launched the app reaches
+  /// it, as in `UNUserNotificationCenter.current().delegate = self`.
+  ///
+  /// The statements run in the app delegate, a `FlutterAppDelegate`, which
+  /// they read as `self`, with the parameters `application` and
+  /// `launchOptions` of the method. Each contribution indents its lines by
+  /// four spaces, as the body of the method is. The socket takes no
+  /// imports, and the file imports `Flutter` and `UIKit`; `Flutter` brings
+  /// `UserNotifications` with it.
+  ///
+  /// The app of `flutter create` has the scene lifecycle of UIKit, under
+  /// which Flutter registers the plugins once the scene of the app
+  /// connects, after this method. So the statements have no registry of
+  /// plugins, no channel and no `FlutterViewController`. The module rule
+  /// `app_entry.launch_code_place` checks that the tag of the provider is
+  /// in that method, before the call.
+  static const iosAppDelegateLaunch = SocketRef<CodeSocket>.role(
+    appEntryRole,
+    'ios_app_delegate_launch',
+    CodeSocket.text(),
+  );
+
   /// Gradle plugins declared in [gradleSettingsFile], keyed by plugin id,
   /// with the highest version any module needs.
   ///
@@ -533,6 +566,7 @@ final class AppEntryRole extends Role<NoDsl> {
         mainActivityIntentFilters,
         infoPlist,
         iosEntitlements,
+        iosAppDelegateLaunch,
         gradleSettingsPlugins,
         gradleAppPlugins,
         gradleAppDependencies,
@@ -571,6 +605,15 @@ final class AppEntryRole extends Role<NoDsl> {
               'them, so the widget that creates the root MaterialApp is '
               'below the widgets that the modules put around the root.',
           check: _checkRootWrappersInMain,
+        ),
+        ModuleRule(
+          id: 'app_entry.launch_code_place',
+          description: 'The tag of the code that runs before the launch of '
+              'the iOS app finishes is in the body of '
+              'application(_:didFinishLaunchingWithOptions:) in '
+              'ios/Runner/AppDelegate.swift, before its call of '
+              'super.application, which hands the launch to Flutter.',
+          check: _checkLaunchCodePlace,
         ),
         ModuleRule(
           id: 'app_entry.tag_lines',
@@ -754,16 +797,34 @@ bool _ascending(List<int> offsets) {
 ///
 /// The tags of the template, and the comments and strings of its code, do
 /// not count, so a brace in them does not end the body.
-({int start, int end})? _bodyOf(String template, String name) {
-  final code = template.replaceAllMapped(
-    _notCode,
-    (match) => ' ' * match[0]!.length,
-  );
-  final declaration = RegExp(
-    '\\b${RegExp.escape(name)}\\s*\\([^)]*\\)\\s*(?:async\\s*)?\\{',
-  ).firstMatch(code);
-  if (declaration == null) return null;
-  final start = declaration.end - 1;
+({int start, int end})? _bodyOf(String template, String name) => _bodyAfter(
+      template,
+      RegExp(
+        '\\b${RegExp.escape(name)}\\s*\\([^)]*\\)\\s*(?:async\\s*)?\\{',
+      ),
+    );
+
+/// [template] with the tags of the template, and the comments and strings
+/// of its code, replaced by spaces, so the offsets of the rest stay.
+String _codeOf(String template) =>
+    template.replaceAllMapped(_notCode, (match) => ' ' * match[0]!.length);
+
+/// The offsets from the opening brace to the closing brace of the first
+/// body in [template] whose declaration [declaration] finds, up to its
+/// opening brace, or `null` if it finds none with a closing brace.
+///
+/// The tags of the template, and the comments and strings of its code, do
+/// not count, so neither the declaration nor a brace may be in them. The
+/// scan knows the comments and strings of Dart. Of a template in Swift,
+/// such as that of an app delegate, it reads line comments, block comments
+/// that do not nest, and strings in double quotes with no string inside an
+/// interpolation and no `#` around them; a brace in a comment or a string
+/// of Swift beyond those may end the body early.
+({int start, int end})? _bodyAfter(String template, RegExp declaration) {
+  final code = _codeOf(template);
+  final found = declaration.firstMatch(code);
+  if (found == null) return null;
+  final start = found.end - 1;
   var depth = 0;
   for (var i = start; i < code.length; i++) {
     switch (code[i]) {
@@ -775,6 +836,62 @@ bool _ascending(List<int> offsets) {
   }
   return null;
 }
+
+/// The declaration of `application(_:didFinishLaunchingWithOptions:)` in
+/// the template of an app delegate in Swift, up to the brace that opens its
+/// body.
+final _launchMethod = RegExp(
+  r'\bfunc\s+application\s*\([^)]*\bdidFinishLaunchingWithOptions\b[^)]*\)'
+  r'[^{]*\{',
+);
+
+List<SmfIssue> _checkLaunchCodePlace(ModuleRuleInput<NoDsl> input) {
+  const path = AppEntryRole.appDelegateFile;
+  const method = 'application(_:didFinishLaunchingWithOptions:)';
+  final tag = '{{{${AppEntryRole.iosAppDelegateLaunch.tag}}}}';
+  final text = _templatesOf(input.contributions)[path] ?? '';
+  final offset = text.indexOf(tag);
+  if (offset < 0) return const [];
+  SmfIssue issue(String problem) =>
+      SmfIssue(problem, origin: ModuleOrigin(input.module.id), path: path);
+  final body = _bodyAfter(text, _launchMethod);
+  if (body == null || offset < body.start || offset > body.end) {
+    return [
+      issue(
+        'The tag $tag is in $path, but not in the body of $method, where the '
+        'code of the modules runs before the launch of the app finishes.',
+      ),
+    ];
+  }
+  const call = 'super.application(_:didFinishLaunchingWithOptions:)';
+  final handOver = _superLaunch
+      .firstMatch(_codeOf(text).substring(body.start, body.end))
+      ?.start;
+  if (handOver == null) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, which has no call '
+        'of $call: the method hands the launch of the app to Flutter with '
+        'that call, after the code of the modules.',
+      ),
+    ];
+  }
+  if (body.start + handOver < offset) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, but not before its '
+        'call of $call, which hands the launch of the app to Flutter: the '
+        'code of the modules runs before it.',
+      ),
+    ];
+  }
+  return const [];
+}
+
+/// The call of `super.application(...)` with which
+/// `application(_:didFinishLaunchingWithOptions:)` hands the launch of the
+/// app to Flutter.
+final _superLaunch = RegExp(r'\bsuper\s*\.\s*application\s*\(');
 
 /// The parts of the template of a Dart file that are not code: the tags of
 /// the template, comments and strings, raw or not, on one line or on

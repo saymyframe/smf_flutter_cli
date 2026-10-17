@@ -472,6 +472,12 @@ void main() {
         rendered(result, AppEntryRole.gradleAppDependencies).values.single,
         '    implementation("androidx.annotation:annotation:1.9.1")',
       );
+      // Only fake_sockets runs code at the launch of the iOS app: a second
+      // contribution of the same statement would run it twice.
+      expect(
+        rendered(result, AppEntryRole.iosAppDelegateLaunch).values.single,
+        '    application.applicationSupportsShakeToEdit = true',
+      );
       // fake_overlap asks for 2.1.3: the highest version of the library
       // wins, and the switch comes with it.
       const library = 'com.android.tools:desugar_jdk_libs:2.1.4';

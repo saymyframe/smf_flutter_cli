@@ -12,6 +12,7 @@ void main() {
   const manifest = 'android/app/src/main/AndroidManifest.xml';
   const infoPlist = 'ios/Runner/Info.plist';
   const entitlements = 'ios/Runner/Runner.entitlements';
+  const appDelegate = 'ios/Runner/AppDelegate.swift';
   const settingsGradle = 'android/settings.gradle.kts';
   const appGradle = 'android/app/build.gradle.kts';
 
@@ -229,6 +230,38 @@ void main() {
       expect(
         RegExp(RegExp.escape(reference[1]!)).allMatches(project),
         hasLength(2),
+      );
+    });
+
+    test(
+        'run the code of the modules before the launch of the iOS app '
+        'finishes, before Flutter takes the launch', () {
+      const launch = '  ) -> Bool {\n'
+          '    return super.application(application, '
+          'didFinishLaunchingWithOptions: launchOptions)\n'
+          '  }\n';
+
+      // As flutter create writes it.
+      expect(alone[appDelegate], contains(launch));
+      expect(
+        every[appDelegate],
+        contains(
+          launch.replaceFirst(
+            '{\n',
+            '{\n    UNUserNotificationCenter.current().delegate = self\n',
+          ),
+        ),
+      );
+      // Not where Flutter registers the plugins, once the scene connects.
+      expect(
+        every[appDelegate],
+        contains(
+          'func didInitializeImplicitFlutterEngine(_ engineBridge: '
+          'FlutterImplicitEngineBridge) {\n'
+          '    GeneratedPluginRegistrant.register(with: '
+          'engineBridge.pluginRegistry)\n'
+          '  }\n',
+        ),
       );
     });
 
