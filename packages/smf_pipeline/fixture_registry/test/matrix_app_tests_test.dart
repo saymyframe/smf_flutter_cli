@@ -574,6 +574,35 @@ void main() {
       stepsIn(localized)['fake_steps.ask']!['en'],
     );
     expect(bodyOf(english, 'chooseLanguage'), 'async {}');
+
+    // An app whose provider names no route of its own is no app of the
+    // matrix: the rules of the role report it first.
+    final steps = apps.singleWhere(
+      (app) => app.name == 'fake_steps with onboarding_screen',
+    );
+    final withoutRoute = MatrixApp(
+      'steps',
+      steps.modules,
+      hook: RoleHookRequest(
+        data: [
+          for (final data in steps.hook!.data)
+            if (data.value is! OnboardingScreenRoute) data,
+        ],
+        presentRoles: steps.hook!.presentRoles,
+        context: steps.hook!.context,
+      ),
+    );
+    expect(
+      () => onboarding.generatedFiles!(withoutRoute, 'my_app'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'No module of steps names a route of its own as the onboarding '
+              'screen.',
+        ),
+      ),
+    );
   });
 
   test(
