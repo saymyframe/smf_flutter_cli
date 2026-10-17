@@ -28,6 +28,7 @@ void main() {
     expect(request.outputDirectory, '.');
     expect(request.onConflict, OnConflict.prompt);
     expect(request.strict, isFalse);
+    expect(request.allowedWarnings, isEmpty);
     expect(request.explain, isFalse);
     expect(request.skipExternalSetup, isFalse);
     expect(request.input, isTrue);
@@ -48,6 +49,9 @@ void main() {
       '--on-conflict',
       'replace',
       '--strict',
+      '--allow-warning=router.no_start',
+      '--allow-warning',
+      'localization.untranslated,router.no_start',
       '--explain',
       '--skip-external-setup',
       '--no-input',
@@ -61,6 +65,10 @@ void main() {
     expect(request.outputDirectory, '/tmp/out');
     expect(request.onConflict, OnConflict.replace);
     expect(request.strict, isTrue);
+    expect(
+      request.allowedWarnings,
+      {'router.no_start', 'localization.untranslated'},
+    );
     expect(request.explain, isTrue);
     expect(request.skipExternalSetup, isTrue);
     expect(request.input, isFalse);
@@ -87,6 +95,25 @@ void main() {
     );
   });
 
+  test('rejects a value of --allow-warning that is not a code of a warning',
+      () {
+    for (final code in ['no_start', 'Router.no_start', 'router.', '.x']) {
+      expect(
+        () => parse(['--strict', '--allow-warning', code]),
+        throwsA(
+          isA<SmfUsageException>().having(
+            (e) => e.message,
+            'message',
+            '"$code" is not the code of a warning, which is the id of a '
+                'role, a dot and a name in lower snake_case, such as '
+                'router.no_start.',
+          ),
+        ),
+        reason: code,
+      );
+    }
+  });
+
   test('role options keep their help and allowed values', () {
     final parser = ArgParser();
     CreateOptions.addTo(parser, [role]);
@@ -94,6 +121,16 @@ void main() {
     expect(parser.options['start']!.valueHelp, 'path');
     expect(parser.options['mode']!.allowed, ['a', 'b']);
     expect(parser.options['dart-fix']!.hide, isTrue);
-    expect(CreateOptions.names, contains('on-conflict'));
+    // CI names the warnings that its apps report on purpose, which a user
+    // has no reason to.
+    expect(parser.options['allow-warning']!.hide, isTrue);
+    expect(parser.options['allow-warning']!.isMultiple, isTrue);
+    expect(parser.usage, isNot(contains('allow-warning')));
+    expect(
+      parser.options['strict']!.help,
+      'Fail instead of leaving out modules that cannot work, and on warnings '
+      'about what the app is made of.',
+    );
+    expect(CreateOptions.names, containsAll(['on-conflict', 'allow-warning']));
   });
 }

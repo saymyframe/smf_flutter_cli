@@ -285,7 +285,12 @@ extension CreatePlanning on CreatePipeline {
   /// In lenient mode, the default, a problem caused by a module leaves that
   /// module out and the stages run again from 3 without it, unless no app
   /// can be made without the module, as without the only provider of a role
-  /// that every app has; with `--strict` every error stops generation.
+  /// that every app has. With `--strict`, every error stops generation, and
+  /// so does every warning about what the app is made of whose code
+  /// `--allow-warning` does not name (see [CreateRequest.allowedWarnings]),
+  /// after the stage that found it: a warning of the validation before the
+  /// machine is checked, and a warning of a choice before the app is
+  /// rendered. A warning about the machine never stops it.
   /// `--explain` runs the stages 1 to 5 and the read-only part of 6, prints
   /// what it found, and stops: it never asks, installs, logs in or chooses.
   ///
@@ -317,6 +322,7 @@ extension CreatePlanning on CreatePipeline {
     final lenience = _Lenience(
       registry,
       strict: request.strict,
+      allowedWarnings: request.allowedWarnings,
       logger: logger,
     );
     final answers = <Role, ModuleId>{};
@@ -397,7 +403,8 @@ extension CreatePlanning on CreatePipeline {
         environment: environment,
         context: context,
       );
-      // It reports the warnings of the choices. Their errors are of the
+      // It reports the warnings of the choices, and with --strict stops on
+      // them, before anything is rendered. Their errors are of the
       // templates of roles, which lenient mode cannot leave out, so it
       // stops on them rather than plan the app again.
       lenience.leaveOut(chosen);
@@ -438,10 +445,19 @@ void _reportAdded(Resolution resolution, SmfLogger logger) {
 /// What lenient mode has decided so far in a run: the modules it left out
 /// and the warnings already reported.
 final class _Lenience {
-  _Lenience(this.registry, {required this.strict, required this.logger});
+  _Lenience(
+    this.registry, {
+    required this.strict,
+    required this.allowedWarnings,
+    required this.logger,
+  });
 
   final ModuleRegistry registry;
   final bool strict;
+
+  /// The codes of the warnings about what the app is made of that do not
+  /// stop a run with [strict].
+  final Set<String> allowedWarnings;
   final SmfLogger logger;
   final Set<ModuleId> excluded = {};
   final List<LeftOut> leftOut = [];
@@ -452,31 +468,38 @@ final class _Lenience {
   bool canDoWithout(Set<ModuleId> modules) =>
       _canDoWithout(registry, {...excluded, ...modules});
 
-  /// Reports the warnings among [issues], each once per run, and decides
-  /// what their errors mean: nothing if there are none, a retry without the
-  /// modules at fault if lenient mode can leave them all out (returns
-  /// `true`), or a [GenerationFailedException] otherwise. Lenient mode does
-  /// not leave out modules that no app can be made without: their errors,
-  /// with the hints that tell how to fix them, stop generation.
+  /// Reports the warnings among [issues] that do not stop the run, each
+  /// once per run, and decides what the others mean: nothing if there are
+  /// none, a retry without the modules at fault if lenient mode can leave
+  /// them all out (returns `true`), or a [GenerationFailedException]
+  /// otherwise.
+  ///
+  /// With [strict], the errors and the warnings about what the app is made
+  /// of stop the run, but for those whose codes are among the
+  /// [allowedWarnings]; a warning about the machine never does. Lenient
+  /// mode stops on no warning, and does not leave out modules that no app
+  /// can be made without: their errors, with the hints that tell how to fix
+  /// them, stop generation.
   bool leaveOut(List<SmfIssue> issues) {
+    final stopping = <SmfIssue>[];
     for (final issue in issues) {
-      // The logger marks a warning itself.
-      if (!issue.isError && _warned.add('$issue')) {
+      if (issue.isError || _stops(issue)) {
+        stopping.add(issue);
+      } else if (_warned.add('$issue')) {
+        // The logger marks a warning itself.
         logger.warn(issueLine(issue));
       }
     }
+    if (stopping.isEmpty) return false;
     final errors = [
-      for (final issue in issues)
+      for (final issue in stopping)
         if (issue.isError) issue,
     ];
-    if (errors.isEmpty) return false;
     final culprits = _culpritsOf(errors);
     if (strict || culprits.isEmpty || !canDoWithout(culprits.keys.toSet())) {
       throw GenerationFailedException(
-        errors.length == 1
-            ? 'Generation stopped because of an error.'
-            : 'Generation stopped because of ${errors.length} errors.',
-        issues: errors,
+        _stoppedBy(errors.length, stopping.length - errors.length),
+        issues: stopping,
       );
     }
     for (final MapEntry(key: module, value: reason) in culprits.entries) {
@@ -486,6 +509,13 @@ final class _Lenience {
     }
     return true;
   }
+
+  /// Whether [warning] stops the run: a warning about what the app is made
+  /// of, with [strict], whose code is not among the [allowedWarnings].
+  bool _stops(SmfIssue warning) =>
+      strict &&
+      warning.category == WarningCategory.composition &&
+      !allowedWarnings.contains(warning.code);
 
   /// The modules that caused [errors], each with the message of its first
   /// error, or none if an error has no module that lenient mode can still
@@ -502,6 +532,24 @@ final class _Lenience {
     }
     return culprits;
   }
+}
+
+/// Why generation stopped, because of [errors] errors and [warnings]
+/// warnings about what the app is made of, which stop only a run with
+/// `--strict`.
+String _stoppedBy(int errors, int warnings) {
+  final causes = [
+    if (errors == 1) 'an error' else if (errors > 1) '$errors errors',
+    if (warnings == 1)
+      'a warning about the app'
+    else if (warnings > 1)
+      '$warnings warnings about the app',
+  ];
+  final goesOn = errors > 0
+      ? ''
+      : ' Without --strict, the run goes on after '
+          '${warnings == 1 ? 'it' : 'them'}.';
+  return 'Generation stopped because of ${causes.join(' and ')}.$goesOn';
 }
 
 /// Whether [registry] can make an app without the modules [without]: every

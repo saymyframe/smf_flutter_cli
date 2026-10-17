@@ -920,6 +920,271 @@ void main() {
     );
   });
 
+  group('--strict and the warnings about what the app is made of', () {
+    const noStart = SmfIssue.warning(
+      'No screen to start on.',
+      code: 'watch.no_start',
+    );
+    const noTabs = SmfIssue.warning(
+      'No main navigation.',
+      code: 'watch.no_tabs',
+    );
+
+    /// A module that provides the role `watch`, whose template reports
+    /// [validated] from its validation and [chosen] from its choice, and
+    /// that has [check] among its checks of the machine.
+    TestModule watcher({
+      List<SmfIssue> validated = const [],
+      List<SmfIssue> chosen = const [],
+      TestCheck? check,
+    }) =>
+        TestModule(
+          'watcher',
+          providers: [
+            RoleProvider.plain(
+              TestRole<String>(
+                'watch',
+                template: TestTemplate(issues: validated, warnings: chosen),
+              ),
+            ),
+          ],
+          contributions: [
+            if (check != null) Preflight([check]),
+          ],
+        );
+
+    /// A run on [host] of the app with [watcher], which generates the app.
+    Future<GeneratedApp?> create(
+      TestModule watcher,
+      FakeHost host, {
+      bool strict = false,
+      Set<String> allowed = const {},
+      bool explain = false,
+    }) =>
+        pipeline([scaffold(), watcher], host).run(
+          CreateRequest(
+            appName: 'my_app',
+            modules: const [ModuleId('watcher')],
+            strict: strict,
+            allowedWarnings: allowed,
+            explain: explain,
+          ),
+        );
+
+    /// What a run that stops throws: [message] with [issues].
+    Matcher stops(String message, List<String> issues) => throwsA(
+          isA<GenerationFailedException>()
+              .having((e) => e.message, 'message', message)
+              .having(
+                (e) => [for (final issue in e.issues) '$issue'],
+                'issues',
+                issues,
+              ),
+        );
+
+    const stoppedByOne = 'Generation stopped because of a warning about the '
+        'app. Without --strict, the run goes on after it.';
+    const noStartLine = 'warning [role:watch] watch.no_start: No screen to '
+        'start on.';
+    const noTabsLine =
+        'warning [role:watch] watch.no_tabs: No main navigation.';
+
+    test(
+        'a warning of a validation stops a strict run before the machine is '
+        'checked, with the warning, and a run without --strict goes on',
+        () async {
+      TestCheck tool() => TestCheck(
+            'cli',
+            status: const PreflightMissing(instructions: 'Install it.'),
+            afterInstall: const PreflightPassed(),
+          );
+
+      final host = FakeHost(processRunner: RecordingRunner());
+      final strictTool = tool();
+      await expectLater(
+        create(
+          watcher(validated: [noStart], check: strictTool),
+          host,
+          strict: true,
+        ),
+        stops(stoppedByOne, [noStartLine]),
+      );
+      // It stopped before the machine was checked, so nothing could be
+      // installed, and it printed the warning only as the cause.
+      expect(strictTool.checks, 0);
+      expect(host.logger.warnings, isEmpty);
+      expect(host.fileSystem.directory('/work/my_app').existsSync(), isFalse);
+
+      final lenient = FakeHost(processRunner: RecordingRunner());
+      final app = await create(
+        watcher(validated: [noStart], check: tool()),
+        lenient,
+      );
+      expect(app?.path, '/work/my_app');
+      expect(
+        lenient.logger.warnings,
+        contains('[role:watch]: No screen to start on.'),
+      );
+    });
+
+    test(
+        'a warning of a choice stops a strict run before the app is '
+        'rendered, and a run without --strict goes on', () async {
+      final runner = RecordingRunner();
+      final host = FakeHost(processRunner: runner);
+      await expectLater(
+        create(watcher(chosen: [noStart]), host, strict: true),
+        stops(stoppedByOne, [noStartLine]),
+      );
+      expect(
+        host.logger.progresses,
+        isNot(contains('start: Rendering the app')),
+      );
+      expect(runner.calls, isEmpty);
+      expect(host.fileSystem.directory('/work/my_app').existsSync(), isFalse);
+
+      final lenient = FakeHost(processRunner: RecordingRunner());
+      final app = await create(watcher(chosen: [noStart]), lenient);
+      expect(app?.path, '/work/my_app');
+      expect(
+        lenient.logger.warnings,
+        ['[role:watch]: No screen to start on.'],
+      );
+    });
+
+    test(
+        'a strict run goes on after a warning whose code --allow-warning '
+        'names, which it prints once, and stops on another code', () async {
+      final host = FakeHost(processRunner: RecordingRunner());
+      final app = await create(
+        watcher(validated: [noStart], chosen: [noStart]),
+        host,
+        strict: true,
+        allowed: {'watch.no_start', 'watch.other'},
+      );
+
+      expect(app?.path, '/work/my_app');
+      expect(host.logger.warnings, ['[role:watch]: No screen to start on.']);
+
+      await expectLater(
+        create(
+          watcher(validated: [noStart, noTabs]),
+          FakeHost(processRunner: RecordingRunner()),
+          strict: true,
+          allowed: {'watch.no_start'},
+        ),
+        stops(stoppedByOne, [
+          noTabsLine,
+        ]),
+      );
+    });
+
+    test(
+        'a strict run tells how many warnings and errors stopped it, all of '
+        'which lenient mode reports', () async {
+      await expectLater(
+        create(
+          watcher(validated: [noStart, noTabs]),
+          FakeHost(),
+          strict: true,
+        ),
+        stops(
+          'Generation stopped because of 2 warnings about the app. Without '
+          '--strict, the run goes on after them.',
+          [noStartLine, noTabsLine],
+        ),
+      );
+
+      // An error of the template of a role stops lenient mode too, which
+      // reports the warnings.
+      const broken = SmfIssue('The data is broken.');
+      final validated = watcher(validated: [noStart, broken, noTabs]);
+      await expectLater(
+        create(validated, FakeHost(), strict: true),
+        stops(
+          'Generation stopped because of an error and 2 warnings about the '
+          'app.',
+          [
+            noStartLine,
+            'error [role:watch]: The data is broken.',
+            noTabsLine,
+          ],
+        ),
+      );
+      await expectLater(
+        create(
+          watcher(validated: [noStart, broken, broken, noTabs]),
+          FakeHost(),
+          strict: true,
+          allowed: {'watch.no_tabs'},
+        ),
+        stops(
+          'Generation stopped because of 2 errors and a warning about the '
+          'app.',
+          [
+            noStartLine,
+            'error [role:watch]: The data is broken.',
+            'error [role:watch]: The data is broken.',
+          ],
+        ),
+      );
+
+      final lenient = FakeHost();
+      await expectLater(
+        create(validated, lenient),
+        stops(
+          'Generation stopped because of an error.',
+          ['error [role:watch]: The data is broken.'],
+        ),
+      );
+      expect(lenient.logger.warnings, [
+        '[role:watch]: No screen to start on.',
+        '[role:watch]: No main navigation.',
+      ]);
+    });
+
+    test('a warning about the machine never stops a strict run', () async {
+      final host = FakeHost(processRunner: RecordingRunner());
+      final app = await create(
+        watcher(
+          check: TestCheck(
+            'cli',
+            status: const PreflightMissing(instructions: 'Install it.'),
+          ),
+        ),
+        host,
+        strict: true,
+      );
+
+      expect(app?.path, '/work/my_app');
+      expect(host.logger.warnings, [
+        '[watcher]: Tool cli is missing. Install it.',
+      ]);
+    });
+
+    test(
+        '--explain with --strict stops on a warning of the validation, as on '
+        'an error, and without --strict it prints the warning', () async {
+      await expectLater(
+        create(
+          watcher(validated: [noStart]),
+          FakeHost(),
+          strict: true,
+          explain: true,
+        ),
+        stops(stoppedByOne, [noStartLine]),
+      );
+
+      final host = FakeHost();
+      expect(
+        await create(watcher(validated: [noStart]), host, explain: true),
+        isNull,
+      );
+      expect(host.logger.warnings, ['[role:watch]: No screen to start on.']);
+      expect(host.logger.infos, contains('Modules'));
+    });
+  });
+
   test(
       'reports the warnings of the choices as warnings of the template of '
       'their role, and stops on one with a code of another role', () async {
