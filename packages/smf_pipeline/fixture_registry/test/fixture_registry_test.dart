@@ -472,6 +472,15 @@ void main() {
         rendered(result, AppEntryRole.gradleAppDependencies).values.single,
         '    implementation("androidx.annotation:annotation:1.9.1")',
       );
+      // fake_overlap asks for 2.1.3: the highest version of the library
+      // wins, and the switch comes with it.
+      const library = 'com.android.tools:desugar_jdk_libs:2.1.4';
+      expect(rendered(result, AppEntryRole.androidCoreLibraryDesugaring), {
+        'smf_app_entry__android_core_library_desugaring_enabled':
+            '        isCoreLibraryDesugaringEnabled = true',
+        'smf_app_entry__android_core_library_desugaring_library':
+            '    coreLibraryDesugaring("$library")',
+      });
       // The notes for coding agents of both modules make one section of the
       // guide, with the note that both have once.
       final guide = rendered(result, AppEntryRole.agentSections).values.single;

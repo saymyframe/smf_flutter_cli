@@ -66,9 +66,10 @@ const appEntryRole = AppEntryRole._();
 /// app, so `flutter test` has a test to run in an app whose modules bring
 /// none.
 ///
-/// The keyed sockets of the native files and of the README, and
-/// [mainActivityIntentFilters], render complete lines, so their tags stand
-/// alone at the start of a line of their file, like the tags of
+/// The keyed sockets of the native files and of the README,
+/// [mainActivityIntentFilters] and both places of
+/// [androidCoreLibraryDesugaring] render complete lines, so their tags
+/// stand alone at the start of a line of their file, like the tags of
 /// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
 /// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module
 /// rules of the role check these tags in the templates of its provider, and
@@ -399,6 +400,37 @@ final class AppEntryRole extends Role<NoDsl> {
     KeyedSocket(policy: MaxPolicy(), renderer: _renderGradleDependencies),
   );
 
+  /// Core library desugaring of the Android app, which a library needs
+  /// when it uses Java APIs that older versions of Android lack, such as
+  /// `java.time`: the version of `com.android.tools:desugar_jdk_libs`, the
+  /// highest any module needs.
+  ///
+  /// The value renders at two places of [gradleAppFile], each with a tag of
+  /// its own (see [ValueSocket.places]): the tag `<tag>_enabled` in the
+  /// `compileOptions` of the `android` block, as
+  /// `isCoreLibraryDesugaringEnabled = true`, and the tag `<tag>_library`
+  /// in the `dependencies` block, as
+  /// `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:<version>")`.
+  /// The build of the app fails with either line alone, so one contribution
+  /// gives both. Without a contribution the file has neither line, as the
+  /// one of `flutter create`.
+  ///
+  /// A module contributes the version that a library of the app asks for,
+  /// such as `2.1.4`, when the Android build of an app with that library
+  /// fails without desugaring.
+  static const androidCoreLibraryDesugaring =
+      SocketRef<ValueSocket<String>>.role(
+    appEntryRole,
+    'android_core_library_desugaring',
+    ValueSocket.places(
+      policy: MaxPolicy(),
+      places: {
+        'enabled': _renderDesugaringEnabled,
+        'library': _renderDesugaringLibrary,
+      },
+    ),
+  );
+
   /// Sections of [readmeFile], keyed by their heading, each with its text
   /// in Markdown, such as how to set up a service that the app uses.
   ///
@@ -504,6 +536,7 @@ final class AppEntryRole extends Role<NoDsl> {
         gradleSettingsPlugins,
         gradleAppPlugins,
         gradleAppDependencies,
+        androidCoreLibraryDesugaring,
         readmeSections,
         agentSections,
       ];

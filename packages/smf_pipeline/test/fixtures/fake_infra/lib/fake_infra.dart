@@ -186,6 +186,7 @@ final class FakeSocketsModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.9.1',
         ),
+        AppEntryRole.androidCoreLibraryDesugaring.value('2.1.4'),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
         AppEntryRole.agentSections.entry(
@@ -199,9 +200,10 @@ final class FakeSocketsModule extends SmfModule {
 /// and values that [FakeSocketsModule] does, so an app with both merges
 /// them: equal permissions, meta-data, plist strings, entitlements and
 /// README sections agree, the plist arrays of Info.plist and of the
-/// entitlements are united, the highest versions win, the
-/// delegate of the localizations appears once, and so does the note for
-/// coding agents that both have.
+/// entitlements are united, the highest versions win, those of Gradle and
+/// of the library of core library desugaring too, the delegate of the
+/// localizations appears once, and so does the note for coding agents that
+/// both have.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -256,6 +258,7 @@ final class FakeOverlapModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.8.0',
         ),
+        AppEntryRole.androidCoreLibraryDesugaring.value('2.1.3'),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
       ];
