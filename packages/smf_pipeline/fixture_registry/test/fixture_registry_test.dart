@@ -472,6 +472,15 @@ void main() {
         rendered(result, AppEntryRole.gradleAppDependencies).values.single,
         '    implementation("androidx.annotation:annotation:1.9.1")',
       );
+      // Only fake_sockets declares a receiver, which the manifest has once.
+      expect(
+        rendered(result, AppEntryRole.androidManifestApplicationComponents)
+            .values
+            .single,
+        '        <receiver\n'
+        '            android:name="com.example.fixture.FixtureReceiver"\n'
+        '            android:exported="false" />',
+      );
       // Only fake_sockets runs code at the launch of the iOS app: a second
       // contribution of the same statement would run it twice.
       expect(

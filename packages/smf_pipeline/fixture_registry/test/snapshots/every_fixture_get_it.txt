@@ -283,6 +283,9 @@ dependencies {
             android:value="2" />
         <meta-data android:name="com.example.fixture.KEY" android:value="fixture"/>
         <meta-data android:name="com.example.fixture.ICON" android:resource="@mipmap/ic_launcher"/>
+        <receiver
+            android:name="com.example.fixture.FixtureReceiver"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

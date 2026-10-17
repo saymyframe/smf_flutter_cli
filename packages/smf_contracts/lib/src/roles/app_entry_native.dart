@@ -283,6 +283,10 @@ const _lineSockets = <(SocketRef, String)>[
     AppEntryRole.androidManifestApplicationMeta,
     AppEntryRole.androidManifestFile,
   ),
+  (
+    AppEntryRole.androidManifestApplicationComponents,
+    AppEntryRole.androidManifestFile,
+  ),
   (AppEntryRole.mainActivityIntentFilters, AppEntryRole.androidManifestFile),
   (AppEntryRole.infoPlist, AppEntryRole.infoPlistFile),
   (AppEntryRole.iosEntitlements, AppEntryRole.iosEntitlementsFile),
@@ -335,7 +339,13 @@ Iterable<SmfIssue> _tagLineIssues(
 
 List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
   final issues = <SmfIssue>[];
-  void once(String path, String what, List<String> keys) {
+  void once(
+    String path,
+    String what,
+    List<String> keys, {
+    String hint = 'A module cannot contribute a key that the template of the '
+        'app entry role has already.',
+  }) {
     final seen = <String>{};
     final reported = <String>{};
     for (final key in keys) {
@@ -343,8 +353,7 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
       issues.add(
         SmfIssue(
           '$path has $what $key more than once.',
-          hint: 'A module cannot contribute a key that the template of the '
-              'app entry role has already.',
+          hint: hint,
           origin: input.owners[path],
           path: path,
         ),
@@ -371,6 +380,16 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
       'the meta-data',
       _childNames(manifest, 'application', 'meta-data'),
     );
+    for (final component in _components) {
+      once(
+        path,
+        'the $component',
+        _childNames(manifest, 'application', component),
+        hint: 'One module declares a component, and none declares one that '
+            'the template of the app entry role has, such as its main '
+            'activity.',
+      );
+    }
   }
   for (final path in const [
     AppEntryRole.gradleSettingsFile,
@@ -382,6 +401,12 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
   }
   return issues;
 }
+
+/// The kinds of the components of the application of an Android manifest,
+/// each declared once under its `android:name`: the manifest merger keeps
+/// a second declaration of a component, with its own attributes, rather
+/// than fail.
+const _components = ['activity', 'service', 'receiver', 'provider'];
 
 /// The text of the Xcode project [text] without its comments: those
 /// between `/*` and `*/`, and those from `//` to the end of the line, but

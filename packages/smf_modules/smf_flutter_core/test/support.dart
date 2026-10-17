@@ -476,6 +476,14 @@ final class EverySocketModule extends SmfModule {
           const AndroidMetaData.value('every socket'),
         ),
         const SocketContribution.code(
+          AppEntryRole.androidManifestApplicationComponents,
+          Fragment(
+            '        <receiver\n'
+            '            android:name="com.example.every_socket.Receiver"\n'
+            '            android:exported="false" />',
+          ),
+        ),
+        const SocketContribution.code(
           AppEntryRole.mainActivityIntentFilters,
           Fragment(
             '            <intent-filter>\n'

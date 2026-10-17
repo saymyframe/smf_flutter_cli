@@ -140,6 +140,13 @@ void main() {
         'Contract App',
       );
       expect(app.findElements('uses-permission'), isEmpty);
+      expect(
+        [
+          for (final component in app.getElement('application')!.childElements)
+            component.name.local,
+        ],
+        ['activity', 'meta-data'],
+      );
 
       final root = XmlDocument.parse(every[manifest]!).rootElement;
       final application = root.getElement('application')!;
@@ -157,6 +164,19 @@ void main() {
             meta.getAttribute('android:name'),
         ],
         ['flutterEmbedding', 'com.example.every_socket.KEY'],
+      );
+      // The components of the modules come after the meta-data.
+      expect(
+        [
+          for (final child in application.childElements)
+            '${child.name.local} ${child.getAttribute('android:name')}',
+        ],
+        [
+          'activity .MainActivity',
+          'meta-data flutterEmbedding',
+          'meta-data com.example.every_socket.KEY',
+          'receiver com.example.every_socket.Receiver',
+        ],
       );
       expect(
         [

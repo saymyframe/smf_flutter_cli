@@ -241,7 +241,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(21));
+      expect(sockets, hasLength(22));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -256,6 +256,7 @@ void main() {
           'smf_app_entry__android_core_library_desugaring_enabled',
           'smf_app_entry__android_core_library_desugaring_library',
           'smf_app_entry__ios_app_delegate_launch',
+          'smf_app_entry__android_manifest_application_components',
         ]),
       );
     });
@@ -1018,6 +1019,38 @@ void main() {
           const SocketContribution.code(
             socket,
             Fragment(filter, imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        isNotEmpty,
+      );
+    });
+
+    test(
+        'components of the Android application are XML without imports, '
+        'those of one contribution after those of another', () {
+      const socket = AppEntryRole.androidManifestApplicationComponents;
+      const receiver = '        <receiver\n'
+          '            android:name="com.example.alarms.AlarmReceiver"\n'
+          '            android:exported="false" />';
+      const service = '        <service\n'
+          '            android:name="com.example.sync.SyncService"\n'
+          '            android:exported="false" />';
+
+      expect(socket.name, 'android_manifest_application_components');
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        socket.render(const [
+          SocketContribution.code(socket, Fragment(receiver)),
+          SocketContribution.code(socket, Fragment(service)),
+        ]),
+        {socket.tag: '$receiver\n$service'},
+      );
+      expect(socket.render(const []), {socket.tag: ''});
+      expect(
+        socket.problemsWith(
+          const SocketContribution.code(
+            socket,
+            Fragment(receiver, imports: [ImportRef('dart:io')]),
           ),
         ),
         isNotEmpty,
@@ -2190,6 +2223,46 @@ See `lib/missing.dart`.
       );
     });
 
+    test(
+        'report a component of the application that the manifest declares '
+        'twice', () {
+      String component(String element, String name) =>
+          '        <$element android:name="$name" '
+          'android:exported="false" />\n';
+      final manifest = _manifest.replaceFirst(
+        '    </application>',
+        '${component('receiver', 'com.example.AlarmReceiver')}'
+            '${component('service', 'com.example.SyncService')}'
+            '${component('provider', 'com.example.FilesProvider')}'
+            '${component('receiver', 'com.example.AlarmReceiver')}'
+            '${component('service', 'com.example.SyncService')}'
+            '${component('provider', 'com.example.FilesProvider')}'
+            '${component('activity', '.MainActivity')}'
+            // A component of another kind with the same name is another.
+            '${component('service', 'com.example.AlarmReceiver')}'
+            '    </application>',
+      );
+      const path = 'android/app/src/main/AndroidManifest.xml';
+
+      expect(
+        messages(checkTexts({AppEntryRole.androidManifestFile: manifest})),
+        [
+          equals('$path has the activity .MainActivity more than once.'),
+          equals('$path has the service com.example.SyncService more than '
+              'once.'),
+          equals('$path has the receiver com.example.AlarmReceiver more than '
+              'once.'),
+          equals('$path has the provider com.example.FilesProvider more than '
+              'once.'),
+        ],
+      );
+      expect(
+        checkTexts({AppEntryRole.androidManifestFile: manifest}).first.hint,
+        'One module declares a component, and none declares one that the '
+        'template of the app entry role has, such as its main activity.',
+      );
+    });
+
     test('tell the meta-data of an activity from those of the application', () {
       final manifest = _manifest.replaceFirst(
         '        </activity>',
@@ -2851,6 +2924,9 @@ Future<void> main() async {
         'ios/Runner/SceneDelegate.swift':
             'class SceneDelegate: FlutterSceneDelegate {\n'
                 '{{{smf_app_entry__ios_app_delegate_launch}}}\n}\n',
+        'android/app/src/debug/AndroidManifest.xml': '<application>\n'
+            '{{{smf_app_entry__android_manifest_application_components}}}\n'
+            '</application>\n',
         AppEntryRole.readmeFile:
             '# {{app_name}}\n\nAn app. {{{smf_app_entry__readme_sections}}}\n',
         // Each place of the desugaring renders lines of the Gradle file of
@@ -2869,6 +2945,12 @@ Future<void> main() async {
           'stand alone at the start of a line of '
           'android/app/src/main/AndroidManifest.xml, because its '
           'contributions render as complete lines.',
+        ),
+        equals(
+          'The tag '
+          '{{{smf_app_entry__android_manifest_application_components}}} is in '
+          'android/app/src/debug/AndroidManifest.xml, but its lines belong in '
+          'android/app/src/main/AndroidManifest.xml.',
         ),
         equals(
           'The tag {{{smf_app_entry__info_plist}}} is in ios/Podfile, but its '
@@ -3315,6 +3397,7 @@ const _manifestTemplate = '''
 {{{smf_app_entry__main_activity_intent_filters}}}
         </activity>
 {{{smf_app_entry__android_manifest_application_meta}}}
+{{{smf_app_entry__android_manifest_application_components}}}
     </application>
 </manifest>
 ''';

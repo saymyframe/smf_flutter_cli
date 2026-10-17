@@ -317,6 +317,28 @@ final class AppEntryRole extends Role<NoDsl> {
     ),
   );
 
+  /// Components of the `<application>` of the Android manifest, such as
+  /// `<receiver>`, `<service>` and `<provider>` elements, as XML without
+  /// imports, after the meta-data of the application. Each contribution
+  /// indents its elements by eight spaces, as children of `<application>`.
+  ///
+  /// A component is for one that the app itself has to declare, such as a
+  /// receiver of a library whose own manifest leaves it out. The manifest
+  /// declares a component of each kind, an `<activity>`, a `<service>`, a
+  /// `<receiver>` or a `<provider>`, under one `android:name` once: the
+  /// manifest merger of the Android build keeps both declarations of a
+  /// component, which may differ in their attributes and intent filters,
+  /// and the build does not fail. So one module declares a component, and
+  /// the provider's own, such as the main activity, cannot be contributed;
+  /// the structural rule `app_entry.native_keys` checks the names as the
+  /// manifest writes them.
+  static const androidManifestApplicationComponents =
+      SocketRef<CodeSocket>.role(
+    appEntryRole,
+    'android_manifest_application_components',
+    CodeSocket.text(),
+  );
+
   /// `<intent-filter>` elements of the main activity of the Android
   /// manifest, such as deep links, as XML without imports.
   static const mainActivityIntentFilters = SocketRef<CodeSocket>.role(
@@ -563,6 +585,7 @@ final class AppEntryRole extends Role<NoDsl> {
         appBuilder,
         androidManifestPermissions,
         androidManifestApplicationMeta,
+        androidManifestApplicationComponents,
         mainActivityIntentFilters,
         infoPlist,
         iosEntitlements,
@@ -659,9 +682,10 @@ final class AppEntryRole extends Role<NoDsl> {
           id: 'app_entry.native_keys',
           description: 'The native files name every key once: the keys of '
               'the top-level dictionary of Info.plist and of the '
-              'entitlements of the iOS app, the permissions and the '
-              'meta-data of the application in the Android manifest, and the '
-              'plugins of each plugins block of the Gradle files.',
+              'entitlements of the iOS app, the permissions in the Android '
+              'manifest, the meta-data of its application and the components '
+              'of each kind there (activity, service, receiver, provider), '
+              'and the plugins of each plugins block of the Gradle files.',
           check: _checkNativeKeys,
         ),
         StructuralRule(

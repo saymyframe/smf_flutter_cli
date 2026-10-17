@@ -146,6 +146,14 @@ final class FakeSocketsModule extends SmfModule {
           const AndroidMetaData.resource('@mipmap/ic_launcher'),
         ),
         const SocketContribution.code(
+          AppEntryRole.androidManifestApplicationComponents,
+          Fragment(
+            '        <receiver\n'
+            '            android:name="com.example.fixture.FixtureReceiver"\n'
+            '            android:exported="false" />',
+          ),
+        ),
+        const SocketContribution.code(
           AppEntryRole.mainActivityIntentFilters,
           Fragment(
             '<intent-filter>\n'
@@ -208,7 +216,9 @@ final class FakeSocketsModule extends SmfModule {
 /// entitlements are united, the highest versions win, those of Gradle and
 /// of the library of core library desugaring too, the delegate of the
 /// localizations appears once, and so does the note for coding agents that
-/// both have.
+/// both have. It puts nothing into the sockets of code of the native files,
+/// such as the components of the Android application, which would have
+/// the same code twice.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
