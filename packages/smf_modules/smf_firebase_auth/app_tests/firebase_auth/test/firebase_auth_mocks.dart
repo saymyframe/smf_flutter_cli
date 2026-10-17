@@ -33,9 +33,10 @@
 // `email`, and `nonce` (see the test of the ways to sign in of the auth
 // role, auth_methods, which builds such tokens). It keeps each identity by
 // its identity provider and its subject. A token with a nonce is taken
-// once, and a raw nonce that the credential has must be that nonce or its
-// SHA-256 hash, as Sign in with Apple writes the hash into its token, and
-// a credential of Apple always has one. As in a project with one account for
+// once. When the credential has a raw nonce, as a credential of Apple
+// always does, the nonce of the token must be that raw nonce or the
+// SHA-256 hash of that raw nonce, whatever the issuer, since Sign in with
+// Apple writes the hash into its token. As in a project with one account for
 // each email address, Firebase's default, a credential of an identity of
 // another user is refused with credential-already-in-use for a link, and
 // one whose email address has an account of another user with

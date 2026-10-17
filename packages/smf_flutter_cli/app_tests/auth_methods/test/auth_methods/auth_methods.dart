@@ -14,10 +14,11 @@
 // whose header has `alg` none and whose payload has `iss`, the issuer of
 // the way to sign in, `sub`, the identity at the identity provider, maybe
 // `email`, the email address of that identity, and `nonce`, a value of its
-// own: the nonce that the request for the token had. That is the rawNonce
-// of the credential itself, as in the tokens that these tests build, or
-// the SHA-256 hash of the rawNonce in hexadecimal, for a way to sign in
-// whose request has the hash, as Sign in with Apple does. A credential of
+// own: the nonce that the request for the token had. Whatever the issuer,
+// the nonce of a token is the rawNonce of its credential, as in the tokens
+// that these tests build, or the SHA-256 hash of that rawNonce in lowercase
+// hexadecimal, as a way to sign in whose request has the hash gets it, such
+// as Sign in with Apple. A credential of
 // the issuer of a way to sign in that revokesOnDeletion also has an
 // authorizationCode of its own, as an identity provider that revokes gives
 // one with each token.
@@ -26,8 +27,9 @@
 // checks a nonce takes it: a provider of the role refuses a token whose
 // nonce it took already with invalidCredentials, and, where its backend
 // checks the nonce, one whose nonce is neither the rawNonce of its
-// credential nor, for an identity provider whose ways to sign in ask with
-// the hash, the hash of it. The one exception is the credential object
+// credential nor the SHA-256 hash of that rawNonce. The fixture sign-in,
+// fake_auth, takes only the rawNonce, since no fixture way to sign in asks
+// with the hash. The one exception is the credential object
 // that linkWith refused just before: signInWith takes the identical
 // object, with what the provider kept for it, as the role says. So every
 // call here gets a credential of its own, but for that one.

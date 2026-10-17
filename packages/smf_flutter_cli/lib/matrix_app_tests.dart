@@ -765,8 +765,11 @@ Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
 /// token with a nonce may be taken once, so each call gets a credential of
 /// its own, but for the sign-in with the identical object that `linkWith`
 /// refused just before. The mocks of the module of a way to sign in issue
-/// such tokens, of one identity of their own and the same each time, each
-/// with a new nonce, and a provider takes them in the tests of an app. It
+/// test tokens too, of one identity of their own and the same each time,
+/// each with the new nonce of its request: the raw nonce, or the SHA-256
+/// hash of that raw nonce for a way to sign in whose request has the hash,
+/// as Sign in with Apple. A provider takes both forms in the tests of an
+/// app, whatever the issuer. It
 /// uses the helpers of the test of the auth role ([authRoleAppTest]), which
 /// every app with the role has. It has no probe for the start check: nobody
 /// can sign in on a device.
