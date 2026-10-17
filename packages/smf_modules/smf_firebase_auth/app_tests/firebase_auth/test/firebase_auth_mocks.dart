@@ -44,7 +44,8 @@
 // by a number, as Firebase gives one, which a later call takes once in
 // place of the token, since the refused call has taken the token. Signing
 // in again with a credential of another user is user-mismatch, and with
-// one of an identity without a user user-not-found. A revocation takes an
+// one of an identity without a user user-not-found. A reload of a user
+// that the server deleted is user-not-found too. A revocation takes an
 // authorization code once, and like the Firebase SDK it never answers one
 // while nobody is signed in.
 //
@@ -126,6 +127,9 @@ final class _User {
 
   /// The identities of the user, each with the email address of its token.
   final Map<_Identity, String?> identities = {};
+
+  /// Whether the server deleted the user, on this device or on another.
+  bool deleted = false;
 
   bool get isAnonymous => email == null && identities.isEmpty;
 
@@ -262,6 +266,12 @@ final class MockFirebaseAuth {
     _current = user;
     firebasePluginConstants[_plugin] = {'APP_CURRENT_USER': user.restored};
   }
+
+  /// Deletes the user who is signed in on the server, as a deletion of the
+  /// account on another device does, and leaves that user signed in on this
+  /// device, as the Firebase SDK does until it next asks the server about
+  /// the user.
+  void deleteUserOnServer() => _delete(_current!);
 
   /// Signs the user out on the platform side and tells the plugin, as the
   /// Firebase SDK does without a call of the app, such as when it finds
@@ -439,10 +449,19 @@ final class MockFirebaseAuth {
       }
       return _credential;
     });
-    answer('FirebaseAuthUserHostApi', 'delete', (_) {
+    answer('FirebaseAuthUserHostApi', 'reload', (_) {
       final user = _signedIn();
-      _accounts.remove(user.email);
-      _identities.removeWhere((_, owner) => owner == user);
+      if (user.deleted) {
+        throw const _Failure(
+          'ERROR_USER_NOT_FOUND',
+          'There is no user record corresponding to this identifier. The '
+              'user may have been deleted.',
+        );
+      }
+      return user.details;
+    });
+    answer('FirebaseAuthUserHostApi', 'delete', (_) {
+      _delete(_signedIn());
       // It tells the plugin nothing: see the top of the file.
       _current = null;
       return null;
@@ -476,6 +495,13 @@ final class MockFirebaseAuth {
   }
 
   void _signIn(_User user) => _current = user;
+
+  /// Deletes [user] on the server, with its email address and identities.
+  void _delete(_User user) {
+    user.deleted = true;
+    _accounts.remove(user.email);
+    _identities.removeWhere((_, owner) => owner == user);
+  }
 
   /// The user who is signed in, for a call that is for that user.
   _User _signedIn() =>

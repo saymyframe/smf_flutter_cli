@@ -24,10 +24,11 @@
 // accountExistsWithOtherMethod, where a link of a password is emailInUse; a
 // sign-in again for a deletion with a credential of another user, or of an
 // identity without a user, is invalidCredentials and leaves the user signed
-// in; and the hint of a way to sign in that is not enabled names it. A
-// revocation of the tokens of Apple that Firebase refuses is notConfigured,
-// with a hint that names what the Apple sign-in method of the project
-// needs, and deletes nothing.
+// in, but for an account that the server deleted, which is signed out; and
+// the hint of a way to sign in that is not enabled names it. A revocation
+// of the tokens of Apple that Firebase refuses is notConfigured, with a hint
+// that names what the Apple sign-in method of the project needs, but for an
+// answer that is no matter of the setup, and deletes nothing.
 //
 // It uses the service of the module and runs none of the start-up of the
 // app but the start of Firebase (service.dart). The matrix sets up the
@@ -283,7 +284,7 @@ void main() {
       },
       // A credential of another user, and of an identity without a user,
       // which Firebase answers with user-not-found, as for a user whose
-      // session has ended.
+      // session has ended: the user still exists on the server.
       'reauthenticateWithCredential': {
         'ERROR_USER_MISMATCH': AuthFailureReason.invalidCredentials,
         'user-mismatch': AuthFailureReason.invalidCredentials,
@@ -405,6 +406,46 @@ void main() {
   });
 
   test(
+      'a deletion with a fresh credential of the user of an account that the '
+      'server deleted signs the user out and fails with recentSignInRequired',
+      () async {
+    await service.signOut();
+    await service.signInWith(credentialOf(apple, 'failures-gone'));
+    // As when the user deleted the account on another device.
+    firebase
+      ..deleteUserOnServer()
+      ..calls.clear();
+
+    final found = outcomeOf(
+      await errorOf(
+        () => service.deleteAccount(
+          fresh: credentialOf(apple, 'failures-gone'),
+        ),
+      ),
+    );
+
+    expect(
+      [
+        found,
+        userOf(service.currentUser),
+        [for (final call in firebase.calls) call.first],
+      ],
+      [
+        AuthFailureReason.recentSignInRequired.name,
+        'nobody',
+        ['reauthenticateWithCredential', 'reload', 'signOut'],
+      ],
+      reason: 'Firebase answers the sign-in again with the credential of the '
+          'user of an account that the server deleted with user-not-found, '
+          'as for a credential of an identity without a user. The reload of '
+          'the user tells the two apart: for a deleted user it fails with a '
+          'code of a session that has ended, and the service signs the user '
+          'out and fails with recentSignInRequired, as for any call for such '
+          'a user.',
+    );
+  });
+
+  test(
       'a revocation of the tokens of Apple that Firebase refuses is '
       'notConfigured, with a hint that names what the Apple sign-in method '
       'of the project needs, one that does not reach Firebase is network, '
@@ -416,6 +457,8 @@ void main() {
       ('invalid-credential', 'Error getting access token from Apple.'),
       ('internal-error', _internal),
       ('network-request-failed', 'A network error has occurred.'),
+      ('too-many-requests', 'Too many requests.'),
+      ('user-disabled', 'The user account has been disabled.'),
     ]) {
       await service.signOut();
       await service.signInWith(credentialOf(apple, 'failures-revoked'));
@@ -477,14 +520,26 @@ void main() {
           true,
           calls,
         ],
+        'too-many-requests: Too many requests.': [
+          AuthFailureReason.tooManyAttempts.name,
+          true,
+          calls,
+        ],
+        'user-disabled: The user account has been disabled.': [
+          AuthFailureReason.userDisabled.name,
+          true,
+          calls,
+        ],
       },
       reason: 'Firebase answers a revocation without the Services ID and the '
           'OAuth code flow configuration of the Apple sign-in method, or '
           'with a wrong one, with invalid-credential: the deletion fails '
           'with notConfigured, whose hint has what Firebase answered and '
           'what the project needs, and so does an internal error, which on '
-          'iOS says no more. The deletion of an account then fails, and the '
-          'user stays signed in.',
+          'iOS says no more. An answer that is no matter of the setup, a '
+          'request that did not reach Firebase, too many attempts or a '
+          'disabled account, gets its own reason. Either way the account is '
+          'not deleted, and the user stays signed in.',
     );
   });
 

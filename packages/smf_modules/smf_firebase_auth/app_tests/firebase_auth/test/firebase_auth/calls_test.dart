@@ -184,8 +184,9 @@ void main() {
         ],
       ],
       reason: 'The service signs in and links with the credential of Google '
-          'by its ID token, since Firebase takes no nonce with a token of '
-          'Google, and with the credential of Apple by its ID token, the '
+          'by its ID token, since GoogleAuthProvider takes no nonce and '
+          'Firebase does not check the nonce of a token of Google, and with '
+          'the credential of Apple by its ID token, the '
           'raw nonce that Firebase checks the token against, and the name '
           'of the user, which Apple gives only at the first sign-in.',
     );
@@ -285,14 +286,66 @@ void main() {
   });
 
   test(
+      'a sign-in with another credential after a refused link sends its own '
+      'token, and the identical credential still gets the credential that '
+      'Firebase gave', () async {
+    await service.signInWith(credentialOf(apple, 'calls-kept'));
+    final owner = service.currentUser?.uid;
+    await service.signOut();
+    await service.signInAnonymously();
+    final refused = credentialOf(apple, 'calls-kept');
+    final link = outcomeOf(await errorOf(() => service.linkWith(refused)));
+    // As when the session could not move the data of the guest, and the
+    // user signs out and in with Google.
+    await service.signOut();
+    final other = credentialOf(google, 'calls-kept-other');
+    firebase.calls.clear();
+    await service.signInWith(other);
+    final ofOther = firebase.calls.single;
+    final otherUser = service.currentUser;
+    await service.signOut();
+    firebase.calls.clear();
+    await service.signInWith(refused);
+    final [_, ofRefused as Map<Object?, Object?>] = firebase.calls.single;
+
+    expect(
+      [
+        link,
+        (ofOther.last! as Map<Object?, Object?>)['idToken'] == other.idToken,
+        issuersOf(otherUser),
+        otherUser?.uid == owner,
+      ],
+      [
+        AuthFailureReason.credentialInUse.name,
+        true,
+        [google],
+        false,
+      ],
+      reason: 'What Firebase gave with a refused link belongs to the '
+          'credential object of the link: a sign-in with another credential '
+          'sends its own token and signs in to its own identity.',
+    );
+    expect(
+      [ofRefused['token'] is int, service.currentUser?.uid == owner],
+      [true, true],
+      reason: 'The identical credential object still gets the credential that '
+          'Firebase gave, and signs in to the user of its identity.',
+    );
+  });
+
+  test(
       'a deletion with a fresh credential of Apple on iOS signs the user in '
       'again, revokes the tokens of Apple with the authorization code of '
-      'that credential, deletes the account and signs out, and on Android it '
-      'revokes nothing', () async {
+      'that credential, deletes the account and signs out, and on Android, '
+      'and for a credential of Google, it revokes nothing', () async {
     final found = <String, List<Object?>>{};
-    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
-      await service.signInWith(credentialOf(apple, 'calls-deleted'));
-      final fresh = credentialOf(apple, 'calls-deleted');
+    for (final (issuer, platform) in [
+      (apple, TargetPlatform.iOS),
+      (apple, TargetPlatform.android),
+      (google, TargetPlatform.iOS),
+    ]) {
+      await service.signInWith(credentialOf(issuer, 'calls-deleted'));
+      final fresh = credentialOf(issuer, 'calls-deleted');
       firebase.calls.clear();
       debugDefaultTargetPlatformOverride = platform;
       try {
@@ -300,7 +353,7 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
-      found[platform.name] = [
+      found['${issuer == apple ? 'Apple' : 'Google'} on ${platform.name}'] = [
         for (final call in firebase.calls)
           switch (call) {
             ['reauthenticateWithCredential', final Map<Object?, Object?> sent]
@@ -318,26 +371,28 @@ void main() {
     expect(
       found,
       {
-        'iOS': [
+        'Apple on iOS': [
           'signs in again with the fresh credential',
           'revokes with the code of the fresh credential',
           'delete',
           'signOut',
           'nobody',
         ],
-        'android': [
-          'signs in again with the fresh credential',
-          'delete',
-          'signOut',
-          'nobody',
-        ],
+        for (final name in ['Apple on android', 'Google on iOS'])
+          name: [
+            'signs in again with the fresh credential',
+            'delete',
+            'signOut',
+            'nobody',
+          ],
       },
       reason: 'With a fresh credential, the service signs the user in again '
           'first, so that Firebase deletes the account without asking for a '
           'recent sign-in. For a credential of Apple, it then revokes the '
           'tokens that Apple gave the app with the authorization code of '
           'that credential, as the App Store asks, before it deletes the '
-          'account. Firebase revokes on iOS and macOS only.',
+          'account. Firebase revokes on iOS and macOS only, and only the '
+          'tokens of Apple.',
     );
   });
 
