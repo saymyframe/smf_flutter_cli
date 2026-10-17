@@ -90,9 +90,9 @@ final class GoogleSignInModule extends SmfModule {
             'readme': readmeHeading,
           },
         ),
-        // 7.2 is the latest release; its Android plugin builds with the
-        // Android Gradle plugin of the apps from the version that the
-        // Flutter of the apps resolves.
+        // The latest release. The Android plugin that it resolves for the
+        // Flutter of the apps, 7.2.12 or later, builds with the built-in
+        // Kotlin of the Android Gradle plugin 9.
         const PubspecContribution.hosted('google_sign_in', '^7.2.0'),
         const PubspecContribution.flutter(assets: [logoFile]),
         authRole.data(
