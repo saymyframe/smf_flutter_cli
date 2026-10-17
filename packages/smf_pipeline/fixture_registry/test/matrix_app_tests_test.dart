@@ -624,6 +624,7 @@ void main() {
       'the mode that the role chose for each: required in an app that got '
       'no value of the option of the role', () {
     final authTest = named('auth_role');
+    const ofModes = 'auth by fake_auth (fake_router) with router, localization';
     final withRole = [
       for (final app in apps)
         if (app.hook!.presentRoles.contains(authRole)) app,
@@ -633,14 +634,17 @@ void main() {
     expect(
       appsOf(authTest),
       containsAll([
-        // The role uses the router role, so its provider has an app with
-        // each router and one without, and the app of each other mode has
-        // the first router.
+        // The role uses the router role and the localization role, so its
+        // provider has an app with each router and one without, each with
+        // the texts of the app and without them, and the app of each other
+        // mode has the first router and the texts.
+        'fake_auth (fake_router) with router, localization',
+        'fake_auth (go_router) with router, localization',
         'fake_auth (fake_router) with router',
         'fake_auth (go_router) with router',
+        'fake_auth with localization',
         'fake_auth',
-        'auth by fake_auth (fake_router) with router --auth-mode=guest',
-        'auth by fake_auth (fake_router) with router --auth-mode=anonymous',
+        for (final mode in ['guest', 'anonymous']) '$ofModes --auth-mode=$mode',
         for (final app in apps)
           if (app.everyModuleWith != null) app.name,
       ]),
@@ -658,7 +662,7 @@ void main() {
           },
       },
     );
-    // The apps of each mode: those of the fixture alone, three in the
+    // The apps of each mode: those of the fixture alone, six in the
     // default mode and one in each other mode, and each app with every
     // module with a clock of 24 hours and with one of 12.
     expect(
@@ -668,7 +672,7 @@ void main() {
               .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
               .length,
       },
-      {'required': 19, 'guest': 17, 'anonymous': 17},
+      {'required': 22, 'guest': 17, 'anonymous': 17},
     );
     // The mode comes from the choice of the role, which an app has without
     // the option too.

@@ -138,7 +138,7 @@ final class FirebaseAuthModule extends SmfModule {
         ),
         const PubspecContribution.hosted('firebase_auth', '^6.7.0'),
         authRole.data(
-          const RoleImplementation(
+          const AuthImplementation(
             type: TypeRef('FirebaseAuthService', import: _file),
             create: FactoryRef('createFirebaseAuthService', import: _file),
           ),

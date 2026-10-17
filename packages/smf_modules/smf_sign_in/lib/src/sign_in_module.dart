@@ -269,6 +269,21 @@ final class SignInModule extends SmfModule {
       translations: {'uk': 'Для цієї пошти вже є акаунт. Увійдіть у нього.'},
     ),
     LocalizedText(
+      'failureCredentialInUse',
+      en: 'This way to sign in is linked to another account already.',
+      translations: {
+        'uk': 'Цей спосіб входу вже прив’язано до іншого акаунта.',
+      },
+    ),
+    LocalizedText(
+      'failureOtherMethod',
+      en: 'An account with this email exists already. Sign in the way you did '
+          'before.',
+      translations: {
+        'uk': 'Акаунт із цією поштою вже є. Увійдіть так, як входили раніше.',
+      },
+    ),
+    LocalizedText(
       'failureWeakPassword',
       en: 'This password is too weak. Choose a stronger one.',
       translations: {'uk': 'Цей пароль надто слабкий. Виберіть надійніший.'},

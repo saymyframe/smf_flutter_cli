@@ -47,7 +47,7 @@ final class MemoryAuthModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(_bundle('memory_auth', {'lib/$file': _code})),
         authRole.data(
-          const RoleImplementation(
+          const AuthImplementation(
             type: TypeRef('MemoryAuthService', import: _file),
             create: FactoryRef('createMemoryAuthService', import: _file),
           ),
@@ -151,12 +151,21 @@ final class MemoryAuthService implements AuthService {
   }
 
   @override
-  Future<void> deleteAccount() async {
+  Future<void> deleteAccount({SignInCredential? fresh}) async {
     await _answer();
     final user = _signedIn();
     memoryAccounts.removeWhere((email, account) => account.uid == user.uid);
     _set(null);
   }
+
+  /// It takes no credential of an identity provider.
+  @override
+  Future<void> signInWith(SignInCredential credential) async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
+
+  @override
+  Future<void> linkWith(SignInCredential credential) async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
 }
 ''';
 }

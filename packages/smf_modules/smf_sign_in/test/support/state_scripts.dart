@@ -98,7 +98,17 @@ final class Scripted implements AuthService {
   Future<void> signOut() => _answer('signOut', () => null);
 
   @override
-  Future<void> deleteAccount() => _answer('deleteAccount', () => null);
+  Future<void> deleteAccount({SignInCredential? fresh}) =>
+      _answer('deleteAccount', () => null);
+
+  /// The scripts take no credential of an identity provider.
+  @override
+  Future<void> signInWith(SignInCredential credential) async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
+
+  @override
+  Future<void> linkWith(SignInCredential credential) async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
 }
 
 /// A session of an app in [mode], started with [service].

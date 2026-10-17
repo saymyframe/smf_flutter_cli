@@ -160,6 +160,8 @@ const _textNames = [
   'passwordRequired',
   'failureCredentials',
   'failureEmailInUse',
+  'failureCredentialInUse',
+  'failureOtherMethod',
   'failureWeakPassword',
   'failureDisabled',
   'failureTooManyAttempts',
@@ -185,6 +187,8 @@ const _textNames = [
 const _failureTexts = {
   'invalidCredentials': 'failureCredentials',
   'emailInUse': 'failureEmailInUse',
+  'credentialInUse': 'failureCredentialInUse',
+  'accountExistsWithOtherMethod': 'failureOtherMethod',
   'weakPassword': 'failureWeakPassword',
   // What the form says of an address without an @ too.
   'invalidEmail': 'emailInvalid',

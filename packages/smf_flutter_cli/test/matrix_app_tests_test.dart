@@ -60,6 +60,12 @@ final class SignInOfTest implements AuthService {
       _refuse();
 
   @override
+  Future<void> signInWith(SignInCredential credential) => _refuse();
+
+  @override
+  Future<void> linkWith(SignInCredential credential) => _refuse();
+
+  @override
   Future<void> signInAnonymously() => _refuse();
 
   @override
@@ -69,7 +75,7 @@ final class SignInOfTest implements AuthService {
   Future<void> signOut() async {}
 
   @override
-  Future<void> deleteAccount() => _refuse();
+  Future<void> deleteAccount({SignInCredential? fresh}) => _refuse();
 
   Future<void> _refuse() async =>
       throw const AuthFailure(AuthFailureReason.notConfigured);
@@ -101,7 +107,7 @@ final class SignInOfTest implements AuthService {
           ),
         ),
         authRole.data(
-          const RoleImplementation(
+          const AuthImplementation(
             type: TypeRef('SignInOfTest', import: _file),
             create: FactoryRef('createSignInOfTest', import: _file),
           ),

@@ -337,6 +337,22 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['user after what is empty'] = userOf(service.currentUser);
   await signIn();
 
+  // A credential of an identity provider, which the service takes for none.
+  const credential = IdTokenCredential(
+    issuer: 'https://accounts.example.com',
+    idToken: 'secret-token',
+  );
+  result['credentials'] = {
+    'signInWith': await step(() => service.signInWith(credential)),
+    'linkWith': await step(() => service.linkWith(credential)),
+    'deleteAccount with a fresh credential':
+        await step(() => service.deleteAccount(fresh: credential)),
+  };
+  await service.signOut();
+  result['linkWith without a user'] =
+      await step(() => service.linkWith(credential));
+  await signIn();
+
   final ended = <String, Object?>{};
   for (final code in const [
     'user-token-expired',
@@ -473,7 +489,7 @@ void main() {
       expect(dependency.dev, isFalse);
       final data = contributions[2] as RoleData<Object>;
       expect(data.role, authRole);
-      final implementation = data.value as RoleImplementation;
+      final implementation = (data.value as AuthImplementation).implementation;
       expect(implementation.isAsync, isFalse);
       expect(implementation.type.name, 'FirebaseAuthService');
       expect(implementation.create!.name, 'createFirebaseAuthService');
@@ -669,8 +685,8 @@ void main() {
         'firebase_auth with router',
         'firebase_auth',
         'shared_preferences',
-        'auth by firebase_auth with router --auth-mode=guest',
-        'auth by firebase_auth with router --auth-mode=anonymous',
+        for (final mode in ['guest', 'anonymous'])
+          'auth by firebase_auth with router, localization --auth-mode=$mode',
       ]);
     });
 
@@ -725,26 +741,38 @@ void main() {
         'auth role, in an app with a router and in one without', () {
       final services = [
         for (final result in results)
-          if (result.app!.files[_implementation] case final file?
-              when !result.hook!.presentRoles.contains(localizationRole))
+          if (result.app!.files[_implementation] case final file?)
             (
               mode: authRole.modeIn(authRole.hookInput(result.hook!)),
               router: result.hook!.presentRoles.contains(routerRole),
+              texts: result.hook!.presentRoles.contains(localizationRole),
               service: file.text,
               script: result.app!.files[enableSignInScript]!.text,
             ),
       ];
 
       expect(
-        [for (final app in services) (app.mode, app.router)],
+        [for (final app in services) (app.mode, app.router, app.texts)],
         [
-          (AuthMode.required, true),
-          (AuthMode.required, false),
-          (AuthMode.guest, true),
-          (AuthMode.anonymous, true),
+          (AuthMode.required, true, true),
+          (AuthMode.required, false, true),
+          (AuthMode.required, true, false),
+          (AuthMode.required, false, false),
+          (AuthMode.guest, true, true),
+          (AuthMode.anonymous, true, true),
         ],
       );
-      expect({for (final app in services) app.service}, hasLength(1));
+      // The service asks Firebase for the language of the app only in an
+      // app with the texts of the app.
+      for (final texts in [true, false]) {
+        expect(
+          {
+            for (final app in services)
+              if (app.texts == texts) app.service,
+          },
+          hasLength(1),
+        );
+      }
       // The script reads the mode from the file of the auth role when it
       // runs, so it follows a mode that the developer of the app changed.
       expect({for (final app in services) app.script}, hasLength(1));
@@ -807,6 +835,7 @@ void main() {
         AuthRole.serviceFile,
         AuthRole.sessionFile,
         AuthRole.guestDataFile,
+        AuthRole.methodsFile,
         _implementation,
         enableSignInScript,
       });
@@ -956,7 +985,7 @@ void main() {
               name: signatureOf(method),
           },
         );
-        expect(interface.keys, hasLength(9));
+        expect(interface.keys, hasLength(11));
       });
 
       test('asks Firebase for no language before a password reset', () {
@@ -1065,6 +1094,37 @@ void main() {
           ],
         });
         expect(sent['a broadcast stream'], isTrue);
+      });
+
+      test(
+          'takes no credential of an identity provider: fails with '
+          'notConfigured before it asks Firebase, with a hint that names the '
+          'identity provider and no token, and deletes nothing', () {
+        const account = 'uid of a@x.dev <a@x.dev>';
+        const refused = 'notConfigured: The app signs in to Firebase '
+            'Authentication with an email address and a password, and as an '
+            'anonymous user, and takes no credential of an identity '
+            'provider, such as IdTokenCredential(https://accounts.example.com).';
+        expect(sent['credentials'], {
+          for (final call in [
+            'signInWith',
+            'linkWith',
+            'deleteAccount with a fresh credential',
+          ])
+            call: [
+              refused,
+              account,
+              <Object?>[],
+              [account],
+            ],
+        });
+        // A call for the user who is signed in fails without a user first.
+        expect(sent['linkWith without a user'], [
+          'recentSignInRequired',
+          'nobody',
+          <Object?>[],
+          ['nobody'],
+        ]);
       });
 
       test(

@@ -6,8 +6,10 @@
 // The deletion of a user signs out too, since the plugin keeps a deleted
 // user as its current one until the platform tells it of the sign-out. A
 // password reset asks for the message in the language that the app is in,
-// and for none in an app without languages of its own. And the service
-// tells of a sign-out that Firebase makes without a call of the app.
+// and for none in an app without languages of its own. The service tells
+// of a sign-out that Firebase makes without a call of the app. And it
+// takes no credential of an identity provider, which reaches nothing of
+// Firebase.
 //
 // It uses the service of the module and runs none of the start-up of the
 // app but the start of Firebase (service.dart). The matrix sets up the
@@ -109,6 +111,59 @@ void main() {
       ('nobody', null),
       reason: 'When deleteAccount() completes, the service has nobody, and '
           'nobody is signed in on the platform side.',
+    );
+  });
+
+  test(
+      'a credential of an identity provider fails with notConfigured before '
+      'it reaches Firebase, and a deletion with one deletes nothing', () async {
+    const credential = IdTokenCredential(
+      issuer: 'https://accounts.example.com',
+      idToken: 'secret-token',
+    );
+    await service.signUp(email: addressOf('credential'), password: password);
+    final uid = service.currentUser!.uid;
+    firebase.calls.clear();
+    final failures = <String, String>{};
+    for (final (name, call) in [
+      ('signInWith', () => service.signInWith(credential)),
+      ('linkWith', () => service.linkWith(credential)),
+      ('deleteAccount', () => service.deleteAccount(fresh: credential)),
+    ]) {
+      try {
+        await call();
+        failures[name] = 'none';
+      } on AuthFailure catch (failure) {
+        final hint = failure.developerHint ?? '';
+        failures[name] = [
+          failure.reason.name,
+          if (hint.contains('https://accounts.example.com')) 'the issuer',
+          if (hint.contains('secret-token')) 'the token',
+        ].join(', ');
+      }
+    }
+
+    expect(
+      failures,
+      {
+        for (final name in ['signInWith', 'linkWith', 'deleteAccount'])
+          name: 'notConfigured, the issuer',
+      },
+      reason: 'The service takes no credential of an identity provider, and '
+          'its hint names the identity provider and no token.',
+    );
+    expect(
+      [
+        for (final call in firebase.calls)
+          if (call.first != 'setLanguageCode') call,
+      ],
+      isEmpty,
+      reason: 'Nothing reaches Firebase.',
+    );
+    expect(
+      userOf(service.currentUser),
+      'the account $uid of ${addressOf('credential')}',
+      reason: 'The user of the account is still signed in, and not deleted.',
     );
   });
 
