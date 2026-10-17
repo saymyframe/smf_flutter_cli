@@ -618,8 +618,19 @@ Future<void> main(List<String> arguments, SendPort port) async {
     ..arrive(greeting)
     ..arrive(const PushMessage(id: 'm2', data: {'sync': 'now'}))
     ..arrive(const PushMessage(id: 'm3', body: 'Only a body'))
-    ..arrive(greeting)
-    ..arrive(const PushMessage(title: 'No id'));
+    // A message equal to the first one, as the provider tells of it again.
+    ..arrive(
+      PushMessage(
+        id: 'm1',
+        title: 'Hello',
+        body: 'A new message',
+        data: {'screen': ['in', 'box'].join()},
+      ),
+    )
+    ..arrive(const PushMessage(title: 'No id'))
+    // An empty title or body counts as none.
+    ..arrive(const PushMessage(id: 'm5', title: '', body: 'Empty title'))
+    ..arrive(const PushMessage(id: 'm6', title: '', body: ''));
   await pump();
   result['heard'] = [...heard];
   result['shown'] = [
@@ -629,7 +640,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['the ids are negative'] = ids.every((id) => id < 0);
   result['the same message has the same id'] = ids[0] == ids[2];
   result['other messages have other ids'] =
-      {ids[0], ids[1], ids[3]}.length == 3;
+      {ids[0], ids[1], ids[3], ids[4]}.length == 4;
   result['the message that a notification keeps'] =
       jsonDecode(shownByApp.first.data['push.message']!);
   result['the messages are one stream'] =
@@ -832,12 +843,24 @@ Future<void> main(List<String> arguments, SendPort port) async {
       result['heard after the errors'] = heard;
 
       failures['launchMessage'] = StateError('The launch broke.');
-      try {
-        await initPush();
-        result['a start whose launch message fails'] = 'completed';
-      } on StateError catch (error) {
-        result['a start whose launch message fails'] = error.message;
-      }
+      await initPush();
+      result['a start whose launch message fails'] = {
+        'the message': shown(appPush.launchMessage),
+        'the address': appPush.address.value,
+      };
+      launchedByNotification = const NotificationTap(
+        id: -2,
+        data: {
+          notificationOwnerKey: 'push',
+          'push.message':
+              '{"id":"m9","title":"Shown","body":null,"data":{}}',
+        },
+      );
+      await initNotifications();
+      await initPush();
+      result['a start whose launch message fails, launched by a message '
+              'that the app showed'] =
+          shown(appPush.launchMessage);
       done.complete();
     },
     (error, stackTrace) => uncaught.add('$error'),
@@ -848,9 +871,24 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// The address in a release build: the app knows it, and prints nothing.
+const _releaseAddress = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  addressOnDevice = 'device-1';
+  await start();
+  await pump();
+  pushService.changeAddress('device-2');
+  await pump();
+  result['the address'] = appPush.address.value;
+  result['printed'] = debugPrinted;
+  port.send(result);
+}
+''';
+
 /// The files of the test app: the files of the role, of the notifications
 /// and of the preferences, as their templates generate them, and the fakes.
-Future<DartFiles> _app({bool async = false}) async {
+/// The app runs in debug mode, or in a release build without [debug].
+Future<DartFiles> _app({bool async = false, bool debug = true}) async {
   final push = await _rendered(async: async);
   final notifications = await _notificationsRendered();
   final preferences = await renderTemplate(
@@ -885,7 +923,15 @@ Future<DartFiles> _app({bool async = false}) async {
       'lib/fakes/fake_notifications.dart': _fakeNotifications,
       'lib/fakes/fake_preferences.dart': _fakePreferences,
     },
-    flutter: const {'foundation.dart': _foundation, 'widgets.dart': _widgets},
+    flutter: {
+      'foundation.dart': debug
+          ? _foundation
+          : _foundation.replaceFirst(
+              'const bool kDebugMode = true;',
+              'const bool kDebugMode = false;',
+            ),
+      'widgets.dart': _widgets,
+    },
   );
 }
 
@@ -1314,6 +1360,8 @@ void main() {
             '{"id":"m3","title":null,"body":"Only a body","data":{}}}';
         const withoutId = '{notifications.owner: push, push.message: '
             '{"id":null,"title":"No id","body":null,"data":{}}}';
+        const emptyTitle = '{notifications.owner: push, push.message: '
+            '{"id":"m5","title":"","body":"Empty title","data":{}}}';
         expect(await app.run('$_notes$_messages'), {
           'heard': [
             'm1 Hello A new message {screen: inbox}',
@@ -1321,14 +1369,18 @@ void main() {
             'm3 null Only a body {}',
             'm1 Hello A new message {screen: inbox}',
             'null No id null {}',
+            'm5  Empty title {}',
+            'm6   {}',
           ],
           // A message with data alone shows nothing, and one with a body
-          // alone shows it as its title.
+          // alone shows it as its title. The message keeps its texts as
+          // they came.
           'shown': [
             'Hello A new message $greeting',
             'Only a body null $bodyAlone',
             'Hello A new message $greeting',
             'No id null $withoutId',
+            'Empty title null $emptyTitle',
           ],
           'the ids are negative': true,
           'the same message has the same id': true,
@@ -1410,20 +1462,43 @@ void main() {
       test(
           'leaves an error of the service, of an address or of a '
           'notification to the handler of the uncaught errors, and goes on, '
-          'and fails a start whose launch message fails', () async {
+          'and starts when the launch message fails', () async {
         expect(await app.run('$_notes$_errors'), {
           'the address after an error': null,
           'the address on the next resume': 'device-1',
           'heard after the errors': ['m1', 'tap p1'],
-          'a start whose launch message fails': 'The launch broke.',
+          // The app starts, with the message of the notifications or none.
+          'a start whose launch message fails': {
+            'the message': null,
+            'the address': 'device-1',
+          },
+          'a start whose launch message fails, launched by a message that '
+              'the app showed': 'm9 Shown null {}',
           'uncaught': [
             'Bad state: The address broke.',
             'Bad state: The streams broke.',
             'Bad state: The streams broke.',
             'Bad state: The streams broke.',
             'Bad state: The notification broke.',
+            'Bad state: The launch broke.',
+            'Bad state: The launch broke.',
           ],
         });
+      });
+    });
+  });
+
+  group('the generated controller in a release build', () {
+    late DartFiles app;
+
+    setUpAll(() async => app = await _app(debug: false));
+
+    tearDownAll(() => app.delete());
+
+    test('follows the address and prints none', () async {
+      expect(await app.run('$_notes$_releaseAddress'), {
+        'the address': 'device-2',
+        'printed': <Object?>[],
       });
     });
   });
@@ -1525,14 +1600,11 @@ void main() {
 
     test(
         'tells what the address needs on iOS and how a free team runs the '
-        'app on an iPhone, and names the native keys of the template', () {
+        'app on an iPhone, with the entitlement of the template', () {
       for (final named in [
         PushRole.controllerFile,
         AppEntryRole.iosEntitlementsFile,
-        AppEntryRole.infoPlistFile,
         PushRole.apsEnvironment,
-        PushRole.backgroundModes,
-        PushRole.remoteNotificationMode,
       ]) {
         expect(section, contains('`$named`'), reason: named);
       }
@@ -1542,6 +1614,7 @@ void main() {
           contains('paid Apple Developer Program'),
           contains('free personal team'),
           contains('The simulator needs no change.'),
+          contains('(production for a distribution profile)'),
         ),
       );
     });

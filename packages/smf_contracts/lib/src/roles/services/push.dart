@@ -52,7 +52,8 @@ const pushRole = PushRole._();
 /// shows with `appNotifications.show()`, as a notification with an owner:
 /// the id of the role under [NotificationsRole.ownerKey] in its data, a
 /// negative id, the data of the message, and the message under
-/// [messageKey]. A message with a body alone shows its body as the title.
+/// [messageKey]. An empty title or body counts as none, and a message with
+/// a body alone shows its body as the title.
 ///
 /// `appPush.taps` tells of each tap on a message while the app runs: those
 /// that the service tells of, on the messages that the platform showed, and
@@ -66,9 +67,11 @@ const pushRole = PushRole._();
 /// `launchTap`, so the code of the app sees each tap once.
 ///
 /// What the service sends on its streams with an error, an error of a
-/// notification that the controller shows, and one of an address that it
-/// asks for have no caller: they reach the handlers of the uncaught errors
-/// of the app, and the controller goes on.
+/// notification that the controller shows, one of an address that it asks
+/// for, and one of the message that launched the app have no caller: they
+/// reach the handlers of the uncaught errors of the app, and the controller
+/// goes on. So the app starts also with a provider that fails to give the
+/// message that launched it.
 ///
 /// ## What a provider keeps to
 ///
@@ -81,13 +84,18 @@ const pushRole = PushRole._();
 ///   in the foreground;
 /// - `address` needs no permission, does not throw, and gives the same
 ///   address from one launch of the app to the next, unless
-///   `addressChanges` tells of another;
-/// - `messages` tells of each message in the foreground once;
+///   `addressChanges` tells of another. `addressChanges` also tells of the
+///   first address that the device gets after `address` gave none;
+/// - `messages` tells of each message in the foreground once, and a value
+///   of its data that the platform gives as something other than a string
+///   is its JSON;
 /// - the platform shows a message with a title or a body that arrives in
 ///   the background or while the app is closed, on Android in the channel
 ///   [NotificationsRole.defaultChannel], and `taps` and `launchMessage` have
-///   its taps. In the foreground, the provider shows nothing of a message
-///   unless `platformShowsInForeground` says that the platform shows it;
+///   its taps; the tap that launched the app is not among `taps`. In the
+///   foreground, the provider shows nothing of a message unless
+///   `platformShowsInForeground` says that the platform or the provider
+///   shows it;
 /// - `launchMessage` completes without the network, and does not throw.
 ///
 /// Only a running app shows whether a provider keeps to it.
@@ -145,8 +153,8 @@ final class PushRole extends Role<RoleImplementation> {
   /// app runs in the background.
   static const backgroundModes = 'UIBackgroundModes';
 
-  /// The mode among the [backgroundModes] in which iOS hands the app a push
-  /// message that arrives in the background.
+  /// The mode among the [backgroundModes] that lets iOS wake the app for a
+  /// push message that arrives in the background.
   static const remoteNotificationMode = 'remote-notification';
 
   /// The key under which a notification that shows a message keeps the
@@ -254,9 +262,9 @@ The app receives push messages through `appPush` in `${PushRole.controllerFile}`
 
 `appPush.address` is the address of this device. The backend of the app sends its messages there. It is `null` until the platform gives one, and the app works without it. Send each new address to the backend: it may come late, and it may change. In debug mode the app prints it, so you can send this device a message by hand.
 
-On iOS the address needs a token of the Apple Push Notification service (APNs). iOS gives one only to a build signed with the entitlement `${PushRole.apsEnvironment}`, which `${AppEntryRole.iosEntitlementsFile}` has. The iOS simulator on a Mac gets a token. One on a macOS virtual machine, as in CI, never does. On an iPhone, signing with the entitlement needs a team of the paid Apple Developer Program. With a free personal team, Xcode cannot sign the app: to run it on an iPhone, remove the key `${PushRole.apsEnvironment}` from `${AppEntryRole.iosEntitlementsFile}`, and the app runs there without an address. The simulator needs no change. The value `development` suits the builds that you run from Xcode. When Xcode exports the app for distribution, it takes the value of the provisioning profile.
+On iOS the address needs a token of the Apple Push Notification service (APNs). iOS gives one only to a build signed with the entitlement `${PushRole.apsEnvironment}`, which `${AppEntryRole.iosEntitlementsFile}` has. The iOS simulator on a Mac gets a token. One on a macOS virtual machine, such as a hosted CI runner, never does. On an iPhone, signing with the entitlement needs a team of the paid Apple Developer Program. With a free personal team, Xcode cannot sign the app: to run it on an iPhone, remove the key `${PushRole.apsEnvironment}` from `${AppEntryRole.iosEntitlementsFile}`, and the app runs there without an address. The simulator needs no change. The value `development` suits the builds that you run from Xcode. When Xcode exports the app for distribution, it takes the value of the provisioning profile (production for a distribution profile).
 
-A message that arrives while the app is in the foreground reaches `appPush.messages`. One with a title or a body also shows as a notification, as it does in the background. Where the system does not show it, the app shows it with `appNotifications`. Either way the user has to allow the notifications of the app, as the section ${NotificationsRole.readmeHeading} tells. In the background the system shows the message, on Android in the channel of the notifications of the app. For iOS, `${AppEntryRole.infoPlistFile}` has `${PushRole.remoteNotificationMode}` among its `${PushRole.backgroundModes}`.
+A message that arrives while the app is in the foreground reaches `appPush.messages`. One with a title or a body also shows as a notification, as it does in the background. Where the system does not show it, the app shows it with `appNotifications`. Either way the user has to allow the notifications of the app, as the section ${NotificationsRole.readmeHeading} tells. In the background the system shows the message, on Android in the channel of the notifications of the app.
 
 `appPush.taps` tells of each tap on a message while the app runs, and `appPush.launchMessage` is the message whose tap launched the app. Read both once the first screen is shown, and navigate as the rest of the app does. A tap on a message does not reach `appNotifications.taps`, so the code of the app sees each tap once.
 

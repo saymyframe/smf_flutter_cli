@@ -24,9 +24,9 @@ final appPush = AppPushController._();
 /// and not [NotificationsController.taps].
 ///
 /// An error of the service on its streams, of a notification that the
-/// controller shows, or of an address that it asks for, has no caller, so
-/// it reaches the handlers of the uncaught errors of the app, and the
-/// controller goes on.
+/// controller shows, of an address that it asks for, or of the message that
+/// launched the app, has no caller, so it reaches the handlers of the
+/// uncaught errors of the app, and the controller goes on.
 final class AppPushController {
   AppPushController._();
 
@@ -93,7 +93,9 @@ final class AppPushController {
   /// new service, and `null` until it gives one.
   ///
   /// If the service fails to give the message that launched the app, the
-  /// future fails with its error.
+  /// app still starts: the error reaches the handlers of the uncaught errors
+  /// of the app, and [launchMessage] is the message of a notification that
+  /// the app showed, if its tap launched the app, or `null`.
   Future<void> start(PushService service) async {
     unawaited(_serviceMessages?.cancel());
     unawaited(_serviceTaps?.cancel());
@@ -114,7 +116,14 @@ final class AppPushController {
       WidgetsBinding.instance.addObserver(observer);
     }
     _askForAddress();
-    final launched = await service.launchMessage();
+    PushMessage? launched;
+    try {
+      launched = await service.launchMessage();
+    } on Object catch (error, stackTrace) {
+      // A provider that fails here would otherwise keep the app from
+      // starting.
+      Zone.current.handleUncaughtError(error, stackTrace);
+    }
     final tap = appNotifications.launchTapOf(_owner);
     _launchMessage = launched ?? (tap == null ? null : _messageIn(tap.data));
   }
@@ -152,23 +161,26 @@ final class AppPushController {
   }
 
   /// Tells of [message], and shows it as a notification of the app if the
-  /// platform does not show it and it has a title or a body.
+  /// platform does not show it and it has a title or a body. An empty title
+  /// or body counts as none.
   void _onMessage(PushMessage message) {
     _messages.add(message);
-    final PushMessage(:title, :body) = message;
+    final title = _textOf(message.title);
+    final body = _textOf(message.body);
     final text = title ?? body;
     if (text == null || _service!.platformShowsInForeground) return;
     final json = jsonEncode({
       'id': message.id,
-      'title': title,
-      'body': body,
+      'title': message.title,
+      'body': message.body,
       'data': message.data,
     });
     unawaited(
       appNotifications.show(
         AppNotification(
-          // The same message takes the same id, so the platform shows it
-          // once, and a negative one, so it never takes the place of a
+          // An equal message takes the same id, so its notification takes
+          // the place of the one that showed it before rather than adding
+          // another, and a negative one, so it never takes the place of a
           // notification of the app.
           id: -1 - (json.hashCode & 0x7FFFFFFF),
           // A message with a body alone shows it as its title.
@@ -183,6 +195,10 @@ final class AppPushController {
       ),
     );
   }
+
+  /// [text], or `null` if it is empty.
+  static String? _textOf(String? text) =>
+      text == null || text.isEmpty ? null : text;
 
   /// The message that [data], the data of a notification that showed a
   /// message, keeps under [_messageKey], or a message with the rest of the
