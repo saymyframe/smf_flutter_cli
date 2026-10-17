@@ -195,6 +195,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['bloc'],
       'Theme': ['None'],
@@ -213,6 +214,7 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
       'Preferences: which module provides it?',
@@ -225,7 +227,6 @@ void main() {
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
-      'onboarding — Onboarding on the first launch of the app',
       'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(run.asked[1].shown, [
@@ -243,7 +244,7 @@ void main() {
     // them: the layout, with the router, brings the localization, whose
     // labels it shows. The theme follows, and then the preferences of both
     // and the DI container, all before the state managers.
-    expect(run.asked[8].shown, [
+    expect(run.asked[9].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -285,6 +286,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['riverpod'],
       'Theme': ['None'],
@@ -303,6 +305,7 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
       'Preferences: which module provides it?',
@@ -354,6 +357,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
@@ -383,7 +387,6 @@ void main() {
     // The module provides a role, so it is not among the features to pick.
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
-      'onboarding — Onboarding on the first launch of the app',
       'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(
@@ -444,6 +447,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
@@ -495,6 +499,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
@@ -513,6 +518,7 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
       'Preferences: which module provides it?',
@@ -553,6 +559,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
@@ -572,6 +579,7 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Router: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
@@ -583,7 +591,7 @@ void main() {
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
     ]);
-    expect(run.asked[4].shown, [
+    expect(run.asked[5].shown, [
       'go_router — Routes and navigation with go_router',
       'None',
     ]);
@@ -606,6 +614,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
@@ -630,7 +639,7 @@ void main() {
     // the modules of the list bring.
     expect(
       localization,
-      messages.indexOf('Settings screen: which module provides it?') + 1,
+      messages.indexOf('Onboarding screen: which module provides it?') + 1,
     );
     // The preferences have one provider, so the run does not ask for them.
     expect(
@@ -736,6 +745,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
@@ -801,6 +811,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
@@ -867,6 +878,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
@@ -952,6 +964,7 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['material_theme'],
@@ -1030,13 +1043,15 @@ void main() {
   });
 
   test(
-      'a run in a terminal offers the onboarding among the features, and '
-      'adds the preferences that it requires without a question; the app '
-      'still starts on the start screen', () async {
+      'a run in a terminal asks which module provides the onboarding screen '
+      'after the settings screen, offers onboarding, and adds the '
+      'preferences that it requires without a question; the app still '
+      'starts on the start screen', () async {
     final run = await _create({
-      'Features': ['home', 'onboarding'],
+      'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['onboarding'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
@@ -1049,6 +1064,20 @@ void main() {
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final onboarding = messages.indexOf(
+      'Onboarding screen: which module provides it?',
+    );
+    // Both roles require the router, so their questions come one after the
+    // other, in the order of the roles of the registry.
+    expect(
+      onboarding,
+      messages.indexOf('Settings screen: which module provides it?') + 1,
+    );
+    expect(run.asked[onboarding].shown, [
+      'onboarding — Onboarding on the first launch of the app',
+      'None',
+    ]);
     // shared_preferences is the only module that provides the preferences,
     // which the onboarding requires, so there is nothing to ask.
     expect(
@@ -1063,6 +1092,24 @@ void main() {
       ),
     );
     final app = run.files.directory('/work/my_app');
+    // The screen shows the steps that the modules of the app add, of which
+    // this app has none.
+    expect(
+      app
+          .childFile('lib/core/onboarding/onboarding_steps.dart')
+          .readAsStringSync(),
+      // The run formats nothing: its commands only stand in for those of
+      // Flutter.
+      matches(
+        RegExp(r'const List<OnboardingStep> appOnboardingSteps = \[\s*\];'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/features/onboarding/onboarding_screen.dart')
+          .readAsStringSync(),
+      contains("import '../../core/onboarding/onboarding_steps.dart';"),
+    );
     expect(
       app
           .childFile('lib/features/onboarding/onboarding_pages.dart')
@@ -1116,6 +1163,7 @@ void main() {
         'Features': [],
         'Infrastructure': ['firebase_core'],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1189,6 +1237,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1301,6 +1350,7 @@ void main() {
         'Features': ['home'],
         'Infrastructure': [],
         'Layout': ['bottom_tabs'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
@@ -1413,6 +1463,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1467,6 +1518,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1561,6 +1613,7 @@ void main() {
         'Features': ['home', 'sign_in'],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'State management': ['riverpod'],
         'Theme': ['None'],
         'Localization': ['None'],

@@ -1,30 +1,39 @@
 // A test that continuous integration runs in the apps with the onboarding
 // module: on its first launch, with nothing saved in its preferences, the
 // app shows the onboarding in place of the screen that it starts on, which
-// it does not build. Next, the button below the pages, shows the last page,
-// where the same button is Get started and finishes the onboarding: the app
-// saves that in its preferences and shows the screen that it starts on, or
-// the fallback screen of the app entry in an app that no route can start.
-// Skip, above the pages, does the same from the first page, and is gone
-// from the last one. A swipe shows the page before or after, and the marks
-// of the pages and the buttons follow the page. In an app that asks for
-// less motion, Next shows the next page at once. Both pages have their
-// texts in each language of the app, as the device asks for it, with their
-// titles as headers for a screen reader, and fit a small phone with a large
-// text size and insets in each. The letters and the number in the cell of a
-// page keep to the cell there: they are part of a picture, which does not
-// grow with the text.
+// it does not build. Next, the button below the pages, shows the page after
+// the first. That is the page of the first step that the modules of the app
+// add to the onboarding, or the last page in an app without such a step.
+// On the page of a step, the button below the pages is the action of the
+// step, with its later below it if the step has one, and the pages keep
+// their place. On the last page the button is Get started and finishes the
+// onboarding: the app saves that in its preferences and shows the screen
+// that it starts on, or the fallback screen of the app entry in an app that
+// no route can start. Skip, above the pages, does the same from the first
+// page and from the page of a step, and is gone from the last one. A swipe
+// shows the page before or after, and the marks of the pages and the
+// buttons follow the page. In an app that asks for less motion, Next shows
+// the next page at once. Every page has its texts in each language of the
+// app, as the device asks for it, with its title as a header for a screen
+// reader, and fits a small phone with a large text size and insets in each.
+// The letters and the number in the cell of a page keep to the cell there:
+// they are part of a picture, which does not grow with the text.
 //
 // The screen only finishes the onboarding: the router of the app, whichever
 // module provides it, leaves the screen, as the router role says of the
 // guards of the routes. The matrix writes texts.dart next to this file, the
 // texts of the module in each language of the app: the languages of the
 // localization role of the app, whichever module provides it, or English
-// alone in an app without the role. The test starts the app once, since
-// the start-up of an app may not run twice, and each expectation gives its
-// reason.
+// alone in an app without the role. The steps are those of the list that
+// the onboarding screen role generates, whichever modules add them, and
+// their labels return their texts in the language of the app, which a test
+// of that role checks. This test calls the action of no step, which may ask
+// for a permission: it goes on from the page of a step with its later, or
+// with a swipe. The test starts the app once, since the start-up of an app
+// may not run twice, and each expectation gives its reason.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/onboarding/onboarding_steps.dart';
 import 'package:{{app_name}}/core/preferences/app_preferences.dart';
 import 'package:{{app_name}}/features/onboarding/onboarding_pages.dart';
 import 'package:{{app_name}}/features/onboarding/onboarding_screen.dart';
@@ -52,6 +61,28 @@ void main() {
   /// (see [useLanguage]), each by its name in the module.
   var texts = onboardingTexts.values.first;
 
+  /// The steps that the onboarding that opened last shows, in their order
+  /// (see [openSteps]).
+  var steps = <OnboardingStep>[];
+
+  /// Takes the steps that the onboarding that just opened shows: those of
+  /// the list of the steps of the app whose showIf kept them, which the
+  /// onboarding asked when it opened. No action of a step has run since, so
+  /// showIf answers as it did then.
+  void openSteps() => steps = [
+        for (final step in appOnboardingSteps)
+          if (step.showIf?.call() ?? true) step,
+      ];
+
+  /// How many pages the onboarding has: the first page and the last page of
+  /// the module, and the page of each step between them.
+  int pageCount() => steps.length + 2;
+
+  /// The step on the page at the index [page], or `null` for a page of the
+  /// module.
+  OnboardingStep? stepAt(int page) =>
+      page > 0 && page <= steps.length ? steps[page - 1] : null;
+
   /// What the screen of the onboarding shows of [matching].
   Finder shown(Finder matching) =>
       find.descendant(of: onboarding, matching: matching);
@@ -65,6 +96,31 @@ void main() {
   Finder skip() => shown(find.widgetWithText(TextButton, texts['skip']!));
   Finder next() => shown(find.widgetWithText(FilledButton, texts['next']!));
   Finder done() => shown(find.widgetWithText(FilledButton, texts['done']!));
+
+  /// The text buttons that the screen of the onboarding shows: Skip, and the
+  /// later of the step whose page the user sees.
+  Finder textButtons() => shown(find.byType(TextButton));
+
+  /// The context of the screen of the onboarding, in whose language the
+  /// labels of a step return their texts.
+  BuildContext screen(WidgetTester tester) => tester.element(onboarding);
+
+  // The buttons of the page of [step], by their labels in the language of
+  // the app: its action, the button below the pages, and its later, below
+  // that button.
+  Finder action(WidgetTester tester, OnboardingStep step) =>
+      shown(find.widgetWithText(FilledButton, step.action(screen(tester))));
+  Finder later(WidgetTester tester, OnboardingStep step) =>
+      shown(find.widgetWithText(TextButton, step.later!(screen(tester))));
+
+  /// The title of the page at the index [page] in the language of the app:
+  /// the name of the app on the first page, the title of a step on its
+  /// page, and the title of the last page.
+  String titleOf(WidgetTester tester, int page) => switch (stepAt(page)) {
+        _ when page == 0 => appName,
+        final step? => step.title(screen(tester)),
+        null => texts['readyTitle']!,
+      };
 
   /// Has the device ask for [language], a language of the app, which the
   /// app follows while its user chose none.
@@ -115,10 +171,11 @@ void main() {
       );
 
   /// Checks the marks below the pages while the user sees the page at the
-  /// index [page]: one for each of the two pages, with the one of that
-  /// page stretched and in the primary colour of the theme.
+  /// index [page]: one for each page, with the one of that page stretched
+  /// and in the primary colour of the theme.
   void expectMarks(WidgetTester tester, {required int page}) {
     final colors = Theme.of(tester.element(onboarding)).colorScheme;
+    final count = pageCount();
     // The marks are the rounded boxes of the screen.
     final marks = [
       for (final container in tester.widgetList<Container>(
@@ -130,8 +187,9 @@ void main() {
     ];
     expect(
       marks,
-      hasLength(2),
-      reason: 'The onboarding has a mark for each of its pages.',
+      hasLength(count),
+      reason: 'The onboarding has a mark for each of its pages, the pages of '
+          'its steps included.',
     );
     for (final (index, mark) in marks.indexed) {
       if (index == page) {
@@ -139,20 +197,20 @@ void main() {
           mark.color,
           colors.primary,
           reason: 'The mark of the page that the user sees is in the primary '
-              'colour: here the page ${page + 1} of 2.',
+              'colour: here the page ${page + 1} of $count.',
         );
       } else {
         expect(
           mark.color,
           isNot(colors.primary),
           reason: 'Only the mark of the page that the user sees is in the '
-              'primary colour: here the page ${page + 1} of 2.',
+              'primary colour: here the page ${page + 1} of $count.',
         );
         expect(
           mark.width,
           lessThan(marks[page].width),
           reason: 'The mark of the page that the user sees is stretched: '
-              'here the page ${page + 1} of 2.',
+              'here the page ${page + 1} of $count.',
         );
       }
     }
@@ -234,18 +292,53 @@ void main() {
     );
   }
 
+  /// Checks, on a device with a large text size, that the labels of
+  /// [buttons], the buttons below the pages, grow only by half with the
+  /// text size of the device, in [language]: the pages take the room that
+  /// the buttons leave, and would have none left on a small phone.
+  void expectLabelsGrowByHalf(
+    WidgetTester tester,
+    List<Finder> buttons,
+    String language,
+  ) {
+    for (final button in buttons) {
+      final label = find.descendant(of: button, matching: find.byType(Text));
+      expect(
+        MediaQuery.textScalerOf(tester.element(label)).scale(10),
+        15,
+        reason: 'With a large text size, the labels of the buttons below the '
+            'pages grow only by half, in $language.',
+      );
+    }
+  }
+
+  /// Goes on from the page of [step], which the user sees, to the next
+  /// page without its action: with its later if it has one, and with a
+  /// swipe otherwise.
+  Future<void> passStep(WidgetTester tester, OnboardingStep step) async {
+    if (step.later != null) {
+      await tester.tap(later(tester, step));
+    } else {
+      await tester.fling(
+          shown(find.byType(PageView)), const Offset(-400, 0), 1000);
+    }
+    await tester.pumpAndSettle();
+  }
+
   // A widget test fails after ten minutes by default; a test that hangs
   // fails sooner.
   testWidgets(
     'on its first launch the app shows the onboarding in place of the '
-    'screen that it starts on, in the language of the device, until its '
-    'last button or Skip finishes it',
+    'screen that it starts on, in the language of the device, with the '
+    'steps of the app before its last page, until its last button or Skip '
+    'finishes it',
     (tester) async {
       addTearDown(tester.view.reset);
       addTearDown(tester.platformDispatcher.clearAllTestValues);
       final languages = onboardingTexts.keys.toList();
       await useLanguage(tester, languages.first);
       await startApp(tester);
+      openSteps();
 
       expect(
         createAppPreferences().getBool(completedKey),
@@ -267,6 +360,7 @@ void main() {
       );
       final pages = shown(find.byType(PageView));
       final controller = tester.widget<PageView>(pages).controller!;
+      final last = pageCount() - 1;
 
       // The first page, as the device asks for each language of the app.
       for (final language in languages) {
@@ -305,6 +399,12 @@ void main() {
           findsNothing,
           reason: 'Only on the last page is the button Get started.',
         );
+        expect(
+          textButtons(),
+          findsOneWidget,
+          reason: 'The first page has no text button but Skip: the later of '
+              'a step shows only on the page of its step, in $language.',
+        );
       }
       await useLanguage(tester, languages.first);
       expectMarks(tester, page: 0);
@@ -329,17 +429,129 @@ void main() {
         greaterThan(tester.getSize(pages).width / 2),
         reason: 'Next takes the width of the screen, but for its margins.',
       );
+      final area = tester.getRect(pages);
 
       await tester.tap(next());
       await tester.pumpAndSettle();
+      expect(
+        titles(tester),
+        [titleOf(tester, 1)],
+        reason: 'Next shows the page after the first, one page at a time: '
+            'that of the first step, or the last page in an app without '
+            'steps.',
+      );
+
+      // The page of each step, in each language of the app too.
+      final stepCells = <Map<String, Size>>[];
+      for (var page = 1; page < last; page++) {
+        final step = stepAt(page)!;
+        for (final language in languages) {
+          await useLanguage(tester, language);
+          final title = titleOf(tester, page);
+          expect(
+            titles(tester),
+            [title],
+            reason: 'The page ${page + 1} is that of a step, with the title '
+                'of the step in $language.',
+          );
+          expectInFull(tester, shown(find.text(title)), language);
+          expectHeader(tester, title);
+          final stepText = shown(find.text(step.text(screen(tester))));
+          expect(
+            stepText,
+            findsOneWidget,
+            reason: 'The page of a step has the text of the step below its '
+                'title, in $language: $title.',
+          );
+          expectInFull(tester, stepText, language);
+          expect(
+            action(tester, step),
+            findsOneWidget,
+            reason: 'On the page of a step, the button below the pages is '
+                'the action of the step, in $language: $title.',
+          );
+          if (step.later != null) {
+            expect(
+              later(tester, step),
+              findsOneWidget,
+              reason: 'The page of a step with a later has its button, in '
+                  '$language: $title.',
+            );
+          }
+          expect(
+            skip(),
+            findsOneWidget,
+            reason: 'The page of a step has Skip, which skips the steps too, '
+                'in $language: $title.',
+          );
+          expect(
+            [next(), done()],
+            everyElement(findsNothing),
+            reason: 'On the page of a step, the button below the pages is '
+                'neither Next nor Get started: $title.',
+          );
+          expect(
+            textButtons(),
+            step.later == null ? findsOneWidget : findsNWidgets(2),
+            reason: 'The page of a step has no text button but Skip and the '
+                'later of the step, if it has one: $title.',
+          );
+        }
+        await useLanguage(tester, languages.first);
+        final title = titleOf(tester, page);
+        expectMarks(tester, page: page);
+        final cell = cellTexts(tester);
+        expect(
+          cell,
+          hasLength(1),
+          reason: 'The cell of the page of a step has the icon of the step '
+              'and a number: $title.',
+        );
+        expect(
+          shown(find.byIcon(step.icon)),
+          findsOneWidget,
+          reason: 'The cell of the page of a step has the icon of the step: '
+              '$title.',
+        );
+        stepCells.add(cell);
+        expect(
+          tester.getRect(pages),
+          area,
+          reason: 'On the page of a step, the pages keep the place and the '
+              'size that they have on the first page, so that nothing jumps '
+              'while they turn: $title.',
+        );
+        expect(
+          tester.getSize(action(tester, step)).width,
+          greaterThan(tester.getSize(pages).width / 2),
+          reason: 'The button of the action of a step takes the width of '
+              'the screen, but for its margins: $title.',
+        );
+        if (step.later != null) {
+          expect(
+            tester.getRect(later(tester, step)).top,
+            greaterThanOrEqualTo(tester.getRect(action(tester, step)).bottom),
+            reason: 'The button of later is below that of the action of the '
+                'step: $title.',
+          );
+        }
+        await passStep(tester, step);
+        expect(
+          titles(tester),
+          [titleOf(tester, page + 1)],
+          reason: 'The later of a step, or a swipe, shows the page after the '
+              'page of the step: $title.',
+        );
+      }
+
       // The last page, in each language of the app too.
       for (final language in languages) {
         await useLanguage(tester, language);
         expect(
           titles(tester),
           [texts['readyTitle']],
-          reason: 'Next shows the page after the first, one page at a time, '
-              'with its title in $language.',
+          reason: 'The page after the steps is the last page, with its title '
+              'in $language.',
         );
         expectInFull(tester, text('readyTitle'), language);
         expectHeader(tester, texts['readyTitle']!);
@@ -360,14 +572,27 @@ void main() {
           reason: 'The last page has no Skip: once it has faded away, it '
               'is gone from the screen.',
         );
+        expect(
+          textButtons(),
+          findsNothing,
+          reason: 'The last page has no text button: Skip is gone, and the '
+              'later of a step shows only on the page of its step, in '
+              '$language.',
+        );
       }
       await useLanguage(tester, languages.first);
-      expectMarks(tester, page: 1);
+      expectMarks(tester, page: last);
       final lastCell = cellTexts(tester);
       expect(
         lastCell,
         hasLength(1),
         reason: 'The cell of the last page has an icon and a number.',
+      );
+      expect(
+        tester.getRect(pages),
+        area,
+        reason: 'On the last page, the pages keep the place and the size '
+            'that they have on the first page.',
       );
 
       // A swipe to the page before, and one to the page after.
@@ -375,16 +600,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         titles(tester),
-        [appName],
+        [titleOf(tester, last - 1)],
         reason: 'A swipe shows the page before the one that the user sees.',
       );
-      expectMarks(tester, page: 0);
-      for (final button in [skip(), next()]) {
+      expectMarks(tester, page: last - 1);
+      for (final button in [
+        skip(),
+        if (stepAt(last - 1) case final step?) action(tester, step) else next(),
+      ]) {
         expect(
           button,
           findsOneWidget,
-          reason: 'After a swipe to the first page, the onboarding has Skip '
-              'and Next again.',
+          reason: 'After a swipe to the page before the last, the onboarding '
+              'has Skip again, and Next or the action of a step.',
         );
       }
       await tester.fling(pages, const Offset(-400, 0), 1000);
@@ -394,7 +622,7 @@ void main() {
         [texts['readyTitle']],
         reason: 'A swipe shows the page after the one that the user sees.',
       );
-      expectMarks(tester, page: 1);
+      expectMarks(tester, page: last);
       expect(
         done(),
         findsOneWidget,
@@ -408,13 +636,13 @@ void main() {
       expect(
         onboardingStatus.completed.value,
         isFalse,
-        reason: 'Next and a swipe finish nothing.',
+        reason: 'Next, the later of a step and a swipe finish nothing.',
       );
       expect(
         createAppPreferences().getBool(completedKey),
         isNull,
-        reason: 'Next and a swipe save nothing: an app that is closed in '
-            'the middle of the onboarding shows it again.',
+        reason: 'Next, the later of a step and a swipe save nothing: an app '
+            'that is closed in the middle of the onboarding shows it again.',
       );
 
       await tester.tap(done());
@@ -430,6 +658,7 @@ void main() {
       // Skip, from the first page of an onboarding that the app starts
       // again.
       await restartOnboarding(tester);
+      openSteps();
       expect(
         titles(tester),
         [appName],
@@ -439,25 +668,36 @@ void main() {
       await tester.pumpAndSettle();
       await expectFinished(tester, 'Skip');
 
-      // An app that asks for less motion: Next shows the last page at
-      // once, so one frame after the tap the page is there, with the button
-      // as Get started and without Skip.
+      // Skip, from the page of a step, skips the steps that come after it.
+      if (steps.isNotEmpty) {
+        await restartOnboarding(tester);
+        openSteps();
+        await tester.tap(next());
+        await tester.pumpAndSettle();
+        expect(
+          titles(tester),
+          [titleOf(tester, 1)],
+          reason: 'Next shows the page of the first step.',
+        );
+        await tester.tap(skip());
+        await tester.pumpAndSettle();
+        await expectFinished(tester, 'Skip on the page of a step');
+      }
+
+      // An app that asks for less motion: Next shows the page after the
+      // first at once, so one frame after the tap the page is there, with
+      // its button and without Skip on the last page.
       tester.platformDispatcher.accessibilityFeaturesTestValue =
           const FakeAccessibilityFeatures(disableAnimations: true);
       await restartOnboarding(tester);
+      openSteps();
       await tester.tap(next());
       await tester.pump();
       expect(
         titles(tester),
-        [texts['readyTitle']],
+        [titleOf(tester, 1)],
         reason: 'In an app that asks for less motion, Next shows the next '
             'page at once.',
-      );
-      expect(
-        done(),
-        findsOneWidget,
-        reason: 'In an app that asks for less motion, the button is Get '
-            'started as soon as the last page is shown.',
       );
       expect(
         next(),
@@ -465,14 +705,32 @@ void main() {
         reason: 'In an app that asks for less motion, the label of the '
             'button changes at once.',
       );
-      expect(
-        skip(),
-        findsNothing,
-        reason: 'In an app that asks for less motion, Skip is gone as soon '
-            'as the last page is shown.',
-      );
+      if (stepAt(1) case final step?) {
+        expect(
+          action(tester, step),
+          findsOneWidget,
+          reason: 'In an app that asks for less motion, the button is the '
+              'action of the step as soon as its page is shown.',
+        );
+      } else {
+        expect(
+          done(),
+          findsOneWidget,
+          reason: 'In an app that asks for less motion, the button is Get '
+              'started as soon as the last page is shown.',
+        );
+        expect(
+          skip(),
+          findsNothing,
+          reason: 'In an app that asks for less motion, Skip is gone as '
+              'soon as the last page is shown.',
+        );
+      }
       tester.platformDispatcher.clearAccessibilityFeaturesTestValue();
       await tester.pumpAndSettle();
+      for (var page = 1; page < last; page++) {
+        await passStep(tester, stepAt(page)!);
+      }
       await tester.tap(done());
       await tester.pumpAndSettle();
       await expectFinished(
@@ -488,6 +746,7 @@ void main() {
         // whether the screen that the app starts on fits such a phone, or
         // another language, is for the tests of its own module.
         await restartOnboarding(tester);
+        openSteps();
         await useLanguage(tester, language);
         const insets = FakeViewPadding(top: _inset, bottom: _inset);
         tester.view
@@ -512,9 +771,38 @@ void main() {
           );
         }
         expectOutOfInsets(tester, [skip(), next()]);
+        expectLabelsGrowByHalf(tester, [next()], language);
         expectCellKeepsTextSize(tester, appName, firstCell, language);
         await tester.tap(next());
         await tester.pumpAndSettle();
+        for (var page = 1; page < last; page++) {
+          final step = stepAt(page)!;
+          final title = titleOf(tester, page);
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'The page of a step fits a small phone with a large text '
+                'size, in $language: $title.',
+          );
+          final buttons = [
+            skip(),
+            action(tester, step),
+            if (step.later != null) later(tester, step),
+          ];
+          for (final button in buttons) {
+            expect(
+              button.hitTestable(),
+              findsOneWidget,
+              reason: 'Skip and the buttons of a step are on the screen of a '
+                  'small phone with a large text size, where a tap reaches '
+                  'them, in $language: $title.',
+            );
+          }
+          expectOutOfInsets(tester, buttons);
+          expectLabelsGrowByHalf(tester, buttons.skip(1).toList(), language);
+          expectCellKeepsTextSize(tester, title, stepCells[page - 1], language);
+          await passStep(tester, step);
+        }
         expect(
           tester.takeException(),
           isNull,
@@ -528,6 +816,7 @@ void main() {
               'large text size, where a tap reaches it, in $language.',
         );
         expectOutOfInsets(tester, [done()]);
+        expectLabelsGrowByHalf(tester, [done()], language);
         expectCellKeepsTextSize(
           tester,
           texts['readyTitle']!,
@@ -547,6 +836,6 @@ void main() {
         );
       }
     },
-    timeout: const Timeout(Duration(minutes: 2)),
+    timeout: const Timeout(Duration(minutes: 3)),
   );
 }

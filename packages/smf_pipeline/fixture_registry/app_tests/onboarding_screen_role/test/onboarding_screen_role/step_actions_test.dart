@@ -79,7 +79,10 @@ void main() {
             'neither its action nor its later shows the next page.',
       );
       hold.complete();
-      await tester.pumpAndSettle();
+      // Frames for a while rather than until the screen settles: a provider
+      // whose button keeps spinning fails the expectation below, with its
+      // reason, rather than time out.
+      await pumpFor(tester, const Duration(seconds: 2));
       expect(
         stepShown(tester, language),
         confirm,
@@ -133,7 +136,9 @@ void main() {
           (error, _) => uncaught.add(error),
         );
         await tapped;
-        await tester.pumpAndSettle();
+        // As above: a provider that stays busy once the action failed fails
+        // the expectations below, with their reasons.
+        await pumpFor(tester, const Duration(seconds: 2));
       } finally {
         FlutterError.onError = onError;
       }

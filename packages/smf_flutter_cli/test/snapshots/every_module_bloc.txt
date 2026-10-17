@@ -128,9 +128,16 @@ With `gen-l10n` of Flutter:
 
 - On the first launch, the guard `onboarding.firstRun` of `routeGuards` shows `OnboardingScreen` of `lib/features/onboarding/onboarding_screen.dart`, the route `onboarding.onboarding` at `/onboarding`, in place of every other screen. So no code navigates to the onboarding or away from it. Once the onboarding is finished, a navigation to that route, such as a link, shows the screen that the app starts on, or the `redirectTo` of another guard while that one does not allow.
 - The pages of the onboarding are the list that `onboardingPages()` returns in `lib/features/onboarding/onboarding_pages.dart`, in the order the user goes through them. To add or reorder a page, change that list. A page is any widget, such as an `OnboardingPage` with a `symbol` or an `icon` for its cell. The screen keeps Skip above the pages, and below them a mark for each page and its button, which is Next and, on the last page, Get started.
+- Before the last page of that list, the screen shows the steps of `appOnboardingSteps` in `lib/core/onboarding/onboarding_steps.dart`, each on an `OnboardingPage` with the icon of the step. On the page of a step, the button below the pages is the action of the step. It spins while its `run` runs, or is disabled then in an app that asks for less motion. The `later` of the step is a second button below it, and Skip skips the steps too.
 - The pages animate when they are first shown and while they turn, and each of these animations ends. Keep it so in a page of your own: a test that waits for the app to settle with `pumpAndSettle()` never ends on a screen that animates without end.
 - `onboardingStatus` in `lib/features/onboarding/onboarding_status.dart` has what the guard reads, and saves it in the preferences under `onboarding.completed`. Its `complete()`, which Skip and the button on the last page call, finishes the onboarding, and its `restart()` starts it again. Nothing else shows the onboarding again: call `restart()` where the user asks to see it, and do not navigate. The router shows the onboarding and, once it is finished, the screen that the user was on, or the screen below the pages pushed over it.
 - In a test that starts the app to check another screen, call `onboardingStatus.complete()` before the app starts. It saves nothing then, and the app does not show the onboarding.
+
+## Onboarding screen
+
+- The onboarding shows the steps of `appOnboardingSteps` in `lib/core/onboarding/onboarding_steps.dart`, each on a page of its own, in the order of the list. A step is an `OnboardingStep`: an `icon`, a `title`, a `text`, the label of its `action` and the function `run` that the action calls. Its `later` is the label of a button that goes on without calling `run`, and the onboarding leaves the step out when its `showIf` returns `false` as the onboarding opens.
+- To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` returns a `Future`, and `showIf` returns a `bool` at once. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
+- Skipping the onboarding skips its steps. So the app does not rely on `run` alone for what a step does, such as asking for a permission: the code that needs it calls the same function too.
 
 ## Preferences
 
@@ -2833,6 +2840,59 @@ String _homeHomeLabel(BuildContext context) => context.l10n.homeLabel;
 
 String _settingsSettingsLabel(BuildContext context) =>
     context.l10n.settingsTitle;
+=== lib/core/onboarding/onboarding_steps.dart (role:onboarding_screen) ===
+import 'package:flutter/widgets.dart';
+
+/// A step of the onboarding, such as a page that asks for a permission: an
+/// icon, a title, a text, and a button whose action is [run].
+///
+/// The onboarding shows each step of [appOnboardingSteps] on a page of its
+/// own, in the order of the list, unless [showIf] returns `false` when the
+/// onboarding opens. Skipping the onboarding skips its steps too.
+final class OnboardingStep {
+  /// Creates a step with [icon], [title] and [text], whose button [action]
+  /// calls [run], and with a second button [later] if it is set.
+  const OnboardingStep({
+    required this.icon,
+    required this.title,
+    required this.text,
+    required this.action,
+    required this.run,
+    this.later,
+    this.showIf,
+  });
+
+  /// The icon of the page of the step.
+  final IconData icon;
+
+  /// Returns the title of the page in the language of the app, for the
+  /// context of the widget that shows it. That widget calls it each time it
+  /// builds, so the text follows the language of the app.
+  final String Function(BuildContext context) title;
+
+  /// Returns the text of the page below its title, as [title] does.
+  final String Function(BuildContext context) text;
+
+  /// Returns the label of the button that calls [run], as [title] does.
+  final String Function(BuildContext context) action;
+
+  /// What the button [action] does, such as asking for a permission. The
+  /// onboarding goes on to its next page once the future completes, also
+  /// when it fails.
+  final Future<void> Function() run;
+
+  /// Returns the label of the button that goes on to the next page without
+  /// calling [run], as [title] does, or is `null` for a step without that
+  /// button.
+  final String Function(BuildContext context)? later;
+
+  /// Whether the onboarding shows the step, which it asks once when it
+  /// opens, or `null` for a step that it always shows.
+  final bool Function()? showIf;
+}
+
+/// The steps of the onboarding, in the order in which it shows them.
+const List<OnboardingStep> appOnboardingSteps = [];
 === lib/core/preferences/app_preferences.dart (role:preferences) ===
 import 'package:flutter/foundation.dart';
 import 'package:my_app/core/l10n/app_locale.dart';
@@ -5668,7 +5728,9 @@ import 'package:my_app/core/l10n/l10n.dart';
 /// To change what the onboarding shows, change this list. A page is any
 /// widget, such as an [OnboardingPage]. The screen of the onboarding shows
 /// them one at a time, with Skip above them and, below them, a mark for
-/// each page and the button that leads on.
+/// each page and the button that leads on. Before the last page of the
+/// list, it shows the steps that the modules of the app add to the
+/// onboarding, each on an [OnboardingPage] with the icon of the step.
 List<Widget> onboardingPages(BuildContext context) => [
   OnboardingPage(
     symbol: 'Ma',
@@ -6113,13 +6175,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
+import '../../core/onboarding/onboarding_steps.dart';
 import 'onboarding_pages.dart';
 import 'onboarding_status.dart';
 
 /// The onboarding of the app, which the app shows on its first launch in
-/// place of every other screen: the pages of [onboardingPages], with Skip
-/// above them, and below them a mark for each page and a button that leads
-/// to the next page and, on the last one, into the app.
+/// place of every other screen: the pages of [onboardingPages], with the
+/// steps that the modules of the app add, [appOnboardingSteps], before the
+/// last of them. Skip is above the pages, and below them are a mark for
+/// each page and a button that leads to the next page and, on the last
+/// one, into the app.
+///
+/// A step is a page in the look of the others, with the icon of the step
+/// in its cell. On the page of a step, the button below the pages is the
+/// action of the step: it calls the function of the step, spins until the
+/// future of that function completes, or takes no tap until then in an app
+/// that asks for less motion, and then shows the next page, also when the
+/// future fails. A step may have a second button below it, which
+/// goes on without the action. Skip skips the steps too.
 ///
 /// Skip and the last button finish the onboarding. The screen does not
 /// navigate, and nothing navigates to it: the router shows it while the
@@ -6141,8 +6214,20 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _controller = PageController();
 
+  /// The steps that the screen shows: those of [appOnboardingSteps] whose
+  /// showIf keeps them when the screen opens. A step stays while the
+  /// screen is shown, also once its showIf would leave it out.
+  late final List<OnboardingStep> _steps = [
+    for (final step in appOnboardingSteps)
+      if (step.showIf?.call() ?? true) step,
+  ];
+
   /// The index of the page that the user sees.
   var _page = 0;
+
+  /// Whether the action of a step runs: until its future completes, the
+  /// pages stay where they are and the buttons of the step take no tap.
+  var _running = false;
 
   @override
   void dispose() {
@@ -6163,10 +6248,63 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
+  /// Calls the action of [step], and shows the next page once its future
+  /// completes, also when it fails: the error goes on to the handlers of
+  /// the errors of the app that nothing caught.
+  Future<void> _run(OnboardingStep step) async {
+    setState(() => _running = true);
+    try {
+      await step.run();
+    } finally {
+      if (mounted) {
+        setState(() => _running = false);
+        _next();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pages = onboardingPages(context);
+    final own = onboardingPages(context);
+    // The steps come before the last page of the list.
+    final first = own.isEmpty ? 0 : own.length - 1;
+    final pages = [
+      ...own.take(first),
+      for (final step in _steps)
+        OnboardingPage(
+          icon: step.icon,
+          title: step.title(context),
+          text: step.text(context),
+        ),
+      ...own.skip(first),
+    ];
     final isLast = _page == pages.length - 1;
+    // The step whose page the user sees, if it is one.
+    final step = _page >= first && _page < first + _steps.length
+        ? _steps[_page - first]
+        : null;
+    // While the action of a step runs, its button spins, but not in an app
+    // that asks for less motion, where it takes no tap instead.
+    final spins = _running && !MediaQuery.disableAnimationsOf(context);
+    // What the button below the pages does, and what it says.
+    final VoidCallback? onPressed;
+    final String label;
+    if (step == null) {
+      onPressed = isLast ? onboardingStatus.complete : _next;
+      label = isLast
+          ? context.l10n.onboardingDone
+          : context.l10n.onboardingNext;
+    } else {
+      // A button that spins keeps its colour and does nothing.
+      onPressed = _running ? (spins ? () {} : null) : () => _run(step);
+      label = step.action(context);
+    }
+    // The steps with a second button, which is below the button of the
+    // pages while the page of its step is shown.
+    final withLater = [
+      for (final other in _steps)
+        if (other.later != null) other,
+    ];
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     // How long Skip and the label of the button take to change with the
@@ -6221,48 +6359,81 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
               Expanded(
-                child: PageView(
-                  controller: _controller,
-                  onPageChanged: (page) {
-                    HapticFeedback.selectionClick();
-                    setState(() => _page = page);
-                  },
-                  children: [
-                    for (final (index, page) in pages.indexed)
-                      OnboardingPageScope(
-                        index: index,
-                        controller: _controller,
-                        child: page,
-                      ),
-                  ],
+                // The pages stay where they are while the action of a step
+                // runs.
+                child: IgnorePointer(
+                  ignoring: _running,
+                  child: PageView(
+                    controller: _controller,
+                    onPageChanged: (page) {
+                      HapticFeedback.selectionClick();
+                      setState(() => _page = page);
+                    },
+                    children: [
+                      for (final (index, page) in pages.indexed)
+                        OnboardingPageScope(
+                          index: index,
+                          controller: _controller,
+                          child: page,
+                        ),
+                    ],
+                  ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(28, 20, 28, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: _PageMarks(
-                        controller: _controller,
-                        count: pages.length,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: isLast ? onboardingStatus.complete : _next,
-                      child: AnimatedSwitcher(
-                        duration: fade,
-                        child: Text(
-                          isLast
-                              ? context.l10n.onboardingDone
-                              : context.l10n.onboardingNext,
-                          key: ValueKey(isLast),
+                // The labels of the buttons grow only by half with the text
+                // size of the device: the pages take the room that the
+                // buttons leave, and would have none left on a small phone.
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.5,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _PageMarks(
+                          controller: _controller,
+                          count: pages.length,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 24),
+                      FilledButton(
+                        onPressed: onPressed,
+                        child: AnimatedSwitcher(
+                          duration: fade,
+                          child: _ButtonLabel(
+                            label,
+                            spins: spins,
+                            key: ValueKey<Object>(step ?? isLast),
+                          ),
+                        ),
+                      ),
+                      // The second button of a step, in a place of the height
+                      // of the tallest of them, so that the pages keep their
+                      // height from page to page. Only the one of the step
+                      // whose page is shown is on the screen: the others take
+                      // no tap and no focus.
+                      if (withLater.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: IndexedStack(
+                            alignment: Alignment.center,
+                            index: step?.later == null
+                                ? withLater.length
+                                : withLater.indexOf(step!),
+                            children: [
+                              for (final other in withLater)
+                                TextButton(
+                                  onPressed: _running ? null : _next,
+                                  child: Text(other.later!(context)),
+                                ),
+                              const SizedBox.shrink(),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -6271,6 +6442,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
+}
+
+/// The label of the button below the pages, or what spins in its place
+/// while the action of a step runs.
+class _ButtonLabel extends StatelessWidget {
+  const _ButtonLabel(this.label, {required this.spins, super.key});
+
+  final String label;
+  final bool spins;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    alignment: Alignment.center,
+    children: [
+      // The label keeps its place, so that the button keeps its size.
+      Visibility.maintain(visible: !spins, child: Text(label)),
+      if (spins)
+        // In the colour that the button gives its label.
+        SizedBox.square(
+          dimension: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: DefaultTextStyle.of(context).style.color,
+          ),
+        ),
+    ],
+  );
 }
 
 /// A mark for each of [count] pages, with the one of the page that the user

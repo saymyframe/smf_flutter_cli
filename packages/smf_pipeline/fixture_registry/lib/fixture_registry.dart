@@ -156,7 +156,10 @@ List<ModuleId> everyFixture({
 /// after the entry of the theme mode; the onboarding module of the CLI,
 /// for the app test that it keeps, whose guard of the routes keeps the user
 /// from every other screen of the app until the mocks of that test open it
-/// for the tests of the other modules; the home module of the CLI, for
+/// for the tests of the other modules, and which provides the onboarding
+/// screen role, with the fixture steps, whose actions note their calls, for
+/// the test of that role and for the steps of that app test; the home
+/// module of the CLI, for
 /// the app test that it keeps for its screen. It comes after the fixture
 /// feature, on whose screen the app starts, so that test goes to its screen
 /// through the navigation of the router role, and reads its texts from the
@@ -203,6 +206,7 @@ List<SmfModule> severalProvidersModules() => const [
       MaterialThemeModule(),
       FakeL10nModule(),
       OnboardingModule(),
+      FakeStepsModule(),
       HomeModule(),
       FirebaseAuthModule(),
       BlocModule(),
