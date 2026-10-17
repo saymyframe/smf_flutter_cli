@@ -17,6 +17,14 @@
 # with adb or simctl, and waits for the line that the check writes to the
 # file smf_start_check in the temporary directory of the app: `passed`, or
 # `failed: ` and the problems.
+# Nothing connects to the app, unlike flutter test, which must reach the VM
+# service of the app and sometimes never does on the emulators and
+# simulators of CI (on an iOS simulator, a race of flutter_tools:
+# https://github.com/flutter/flutter/issues/181771). So a run that fails
+# is not tried again. The script fails when the check fails, when the app
+# stops before the check writes its result, as when it crashes at start-up,
+# and when the result does not come in time, and then prints the log of
+# the app.
 #
 # $4 is the build mode of the app: debug, as when it is left out, or
 # release, on Android only, since Flutter builds no release app for an iOS
@@ -30,14 +38,6 @@
 # the log of the device instead, from the process that it launched, so
 # that a line of an earlier run, which the log may still have, does not
 # count.
-# Nothing connects to the app, unlike flutter test, which must reach the VM
-# service of the app and sometimes never does on the emulators and
-# simulators of CI (on an iOS simulator, a race of flutter_tools:
-# https://github.com/flutter/flutter/issues/181771). So a run that fails
-# is not tried again. The script fails when the check fails, when the app
-# stops before the check writes its result, as when it crashes at start-up,
-# and when the result does not come in time, and then prints the log of
-# the app.
 set -euo pipefail
 # shellcheck source=build_apk.sh
 source "$(dirname "${BASH_SOURCE[0]}")/build_apk.sh"
