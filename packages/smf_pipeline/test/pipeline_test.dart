@@ -1166,9 +1166,9 @@ void main() {
       ];
 
       const unused =
-          '--start has no effect: no module of the app provides the nav role.';
+          '--entry has no effect: no module of the app provides the nav role.';
 
-      // The request gives --start, an option of the nav role.
+      // The request gives --entry, an option of the nav role.
       await expectLater(
         pipeline(modules, FakeHost()).plan(request(['fine'], strict: true)),
         stops(stoppedByOne, ['warning pipeline.unused_option: $unused']),

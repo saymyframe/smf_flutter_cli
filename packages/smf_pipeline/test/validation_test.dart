@@ -100,7 +100,7 @@ void main() {
           options: [RoleOption(name: option, help: '')],
           template: TestTemplate(),
         );
-    final present = withOption('present', 'start');
+    final present = withOption('present', 'entry');
     final absent = withOption('absent', 'chime');
     final modules = [
       scaffold(),
@@ -114,7 +114,7 @@ void main() {
       resolution: resolution,
       collection: collect(resolution, testContext),
       context: testContext,
-      optionValues: const {'start': '/home', 'chime': null, 'flavor': 'x'},
+      optionValues: const {'entry': '/home', 'chime': null, 'flavor': 'x'},
     );
 
     const unused = 'warning pipeline.unused_option: --chime has no effect: '
