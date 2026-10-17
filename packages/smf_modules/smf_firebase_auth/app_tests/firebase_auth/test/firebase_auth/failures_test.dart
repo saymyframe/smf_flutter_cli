@@ -387,11 +387,15 @@ void main() {
       ),
     };
 
+    // The script of the app enables Google, and only the Firebase console
+    // Apple.
+    const script = 'run `dart tool/enable_firebase_sign_in.dart` in the '
+        'directory of the app, or ';
     String hint(String method) =>
         'notConfigured (Sign-in with $method is not enabled in the Firebase '
         'project $project (Firebase answered operation-not-allowed). To fix '
-        'it, enable $method in the Firebase console under Authentication > '
-        'Sign-in method: $link)';
+        "it, ${method == 'Google' ? script : ''}enable $method in the "
+        'Firebase console under Authentication > Sign-in method: $link)';
     expect(
       found,
       {

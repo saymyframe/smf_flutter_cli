@@ -1684,10 +1684,15 @@ void main() {
             'gives a sign-in with a credential the reason of the auth role '
             'for each code of Firebase, and names its way to sign in in the '
             'hint of one that is not enabled', () {
+          // The script of the app enables Google, and only the Firebase
+          // console Apple.
+          const script = 'run `$enableSignInCommand` in the directory of the '
+              'app, or ';
           String notEnabled(String method) =>
               'notConfigured: Sign-in with $method is not enabled in the '
               'Firebase project stand-in-project (Firebase answered '
-              'operation-not-allowed). To fix it, enable $method in the '
+              'operation-not-allowed). To fix it, '
+              "${method == 'Google' ? script : ''}enable $method in the "
               'Firebase console under Authentication > Sign-in method: $link';
           expect(sent['refused sign-ins'], {
             'account-exists-with-different-credential':
