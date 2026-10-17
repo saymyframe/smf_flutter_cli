@@ -240,12 +240,14 @@ abstract interface class AuthService {
   ///
   /// It takes a credential that [linkWith] refused just before, with
   /// [AuthFailureReason.credentialInUse] or
-  /// [AuthFailureReason.accountExistsWithOtherMethod], as the session gives
-  /// it: an identity provider may take a credential once, so a provider
-  /// signs in with what its backend answered the refused link with. For an
-  /// identity whose email address has an account that signs in in another
-  /// way, it fails with [AuthFailureReason.accountExistsWithOtherMethod] or
-  /// signs in to that account, as the backend of the provider does.
+  /// [AuthFailureReason.accountExistsWithOtherMethod]: the session passes
+  /// the identical object. An identity provider may take a credential only
+  /// once, so the service signs in with what its backend answered the
+  /// refused link for that object, or with the credential itself when the
+  /// backend gave nothing. For an identity whose email address has an
+  /// account that signs in in another way, it fails with
+  /// [AuthFailureReason.accountExistsWithOtherMethod] or signs in to that
+  /// account, as the backend of the provider decides.
   Future<void> signInWith(SignInCredential credential);
 
   /// Gives the user who is signed in the identity of [credential]: the user
@@ -258,6 +260,12 @@ abstract interface class AuthService {
   /// account of another user, with
   /// [AuthFailureReason.accountExistsWithOtherMethod]. Either way it changes
   /// nothing: the user stays signed in, with the same id.
+  ///
+  /// When it fails with either reason, it keeps what its backend answered
+  /// for this credential object, such as a credential to sign in with,
+  /// without holding the token longer than needed. The session passes the
+  /// identical object to [signInWith], which uses that answer, or the
+  /// credential itself when the backend gave nothing.
   Future<void> linkWith(SignInCredential credential);
 
   /// Creates an anonymous user, with an id of its own, and signs in as that

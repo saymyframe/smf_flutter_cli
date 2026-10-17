@@ -54,7 +54,7 @@ SignInMethod _method({
 }) =>
     SignInMethod(
       label: label,
-      icon: const Fragment('FakeIcon()', imports: [_methodFile]),
+      icon: const TypeRef('FakeIcon', import: _methodFile),
       platforms: platforms,
       credential: const FunctionRef('fakeCredential', import: _methodFile),
       issuer: issuer,
@@ -998,6 +998,23 @@ Future<void> main(List<String> arguments, SendPort port) async {
     };
     session.dispose();
   }
+
+  // A sign-in with a credential made before the start of an app with
+  // anonymous users finds the anonymous user of the start, who gets the
+  // identity.
+  onDevice = null;
+  final session = AppSessionController(
+    mode: AuthMode.anonymous,
+    takeGuestData: takeGuestData,
+  );
+  final signedIn = session.signInWith(credential);
+  await session.start(FakeAuth());
+  await signedIn;
+  result['a credential before the start of an app with anonymous users'] = {
+    'calls': takeCalls(),
+    'state': show(session.value),
+  };
+  session.dispose();
   port.send(result);
 }
 ''';
@@ -1510,9 +1527,29 @@ Future<void> main(List<String> arguments, SendPort port) async {
     session = AppSessionController(mode: mode, takeGuestData: take);
     await session.start(FakeAuth());
     await signIn(session);
+    final signedIn = note(session);
+    session.dispose();
+    // A credential of a new identity, and then one of an identity that
+    // the user of the first has.
+    final identity = IdTokenCredential(
+      issuer: 'https://id.example.com',
+      idToken: 'token-of-$name',
+    );
+    onDevice = AuthUser(uid: 'linked-$name', isAnonymous: true);
+    session = AppSessionController(mode: mode, takeGuestData: take);
+    await session.start(FakeAuth());
+    await session.signInWith(identity);
+    final linked = note(session);
+    session.dispose();
+    onDevice = AuthUser(uid: 'guest-$name', isAnonymous: true);
+    session = AppSessionController(mode: mode, takeGuestData: take);
+    await session.start(FakeAuth());
+    await session.signInWith(identity);
     result['an anonymous user in the mode $name'] = {
       'signs up': signedUp,
-      'signs in': note(session),
+      'signs in': signedIn,
+      'signs in with a new identity': linked,
+      'signs in with the identity of another user': note(session),
     };
     session.dispose();
   }
@@ -1863,6 +1900,24 @@ Future<void> main(List<String> arguments, SendPort port) async {
     result['a link that fails with $name'] = note(session, failure);
     session.dispose();
   }
+
+  // A call made while the link waits runs after the whole sign-in, the
+  // sign-in that follows the refused link too.
+  session = await sessionOf(AuthMode.anonymous);
+  final hold = holds['linkWith'] = Completer<void>();
+  final signedIn = session.signInWith(credential);
+  final signedOut = session.signOut();
+  await pump();
+  final whileTheLinkWaits = takeCalls();
+  holds.clear();
+  hold.complete();
+  await signedIn;
+  await signedOut;
+  result['a sign-out while the link waits'] = {
+    'calls while the link waits': whileTheLinkWaits,
+    ...note(session),
+  };
+  session.dispose();
   port.send(result);
 }
 ''';
@@ -2195,6 +2250,14 @@ List<SmfIssue> _methodModuleIssues(
   );
 }
 
+/// The index of the icon of the way to sign in of the tests, a class with
+/// a `const` unnamed constructor that requires no arguments.
+const _fakeIcon = IndexedDeclaration(
+  name: 'FakeIcon',
+  kind: DeclarationKind.classType,
+  constructors: [IndexedConstructor(isConst: true)],
+);
+
 void main() {
   group('the auth role', () {
     test(
@@ -2245,6 +2308,7 @@ void main() {
           'auth.start_calls',
           'auth.implementation_factories',
           'auth.method_functions',
+          'auth.method_icons',
         ],
       );
     });
@@ -3176,6 +3240,15 @@ void main() {
 
         expect(await app.run('$_notes$_earlyCalls'), {
           for (final mode in AuthMode.values) mode.name: expected(mode),
+          // The call waits for the anonymous user of the start, so it links
+          // the identity to that user.
+          'a credential before the start of an app with anonymous users': {
+            'calls': [
+              'signInAnonymously',
+              'linkWith IdTokenCredential(https://id.example.com)',
+            ],
+            'state': 'account user-5 null',
+          },
         });
       });
 
@@ -3428,6 +3501,21 @@ void main() {
               'signs in': note(
                 owner,
                 ['take other-$mode', 'signIn $_email', 'give owner'],
+              ),
+              // The anonymous user gets the new identity with the id, and
+              // the next one signs in to the user of that identity.
+              'signs in with a new identity': note(
+                'account linked-$mode null',
+                ['linkWith IdTokenCredential(https://id.example.com)'],
+              ),
+              'signs in with the identity of another user': note(
+                'account linked-$mode null',
+                [
+                  'linkWith IdTokenCredential(https://id.example.com)',
+                  'take guest-$mode',
+                  'signInWith IdTokenCredential(https://id.example.com)',
+                  'give linked-$mode',
+                ],
               ),
             },
           'the function of the app has nothing to move': true,
@@ -3698,7 +3786,11 @@ void main() {
         ],
       ).single;
       expect(issue.message, contains('socket auth.implementations'));
-      expect(issue.hint, contains('RoleImplementation'));
+      expect(
+        issue.hint,
+        'Contribute the implementation as data of the role, '
+        'AuthImplementation, instead.',
+      );
     });
 
     test(
@@ -4006,11 +4098,12 @@ void main() {
     });
 
     test(
-        'reports an icon that is no expression, a way to sign in on no '
-        'platform, and a function that is no public function of the app', () {
+        'reports an icon that is no class of a file of the app, a way to '
+        'sign in on no platform, and a function that is no public function '
+        'of the app', () {
       final problems = const SignInMethod(
         label: LocalizedText('label', en: 'Continue with Example'),
-        icon: Fragment.wrap('Center(child: ', ')'),
+        icon: TypeRef('Icon'),
         platforms: {},
         credential: FunctionRef(
           '_credential',
@@ -4020,36 +4113,37 @@ void main() {
         appStore: AppStoreLogin.thirdParty,
       ).problems();
 
-      const noExpression = 'The way to sign in of https://id.example.com has '
-          'an icon that is not an expression, such as Icon(Icons.key).';
+      const outsideIcon = 'The icon Icon of the way to sign in of '
+          'https://id.example.com must be a widget class of a file of the '
+          'app, imported with ImportRef.app.';
       const noPlatform = 'The way to sign in of https://id.example.com names '
           'no platform that it works on.';
       const outside = 'The function _credential of the way to sign in of '
           'https://id.example.com must be a function of a file of the app, '
           'imported with ImportRef.app.';
       expect(problems, [
-        noExpression,
+        outsideIcon,
         noPlatform,
         'The function "_credential" is not a public Dart function name.',
         outside,
       ]);
+      const badName = 'The type "_Icon" is not a public Dart type name.';
+      const ofPackage = 'The icon _Icon of the way to sign in of '
+          'https://id.example.com must be a widget class of a file of the '
+          'app, imported with ImportRef.app.';
       expect(
         const SignInMethod(
           label: LocalizedText('label', en: 'Continue with Example'),
-          icon: Fragment(
-            ' ',
-            imports: [ImportRef('package:flutter/material.dart', prefix: '1')],
+          icon: TypeRef(
+            '_Icon',
+            import: ImportRef('package:flutter/material.dart'),
           ),
           platforms: {AppPlatform.ios},
           credential: FunctionRef('credential', import: _methodFile),
           issuer: _issuer,
           appStore: AppStoreLogin.privacyFocused,
         ).problems(),
-        [
-          noExpression,
-          ...const ImportRef('package:flutter/material.dart', prefix: '1')
-              .problems(),
-        ],
+        [badName, ofPackage],
       );
     });
   });
@@ -4176,7 +4270,7 @@ void main() {
           authRole,
           const SignInMethod(
             label: LocalizedText('label', en: "Continue with 'Second'"),
-            icon: Fragment('SecondIcon()', imports: [_secondFile]),
+            icon: TypeRef('SecondIcon', import: _secondFile),
             platforms: {AppPlatform.ios, AppPlatform.android},
             credential: FunctionRef('secondCredential', import: _secondFile),
             issuer: 'https://second.example.com',
@@ -4189,7 +4283,7 @@ void main() {
       expect(_itemsOf(code), [
         {
           'label': '_exampleSignInLabel',
-          'icon': 'FakeIcon()',
+          'icon': 'method0.FakeIcon()',
           'platforms': '{TargetPlatform.android, TargetPlatform.iOS}',
           'credential': 'method0.fakeCredential',
           'issuer': "'https://id.example.com'",
@@ -4199,14 +4293,14 @@ void main() {
         // one before, so the name of its function takes a number.
         {
           'label': '_exampleSignInLabel2',
-          'icon': 'FakeIcon()',
+          'icon': 'method0.FakeIcon()',
           'platforms': '{TargetPlatform.iOS}',
           'credential': 'method0.fakeCredential',
           'issuer': "'https://ios.example.com'",
         },
         {
           'label': '_secondSignInLabel',
-          'icon': 'SecondIcon()',
+          'icon': 'method1.SecondIcon()',
           'platforms': '{TargetPlatform.android, TargetPlatform.iOS}',
           'credential': 'method1.secondCredential',
           'issuer': "'https://second.example.com'",
@@ -4216,9 +4310,9 @@ void main() {
         'package:flutter/foundation.dart',
         'package:flutter/widgets.dart',
         'auth_service.dart',
-        'package:my_app/fakes/fake_method.dart',
+        // One import of each file, with a prefix of the template's own, for
+        // the icon and the function of the ways to sign in.
         'package:my_app/fakes/fake_method.dart method0',
-        'package:my_app/fakes/second_method.dart',
         'package:my_app/fakes/second_method.dart method1',
       ]);
       // Without the texts of the app, each label is its English text.
@@ -4562,20 +4656,28 @@ void main() {
     });
 
     test(
-        'rejects a function in a file that the bricks of the module do not '
-        'generate', () {
-      final issue = _methodModuleIssues([method, texts]).single;
+        'rejects a function and an icon in files that the bricks of the '
+        'module do not generate', () {
+      final issues = _methodModuleIssues([method, texts]);
 
       expect(
-        issue.message,
-        'The function fakeCredential of the way to sign in of '
-        'https://id.example.com is in lib/fakes/fake_method.dart, which the '
-        'bricks of the module do not generate.',
-      );
-      expect(issue.path, _methodPath);
-      expect(
-        issue.hint,
-        'Generate the file of the function in a brick of the module.',
+        [for (final issue in issues) (issue.message, issue.hint, issue.path)],
+        [
+          (
+            'The function fakeCredential of the way to sign in of '
+                'https://id.example.com is in lib/fakes/fake_method.dart, '
+                'which the bricks of the module do not generate.',
+            'Generate the file of the function in a brick of the module.',
+            _methodPath,
+          ),
+          (
+            'The icon FakeIcon of the way to sign in of '
+                'https://id.example.com is in lib/fakes/fake_method.dart, '
+                'which the bricks of the module do not generate.',
+            'Generate the file of the icon in a brick of the module.',
+            _methodPath,
+          ),
+        ],
       );
     });
   });
@@ -4635,6 +4737,7 @@ void main() {
               type: type,
               parameters: parameters,
             ),
+            _fakeIcon,
           ],
           invocations: invocations,
           references: references,
@@ -4705,19 +4808,25 @@ void main() {
         'rejects a missing function, and a function in a file of another '
         'module', () {
       expect(
-        issuesOf([const DartFileIndex(path: _methodPath)]).single.message,
+        issuesOf([
+          const DartFileIndex(path: _methodPath, declarations: [_fakeIcon]),
+        ]).single.message,
         contains('does not declare function fakeCredential()'),
       );
-      final issue = issuesOf(
-        [functionFile()],
-        owners: {_methodPath: const ModuleOrigin(ModuleId('other'))},
-      ).single;
       expect(
-        issue.message,
-        'The function fakeCredential of the way to sign in of '
-        'https://id.example.com of example_sign_in is in '
-        'lib/fakes/fake_method.dart, a file of other; a way to sign in calls '
-        'a function of its own module.',
+        [
+          for (final issue in issuesOf(
+            [functionFile()],
+            owners: {_methodPath: const ModuleOrigin(ModuleId('other'))},
+          ))
+            issue.message,
+        ],
+        contains(
+          'The function fakeCredential of the way to sign in of '
+          'https://id.example.com of example_sign_in is in '
+          'lib/fakes/fake_method.dart, a file of other; a way to sign in '
+          'calls a function of its own module.',
+        ),
       );
     });
 
@@ -4747,6 +4856,7 @@ void main() {
               kind: DeclarationKind.function,
               type: 'Future<SignInCredential?>',
             ),
+            _fakeIcon,
           ],
           memberAccesses: [IndexedMemberAccess('session', 'appSession')],
         ),
@@ -4764,13 +4874,16 @@ void main() {
       }
     });
 
-    test('leaves a function of a package to the compiler', () {
+    test('leaves a function and an icon of a package to the compiler', () {
       expect(
         issuesOf(
           const [],
           method: const SignInMethod(
             label: LocalizedText('label', en: 'Continue with Example'),
-            icon: Fragment('Icon(Icons.key)'),
+            icon: TypeRef(
+              'ExampleIcon',
+              import: ImportRef('package:example/example.dart'),
+            ),
             platforms: {AppPlatform.ios},
             credential: FunctionRef(
               'credential',
@@ -4859,6 +4972,22 @@ void main() {
           failure: 'unknown, hint Bad state: The link broke., thrown in '
               'fake_auth.dart',
         ),
+        // The sign-out waits for the sign-in to the account of the
+        // identity, and the app then has a new anonymous user.
+        'a sign-out while the link waits': {
+          'calls while the link waits': [link],
+          ...note(
+            'anonymous user-11',
+            [
+              'take user-10',
+              signIn,
+              'give user-3',
+              'signOut',
+              'signInAnonymously',
+            ],
+            issuers: '-',
+          ),
+        },
       });
     });
   });
@@ -4996,10 +5125,12 @@ void main() {
           '\n'
           'A screen of sign-in shows the button of a way to sign in only on '
           'the platforms that it works on. When an anonymous user signs in '
-          'this way, the user gets the identity and keeps the id if no '
-          'account has it yet, and otherwise signs in to that account, as '
-          'with a password, and `takeGuestData()` moves what the anonymous '
-          'user had.\n',
+          'this way and no account has the identity yet, the user gets the '
+          'identity and keeps the id. Otherwise the user signs in to that '
+          'account, as with a password, and `takeGuestData()` moves what the '
+          'anonymous user had. The sign-in may also fail, because the address '
+          'of the identity has an account that signs in in another way: the '
+          'provider of sign-in decides which.\n',
         ),
       );
     });
@@ -5019,7 +5150,7 @@ void main() {
         appStore: AppStoreLogin.thirdParty,
       );
 
-      expect(await sectionWith([thirdParty]), endsWith('had.\n\n$asks'));
+      expect(await sectionWith([thirdParty]), endsWith('which.\n\n$asks'));
       expect(await sectionWith([thirdParty, _method()]), isNot(contains(asks)));
       expect(
         await sectionWith([
@@ -5030,6 +5161,112 @@ void main() {
           ),
         ]),
         isNot(contains(asks)),
+      );
+    });
+  });
+
+  group('the structural rule auth.method_icons', () {
+    /// The issues of the structural rules of the role in an app with the
+    /// way to sign in of the module `example_sign_in` and with the file of
+    /// its function and its icon, which declares [icon], owned by [owner].
+    List<SmfIssue> issuesWith(
+      IndexedDeclaration? icon, {
+      ContributionOrigin owner =
+          const ModuleOrigin(ModuleId('example_sign_in')),
+    }) =>
+        authRole.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: [dataOf(authRole, _method(), module: 'example_sign_in')],
+              presentRoles: {authRole},
+              context: testContext,
+            ),
+            files: {
+              _methodPath: DartFileIndex(
+                path: _methodPath,
+                declarations: [
+                  const IndexedDeclaration(
+                    name: 'fakeCredential',
+                    kind: DeclarationKind.function,
+                    type: 'Future<SignInCredential?>',
+                  ),
+                  if (icon != null) icon,
+                ],
+              ),
+            },
+            owners: {_methodPath: owner},
+          ),
+        );
+
+    test(
+        'accepts an icon that is a class with a const unnamed constructor '
+        'that requires no arguments', () {
+      expect(issuesWith(_fakeIcon), isEmpty);
+    });
+
+    test(
+        'rejects a missing class, one without a const constructor, and one '
+        'whose constructor requires an argument, which the list cannot '
+        'create as a constant', () {
+      const hint = 'The list of the ways to sign in creates the icon as a '
+          'constant, without arguments.';
+      final issues = {
+        for (final (name, icon) in [
+          ('missing', null),
+          (
+            'not const',
+            const IndexedDeclaration(
+              name: 'FakeIcon',
+              kind: DeclarationKind.classType,
+              constructors: [IndexedConstructor()],
+            ),
+          ),
+          (
+            'an argument',
+            const IndexedDeclaration(
+              name: 'FakeIcon',
+              kind: DeclarationKind.classType,
+              constructors: [
+                IndexedConstructor(
+                  isConst: true,
+                  parameters: [
+                    IndexedParameter(
+                      'size',
+                      kind: ParameterKind.requiredPositional,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ])
+          name: [
+            for (final issue in issuesWith(icon))
+              if (issue.hint == hint) issue.message,
+          ],
+      };
+
+      expect(issues, {
+        'missing': [contains('does not declare class FakeIcon')],
+        'not const': [contains('FakeIcon')],
+        'an argument': [contains('FakeIcon')],
+      });
+    });
+
+    test('rejects an icon in a file of another module', () {
+      expect(
+        [
+          for (final issue in issuesWith(
+            _fakeIcon,
+            owner: const ModuleOrigin(ModuleId('other')),
+          ))
+            issue.message,
+        ],
+        contains(
+          'The icon FakeIcon of the way to sign in of https://id.example.com '
+          'of example_sign_in is in lib/fakes/fake_method.dart, a file of '
+          'other; a way to sign in shows an icon of its own module.',
+        ),
       );
     });
   });

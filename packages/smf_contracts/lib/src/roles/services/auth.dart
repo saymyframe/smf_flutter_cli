@@ -182,8 +182,10 @@ enum AuthMode {
 /// service, so the user keeps the id. When that fails with
 /// `credentialInUse` or `accountExistsWithOtherMethod`, the identity has
 /// an account already, and the session signs in to it with `signInWith`
-/// and the same credential, moving the data of the guest as it does for
-/// `signIn`. The user of an account, and nobody, signs in with
+/// and the identical credential object, moving the data of the guest as it
+/// does for `signIn`. That sign-in may fail with
+/// `accountExistsWithOtherMethod` too, as the backend of the provider
+/// decides. The user of an account, and nobody, signs in with
 /// `signInWith` at once.
 ///
 /// For an account with a way to sign in that [SignInMethod.revokesOnDeletion]
@@ -255,8 +257,12 @@ enum AuthMode {
 /// - `linkWith` of an identity that another user has fails with
 ///   `credentialInUse`, and of one whose email address has an account of
 ///   another user with `accountExistsWithOtherMethod`, and changes nothing.
-///   `signInWith` then takes the same credential, which an identity
-///   provider may take only once;
+///   It keeps what its backend answered for that credential object, such
+///   as a credential to sign in with, without holding the token longer
+///   than needed. The session passes the identical object to `signInWith`,
+///   which uses that answer, or the credential itself when the backend
+///   gave nothing, since an identity provider may take a credential only
+///   once;
 /// - a credential whose identity provider the provider does not take fails
 ///   with `notConfigured`, with the issuer in the hint;
 /// - `deleteAccount(fresh:)` signs the user in again with the credential
@@ -293,12 +299,15 @@ enum AuthMode {
 /// - `auth.method_functions`: the function of every way to sign in is a
 ///   top-level function in a file of its module that takes no arguments,
 ///   returns a `Future` of a credential that may be `null`, and whose file
-///   does not use `appSession`.
+///   does not use `appSession`;
+/// - `auth.method_icons`: the icon of every way to sign in is a class in a
+///   file of its module with a `const` unnamed constructor that requires
+///   no arguments.
 ///
 /// The module rule `auth.methods` checks the ways to sign in of a module:
 /// only a module that requires or provides the role gives one, with a
-/// label, an icon, platforms and an issuer of an https URL, a function in
-/// a file that the bricks of the module generate, and each issuer once.
+/// label, platforms and an issuer of an https URL, an icon and a function
+/// in files that the bricks of the module generate, and each issuer once.
 /// The template reports two modules with ways to sign in of one issuer.
 ///
 /// They do not see a `part` file of a library that imports [sessionFile],
@@ -481,8 +490,8 @@ final class AuthRole extends Role<AuthData> {
           description: 'Only a module that requires or provides the role '
               'gives it ways to sign in, each with a label whose texts have '
               'translations only if the module lists the localization role, '
-              'an icon, platforms, an issuer that is an https URL, a '
-              'function in a file of the app that the bricks of the module '
+              'platforms, an issuer that is an https URL, an icon and a '
+              'function in files of the app that the bricks of the module '
               'generate, and an issuer of its own among the ways to sign in '
               'of the module.',
           check: _checkMethods,
@@ -519,6 +528,14 @@ final class AuthRole extends Role<AuthData> {
               'its file does not use appSession, which calls it within its '
               'own calls.',
           check: _checkMethodFunctions,
+        ),
+        StructuralRule(
+          id: 'auth.method_icons',
+          description: 'The icon of every way to sign in is a class in a file '
+              'of its module with a const unnamed constructor that requires '
+              'no arguments, which the list of the ways to sign in creates '
+              'as a constant.',
+          check: _checkMethodIcons,
         ),
       ];
 
@@ -702,25 +719,20 @@ enum SignInNeed {
 /// authRole.data(
 ///   const SignInMethod(
 ///     label: LocalizedText('label', en: 'Continue with Example'),
-///     icon: Fragment(
-///       'Icon(Icons.key)',
-///       imports: [ImportRef('package:flutter/material.dart')],
-///     ),
+///     icon: TypeRef('ExampleSignInIcon', import: file),
 ///     platforms: {AppPlatform.android, AppPlatform.ios},
-///     credential: FunctionRef(
-///       'exampleCredential',
-///       import: ImportRef.app('core/example_sign_in/example_sign_in.dart'),
-///     ),
+///     credential: FunctionRef('exampleCredential', import: file),
 ///     issuer: 'https://accounts.example.com',
 ///     appStore: AppStoreLogin.thirdParty,
 ///   ),
 /// )
 /// ```
 ///
+/// Here `file` is `ImportRef.app('core/example_sign_in/example_sign_in.dart')`.
 /// The template of the role renders it into `appSignInMethods` of
-/// [AuthRole.methodsFile] (see [AuthRole]). The module generates the file
-/// of its function in a brick of its own; the module rule `auth.methods`
-/// reports a function in a file that the bricks of the module do not
+/// [AuthRole.methodsFile] (see [AuthRole]). The module generates the files
+/// of its icon and of its function in a brick of its own; the module rule
+/// `auth.methods` reports one that the bricks of the module do not
 /// generate.
 ///
 /// The label is a text of the module (see [DataWithTexts]). A module that
@@ -743,11 +755,18 @@ final class SignInMethod extends AuthData implements DataWithTexts {
   /// The label of the button, such as `Continue with Example`.
   final LocalizedText label;
 
-  /// The icon of the button, a constant expression of the type `Widget`
-  /// with the imports it needs: an `Icon`, which takes the colour of the
-  /// label, such as `Icon(Icons.key)` of `package:flutter/material.dart`,
-  /// or an image of the module, which keeps its own colours.
-  final Fragment icon;
+  /// The icon of the button: a widget class of a file of the app that the
+  /// module generates, with a `const` unnamed constructor that requires no
+  /// arguments, such as one whose `build` returns `Icon(Icons.key)`, which
+  /// takes the colour of the label, or an image of the module, which keeps
+  /// its own colours.
+  ///
+  /// The template of the role creates it as a constant in the list, through
+  /// an import of its file with a prefix of its own, as it imports the file
+  /// of [credential], so [ImportRef.prefix] and [ImportRef.show] do not
+  /// apply, and icons of the same name in the files of two modules do not
+  /// clash.
+  final TypeRef icon;
 
   /// The platforms that the way to sign in works on. The app shows its
   /// button on no other.
@@ -806,13 +825,13 @@ final class SignInMethod extends AuthData implements DataWithTexts {
         'into its tokens.',
       );
     }
-    if (icon.isWrapper || icon.code.trim().isEmpty) {
+    problems.addAll(icon.problems());
+    if (icon.import?.isAppFile != true) {
       problems.add(
-        '$what has an icon that is not an expression, such as '
-        'Icon(Icons.key).',
+        'The icon ${icon.name} of the way to sign in of $issuer must be a '
+        'widget class of a file of the app, imported with ImportRef.app.',
       );
     }
-    problems.addAll(icon.problems());
     if (platforms.isEmpty) {
       problems.add('$what names no platform that it works on.');
     }
@@ -865,6 +884,13 @@ ContributionOrigin _methodOwnerOf(ContributionOrigin origin) =>
 String? _methodFileOf(FunctionRef function) =>
     function.import.isAppFile ? 'lib/${function.import.uri}' : null;
 
+/// The path of the file of [icon] relative to the project root, or `null`
+/// if it is not of a file of the app.
+String? _iconFileOf(TypeRef icon) => switch (icon.import) {
+      final import? when import.isAppFile => 'lib/${import.uri}',
+      _ => null,
+    };
+
 /// The problems of the ways to sign in of the module of [input], which the
 /// module rule `auth.methods` reports: a module that neither requires nor
 /// provides the role, those of each way to sign in on its own, those of
@@ -899,16 +925,18 @@ List<SmfIssue> _checkMethods(ModuleRuleInput<AuthData> input) {
           'The module gives two ways to sign in of ${method.issuer}.',
       ])
         SmfIssue(problem, origin: origin),
-      if (_methodFileOf(method.credential) case final path?
-          when !generated.containsKey(path))
-        SmfIssue(
-          'The function ${method.credential.name} of the way to sign in of '
-          '${method.issuer} is in $path, which the bricks of the module do '
-          'not generate.',
-          hint: 'Generate the file of the function in a brick of the module.',
-          origin: origin,
-          path: path,
-        ),
+      for (final (what, name, path) in [
+        ('function', method.credential.name, _methodFileOf(method.credential)),
+        ('icon', method.icon.name, _iconFileOf(method.icon)),
+      ])
+        if (path != null && !generated.containsKey(path))
+          SmfIssue(
+            'The $what $name of the way to sign in of ${method.issuer} is in '
+            '$path, which the bricks of the module do not generate.',
+            hint: 'Generate the file of the $what in a brick of the module.',
+            origin: origin,
+            path: path,
+          ),
     ],
   ];
 }
@@ -1011,6 +1039,50 @@ String _labelFunctionOf(
     name = '$base$number';
   }
   return name;
+}
+
+/// The problems with the icons that the ways to sign in of [input] name: an
+/// icon in a file of another module, a class missing from its file, and one
+/// that the list of the ways to sign in cannot create as a constant without
+/// arguments.
+///
+/// The module rule `auth.methods` reports an icon outside the app.
+List<SmfIssue> _checkMethodIcons(StructuralRuleInput<AuthData> input) {
+  final issues = <SmfIssue>[];
+  for (final data in input.roleInput.data) {
+    final origin = data.origin;
+    if (data.value case SignInMethod(:final icon, :final issuer)) {
+      final path = _iconFileOf(icon);
+      if (path == null) continue;
+      final owner = input.owners[path];
+      if (owner != null && !isContributor(owner, origin)) {
+        issues.add(
+          SmfIssue(
+            'The icon ${icon.name} of the way to sign in of $issuer of '
+            '$origin is in $path, a file of $owner; a way to sign in shows '
+            'an icon of its own module.',
+            origin: origin,
+            path: path,
+          ),
+        );
+        continue;
+      }
+      final symbol =
+          RequiredClass(icon.name, path: path, constConstructor: true);
+      for (final issue in symbol.checkIn(input.files)) {
+        issues.add(
+          SmfIssue(
+            issue.message,
+            hint: 'The list of the ways to sign in creates the icon as a '
+                'constant, without arguments.',
+            origin: origin,
+            path: path,
+          ),
+        );
+      }
+    }
+  }
+  return issues;
 }
 
 /// What the owner of a file does rather than reach the service of the
@@ -1159,10 +1231,13 @@ String _methodsSection(List<AppSignInMethod> methods) {
     ..writeln()
     ..writeln(
       'A screen of sign-in shows the button of a way to sign in only on the '
-      'platforms that it works on. When an anonymous user signs in this way, '
-      'the user gets the identity and keeps the id if no account has it yet, '
-      'and otherwise signs in to that account, as with a password, and '
-      '`takeGuestData()` moves what the anonymous user had.',
+      'platforms that it works on. When an anonymous user signs in this way '
+      'and no account has the identity yet, the user gets the identity and '
+      'keeps the id. Otherwise the user signs in to that account, as with a '
+      'password, and `takeGuestData()` moves what the anonymous user had. '
+      'The sign-in may also fail, because the address of the identity has an '
+      'account that signs in in another way: the provider of sign-in decides '
+      'which.',
     );
   if (_withoutEquivalent(methods).isNotEmpty) {
     buffer
@@ -1270,6 +1345,9 @@ final class _AuthTemplate extends _ServiceTemplate<AuthData> {
         AuthImplementation(:final implementation) => implementation,
         SignInMethod() => null,
       };
+
+  @override
+  String get implementationClass => 'AuthImplementation';
 
   @override
   MasonBundle get bundle => authRoleBundle;
@@ -1383,8 +1461,8 @@ final class _AuthTemplate extends _ServiceTemplate<AuthData> {
   }
 
   /// The ways to sign in of the app in [methods] as the items of the list
-  /// of [AuthRole.methodsFile], `methods`, with the imports of their icons
-  /// and of the files of their functions, each with a prefix of the
+  /// of [AuthRole.methodsFile], `methods`, with the imports of the files of
+  /// their icons and of their functions, each once with a prefix of the
   /// template's own, and the functions of their labels, `labels`, each of
   /// which reads the text of the module of the way to sign in from the
   /// texts of the app, or is its English text; see
@@ -1393,11 +1471,17 @@ final class _AuthTemplate extends _ServiceTemplate<AuthData> {
     RoleHookInput<AuthData> input,
     List<AppSignInMethod> methods,
   ) {
-    // A function is in a file of the app, which its path identifies.
+    // A function and an icon are in files of the app, which their paths
+    // identify, each imported once with a prefix of the template's own.
     final files = <String, ImportRef>{};
+    String prefixOf(ImportRef import) => files
+        .putIfAbsent(
+          import.uri,
+          () => import.withPrefix('method${files.length}'),
+        )
+        .prefix!;
     final items = <String>[];
     final labels = <String>[];
-    final iconImports = <ImportRef>[];
     final textImports = <ImportRef>[];
     final names = <String>{};
     for (final AppSignInMethod(:owner, :method) in methods) {
@@ -1406,12 +1490,9 @@ final class _AuthTemplate extends _ServiceTemplate<AuthData> {
       labels.add('String $function(BuildContext context) => ${label.code};');
       textImports.addAll(label.imports);
       final credential = method.credential;
-      final prefix = files
-          .putIfAbsent(
-            credential.import.uri,
-            () => credential.import.withPrefix('method${files.length}'),
-          )
-          .prefix;
+      final icon = method.icon;
+      final iconCode = icon.codeWith(prefixOf(icon.import!));
+      final credentialCode = credential.codeWith(prefixOf(credential.import));
       final platforms = [
         for (final platform in AppPlatform.values)
           if (method.platforms.contains(platform))
@@ -1423,21 +1504,17 @@ final class _AuthTemplate extends _ServiceTemplate<AuthData> {
       final item = StringBuffer()
         ..writeln('  ${AuthRole.signInMethod.name}(')
         ..writeln('    label: $function,')
-        ..writeln('    icon: ${method.icon.code},')
+        ..writeln('    icon: $iconCode(),')
         ..writeln('    platforms: {${platforms.join(', ')}},')
-        ..writeln('    credential: ${credential.codeWith(prefix)},')
+        ..writeln('    credential: $credentialCode,')
         ..writeln('    issuer: ${SmfNames.dartString(method.issuer)},');
       if (method.revokesOnDeletion) {
         item.writeln('    revokesOnDeletion: true,');
       }
       items.add('$item  ),');
-      iconImports.addAll(method.icon.imports);
     }
     return {
-      'methods': Fragment(
-        items.join('\n'),
-        imports: [...iconImports, ...files.values],
-      ),
+      'methods': Fragment(items.join('\n'), imports: [...files.values]),
       // A blank line before each function, the first after the list.
       'labels': Fragment(
         [for (final label in labels) '\n$label'].join('\n'),

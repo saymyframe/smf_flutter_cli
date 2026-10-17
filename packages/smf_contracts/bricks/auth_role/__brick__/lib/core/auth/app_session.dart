@@ -289,7 +289,9 @@ final class AppSessionController extends ChangeNotifier
   /// so everything that the user had stays. When that identity belongs to
   /// another user already, or its email address has an account that signs
   /// in in another way, the anonymous user signs in to that account
-  /// instead, and what the anonymous user had moves to it as
+  /// instead, or the call fails with
+  /// [AuthFailureReason.accountExistsWithOtherMethod], as the backend of the
+  /// provider decides. What the anonymous user had moves to the account as
   /// `takeGuestData` says, as with [signIn].
   Future<void> signInWith(SignInCredential credential) =>
       _call((service) async {

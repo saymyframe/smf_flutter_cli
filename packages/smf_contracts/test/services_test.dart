@@ -179,7 +179,10 @@ void main() {
           );
       const method = SignInMethod(
         label: LocalizedText('label', en: 'Continue with Example'),
-        icon: Fragment('Icon(Icons.key)'),
+        icon: TypeRef(
+          'ExampleIcon',
+          import: ImportRef.app('core/example/example.dart'),
+        ),
         platforms: {AppPlatform.android},
         credential: FunctionRef(
           'exampleCredential',

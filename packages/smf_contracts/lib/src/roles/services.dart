@@ -124,7 +124,8 @@ List<SmfIssue> _checkImplementations<D extends Object>(
         SmfIssue(
           'The module contributes code to the ${contribution.socket}, which '
           'the template of the role fills from the implementations.',
-          hint: 'Contribute a RoleImplementation instead.',
+          hint: 'Contribute the implementation as data of the role, '
+              '${template.implementationClass}, instead.',
           origin: origin,
         ),
     if (!provides && given.isNotEmpty)
@@ -371,6 +372,10 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
   /// it holds none.
   RoleImplementation? implementationOf(D data) =>
       data is RoleImplementation ? data : null;
+
+  /// The class of the data with which a provider contributes its
+  /// implementation, as a message names it.
+  String get implementationClass => 'RoleImplementation';
 
   MasonBundle get bundle;
 
