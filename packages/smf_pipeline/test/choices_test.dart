@@ -176,6 +176,196 @@ void main() {
       throwsA(isA<SmfUsageException>()),
     );
   });
+
+  group('conditions of data on what roles chose', () {
+    /// A role that chooses [choice], and records the data it got.
+    TestRole<String> chooser(String id, String choice) =>
+        TestRole<String>(id, template: TestTemplate(choice: choice));
+
+    test(
+        'a role chooses after the roles whose choices its data depends on, '
+        'with the data whose conditions hold, and the others keep their '
+        'order', () async {
+      final first = chooser('first', 'a');
+      final labels = chooser('labels', 'chosen');
+      final clock = chooser('clock', '12');
+      final last = chooser('last', 'z');
+      final twelve = ChoiceCondition(
+        clock,
+        'the clock shows 12 hours',
+        holdsFor: (choice) => choice == '12',
+        withoutRole: false,
+      );
+      final evening = ChoiceCondition(
+        clock,
+        'the clock shows the evening',
+        holdsFor: (choice) => choice == 'evening',
+        withoutRole: false,
+      );
+      final modules = [
+        TestModule(
+          'face',
+          uses: {labels, clock},
+          contributions: [
+            labels.data('always'),
+            labels.data('noon', whenChosen: {twelve}),
+            labels.data('dusk', whenChosen: {evening}),
+          ],
+        ),
+        TestModule(
+          'providers',
+          providers: [
+            for (final role in [first, labels, clock, last])
+              RoleProvider.plain(role),
+          ],
+        ),
+      ];
+      final resolution = resolutionOf(modules);
+      final order = <Role>[];
+
+      final choices = await chooseRoles(
+        registry: ModuleRegistry(modules),
+        resolution: resolution,
+        collection: collect(resolution, testContext),
+        optionValues: const {},
+        environment: FakeHost().environment(),
+        context: testContext,
+        onChoice: (role, choice) => order.add(role),
+      );
+
+      expect(order, [first, clock, labels, last]);
+      expect(choices, {first: 'a', clock: '12', labels: 'chosen', last: 'z'});
+      final template = labels.template! as TestTemplate<String>;
+      expect(
+        template.chosen.single.data.map((data) => data.value),
+        ['always', 'noon'],
+      );
+    });
+
+    test(
+        'a condition of a role without a template, or of an absent role, '
+        'makes no role wait', () async {
+      final labels = chooser('labels', 'chosen');
+      final plain = TestRole<String>('plain');
+      final absent = chooser('absent', 'x');
+      final modules = [
+        TestModule(
+          'face',
+          uses: {labels, plain, absent},
+          contributions: [
+            labels.data(
+              'plain',
+              whenChosen: {
+                ChoiceCondition(
+                  plain,
+                  'the plain role chose nothing',
+                  holdsFor: (choice) => choice == null,
+                  withoutRole: false,
+                ),
+              },
+            ),
+            labels.data(
+              'absent',
+              whenChosen: {
+                ChoiceCondition(
+                  absent,
+                  'the absent role chose',
+                  holdsFor: (choice) => true,
+                  withoutRole: false,
+                ),
+              },
+            ),
+          ],
+        ),
+        TestModule(
+          'providers',
+          providers: [RoleProvider.plain(labels), RoleProvider.plain(plain)],
+        ),
+      ];
+      final resolution = resolutionOf(modules);
+
+      final choices = await chooseRoles(
+        registry: ModuleRegistry(modules),
+        resolution: resolution,
+        collection: collect(resolution, testContext),
+        optionValues: const {},
+        environment: FakeHost().environment(),
+        context: testContext,
+      );
+
+      expect(choices, {labels: 'chosen'});
+      final template = labels.template! as TestTemplate<String>;
+      expect(
+        template.chosen.single.data.map((data) => data.value),
+        ['plain'],
+      );
+    });
+
+    test('choiceOrder names the roles of a cycle, which chooseRoles refuses',
+        () async {
+      final a = chooser('a', 'x');
+      final b = chooser('b', 'y');
+      final c = chooser('c', 'z');
+      ChoiceCondition chose(Role role) => ChoiceCondition(
+            role,
+            'the ${role.id} role chose',
+            holdsFor: (choice) => true,
+            withoutRole: false,
+          );
+      final modules = [
+        TestModule(
+          'face',
+          uses: {a, b, c},
+          contributions: [
+            a.data('of a', whenChosen: {chose(b)}),
+            b.data('of b', whenChosen: {chose(a)}),
+            // A role that waits for the cycle is not part of it.
+            c.data('of c', whenChosen: {chose(a)}),
+            // Data of a role with a condition of the role itself, which
+            // validation reports, makes the role wait for nothing.
+            c.data('of c too', whenChosen: {chose(c)}),
+          ],
+        ),
+        TestModule(
+          'providers',
+          providers: [
+            RoleProvider.plain(c),
+            RoleProvider.plain(a),
+            RoleProvider.plain(b),
+          ],
+        ),
+      ];
+      final resolution = resolutionOf(modules);
+      final collection = collect(resolution, testContext);
+
+      final (:order, :cycle) =
+          choiceOrder(resolution.presentRoles, collection.roleData);
+      expect(order, isEmpty);
+      expect(cycle, [a, b, a]);
+      final plain = choiceOrder({a, b}, [a.data('of a')]);
+      expect(plain.order, [a, b]);
+      expect(plain.cycle, isEmpty);
+
+      await expectLater(
+        chooseRoles(
+          registry: ModuleRegistry(modules),
+          resolution: resolution,
+          collection: collection,
+          optionValues: const {},
+          environment: FakeHost().environment(),
+          context: testContext,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'The roles cannot choose, because the conditions of their data '
+                'form a cycle: a role → b role → a role.',
+          ),
+        ),
+      );
+    });
+  });
 }
 
 final class _Failing extends RoleTemplate<String> {

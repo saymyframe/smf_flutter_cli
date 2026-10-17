@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/src/render.dart';
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -705,6 +706,101 @@ void main() {
     });
   });
 
+  test(
+      'renders only the bricks and the data whose conditions on what the '
+      'roles chose hold', () async {
+    final hours = TestRole<String>(
+      'hours',
+      options: const [RoleOption(name: 'hours', help: 'Hours')],
+      template: _HoursTemplate(),
+    );
+    final twelve = ChoiceCondition(
+      hours,
+      'the clock shows 12 hours',
+      holdsFor: (choice) => choice == '12',
+      withoutRole: false,
+    );
+    final labelsTemplate = _LabelsTemplate();
+    final labels = TestRole<String>('labels', template: labelsTemplate);
+    final modules = [
+      scaffold(),
+      TestModule(
+        'face',
+        uses: {hours, labels},
+        contributions: [
+          labels.data('always'),
+          labels.data('noon', whenChosen: {twelve}),
+          BrickContribution(
+            bundle('dial', files: {'lib/dial.dart': 'class Dial {}\n'}),
+            whenChosen: {twelve},
+          ),
+        ],
+      ),
+      // The labels choose first, unless their data waits for the hours.
+      TestModule('tags', providers: [RoleProvider.plain(labels)]),
+      TestModule('clock', providers: [RoleProvider.plain(hours)]),
+    ];
+
+    Future<(GenerationPlan, RenderedApp)> run(String value) async {
+      final plan = (await pipeline(modules, FakeHost()).plan(
+        CreateRequest(
+          appName: 'my_app',
+          modules: const [
+            ModuleId('face'),
+            ModuleId('tags'),
+            ModuleId('clock'),
+          ],
+          roleOptions: {'hours': value},
+        ),
+      ))!;
+      await plan.environment.dispose();
+      final app = renderApp(
+        registry: ModuleRegistry(modules),
+        resolution: plan.resolution,
+        collection: plan.collection,
+        context: plan.context,
+        choices: plan.choices,
+        pubspec: plan.pubspec,
+      );
+      return (plan, app);
+    }
+
+    final (twelveHours, withDial) = await run('12');
+    expect(twelveHours.choices[hours], '12');
+    expect(
+      twelveHours.collection.roleData.map((data) => data.value),
+      ['always', 'noon'],
+    );
+    expect(withDial.files['lib/dial.dart']!.text, 'class Dial {}\n');
+    expect(
+      withDial.files['lib/labels.dart']!.text,
+      "const labels = 'always, noon';\n",
+    );
+
+    final (twentyFourHours, withoutDial) = await run('24');
+    expect(twentyFourHours.choices[hours], '24');
+    expect(
+      twentyFourHours.collection.roleData.map((data) => data.value),
+      ['always'],
+    );
+    expect(withoutDial.files.containsKey('lib/dial.dart'), isFalse);
+    expect(
+      withoutDial.files['lib/labels.dart']!.text,
+      "const labels = 'always';\n",
+    );
+    // The choice of the labels read only the data whose conditions held.
+    expect(
+      [
+        for (final context in labelsTemplate.chosen)
+          [for (final data in context.data) data.value],
+      ],
+      [
+        ['always', 'noon'],
+        ['always'],
+      ],
+    );
+  });
+
   test('strict mode fails on every error', () async {
     final modules = [
       scaffold(),
@@ -1339,4 +1435,41 @@ void main() {
       );
     });
   });
+}
+
+/// A template that chooses the value of `--hours`, or 24.
+final class _HoursTemplate extends RoleTemplate<String> {
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async =>
+      context.option('hours') ?? '24';
+}
+
+/// A template that writes its data into `lib/labels.dart`, and records the
+/// data that its choice got.
+final class _LabelsTemplate extends RoleTemplate<String> {
+  /// The contexts of [choose], in order.
+  final List<RoleChoiceContext<String>> chosen = [];
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundle(
+            'labels',
+            files: {'lib/labels.dart': "const labels = '{{labels}}';\n"},
+          ),
+        ),
+      ];
+
+  @override
+  Future<Object?> choose(RoleChoiceContext<String> context) async {
+    chosen.add(context);
+    return null;
+  }
+
+  @override
+  RoleOutput render(RoleHookInput<String> input) => RoleOutput(
+        vars: {
+          'labels': [for (final data in input.data) data.value].join(', '),
+        },
+      );
 }

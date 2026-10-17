@@ -62,7 +62,9 @@ final class GenerationPlan {
   /// The modules of the app and the roles they provide.
   final Resolution resolution;
 
-  /// The contributions of the modules and role templates.
+  /// The contributions of the modules and role templates, decided by the
+  /// [choices]: a contribution with conditions on what roles chose applies
+  /// only where they hold (see [Collection.decide]).
   final Collection collection;
 
   /// The contributions of each socket that apply, in order.
@@ -276,6 +278,9 @@ extension CreatePlanning on CreatePipeline {
   /// 5. Validation: the rules of the model and the checks of the roles.
   /// 6. Preflight: the machine has what generation needs.
   /// 7. Choices: what only the user can decide, such as the start screen.
+  ///    Then the contributions with conditions on what the roles chose
+  ///    apply only where the conditions hold; the stages before take them
+  ///    as contributions that apply.
   ///
   /// In lenient mode, the default, a problem caused by a module leaves that
   /// module out and the stages run again from 3 without it, unless no app
@@ -397,7 +402,7 @@ extension CreatePlanning on CreatePipeline {
         selection: selection,
         context: context,
         resolution: resolution,
-        collection: collection,
+        collection: collection.decide(choices, resolution.presentRoles),
         socketOrders: validation.socketOrders,
         postGenOrder: validation.postGenOrder,
         pubspec: validation.pubspec,

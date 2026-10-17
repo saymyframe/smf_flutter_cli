@@ -133,6 +133,105 @@ void main() {
     expect([for (final c in collection.all) c.applies], [true, true, false]);
   });
 
+  test(
+      'applies a contribution with conditions on what roles chose by the '
+      'roles alone, until the choices decide it', () {
+    final clock = TestRole<String>('clock');
+    final twelve = ChoiceCondition(
+      clock,
+      'the clock shows 12 hours',
+      holdsFor: (choice) => choice == '12',
+      withoutRole: false,
+    );
+    final dial = BrickContribution(
+      bundle('dial', paths: ['lib/dial.dart']),
+      whenChosen: {twelve},
+    );
+    final module = TestModule(
+      'face',
+      uses: {used, absent, clock},
+      contributions: [
+        dial,
+        used.data('always'),
+        used.data('noon', whenChosen: {twelve}),
+        // It does not apply by the roles, whatever the clock chose.
+        absent.data('gone', whenChosen: {twelve}),
+      ],
+    );
+    final provider = TestModule(
+      'prov',
+      providers: [RoleProvider.plain(used), RoleProvider.plain(clock)],
+    );
+    final resolution = resolutionOf([module, provider]);
+    final collection = collect(resolution, testContext);
+    const issue = SmfIssue('kept');
+    final withIssue = Collection(collection.all, issues: const [issue]);
+
+    expect(
+      [for (final c in collection.all) c.applies],
+      [true, true, true, false],
+    );
+
+    final twelveHours = withIssue.decide(
+      {clock: '12'},
+      resolution.presentRoles,
+    );
+    expect(
+      [for (final c in twelveHours.all) c.applies],
+      [true, true, true, false],
+    );
+    expect(twelveHours.roleData.map((data) => data.value), ['always', 'noon']);
+    expect(twelveHours.issues, [issue]);
+
+    final twentyFourHours = withIssue.decide(
+      {clock: '24'},
+      resolution.presentRoles,
+    );
+    expect(
+      [for (final c in twentyFourHours.all) c.applies],
+      [false, true, false, false],
+    );
+    expect(twentyFourHours.applyingOf<BrickContribution>(), isEmpty);
+    expect(twentyFourHours.roleData.map((data) => data.value), ['always']);
+    // Every contribution stays, with its origin and its kind.
+    expect(twentyFourHours.all.first.contribution, same(dial));
+    expect(
+      twentyFourHours.all.first.origin,
+      const ModuleOrigin(ModuleId('face')),
+    );
+    expect(twentyFourHours.issues, [issue]);
+
+    // Without the clock, the condition holds as it says.
+    expect(
+      [
+        for (final c in withIssue.decide(const {}, {used}).all) c.applies,
+      ],
+      [false, true, false, false],
+    );
+  });
+
+  test('keeps whether a render hook returned a contribution it decides', () {
+    final clock = TestRole<String>('clock');
+    final never = ChoiceCondition(
+      clock,
+      'never',
+      holdsFor: (choice) => false,
+      withoutRole: true,
+    );
+    final collection = Collection([
+      Collected(
+        RoleData<String>(clock, 'from a hook', whenChosen: {never}),
+        const ModuleOrigin(ModuleId('face')),
+        applies: true,
+        fromHook: true,
+      ),
+    ]);
+
+    final decided = collection.decide({clock: 'x'}, {clock}).all.single;
+    expect(decided.applies, isFalse);
+    expect(decided.fromHook, isTrue);
+  });
+
   test('a module that fails to contribute gets an issue', () {
     final collection = collect(
       resolutionOf([_ThrowingModule(), TestModule('fine')]),

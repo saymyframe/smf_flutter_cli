@@ -70,7 +70,10 @@ final class ContractResult {
   /// The modules of the app, if the case resolved.
   final Resolution? resolution;
 
-  /// The contributions of the app, if the case resolved.
+  /// The contributions of the app, if the case resolved: as stage 4 makes
+  /// them, and once the harness rendered the [app], decided by the
+  /// [choices], so that a contribution with conditions on what the roles
+  /// chose applies only where they hold (see [Collection.decide]).
   final Collection? collection;
 
   /// The result of stage 5, with the order of every socket and the merged
@@ -106,10 +109,11 @@ final class ContractResult {
   /// provides it.
   final RoleHookRequest? hook;
 
-  /// This result with [more] issues, and with the [choices], the
-  /// [answers], the [app] and the [hook] if they are given.
+  /// This result with [more] issues, and with the [collection], the
+  /// [choices], the [answers], the [app] and the [hook] if they are given.
   ContractResult _with(
     List<SmfIssue> more, {
+    Collection? collection,
     Map<Role, Object?>? choices,
     Map<String, String>? answers,
     RenderedApp? app,
@@ -119,7 +123,7 @@ final class ContractResult {
         contractCase,
         [...issues, ...more],
         resolution: resolution,
-        collection: collection,
+        collection: collection ?? this.collection,
         validation: validation,
         choices: choices ?? this.choices,
         answers: answers ?? this.answers,
@@ -753,6 +757,12 @@ final class ContractHarness {
   /// [contractCase], then, if [render] is on and they found no error, the
   /// stages 7 and 8 and [checkRendered].
   ///
+  /// As the pipeline does, it renders the app with the contributions that
+  /// the choices of stage 7 decided (see [Collection.decide]), and the
+  /// result has them, with the [ContractResult.hook] of that app; the
+  /// stages before take a contribution with conditions on what the roles
+  /// chose as one that applies.
+  ///
   /// Before the stage 7, it reports a value that the case or [roleOptions]
   /// give an option that does not take it (see [RoleOption.allowed]), as
   /// the command line would refuse it, and makes no choice with it.
@@ -827,6 +837,7 @@ final class ContractHarness {
     final refused = _refusedValues(options);
     if (refused.isNotEmpty) return checked._with(refused);
     final Map<Role, Object?> choices;
+    final Collection decided;
     final RenderedApp app;
     final answering = _EnterPrompter();
     // The choices of the roles that asked, which the harness answered.
@@ -871,10 +882,11 @@ final class ContractHarness {
         return checked._with(ofModes, choices: choices);
       }
       answers = given;
+      decided = collection.decide(choices, resolution.presentRoles);
       app = renderApp(
         registry: registry,
         resolution: resolution,
-        collection: collection,
+        collection: decided,
         context: context,
         choices: choices,
         pubspec: validation.pubspec,
@@ -889,13 +901,14 @@ final class ContractHarness {
     }
     final rendered = checked._with(
       const [],
+      collection: decided,
       choices: choices,
       answers: answers,
       app: app,
       hook: hookRequest(
         registry: registry,
         resolution: resolution,
-        collection: collection,
+        collection: decided,
         context: context,
         choices: choices,
       ),
@@ -1096,12 +1109,11 @@ final class ContractHarness {
       if (failure != null)
         _failedWithoutTerminal(
           failure,
-          // The roles choose in the order of the present roles, so the
-          // first role with a template that has not chosen is the one
-          // that failed.
-          resolution.presentRoles.firstWhere(
-            (role) => role.template != null && !again.containsKey(role),
-          ),
+          // The first role in the order of the choices that has not chosen
+          // is the one that failed.
+          choiceOrder(resolution.presentRoles, collection.roleData)
+              .order
+              .firstWhere((role) => !again.containsKey(role)),
           modes: modes,
           options: options,
         ),
@@ -1312,7 +1324,9 @@ final class ContractHarness {
   /// Indexes the Dart files among [files], the text files of the rendered
   /// app of [result] by path, runs the structural rules of its present roles
   /// with the data it collected and the texts, and checks the symbols of
-  /// their interfaces.
+  /// their interfaces: those that the app needs, by the choices of its
+  /// roles, are declared, and the app has no file of one that it does not
+  /// need (see [RoleInterface.checkSymbols]).
   ///
   /// [owners] names who generated each file; the rules of the roles check
   /// only files with an owner.
