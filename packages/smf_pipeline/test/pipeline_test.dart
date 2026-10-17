@@ -1143,6 +1143,31 @@ void main() {
       ]);
     });
 
+    test(
+        'an option of a role that the app lacks stops a strict run, since '
+        'the command line asks for a role that the app does not have',
+        () async {
+      final modules = [
+        scaffold(),
+        TestModule('go', providers: [RoleProvider.plain(nav)]),
+        TestModule('fine'),
+      ];
+
+      const unused =
+          '--start has no effect: no module of the app provides the nav role.';
+
+      // The request gives --start, an option of the nav role.
+      await expectLater(
+        pipeline(modules, FakeHost()).plan(request(['fine'], strict: true)),
+        stops(stoppedByOne, ['warning pipeline.unused_option: $unused']),
+      );
+
+      final host = FakeHost();
+      final plan = (await pipeline(modules, host).plan(request(['fine'])))!;
+      expect(host.logger.warnings, [unused]);
+      await plan.environment.dispose();
+    });
+
     test('a warning about the machine never stops a strict run', () async {
       final host = FakeHost(processRunner: RecordingRunner());
       final app = await create(
