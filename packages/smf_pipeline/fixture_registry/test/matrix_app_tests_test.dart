@@ -142,9 +142,10 @@ void main() {
   test(
       'the app tests check the contract of the router role, of the layout '
       'role, of the DI role, of the events role, of the preferences role, '
-      'of the localization role, of the theme role, of the app entry role '
-      'and of the auth role with every provider of each, which they tell '
-      'apart by the roles of the app only', () {
+      'of the localization role, of the theme role, of the app entry role, '
+      'of the auth role and of the onboarding screen role with every '
+      'provider of each, which they tell apart by the roles of the app '
+      'only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -157,9 +158,11 @@ void main() {
         themeRole,
         appEntryRole,
         authRole,
+        onboardingScreenRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
+    expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -376,6 +379,201 @@ void main() {
         reason: name,
       );
     }
+  });
+
+  test(
+      'the test of the onboarding screen role applies to the apps with '
+      'every module, whose modules give the role steps, those of the fixture '
+      'steps among them, and not to the apps of the fixture steps alone', () {
+    final onboarding = named('onboarding_screen_role');
+    List<String> stepsOf(MatrixApp app) {
+      final hook = app.hook!;
+      return hook.presentRoles.contains(onboardingScreenRole)
+          ? [
+              for (final step in onboardingScreenRole
+                  .stepsIn(onboardingScreenRole.hookInput(hook)))
+                step.fullName,
+            ]
+          : const [];
+    }
+
+    expect(appsOf(onboarding), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    // The tests use the two steps of the fixture steps, ask and then
+    // confirm, the step after it.
+    for (final app in apps.where(onboarding.appliesTo)) {
+      expect(
+        stepsOf(app).join(' '),
+        contains('fake_steps.ask fake_steps.confirm'),
+        reason: app.name,
+      );
+    }
+    // The apps of the fixture steps with the role have the steps too, and
+    // run no flutter test for them.
+    final alone = apps.singleWhere(
+      (app) => app.name == 'fake_steps with onboarding_screen, localization',
+    );
+    expect(stepsOf(alone), ['fake_steps.ask', 'fake_steps.confirm']);
+    expect(onboarding.appliesTo(alone), isFalse);
+    // An app without steps has no test of the role.
+    for (final app in apps) {
+      if (stepsOf(app).isEmpty) {
+        expect(onboarding.appliesTo(app), isFalse, reason: app.name);
+      }
+    }
+  });
+
+  test(
+      'the tests of the onboarding screen role get the screen of the '
+      'provider of the role and the texts of each step in each language of '
+      'the app, as the template of the role reads them, and in English alone '
+      'in an app without the localization role', () {
+    final onboarding = named('onboarding_screen_role');
+
+    /// The file that the matrix writes for the app named [name], whose
+    /// package is `my_app`, parsed.
+    CompilationUnit fileOf(String name) {
+      final files = onboarding.generatedFiles!(
+        apps.singleWhere((app) => app.name == name),
+        'my_app',
+      );
+      expect(files.keys, [onboardingOfAppFile]);
+      return parseString(content: files[onboardingOfAppFile]!).unit;
+    }
+
+    List<String?> importsOf(CompilationUnit unit) => [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ];
+
+    /// The source of the value of the top-level constant [name] of [unit].
+    String valueOf(CompilationUnit unit, String name) => unit.declarations
+        .whereType<TopLevelVariableDeclaration>()
+        .expand((declaration) => declaration.variables.variables)
+        .singleWhere((variable) => variable.name.lexeme == name)
+        .initializer!
+        .toSource();
+
+    /// The steps of `appSteps` of [unit], each by its name, with its texts
+    /// by the code of each language, each text by the name of its field.
+    Map<String, Map<String, Map<String, String?>>> stepsIn(
+      CompilationUnit unit,
+    ) {
+      final list = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .expand((declaration) => declaration.variables.variables)
+          .singleWhere((variable) => variable.name.lexeme == 'appSteps')
+          .initializer! as ListLiteral;
+      Map<String, Expression> fieldsOf(Expression record) => {
+            for (final field in (record as RecordLiteral)
+                .fields
+                .cast<RecordLiteralNamedField>())
+              field.name.lexeme: field.fieldExpression,
+          };
+      String? stringOf(Expression value) =>
+          value is NullLiteral ? null : (value as StringLiteral).stringValue;
+      return {
+        for (final step in list.elements.cast<Expression>())
+          stringOf(fieldsOf(step)['name']!)!: {
+            for (final entry in (fieldsOf(step)['texts']! as SetOrMapLiteral)
+                .elements
+                .cast<MapLiteralEntry>())
+              stringOf(entry.key)!: {
+                for (final MapEntry(key: field, :value)
+                    in fieldsOf(entry.value).entries)
+                  field: stringOf(value),
+              },
+          },
+      };
+    }
+
+    /// The source of the body of the function [name] of [unit].
+    String bodyOf(CompilationUnit unit, String name) => unit.declarations
+        .whereType<FunctionDeclaration>()
+        .singleWhere((function) => function.name.lexeme == name)
+        .functionExpression
+        .body
+        .toSource();
+
+    const screen = 'package:my_app/features/fake_onboarding/'
+        'fixture_onboarding_screen.dart';
+    final localized = fileOf('every module (fake_router, fake_di, fake_bloc)');
+    expect(importsOf(localized), [
+      'package:flutter/widgets.dart',
+      'package:my_app/core/l10n/app_locale.dart',
+      screen,
+    ]);
+    expect(
+      valueOf(localized, 'onboardingScreen'),
+      'screen.FixtureOnboardingScreen',
+    );
+    expect(
+      bodyOf(localized, 'newOnboardingScreen'),
+      '=> screen.FixtureOnboardingScreen();',
+    );
+    expect(valueOf(localized, 'stepLanguages'), "['en', 'uk']");
+    // The steps of the fixture steps, in the order of the role: the text of
+    // confirm without a translation reads in English in Ukrainian too, and
+    // confirm has no later.
+    expect(stepsIn(localized), {
+      'fake_steps.ask': {
+        'en': {
+          'title': 'A step that asks',
+          'text': 'The fixture asks for something here.',
+          'action': 'Ask',
+          'later': 'Not now',
+        },
+        'uk': {
+          'title': 'Крок, що питає',
+          'text': 'Тут фікстура про щось питає.',
+          'action': 'Спитати',
+          'later': 'Не зараз',
+        },
+      },
+      'fake_steps.confirm': {
+        'en': {
+          'title': 'A step that confirms',
+          'text': 'The fixture confirms something here.',
+          'action': 'Confirm',
+          'later': null,
+        },
+        'uk': {
+          'title': 'Крок, що підтверджує',
+          'text': 'The fixture confirms something here.',
+          'action': 'Підтвердити',
+          'later': null,
+        },
+      },
+    });
+    expect(stepsIn(localized).keys, ['fake_steps.ask', 'fake_steps.confirm']);
+    expect(
+      bodyOf(localized, 'chooseLanguage'),
+      '=> appLocale.choose(Locale(language));',
+    );
+
+    // Without the localization role, the steps are in English, and the app
+    // has no language to choose.
+    final english = fileOf('fake_steps with onboarding_screen');
+    expect(importsOf(english), ['package:flutter/widgets.dart', screen]);
+    expect(valueOf(english, 'stepLanguages'), "['en']");
+    expect(
+      {
+        for (final MapEntry(key: name, value: texts)
+            in stepsIn(english).entries)
+          name: texts.keys,
+      },
+      {
+        'fake_steps.ask': ['en'],
+        'fake_steps.confirm': ['en'],
+      },
+    );
+    expect(
+      stepsIn(english)['fake_steps.ask']!['en'],
+      stepsIn(localized)['fake_steps.ask']!['en'],
+    );
+    expect(bodyOf(english, 'chooseLanguage'), 'async {}');
   });
 
   test(

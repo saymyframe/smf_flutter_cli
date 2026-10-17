@@ -1230,6 +1230,27 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenOnboardingModule(),
+        role: onboardingScreenRole,
+        bug: 'Its screen shows a page for each step of the onboarding, also '
+            'for a step whose showIf would leave it out, which it never '
+            'asks.',
+        // A router, which the role requires, and the fixture steps, whose
+        // step ask has a showIf that the test of its conditions makes leave
+        // it out.
+        app: [FakeRouterModule.id, FakeStepsModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/onboarding_screen_role/step_conditions_test.dart',
+            'a step whose showIf leaves it out when the onboarding opens is '
+                'not shown, and a step that shows stays once its showIf would '
+                'leave it out',
+            'A step whose condition does not hold when the onboarding starts '
+                'is not shown.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.themeWithLightDarkTheme,
         role: themeRole,
         bug: 'Its createDarkTheme() returns a light theme, the one that its '
