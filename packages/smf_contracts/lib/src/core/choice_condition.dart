@@ -40,6 +40,14 @@ import 'package:smf_contracts/core.dart';
 /// 12 hours only to the apps that need them:
 /// `BrickContribution(dialBundle, whenChosen: {ClockRole.twelveHours})`.
 ///
+/// The contract test harness renders the apps of its cases, which differ in
+/// their modules and in the values of the mode options of their roles (see
+/// [RoleOption.mode]), and answers a question of a role as a user who
+/// presses Enter. So it checks both sides of a condition only when the data
+/// of the modules or a mode option drives the choice. A condition on
+/// another kind of choice, such as a free answer to a question, gets only
+/// the side of the default answer checked.
+///
 /// Conditions compare by identity, like roles, so each condition is one
 /// constant.
 @immutable
