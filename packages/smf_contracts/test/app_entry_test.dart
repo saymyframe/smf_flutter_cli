@@ -2926,6 +2926,9 @@ Future<void> main() async {
       const notFirst = 'The tag $tag is in the body of $method in $path, but '
           'not before its call of $call, which hands the launch of the app to '
           'Flutter: the code of the modules runs before it.';
+      const noCall = 'The tag $tag is in the body of $method in $path, which '
+          'has no call of $call: the method hands the launch of the app to '
+          'Flutter with that call, after the code of the modules.';
       String moved(String to) =>
           _appDelegateTemplate.replaceFirst('$tag\n', '').replaceFirst(
                 to,
@@ -2942,6 +2945,25 @@ Future<void> main() async {
             '    print("A } of a string")\n'
             '$tag',
           ),
+        ),
+        isEmpty,
+      );
+      // A call of super in a comment or a string before the tag is no call,
+      // and a space before the parenthesis of the call is.
+      expect(
+        problems(
+          _appDelegateTemplate
+              .replaceFirst(
+                'super.application(application',
+                'super.application (application',
+              )
+              .replaceFirst(
+                tag,
+                '    // super.application(application, '
+                'didFinishLaunchingWithOptions: launchOptions)\n'
+                '    print("super.application(")\n'
+                '$tag',
+              ),
         ),
         isEmpty,
       );
@@ -2974,7 +2996,7 @@ Future<void> main() async {
             'return true',
           ),
         ),
-        [notFirst],
+        [noCall],
       );
       final issue = issues(moved('    GeneratedPluginRegistrant')).single;
       expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));

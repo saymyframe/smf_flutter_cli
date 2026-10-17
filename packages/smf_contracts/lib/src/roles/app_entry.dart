@@ -815,8 +815,11 @@ String _codeOf(String template) =>
 ///
 /// The tags of the template, and the comments and strings of its code, do
 /// not count, so neither the declaration nor a brace may be in them. The
-/// comments and the strings in double quotes of Swift have the syntax of
-/// those of Dart, so this reads the template of an app delegate too.
+/// scan knows the comments and strings of Dart. Of a template in Swift,
+/// such as that of an app delegate, it reads line comments, block comments
+/// that do not nest, and strings in double quotes with no string inside an
+/// interpolation and no `#` around them; a brace in a comment or a string
+/// of Swift beyond those may end the body early.
 ({int start, int end})? _bodyAfter(String template, RegExp declaration) {
   final code = _codeOf(template);
   final found = declaration.firstMatch(code);
@@ -860,21 +863,35 @@ List<SmfIssue> _checkLaunchCodePlace(ModuleRuleInput<NoDsl> input) {
       ),
     ];
   }
-  final call = _codeOf(text)
-      .substring(body.start, body.end)
-      .indexOf('super.application(');
-  if (call < 0 || body.start + call < offset) {
+  const call = 'super.application(_:didFinishLaunchingWithOptions:)';
+  final handOver = _superLaunch
+      .firstMatch(_codeOf(text).substring(body.start, body.end))
+      ?.start;
+  if (handOver == null) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, which has no call '
+        'of $call: the method hands the launch of the app to Flutter with '
+        'that call, after the code of the modules.',
+      ),
+    ];
+  }
+  if (body.start + handOver < offset) {
     return [
       issue(
         'The tag $tag is in the body of $method in $path, but not before its '
-        'call of super.application(_:didFinishLaunchingWithOptions:), which '
-        'hands the launch of the app to Flutter: the code of the modules '
-        'runs before it.',
+        'call of $call, which hands the launch of the app to Flutter: the '
+        'code of the modules runs before it.',
       ),
     ];
   }
   return const [];
 }
+
+/// The call of `super.application(...)` with which
+/// `application(_:didFinishLaunchingWithOptions:)` hands the launch of the
+/// app to Flutter.
+final _superLaunch = RegExp(r'\bsuper\s*\.\s*application\s*\(');
 
 /// The parts of the template of a Dart file that are not code: the tags of
 /// the template, comments and strings, raw or not, on one line or on
