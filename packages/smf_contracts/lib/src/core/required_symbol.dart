@@ -44,11 +44,12 @@ sealed class RequiredSymbol {
   /// [ChoiceCondition].
   ///
   /// An app where they hold has the symbol, as an unconditional one, and
-  /// an app where one does not has no file at [path]: so the symbol has a
-  /// file of its own, and the providers of the role contribute it under the
-  /// same conditions (see [Contribution.whenChosen]). A condition is of the
-  /// role of the symbol or of a role that it requires or uses, which every
-  /// provider of the role uses too and so may name.
+  /// an app where one does not has no file at [path]: so the symbols at one
+  /// path have the same conditions, and the providers of the role
+  /// contribute the file under them (see [Contribution.whenChosen]). A
+  /// condition is of the role of the symbol or of a role that it requires
+  /// or uses, which every provider of the role uses too and so may name. A
+  /// registry of modules refuses a role that breaks either rule.
   final Set<ChoiceCondition> whenChosen;
 
   /// The import of [path], for code that uses the symbol.

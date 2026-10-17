@@ -84,7 +84,8 @@ final class ModuleRegistry {
   ///
   /// It checks the names that become Dart identifiers, tags and options,
   /// the values of the mode options, the dependencies between modules, the
-  /// rules of module kinds, the variants, and the sockets.
+  /// rules of module kinds, the variants, the sockets, and the conditions of
+  /// the symbols of the roles on what roles chose.
   static List<String> problemsOf(List<SmfModule> modules) {
     final roles = rolesOf(modules);
     return [
@@ -94,6 +95,7 @@ final class ModuleRegistry {
       for (final module in modules) ..._descriptorProblems(module, modules),
       ..._socketProblems(roles, modules),
       ..._optionProblems(roles),
+      ..._symbolConditionProblems(roles),
       for (final role in roles)
         if (role.cardinality == RoleCardinality.exactlyOne &&
             !modules.any((m) => m.descriptor.provides.contains(role)))
@@ -447,6 +449,54 @@ final class _SocketCheck {
       }
     }
   }
+}
+
+/// The problems of the conditions of the symbols of [roles] on what roles
+/// chose (see [RequiredSymbol.whenChosen]): the symbols at one path of a
+/// role have the same conditions, since an app has the file or not, and
+/// each condition is of the role or of a role that it requires or uses,
+/// which every provider of the role may name.
+List<String> _symbolConditionProblems(List<Role> roles) {
+  final problems = <String>[];
+  for (final role in roles) {
+    final byPath = <String, List<RequiredSymbol>>{};
+    for (final symbol in role.interface.symbols) {
+      byPath.putIfAbsent(symbol.path, () => []).add(symbol);
+      for (final condition in symbol.whenChosen) {
+        final other = condition.role;
+        if (identical(other, role) || role.visibleRoles.contains(other)) {
+          continue;
+        }
+        problems.add(
+          'The $symbol of the $role depends on what the $other chose '
+          '(${condition.name}), but the $role neither requires nor uses the '
+          '$other, so its providers may not name the condition.',
+        );
+      }
+    }
+    for (final MapEntry(key: path, value: symbols) in byPath.entries) {
+      final first = symbols.first.whenChosen;
+      if (symbols.every(
+        (symbol) =>
+            symbol.whenChosen.length == first.length &&
+            symbol.whenChosen.containsAll(first),
+      )) {
+        continue;
+      }
+      String conditionsOf(RequiredSymbol symbol) => symbol.whenChosen.isEmpty
+          ? 'no condition'
+          : symbol.whenChosen.join(', ');
+      final listed = [
+        for (final symbol in symbols) '$symbol (${conditionsOf(symbol)})',
+      ].join(', ');
+      problems.add(
+        'The symbols of the $role at $path depend on different conditions '
+        'on what roles chose: $listed. An app has the file or not, so all '
+        'its symbols have the same conditions.',
+      );
+    }
+  }
+  return problems;
 }
 
 final RegExp _kebabCase = RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$');
