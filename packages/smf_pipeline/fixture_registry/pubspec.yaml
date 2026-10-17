@@ -35,7 +35,7 @@ dependencies:
   # the app test that it keeps and the test of the role that the CLI keeps.
   smf_firebase_messaging: ^0.5.0
   # The matrix of CI, for the tests of the apps of the fixtures.
-  smf_flutter_cli: ^0.5.0
+  smf_flutter_cli: ^0.5.1
   smf_flutter_core: ^0.4.1
   smf_get_it: ^0.4.1
   smf_go_router: ^0.5.0
@@ -58,10 +58,10 @@ dependencies:
   smf_settings: ^0.4.1
   # The provider of the preferences role in the registry of several
   # providers, for the test of the role that the CLI keeps.
-  smf_shared_preferences: ^0.4.1
+  smf_shared_preferences: ^0.4.2
   # The sign-in of the CLI, for its app test in the app of several
   # providers, whose other tests its mocks sign an account up for.
-  smf_sign_in: ^0.5.0
+  smf_sign_in: ^0.5.1
 
 dev_dependencies:
   analyzer: ^14.4.0
@@ -69,7 +69,7 @@ dev_dependencies:
   dart_style: 3.1.13
   file: ^7.0.1
   pub_semver: ^2.2.0
-  smf_pipeline: ^0.5.0
+  smf_pipeline: ^0.5.1
   test: ^1.32.0
   very_good_analysis: ^10.3.0
   xml: ^7.0.0
