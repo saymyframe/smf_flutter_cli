@@ -18,6 +18,17 @@
 // the user. And a call for a user whose session has ended on the server
 // signs that user out.
 //
+// A call with a credential of Google or Apple gets the reason of its own
+// call: a link that Firebase refuses because the identity, or its email
+// address, belongs to another user is credentialInUse or
+// accountExistsWithOtherMethod, where a link of a password is emailInUse; a
+// sign-in again for a deletion with a credential of another user, or of an
+// identity without a user, is invalidCredentials and leaves the user signed
+// in; and the hint of a way to sign in that is not enabled names it. A
+// revocation of the tokens of Apple that Firebase refuses is notConfigured,
+// with a hint that names what the Apple sign-in method of the project
+// needs, and deletes nothing.
+//
 // It uses the service of the module and runs none of the start-up of the
 // app but the start of Firebase (service.dart). The matrix sets up the
 // mocks of the platform side of every module of the app before the tests,
@@ -95,11 +106,16 @@ void main() {
     };
   });
 
-  /// How the call of [method] ends when Firebase answers it with [code] and
-  /// [message], as a platform sends them.
-  Future<String> outcome(String method, String code, [String? message]) async {
+  /// How the call of [method], or [call], ends when Firebase answers it
+  /// with [code] and [message], as a platform sends them.
+  Future<String> outcome(
+    String method,
+    String code, [
+    String? message,
+    Future<void> Function()? call,
+  ]) async {
     firebase.failNext(method, code: code, message: message);
-    return outcomeOf(await errorOf(calls[method]!));
+    return outcomeOf(await errorOf(call ?? calls[method]!));
   }
 
   /// How the call of [method] ends for each of [codes].
@@ -206,6 +222,269 @@ void main() {
       userOf(service.currentUser),
       before,
       reason: 'A call that failed leaves the user who is signed in.',
+    );
+  });
+
+  test(
+      'a call with a credential gets the reason of its own call for each code '
+      'of Firebase, in the form of Android and in the form of iOS, and leaves '
+      'the user', () async {
+    // Each call with a credential, by the method of Firebase that it makes,
+    // with what makes the user whom it is for, and the call itself, with a
+    // new credential each time.
+    final ofCalls =
+        <String, (Future<void> Function(), Future<void> Function())>{
+      'signInWithCredential': (
+        service.signOut,
+        () => service.signInWith(credentialOf(google, 'failures-sign-in')),
+      ),
+      'linkWithCredential': (
+        () async {
+          await service.signOut();
+          await service.signInAnonymously();
+        },
+        () => service.linkWith(credentialOf(apple, 'failures-link')),
+      ),
+      'reauthenticateWithCredential': (
+        () async {
+          await service.signOut();
+          await service.signInWith(credentialOf(apple, 'failures-deleted'));
+        },
+        () => service.deleteAccount(
+              fresh: credentialOf(apple, 'failures-deleted'),
+            ),
+      ),
+    };
+    const reasons = {
+      'signInWithCredential': {
+        'ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL':
+            AuthFailureReason.accountExistsWithOtherMethod,
+        'account-exists-with-different-credential':
+            AuthFailureReason.accountExistsWithOtherMethod,
+        'ERROR_INVALID_CREDENTIAL': AuthFailureReason.invalidCredentials,
+        'invalid-credential': AuthFailureReason.invalidCredentials,
+        'ERROR_MISSING_OR_INVALID_NONCE': AuthFailureReason.invalidCredentials,
+        'missing-or-invalid-nonce': AuthFailureReason.invalidCredentials,
+        'ERROR_USER_DISABLED': AuthFailureReason.userDisabled,
+        'network-request-failed': AuthFailureReason.network,
+      },
+      // A link of a password answers credential-already-in-use and
+      // email-already-in-use with emailInUse (see above).
+      'linkWithCredential': {
+        'ERROR_CREDENTIAL_ALREADY_IN_USE': AuthFailureReason.credentialInUse,
+        'credential-already-in-use': AuthFailureReason.credentialInUse,
+        'ERROR_EMAIL_ALREADY_IN_USE':
+            AuthFailureReason.accountExistsWithOtherMethod,
+        'email-already-in-use': AuthFailureReason.accountExistsWithOtherMethod,
+        'ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL':
+            AuthFailureReason.accountExistsWithOtherMethod,
+        'ERROR_INVALID_CREDENTIAL': AuthFailureReason.invalidCredentials,
+        'ERROR_MISSING_OR_INVALID_NONCE': AuthFailureReason.invalidCredentials,
+      },
+      // A credential of another user, and of an identity without a user,
+      // which Firebase answers with user-not-found, as for a user whose
+      // session has ended.
+      'reauthenticateWithCredential': {
+        'ERROR_USER_MISMATCH': AuthFailureReason.invalidCredentials,
+        'user-mismatch': AuthFailureReason.invalidCredentials,
+        'ERROR_USER_NOT_FOUND': AuthFailureReason.invalidCredentials,
+        'user-not-found': AuthFailureReason.invalidCredentials,
+        'ERROR_INVALID_CREDENTIAL': AuthFailureReason.invalidCredentials,
+        'ERROR_MISSING_OR_INVALID_NONCE': AuthFailureReason.invalidCredentials,
+        'network-request-failed': AuthFailureReason.network,
+      },
+    };
+
+    final found = <String, Map<String, String>>{};
+    final moved = <String>[];
+    for (final MapEntry(key: method, value: codes) in reasons.entries) {
+      final (prepare, call) = ofCalls[method]!;
+      found[method] = {};
+      for (final code in codes.keys) {
+        await prepare();
+        final before = userOf(service.currentUser);
+        firebase.failNext(method, code: code);
+        found[method]![code] = outcomeOf(await errorOf(call));
+        if (userOf(service.currentUser) != before) {
+          moved.add('$method answered with $code');
+        }
+      }
+    }
+
+    expect(
+      found,
+      {
+        for (final MapEntry(key: method, value: codes) in reasons.entries)
+          method: {
+            for (final MapEntry(key: code, value: reason) in codes.entries)
+              code: reason.name,
+          },
+      },
+      reason: 'A call with a credential that Firebase answers with one of '
+          'its codes fails with the reason of the auth role for that code '
+          'and that call: a link that Firebase refuses for an identity of '
+          'another user is credentialInUse, and for an email address of '
+          'another account accountExistsWithOtherMethod. A sign-in again '
+          'for a deletion with a credential of another user, or of an '
+          'identity without a user, is invalidCredentials, and a token whose '
+          'nonce Firebase took before is invalidCredentials too.',
+    );
+    expect(
+      moved,
+      isEmpty,
+      reason: 'A call with a credential that failed leaves the user who is '
+          'signed in, also a sign-in again that Firebase answers with '
+          'user-not-found, which is no sign that the session of the user has '
+          'ended.',
+    );
+  });
+
+  test(
+      'a link of a way to sign in that the user has already is unknown, with '
+      'the code and the message of Firebase', () async {
+    await service.signOut();
+    await service.signInAnonymously();
+
+    final found = await outcome(
+      'linkWithCredential',
+      'ERROR_PROVIDER_ALREADY_LINKED',
+      'User has already been linked to the given provider.',
+      () => service.linkWith(credentialOf(google, 'failures-linked')),
+    );
+
+    expect(
+      found,
+      'unknown (provider-already-linked: User has already been linked to the '
+      'given provider.)',
+      reason: 'The session links a way to sign in only to an anonymous user, '
+          'so Firebase answers no link of the app so. The service leaves it '
+          'unknown, with what Firebase answered as the hint.',
+    );
+  });
+
+  test(
+      'a call with a credential of a way to sign in that is not enabled is '
+      'notConfigured, with a hint that names the way to sign in and the link '
+      'to the project', () async {
+    await service.signOut();
+    final project = Firebase.app().options.projectId;
+    final link = 'https://console.firebase.google.com/project/$project/'
+        'authentication/providers';
+
+    final found = {
+      'Google, in the form of Android': await outcome(
+        'signInWithCredential',
+        'ERROR_OPERATION_NOT_ALLOWED',
+        'The identity provider configuration is disabled.',
+        () => service.signInWith(credentialOf(google, 'failures-disabled')),
+      ),
+      'Apple, in the form of iOS': await outcome(
+        'signInWithCredential',
+        'operation-not-allowed',
+        null,
+        () => service.signInWith(credentialOf(apple, 'failures-disabled')),
+      ),
+    };
+
+    String hint(String method) =>
+        'notConfigured (Sign-in with $method is not enabled in the Firebase '
+        'project $project (Firebase answered operation-not-allowed). To fix '
+        'it, enable $method in the Firebase console under Authentication > '
+        'Sign-in method: $link)';
+    expect(
+      found,
+      {
+        'Google, in the form of Android': hint('Google'),
+        'Apple, in the form of iOS': hint('Apple'),
+      },
+      reason: 'When Firebase answers that the sign-in method of a credential '
+          'is not enabled, the call fails with notConfigured, and its hint '
+          'names that sign-in method and the page of the project where it '
+          'is enabled.',
+    );
+  });
+
+  test(
+      'a revocation of the tokens of Apple that Firebase refuses is '
+      'notConfigured, with a hint that names what the Apple sign-in method '
+      'of the project needs, one that does not reach Firebase is network, '
+      'and neither deletes anything', () async {
+    final project = Firebase.app().options.projectId;
+    final found = <String, List<Object?>>{};
+    for (final (code, message) in const [
+      ('invalid-credential', 'Code flow is not enabled for Apple.'),
+      ('invalid-credential', 'Error getting access token from Apple.'),
+      ('internal-error', _internal),
+      ('network-request-failed', 'A network error has occurred.'),
+    ]) {
+      await service.signOut();
+      await service.signInWith(credentialOf(apple, 'failures-revoked'));
+      final before = userOf(service.currentUser);
+      firebase.calls.clear();
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        found['$code: $message'] = [
+          await outcome(
+            'revokeTokenWithAuthorizationCode',
+            code,
+            message,
+            () => service.deleteAccount(
+              fresh: credentialOf(apple, 'failures-revoked'),
+            ),
+          ),
+          userOf(service.currentUser) == before,
+          [for (final call in firebase.calls) call.first],
+        ];
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    }
+
+    String notRevoked(String answer) =>
+        'notConfigured (Firebase did not revoke the tokens that Apple gave '
+        'the app ($answer), so the account was not deleted. The revocation '
+        'needs the Services ID and the OAuth code flow configuration, with '
+        'the Apple team ID, the Key ID and the private key, of the Apple '
+        'sign-in method of the Firebase project $project, in the Firebase '
+        'console under Authentication > Sign-in method: '
+        'https://console.firebase.google.com/project/$project/authentication/'
+        'providers. When they are set, the authorization code of Apple was '
+        'older than five minutes or used before, and the next deletion asks '
+        'Apple for a new one.)';
+    const calls = [
+      'reauthenticateWithCredential',
+      'revokeTokenWithAuthorizationCode',
+    ];
+    expect(
+      found,
+      {
+        for (final message in [
+          'Code flow is not enabled for Apple.',
+          'Error getting access token from Apple.',
+        ])
+          'invalid-credential: $message': [
+            notRevoked('invalid-credential: $message'),
+            true,
+            calls,
+          ],
+        'internal-error: $_internal': [
+          notRevoked('internal-error: $_internal'),
+          true,
+          calls,
+        ],
+        'network-request-failed: A network error has occurred.': [
+          AuthFailureReason.network.name,
+          true,
+          calls,
+        ],
+      },
+      reason: 'Firebase answers a revocation without the Services ID and the '
+          'OAuth code flow configuration of the Apple sign-in method, or '
+          'with a wrong one, with invalid-credential: the deletion fails '
+          'with notConfigured, whose hint has what Firebase answered and '
+          'what the project needs, and so does an internal error, which on '
+          'iOS says no more. The deletion of an account then fails, and the '
+          'user stays signed in.',
     );
   });
 
