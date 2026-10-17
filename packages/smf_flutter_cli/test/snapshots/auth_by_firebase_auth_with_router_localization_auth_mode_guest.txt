@@ -1631,17 +1631,45 @@ const _endedSession = {
   'no-current-user',
 };
 
+/// The issuer of the ID tokens of Google.
+const _google = 'https://accounts.google.com';
+
+/// The issuer of the ID tokens of Apple.
+const _apple = 'https://appleid.apple.com';
+
+/// The identity providers whose credentials the service takes, by the
+/// issuer of their tokens: the id of each in Firebase Authentication, and
+/// its name among the sign-in methods of the Firebase console.
+const _providers = {
+  _google: (id: 'google.com', name: 'Google'),
+  _apple: (id: 'apple.com', name: 'Apple'),
+};
+
+/// The reasons of the codes with which Firebase refuses
+/// [FirebaseAuthService.linkWith] because the identity of the credential,
+/// or its email address, belongs to another user. For
+/// [FirebaseAuthService.linkPassword], the same codes mean that the email
+/// address has an account, `emailInUse`.
+const _linkReasons = {
+  'credential-already-in-use': AuthFailureReason.credentialInUse,
+  'email-already-in-use': AuthFailureReason.accountExistsWithOtherMethod,
+  'account-exists-with-different-credential':
+      AuthFailureReason.accountExistsWithOtherMethod,
+};
+
 /// Sign-in with
 /// [Firebase Authentication](https://firebase.google.com/docs/auth), with
-/// an email address and a password, and as an anonymous user.
+/// an email address and a password, as an anonymous user, and with the
+/// credentials that the ways to sign in of Google and Apple get.
 ///
 /// The code of the app does not use it: it signs in through `appSession` of
 /// `app_session.dart`.
 ///
 /// The ways to sign in are enabled in the Firebase project, not here:
-/// Email/Password, and Anonymous for an app that signs in anonymous users.
-/// `tool/enable_firebase_sign_in.dart` enables them. Until they are, a call
-/// fails with [AuthFailureReason.notConfigured], and its
+/// Email/Password, Anonymous for an app that signs in anonymous users, and
+/// Google and Apple for an app with their ways to sign in.
+/// `tool/enable_firebase_sign_in.dart` enables the first two. Until they
+/// are, a call fails with [AuthFailureReason.notConfigured], and its
 /// [AuthFailure.developerHint] tells how to enable them.
 ///
 /// An empty address or password fails here, before Firebase is asked, since
@@ -1650,14 +1678,35 @@ const _endedSession = {
 /// [AuthFailureReason.invalidCredentials] in [signIn] and with
 /// [AuthFailureReason.weakPassword] in [signUp] and [linkPassword].
 ///
-/// It takes no credential of an identity provider: [signInWith], [linkWith]
-/// and a deletion with a fresh credential fail with
-/// [AuthFailureReason.notConfigured] before Firebase is asked.
+/// A credential of Google goes to Firebase with its ID token, and one of
+/// Apple with its ID token, its raw nonce and the name of the user: Firebase
+/// takes no nonce with a token of Google. A credential of another identity
+/// provider fails with [AuthFailureReason.notConfigured] before Firebase is
+/// asked. Apple takes a credential once, so when Firebase refuses
+/// [linkWith] because the identity or its email address belongs to another
+/// user, the service keeps the credential that Firebase gives with its
+/// answer, and [signInWith] of the identical credential object signs in
+/// with that one.
+///
+/// [deleteAccount] with a fresh credential signs the user in again with it,
+/// and, for a credential of Apple, revokes the tokens that Apple gave the
+/// app with its authorization code before it deletes the account, as the
+/// App Store asks of an app with Sign in with Apple. Firebase revokes them
+/// on iOS and macOS, and has no call for it elsewhere. A revocation needs
+/// the Services ID and the OAuth code flow configuration of the Apple
+/// sign-in method in the Firebase console: without them it fails with
+/// [AuthFailureReason.notConfigured], and the account stays.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
 
   final FirebaseAuth _auth;
+
+  /// What Firebase gave with its answer to a link that it refused, for the
+  /// credential object of the link: a credential of the same identity,
+  /// which the plugin keeps on the platform and names by a number, so that
+  /// the service holds no token.
+  final Expando<AuthCredential> _givenForRefusedLink = Expando();
 
   /// Tells that the user may have changed: after each call here, and when
   /// Firebase tells of a change that no call here made, such as the end of
@@ -1684,6 +1733,11 @@ final class FirebaseAuthService implements AuthService {
       // Android has an empty address, not none, for an anonymous user whom
       // it kept on the device.
       email: email == null || email.isEmpty ? null : email,
+      issuers: {
+        for (final MapEntry(key: issuer, value: (:id, name: _))
+            in _providers.entries)
+          if (user.providerData.any((info) => info.providerId == id)) issuer,
+      },
     );
   }
 
@@ -1723,23 +1777,33 @@ final class FirebaseAuthService implements AuthService {
     );
   });
 
+  /// After a link of the identical [credential] that Firebase refused, it
+  /// signs in with the credential that Firebase gave with that answer, once.
   @override
-  Future<void> signInWith(SignInCredential credential) =>
-      _run(() async => throw _refused(credential));
+  Future<void> signInWith(SignInCredential credential) => _run(() {
+    final given = _givenForRefusedLink[credential];
+    _givenForRefusedLink[credential] = null;
+    return _auth.signInWithCredential(given ?? _firebaseOf(credential));
+  }, credential: credential);
 
   @override
-  Future<void> linkWith(SignInCredential credential) =>
-      _runForUser((user) async => throw _refused(credential));
-
-  /// The failure of a call with [credential], which the service does not
-  /// take.
-  AuthFailure _refused(SignInCredential credential) => AuthFailure(
-    AuthFailureReason.notConfigured,
-    developerHint:
-        'The app signs in to Firebase Authentication with an '
-        'email address and a password, and as an anonymous user, and '
-        'takes no credential of an identity provider, such as '
-        '$credential.',
+  Future<void> linkWith(SignInCredential credential) => _runForUser(
+    (user) async {
+      final ofFirebase = _firebaseOf(credential);
+      try {
+        await user.linkWithCredential(ofFirebase);
+      } on FirebaseAuthException catch (error) {
+        // The sign-in that follows takes the credential that Firebase
+        // gave: Apple takes the token of a credential once, and the
+        // refused link has taken it.
+        if (_linkReasons.containsKey(error.code)) {
+          _givenForRefusedLink[credential] = error.credential;
+        }
+        rethrow;
+      }
+    },
+    credential: credential,
+    reasons: _linkReasons,
   );
 
   /// While an anonymous user is signed in, Firebase answers with that user
@@ -1776,33 +1840,157 @@ final class FirebaseAuthService implements AuthService {
   @override
   Future<void> deleteAccount({SignInCredential? fresh}) =>
       _runForUser((user) async {
-        if (fresh != null) throw _refused(fresh);
+        if (fresh != null) await _signInAgain(user, fresh);
         await user.delete();
-        // Firebase signs a deleted user out, but the plugin keeps that user
-        // as the current one until the platform tells it of the sign-out,
-        // which may come after this call is over.
+        // Firebase signs a deleted user out, but the plugin keeps that
+        // user as the current one until the platform tells it of the
+        // sign-out, which may come after this call is over.
         await _auth.signOut();
-      });
+      }, credential: fresh);
 
-  /// Runs [call] for the user who is signed in.
+  /// Signs [user] in again with [fresh], so that Firebase deletes the
+  /// account without asking for a recent sign-in, and revokes the tokens of
+  /// Apple with the authorization code of [fresh] where it does.
+  Future<void> _signInAgain(User user, SignInCredential fresh) async {
+    final ofFirebase = _firebaseOf(fresh);
+    final code = _codeToRevoke(fresh);
+    try {
+      await user.reauthenticateWithCredential(ofFirebase);
+    } on FirebaseAuthException catch (error) {
+      // Firebase answers so for a credential of an identity that has no
+      // user, which is no sign that the session of the user has ended.
+      if (error.code == 'user-not-found') {
+        throw const AuthFailure(AuthFailureReason.invalidCredentials);
+      }
+      rethrow;
+    }
+    if (code != null) await _revoke(code);
+  }
+
+  /// The authorization code with which the service revokes the tokens that
+  /// Apple gave the app before it deletes the account, for a [fresh]
+  /// credential of Apple on iOS and macOS, or `null`: Firebase has no call
+  /// for the revocation on the other platforms. Apple takes a code once, so
+  /// it is the code of the fresh credential, never that of a sign-in
+  /// before.
+  String? _codeToRevoke(SignInCredential fresh) {
+    if (fresh case IdTokenCredential(issuer: _apple, :final authorizationCode)
+        when defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS) {
+      return authorizationCode ??
+          (throw const AuthFailure(
+            AuthFailureReason.notConfigured,
+            developerHint:
+                'The credential of Apple has no authorization '
+                'code, with which Firebase revokes the tokens that Apple '
+                'gave the app before the account is deleted, so the account '
+                'was not deleted. The way to sign in with Apple gives one '
+                'with each credential.',
+          ));
+    }
+    return null;
+  }
+
+  /// Revokes the tokens that Apple gave the app with the authorization
+  /// [code]. A failure keeps the account: it is
+  /// [AuthFailureReason.notConfigured], but for a request that did not
+  /// reach Firebase and a session that has ended.
+  Future<void> _revoke(String code) async {
+    // Firebase never completes the call while nobody is signed in.
+    if (_auth.currentUser == null) {
+      throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+    }
+    try {
+      await _auth.revokeTokenWithAuthorizationCode(code);
+    } on Object catch (error) {
+      if (error is FirebaseAuthException &&
+          (error.code == 'network-request-failed' ||
+              _endedSession.contains(error.code))) {
+        rethrow;
+      }
+      final project = _auth.app.options.projectId;
+      throw AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint:
+            'Firebase did not revoke the tokens that Apple gave '
+            'the app (${_answerOf(error)}), so the account was not deleted. '
+            'The revocation needs the Services ID and the OAuth code flow '
+            'configuration, with the Apple team ID, the Key ID and the '
+            'private key, of the Apple sign-in method of the Firebase '
+            'project $project, in the Firebase console under '
+            'Authentication > Sign-in method: ${_consoleOf(project)}. When '
+            'they are set, the authorization code of Apple was older than '
+            'five minutes or used before, and the next deletion asks Apple '
+            'for a new one.',
+      );
+    }
+  }
+
+  /// The credential of Firebase Authentication for [credential].
+  ///
+  /// It fails with [AuthFailureReason.notConfigured] for a credential of an
+  /// identity provider that the service does not take, and for a credential
+  /// of Apple without the raw nonce, which Firebase checks the token of
+  /// Apple against.
+  AuthCredential _firebaseOf(SignInCredential credential) =>
+      switch (credential) {
+        IdTokenCredential(issuer: _google, :final idToken) =>
+          GoogleAuthProvider.credential(idToken: idToken),
+        IdTokenCredential(
+          issuer: _apple,
+          :final idToken,
+          :final rawNonce?,
+          :final givenName,
+          :final familyName,
+        ) =>
+          AppleAuthProvider.credentialWithIDToken(
+            idToken,
+            rawNonce,
+            AppleFullPersonName(givenName: givenName, familyName: familyName),
+          ),
+        IdTokenCredential(issuer: _apple) => throw const AuthFailure(
+          AuthFailureReason.notConfigured,
+          developerHint:
+              'The credential of Apple has no raw nonce, which '
+              'Firebase checks the token of Apple against. The way to sign '
+              'in with Apple gives the nonce of its request with each '
+              'credential.',
+        ),
+        IdTokenCredential(:final issuer) => throw AuthFailure(
+          AuthFailureReason.notConfigured,
+          developerHint:
+              'The app signs in to Firebase Authentication with '
+              'the credentials of Google ($_google) and Apple ($_apple), '
+              'and takes no credential of $issuer.',
+        ),
+      };
+
+  /// Runs [call] for the user who is signed in, as [_run] runs a call.
   ///
   /// It fails with [AuthFailureReason.recentSignInRequired] when nobody is
   /// signed in, and when Firebase answers that the session of the user has
   /// ended: the user is then signed out on this device first.
-  Future<void> _runForUser(Future<void> Function(User user) call) =>
-      _run(() async {
-        final user = _auth.currentUser;
-        if (user == null) {
-          throw const AuthFailure(AuthFailureReason.recentSignInRequired);
-        }
-        try {
-          await call(user);
-        } on FirebaseAuthException catch (error) {
-          if (!_endedSession.contains(error.code)) rethrow;
-          await _auth.signOut();
-          throw const AuthFailure(AuthFailureReason.recentSignInRequired);
-        }
-      });
+  Future<void> _runForUser(
+    Future<void> Function(User user) call, {
+    SignInCredential? credential,
+    Map<String, AuthFailureReason> reasons = const {},
+  }) => _run(
+    () async {
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+      }
+      try {
+        await call(user);
+      } on FirebaseAuthException catch (error) {
+        if (!_endedSession.contains(error.code)) rethrow;
+        await _auth.signOut();
+        throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+      }
+    },
+    credential: credential,
+    reasons: reasons,
+  );
 
   /// Fails for an [email] that is empty with
   /// [AuthFailureReason.invalidEmail], and for a [password] that is empty
@@ -1824,64 +2012,96 @@ final class FirebaseAuthService implements AuthService {
 
   /// Runs [call], which then fails only with an [AuthFailure], and tells
   /// of the user that it leaves, also when it failed.
-  Future<void> _run(Future<void> Function() call) async {
+  ///
+  /// A code of Firebase gets its reason of [reasons], the reasons of the
+  /// codes for this call, and otherwise that of [_failureOf]. [credential]
+  /// is the credential that the call signs in with, whose way to sign in
+  /// the hint of a failure names.
+  Future<void> _run(
+    Future<void> Function() call, {
+    SignInCredential? credential,
+    Map<String, AuthFailureReason> reasons = const {},
+  }) async {
     try {
       await call();
     } on Object catch (error, stackTrace) {
-      Error.throwWithStackTrace(_failureOf(error), stackTrace);
+      Error.throwWithStackTrace(
+        _failureOf(error, credential, reasons),
+        stackTrace,
+      );
     } finally {
       _changes.add(null);
     }
   }
 
   /// The failure of a call that failed with [error]: the reason for the
-  /// code of Firebase. A code that has no reason yet gets one here.
-  AuthFailure _failureOf(Object error) {
+  /// code of Firebase, from [reasons] first. A code that has no reason yet
+  /// gets one here. The hint of a way to sign in that is not enabled names
+  /// the way to sign in of [credential], or Email/Password and Anonymous.
+  AuthFailure _failureOf(
+    Object error,
+    SignInCredential? credential,
+    Map<String, AuthFailureReason> reasons,
+  ) {
     if (error is AuthFailure) return error;
     if (error is! FirebaseAuthException) {
       return AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
     }
-    final reason = switch (error.code) {
-      // Firebase answers a wrong password and an address without an account
-      // alike, unless the project is without the protection against the
-      // enumeration of email addresses.
-      'invalid-credential' ||
-      'invalid-login-credentials' ||
-      'wrong-password' ||
-      'user-not-found' => AuthFailureReason.invalidCredentials,
-      'email-already-in-use' ||
-      'credential-already-in-use' => AuthFailureReason.emailInUse,
-      'weak-password' ||
-      'password-does-not-meet-requirements' => AuthFailureReason.weakPassword,
-      'invalid-email' || 'missing-email' => AuthFailureReason.invalidEmail,
-      'user-disabled' => AuthFailureReason.userDisabled,
-      'too-many-requests' => AuthFailureReason.tooManyAttempts,
-      'network-request-failed' => AuthFailureReason.network,
-      'requires-recent-login' => AuthFailureReason.recentSignInRequired,
-      _ => null,
-    };
+    final reason =
+        reasons[error.code] ??
+        switch (error.code) {
+          // Firebase answers a wrong password and an address without an
+          // account alike, unless the project is without the protection
+          // against the enumeration of email addresses. It also answers so
+          // for a credential that it refuses, such as one that expired, and
+          // for one whose nonce it took before.
+          'invalid-credential' ||
+          'invalid-login-credentials' ||
+          'wrong-password' ||
+          'user-not-found' ||
+          'missing-or-invalid-nonce' ||
+          // A fresh credential of another user than the one whose account
+          // is deleted.
+          'user-mismatch' => AuthFailureReason.invalidCredentials,
+          'email-already-in-use' ||
+          'credential-already-in-use' => AuthFailureReason.emailInUse,
+          'account-exists-with-different-credential' =>
+            AuthFailureReason.accountExistsWithOtherMethod,
+          'weak-password' || 'password-does-not-meet-requirements' =>
+            AuthFailureReason.weakPassword,
+          'invalid-email' || 'missing-email' => AuthFailureReason.invalidEmail,
+          'user-disabled' => AuthFailureReason.userDisabled,
+          'too-many-requests' => AuthFailureReason.tooManyAttempts,
+          'network-request-failed' => AuthFailureReason.network,
+          'requires-recent-login' => AuthFailureReason.recentSignInRequired,
+          _ => null,
+        };
     if (reason != null) return AuthFailure(reason);
-    // The message on one line: that of iOS may be the description of an
-    // error over many lines.
-    final message = (error.message ?? '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    final answer = message.isEmpty ? error.code : '${error.code}: $message';
+    final answer = _answerOf(error);
     final project = _auth.app.options.projectId;
-    final enable =
-        'run `dart tool/enable_firebase_sign_in.dart` in the '
-        'directory of the app, or enable Email/Password, and Anonymous for '
-        'an app that signs in anonymous users, in the Firebase console '
-        'under Authentication > Sign-in method: '
-        'https://console.firebase.google.com/project/$project/'
-        'authentication/providers';
+    final console =
+        'the Firebase console under Authentication > Sign-in '
+        'method: ${_consoleOf(project)}';
+    final method = switch (credential) {
+      IdTokenCredential(:final issuer) => _providers[issuer]?.name,
+      null => null,
+    };
+    // The way to sign in, after "sign-in", and what enables it.
+    final (withMethod, enable) = method == null
+        ? (
+            '',
+            'run `dart tool/enable_firebase_sign_in.dart` in the directory '
+                'of the app, or enable Email/Password, and Anonymous for an '
+                'app that signs in anonymous users, in $console',
+          )
+        : (' with $method', 'enable $method in $console');
     // A way to sign in that is not enabled, which Firebase tells by its
     // code, and a project in which Authentication was never set up, which
     // it tells only in its message.
     const noConfiguration = 'CONFIGURATION_NOT_FOUND';
     final notEnabled = switch (error.code) {
       'operation-not-allowed' || 'admin-restricted-operation' => error.code,
-      _ when message.contains(noConfiguration) =>
+      _ when answer.contains(noConfiguration) =>
         '${error.code}, $noConfiguration',
       _ => null,
     };
@@ -1889,8 +2109,9 @@ final class FirebaseAuthService implements AuthService {
       return AuthFailure(
         AuthFailureReason.notConfigured,
         developerHint:
-            'Sign-in is not enabled in the Firebase project '
-            '$project (Firebase answered $notEnabled). To fix it, $enable',
+            'Sign-in$withMethod is not enabled in the Firebase '
+            'project $project (Firebase answered $notEnabled). To fix it, '
+            '$enable',
       );
     }
     // On iOS and macOS, Firebase may answer for such a project with an
@@ -1903,13 +2124,30 @@ final class FirebaseAuthService implements AuthService {
         AuthFailureReason.notConfigured,
         developerHint:
             'Firebase reported an internal error ($answer), which '
-            'is also what it answers on iOS and macOS when sign-in is not '
-            'enabled in the Firebase project $project. If that is the '
+            'is also what it answers on iOS and macOS when sign-in$withMethod '
+            'is not enabled in the Firebase project $project. If that is the '
             'cause, $enable',
       );
     }
     return AuthFailure(AuthFailureReason.unknown, developerHint: answer);
   }
+
+  /// What Firebase answered with [error]: its code and its message on one
+  /// line, since the message of iOS may be the description of an error over
+  /// many lines, or the error itself when it is no error of Firebase.
+  String _answerOf(Object error) {
+    if (error is! FirebaseAuthException) return '$error';
+    final message = (error.message ?? '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return message.isEmpty ? error.code : '${error.code}: $message';
+  }
+
+  /// The page of the Firebase console with the sign-in methods of
+  /// [project].
+  String _consoleOf(String project) =>
+      'https://console.firebase.google.com/project/$project/'
+      'authentication/providers';
 }
 === lib/core/auth/guest_data.dart (role:auth) ===
 /// Gives the account [accountUid] what a guest had: the function that

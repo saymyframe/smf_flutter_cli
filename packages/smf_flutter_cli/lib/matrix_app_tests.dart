@@ -105,20 +105,23 @@ Future<MatrixAppTests> smfAppTests() async {
         roles: {routerRole},
       ),
       // The sign-in service of the module on Firebase Authentication: what
-      // each of its calls sends to Firebase; the reason that it gives each
-      // code of Firebase, in the form in which Android and iOS send it;
-      // the user whom it finds on the device when it is created; a call
-      // for a user whose session has ended on the server, which signs that
-      // user out; and the language in which it asks Firebase for the
-      // message of a password reset, the one that the app is in (see
-      // _messageLanguagesOf). The tests use the service of the module, and
-      // leave what every provider of the auth role does to the test of the
-      // role. The mocks are a backend in memory with no account and nobody
-      // signed in, and the matrix sets them up for the tests of every
-      // module of the app, since the start-up of the app starts the
-      // session of the app on Firebase Authentication. Its probe compares,
-      // on a device, the user of the session with the one that the Firebase
-      // SDK has there.
+      // each of its calls sends to Firebase, with a password and with the
+      // credentials of Google and Apple; the credential that Firebase gave
+      // with a refused link, which the sign-in after it takes; the
+      // revocation of the tokens of Apple before a deletion; the reason
+      // that it gives each code of Firebase, in the form in which Android
+      // and iOS send it; the user whom it finds on the device when it is
+      // created; a call for a user whose session has ended on the server,
+      // which signs that user out; and the language in which it asks
+      // Firebase for the message of a password reset, the one that the app
+      // is in (see _messageLanguagesOf). The tests use the service of the
+      // module, and leave what every provider of the auth role does to the
+      // test of the role. The mocks are a backend in memory with no account
+      // and nobody signed in, which takes the test tokens of Google and
+      // Apple, and the matrix sets them up for the tests of every module of
+      // the app, since the start-up of the app starts the session of the
+      // app on Firebase Authentication. Its probe compares, on a device, the
+      // user of the session with the one that the Firebase SDK has there.
       MatrixAppTest(
         '$firebaseAuth/firebase_auth',
         appliesTo: _has(FirebaseAuthModule.id),
