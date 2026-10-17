@@ -1340,7 +1340,7 @@ final class IdTokenCredential extends SignInCredential {
 
   /// The nonce whose hash the request for the token had, which the
   /// identity provider wrote into the token, or `null` if the request had
-  /// none. The provider of sign-in passes it on, so that its backend checks
+  /// none. The provider of sign-in passes it on where its backend checks
   /// the token against it.
   final String? rawNonce;
 
@@ -1615,6 +1615,17 @@ const _endedSession = {
   'no-current-user',
 };
 
+/// The codes of an answer of Firebase to a revocation that are no matter of
+/// the setup of the Apple sign-in method of the project: a request that did
+/// not reach Firebase, too many attempts, a disabled account, and a session
+/// that has ended.
+const _notOfSetup = {
+  'network-request-failed',
+  'too-many-requests',
+  'user-disabled',
+  ..._endedSession,
+};
+
 /// The issuer of the ID tokens of Google.
 const _google = 'https://accounts.google.com';
 
@@ -1663,8 +1674,9 @@ const _linkReasons = {
 /// [AuthFailureReason.weakPassword] in [signUp] and [linkPassword].
 ///
 /// A credential of Google goes to Firebase with its ID token, and one of
-/// Apple with its ID token, its raw nonce and the name of the user: Firebase
-/// takes no nonce with a token of Google. A credential of another identity
+/// Apple with its ID token, its raw nonce and the name of the user:
+/// `GoogleAuthProvider` takes no nonce, and Firebase does not check the
+/// nonce of a token of Google. A credential of another identity
 /// provider fails with [AuthFailureReason.notConfigured] before Firebase is
 /// asked. Apple takes a credential once, so when Firebase refuses
 /// [linkWith] because the identity or its email address belongs to another
@@ -1688,8 +1700,9 @@ final class FirebaseAuthService implements AuthService {
 
   /// What Firebase gave with its answer to a link that it refused, for the
   /// credential object of the link: a credential of the same identity,
-  /// which the plugin keeps on the platform and names by a number, so that
-  /// the service holds no token.
+  /// which the plugin keeps on the platform and names by a number. It may
+  /// carry the token that the platform gave, and is dropped once used. No
+  /// hint names it.
   final Expando<AuthCredential> _givenForRefusedLink = Expando();
 
   /// Tells that the user may have changed: after each call here, and when
@@ -1841,12 +1854,14 @@ final class FirebaseAuthService implements AuthService {
     try {
       await user.reauthenticateWithCredential(ofFirebase);
     } on FirebaseAuthException catch (error) {
+      if (error.code != 'user-not-found') rethrow;
       // Firebase answers so for a credential of an identity that has no
-      // user, which is no sign that the session of the user has ended.
-      if (error.code == 'user-not-found') {
-        throw const AuthFailure(AuthFailureReason.invalidCredentials);
-      }
-      rethrow;
+      // user, and for a credential of the user when the account was
+      // deleted on the server, such as on another device. A reload of the
+      // user fails for the second with a code of a session that has ended,
+      // which signs the user out.
+      await user.reload();
+      throw const AuthFailure(AuthFailureReason.invalidCredentials);
     }
     if (code != null) await _revoke(code);
   }
@@ -1877,8 +1892,9 @@ final class FirebaseAuthService implements AuthService {
 
   /// Revokes the tokens that Apple gave the app with the authorization
   /// [code]. A failure keeps the account: it is
-  /// [AuthFailureReason.notConfigured], but for a request that did not
-  /// reach Firebase and a session that has ended.
+  /// [AuthFailureReason.notConfigured], but for an answer of Firebase that
+  /// is no matter of the setup ([_notOfSetup]), which gets its reason as
+  /// that of any other call.
   Future<void> _revoke(String code) async {
     // Firebase never completes the call while nobody is signed in.
     if (_auth.currentUser == null) {
@@ -1887,9 +1903,7 @@ final class FirebaseAuthService implements AuthService {
     try {
       await _auth.revokeTokenWithAuthorizationCode(code);
     } on Object catch (error) {
-      if (error is FirebaseAuthException &&
-          (error.code == 'network-request-failed' ||
-              _endedSession.contains(error.code))) {
+      if (error is FirebaseAuthException && _notOfSetup.contains(error.code)) {
         rethrow;
       }
       final project = _auth.app.options.projectId;
@@ -1910,7 +1924,9 @@ final class FirebaseAuthService implements AuthService {
     }
   }
 
-  /// The credential of Firebase Authentication for [credential].
+  /// The credential of Firebase Authentication for [credential]. One of
+  /// Google has the ID token alone: `GoogleAuthProvider` takes no nonce, and
+  /// Firebase does not check the nonce of a token of Google.
   ///
   /// It fails with [AuthFailureReason.notConfigured] for a credential of an
   /// identity provider that the service does not take, and for a credential

@@ -1280,7 +1280,7 @@ final class IdTokenCredential extends SignInCredential {
 
   /// The nonce whose hash the request for the token had, which the
   /// identity provider wrote into the token, or `null` if the request had
-  /// none. The provider of sign-in passes it on, so that its backend checks
+  /// none. The provider of sign-in passes it on where its backend checks
   /// the token against it.
   final String? rawNonce;
 
