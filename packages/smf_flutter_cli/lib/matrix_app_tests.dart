@@ -691,6 +691,55 @@ Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
       roles: {authRole},
     );
 
+/// The test of the ways to sign in of the auth role that the CLI keeps in
+/// its `app_tests/auth_methods`, for the apps whose modules give the role a
+/// way to sign in with an identity provider ([AuthRole.methodsIn]),
+/// whichever modules provide the role and the ways to sign in, in each mode
+/// of the role. Each of its two files runs the start-up of the app once,
+/// with `bootstrap()`:
+/// - the service of the provider keeps the contract of `AuthService` for
+///   credentials, with each issuer of the ways to sign in of the app:
+///   signing in with the credential of a new identity creates its user,
+///   whom signing in with it again finds, in place of whoever is signed in;
+///   `linkWith` gives the anonymous user who is signed in the identity with
+///   the same id; `linkWith` of an identity that another user has fails
+///   with `credentialInUse`, and `signInWith` takes the identical credential
+///   then; for an identity whose email address has an account that signs
+///   in with a password, `linkWith` fails with
+///   `accountExistsWithOtherMethod`, and `signInWith` fails so too or signs
+///   in to that account; a call for the user who is signed in fails when
+///   nobody is; and `deleteAccount` with a fresh credential deletes the user
+///   whom a start found on the device, and one of another user fails with
+///   `invalidCredentials`;
+/// - the session of the app signs in with the credential that the function
+///   of each way to sign in returns, on a platform that the way to sign in
+///   works on: an anonymous user gets the identity and keeps the id, a
+///   later anonymous user and a sign-in without a user sign in to the
+///   account of that identity, and once the next start found that account
+///   on the device, `appSession.deleteAccount()` deletes it, for a way to
+///   sign in with `revokesOnDeletion` with a credential that it asks the
+///   way to sign in for again, after which the identity has another user.
+///
+/// The test knows only the role, and reads the ways to sign in of the app
+/// from `appSignInMethods`, which the template of the role generates, so the
+/// matrix writes no file for it. It builds test tokens of identities of its
+/// own for each issuer: JSON Web Tokens without a signature, whose payload
+/// has `iss`, `sub` and `email`. The mocks of the module of a way to sign in
+/// issue such tokens, of one identity of their own and the same each time,
+/// and a provider takes them in the tests of an app. It uses the helpers of
+/// the test of the auth role ([authRoleAppTest]), which every app with the
+/// role has. It has no probe for the start check: nobody can sign in on a
+/// device.
+Future<MatrixAppTest> authMethodsAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/auth_methods',
+      appliesTo: (app) {
+        final hook = app.hook!;
+        return hook.presentRoles.contains(authRole) &&
+            authRole.methodsIn(authRole.hookInput(hook)).isNotEmpty;
+      },
+      roles: {authRole},
+    );
+
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them. Once the app started

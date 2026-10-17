@@ -375,6 +375,15 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // with every module, which the matrix has once more for the other
       // modes.
       await authRoleAppTest(),
+      // The ways to sign in of the apps with the auth role whose modules
+      // give the role one, whichever modules provide the role and the ways
+      // to sign in, the test that the CLI keeps: the service takes the
+      // credentials of identities of each issuer of the app as the role
+      // says, and the session signs in with the credential that the
+      // function of each way to sign in returns, in each mode of the role.
+      // Those are the apps of the fixture way to sign in, with the fixture
+      // sign-in, and the apps with every module.
+      await authMethodsAppTest(),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
