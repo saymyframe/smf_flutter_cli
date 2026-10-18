@@ -23,6 +23,10 @@
 // at once, and the button of a form does not spin while its call is on its
 // way.
 //
+// The buttons of the ways to sign in of the sign-in and of the sign-up, on
+// Android and on iOS, scroll into view in the same way, and keep their labels
+// whole as the other buttons do, while their icons keep their size.
+//
 // The screen of the account scrolls to the address, to its button and to
 // its action in the same way, and so does the sheet to its two buttons,
 // which keep out of the insets. The title of the sheet is a header too, and
@@ -39,6 +43,7 @@
 // run twice, and each expectation gives its reason.
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -253,6 +258,28 @@ void _expectLabel(
   );
 }
 
+/// Checks the buttons of the ways to sign in of the page that the user
+/// sees, in [language]: the page scrolls to each, its label keeps its words
+/// whole, and its icon keeps its size, whatever the text size of the device.
+Future<void> _expectMethodButtons(WidgetTester tester, String language) async {
+  for (final method in methodsHere()) {
+    final button = methodButton(method);
+    final label = method.label(tester.element(button));
+    await _expectReached(tester, button, 'the button "$label"');
+    _expectLabel(tester, button, label, language);
+    final icon = find.descendant(
+      of: button,
+      matching: find.byWidget(method.icon),
+    );
+    expect(
+      IconTheme.of(tester.element(icon)).size,
+      20,
+      reason: 'The icon of the button "$label" keeps its size with a large '
+          'text size: a logo does not grow with the text.',
+    );
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   // A tap that reaches no widget fails the test where it misses.
@@ -387,6 +414,12 @@ void main() {
         ]) {
           _expectLabel(tester, button, label, language);
         }
+        // The buttons of the ways to sign in, on Android and on iOS.
+        for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+          await usePlatform(tester, platform);
+          await _expectMethodButtons(tester, language);
+        }
+        await usePlatform(tester, null);
         final message = failureMessage(AuthFailureReason.notConfigured);
         final hint = find.descendant(
           of: find.byType(FailureMessage),
@@ -466,6 +499,7 @@ void main() {
         ]) {
           _expectLabel(tester, button, label, language);
         }
+        await _expectMethodButtons(tester, language);
         await _tap(tester, otherScreenAction);
 
         // The screen that resets a password, and what it says once the
