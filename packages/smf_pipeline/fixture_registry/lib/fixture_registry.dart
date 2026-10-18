@@ -168,10 +168,9 @@ List<ModuleId> everyFixture({
 /// the CLI has, for the app tests that they keep and for the test of the
 /// ways to sign in of the auth role that the CLI keeps, which runs there
 /// on Firebase Authentication with both; and the sign-in module of the
-/// CLI, for the app test
-/// that it keeps, with the two state managers of the CLI, bloc and
-/// riverpod, since a registry has every provider that one of its modules
-/// has a variant for.
+/// CLI, for the app test that it keeps, with the two state managers of the
+/// CLI, bloc and riverpod, since a registry has every provider that one of
+/// its modules has a variant for.
 /// The app asks for an account, as an app in the first mode of the auth
 /// role does, so the guards of the sign-in keep the user from every other
 /// screen until the mocks of that test sign an account up for the tests of

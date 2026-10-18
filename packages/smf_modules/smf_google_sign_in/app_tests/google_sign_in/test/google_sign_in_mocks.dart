@@ -20,7 +20,10 @@
 // package was started with a nonce, which Google writes into its token
 // then, so that a provider of the auth role takes it in the tests of an
 // app (see the test of the ways to sign in of the auth role,
-// auth_methods). The app starts the package without one.
+// auth_methods). The app starts the package without one. A start completes
+// a turn after it was asked for, and a sign-in that did not wait for it
+// fails with a StateError, as one on Android fails without the server
+// client that the start reads.
 //
 // It differs from Google in this: it shows no sheet, so a sign-in
 // completes at once, it checks no client of the app, no key that signs it
@@ -59,6 +62,12 @@ final class MockGoogleSignIn extends GoogleSignInPlatform {
   /// its tokens.
   String? _nonce;
 
+  /// Whether a start of the package has completed. google_sign_in asks its
+  /// user to wait for the start before any other call: on Android, the
+  /// start reads the server client of the app, without which a sign-in
+  /// fails.
+  bool _started = false;
+
   /// Fails the next sign-in with [error], as the plugin of a platform
   /// throws it: a [GoogleSignInException], such as one with the code
   /// [GoogleSignInExceptionCode.canceled] for a closed sheet, or another
@@ -68,7 +77,11 @@ final class MockGoogleSignIn extends GoogleSignInPlatform {
   @override
   Future<void> init(InitParameters params) async {
     starts.add(params);
+    // The start completes a turn later, as that of a plugin that asks its
+    // platform does, so a sign-in that does not wait for it comes first.
+    await Future<void>.value();
     _nonce = params.nonce;
+    _started = true;
   }
 
   @override
@@ -79,6 +92,12 @@ final class MockGoogleSignIn extends GoogleSignInPlatform {
     AuthenticateParameters params,
   ) async {
     signIns++;
+    if (!_started) {
+      throw StateError(
+        'google_sign_in was asked to sign in before its start completed. '
+        'On Android, the sign-in would have no server client.',
+      );
+    }
     if (_failures.isNotEmpty) throw _failures.removeAt(0);
     return AuthenticationResults(
       user: const GoogleSignInUserData(

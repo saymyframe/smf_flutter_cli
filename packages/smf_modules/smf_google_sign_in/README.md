@@ -2,7 +2,7 @@
 
 The SMF module of Google sign-in with [google_sign_in](https://pub.dev/packages/google_sign_in). The users of the app sign in with their Google account on Android and iOS, next to the other ways to sign in of the app.
 
-The module gives the auth role of SMF a way to sign in, with the label "Continue with Google" in English and Ukrainian and the "G" of Google as its icon. The auth role lists it in `appSignInMethods`, and a screen of sign-in shows its button on Android and iOS. `googleCredential()` asks Google for a credential with the sheet of Google sign-in and returns the ID token of the Google account. The app gives the credential to its provider of sign-in. A closed sheet is no failure: the function returns `null`.
+The module gives the auth role of SMF a way to sign in, with the label "Continue with Google" in English and Ukrainian and the "G" of Google as its icon. The auth role lists it in `appSignInMethods`, and a sign-in screen of the app, such as the one of the `sign_in` module, shows its button on Android and iOS. `googleCredential()` asks Google for a credential with the sheet of Google sign-in and returns the ID token of the Google account. The app gives the credential to its provider of sign-in. A closed sheet is no failure: the function returns `null`.
 
 Google sign-in needs the Google project to know the app: the SHA-1 of the keys that sign the Android app, an iOS client whose reversed id is a URL scheme of the app, and the web client that the ID token is issued to. The module states these needs to the provider of sign-in, which sets them up or tells how in the README of the app. google_sign_in reads the ids of the clients from the files of the app, so the module passes it none.
 

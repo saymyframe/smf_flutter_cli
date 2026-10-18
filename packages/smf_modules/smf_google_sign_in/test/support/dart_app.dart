@@ -180,7 +180,10 @@ class WidgetsBinding {
 /// `googleAnswers`, what the platform answers the next sign-ins with in
 /// turn, a `GoogleAnswer` with the ID token of an account or an error that
 /// the sign-in throws, `googleStarts`, the arguments of each start of the
-/// package, and `googleSignIns`, how many sign-ins reached the platform.
+/// package, and `googleSignIns`, how many sign-ins reached the platform. A
+/// start completes a turn after it was asked for, and a sign-in before
+/// that throws a [StateError], as the package asks its user to wait for
+/// the start.
 const _googleSignIn = r'''
 /// What the platform answers the next sign-ins with, in turn: a
 /// [GoogleAnswer], or an error that the sign-in throws.
@@ -191,6 +194,10 @@ final List<Map<String, String?>> googleStarts = [];
 
 /// How many sign-ins reached the platform.
 var googleSignIns = 0;
+
+/// Whether a start of the package has completed, which the package asks
+/// its user to wait for before a sign-in.
+var _googleStarted = false;
 
 /// An account that the platform answers a sign-in with: its ID token.
 class GoogleAnswer {
@@ -251,20 +258,22 @@ class GoogleSignIn {
     String? nonce,
     String? hostedDomain,
   }) async {
-    await null;
     googleStarts.add({
       'clientId': clientId,
       'serverClientId': serverClientId,
       'nonce': nonce,
       'hostedDomain': hostedDomain,
     });
+    await null;
+    _googleStarted = true;
   }
 
   Future<GoogleSignInAccount> authenticate({
     List<String> scopeHint = const <String>[],
   }) async {
-    await null;
     googleSignIns++;
+    if (!_googleStarted) throw StateError('The start has not completed.');
+    await null;
     final answer = googleAnswers.removeAt(0);
     if (answer is GoogleAnswer) return GoogleSignInAccount._(answer.idToken);
     throw answer;

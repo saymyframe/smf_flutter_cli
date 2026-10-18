@@ -46,7 +46,7 @@ Future<SignInCredential?> googleCredential() async {
       // has no Android client with the name of the package and the SHA-1
       // of the key that signed the app.
       case GoogleSignInExceptionCode.unknownError
-          when error.description?.contains('[28444]') ?? false:
+          when RegExp(r'\b28444\b').hasMatch(error.description ?? ''):
         throw _notConfigured(error.description!);
       default:
         throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');

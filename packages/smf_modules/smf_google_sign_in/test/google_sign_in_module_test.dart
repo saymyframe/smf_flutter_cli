@@ -210,6 +210,21 @@ Future<void> main(List<String> arguments, SendPort port) async {
       ),
     ),
     (
+      'unknownError of a key that Google does not know, in another form',
+      const GoogleSignInException(
+        code: GoogleSignInExceptionCode.unknownError,
+        description: 'GetCredentialCustomException: 28444: Developer console '
+            'is not set up correctly.',
+      ),
+    ),
+    (
+      'unknownError with another number',
+      const GoogleSignInException(
+        code: GoogleSignInExceptionCode.unknownError,
+        description: 'Error 128444.',
+      ),
+    ),
+    (
       'clientConfigurationError without a description',
       const GoogleSignInException(
         code: GoogleSignInExceptionCode.clientConfigurationError,
@@ -639,6 +654,12 @@ void main() {
               'which of these it sets up.'),
           contains('fails with the reason `notConfigured`'),
           contains('On iOS, the Google Sign-In SDK stops the app instead'),
+          contains('If the button of Google does nothing on Android, check '
+              'that the SHA-1'),
+          contains('such as the one of the `sign_in` module'),
+          contains('pass them to `initialize()` in `googleCredential()` of '
+              '`$googleSignInFile`'),
+          contains('the logo of the Google Sign-In SDK (Apache License 2.0)'),
           contains('keep the image as it is'),
         ]),
       );
@@ -680,7 +701,7 @@ void main() {
           'clientConfigurationError',
           'providerConfigurationError',
           'unknownError',
-          '[28444]',
+          '28444',
           'notConfigured',
           'unknown',
           'GoogleSignInIcon',
@@ -794,13 +815,21 @@ void main() {
         'unknownError of a key that Google does not know': notConfigured(
           '[28444] Developer console is not set up correctly.',
         ),
+        'unknownError of a key that Google does not know, in another form':
+            notConfigured(
+          'GetCredentialCustomException: 28444: Developer console is not set '
+          'up correctly.',
+        ),
+        'unknownError with another number': 'failed: unknown: '
+            'GoogleSignInException(code '
+            'GoogleSignInExceptionCode.unknownError, Error 128444., null)',
         'clientConfigurationError without a description':
             notConfigured('clientConfigurationError'),
         'another error': 'failed: unknown: Bad state: broken',
         'no ID token': 'failed: unknown: Google gave no ID token.',
       });
       // Each of them asked Google once.
-      expect(calls['sign-ins of the errors'], 11);
+      expect(calls['sign-ins of the errors'], 13);
     });
   });
 }
