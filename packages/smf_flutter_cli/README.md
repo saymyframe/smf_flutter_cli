@@ -2,11 +2,11 @@
 
 `smf` generates Flutter apps from independent modules. You pick what the app needs, such as a router, tabs at the bottom, sign-in, dependency injection, a state manager, Firebase or a start screen, and `smf create` generates a Flutter project in which these parts already work together. The project does not depend on SMF at run time, so its code is yours from the first commit.
 
-![smf create in a terminal: it asks for the app name and the modules, adds the modules that the chosen ones need, such as go_router, the settings screen and Firebase Authentication, asks who may use the app without an account, and generates a Flutter app with an onboarding, a start screen, sign-in, tabs at the bottom, a theme, two languages, get_it and BLoC](https://doc.saymyframe.com/demo/0.5/smf_create.gif)
+![smf create in a terminal: it asks for the app name and the modules, among them Google sign-in, Sign in with Apple, the onboarding and the notifications, adds the modules that the chosen ones need, such as go_router, the settings screen and Firebase Authentication, asks who may use the app without an account, and generates a Flutter app with an onboarding, a start screen, sign-in with email, Google and Apple, tabs at the bottom, a theme, two languages, notifications, get_it and BLoC](https://doc.saymyframe.com/demo/0.6/smf_create.gif)
 
-With the modules `onboarding`, `sign_in`, `home`, `bottom_tabs`, `material_theme` and `gen_l10n`, the app opens on an onboarding and then asks the user to sign in. It has a start screen, an account screen, a settings screen with a theme mode and a language, and a light and a dark theme:
+With the modules `onboarding`, `sign_in`, `google_sign_in`, `apple_sign_in`, `home`, `bottom_tabs`, `material_theme`, `gen_l10n` and `local_notifications`, the app opens on an onboarding that asks for the permission to show notifications, and then asks the user to sign in with Google, with Apple on iOS or with an email address. It has a start screen, an account screen, a settings screen with a theme mode, a language and the notifications, and a light and a dark theme:
 
-![The app that smf create generates, on a phone: the onboarding, the sign-in, the start screen, and the account screen in the dark theme and in Ukrainian](https://doc.saymyframe.com/demo/0.5/app_look.png)
+![The app that smf create generates, on a phone: the onboarding, the sign-in with Google, Apple and an email address, the start screen, and the account screen in the dark theme and in Ukrainian](https://doc.saymyframe.com/demo/0.6/app_look.png)
 
 `sign_in` needs a Firebase project for its accounts. The other modules of this app need none.
 

@@ -7,9 +7,9 @@ issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
 documentation: https://doc.saymyframe.com
 topics: [flutter, cli, code-generation, boilerplate, template]
 screenshots:
-  - description: "smf create in a terminal: answers for an app with an onboarding, a start screen, sign-in, tabs, a theme and two languages, and the question of who may use it."
+  - description: "smf create in a terminal: an app with an onboarding, sign-in with email, Google and Apple, a start screen, tabs, a theme, two languages and notifications."
     path: screenshots/smf_create.png
-  - description: "The app that smf create generates, on a phone: the onboarding, the sign-in, the start screen, and the account screen in the dark theme and in Ukrainian."
+  - description: "The app that smf create generates: the onboarding, the sign-in with Google, Apple and email, the start screen, and the account screen in dark and Ukrainian."
     path: screenshots/app_look.png
 license: Apache-2.0
 
