@@ -21,6 +21,11 @@ dependencies:
 
 dev_dependencies:
   analyzer: ^14.4.0
+  # The access token of a service account, with which the test that CI runs
+  # sends a push message to the app that it starts on an Android emulator.
+  googleapis_auth: ^2.0.0
+  # The request of that test to Firebase Cloud Messaging.
+  http: ^1.6.0
   # The app entry of the apps that the tests render.
   smf_flutter_core: ^0.4.1
   # The provider of the notifications role, which the push role requires,

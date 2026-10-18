@@ -38,25 +38,75 @@
 # the log of the device instead, from the process that it launched, so
 # that a line of an earlier run, which the log may still have, does not
 # count.
+#
+# Each argument after the mode, <name>=<command>, is an answer: a command
+# of CI for a probe of the start check that needs something of CI once the
+# app runs, such as a push message, which only a server with a key of the
+# project can send. The name has small letters, digits and underscores.
+# Once the start check passed, the script waits for the request of the
+# probe, smf_start_request_<name> in the temporary directory of the app,
+# copies it into a file that only the user of the script may read, and
+# runs the command once, with bash, in the directory of the app, with the
+# path of that file in SMF_START_REQUEST. Then it waits for the verdict of
+# the app, smf_start_report_<name> there: `passed`, or `failed: ` and the
+# problem. An app that gives its verdict without a request, as when it has
+# nothing to ask for, gets no command. The app writes each file next to its
+# place and renames it, so that it is there only whole. The answers run one
+# after another, in their order. The script fails when the app writes
+# neither file in 150 s after its start check passed, when the command
+# fails or takes more than 300 s, when the app gives no verdict in 150 s
+# after the command, when the app stops before it, and when the verdict is
+# not `passed`. It prints no request and removes its copy, but the log of
+# the app that it prints shows what the app printed itself, such as the
+# address for push messages that a debug app prints. Answers need a debug
+# app, whose files the script reads; without them, it is done once the
+# start check passed. tools/start_app_test.dart tests this protocol.
 set -euo pipefail
 # shellcheck source=build_apk.sh
 source "$(dirname "${BASH_SOURCE[0]}")/build_apk.sh"
 
-if [ $# -lt 3 ] || [ $# -gt 4 ] || [[ ! "$1" =~ ^(android|ios)$ ]] ||
-  [[ ! "$3" =~ ^[0-9]+$ ]] || [[ ! "${4:-debug}" =~ ^(debug|release)$ ]]; then
-  echo "Usage: $0 <android|ios> <device> <seconds> [debug|release]" >&2
+usage() {
+  echo "Usage: $0 <android|ios> <device> <seconds> [debug|release] [<name>=<command>]..." >&2
   exit 64
+}
+if [ $# -lt 3 ] || [[ ! "$1" =~ ^(android|ios)$ ]] || [[ ! "$3" =~ ^[0-9]+$ ]]; then
+  usage
 fi
 platform="$1"
 device="$2"
 seconds="$3"
-mode="${4:-debug}"
+shift 3
+mode=debug
+if [ $# -gt 0 ] && [[ "$1" =~ ^(debug|release)$ ]]; then
+  mode="$1"
+  shift
+fi
+# The answers, by the name of each, and their commands.
+answers=()
+commands=()
+for argument in "$@"; do
+  if [[ ! "$argument" =~ ^[a-z0-9_]+= ]] || [ -z "${argument#*=}" ] ||
+    [[ " ${answers[*]-} " == *" ${argument%%=*} "* ]]; then
+    usage
+  fi
+  answers+=("${argument%%=*}")
+  commands+=("${argument#*=}")
+done
 if [ "$platform" = ios ] && [ "$mode" = release ]; then
   echo "Flutter builds no release app for an iOS simulator: start it in debug." >&2
   exit 64
 fi
+if [ "$mode" = release ] && [ ${#answers[@]} -gt 0 ]; then
+  echo "The script cannot read the files of a release app, so it answers no request of one: start it in debug." >&2
+  exit 64
+fi
 check=integration_test/start_check.dart
 result=smf_start_check
+# When the start check passed, by SECONDS.
+passed=
+# The copy of the request of the app that an answer is running for, which
+# the script removes when it ends, as when the step that runs it times out.
+copy=
 # The seconds that the commands of `step` have since the last `allow`, what
 # they have them for, and when they end by SECONDS.
 limit=
@@ -128,40 +178,131 @@ attempt() {
   echo "$name took $((SECONDS - began)) s."
 }
 
+# Sets line to what the command in the arguments prints, without the
+# carriage returns of adb shell, and fails when it fails or prints nothing.
+got() {
+  line="$("$@" 2> /dev/null | tr -d '\r')" && [ -n "$line" ]
+}
+
+# Runs the command in the arguments until it succeeds, as long as `alive`
+# finds the app running and the time of `allow` lasts. Returns 1 when the
+# app stopped and 2 when the time ran out, once it printed the log of the
+# app with `show_log`.
+poll() {
+  while :; do
+    if "$@"; then
+      return 0
+    fi
+    if ! alive; then
+      # What the command waits for may have come just before the app
+      # stopped.
+      if "$@"; then
+        return 0
+      fi
+      show_log
+      return 1
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      show_log
+      return 2
+    fi
+    sleep 1
+  done
+}
+
 # Waits for the result of the check, which the command in the arguments
 # prints once the app wrote it, as long as `alive` finds the app running.
 # Fails when the result is not `passed`, when the app stops before it, and
 # when it does not come in the time that is left, and then prints the log
 # of the app with `show_log`.
 wait_for_result() {
-  local launched=$SECONDS line
-  while :; do
-    if line="$("$@" 2> /dev/null)" && [ -n "$line" ]; then
-      break
-    fi
-    if ! alive; then
-      # The result may have come just before the app stopped.
-      if line="$("$@" 2> /dev/null)" && [ -n "$line" ]; then
-        break
-      fi
-      show_log
-      echo "::error::The app stopped $((SECONDS - launched)) s after it was launched, before its start check wrote a result."
-      exit 1
-    fi
-    if [ "$SECONDS" -ge "$deadline" ]; then
-      show_log
-      echo "::error::The start check of the app wrote no result in the $seconds s of the start of the app, $((SECONDS - launched)) s of them after the app was launched."
-      exit 1
-    fi
-    sleep 1
-  done
-  line="$(tr -d '\r' <<< "$line")"
+  local launched=$SECONDS code=0
+  poll got "$@" || code=$?
+  if [ "$code" -eq 1 ]; then
+    echo "::error::The app stopped $((SECONDS - launched)) s after it was launched, before its start check wrote a result."
+    exit 1
+  elif [ "$code" -ne 0 ]; then
+    echo "::error::The start check of the app wrote no result in the $seconds s of the start of the app, $((SECONDS - launched)) s of them after the app was launched."
+    exit 1
+  fi
   if [ "$line" != passed ]; then
     show_log
     echo "::error::The start check of the app $line"
     exit 1
   fi
   echo "The start check of the app passed $((SECONDS - launched)) s after the app was launched, $SECONDS s after the script started."
+  passed=$SECONDS
+}
+
+# Runs the answers, one after another, once the start check passed.
+answer_all() {
+  local index
+  for ((index = 0; index < ${#answers[@]}; index++)); do
+    answer "${answers[$index]}" "${commands[$index]}"
+  done
+}
+
+# Sets line to the verdict of the app on the answer $1 and reported to 1,
+# or else to its request and reported to nothing; fails when the app wrote
+# neither.
+asked_or_reported() {
+  if got "${platform}_file" "smf_start_report_$1"; then
+    reported=1
+  elif got "${platform}_file" "smf_start_request_$1"; then
+    reported=
+  else
+    return 1
+  fi
+}
+
+# Runs the answer $1, the command $2, for the request of the app, and fails
+# unless the verdict of the app on it is `passed` (see the top).
+answer() {
+  local name="$1" command="$2" began code=0
+  allow 150 "that the app has to ask for the answer $name"
+  poll asked_or_reported "$name" || code=$?
+  if [ "$code" -eq 1 ]; then
+    echo "::error::The app stopped $((SECONDS - passed)) s after its start check passed, before it asked for the answer $name."
+    exit 1
+  elif [ "$code" -ne 0 ]; then
+    echo "::error::The app did not ask for the answer $name in the $limit s after its start check passed: a probe of its start check writes the request smf_start_request_$name into the temporary directory of the app."
+    exit 1
+  fi
+  if [ -z "$reported" ]; then
+    echo "The app asked for the answer $name $((SECONDS - passed)) s after its start check passed."
+    # mktemp makes a file that only the user of the script may read.
+    copy="$(mktemp "${TMPDIR:-/tmp}/smf_start_request_$name.XXXXXX")"
+    printf '%s\n' "$line" > "$copy"
+    began=$SECONDS
+    within 300 env SMF_START_REQUEST="$copy" bash -c "$command" < /dev/null || code=$?
+    rm -f "$copy"
+    copy=
+    if [ "$code" -ne 0 ]; then
+      show_log
+      if [ "$code" -eq 142 ]; then
+        echo "::error::The answer $name did not finish in 300 s."
+      else
+        echo "::error::The answer $name failed with the exit code $code."
+      fi
+      exit 1
+    fi
+    echo "The answer $name took $((SECONDS - began)) s."
+    allow 150 "that the app has to give its verdict on the answer $name"
+    poll got "${platform}_file" "smf_start_report_$name" || code=$?
+    if [ "$code" -eq 1 ]; then
+      echo "::error::The app stopped $((SECONDS - began)) s after the answer $name began, before it gave its verdict on it."
+      exit 1
+    elif [ "$code" -ne 0 ]; then
+      echo "::error::The app wrote no verdict on the answer $name in the $limit s after the answer: its check of the answer writes smf_start_report_$name into the temporary directory of the app."
+      exit 1
+    fi
+  fi
+  if [ "$line" != passed ]; then
+    show_log
+    echo "::error::The check of the answer $name in the app $line"
+    exit 1
+  fi
+  echo "The check of the answer $name in the app passed $((SECONDS - passed)) s after its start check passed."
 }
 
 android() {
@@ -196,7 +337,7 @@ android() {
   # An emulator of CI installs the app in less than 10 s.
   allow 120 'that the device has to install the app'
   step 'adb install' "${adb[@]}" install -r "$apk"
-  trap 'within 30 "${adb[@]}" shell am force-stop "$id" || true' EXIT
+  trap '[ -z "$copy" ] || rm -f "$copy"; within 30 "${adb[@]}" shell am force-stop "$id" || true' EXIT
   # pm clear stops the app and deletes its data, with the result of an
   # earlier run.
   step 'adb shell pm clear' "${adb[@]}" shell pm clear "$id"
@@ -209,13 +350,19 @@ android() {
     pid="${pid%% *}"
     wait_for_result android_logged_result
   else
-    # The files of a debug app can be read with run-as, which starts in the
-    # directory of its data. The temporary directory of Dart is code_cache/
-    # there: Flutter gives the engine the code cache of the app as its cache
-    # directory (--cache-dir-path), which the Dart VM takes as systemTemp.
-    wait_for_result within 30 "${adb[@]}" shell run-as "$id" cat "code_cache/$result"
+    wait_for_result android_file "$result"
   fi
+  answer_all
   android_printed
+}
+
+# Prints the file $1 of the temporary directory of the app. The files of a
+# debug app can be read with run-as, which starts in the directory of its
+# data. The temporary directory of Dart is code_cache/ there: Flutter gives
+# the engine the code cache of the app as its cache directory
+# (--cache-dir-path), which the Dart VM takes as systemTemp.
+android_file() {
+  within 30 "${adb[@]}" shell run-as "$id" cat "code_cache/$1"
 }
 
 # Sets target to the target platform of Flutter for the ABI of the device,
@@ -271,7 +418,7 @@ ios() {
   # architecture after -verify_arch.)
   build 'flutter build ios' env FLUTTER_XCODE_ARCHS="$(uname -m)" \
     flutter build ios --simulator --debug -t "$check"
-  local app=build/ios/iphonesimulator/Runner.app data launched
+  local app=build/ios/iphonesimulator/Runner.app launched
   id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
   executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
   echo "Starting $id on $device."
@@ -282,7 +429,7 @@ ios() {
   attempt 'xcrun simctl terminate' xcrun simctl terminate "$device" "$id"
   attempt 'xcrun simctl uninstall' xcrun simctl uninstall "$device" "$id"
   step 'xcrun simctl install' xcrun simctl install "$device" "$app"
-  trap 'within 60 xcrun simctl terminate "$device" "$id" 2> /dev/null || true' EXIT
+  trap '[ -z "$copy" ] || rm -f "$copy"; within 60 xcrun simctl terminate "$device" "$id" 2> /dev/null || true' EXIT
   # The container of the data of the app, whose tmp/ is the temporary
   # directory of the app.
   data="$(within 60 xcrun simctl get_app_container "$device" "$id" data)"
@@ -294,8 +441,15 @@ ios() {
   }
   # The app runs as a process of the Mac: simctl prints `<id>: <pid>`.
   pid="${launched##*: }"
-  wait_for_result within 30 cat "$data/tmp/$result"
+  wait_for_result ios_file "$result"
+  answer_all
   ios_printed
+}
+
+# Prints the file $1 of the temporary directory of the app, tmp/ of the
+# container of its data.
+ios_file() {
+  within 30 cat "$data/tmp/$1"
 }
 
 # What the app printed: the lines of Flutter in the log of the simulator.
