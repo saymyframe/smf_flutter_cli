@@ -188,11 +188,12 @@ With `sign_in_with_apple`:
 - The look of a screen and its state are in different files. The look is `SignInView`, `SignUpView` and `ResetPasswordView`, each in a file of its name, such as `lib/features/sign_in/sign_in_view.dart`. They share `AuthPage` of `lib/features/sign_in/sign_in_page.dart`, which is the frame of a screen, and the fields and buttons of `lib/features/sign_in/sign_in_widgets.dart`. All of them are plain Flutter widgets: a view gets the state of its call and callbacks, and imports nothing that manages state. The file of a screen, such as `lib/features/sign_in/sign_in_screen.dart`, only gives its view the state.
 - The fields, the buttons and the cards of the screens are those of the theme of the app. These files give a field no colour, border or padding, so for another look of a field, change the theme of the app. `OtherScreenAction`, the way from the sign-in to the sign-up and back, is a text button of the theme with one colour of its own, `colorScheme.secondary`.
 - The title of a page and the label of each button are each a `WholeWords` of `lib/features/sign_in/sign_in_widgets.dart`, not a `Text`. It breaks a text between its words and never inside one. Where the longest word would not fit, as on a narrow phone with a large text size, the text is only as large as that word allows. Use it for the label of a new button of the feature too.
+- Above the form, the sign-in and the sign-up show a `SignInMethodButton` for each way to sign in of `appSignInMethods` that works on the platform, from `signInMethodsHere()` of `lib/features/sign_in/sign_in_widgets.dart`. A module of a way to sign in adds its button, and this feature adds nothing for it. On a tap, `continueWith(method)` of the state calls `continueWithMethod()` of `lib/features/sign_in/sign_in_state.dart`, which awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. These buttons are white with a grey hairline, with the label and the icon in black, in both themes, so that a logo in its own colours stays on white.
 - That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, for as long as the session has the account, since the router leaves the screen then. When the session has no account again before that, the form is back.
 - A failure gets its text in `authFailureText()` of `lib/features/sign_in/sign_in_widgets.dart`, which has a text for every `AuthFailureReason`. `FailureMessage` shows that text, and the `developerHint` of the failure in debug mode only.
 - While a call is on its way, `SubmitButton` spins. A widget test that waits with `pumpAndSettle()` returns only once the call has ended, so until then it shows frames with `pump()`.
 - The screen of the account is `AccountScreen`, the route `sign_in.account` at `/sign_in/account`, with its look in `AccountView` of `lib/features/sign_in/account_view.dart`. The route needs an account, so for a user without one the router opens the sign-in over the page first. `AccountSetting` of `lib/features/sign_in/account_setting.dart` is the entry of the account on the settings screen. It opens the screen with `context.nav.signIn.account().push<void>()`. In an app without a main navigation, no screen leads to the settings screen: a screen of the app opens it through `context.nav`, or opens the account with that same call.
-- The screen of the account signs out and deletes the account through its state, an `AccountState`. It neither closes itself nor navigates after that: the router closes its page, or shows the sign-in in place of every screen. The state stays busy after a call that succeeded for as long as the session has no account. `confirmDeleteAccount()` asks in a sheet first, and the screen deletes the account only once that sheet is closed. `DestructiveAction` is a text button of the theme in the colour `colorScheme.error`.
+- The screen of the account signs out and deletes the account through its state, an `AccountState`. It neither closes itself nor navigates after that: the router closes its page, or shows the sign-in in place of every screen. The state stays busy after a call that succeeded for as long as the session has no account. `confirmDeleteAccount()` asks in a sheet first, and the screen deletes the account only once that sheet is closed. A failed deletion gets its text in `deletionFailureText()` of `lib/features/sign_in/account_view.dart`. `DestructiveAction` is a text button of the theme in the colour `colorScheme.error`.
 
 - The state of each screen is a cubit in a file next to it: `SignInCubit`, `SignUpCubit`, `ResetPasswordCubit` and `AccountCubit`. The screen provides its cubit and builds its view from the state. A cubit takes the session through its constructor, so a test creates one with an `AppSessionController` of its own. `lib/features/sign_in/sign_in_composition.dart` creates the cubits with `appSession`, and apart from the file of the guards, no other file of the feature names `appSession`.
 - A widget reads who uses the app with `context.watch<SessionCubit>().state`, an `AppSession`. The root of the app provides the `SessionCubit` of `lib/features/sign_in/session_cubit.dart`, which follows `appSession`.
@@ -3854,6 +3855,12 @@ class FixtureTexts {
     _ => 'Enter the email and the password of your account.',
   };
 
+  /// The text methodsIntro of the module sign_in.
+  String get signInMethodsIntro => switch (language) {
+    'uk' => 'Виберіть, як увійти у свій акаунт.',
+    _ => 'Choose how to sign in to your account.',
+  };
+
   /// The text email of the module sign_in.
   String get signInEmail => switch (language) {
     'uk' => 'Електронна пошта',
@@ -3908,6 +3915,12 @@ class FixtureTexts {
     _ => 'All it takes is an email and a password.',
   };
 
+  /// The text signUpMethodsIntro of the module sign_in.
+  String get signInSignUpMethodsIntro => switch (language) {
+    'uk' => 'Виберіть, як створити акаунт.',
+    _ => 'Choose how to create your account.',
+  };
+
   /// The text signUpSubmit of the module sign_in.
   String get signInSignUpSubmit => switch (language) {
     'uk' => 'Створити акаунт',
@@ -3918,6 +3931,12 @@ class FixtureTexts {
   String get signInHaveAccount => switch (language) {
     'uk' => 'У мене вже є акаунт',
     _ => 'I already have an account',
+  };
+
+  /// The text or of the module sign_in.
+  String get signInOr => switch (language) {
+    'uk' => 'або',
+    _ => 'or',
   };
 
   /// The text resetTitle of the module sign_in.
@@ -4097,6 +4116,18 @@ class FixtureTexts {
   String get signInDelete => switch (language) {
     'uk' => 'Видалити',
     _ => 'Delete',
+  };
+
+  /// The text deleteUnavailable of the module sign_in.
+  String get signInDeleteUnavailable => switch (language) {
+    'uk' => 'Зараз акаунт не можна видалити. Спробуйте пізніше.',
+    _ => 'Your account cannot be deleted right now. Try again later.',
+  };
+
+  /// The text deleteOtherAccount of the module sign_in.
+  String get signInDeleteOtherAccount => switch (language) {
+    'uk' => 'Це інший акаунт. Підтвердьте той, у який ви ввійшли.',
+    _ => 'That is another account. Confirm with the one you are signed in to.',
   };
 
   /// The text settingSignedIn of the module sign_in.
@@ -8141,7 +8172,9 @@ class AccountCubit extends Cubit<AccountState> {
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (!isClosed) emit(AccountState(failure: failure));
+      if (!isClosed) {
+        emit(AccountState(failure: failure, failedAction: action));
+      }
       return;
     }
     _calling = false;
@@ -8174,8 +8207,8 @@ import 'sign_in_composition.dart';
 import 'sign_in_state.dart';
 
 /// The screen of the account: the [AccountView] with the state of an
-/// [AccountCubit], and the address of the account from the [SessionCubit]
-/// of the app.
+/// [AccountCubit], and the address and the identity providers of the
+/// account from the [SessionCubit] of the app.
 ///
 /// It neither closes itself nor navigates once the user is signed out or
 /// the account is deleted: the router leaves the screen then.
@@ -8191,8 +8224,10 @@ class AccountScreen extends StatelessWidget {
         final session = context.watch<SessionCubit>().state;
         return AccountView(
           email: session is AccountSession ? session.email : null,
+          issuers: session is AccountSession ? session.issuers : const {},
           busy: state.busy,
           failure: state.failure,
+          failedAction: state.failedAction,
           onSignOut: context.read<AccountCubit>().signOut,
           onDeleteAccount: context.read<AccountCubit>().deleteAccount,
         );
@@ -8284,13 +8319,15 @@ import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_state.dart';
 import 'sign_in_widgets.dart';
 
 /// What the screen of the account shows: the email address of the account
-/// that the user is signed in to, the button that signs out, and the
-/// action that deletes the account, which asks first.
+/// that the user is signed in to, or the label of its way to sign in for an
+/// account without one, the button that signs out, and the action that
+/// deletes the account, which asks first.
 ///
 /// It keeps nothing of the calls themselves: the screen gives it the
 /// address and the state of the calls, and takes what the user asks for.
@@ -8299,8 +8336,10 @@ class AccountView extends StatefulWidget {
   /// Creates the view.
   const AccountView({
     required this.email,
+    required this.issuers,
     required this.busy,
     required this.failure,
+    required this.failedAction,
     required this.onSignOut,
     required this.onDeleteAccount,
     super.key,
@@ -8310,11 +8349,18 @@ class AccountView extends StatefulWidget {
   /// one, and once nobody is signed in to an account.
   final String? email;
 
+  /// The identity providers that the account signs in with, each by the
+  /// issuer of its way to sign in: `AccountSession.issuers`.
+  final Set<String> issuers;
+
   /// The action whose call is on its way, or `null` when none is.
   final AccountAction? busy;
 
   /// Why the last action failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The action that failed with [failure], or `null` if none did.
+  final AccountAction? failedAction;
 
   /// Signs the user out.
   final VoidCallback onSignOut;
@@ -8327,14 +8373,17 @@ class AccountView extends StatefulWidget {
 }
 
 class _AccountViewState extends State<AccountView> {
-  /// The address that the page shows: that of the account, also once the
-  /// user is signed out, since the page shows until the router closes it.
+  /// The address and the identity providers of the account that the page
+  /// shows: those of the account, also once the user is signed out, since
+  /// the page shows until the router closes it.
   late String? _email = widget.email;
+  late Set<String> _issuers = widget.issuers;
 
   @override
   void didUpdateWidget(AccountView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.email != null) _email = widget.email;
+    if (widget.issuers.isNotEmpty) _issuers = widget.issuers;
   }
 
   /// Asks whether to delete the account, and deletes it on a yes. The
@@ -8348,6 +8397,12 @@ class _AccountViewState extends State<AccountView> {
   @override
   Widget build(BuildContext context) {
     final email = _email;
+    // An account without an address is named by its way to sign in.
+    final method = email != null
+        ? null
+        : appSignInMethods
+              .where((method) => _issuers.contains(method.issuer))
+              .firstOrNull;
     final idle = widget.busy == null;
     return AuthPage(
       title: context.l10n.signInAccountTitle,
@@ -8356,11 +8411,17 @@ class _AccountViewState extends State<AccountView> {
           : context.l10n.signInSignedInAs,
       children: [
         if (email != null) EmailAddress(email),
+        if (method != null) _SignInWay(method),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 28),
-            FailureMessage(widget.failure),
+            FailureMessage(
+              widget.failure,
+              textOf: widget.failedAction == AccountAction.delete
+                  ? deletionFailureText
+                  : authFailureText,
+            ),
             SubmitButton(
               label: context.l10n.signInSignOut,
               busy: widget.busy == AccountAction.signOut,
@@ -8380,6 +8441,45 @@ class _AccountViewState extends State<AccountView> {
     );
   }
 }
+
+/// The way to sign in of an account without an email address, on a line of
+/// its own, as the page shows the address of an account: a card as the
+/// theme of the app has its cards, with the label of the way to sign in.
+class _SignInWay extends StatelessWidget {
+  const _SignInWay(this.method);
+
+  final SignInMethod method;
+
+  @override
+  Widget build(BuildContext context) => Card.outlined(
+    // In the theme of any app, the card is as wide as the form.
+    margin: EdgeInsets.zero,
+    child: ListTile(
+      leading: const Icon(Icons.account_circle_outlined),
+      title: Text(method.label(context)),
+    ),
+  );
+}
+
+/// The text of the app for [reason], the reason of a failure of the
+/// deletion of the account.
+///
+/// Before the deletion of an account with a way to sign in that
+/// `revokesOnDeletion`, the identity provider asks the user again. A
+/// provider of sign-in that cannot revoke the tokens of the identity
+/// provider, as when that is not set up, fails with
+/// [AuthFailureReason.notConfigured], and one that got a credential of
+/// another user with [AuthFailureReason.invalidCredentials]. The texts of a
+/// sign-in for these reasons would not tell a user who deletes the account
+/// what happened, so this has texts of its own for them, and those of
+/// [authFailureText] for the others.
+String deletionFailureText(BuildContext context, AuthFailureReason reason) =>
+    switch (reason) {
+      AuthFailureReason.notConfigured => context.l10n.signInDeleteUnavailable,
+      AuthFailureReason.invalidCredentials =>
+        context.l10n.signInDeleteOtherAccount,
+      _ => authFailureText(context, reason),
+    };
 
 /// Asks the user whether to delete the account, in a sheet over the page of
 /// [context], as the settings of the app ask in sheets, and returns whether
@@ -8717,11 +8817,13 @@ SessionCubit createSessionCubit() => SessionCubit(appSession);
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_state.dart';
 
 /// The state of the screen of the sign-in: it signs in through the session
-/// of the app, and tells whether the sign-in is on its way and why the last
-/// one failed.
+/// of the app, with the email address and the password of the form or with
+/// a way to sign in of the app, and tells whether a call is on its way and
+/// why the last one failed.
 class SignInCubit extends Cubit<AuthActionState> {
   /// Creates the cubit that signs in through [_session].
   SignInCubit(this._session) : super(const AuthActionState()) {
@@ -8737,19 +8839,48 @@ class SignInCubit extends Cubit<AuthActionState> {
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
   /// stays busy for as long as the session has the account.
-  Future<void> signIn({required String email, required String password}) async {
+  Future<void> signIn({required String email, required String password}) =>
+      _run(() async {
+        await _session.signIn(email: email, password: password);
+        return true;
+      });
+
+  /// Signs in with [method], a way to sign in of the app: asks its identity
+  /// provider for a credential, with a sheet of its own, and gives it to
+  /// the session.
+  ///
+  /// When the user closes the sheet, the state is again as it was before.
+  /// Once the user is signed in, the router leaves the screen, so the state
+  /// stays busy for as long as the session has the account.
+  Future<void> continueWith(SignInMethod method) =>
+      _run(() => continueWithMethod(_session, method), method: method);
+
+  /// Makes [call], the call of [method] or of the form, unless a call is on
+  /// its way. [call] returns whether it signed in: `false` when the user
+  /// closed the sheet of a way to sign in, and the state is again as it
+  /// was before then.
+  Future<void> _run(
+    Future<bool> Function() call, {
+    SignInMethod? method,
+  }) async {
     if (state.busy) return;
+    final before = state;
     _calling = true;
-    emit(const AuthActionState(busy: true));
+    emit(AuthActionState(busy: true, method: method));
+    final bool signedIn;
     try {
-      await _session.signIn(email: email, password: password);
+      signedIn = await call();
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (!isClosed) emit(AuthActionState(failure: failure));
+      if (!isClosed) emit(AuthActionState(failure: failure, method: method));
       return;
     }
     _calling = false;
+    if (!signedIn) {
+      if (!isClosed) emit(before);
+      return;
+    }
     _follow();
   }
 
@@ -9173,10 +9304,12 @@ class SignInScreen extends StatelessWidget {
       builder: (context, state) => SignInView(
         busy: state.busy,
         failure: state.failure,
+        method: state.method,
         onSubmit: (email, password) => context.read<SignInCubit>().signIn(
           email: email,
           password: password,
         ),
+        onContinueWith: context.read<SignInCubit>().continueWith,
         onCreateAccount: () => context.nav.signIn.signUp().push<void>(),
         onForgotPassword: () => context.nav.signIn.resetPassword().push<void>(),
       ),
@@ -9187,14 +9320,16 @@ class SignInScreen extends StatelessWidget {
 import 'package:flutter/foundation.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 
-/// The state of a form of the sign-in that makes one call, such as the
-/// sign-in itself: whether the call is on its way, and why the last one
-/// failed.
+/// The state of a screen of the sign-in whose form makes one call, such as
+/// the sign-in itself, and whose buttons continue with the ways to sign in
+/// of the app: whether a call is on its way, which one, and why the last
+/// one failed.
 @immutable
 final class AuthActionState {
   /// Creates the state.
-  const AuthActionState({this.busy = false, this.failure});
+  const AuthActionState({this.busy = false, this.failure, this.method});
 
   /// Whether the call is on its way.
   ///
@@ -9209,14 +9344,51 @@ final class AuthActionState {
   /// Why the last call failed, or `null` if none did.
   final AuthFailure? failure;
 
+  /// The way to sign in whose call is on its way or failed last, or `null`
+  /// for the call of the form. So the screen shows the failure of a call
+  /// where the user made it: below the buttons of the ways to sign in, or
+  /// above the button of the form.
+  final SignInMethod? method;
+
   @override
   bool operator ==(Object other) =>
       other is AuthActionState &&
       other.busy == busy &&
-      other.failure == failure;
+      other.failure == failure &&
+      other.method == method;
 
   @override
-  int get hashCode => Object.hash(busy, failure);
+  int get hashCode => Object.hash(busy, failure, method);
+}
+
+/// Signs in with [method] through [session]: asks the identity provider of
+/// the way to sign in for a credential, with a sheet of its own, and gives
+/// the credential to the session, which gives an anonymous user the
+/// identity with the same id.
+///
+/// Returns `false` when the user closed the sheet, which is no failure: the
+/// session gets no call then. It fails only with an [AuthFailure]. A way to
+/// sign in fails so too, and an error of another kind becomes a failure
+/// with the reason [AuthFailureReason.unknown], as the session does with
+/// the errors of its calls.
+Future<bool> continueWithMethod(
+  AppSessionController session,
+  SignInMethod method,
+) async {
+  final SignInCredential? credential;
+  try {
+    credential = await method.credential();
+  } on AuthFailure {
+    rethrow;
+  } on Object catch (error, stackTrace) {
+    Error.throwWithStackTrace(
+      AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+      stackTrace,
+    );
+  }
+  if (credential == null) return false;
+  await session.signInWith(credential);
+  return true;
 }
 
 /// The state of the form that sends the message to reset a password.
@@ -9256,11 +9428,11 @@ enum AccountAction {
 }
 
 /// The state of the screen of the account: which of its two actions is on
-/// its way, and why the last one failed.
+/// its way, and which one failed last and why.
 @immutable
 final class AccountState {
   /// Creates the state.
-  const AccountState({this.busy, this.failure});
+  const AccountState({this.busy, this.failure, this.failedAction});
 
   /// The action whose call is on its way, or `null` when none is. While it
   /// is, the screen takes no other action.
@@ -9275,47 +9447,67 @@ final class AccountState {
   /// Why the last action failed, or `null` if none did.
   final AuthFailure? failure;
 
-  @override
-  bool operator ==(Object other) =>
-      other is AccountState && other.busy == busy && other.failure == failure;
+  /// The action that failed with [failure], or `null` if none did. The
+  /// screen tells of a failed deletion in words of its own.
+  final AccountAction? failedAction;
 
   @override
-  int get hashCode => Object.hash(busy, failure);
+  bool operator ==(Object other) =>
+      other is AccountState &&
+      other.busy == busy &&
+      other.failure == failure &&
+      other.failedAction == failedAction;
+
+  @override
+  int get hashCode => Object.hash(busy, failure, failedAction);
 }
 === lib/features/sign_in/sign_in_view.dart (sign_in) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_widgets.dart';
 
-/// What the screen of the sign-in shows: the form with the email address
+/// What the screen of the sign-in shows: a button for each way to sign in
+/// of the app that works on this platform, the form with the email address
 /// and the password of an account, and the ways to the screens that create
 /// an account and reset a password.
 ///
 /// It keeps the form and what the user types, and nothing of the sign-in
-/// itself: the screen gives it the state of the call and takes what the
+/// itself: the screen gives it the state of the calls and takes what the
 /// user asks for. So it is the same whichever way the app manages state.
 class SignInView extends StatefulWidget {
   /// Creates the view.
   const SignInView({
     required this.busy,
     required this.failure,
+    required this.method,
     required this.onSubmit,
+    required this.onContinueWith,
     required this.onCreateAccount,
     required this.onForgotPassword,
     super.key,
   });
 
-  /// Whether the sign-in is on its way.
+  /// Whether a call of the screen is on its way: the sign-in of the form, or
+  /// the call of [method].
   final bool busy;
 
-  /// Why the last sign-in failed, or `null` if none did.
+  /// Why the last call failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The way to sign in whose call is on its way or failed last, or `null`
+  /// for the call of the form.
+  final SignInMethod? method;
 
   /// Signs in with what the form has, once the form has both.
   final void Function(String email, String password) onSubmit;
+
+  /// Signs in with a way to sign in of the app, whose button the user
+  /// tapped.
+  final void Function(SignInMethod method) onContinueWith;
 
   /// Shows the screen that creates an account.
   final VoidCallback onCreateAccount;
@@ -9352,12 +9544,26 @@ class _SignInViewState extends State<SignInView> {
 
   @override
   Widget build(BuildContext context) {
+    final methods = signInMethodsHere();
+    // The failure of a call shows where the user made the call.
+    final method = widget.method;
     return AuthPage(
       title: context.l10n.signInTitle,
-      intro: context.l10n.signInIntro,
+      intro: methods.isEmpty
+          ? context.l10n.signInIntro
+          : context.l10n.signInMethodsIntro,
       children: [
-        // While the sign-in is on its way, the form takes no input: no tap,
-        // and no typing into a field that has the focus.
+        // Above the form, so that a phone shows them without a scroll.
+        if (methods.isNotEmpty)
+          SignInMethods(
+            methods: methods,
+            busy: widget.busy,
+            method: method,
+            failure: method == null ? null : widget.failure,
+            onPressed: widget.onContinueWith,
+          ),
+        // While a call is on its way, the form takes no input: no tap, and
+        // no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -9405,11 +9611,11 @@ class _SignInViewState extends State<SignInView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 12),
-            FailureMessage(widget.failure),
+            FailureMessage(method == null ? widget.failure : null),
             SubmitButton(
               label: context.l10n.signInSubmit,
-              busy: widget.busy,
-              onPressed: _submit,
+              busy: widget.busy && method == null,
+              onPressed: widget.busy && method != null ? null : _submit,
             ),
             const SizedBox(height: 4),
             // The way to the other screen, as on the screen that creates an
@@ -9431,6 +9637,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 
 /// A text that keeps its words whole: it breaks between its words and never
 /// inside one.
@@ -9769,6 +9976,181 @@ class _BusyLabel extends StatelessWidget {
   );
 }
 
+/// The ways to sign in of the app that work on the platform that the app
+/// runs on, in their order: those of `appSignInMethods` that are
+/// available.
+List<SignInMethod> signInMethodsHere() => [
+  for (final method in appSignInMethods)
+    if (method.isAvailable) method,
+];
+
+/// The buttons of [methods], the ways to sign in of a page, one below the
+/// other, then the message of the failure of the last call of one of them,
+/// and the line with "or" that leads to the form below.
+///
+/// While a call of the page is on its way, the button of the way to sign in
+/// that made it spins, and no button takes a tap.
+class SignInMethods extends StatelessWidget {
+  /// Creates the buttons of [methods].
+  const SignInMethods({
+    required this.methods,
+    required this.busy,
+    required this.method,
+    required this.failure,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The ways to sign in, in their order.
+  final List<SignInMethod> methods;
+
+  /// Whether a call of the page is on its way: that of [method], or that of
+  /// the form while [method] is `null`.
+  final bool busy;
+
+  /// The way to sign in whose call is on its way or failed last, or `null`.
+  final SignInMethod? method;
+
+  /// Why the last call of a way to sign in failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  /// Signs in with the way to sign in whose button the user tapped.
+  final void Function(SignInMethod method) onPressed;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final (index, way) in methods.indexed) ...[
+        if (index > 0) const SizedBox(height: 12),
+        SignInMethodButton(
+          method: way,
+          busy: busy && method == way,
+          onPressed: busy ? null : () => onPressed(way),
+        ),
+      ],
+      const SizedBox(height: 20),
+      FailureMessage(failure),
+      const _Or(),
+      const SizedBox(height: 20),
+    ],
+  );
+}
+
+/// The colours of the button of a way to sign in, the same in a light and
+/// in a dark theme: a white button with a grey hairline around it, and a
+/// label and an icon in black. They keep to what the brand guidelines of
+/// identity providers allow a custom button of theirs on any background,
+/// and a logo that keeps its own colours stays on white.
+const _methodFill = Color(0xFFFFFFFF);
+const _methodOutline = Color(0xFF747775);
+const _methodInk = Color(0xFF000000);
+
+/// The size of the icon of a way to sign in, which does not grow with the
+/// text size of the device: a logo keeps its size.
+const _methodIconSize = 20.0;
+
+/// The space between the icon of a way to sign in and its label.
+const _methodIconGap = 12.0;
+
+/// The button of a way to sign in, as wide as the page: its icon at the
+/// start and its label in the middle, in the text style that the theme of
+/// the app gives a filled button, in the weight medium. It is as tall as
+/// the button that submits a form, and in colours of its own, which the
+/// theme does not change. A screen reader reads it as one button with its
+/// label.
+///
+/// While its call is on its way, it spins in the place of its label and
+/// does nothing. In an app that asks for less motion it is disabled with
+/// its label instead, as a button that takes no tap is: lighter.
+class SignInMethodButton extends StatelessWidget {
+  /// Creates the button of [method].
+  const SignInMethodButton({
+    required this.method,
+    required this.busy,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The way to sign in, whose label and icon the button shows.
+  final SignInMethod method;
+
+  /// Whether the call of the way to sign in is on its way.
+  final bool busy;
+
+  /// Signs in with the way to sign in, or `null` while the button takes no
+  /// tap, as while another call of its page is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spins = _spins(context, busy: busy);
+    final onPressed = _whileBusy(this.onPressed, busy: busy, spins: spins);
+    // The text style that the theme gives a filled button, as the button
+    // that submits a form has it, in the weight medium.
+    final themed =
+        FilledButtonTheme.of(context).style?.textStyle?.resolve(const {}) ??
+        Theme.of(context).textTheme.labelLarge;
+    return Opacity(
+      // A logo keeps its colours, so the whole button is lighter while it
+      // takes no tap.
+      opacity: onPressed == null ? 0.5 : 1,
+      child: FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: _methodFill,
+          foregroundColor: _methodInk,
+          disabledBackgroundColor: _methodFill,
+          disabledForegroundColor: _methodInk,
+          iconColor: _methodInk,
+          disabledIconColor: _methodInk,
+          iconSize: _methodIconSize,
+          side: const BorderSide(color: _methodOutline),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          textStyle: themed?.copyWith(fontWeight: FontWeight.w500),
+        ),
+        onPressed: onPressed,
+        child: Row(
+          children: [
+            // The label names the way to sign in.
+            ExcludeSemantics(child: method.icon),
+            const SizedBox(width: _methodIconGap),
+            Expanded(child: _BusyLabel(method.label(context), spins: spins)),
+            // As wide as the icon and the space after it, so that the label
+            // is in the middle of the button.
+            const SizedBox(width: _methodIconSize + _methodIconGap),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The line between the buttons of the ways to sign in and the form, with
+/// "or" in its middle.
+class _Or extends StatelessWidget {
+  const _Or();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        const Expanded(child: Divider()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            context.l10n.signInOr,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider()),
+      ],
+    );
+  }
+}
+
 /// The action of a screen that leads to the other screen of the sign-in:
 /// from the sign-in to the screen that creates an account, and from there
 /// back.
@@ -9862,10 +10244,18 @@ class DestructiveAction extends StatelessWidget {
 /// developer of the app, which is no text for a user.
 class FailureMessage extends StatelessWidget {
   /// Creates the message of [failure].
-  const FailureMessage(this.failure, {super.key});
+  const FailureMessage(
+    this.failure, {
+    this.textOf = authFailureText,
+    super.key,
+  });
 
   /// The failure, or `null` when the last call did not fail.
   final AuthFailure? failure;
+
+  /// The text of the app for the reason of the failure: [authFailureText],
+  /// unless a page tells of a failure of its call in words of its own.
+  final String Function(BuildContext context, AuthFailureReason reason) textOf;
 
   @override
   Widget build(BuildContext context) {
@@ -9874,7 +10264,7 @@ class FailureMessage extends StatelessWidget {
         ? const SizedBox(width: double.infinity)
         : Padding(
             padding: const EdgeInsets.only(bottom: 20),
-            child: _Failure(failure),
+            child: _Failure(failure, textOf: textOf),
           );
     // An app that asks for less motion shows the message at once. It does
     // so without an AnimatedSize: one with a duration of zero fails an
@@ -9892,9 +10282,10 @@ class FailureMessage extends StatelessWidget {
 /// The box with the text of [failure]: a card as the theme of the app has
 /// its cards, in a tint of the colour that the theme has for an error.
 class _Failure extends StatelessWidget {
-  const _Failure(this.failure);
+  const _Failure(this.failure, {required this.textOf});
 
   final AuthFailure failure;
+  final String Function(BuildContext context, AuthFailureReason reason) textOf;
 
   @override
   Widget build(BuildContext context) {
@@ -9929,7 +10320,7 @@ class _Failure extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      authFailureText(context, failure.reason),
+                      textOf(context, failure.reason),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: colors.onSurface,
                       ),
@@ -10014,11 +10405,12 @@ class EmailAddress extends StatelessWidget {
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_state.dart';
 
 /// The state of the screen that creates an account: it signs up through
-/// the session of the app, and tells whether the sign-up is on its way and
-/// why the last one failed.
+/// the session of the app, or signs in with a way to sign in of the app,
+/// and tells whether a call is on its way and why the last one failed.
 class SignUpCubit extends Cubit<AuthActionState> {
   /// Creates the cubit that signs up through [_session].
   SignUpCubit(this._session) : super(const AuthActionState()) {
@@ -10034,19 +10426,48 @@ class SignUpCubit extends Cubit<AuthActionState> {
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
   /// stays busy for as long as the session has the account.
-  Future<void> signUp({required String email, required String password}) async {
+  Future<void> signUp({required String email, required String password}) =>
+      _run(() async {
+        await _session.signUp(email: email, password: password);
+        return true;
+      });
+
+  /// Signs in with [method], a way to sign in of the app: asks its identity
+  /// provider for a credential, with a sheet of its own, and gives it to
+  /// the session.
+  ///
+  /// When the user closes the sheet, the state is again as it was before.
+  /// Once the user is signed in, the router leaves the screen, so the state
+  /// stays busy for as long as the session has the account.
+  Future<void> continueWith(SignInMethod method) =>
+      _run(() => continueWithMethod(_session, method), method: method);
+
+  /// Makes [call], the call of [method] or of the form, unless a call is on
+  /// its way. [call] returns whether it signed in: `false` when the user
+  /// closed the sheet of a way to sign in, and the state is again as it
+  /// was before then.
+  Future<void> _run(
+    Future<bool> Function() call, {
+    SignInMethod? method,
+  }) async {
     if (state.busy) return;
+    final before = state;
     _calling = true;
-    emit(const AuthActionState(busy: true));
+    emit(AuthActionState(busy: true, method: method));
+    final bool signedIn;
     try {
-      await _session.signUp(email: email, password: password);
+      signedIn = await call();
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (!isClosed) emit(AuthActionState(failure: failure));
+      if (!isClosed) emit(AuthActionState(failure: failure, method: method));
       return;
     }
     _calling = false;
+    if (!signedIn) {
+      if (!isClosed) emit(before);
+      return;
+    }
     _follow();
   }
 
@@ -10089,10 +10510,12 @@ class SignUpScreen extends StatelessWidget {
       builder: (context, state) => SignUpView(
         busy: state.busy,
         failure: state.failure,
+        method: state.method,
         onSubmit: (email, password) => context.read<SignUpCubit>().signUp(
           email: email,
           password: password,
         ),
+        onContinueWith: context.read<SignUpCubit>().continueWith,
         // Closes this page. The screen of the sign-in is the page below
         // it, whether that one is the first page of the app or shown over
         // another screen.
@@ -10106,34 +10529,47 @@ import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_widgets.dart';
 
-/// What the screen that creates an account shows: the form with the email
+/// What the screen that creates an account shows: a button for each way to
+/// sign in of the app that works on this platform, the form with the email
 /// address and the password of the new account, and the way back to the
 /// sign-in.
 ///
 /// It keeps the form and what the user types, and nothing of the sign-up
-/// itself: the screen gives it the state of the call and takes what the
+/// itself: the screen gives it the state of the calls and takes what the
 /// user asks for. So it is the same whichever way the app manages state.
 class SignUpView extends StatefulWidget {
   /// Creates the view.
   const SignUpView({
     required this.busy,
     required this.failure,
+    required this.method,
     required this.onSubmit,
+    required this.onContinueWith,
     required this.onSignIn,
     super.key,
   });
 
-  /// Whether the sign-up is on its way.
+  /// Whether a call of the screen is on its way: the sign-up of the form, or
+  /// the call of [method].
   final bool busy;
 
-  /// Why the last sign-up failed, or `null` if none did.
+  /// Why the last call failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The way to sign in whose call is on its way or failed last, or `null`
+  /// for the call of the form.
+  final SignInMethod? method;
 
   /// Creates the account with what the form has, once the form has both.
   final void Function(String email, String password) onSubmit;
+
+  /// Signs in with a way to sign in of the app, whose button the user
+  /// tapped.
+  final void Function(SignInMethod method) onContinueWith;
 
   /// Leads back to the sign-in, for a user who has an account.
   final VoidCallback onSignIn;
@@ -10167,12 +10603,26 @@ class _SignUpViewState extends State<SignUpView> {
 
   @override
   Widget build(BuildContext context) {
+    final methods = signInMethodsHere();
+    // The failure of a call shows where the user made the call.
+    final method = widget.method;
     return AuthPage(
       title: context.l10n.signInSignUpTitle,
-      intro: context.l10n.signInSignUpIntro,
+      intro: methods.isEmpty
+          ? context.l10n.signInSignUpIntro
+          : context.l10n.signInSignUpMethodsIntro,
       children: [
-        // While the sign-up is on its way, the form takes no input: no tap,
-        // and no typing into a field that has the focus.
+        // Above the form, so that a phone shows them without a scroll.
+        if (methods.isNotEmpty)
+          SignInMethods(
+            methods: methods,
+            busy: widget.busy,
+            method: method,
+            failure: method == null ? null : widget.failure,
+            onPressed: widget.onContinueWith,
+          ),
+        // While a call is on its way, the form takes no input: no tap, and
+        // no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -10209,11 +10659,11 @@ class _SignUpViewState extends State<SignUpView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 24),
-            FailureMessage(widget.failure),
+            FailureMessage(method == null ? widget.failure : null),
             SubmitButton(
               label: context.l10n.signInSignUpSubmit,
-              busy: widget.busy,
-              onPressed: _submit,
+              busy: widget.busy && method == null,
+              onPressed: widget.busy && method != null ? null : _submit,
             ),
             const SizedBox(height: 4),
             OtherScreenAction(
