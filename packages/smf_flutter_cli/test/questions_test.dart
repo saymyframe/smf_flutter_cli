@@ -187,6 +187,10 @@ Future<_Run> _create(
   );
 }
 
+/// How a run in a terminal offers the feature `sign_in`.
+const _signInChoice = 'sign_in — Sign-in and sign-up with email or the ways '
+    'to sign in of the app, and an account screen';
+
 void main() {
   test(
       'a run in a terminal asks for the features first, and not for the '
@@ -226,8 +230,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
-      'sign_in — Sign-in and sign-up with email or the ways to sign in of the '
-          'app, and an account screen',
+      _signInChoice,
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -387,8 +390,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       'onboarding — Onboarding on the first launch of the app',
-      'sign_in — Sign-in and sign-up with email or the ways to sign in of the '
-          'app, and an account screen',
+      _signInChoice,
     ]);
     expect(
       run.lines,
