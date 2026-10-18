@@ -23,10 +23,12 @@ class SignUpScreen extends StatelessWidget {
       builder: (context, state) => SignUpView(
         busy: state.busy,
         failure: state.failure,
+        method: state.method,
         onSubmit: (email, password) => context.read<SignUpCubit>().signUp(
           email: email,
           password: password,
         ),
+        onContinueWith: context.read<SignUpCubit>().continueWith,
         // Closes this page. The screen of the sign-in is the page below
         // it, whether that one is the first page of the app or shown over
         // another screen.

@@ -29,6 +29,7 @@ class AccountScreen extends StatelessWidget {
           email: session is AccountSession ? session.email : null,
           busy: state.busy,
           failure: state.failure,
+          failedAction: state.failedAction,
           onSignOut: context.read<AccountCubit>().signOut,
           onDeleteAccount: context.read<AccountCubit>().deleteAccount,
         );

@@ -18,6 +18,7 @@ class AccountView extends StatefulWidget {
     required this.email,
     required this.busy,
     required this.failure,
+    required this.failedAction,
     required this.onSignOut,
     required this.onDeleteAccount,
     super.key,
@@ -32,6 +33,9 @@ class AccountView extends StatefulWidget {
 
   /// Why the last action failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The action that failed with [failure], or `null` if none did.
+  final AccountAction? failedAction;
 
   /// Signs the user out.
   final VoidCallback onSignOut;
@@ -77,7 +81,12 @@ class _AccountViewState extends State<AccountView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 28),
-            FailureMessage(widget.failure),
+            FailureMessage(
+              widget.failure,
+              textOf: widget.failedAction == AccountAction.delete
+                  ? deletionFailureText
+                  : authFailureText,
+            ),
             SubmitButton(
               label: {{{text_sign_out}}},
               busy: widget.busy == AccountAction.signOut,
@@ -97,6 +106,26 @@ class _AccountViewState extends State<AccountView> {
     );
   }
 }
+
+/// The text of the app for [reason], the reason of a failure of the
+/// deletion of the account.
+///
+/// Before the deletion of an account with a way to sign in that
+/// `revokesOnDeletion`, the identity provider asks the user again. A
+/// provider of sign-in that cannot revoke the tokens of the identity
+/// provider, as when that is not set up, fails with
+/// [AuthFailureReason.notConfigured], and one that got a credential of
+/// another user with [AuthFailureReason.invalidCredentials]. The texts of a
+/// sign-in for these reasons would not tell a user who deletes the account
+/// what happened, so this has texts of its own for them, and those of
+/// [authFailureText] for the others.
+String deletionFailureText(BuildContext context, AuthFailureReason reason) =>
+    switch (reason) {
+      AuthFailureReason.notConfigured => {{{text_delete_unavailable}}},
+      AuthFailureReason.invalidCredentials =>
+        {{{text_delete_other_account}}},
+      _ => authFailureText(context, reason),
+    };
 
 /// Asks the user whether to delete the account, in a sheet over the page of
 /// [context], as the settings of the app ask in sheets, and returns whether

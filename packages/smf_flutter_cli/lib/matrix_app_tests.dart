@@ -286,9 +286,15 @@ Future<MatrixAppTests> smfAppTests() async {
       // is wrong with an email address and a password, the text of each
       // failure of a call in each language of the app, and that a call is
       // on its way; a password reset tells where the message went; and the
-      // screens fit a small phone with a large text size. The screen of
+      // screens fit a small phone with a large text size. The sign-in and
+      // the sign-up have a button for each way to sign in of the app that
+      // works on the platform, from appSignInMethods of the auth role, which
+      // signs in through the session with the mocks of the module of the way
+      // to sign in, spins while its call is on its way and shows its failure
+      // below the buttons, on Android and on iOS. The screen of
       // the account signs out and deletes the account, which it asks about
-      // first in a sheet, and the entry of the settings screen leads to
+      // first in a sheet, with texts of its own for a deletion that the
+      // provider refused, and the entry of the settings screen leads to
       // it, through the sign-in for a user without an account. For them
       // the matrix writes the settings screen of the app, whether it is a
       // destination of the main navigation, and the entry that the module

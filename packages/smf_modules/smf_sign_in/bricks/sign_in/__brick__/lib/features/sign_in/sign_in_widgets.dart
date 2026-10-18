@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 
 /// A text that keeps its words whole: it breaks between its words and never
 /// inside one.
@@ -340,6 +341,179 @@ class _BusyLabel extends StatelessWidget {
   );
 }
 
+/// The ways to sign in of the app that work on the platform that the app
+/// runs on, in their order: those of `appSignInMethods` that are
+/// available.
+List<SignInMethod> signInMethodsHere() => [
+  for (final method in appSignInMethods)
+    if (method.isAvailable) method,
+];
+
+/// The buttons of [methods], the ways to sign in of a page, one below the
+/// other, then the message of the failure of the last call of one of them,
+/// and the line with "or" that leads to the form below.
+///
+/// While a call of the page is on its way, the button of the way to sign in
+/// that made it spins, and no button takes a tap.
+class SignInMethods extends StatelessWidget {
+  /// Creates the buttons of [methods].
+  const SignInMethods({
+    required this.methods,
+    required this.busy,
+    required this.method,
+    required this.failure,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The ways to sign in, in their order.
+  final List<SignInMethod> methods;
+
+  /// Whether a call of the page is on its way: that of [method], or that of
+  /// the form while [method] is `null`.
+  final bool busy;
+
+  /// The way to sign in whose call is on its way or failed last, or `null`.
+  final SignInMethod? method;
+
+  /// Why the last call of a way to sign in failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  /// Signs in with the way to sign in whose button the user tapped.
+  final void Function(SignInMethod method) onPressed;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final (index, way) in methods.indexed) ...[
+        if (index > 0) const SizedBox(height: 12),
+        SignInMethodButton(
+          method: way,
+          busy: busy && method == way,
+          onPressed: busy ? null : () => onPressed(way),
+        ),
+      ],
+      const SizedBox(height: 20),
+      FailureMessage(failure),
+      const _Or(),
+      const SizedBox(height: 20),
+    ],
+  );
+}
+
+/// The colours of the button of a way to sign in, the same in a light and
+/// in a dark theme: a white button with a grey hairline around it, and a
+/// label and an icon in black. They keep to what the brand guidelines of
+/// identity providers allow a custom button of theirs on any background,
+/// and a logo that keeps its own colours stays on white.
+const _methodFill = Color(0xFFFFFFFF);
+const _methodOutline = Color(0xFF747775);
+const _methodInk = Color(0xFF000000);
+
+/// The size of the icon of a way to sign in, which does not grow with the
+/// text size of the device: a logo keeps its size.
+const _methodIconSize = 20.0;
+
+/// The space between the icon of a way to sign in and its label.
+const _methodIconGap = 12.0;
+
+/// The button of a way to sign in, as wide as the page: its icon at the
+/// start and its label in the middle, in the text style that the theme of
+/// the app gives a filled button, in the weight medium. It is as tall as
+/// the button that submits a form, and in colours of its own, which the
+/// theme does not change. A screen reader reads it as one button with its
+/// label.
+///
+/// While its call is on its way, it spins in the place of its label and
+/// does nothing. In an app that asks for less motion it is disabled with
+/// its label instead. A disabled button of a way to sign in keeps its
+/// colours, as the brand guidelines ask of the logo and the label, and
+/// only takes no tap.
+class SignInMethodButton extends StatelessWidget {
+  /// Creates the button of [method].
+  const SignInMethodButton({
+    required this.method,
+    required this.busy,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The way to sign in, whose label and icon the button shows.
+  final SignInMethod method;
+
+  /// Whether the call of the way to sign in is on its way.
+  final bool busy;
+
+  /// Signs in with the way to sign in, or `null` while the button takes no
+  /// tap, as while another call of its page is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spins = _spins(context, busy: busy);
+    final onPressed = _whileBusy(this.onPressed, busy: busy, spins: spins);
+    // The text style that the theme gives a filled button, as the button
+    // that submits a form has it, in the weight medium.
+    final themed =
+        FilledButtonTheme.of(context).style?.textStyle?.resolve(const {}) ??
+        Theme.of(context).textTheme.labelLarge;
+    return FilledButton(
+      // The same colours whether the button takes a tap or not.
+      style: FilledButton.styleFrom(
+        backgroundColor: _methodFill,
+        foregroundColor: _methodInk,
+        disabledBackgroundColor: _methodFill,
+        disabledForegroundColor: _methodInk,
+        iconColor: _methodInk,
+        disabledIconColor: _methodInk,
+        iconSize: _methodIconSize,
+        side: const BorderSide(color: _methodOutline),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        textStyle: themed?.copyWith(fontWeight: FontWeight.w500),
+      ),
+      onPressed: onPressed,
+      child: Row(
+        children: [
+          // The label names the way to sign in.
+          ExcludeSemantics(child: method.icon),
+          const SizedBox(width: _methodIconGap),
+          Expanded(child: _BusyLabel(method.label(context), spins: spins)),
+          // As wide as the icon and the space after it, so that the label
+          // is in the middle of the button.
+          const SizedBox(width: _methodIconSize + _methodIconGap),
+        ],
+      ),
+    );
+  }
+}
+
+/// The line between the buttons of the ways to sign in and the form, with
+/// "or" in its middle.
+class _Or extends StatelessWidget {
+  const _Or();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        const Expanded(child: Divider()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            {{{text_or}}},
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider()),
+      ],
+    );
+  }
+}
+
 /// The action of a screen that leads to the other screen of the sign-in:
 /// from the sign-in to the screen that creates an account, and from there
 /// back.
@@ -433,10 +607,19 @@ class DestructiveAction extends StatelessWidget {
 /// developer of the app, which is no text for a user.
 class FailureMessage extends StatelessWidget {
   /// Creates the message of [failure].
-  const FailureMessage(this.failure, {super.key});
+  const FailureMessage(
+    this.failure, {
+    this.textOf = authFailureText,
+    super.key,
+  });
 
   /// The failure, or `null` when the last call did not fail.
   final AuthFailure? failure;
+
+  /// The text of the app for the reason of the failure: [authFailureText],
+  /// unless a page tells of a failure of its call in words of its own.
+  final String Function(BuildContext context, AuthFailureReason reason)
+  textOf;
 
   @override
   Widget build(BuildContext context) {
@@ -445,7 +628,7 @@ class FailureMessage extends StatelessWidget {
         ? const SizedBox(width: double.infinity)
         : Padding(
             padding: const EdgeInsets.only(bottom: 20),
-            child: _Failure(failure),
+            child: _Failure(failure, textOf: textOf),
           );
     // An app that asks for less motion shows the message at once. It does
     // so without an AnimatedSize: one with a duration of zero fails an
@@ -463,9 +646,11 @@ class FailureMessage extends StatelessWidget {
 /// The box with the text of [failure]: a card as the theme of the app has
 /// its cards, in a tint of the colour that the theme has for an error.
 class _Failure extends StatelessWidget {
-  const _Failure(this.failure);
+  const _Failure(this.failure, {required this.textOf});
 
   final AuthFailure failure;
+  final String Function(BuildContext context, AuthFailureReason reason)
+  textOf;
 
   @override
   Widget build(BuildContext context) {
@@ -500,7 +685,7 @@ class _Failure extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      authFailureText(context, failure.reason),
+                      textOf(context, failure.reason),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: colors.onSurface,
                       ),
