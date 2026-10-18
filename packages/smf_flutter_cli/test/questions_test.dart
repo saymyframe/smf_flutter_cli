@@ -1603,6 +1603,96 @@ void main() {
   });
 
   test(
+      'a run in a terminal asks which module provides the notifications '
+      'after the push messages and the two screens that their role adds to, '
+      'offers local_notifications, and adds the preferences that their role '
+      'requires without a question', () async {
+    final run = await _create({
+      'Features': [],
+      'Infrastructure': [],
+      'Layout': ['None'],
+      'Settings screen': ['settings'],
+      'Onboarding screen': ['onboarding'],
+      'Localization': ['None'],
+      'Theme': ['None'],
+      'Push messages': ['None'],
+      'Notifications': ['local_notifications'],
+      'Dependency injection': ['None'],
+      'State management': ['None'],
+      'Events': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+      'Authentication': ['None'],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final notifications = messages.indexOf(
+      'Notifications: which module provides it?',
+    );
+    // The push role requires the notifications, so its question comes
+    // right before theirs, which knows then whether the app needs them.
+    expect(
+      notifications,
+      messages.indexOf('Push messages: which module provides it?') + 1,
+    );
+    // The role adds a step to the onboarding and an entry to the settings
+    // screen, which the user has chosen or declined by then.
+    expect(
+      messages.indexOf('Settings screen: which module provides it?'),
+      allOf(isNonNegative, lessThan(notifications)),
+    );
+    expect(
+      messages.indexOf('Onboarding screen: which module provides it?'),
+      allOf(isNonNegative, lessThan(notifications)),
+    );
+    expect(run.asked[notifications].shown, [
+      'local_notifications — Notifications with flutter_local_notifications',
+      'None',
+    ]);
+    // shared_preferences is the only module that provides the preferences,
+    // which the notifications role requires, so there is nothing to ask.
+    expect(messages, isNot(contains(startsWith('Preferences:'))));
+    expect(
+      run.lines,
+      contains(
+        'Adding shared_preferences: the only provider of the preferences '
+        'role, which onboarding requires.',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/onboarding/onboarding_steps.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('/core/notifications/notifications_step.dart'),
+        contains('.allowNotifications,'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/features/settings/settings_screen.dart')
+          .readAsStringSync(),
+      contains('.NotificationsSetting()'),
+    );
+    // The start-up opens the preferences before the notifications, which
+    // read from them whether the app asked for the permission.
+    const bootstrap = 'lib/bootstrap.dart';
+    final calls = DartFileIndexer.index(
+      bootstrap,
+      app.childFile(bootstrap).readAsStringSync(),
+    ).invocations;
+    expect(
+      [
+        for (final call in calls)
+          if (call.enclosingDeclaration == 'bootstrap') call.name,
+      ],
+      ['initPreferences', 'initNotifications'],
+    );
+  });
+
+  test(
       'a run in a terminal gives an app without a router Firebase Analytics '
       'without screen views, and registers its service in the DI container',
       () async {
@@ -2023,6 +2113,126 @@ void main() {
         contains("initialLocation: '/home',"),
         contains("path: '/sign_in',"),
       ),
+    );
+  });
+
+  test(
+      'a run in a terminal that picks every module asks its questions in '
+      'their order, and none of a role that an earlier answer needs, whose '
+      'only provider it adds', () async {
+    const picked = [
+      'home',
+      'sign_in',
+      'firebase_core',
+      'google_sign_in',
+      'apple_sign_in',
+      'bottom_tabs',
+      'onboarding',
+      'gen_l10n',
+      'material_theme',
+      'firebase_messaging',
+      'get_it',
+      'bloc',
+      'event_bus',
+      'firebase_crashlytics',
+      'firebase_analytics',
+    ];
+    final run = await _create(
+      {
+        'Features': ['home', 'sign_in'],
+        'Infrastructure': ['firebase_core', 'google_sign_in', 'apple_sign_in'],
+        'Layout': ['bottom_tabs'],
+        'Onboarding screen': ['onboarding'],
+        'Localization': ['gen_l10n'],
+        'Theme': ['material_theme'],
+        'Push messages': ['firebase_messaging'],
+        'Dependency injection': ['get_it'],
+        'State management': ['bloc'],
+        'Events': ['event_bus'],
+        'Crash reporting': ['firebase_crashlytics'],
+        'Analytics': ['firebase_analytics'],
+        'Who may use the app': ['Nobody'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // The modules without a role come first, by kind. Then the roles, each
+    // after the roles that require it: the screens, of which the layout,
+    // the settings screen and the onboarding screen require the router and
+    // so come before its question; the look of the app, its languages and
+    // its theme; the push messages, before the notifications that their
+    // role requires, which come after the two screens that the
+    // notifications role adds to; what is under the hood, the preferences
+    // that the localization, the theme, the onboarding and the
+    // notifications require, the DI container, the state manager and the
+    // events; and last the services of crash reporting, analytics and
+    // authentication. The choices of the roles come once the modules are
+    // known.
+    expect(run.asked.map((question) => question.message), [
+      'Features: which do you want?',
+      'Infrastructure: which do you want?',
+      'Layout: which module provides it?',
+      'Onboarding screen: which module provides it?',
+      'Localization: which module provides it?',
+      'Theme: which module provides it?',
+      'Push messages: which module provides it?',
+      'Dependency injection: which module provides it?',
+      equals(
+        'State management: sign_in requires the state management role. '
+        'Which module provides it?',
+      ),
+      'Events: which module provides it?',
+      'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
+      'Who may use the app without an account?',
+    ]);
+    // The answers before the questions of the settings screen, the router,
+    // the notifications, the preferences and the authentication need those
+    // roles, so the run asks none of them and adds their only providers.
+    final added = [
+      for (final line in run.lines)
+        if (line.startsWith('Adding ')) line,
+    ];
+    expect(added, [
+      equals(
+        'Adding flutter_core: the only provider of the app entry role, which '
+        'every app needs.',
+      ),
+      equals(
+        'Adding go_router: the only provider of the router role, which home '
+        'requires.',
+      ),
+      equals(
+        'Adding firebase_auth: the only provider of the authentication role, '
+        'which sign_in requires.',
+      ),
+      equals(
+        'Adding settings: the only provider of the settings screen role, '
+        'which sign_in requires.',
+      ),
+      equals(
+        'Adding shared_preferences: the only provider of the preferences '
+        'role, which onboarding requires.',
+      ),
+      equals(
+        'Adding local_notifications: the only provider of the notifications '
+        'role, which firebase_messaging requires.',
+      ),
+    ]);
+    // So the app has every module of smf create but the other state
+    // manager: a module that the CLI offers next fails this test until its
+    // question has its place here.
+    expect(
+      {
+        ...picked,
+        for (final line in added) line.split(' ')[1].replaceAll(':', ''),
+      },
+      {
+        for (final module in smfModules)
+          if (module.descriptor.id.value != 'riverpod')
+            module.descriptor.id.value,
+      },
     );
   });
 
