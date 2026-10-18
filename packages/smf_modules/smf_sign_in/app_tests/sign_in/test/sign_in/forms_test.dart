@@ -406,6 +406,20 @@ Future<void> _expectBusyMethod(
         'failure below the buttons of the ways to sign in, and not above '
         'the button of the form, and leaves the session as it was.',
   );
+  final shown = tester.getRect(
+    find.descendant(of: find.byType(SignInMethods), matching: message),
+  );
+  final lastButton = tester.getRect(
+    buttonIn(methodButton(methodsHere().last)),
+  );
+  final or = tester.getRect(text('or'));
+  expect(
+    (shown.top >= lastButton.bottom, shown.bottom <= or.top),
+    (true, true),
+    reason: 'The failure of a call of a way to sign in of $screen is between '
+        'the last button of a way to sign in and "or": it is at $shown, the '
+        'last button at $lastButton and "or" at $or.',
+  );
   service.failure = null;
 }
 
