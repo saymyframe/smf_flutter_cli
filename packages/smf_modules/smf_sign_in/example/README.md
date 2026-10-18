@@ -1,6 +1,6 @@
 # Generate a Flutter app with sign-in screens
 
-`sign_in` is the feature with the sign-in screens of the apps that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) generates. On its screens a user signs in with an email address and a password, creates an account, and resets a password. On the screen of the account, the user signs out or deletes the account. Choose it with `-m`, here with the start screen `home`, BLoC for the state of the screens, and `bottom_tabs`, which provides the layout role, the main navigation of the app:
+`sign_in` is the feature with the sign-in screens of the apps that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) generates. On its screens a user signs in with an email address and a password, creates an account, and resets a password. The sign-in and the sign-up also have a button for each way to sign in that another module adds, such as `google_sign_in`. On the screen of the account, the user signs out or deletes the account. Choose it with `-m`, here with the start screen `home`, BLoC for the state of the screens, and `bottom_tabs`, which provides the layout role, the main navigation of the app:
 
 ```bash
 dart pub global activate smf_flutter_cli
@@ -37,7 +37,7 @@ class SignInScreen extends StatelessWidget {
 }
 ```
 
-`SignInCubit` signs in through `appSession`, the session of the app. Its state tells the view whether the call is on its way and why the last one failed. After a sign-in that succeeded it stays busy for as long as the session has the account, since the router takes the screen away then:
+`SignInCubit` signs in through `appSession`, the session of the app. Its state tells the view whether a call is on its way, which one, and why the last one failed. A button of a way to sign in calls `continueWith`. After a sign-in that succeeded the state stays busy for as long as the session has the account, since the router takes the screen away then:
 
 ```dart
   Future<void> signIn({required String email, required String password}) =>

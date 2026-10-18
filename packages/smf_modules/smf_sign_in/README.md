@@ -1,6 +1,6 @@
 # smf_sign_in
 
-The SMF module of the sign-in screens of the app. It is a feature: four screens with their routes, which the module that provides the router renders, two guards of the routes, which that module asks, and an entry of the settings screen. On three of the screens, a user signs in to an account with an email address and a password, creates an account, and asks for the message that resets a password. The fourth is the screen of the account, where the user signs out or deletes the account.
+The SMF module of the sign-in screens of the app. It is a feature: four screens with their routes, which the module that provides the router renders, two guards of the routes, which that module asks, and an entry of the settings screen. On three of the screens, a user signs in to an account with an email address and a password, creates an account, and asks for the message that resets a password. The sign-in and the sign-up also have a button for each way to sign in that another module adds, such as `google_sign_in` or `apple_sign_in`. The fourth is the screen of the account, where the user signs out or deletes the account.
 
 The module keeps no accounts. It requires a module that provides sign-in, and reaches it only through `appSession`, the session of the app, so the screens are the same whichever module that is.
 
@@ -20,11 +20,19 @@ One button has a colour of its own. The action that leads to the other screen is
 
 The parts of a screen rise in one after another, once. On a device that asks for less motion, they are there at once, and a busy button is disabled and keeps its label. A screen scrolls when it is too small for what it shows, as with the keyboard open or with a large text size on a small phone, and the labels and the buttons grow with their texts. A title grows only by half. A title and the label of a button break between their words and never inside one. Where the longest word would not fit, as on a narrow phone with a large text size, the text is only as large as that word allows. The letters in the cell keep their size, since they are part of a picture. A screen reader announces the title as a header, each field by its label, and a failure when it appears.
 
+## Ways to sign in
+
+A module of a way to sign in, such as `google_sign_in` or `apple_sign_in`, gives the auth role its label, its icon and the platforms it works on, and the role lists it in `appSignInMethods`. The sign-in and the sign-up show a button for each way that works on the platform of the app. The buttons are above the form, in the order of the modules, with "or" between them and the form. With buttons, the line of text below the title asks how to sign in. An app without such a module shows the form alone.
+
+Each button is as wide as the form and as tall as the button that submits. Its label has the text style of that button in the medium weight. The button is white with a grey hairline, and its label and icon are black, in the light theme and in the dark one. The brand guidelines of identity providers allow these colours for a custom button on any background, and a logo in its own colours stays on white. The icon keeps its size at a large text size, and a screen reader reads each button as one button with its label.
+
+A tap asks the way to sign in for a credential, as with the sheet of its identity provider, and gives it to `appSession.signInWith`. An anonymous user keeps the id. While the call is on its way, the button spins and nothing else on the screen takes a tap. A failure shows below the buttons. When the user closes the sheet, the screen is as it was before the tap.
+
 ## The account
 
-The screen of the account is at `/sign_in/account`. It shows the email address of the account that the user is signed in to, the button Sign out, and the action Delete account.
+The screen of the account is at `/sign_in/account`. It shows the email address of the account that the user is signed in to, the button Sign out, and the action Delete account. An account of a way to sign in may have no email address, and the screen then shows the label of its way to sign in.
 
-Delete account is a text button in the colour that the theme has for an error. It asks first, in a sheet over the page: the sheet says that the deletion cannot be undone, and has the buttons Delete and Cancel. The screen closes the sheet before it deletes the account. A provider of sign-in may refuse to delete an account whose user signed in long ago. The screen then stays, with a text that tells the user to sign out and sign in again.
+Delete account is a text button in the colour that the theme has for an error. It asks first, in a sheet over the page: the sheet says that the deletion cannot be undone, and has the buttons Delete and Cancel. The screen closes the sheet before it deletes the account. A provider of sign-in may refuse to delete an account whose user signed in long ago. The screen then stays, with a text that tells the user to sign out and sign in again. Some ways to sign in, such as Sign in with Apple, ask the user again before a deletion, so that the provider of sign-in can revoke their tokens. When the provider cannot revoke them, or the user confirms with another account, the screen says so in a text of its own: the texts of a sign-in would not tell the user what happened.
 
 The settings screen of the app has an entry for the account. It shows the email address of the account, or Not signed in, and a tap on it opens the screen of the account over the settings screen. The route of that screen needs an account. So for a user without one, in an app that everyone may use, the router opens the sign-in over the settings screen first, and shows the screen of the account once the user is signed in. In an app that signs in anonymous users, such a user creates the account on the sign-up and keeps everything that the anonymous user had.
 
@@ -37,10 +45,10 @@ The screen neither closes itself nor navigates. After a sign-out or a deletion t
 The module generates its files in `lib/features/sign_in/`. The look of the screens is the same in every app:
 
 - `sign_in_view.dart`, `sign_up_view.dart` and `reset_password_view.dart` have `SignInView`, `SignUpView` and `ResetPasswordView`. A view is a plain Flutter widget: it keeps its form, gets the state of its call, and takes callbacks for what the user asks for.
-- `account_view.dart` has `AccountView`, the look of the screen of the account, and `confirmDeleteAccount()`, which asks in the sheet. `account_setting_row.dart` has `AccountSettingRow`, the row of the entry on the settings screen.
+- `account_view.dart` has `AccountView`, the look of the screen of the account, `confirmDeleteAccount()`, which asks in the sheet, and `deletionFailureText()`, the texts of a deletion that failed. `account_setting_row.dart` has `AccountSettingRow`, the row of the entry on the settings screen.
 - `sign_in_page.dart` has `AuthPage`, the frame of a screen: the cell, the title, the line of text, and the entrance.
-- `sign_in_widgets.dart` has the fields, the button that submits, `OtherScreenAction` for the way to the other screen, `DestructiveAction` for what cannot be undone, and `FailureMessage`. It also has `authFailureText()`, which has a text for every reason of a failure, and `WholeWords`, the text of a title or of the label of a button, which keeps its words whole.
-- `sign_in_state.dart` has `AuthActionState`, `ResetPasswordState` and `AccountState`, the values of the state of a screen.
+- `sign_in_widgets.dart` has the fields, the button that submits, `OtherScreenAction` for the way to the other screen, `DestructiveAction` for what cannot be undone, and `FailureMessage`. `SignInMethods` and `SignInMethodButton` are the buttons of the ways to sign in, and `signInMethodsHere()` lists the ways that work on the platform. It also has `authFailureText()`, which has a text for every reason of a failure, and `WholeWords`, the text of a title or of the label of a button, which keeps its words whole.
+- `sign_in_state.dart` has `AuthActionState`, `ResetPasswordState` and `AccountState`, the values of the state of a screen. It also has `continueWithMethod()`, which asks a way to sign in for its credential and gives it to the session, for the state of the sign-in and of the sign-up.
 - `sign_in_guards.dart` has the functions of the two guards.
 
 What keeps the state of a screen depends on the module that manages state in the app, so the module has a variant for each:
@@ -88,7 +96,7 @@ Every reason of a failure has a text of its own. When sign-in is not set up at t
 
 ## In your tests
 
-A cubit takes the session through its constructor, and a provider reaches it through `appSessionProvider`, which a test overrides. So a test of the state of a screen gives it an `AppSessionController` of its own, with a service that the test scripts.
+A cubit takes the session through its constructor, and a provider reaches it through `appSessionProvider`, which a test overrides. So a test of the state of a screen gives it an `AppSessionController` of its own, with a service that the test scripts. `continueWith()` takes any `SignInMethod`, so a test gives it a way to sign in whose `credential` it scripts, such as one that returns `null` as a closed sheet does.
 
 The button that submits spins for as long as its call takes. A widget test that waits for a screen with `pumpAndSettle()` returns only once the call has ended, so while a call is on its way, such a test shows frames with `pump()`.
 
