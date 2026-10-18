@@ -270,6 +270,7 @@ class App extends StatelessWidget {
 {{{smf_app_entry__main_activity_intent_filters}}}
         </activity>
 {{{smf_app_entry__android_manifest_application_meta}}}
+{{{smf_app_entry__android_manifest_application_components}}}
     </application>
 </manifest>
 ''',
@@ -283,8 +284,15 @@ plugins {
 {{{smf_app_entry__gradle_app_plugins}}}
 }
 
+android {
+    compileOptions {
+{{{smf_app_entry__android_core_library_desugaring_enabled}}}
+    }
+}
+
 dependencies {
 {{{smf_app_entry__gradle_app_dependencies}}}
+{{{smf_app_entry__android_core_library_desugaring_library}}}
 }
 ''',
   'ios/Podfile':
@@ -296,6 +304,21 @@ dependencies {
 {{{smf_app_entry__info_plist}}}
 </dict>
 </plist>
+''',
+  'ios/Runner/AppDelegate.swift': '''
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+{{{smf_app_entry__ios_app_delegate_launch}}}
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}
 ''',
   'ios/Runner/Runner.entitlements': '''
 <plist version="1.0">

@@ -507,12 +507,58 @@ void f() {{{{smf_after__brace}}}
           ),
         ]),
         [
-          contains('The socket m.one has only its tag smf_m__one_open'),
+          equals(
+            'm: The socket m.one has only smf_m__one_open of its tags, in '
+            'lib/a.dart; a wrapper needs both smf_m__one_open and '
+            'smf_m__one_close.',
+          ),
           contains('The tag smf_m__two_close of the socket m.two comes '
               'before smf_m__two_open'),
           contains('The tags of the socket m.three are in different files'),
         ],
       );
+    });
+
+    test(
+        'a socket for one value at several places has the tag of each, '
+        'since the value goes to all of them', () {
+      String library(String version) => 'library:$version';
+      final versions = SocketRef<ValueSocket<String>>.module(
+        const ModuleId('m'),
+        'versions',
+        ValueSocket.places(
+          policy: const MaxPolicy(),
+          places: {'enabled': library, 'library': library},
+        ),
+      );
+      List<String> issues(Map<String, String> files) => check([
+            scaffold(),
+            TestModule(
+              'm',
+              sockets: [versions],
+              contributions: [
+                brick(files),
+                versions.value('2.1.4'),
+              ],
+            ),
+          ]);
+
+      expect(
+        issues({
+          'android/a.gradle': '{{{smf_m__versions_enabled}}}\n',
+          'android/b.gradle': '{{{smf_m__versions_library}}}\n'
+              '{{{smf_m__versions_library}}}\n',
+        }),
+        isEmpty,
+      );
+      expect(issues({'android/a.gradle': '{{{smf_m__versions_library}}}\n'}), [
+        equals(
+          'm: The socket m.versions has only smf_m__versions_library of its '
+          'tags, in android/a.gradle; its value goes to each of its tags, '
+          'smf_m__versions_enabled and smf_m__versions_library, so the '
+          'templates hold all of them.',
+        ),
+      ]);
     });
 
     test('every socket that must have a tag has it', () {

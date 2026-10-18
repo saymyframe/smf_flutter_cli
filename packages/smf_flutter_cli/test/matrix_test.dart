@@ -226,9 +226,13 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// The harness builds the app of a module with only the modules that it
 /// needs: such an app has no route to start on, since only home has one,
 /// and the destination of its feature has no main navigation to lead to it,
-/// since the app has no layout. An app of Google sign-in has no way to sign
-/// in that the App Store takes as its equivalent on iOS, which the apps
-/// with every module have in Sign in with Apple (guideline 4.8).
+/// since the app has no layout. The apps of a module with the settings
+/// screen, such as those of the theme and of the notifications, get the
+/// settings feature for it, and the apps of the notifications with the
+/// onboarding screen get the onboarding feature, which has no route to
+/// start on either. An app of Google sign-in has no way to sign in
+/// that the App Store takes as its equivalent on iOS, which the apps with
+/// every module have in Sign in with Apple (guideline 4.8).
 const _warningApps = <String, List<String>>{
   'settings with localization': [
     'router.no_main_navigation',
@@ -247,6 +251,24 @@ const _warningApps = <String, List<String>>{
   'onboarding': ['router.no_start'],
   'google_sign_in with localization': ['auth.no_equivalent_sign_in'],
   'google_sign_in': ['auth.no_equivalent_sign_in'],
+  'local_notifications with settings_screen, onboarding_screen, '
+      'localization': ['router.no_main_navigation', 'router.no_start'],
+  'local_notifications with settings_screen, onboarding_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'local_notifications with settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'local_notifications with onboarding_screen, localization': [
+    'router.no_start',
+  ],
+  'local_notifications with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'local_notifications with onboarding_screen': ['router.no_start'],
   'sign_in (bloc) with localization': [
     'router.no_main_navigation',
     'router.no_start',
@@ -272,10 +294,15 @@ void main() {
       'container, the apps of the events and of the preferences with the '
       'DI container and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
-      'the app of Firebase, the app of Crashlytics '
+      'the apps of the notifications with the settings screen, the '
+      'onboarding screen and the localization and without each, which all '
+      'get the preferences, the '
+      'app of Firebase, the app of Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
-      'which get Firebase, the apps of Firebase Authentication with and '
+      'which get Firebase, the app of Firebase Cloud Messaging, which gets '
+      'Firebase and the notifications with their preferences, the apps of '
+      'Firebase Authentication with and '
       'without the localization and the router, which get Firebase, the '
       'apps of Google sign-in and of Sign in with Apple with the '
       'localization and without, which get Firebase Authentication, the '
@@ -293,9 +320,9 @@ void main() {
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, onboarding, firebase_core, '
-        'firebase_crashlytics, firebase_analytics, firebase_auth, '
-        'google_sign_in, apple_sign_in, sign_in)';
+        'shared_preferences, onboarding, local_notifications, firebase_core, '
+        'firebase_crashlytics, firebase_analytics, firebase_messaging, '
+        'firebase_auth, google_sign_in, apple_sign_in, sign_in)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -360,6 +387,42 @@ void main() {
         'shared_preferences, go_router)',
       ),
       'onboarding (onboarding, flutter_core, shared_preferences, go_router)',
+      equals(
+        'local_notifications with settings_screen, onboarding_screen, '
+        'localization (local_notifications, settings, onboarding, gen_l10n, '
+        'flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with settings_screen, onboarding_screen '
+        '(local_notifications, settings, onboarding, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with settings_screen, localization '
+        '(local_notifications, settings, gen_l10n, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with onboarding_screen, localization '
+        '(local_notifications, onboarding, gen_l10n, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with settings_screen (local_notifications, '
+        'settings, flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with onboarding_screen (local_notifications, '
+        'onboarding, flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with localization (local_notifications, '
+        'gen_l10n, flutter_core, shared_preferences)',
+      ),
+      equals(
+        'local_notifications (local_notifications, flutter_core, '
+        'shared_preferences)',
+      ),
       'firebase_core (firebase_core, flutter_core)',
       equals(
         'firebase_crashlytics with di (firebase_crashlytics, get_it, '
@@ -383,6 +446,10 @@ void main() {
       ),
       equals(
         'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_messaging (firebase_messaging, firebase_core, flutter_core, '
+        'local_notifications, shared_preferences)',
       ),
       equals(
         'firebase_auth with localization, router (firebase_auth, gen_l10n, '
@@ -646,7 +713,7 @@ void main() {
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, onboarding, local)';
+        'shared_preferences, onboarding, local_notifications, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2254,6 +2321,7 @@ Type type() => Types;
               'event_bus',
               'shared_preferences',
               'onboarding',
+              'local_notifications',
             ].join(','),
             '-o',
             '/apps',

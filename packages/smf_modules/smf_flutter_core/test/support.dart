@@ -476,6 +476,14 @@ final class EverySocketModule extends SmfModule {
           const AndroidMetaData.value('every socket'),
         ),
         const SocketContribution.code(
+          AppEntryRole.androidManifestApplicationComponents,
+          Fragment(
+            '        <receiver\n'
+            '            android:name="com.example.every_socket.Receiver"\n'
+            '            android:exported="false" />',
+          ),
+        ),
+        const SocketContribution.code(
           AppEntryRole.mainActivityIntentFilters,
           Fragment(
             '            <intent-filter>\n'
@@ -493,6 +501,10 @@ final class EverySocketModule extends SmfModule {
           'com.apple.developer.associated-domains',
           const PlistStringArray(['applinks:example.com']),
         ),
+        const SocketContribution.code(
+          AppEntryRole.iosAppDelegateLaunch,
+          Fragment('    UNUserNotificationCenter.current().delegate = self'),
+        ),
         AppEntryRole.gradleSettingsPlugins.entry(
           'io.github.ben-manes.versions',
           '0.64.0',
@@ -502,6 +514,7 @@ final class EverySocketModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.9.1',
         ),
+        AppEntryRole.androidCoreLibraryDesugaring.value('2.1.4'),
         AppEntryRole.readmeSections.entry(
           'Every socket',
           'The app has something in every socket of its entry.',

@@ -12,6 +12,7 @@ void main() {
   const manifest = 'android/app/src/main/AndroidManifest.xml';
   const infoPlist = 'ios/Runner/Info.plist';
   const entitlements = 'ios/Runner/Runner.entitlements';
+  const appDelegate = 'ios/Runner/AppDelegate.swift';
   const settingsGradle = 'android/settings.gradle.kts';
   const appGradle = 'android/app/build.gradle.kts';
 
@@ -139,6 +140,13 @@ void main() {
         'Contract App',
       );
       expect(app.findElements('uses-permission'), isEmpty);
+      expect(
+        [
+          for (final component in app.getElement('application')!.childElements)
+            component.name.local,
+        ],
+        ['activity', 'meta-data'],
+      );
 
       final root = XmlDocument.parse(every[manifest]!).rootElement;
       final application = root.getElement('application')!;
@@ -156,6 +164,19 @@ void main() {
             meta.getAttribute('android:name'),
         ],
         ['flutterEmbedding', 'com.example.every_socket.KEY'],
+      );
+      // The components of the modules come after the meta-data.
+      expect(
+        [
+          for (final child in application.childElements)
+            '${child.name.local} ${child.getAttribute('android:name')}',
+        ],
+        [
+          'activity .MainActivity',
+          'meta-data flutterEmbedding',
+          'meta-data com.example.every_socket.KEY',
+          'receiver com.example.every_socket.Receiver',
+        ],
       );
       expect(
         [
@@ -232,6 +253,38 @@ void main() {
       );
     });
 
+    test(
+        'run the code of the modules before the launch of the iOS app '
+        'finishes, before Flutter takes the launch', () {
+      const launch = '  ) -> Bool {\n'
+          '    return super.application(application, '
+          'didFinishLaunchingWithOptions: launchOptions)\n'
+          '  }\n';
+
+      // As flutter create writes it.
+      expect(alone[appDelegate], contains(launch));
+      expect(
+        every[appDelegate],
+        contains(
+          launch.replaceFirst(
+            '{\n',
+            '{\n    UNUserNotificationCenter.current().delegate = self\n',
+          ),
+        ),
+      );
+      // Not where Flutter registers the plugins, once the scene connects.
+      expect(
+        every[appDelegate],
+        contains(
+          'func didInitializeImplicitFlutterEngine(_ engineBridge: '
+          'FlutterImplicitEngineBridge) {\n'
+          '    GeneratedPluginRegistrant.register(with: '
+          'engineBridge.pluginRegistry)\n'
+          '  }\n',
+        ),
+      );
+    });
+
     test('have the bundle id and the highest minimum iOS version', () {
       String versions(String pbxproj) => RegExp(
             r'IPHONEOS_DEPLOYMENT_TARGET = ([\d.]+);',
@@ -268,11 +321,43 @@ void main() {
       );
       expect(
         _block(every[appGradle]!, 'dependencies'),
-        '\n    implementation("androidx.annotation:annotation:1.9.1")\n',
+        '\n    implementation("androidx.annotation:annotation:1.9.1")\n'
+        '    coreLibraryDesugaring("$_desugaring")\n',
+      );
+    });
+
+    test(
+        'enable core library desugaring only for a module that needs it, '
+        'with the switch and the library together', () {
+      const java17 = '        sourceCompatibility = JavaVersion.VERSION_17\n'
+          '        targetCompatibility = JavaVersion.VERSION_17\n';
+
+      // The compileOptions as flutter create writes them, and the empty
+      // dependencies block of the brick.
+      expect(_compileOptions(alone[appGradle]!), java17);
+      expect(alone[appGradle], isNot(contains('esugaring')));
+      expect(_block(alone[appGradle]!, 'dependencies'), '\n');
+
+      expect(
+        _compileOptions(every[appGradle]!),
+        '$java17        isCoreLibraryDesugaringEnabled = true\n',
+      );
+      expect(
+        _block(every[appGradle]!, 'dependencies'),
+        endsWith('    coreLibraryDesugaring("$_desugaring")\n'),
       );
     });
   });
 }
+
+/// The library of core library desugaring that the modules of the app ask
+/// for.
+const _desugaring = 'com.android.tools:desugar_jdk_libs:2.1.4';
+
+/// The text between the braces of the `compileOptions` of the `android`
+/// block of the Gradle script of the app, [text].
+String _compileOptions(String text) =>
+    RegExp(r'\n    compileOptions \{\n([^{}]*?)    \}\n').firstMatch(text)![1]!;
 
 /// The value elements of the top-level dictionary of the property list
 /// [text], by key.

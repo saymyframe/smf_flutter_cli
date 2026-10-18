@@ -46,10 +46,11 @@ const notificationsRole = NotificationsRole._();
 /// are scheduled and not shown yet. A notification is an `AppNotification`
 /// with an id, a title, a body and data. Its id is a 32-bit integer, which
 /// the platforms keep, and a notification with the id of one that is shown
-/// or scheduled takes its place. `show()` and `schedule()` fail with an
-/// `ArgumentError` for an id that the app does not take, and `schedule()`
-/// for a time that is not in the future, before they reach the provider.
-/// `scheduled()` and `cancelAll()` take the notifications of an owner too.
+/// or scheduled takes its place, a scheduled one when it shows. `show()`
+/// and `schedule()` fail with an `ArgumentError` for an id that the app does
+/// not take, and `schedule()` for a time that is not in the future, before
+/// they reach the provider. `scheduled()` and `cancelAll()` take the
+/// notifications of an owner too.
 /// What the provider throws reaches the code that called. An error of the
 /// provider when the user comes back to the app, or one that its taps send,
 /// has no caller, so it reaches the handlers of the uncaught errors of the
@@ -153,7 +154,10 @@ const notificationsRole = NotificationsRole._();
 ///   notification shows also when the app is closed then, and after a
 ///   restart of the device;
 /// - a notification with the id of one that is shown or scheduled takes its
-///   place, and `cancel` removes the one of its id, shown or scheduled;
+///   place: `show` cancels the scheduled notification of its id, if there
+///   is one, so that it does not show later, and a notification scheduled
+///   with the id of one that is shown takes its place when it shows.
+///   `cancel` removes the notification of its id, shown or scheduled;
 /// - `taps` and `launchTap` have the data that the notification had;
 /// - `request` completes once the user answered, also with a no, and never
 ///   throws for it. Where the platform has no question to show and the app
@@ -197,7 +201,10 @@ const notificationsRole = NotificationsRole._();
 /// the apps run, start as on a first launch: the app may not show
 /// notifications and has not asked, so the onboarding shows its step. A
 /// request grants the permission, so that a test that asks goes on with an
-/// app that may show notifications.
+/// app that may show notifications, and `openSettings` completes. The mocks
+/// of no module ask for the permission before the tests of the app start,
+/// since the test of the role, and the tests of the step of the onboarding,
+/// expect `notAsked` right after `bootstrap()`.
 final class NotificationsRole extends Role<RoleImplementation> {
   const NotificationsRole._();
 

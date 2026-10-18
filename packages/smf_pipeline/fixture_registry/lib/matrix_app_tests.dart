@@ -15,7 +15,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, whose providers call the listeners of the screen, the DI role, the
 /// events role, the preferences role, the localization role, the theme
 /// role, the app entry role, whose provider builds the root that follows
-/// the theme mode, the auth role and the onboarding screen role.
+/// the theme mode, the auth role, the onboarding screen role, the
+/// notifications role and the push role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -360,13 +361,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // the fixture steps, whose actions note their calls. Only in the apps
       // with every module whose modules give the role steps, which run
       // flutter test for other tests already.
-      MatrixAppTest(
-        '$appTests/onboarding_screen_role',
-        appliesTo: (app) =>
-            app.everyModuleWith != null && _stepsOf(app).isNotEmpty,
-        generatedFiles: _onboardingOf,
-        roles: {onboardingScreenRole},
-      ),
+      _onboardingScreenRoleTest(appTests),
       // Sign-in in the apps with the auth role, whichever module provides
       // it, the test that the CLI keeps: in every app with the role, since
       // it must hold in each mode of the role. Those are the apps of the
@@ -384,6 +379,32 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // Those are the apps of the fixture way to sign in, with the fixture
       // sign-in, and the apps with every module.
       await authMethodsAppTest(),
+      // The notifications of the apps with the notifications role,
+      // whichever module provides it, the test that the CLI keeps: only in
+      // the apps with every module, which run flutter test for other tests
+      // already. There the fixture notifications provide the role.
+      await notificationsRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      ),
+      // The step of the onboarding that asks for the permission to show
+      // notifications, the test that the CLI keeps: only in the apps with
+      // every module, which run flutter test for other tests already. There
+      // the fixture notifications provide the role, and the fixture
+      // onboarding the onboarding screen. No app of the matrix of the
+      // fixtures has the notifications role and the settings screen role,
+      // so the test of the entry of the notifications on that screen, which
+      // the CLI keeps too, has none to run in.
+      await notificationsStepAppTest(
+        among: (app) => app.everyModuleWith != null,
+      ),
+      // The push messages of the apps with the push role, whichever module
+      // provides it, the test that the CLI keeps: only in the apps with
+      // every module, which run flutter test for other tests already. There
+      // the fixture push messages provide the role, whose device gets its
+      // address a while after the first start, and the fixture
+      // notifications the notifications role, which the push role
+      // requires.
+      await pushRoleAppTest(among: (app) => app.everyModuleWith != null),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -410,9 +431,22 @@ Future<MatrixAppTests> fixtureAppTests() async {
       appEntryRole,
       authRole,
       onboardingScreenRole,
+      notificationsRole,
+      pushRole,
     },
   );
 }
+
+/// The test of the onboarding screen role, in [appTests], the directory of
+/// the app tests of the fixture registry: in the apps with every module
+/// whose modules give the role steps, whichever module provides the role.
+MatrixAppTest _onboardingScreenRoleTest(String appTests) => MatrixAppTest(
+      '$appTests/onboarding_screen_role',
+      appliesTo: (app) =>
+          app.everyModuleWith != null && _stepsOf(app).isNotEmpty,
+      generatedFiles: _onboardingOf,
+      roles: {onboardingScreenRole},
+    );
 
 /// The steps of the onboarding of [app], an app of the matrix, in the order
 /// of the role ([OnboardingScreenRole.stepsIn]), or none in an app without
@@ -779,7 +813,10 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// with every provider. The two tests of the localization role that the
 /// CLI keeps are among the first: that app has the fixture texts and the
 /// settings module of the CLI, so the role and the setting of the language
-/// are checked with a second provider of the role there.
+/// are checked with a second provider of the role there. The test of the
+/// onboarding screen role, which the fixture registry keeps, runs there
+/// too, with the onboarding of the CLI, which provides that role, and the
+/// fixture steps.
 ///
 /// A test of such a role checks that each call of the service of the role
 /// reaches every provider once, whatever the other providers do with it. So
@@ -812,8 +849,12 @@ Future<MatrixAppTests> severalProvidersAppTests() async {
         appliesTo: (app) => _withEveryModule(app, crashReportingRole),
         roles: {crashReportingRole},
       ),
+      // The steps of the onboarding, as in the apps of the fixtures, with
+      // the onboarding of the CLI, which provides the role there, and the
+      // fixture steps.
+      _onboardingScreenRoleTest(appTests),
     ],
-    testedRoles: {analyticsRole, crashReportingRole},
+    testedRoles: {analyticsRole, crashReportingRole, onboardingScreenRole},
   );
 }
 

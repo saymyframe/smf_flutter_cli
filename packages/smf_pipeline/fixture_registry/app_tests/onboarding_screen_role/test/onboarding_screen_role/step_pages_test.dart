@@ -5,9 +5,9 @@
 // language of the app, and the onboarding screen shows each step on a page
 // of its own, in the order of the role, with no other page between two
 // steps: its icon, its title as a header for a screen reader, its text, the
-// button of its action and, if it has one, that of later. A swipe past a
-// step calls no action. The labels follow the language of the app while a
-// step shows (OnboardingScreenRole).
+// button of its action and, if it has one, that of later, which no other
+// page shows. A swipe past a step calls no action. The labels follow the
+// language of the app while a step shows (OnboardingScreenRole).
 //
 // It uses what the tests of the role share (steps.dart), the texts that the
 // matrix writes for each step in each language of the app, and the steps of
@@ -51,6 +51,20 @@ void _expectStep(WidgetTester tester, int index, String language) {
       reason: 'The page of a step shows $what of the step: $name.',
     );
   }
+}
+
+/// Checks that the page that the user sees, which [what] names, does not
+/// show the button of the later of the step ask in [language]: only the page
+/// of a step shows its later, and [what] is the page of another step
+/// without a later, or a page of the provider that is no step.
+void _expectNoLaterOfAsk(WidgetTester tester, String language, String what) {
+  final later = textsOf(ask, language).later!;
+  expect(
+    isOnScreen(tester, shown(find.text(later))),
+    isFalse,
+    reason: 'Only the page of a step shows the button of its later, not '
+        '$what ($language).',
+  );
 }
 
 void main() {
@@ -99,11 +113,22 @@ void main() {
             reason: 'The onboarding shows the two steps of the fixture steps.',
           );
           await showNewScreen(tester);
+          if (stepShown(tester, language) == null) {
+            _expectNoLaterOfAsk(tester, language, 'the first page');
+          }
           final pages = await swipeThrough(
             tester,
             language,
-            onStep: (index) => _expectStep(tester, index, language),
+            onStep: (index) {
+              _expectStep(tester, index, language);
+              if (index == confirm) {
+                _expectNoLaterOfAsk(tester, language, 'the page of confirm');
+              }
+            },
           );
+          if (pages.last == null) {
+            _expectNoLaterOfAsk(tester, language, 'the last page');
+          }
           final steps = pages.whereType<int>().toList();
           expect(
             steps,

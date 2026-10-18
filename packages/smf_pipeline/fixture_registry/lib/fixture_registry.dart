@@ -31,11 +31,13 @@ import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
+import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
@@ -76,6 +78,8 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeThemeModule(),
       const FakeAuthModule(),
       const FakeSignInMethodModule(),
+      const FakeNotificationsModule(),
+      const FakePushModule(),
       const FakeRegistrationsModule(),
       const FakeParentModule(),
       const FakeChildModule(),
@@ -123,6 +127,8 @@ List<ModuleId> everyFixture({
       FakeThemeModule.id,
       FakeAuthModule.id,
       FakeSignInMethodModule.id,
+      FakeNotificationsModule.id,
+      FakePushModule.id,
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
@@ -156,7 +162,10 @@ List<ModuleId> everyFixture({
 /// after the entry of the theme mode; the onboarding module of the CLI,
 /// for the app test that it keeps, whose guard of the routes keeps the user
 /// from every other screen of the app until the mocks of that test open it
-/// for the tests of the other modules; the home module of the CLI, for
+/// for the tests of the other modules, and which provides the onboarding
+/// screen role, with the fixture steps, whose actions note their calls, for
+/// the test of that role and for the steps of that app test; the home
+/// module of the CLI, for
 /// the app test that it keeps for its screen. It comes after the fixture
 /// feature, on whose screen the app starts, so that test goes to its screen
 /// through the navigation of the router role, and reads its texts from the
@@ -174,7 +183,13 @@ List<ModuleId> everyFixture({
 /// The app asks for an account, as an app in the first mode of the auth
 /// role does, so the guards of the sign-in keep the user from every other
 /// screen until the mocks of that test sign an account up for the tests of
-/// the other modules.
+/// the other modules. Then comes local_notifications, the provider of the
+/// notifications role that the CLI has, for the app test that it keeps and
+/// for the test of that role that the CLI keeps, whose entry the settings
+/// screen shows too. Last comes Firebase Cloud Messaging, the provider of
+/// the push role that the CLI has, for the app test that it keeps and for
+/// the test of that role that the CLI keeps, which run there next to the
+/// other Firebase modules and show a message through those notifications.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -207,6 +222,7 @@ List<SmfModule> severalProvidersModules() => const [
       MaterialThemeModule(),
       FakeL10nModule(),
       OnboardingModule(),
+      FakeStepsModule(),
       HomeModule(),
       FirebaseAuthModule(),
       GoogleSignInModule(),
@@ -214,4 +230,6 @@ List<SmfModule> severalProvidersModules() => const [
       BlocModule(),
       RiverpodModule(),
       SignInModule(),
+      LocalNotificationsModule(),
+      FirebaseMessagingModule(),
     ];

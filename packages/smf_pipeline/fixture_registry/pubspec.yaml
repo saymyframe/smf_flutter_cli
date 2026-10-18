@@ -34,6 +34,9 @@ dependencies:
   smf_firebase_auth: ^0.5.0
   smf_firebase_core: ^0.4.1
   smf_firebase_crashlytics: ^0.4.1
+  # The provider of the push role in the registry of several providers, for
+  # the app test that it keeps and the test of the role that the CLI keeps.
+  smf_firebase_messaging: ^0.5.0
   # The matrix of CI, for the tests of the apps of the fixtures.
   smf_flutter_cli: ^0.5.1
   smf_flutter_core: ^0.4.1
@@ -45,6 +48,10 @@ dependencies:
   # The start screen of the CLI, for its app test in the app of several
   # providers, which starts on another screen.
   smf_home_flutter: ^0.4.1
+  # The provider of the notifications role in the registry of several
+  # providers, for the app test that it keeps and the test of the role that
+  # the CLI keeps.
+  smf_local_notifications: ^0.5.0
   # The provider of the theme role in the registry of several providers, for
   # the tests of the role that the CLI keeps.
   smf_material_theme: ^0.4.1

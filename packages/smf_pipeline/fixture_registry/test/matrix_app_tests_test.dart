@@ -51,9 +51,9 @@ const _everyModuleWarnings = [
 /// made of, by name, each with the codes of its warnings: those with the
 /// texts of fake_second; those of the fixture gates and of the fixture
 /// onboarding, whose apps have no route to start on; and those of the
-/// fixture steps with the onboarding, which have no route to start on
-/// either, and with the texts of the fixture steps a text without a
-/// translation, on purpose.
+/// fixture steps and of the fixture notifications with the onboarding,
+/// which have no route to start on either, and with the texts of the
+/// fixture steps a text without a translation, on purpose.
 const _warningApps = <String, List<String>>{
   'fake_second (fake_router) with localization, badge': [
     'localization.unsupported_language',
@@ -84,11 +84,15 @@ const _warningApps = <String, List<String>>{
     'router.no_start',
   ],
   'fake_steps with onboarding_screen': ['router.no_start'],
+  'fake_notifications with onboarding_screen, localization': [
+    'router.no_start',
+  ],
+  'fake_notifications with onboarding_screen': ['router.no_start'],
 };
 
 /// The codes of the warnings about what it is made of of the app of
-/// several providers, which has the texts of fake_second, and destinations
-/// without a layout.
+/// several providers, which has the texts of fake_second and of the fixture
+/// steps, and destinations without a layout.
 const _severalProvidersWarnings = [
   'localization.unsupported_language',
   'localization.untranslated',
@@ -155,9 +159,9 @@ void main() {
       'the app tests check the contract of the router role, of the layout '
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
-      'of the auth role and of the onboarding screen role with every '
-      'provider of each, which they tell apart by the roles of the app '
-      'only', () {
+      'of the auth role, of the onboarding screen role, of the notifications '
+      'role and of the push role with every provider of each, which they tell '
+      'apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -171,11 +175,16 @@ void main() {
         appEntryRole,
         authRole,
         onboardingScreenRole,
+        notificationsRole,
+        pushRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
     expect(named('auth_methods').roles, {authRole});
     expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
+    expect(named('notifications_role').roles, {notificationsRole});
+    expect(named('notifications_step').roles, {notificationsRole});
+    expect(named('push_role').roles, {pushRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -263,9 +272,10 @@ void main() {
 
   test(
       'the tests of the events role, of the preferences role, of the '
-      'localization role, of the theme role and of the walk of the routes '
-      'apply only to the apps with every module, which have the roles and '
-      'run flutter test for other tests already', () {
+      'localization role, of the theme role, of the notifications role, of '
+      'the push role and of the walk of the routes apply only to the apps '
+      'with every module, which have the roles and run flutter test for '
+      'other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -283,6 +293,14 @@ void main() {
       'preferences_restorers',
       'theme_role',
       'theme_look',
+      // The test of the notifications that the CLI keeps, for the fixture
+      // notifications, which every such app has, and its test of the step
+      // that the template of their role gives the fixture onboarding.
+      'notifications_role',
+      'notifications_step',
+      // The test of the push messages that the CLI keeps, for the fixture
+      // push messages, which every such app has.
+      'push_role',
     ]) {
       expect(
         appsOf(named(name)),
@@ -320,12 +338,23 @@ void main() {
     for (final app in everyModule) {
       expect(
         app.hook!.presentRoles,
-        containsAll([eventsRole, preferencesRole, themeRole]),
+        containsAll([
+          eventsRole,
+          preferencesRole,
+          themeRole,
+          notificationsRole,
+          pushRole,
+        ]),
         reason: app.name,
       );
       expect(
         app.modules,
-        containsAll([FakePreferencesUserModule.id, FakeThemeModule.id]),
+        containsAll([
+          FakePreferencesUserModule.id,
+          FakeThemeModule.id,
+          FakeNotificationsModule.id,
+          FakePushModule.id,
+        ]),
         reason: app.name,
       );
       expect(appsOf(named('router_screens')), contains(app.name));
@@ -529,7 +558,10 @@ void main() {
     expect(valueOf(localized, 'stepLanguages'), "['en', 'uk']");
     // The steps of the fixture steps, in the order of the role: the text of
     // confirm without a translation reads in English in Ukrainian too, and
-    // confirm has no later.
+    // confirm has no later. Then the step that the template of the
+    // notifications role gives the onboarding, since the app has the
+    // fixture notifications: the steps of the templates of roles come after
+    // those of the modules.
     expect(stepsIn(localized), {
       'fake_steps.ask': {
         'en': {
@@ -559,8 +591,24 @@ void main() {
           'later': null,
         },
       },
+      'notifications.permission': {
+        for (final language in ['en', 'uk'])
+          language: {
+            for (final (field, text) in [
+              ('title', NotificationsRole.stepTitle),
+              ('text', NotificationsRole.stepText),
+              ('action', NotificationsRole.stepAction),
+              ('later', NotificationsRole.stepLater),
+            ])
+              field: text.textIn(language),
+          },
+      },
     });
-    expect(stepsIn(localized).keys, ['fake_steps.ask', 'fake_steps.confirm']);
+    expect(stepsIn(localized).keys, [
+      'fake_steps.ask',
+      'fake_steps.confirm',
+      'notifications.permission',
+    ]);
     expect(
       bodyOf(localized, 'chooseLanguage'),
       '=> appLocale.choose(Locale(language));',
@@ -616,6 +664,114 @@ void main() {
         ),
       ),
     );
+  });
+
+  test(
+      'the test of the notifications role applies to the apps with every '
+      'module, where the fixture notifications provide the role, and not to '
+      'the apps of the fixture alone, which the matrix only analyzes', () {
+    final notificationsTest = named('notifications_role');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(notificationsRole)) app.name,
+    ];
+
+    expect(
+      withRole,
+      containsAll([
+        'fake_notifications with localization',
+        'fake_notifications',
+      ]),
+    );
+    expect(appsOf(notificationsTest), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps.where(notificationsTest.appliesTo)) {
+      expect(
+        notificationsTest.values!(app),
+        {'asked_key': NotificationsRole.askedKey},
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
+      'the test of the step of the notifications that the CLI keeps applies '
+      'to the apps with every module, where the fixture onboarding shows the '
+      'step that the template of the notifications role gives it, and the '
+      'test of the entry of the notifications on the settings screen to no '
+      'app, since no app of the matrix of the fixtures has both the '
+      'notifications role and the settings screen role', () {
+    final step = named('notifications_step');
+
+    expect(appsOf(step), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps.where(step.appliesTo)) {
+      // It takes the service of the test from the files of the test of the
+      // notifications role, which applies to each of its apps.
+      expect(
+        named('notifications_role').appliesTo(app),
+        isTrue,
+        reason: app.name,
+      );
+      expect(
+        step.generatedFiles!(app, 'my_app').values.single,
+        contains(
+          'const bool Function() stepShows = '
+          'step0.notificationsStepShows;\n',
+        ),
+        reason: app.name,
+      );
+    }
+    // The test of the entry is not registered for the fixtures: it would
+    // apply to no app, which fails the run. Once an app of the matrix has
+    // both roles, such as with a fixture provider of the settings screen
+    // role, the test belongs among those of the fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'notifications_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({notificationsRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register notificationsSettingAppTest() in fixtureAppTests() '
+          'for these apps.',
+    );
+  });
+
+  test(
+      'the test of the push role applies to the apps with every module, '
+      'where the fixture push messages provide the role, and not to the app '
+      'of the fixture alone, which the matrix only analyzes', () {
+    final pushTest = named('push_role');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(pushRole)) app.name,
+    ];
+
+    expect(withRole, contains('fake_push'));
+    expect(appsOf(pushTest), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps.where(pushTest.appliesTo)) {
+      expect(
+        pushTest.values!(app),
+        {'push_owner': pushRole.id},
+        reason: app.name,
+      );
+    }
   });
 
   test(
@@ -1550,8 +1706,9 @@ void main() {
         'gets the app tests of the modules of the CLI, the tests of the DI '
         'role, of the events role, of the preferences role, of the auth '
         'role, of the settings screen role and of the theme role, the mocks '
-        'of the fixture providers and the tests of the roles of several '
-        'providers, which all apply to it', () {
+        'of the fixture providers, the tests of the roles of several '
+        'providers and the test of the onboarding screen role, which all '
+        'apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -1578,6 +1735,10 @@ void main() {
           'crash_reporting_role',
           'localization_role',
           'language_setting',
+          'onboarding_screen_role',
+          'notifications_role',
+          'notifications_setting',
+          'notifications_step',
         ]),
       );
       for (final test in severalProviders.tests) {
@@ -1641,10 +1802,67 @@ void main() {
     });
 
     test(
+        'has the entry of the notifications on the settings screen and the '
+        'step of the notifications in the onboarding, which the template of '
+        'the role gives them with the provider of the CLI, and the tests of '
+        'both, tests of the notifications role, apply to it with the helpers '
+        'of the tests of the settings screen and of the notifications', () {
+      final hook = everyModule.hook!;
+
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(notificationsRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('local_notifications')],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(hook)))
+            entry.file,
+        ],
+        contains(NotificationsRole.settingFile),
+      );
+      expect(
+        [
+          for (final step in onboardingScreenRole
+              .stepsIn(onboardingScreenRole.hookInput(hook)))
+            step.fullName,
+        ],
+        contains('notifications.${NotificationsRole.stepName}'),
+      );
+      for (final (name, helpers) in [
+        (
+          'notifications_setting',
+          ['settings_screen_role', 'notifications_role'],
+        ),
+        ('notifications_step', ['notifications_role']),
+      ]) {
+        final test = ofSeveral(name);
+        expect(test.roles, {notificationsRole}, reason: name);
+        expect(test.appliesTo(everyModule), isTrue, reason: name);
+        for (final app in matrix.where(test.appliesTo)) {
+          for (final helper in helpers) {
+            expect(
+              ofSeveral(helper).appliesTo(app),
+              isTrue,
+              reason: '$helper for $name in ${app.name}',
+            );
+          }
+        }
+      }
+    });
+
+    test(
         'checks the contract of the analytics role and of the crash reporting '
         'role with every provider of each, which it tells apart by the roles '
         'of the app only, in the app with every module only', () {
-      expect(severalProviders.testedRoles, {analyticsRole, crashReportingRole});
+      expect(
+        severalProviders.testedRoles,
+        {analyticsRole, crashReportingRole, onboardingScreenRole},
+      );
       for (final (name, role) in [
         ('analytics_role', analyticsRole),
         ('crash_reporting_role', crashReportingRole),
@@ -1674,6 +1892,48 @@ void main() {
         isEmpty,
       );
       expect(severalProviders.modeProblems(matrix), isEmpty);
+    });
+
+    test(
+        'checks the onboarding screen role with the onboarding of the CLI, '
+        'which provides it there, and with the steps of the fixture steps, '
+        'whose calls the test reads, in the apps with every module', () {
+      final test = ofSeveral('onboarding_screen_role');
+      final hook = everyModule.hook!;
+      final input = onboardingScreenRole.hookInput(hook);
+
+      expect(test.roles, {onboardingScreenRole});
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(onboardingScreenRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('onboarding')],
+      );
+      expect(hook.presentRoles, contains(onboardingScreenRole));
+      // The two steps of the fixture steps, and then the step of the
+      // notifications role, whose provider of the CLI the registry has: the
+      // steps of one stage come in the order of their contributors, the
+      // modules before the templates of the roles.
+      expect(
+        [
+          for (final step in onboardingScreenRole.stepsIn(input)) step.fullName,
+        ],
+        ['fake_steps.ask', 'fake_steps.confirm', 'notifications.permission'],
+      );
+      expect(onboardingScreenRole.screenIn(input)!.fullPath, '/onboarding');
+      expect(
+        [
+          for (final app in matrix)
+            if (test.appliesTo(app)) app,
+        ],
+        [
+          for (final app in matrix)
+            if (app.everyModuleWith != null) app,
+        ],
+      );
+      expect(test.appliesTo(everyModule), isTrue);
     });
   });
 }

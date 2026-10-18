@@ -120,6 +120,7 @@ bool _shownOfAppEntry(String path) =>
       AppEntryRole.androidManifestFile,
       AppEntryRole.infoPlistFile,
       AppEntryRole.iosEntitlementsFile,
+      AppEntryRole.appDelegateFile,
       AppEntryRole.gradleSettingsFile,
       AppEntryRole.gradleAppFile,
       AppEntryRole.xcodeProjectFile,

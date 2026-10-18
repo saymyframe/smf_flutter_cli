@@ -86,6 +86,14 @@ const modulePaths = {
     'smf_firebase_auth',
   ): 'The test of firebase_auth that asks the Firebase project of the app '
       'whether Email/Password is enabled there, before CI starts the app.',
+  (
+    'Start the app with every module on the Android emulator, and send it a '
+        'push message',
+    'smf_firebase_messaging',
+  ): 'The test of firebase_messaging that answers the request of the probe '
+      'of the module in the start check, through start_app.sh: it sends a '
+      'push message to the address of the device with the key of the '
+      'service account, and the app tells the script whether it came.',
   ('Archive the app with every module', 'smf_firebase_crashlytics'):
       'The test of firebase_crashlytics that archives the app of the job '
           'with the build phase for Crashlytics fixed by the command of its '

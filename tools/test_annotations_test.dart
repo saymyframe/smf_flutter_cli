@@ -575,6 +575,33 @@ jobs:
       );
     });
 
+    test(
+        'find a run of tests in an answer of start_app.sh, a command in one '
+        'of its arguments', () {
+      String job(String report) => '''
+jobs:
+  a:
+    steps:
+      - name: Start
+        run: |
+          .github/scripts/start_app.sh android emulator-5554 240 \\
+            "messages=cd '\$package' && dart test test/a_test.dart$report"
+      - if: always()
+        run: dart tools/test_annotations.dart
+''';
+
+      const withoutReport = 'a: the step "Start" runs tests without a report '
+          'in build/test-results/: dart test test/a_test.dart"';
+      expect(reportProblemsOf(job(''), const {}), [withoutReport]);
+      expect(
+        reportProblemsOf(
+          job(' --file-reporter json:build/test-results/a.json'),
+          const {},
+        ),
+        isEmpty,
+      );
+    });
+
     test('pass the jobs without tests and those that call a workflow', () {
       expect(
         reportProblemsOf(

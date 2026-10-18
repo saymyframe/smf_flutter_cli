@@ -357,6 +357,46 @@ void main() {
         ]),
       );
     });
+
+    test('of a family are those that its kind takes', () {
+      String library(String version) => version;
+      final problems = _problems([
+        TestModule(
+          'a',
+          socketFamilies: [
+            SocketFamily<String, ValueSocket<String>>.module(
+              const ModuleId('a'),
+              'versions',
+              ValueSocket.places(
+                policy: const MaxPolicy(),
+                places: {'On': library},
+              ),
+              keyOf: (key) => [key],
+            ),
+            SocketFamily<String, ValueSocket<String>>.module(
+              const ModuleId('a'),
+              'nowhere',
+              const ValueSocket.places(policy: MaxPolicy(), places: {}),
+              keyOf: (key) => [key],
+            ),
+          ],
+        ),
+      ]);
+
+      expect(
+        problems,
+        allOf([
+          _hasProblem(
+            'The place "On" of the value of the socket family a.versions is '
+            'not lower snake_case.',
+          ),
+          _hasProblem(
+            'The socket family a.nowhere has no place for its value, so it '
+            'has no tag.',
+          ),
+        ]),
+      );
+    });
   });
 
   group('role options', () {

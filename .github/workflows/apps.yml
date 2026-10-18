@@ -482,10 +482,11 @@ jobs:
     name: Android start (${{ matrix.app }})
     needs: plan
     runs-on: ubuntu-latest
-    # About 12 minutes: the emulator boots while the app is generated, then
+    # About 8 minutes: the emulator boots while the app is generated, then
     # the app is built and starts, which start_app.sh gives 240 s once the
-    # emulator has the app.
-    timeout-minutes: 25
+    # emulator has the app. The first app of the plan then starts once more
+    # as a release app, which takes a few minutes more.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -597,6 +598,25 @@ jobs:
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
 
+      # The app as a user installs it: a release build, in which R8 shrinks
+      # the Java and Kotlin code and renames the classes that no rule keeps.
+      # A plugin that looks a class up by its name, as through JNI, then
+      # fails in a release app though it works in a debug one, as
+      # shared_preferences_android 2.5.0 did when the app opened the
+      # preferences. Such a plugin release breaks the apps without a change
+      # of SMF, and the nightly run starts the app with each version of
+      # Flutter, so it shows up within a day. Only the first app of the plan
+      # starts so, which keeps the other jobs as they are; start_app.sh
+      # builds it for the ABI of the emulator only. The timeout of the step
+      # limits the build with R8, a few minutes longer than that of a debug
+      # app.
+      - name: Start the app without external services as a release app on the Android emulator
+        if: strategy.job-index == 0
+        timeout-minutes: 15
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 release
+
       - *gradle_added
       - *save_gradle
 
@@ -629,10 +649,10 @@ jobs:
     needs: [plan, firebase-key]
     if: needs.firebase-key.outputs.key == 'true'
     runs-on: ubuntu-latest
-    # About 14 minutes: the app, its configuration, its sign-in methods, its
+    # About 15 minutes: the app, its configuration, its sign-in methods, its
     # build and its start, which start_app.sh gives 240 s once the emulator
-    # has the app.
-    timeout-minutes: 25
+    # has the app, and a push message to the app once it started.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -726,12 +746,34 @@ jobs:
       - *gradle_restored
       - *wait_for_emulator
 
-      - name: Start the app with every module on the Android emulator
-        timeout-minutes: 12
+      # Once the start check of the app passed, the probe of
+      # firebase_messaging asks start_app.sh for a push message to the
+      # address of the device, and tells whether it came with what it asked
+      # for. The answer, a test of the module, sends it with the key of the
+      # service account, in a file that only this step has, which is on
+      # disk while Gradle builds the app in this step too. The debug app
+      # prints its address for push messages, which the log of the start
+      # shows: that is harmless, since sending to it needs an access token
+      # of the Firebase project, and the app is on the emulator for minutes.
+      # The timeout of the step limits the build; start_app.sh limits the
+      # start, the answer and the wait for the message, which take a minute
+      # or two.
+      - name: Start the app with every module on the Android emulator, and send it a push message
+        timeout-minutes: 18
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SMF_FIREBASE_PROJECT: saymyframe-app-cli
+          SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
         run: |
+          trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
+          (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
+          unset FIREBASE_SERVICE_ACCOUNT
+          messaging="$GITHUB_WORKSPACE/packages/smf_modules/smf_firebase_messaging"
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/firebase" \
-            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 \
+            "firebase_messaging=cd '$messaging' && dart test test/push_delivery_test.dart --file-reporter json:build/test-results/push_delivery_test.json"
 
+      - *delete_key
       - *gradle_added
       - *save_gradle
 

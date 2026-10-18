@@ -253,6 +253,15 @@ String _renderGradleDependencies(List<MapEntry<String, String>> entries) =>
       },
     ).join('\n');
 
+String _renderDesugaringEnabled(String version) =>
+    '        isCoreLibraryDesugaringEnabled = true';
+
+String _renderDesugaringLibrary(String version) {
+  final library =
+      'com.android.tools:desugar_jdk_libs:${_escapeKotlin(version)}';
+  return '    coreLibraryDesugaring("$library")';
+}
+
 String _escapeXml(String text) => text
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -263,7 +272,8 @@ String _escapeXml(String text) => text
 String _escapeKotlin(String text) =>
     text.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll(r'$', r'\$');
 
-/// The sockets that render complete lines of a file, with the file.
+/// The sockets that render complete lines of a file, with the file: every
+/// tag of such a socket stands alone on its lines.
 const _lineSockets = <(SocketRef, String)>[
   (
     AppEntryRole.androidManifestPermissions,
@@ -273,50 +283,113 @@ const _lineSockets = <(SocketRef, String)>[
     AppEntryRole.androidManifestApplicationMeta,
     AppEntryRole.androidManifestFile,
   ),
+  (
+    AppEntryRole.androidManifestApplicationComponents,
+    AppEntryRole.androidManifestFile,
+  ),
   (AppEntryRole.mainActivityIntentFilters, AppEntryRole.androidManifestFile),
   (AppEntryRole.infoPlist, AppEntryRole.infoPlistFile),
   (AppEntryRole.iosEntitlements, AppEntryRole.iosEntitlementsFile),
+  (AppEntryRole.iosAppDelegateLaunch, AppEntryRole.appDelegateFile),
   (AppEntryRole.gradleSettingsPlugins, AppEntryRole.gradleSettingsFile),
   (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
   (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),
+  (AppEntryRole.androidCoreLibraryDesugaring, AppEntryRole.gradleAppFile),
   (AppEntryRole.readmeSections, AppEntryRole.readmeFile),
 ];
 
 List<SmfIssue> _checkTagLines(ModuleRuleInput<NoDsl> input) {
   final origin = ModuleOrigin(input.module.id);
   final templates = _templatesOf(input.contributions);
-  final issues = <SmfIssue>[];
-  for (final (socket, path) in _lineSockets) {
-    final tag = '{{{${socket.tag}}}}';
-    for (final MapEntry(key: template, value: text) in templates.entries) {
-      if (!text.contains(tag)) continue;
-      if (template != path) {
-        issues.add(
-          SmfIssue(
-            'The tag $tag is in $template, but its lines belong in $path.',
-            origin: origin,
-            path: template,
-          ),
-        );
-      } else if (tag.allMatches(text).length !=
-          text.split('\n').where((line) => line.trimRight() == tag).length) {
-        issues.add(
-          SmfIssue(
-            'The tag $tag must stand alone at the start of a line of $path, '
-            'because its contributions render as complete lines.',
-            origin: origin,
-            path: path,
-          ),
-        );
-      }
+  return [
+    for (final (socket, path) in _lineSockets)
+      for (final name in socket.tags)
+        ..._tagLineIssues('{{{$name}}}', path, templates, origin),
+  ];
+}
+
+/// The problems of [tag], the tag of a socket whose lines belong in the
+/// file at [path], in the [templates] of a module of [origin]: it is in
+/// another template, or not alone at the start of its lines.
+Iterable<SmfIssue> _tagLineIssues(
+  String tag,
+  String path,
+  Map<String, String> templates,
+  ContributionOrigin origin,
+) sync* {
+  for (final MapEntry(key: template, value: text) in templates.entries) {
+    if (!text.contains(tag)) continue;
+    if (template != path) {
+      yield SmfIssue(
+        'The tag $tag is in $template, but its lines belong in $path.',
+        origin: origin,
+        path: template,
+      );
+    } else if (tag.allMatches(text).length !=
+        text.split('\n').where((line) => line.trimRight() == tag).length) {
+      yield SmfIssue(
+        'The tag $tag must stand alone at the start of a line of $path, '
+        'because its contributions render as complete lines.',
+        origin: origin,
+        path: path,
+      );
     }
   }
-  return issues;
+}
+
+/// The sockets of the Android manifest, each with the element whose
+/// children its contributions are.
+const _manifestSockets = <(SocketRef, String)>[
+  (AppEntryRole.androidManifestPermissions, 'manifest'),
+  (AppEntryRole.androidManifestApplicationMeta, 'application'),
+  (AppEntryRole.androidManifestApplicationComponents, 'application'),
+  (AppEntryRole.mainActivityIntentFilters, 'activity'),
+];
+
+List<SmfIssue> _checkManifestTagPlaces(ModuleRuleInput<NoDsl> input) {
+  const path = AppEntryRole.androidManifestFile;
+  final template = _templatesOf(input.contributions)[path] ?? '';
+  // The comments, blanked so that the offsets of the rest stay.
+  final text = template.replaceAllMapped(
+    RegExp('<!--.*?-->', dotAll: true),
+    (comment) => ' ' * comment[0]!.length,
+  );
+  return [
+    for (final (socket, parent) in _manifestSockets)
+      if (text.indexOf('{{{${socket.tag}}}}') case final offset
+          when offset >= 0 && _elementAt(text, offset) != parent)
+        SmfIssue(
+          'The tag {{{${socket.tag}}}} is in $path, but not among the '
+          'children of <$parent>, where its contributions belong.',
+          origin: ModuleOrigin(input.module.id),
+          path: path,
+        ),
+  ];
+}
+
+/// The name of the innermost element that is open at [offset] of the XML
+/// [text], which has no comments, or `null` outside every element.
+String? _elementAt(String text, int offset) {
+  final open = <String>[];
+  for (final tag in _xmlTags.allMatches(text.substring(0, offset))) {
+    if (tag[1] == '/') {
+      if (open.isNotEmpty) open.removeLast();
+    } else if (tag[4] != '/') {
+      open.add(tag[2]!);
+    }
+  }
+  return open.lastOrNull;
 }
 
 List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
   final issues = <SmfIssue>[];
-  void once(String path, String what, List<String> keys) {
+  void once(
+    String path,
+    String what,
+    List<String> keys, {
+    String hint = 'A module cannot contribute a key that the template of the '
+        'app entry role has already.',
+  }) {
     final seen = <String>{};
     final reported = <String>{};
     for (final key in keys) {
@@ -324,8 +397,7 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
       issues.add(
         SmfIssue(
           '$path has $what $key more than once.',
-          hint: 'A module cannot contribute a key that the template of the '
-              'app entry role has already.',
+          hint: hint,
           origin: input.owners[path],
           path: path,
         ),
@@ -352,6 +424,20 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
       'the meta-data',
       _childNames(manifest, 'application', 'meta-data'),
     );
+    final namespace = _namespaceOf(texts[AppEntryRole.gradleAppFile] ?? '');
+    for (final component in _components) {
+      once(
+        path,
+        'the $component',
+        [
+          for (final name in _childNames(manifest, 'application', component))
+            _resolvedName(name, namespace),
+        ],
+        hint: 'One module declares a component, and none declares one that '
+            'the template of the app entry role has, such as its main '
+            'activity.',
+      );
+    }
   }
   for (final path in const [
     AppEntryRole.gradleSettingsFile,
@@ -362,6 +448,35 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
     }
   }
   return issues;
+}
+
+/// The kinds of the components of the application of an Android manifest,
+/// each declared once under its `android:name`: the build of the app fails
+/// on two declarations of a component that differ, and keeps both of two
+/// equal ones in the merged manifest.
+const _components = [
+  'activity',
+  'activity-alias',
+  'service',
+  'receiver',
+  'provider',
+];
+
+/// The `namespace` of the Gradle build script of the app [text], against
+/// which Android resolves a relative name of a component, or `null` if it
+/// sets none.
+String? _namespaceOf(String text) => RegExp(
+      r'''^\s*namespace\s*=?\s*["']([^"']+)["']''',
+      multiLine: true,
+    ).firstMatch(text.replaceAll(RegExp('//[^\n]*'), ''))?[1];
+
+/// [name], the `android:name` of a component, as Android resolves it: a
+/// name that starts with a dot, or has none, is relative to [namespace],
+/// and stays as it is written when the app sets no namespace.
+String _resolvedName(String name, String? namespace) {
+  if (namespace == null) return name;
+  if (name.startsWith('.')) return '$namespace$name';
+  return name.contains('.') ? name : '$namespace.$name';
 }
 
 /// The text of the Xcode project [text] without its comments: those
@@ -599,10 +714,9 @@ List<String> _plistKeys(String text) {
 /// first element [parent] in the XML [text], in order.
 List<String> _childNames(String text, String parent, String element) {
   final names = <String>[];
-  final name = RegExp(r'android:name\s*=\s*"([^"]*)"');
-  final tags = RegExp(r'<(/?)([A-Za-z][\w:.-]*)((?:[^>"]|"[^"]*")*?)(/?)>');
+  final name = RegExp(r'''android:name\s*=\s*(?:"([^"]*)"|'([^']*)')''');
   // The tags after the one that opens the parent, if any.
-  final inParent = tags
+  final inParent = _xmlTags
       .allMatches(_withoutXmlComments(text))
       .skipWhile((match) => !_opensElement(match, parent))
       .skip(1);
@@ -616,7 +730,7 @@ List<String> _childNames(String text, String parent, String element) {
     }
     if (depth == 0 && match[2] == element) {
       if (name.firstMatch(match[3]!) case final attribute?) {
-        names.add(_unescapeXml(attribute[1]!));
+        names.add(_unescapeXml(attribute[1] ?? attribute[2]!));
       }
     }
     if (match[4] != '/') depth++;
@@ -624,7 +738,13 @@ List<String> _childNames(String text, String parent, String element) {
   return names;
 }
 
-/// Whether [tag], a match of the tags of [_childNames], is the start tag of
+/// The start tags, end tags and empty-element tags of XML: whether it is an
+/// end tag, the name of the element, its attributes, whose values in
+/// either quotes may hold a `>`, and whether it is an empty-element tag.
+final _xmlTags =
+    RegExp(r'''<(/?)([A-Za-z][\w:.-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(/?)>''');
+
+/// Whether [tag], a match of [_xmlTags], is the start tag of
 /// an element [name]: neither a closing tag nor an empty-element tag, such
 /// as `<name/>`.
 bool _opensElement(RegExpMatch tag, String name) =>

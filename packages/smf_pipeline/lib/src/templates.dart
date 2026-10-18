@@ -623,8 +623,11 @@ final class _BrickScanner {
 /// - only the tag of a socket for one value, such as a minimum version, may
 ///   appear several times; a socket whose contributions carry imports has
 ///   its tag in a Dart file, and a socket of the pipeline at the start of a
-///   line of `pubspec.yaml`; both tags of a wrapper are in the same file,
-///   the opening one first.
+///   line of `pubspec.yaml`;
+/// - the templates hold every tag of a socket with several or none of them:
+///   both tags of a wrapper, in the same file, the opening one first, and
+///   the tag of each place of a socket for one value at several places
+///   ([ValueSocket.places]).
 ///
 /// Stage 5 runs it; the contract harness adds [missingTemplateTags].
 List<SmfIssue> checkTemplateTags({
@@ -691,7 +694,38 @@ Iterable<SmfIssue> _placeIssues(
   Map<String, List<(TemplateTag, ContributionOrigin)>> tags,
 ) sync* {
   yield* _tagPlaceIssues(socket, tags);
-  if (socket.kind is WrapperSocket) yield* _wrapperIssues(socket, tags);
+  if (_partialTagsIssue(socket, tags) case final issue?) {
+    yield issue;
+  } else if (socket.kind is WrapperSocket) {
+    yield* _wrapperIssues(socket, tags);
+  }
+}
+
+/// The problem of [socket] when the templates hold some of its tags but
+/// not all, among [tags], those found, by tag name, with who holds each: a
+/// wrapper needs both, and a socket for one value at several places (see
+/// [ValueSocket.places]) puts its value at each, so a part of it would be
+/// lost.
+SmfIssue? _partialTagsIssue(
+  SocketRef socket,
+  Map<String, List<(TemplateTag, ContributionOrigin)>> tags,
+) {
+  final found = [
+    for (final name in socket.tags)
+      if (tags[name] case [final place, ...]) place,
+  ];
+  if (found.length == socket.tags.length) return null;
+  final names = found.map((place) => place.$1.name).join(' and ');
+  final paths = {for (final (tag, _) in found) tag.path}.join(' and ');
+  final needs = socket.kind is WrapperSocket
+      ? 'a wrapper needs both ${socket.tags.join(' and ')}'
+      : 'its value goes to each of its tags, ${socket.tags.join(' and ')}, so '
+          'the templates hold all of them';
+  return SmfIssue(
+    'The $socket has only $names of its tags, in $paths; $needs.',
+    origin: found.first.$2,
+    path: found.first.$1.path,
+  );
 }
 
 /// The problems with the places of each of [tags], the tags of [socket]:
@@ -735,25 +769,18 @@ Iterable<SmfIssue> _tagPlaceIssues(
   }
 }
 
-/// The problems with [tags], the tags of [socket], a wrapper: both are in
-/// the same file, the opening one first.
+/// The problems with [tags], the tags of [socket], a wrapper, which the
+/// templates hold both of: both are in the same file, the opening one
+/// first.
 Iterable<SmfIssue> _wrapperIssues(
   SocketRef socket,
   Map<String, List<(TemplateTag, ContributionOrigin)>> tags,
 ) sync* {
   final open = socket.tags.first;
   final close = socket.tags.last;
-  final opening = tags[open];
-  final closing = tags[close];
-  if (opening == null || closing == null) {
-    final (tag, origin) = (opening ?? closing)!.first;
-    yield SmfIssue(
-      'The $socket has only its tag ${tag.name} in ${tag.path}; a wrapper '
-      'needs both $open and $close.',
-      origin: origin,
-      path: tag.path,
-    );
-  } else if (opening.first.$1.path != closing.first.$1.path) {
+  final opening = tags[open]!;
+  final closing = tags[close]!;
+  if (opening.first.$1.path != closing.first.$1.path) {
     yield SmfIssue(
       'The tags of the $socket are in different files: '
       '${opening.first.$1.path} and ${closing.first.$1.path}.',
