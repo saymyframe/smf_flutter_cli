@@ -25,10 +25,12 @@ class SignInScreen extends StatelessWidget {
       builder: (context, state) => SignInView(
         busy: state.busy,
         failure: state.failure,
+        method: state.method,
         onSubmit: (email, password) => context.read<SignInCubit>().signIn(
           email: email,
           password: password,
         ),
+        onContinueWith: context.read<SignInCubit>().continueWith,
         onCreateAccount: () => context.nav.signIn.signUp().push<void>(),
         onForgotPassword: () => context.nav.signIn.resetPassword().push<void>(),
       ),

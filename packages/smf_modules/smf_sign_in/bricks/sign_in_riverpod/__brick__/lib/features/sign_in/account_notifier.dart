@@ -64,7 +64,9 @@ class AccountNotifier extends Notifier<AccountState> {
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (ref.mounted) state = AccountState(failure: failure);
+      if (ref.mounted) {
+        state = AccountState(failure: failure, failedAction: action);
+      }
       return;
     }
     _calling = false;

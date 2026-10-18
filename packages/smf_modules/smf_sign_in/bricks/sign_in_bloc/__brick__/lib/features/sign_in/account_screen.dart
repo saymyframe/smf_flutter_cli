@@ -9,8 +9,8 @@ import 'sign_in_composition.dart';
 import 'sign_in_state.dart';
 
 /// The screen of the account: the [AccountView] with the state of an
-/// [AccountCubit], and the address of the account from the [SessionCubit]
-/// of the app.
+/// [AccountCubit], and the address and the identity providers of the
+/// account from the [SessionCubit] of the app.
 ///
 /// It neither closes itself nor navigates once the user is signed out or
 /// the account is deleted: the router leaves the screen then.
@@ -27,8 +27,10 @@ class AccountScreen extends StatelessWidget {
         final session = context.watch<SessionCubit>().state;
         return AccountView(
           email: session is AccountSession ? session.email : null,
+          issuers: session is AccountSession ? session.issuers : const {},
           busy: state.busy,
           failure: state.failure,
+          failedAction: state.failedAction,
           onSignOut: context.read<AccountCubit>().signOut,
           onDeleteAccount: context.read<AccountCubit>().deleteAccount,
         );

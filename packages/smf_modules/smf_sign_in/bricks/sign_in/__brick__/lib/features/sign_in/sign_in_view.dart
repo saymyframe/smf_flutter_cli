@@ -1,35 +1,48 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_widgets.dart';
 
-/// What the screen of the sign-in shows: the form with the email address
+/// What the screen of the sign-in shows: a button for each way to sign in
+/// of the app that works on this platform, the form with the email address
 /// and the password of an account, and the ways to the screens that create
 /// an account and reset a password.
 ///
 /// It keeps the form and what the user types, and nothing of the sign-in
-/// itself: the screen gives it the state of the call and takes what the
+/// itself: the screen gives it the state of the calls and takes what the
 /// user asks for. So it is the same whichever way the app manages state.
 class SignInView extends StatefulWidget {
   /// Creates the view.
   const SignInView({
     required this.busy,
     required this.failure,
+    required this.method,
     required this.onSubmit,
+    required this.onContinueWith,
     required this.onCreateAccount,
     required this.onForgotPassword,
     super.key,
   });
 
-  /// Whether the sign-in is on its way.
+  /// Whether a call of the screen is on its way: the sign-in of the form, or
+  /// the call of [method].
   final bool busy;
 
-  /// Why the last sign-in failed, or `null` if none did.
+  /// Why the last call failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The way to sign in whose call is on its way or failed last, or `null`
+  /// for the call of the form.
+  final SignInMethod? method;
 
   /// Signs in with what the form has, once the form has both.
   final void Function(String email, String password) onSubmit;
+
+  /// Signs in with a way to sign in of the app, whose button the user
+  /// tapped.
+  final void Function(SignInMethod method) onContinueWith;
 
   /// Shows the screen that creates an account.
   final VoidCallback onCreateAccount;
@@ -66,12 +79,26 @@ class _SignInViewState extends State<SignInView> {
 
   @override
   Widget build(BuildContext context) {
+    final methods = signInMethodsHere();
+    // The failure of a call shows where the user made the call.
+    final method = widget.method;
     return AuthPage(
       title: {{{text_title}}},
-      intro: {{{text_intro}}},
+      intro: methods.isEmpty
+          ? {{{text_intro}}}
+          : {{{text_methods_intro}}},
       children: [
-        // While the sign-in is on its way, the form takes no input: no tap,
-        // and no typing into a field that has the focus.
+        // Above the form, so that a phone shows them without a scroll.
+        if (methods.isNotEmpty)
+          SignInMethods(
+            methods: methods,
+            busy: widget.busy,
+            method: method,
+            failure: method == null ? null : widget.failure,
+            onPressed: widget.onContinueWith,
+          ),
+        // While a call is on its way, the form takes no input: no tap, and
+        // no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -119,11 +146,11 @@ class _SignInViewState extends State<SignInView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 12),
-            FailureMessage(widget.failure),
+            FailureMessage(method == null ? widget.failure : null),
             SubmitButton(
               label: {{{text_submit}}},
-              busy: widget.busy,
-              onPressed: _submit,
+              busy: widget.busy && method == null,
+              onPressed: widget.busy && method != null ? null : _submit,
             ),
             const SizedBox(height: 4),
             // The way to the other screen, as on the screen that creates an

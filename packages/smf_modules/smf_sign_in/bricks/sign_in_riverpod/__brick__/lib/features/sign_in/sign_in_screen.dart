@@ -22,9 +22,11 @@ class SignInScreen extends ConsumerWidget {
     return SignInView(
       busy: state.busy,
       failure: state.failure,
+      method: state.method,
       onSubmit: (email, password) => ref
           .read(signInProvider.notifier)
           .signIn(email: email, password: password),
+      onContinueWith: ref.read(signInProvider.notifier).continueWith,
       onCreateAccount: () => context.nav.signIn.signUp().push<void>(),
       onForgotPassword: () => context.nav.signIn.resetPassword().push<void>(),
     );

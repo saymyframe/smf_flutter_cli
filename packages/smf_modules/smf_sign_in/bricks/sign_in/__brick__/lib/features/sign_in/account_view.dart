@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_state.dart';
 import 'sign_in_widgets.dart';
 
 /// What the screen of the account shows: the email address of the account
-/// that the user is signed in to, the button that signs out, and the
-/// action that deletes the account, which asks first.
+/// that the user is signed in to, or the label of its way to sign in for an
+/// account without one, the button that signs out, and the action that
+/// deletes the account, which asks first.
 ///
 /// It keeps nothing of the calls themselves: the screen gives it the
 /// address and the state of the calls, and takes what the user asks for.
@@ -16,8 +18,10 @@ class AccountView extends StatefulWidget {
   /// Creates the view.
   const AccountView({
     required this.email,
+    required this.issuers,
     required this.busy,
     required this.failure,
+    required this.failedAction,
     required this.onSignOut,
     required this.onDeleteAccount,
     super.key,
@@ -27,11 +31,18 @@ class AccountView extends StatefulWidget {
   /// one, and once nobody is signed in to an account.
   final String? email;
 
+  /// The identity providers that the account signs in with, each by the
+  /// issuer of its way to sign in: `AccountSession.issuers`.
+  final Set<String> issuers;
+
   /// The action whose call is on its way, or `null` when none is.
   final AccountAction? busy;
 
   /// Why the last action failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The action that failed with [failure], or `null` if none did.
+  final AccountAction? failedAction;
 
   /// Signs the user out.
   final VoidCallback onSignOut;
@@ -44,14 +55,17 @@ class AccountView extends StatefulWidget {
 }
 
 class _AccountViewState extends State<AccountView> {
-  /// The address that the page shows: that of the account, also once the
-  /// user is signed out, since the page shows until the router closes it.
+  /// The address and the identity providers of the account that the page
+  /// shows: those of the account, also once the user is signed out, since
+  /// the page shows until the router closes it.
   late String? _email = widget.email;
+  late Set<String> _issuers = widget.issuers;
 
   @override
   void didUpdateWidget(AccountView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.email != null) _email = widget.email;
+    if (widget.issuers.isNotEmpty) _issuers = widget.issuers;
   }
 
   /// Asks whether to delete the account, and deletes it on a yes. The
@@ -65,6 +79,12 @@ class _AccountViewState extends State<AccountView> {
   @override
   Widget build(BuildContext context) {
     final email = _email;
+    // An account without an address is named by its way to sign in.
+    final method = email != null
+        ? null
+        : appSignInMethods
+              .where((method) => _issuers.contains(method.issuer))
+              .firstOrNull;
     final idle = widget.busy == null;
     return AuthPage(
       title: {{{text_account_title}}},
@@ -73,11 +93,17 @@ class _AccountViewState extends State<AccountView> {
           : {{{text_signed_in_as}}},
       children: [
         if (email != null) EmailAddress(email),
+        if (method != null) _SignInWay(method),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 28),
-            FailureMessage(widget.failure),
+            FailureMessage(
+              widget.failure,
+              textOf: widget.failedAction == AccountAction.delete
+                  ? deletionFailureText
+                  : authFailureText,
+            ),
             SubmitButton(
               label: {{{text_sign_out}}},
               busy: widget.busy == AccountAction.signOut,
@@ -97,6 +123,45 @@ class _AccountViewState extends State<AccountView> {
     );
   }
 }
+
+/// The way to sign in of an account without an email address, on a line of
+/// its own, as the page shows the address of an account: a card as the
+/// theme of the app has its cards, with the label of the way to sign in.
+class _SignInWay extends StatelessWidget {
+  const _SignInWay(this.method);
+
+  final SignInMethod method;
+
+  @override
+  Widget build(BuildContext context) => Card.outlined(
+    // In the theme of any app, the card is as wide as the form.
+    margin: EdgeInsets.zero,
+    child: ListTile(
+      leading: const Icon(Icons.account_circle_outlined),
+      title: Text(method.label(context)),
+    ),
+  );
+}
+
+/// The text of the app for [reason], the reason of a failure of the
+/// deletion of the account.
+///
+/// Before the deletion of an account with a way to sign in that
+/// `revokesOnDeletion`, the identity provider asks the user again. A
+/// provider of sign-in that cannot revoke the tokens of the identity
+/// provider, as when that is not set up, fails with
+/// [AuthFailureReason.notConfigured], and one that got a credential of
+/// another user with [AuthFailureReason.invalidCredentials]. The texts of a
+/// sign-in for these reasons would not tell a user who deletes the account
+/// what happened, so this has texts of its own for them, and those of
+/// [authFailureText] for the others.
+String deletionFailureText(BuildContext context, AuthFailureReason reason) =>
+    switch (reason) {
+      AuthFailureReason.notConfigured => {{{text_delete_unavailable}}},
+      AuthFailureReason.invalidCredentials =>
+        {{{text_delete_other_account}}},
+      _ => authFailureText(context, reason),
+    };
 
 /// Asks the user whether to delete the account, in a sheet over the page of
 /// [context], as the settings of the app ask in sheets, and returns whether

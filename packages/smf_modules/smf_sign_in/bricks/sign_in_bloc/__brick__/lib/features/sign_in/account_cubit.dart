@@ -38,7 +38,9 @@ class AccountCubit extends Cubit<AccountState> {
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (!isClosed) emit(AccountState(failure: failure));
+      if (!isClosed) {
+        emit(AccountState(failure: failure, failedAction: action));
+      }
       return;
     }
     _calling = false;

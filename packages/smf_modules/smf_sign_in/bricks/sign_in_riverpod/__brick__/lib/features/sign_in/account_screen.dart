@@ -7,8 +7,8 @@ import 'account_view.dart';
 import 'session_provider.dart';
 
 /// The screen of the account: the [AccountView] with the state of
-/// [accountProvider], and the address of the account from
-/// [sessionProvider].
+/// [accountProvider], and the address and the identity providers of the
+/// account from [sessionProvider].
 ///
 /// It neither closes itself nor navigates once the user is signed out or
 /// the account is deleted: the router leaves the screen then.
@@ -23,8 +23,10 @@ class AccountScreen extends ConsumerWidget {
     final session = ref.watch(sessionProvider);
     return AccountView(
       email: session is AccountSession ? session.email : null,
+      issuers: session is AccountSession ? session.issuers : const {},
       busy: state.busy,
       failure: state.failure,
+      failedAction: state.failedAction,
       onSignOut: ref.read(accountProvider.notifier).signOut,
       onDeleteAccount: ref.read(accountProvider.notifier).deleteAccount,
     );

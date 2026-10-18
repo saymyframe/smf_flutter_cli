@@ -6,8 +6,8 @@ import 'package:smf_sign_in/src/agents.dart';
 
 /// The module of the sign-in screens of the app: a feature with three
 /// routes, on which a user signs in to an account with an email address and
-/// a password, creates an account, and asks for the message that resets a
-/// password.
+/// a password or with a way to sign in of the app, creates an account, and
+/// asks for the message that resets a password.
 ///
 /// ## The screens
 ///
@@ -30,6 +30,19 @@ import 'package:smf_sign_in/src/agents.dart';
 /// of the module for each reason of the auth role. Once the message that
 /// resets a password is sent, the screen shows the address that it went to,
 /// in a widget of its own, since a text has no parameters.
+///
+/// The sign-in and the sign-up have a button above the form for each way to
+/// sign in of the app that works on the platform of the app, the
+/// `appSignInMethods` of the auth role that are available, with the label
+/// and the icon of the way to sign in, and a line with "or" below them. The
+/// buttons are white, with a grey hairline and a black label, in a light
+/// and in a dark theme: what the brand guidelines of identity providers
+/// allow a custom button of theirs. A tap calls the function of the way to
+/// sign in through the state of the screen, which gives the credential to
+/// `appSession.signInWith`. The button spins while the call is on its way,
+/// and a failure shows below the buttons. When the user closes the sheet of
+/// the identity provider, the screen is as it was before the tap. With
+/// such buttons, the line of text below the title asks how to sign in.
 ///
 /// The parts of a screen rise in one after another, once. In an app that
 /// asks for less motion they are there at once, and a busy button is
@@ -146,8 +159,12 @@ final class SignInModule extends SmfModule {
   static const accountGuard = 'hasAccount';
 
   /// The texts of the screens: those of the sign-in, of the sign-up and of
-  /// the password reset, what a form says of a field that is not filled
-  /// in, and a text for each reason of a failure of the auth role.
+  /// the password reset, with the line of text of the first two above the
+  /// buttons of the ways to sign in and the "or" below them, what a form
+  /// says of a field that is not filled in, a text for each reason of a
+  /// failure of the auth role, and those of the screen of the account, with
+  /// texts of its own for a deletion that the provider of sign-in refused
+  /// after the identity provider asked the user again.
   ///
   /// `emailInvalid` is both what the form says of an address without an
   /// `@` and the text of the failure `invalidEmail`.
@@ -157,6 +174,11 @@ final class SignInModule extends SmfModule {
       'intro',
       en: 'Enter the email and the password of your account.',
       translations: {'uk': 'Введіть пошту й пароль свого акаунта.'},
+    ),
+    LocalizedText(
+      'methodsIntro',
+      en: 'Choose how to sign in to your account.',
+      translations: {'uk': 'Виберіть, як увійти у свій акаунт.'},
     ),
     LocalizedText(
       'email',
@@ -196,6 +218,11 @@ final class SignInModule extends SmfModule {
       translations: {'uk': 'Потрібні лише пошта й пароль.'},
     ),
     LocalizedText(
+      'signUpMethodsIntro',
+      en: 'Choose how to create your account.',
+      translations: {'uk': 'Виберіть, як створити акаунт.'},
+    ),
+    LocalizedText(
       'signUpSubmit',
       en: 'Create account',
       translations: {'uk': 'Створити акаунт'},
@@ -205,6 +232,7 @@ final class SignInModule extends SmfModule {
       en: 'I already have an account',
       translations: {'uk': 'У мене вже є акаунт'},
     ),
+    LocalizedText('or', en: 'or', translations: {'uk': 'або'}),
     LocalizedText(
       'resetTitle',
       en: 'Reset password',
@@ -370,6 +398,21 @@ final class SignInModule extends SmfModule {
       translations: {'uk': 'Видалити'},
     ),
     LocalizedText(
+      'deleteUnavailable',
+      en: 'Your account cannot be deleted right now. Try again later.',
+      translations: {
+        'uk': 'Зараз акаунт не можна видалити. Спробуйте пізніше.',
+      },
+    ),
+    LocalizedText(
+      'deleteOtherAccount',
+      en: 'That is another account. Confirm with the one you are signed in '
+          'to.',
+      translations: {
+        'uk': 'Це інший акаунт. Підтвердьте той, у який ви ввійшли.',
+      },
+    ),
+    LocalizedText(
       'settingSignedIn',
       en: 'Signed in',
       translations: {'uk': 'Вхід виконано'},
@@ -392,8 +435,8 @@ final class SignInModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description:
-            'Email sign-in: sign-up, password reset and an account screen',
+        description: 'Sign-in and sign-up with email or the ways to sign in '
+            'of the app, and an account screen',
         kind: ModuleKinds.feature,
         requires: {authRole, settingsScreenRole},
         uses: {localizationRole},

@@ -20,9 +20,11 @@ class SignUpScreen extends ConsumerWidget {
     return SignUpView(
       busy: state.busy,
       failure: state.failure,
+      method: state.method,
       onSubmit: (email, password) => ref
           .read(signUpProvider.notifier)
           .signUp(email: email, password: password),
+      onContinueWith: ref.read(signUpProvider.notifier).continueWith,
       // Closes this page. The screen of the sign-in is the page below it,
       // whether that one is the first page of the app or shown over
       // another screen.
