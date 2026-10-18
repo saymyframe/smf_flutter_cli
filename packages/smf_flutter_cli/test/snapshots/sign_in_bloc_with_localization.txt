@@ -4251,8 +4251,8 @@ import 'sign_in_composition.dart';
 import 'sign_in_state.dart';
 
 /// The screen of the account: the [AccountView] with the state of an
-/// [AccountCubit], and the address and the identity providers of the
-/// account from the [SessionCubit] of the app.
+/// [AccountCubit], and the address of the account from the [SessionCubit]
+/// of the app.
 ///
 /// It neither closes itself nor navigates once the user is signed out or
 /// the account is deleted: the router leaves the screen then.
@@ -4268,7 +4268,6 @@ class AccountScreen extends StatelessWidget {
         final session = context.watch<SessionCubit>().state;
         return AccountView(
           email: session is AccountSession ? session.email : null,
-          issuers: session is AccountSession ? session.issuers : const {},
           busy: state.busy,
           failure: state.failure,
           failedAction: state.failedAction,
@@ -4363,15 +4362,13 @@ import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
 import '../../core/auth/app_session.dart';
-import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_state.dart';
 import 'sign_in_widgets.dart';
 
 /// What the screen of the account shows: the email address of the account
-/// that the user is signed in to, or the label of its way to sign in for an
-/// account without one, the button that signs out, and the action that
-/// deletes the account, which asks first.
+/// that the user is signed in to, the button that signs out, and the
+/// action that deletes the account, which asks first.
 ///
 /// It keeps nothing of the calls themselves: the screen gives it the
 /// address and the state of the calls, and takes what the user asks for.
@@ -4380,7 +4377,6 @@ class AccountView extends StatefulWidget {
   /// Creates the view.
   const AccountView({
     required this.email,
-    required this.issuers,
     required this.busy,
     required this.failure,
     required this.failedAction,
@@ -4392,10 +4388,6 @@ class AccountView extends StatefulWidget {
   /// The email address of the account, or `null` for an account without
   /// one, and once nobody is signed in to an account.
   final String? email;
-
-  /// The identity providers that the account signs in with, each by the
-  /// issuer of its way to sign in: `AccountSession.issuers`.
-  final Set<String> issuers;
 
   /// The action whose call is on its way, or `null` when none is.
   final AccountAction? busy;
@@ -4417,17 +4409,14 @@ class AccountView extends StatefulWidget {
 }
 
 class _AccountViewState extends State<AccountView> {
-  /// The address and the identity providers of the account that the page
-  /// shows: those of the account, also once the user is signed out, since
-  /// the page shows until the router closes it.
+  /// The address that the page shows: that of the account, also once the
+  /// user is signed out, since the page shows until the router closes it.
   late String? _email = widget.email;
-  late Set<String> _issuers = widget.issuers;
 
   @override
   void didUpdateWidget(AccountView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.email != null) _email = widget.email;
-    if (widget.issuers.isNotEmpty) _issuers = widget.issuers;
   }
 
   /// Asks whether to delete the account, and deletes it on a yes. The
@@ -4441,12 +4430,6 @@ class _AccountViewState extends State<AccountView> {
   @override
   Widget build(BuildContext context) {
     final email = _email;
-    // An account without an address is named by its way to sign in.
-    final method = email != null
-        ? null
-        : appSignInMethods
-              .where((method) => _issuers.contains(method.issuer))
-              .firstOrNull;
     final idle = widget.busy == null;
     return AuthPage(
       title: context.l10n.signInAccountTitle,
@@ -4455,7 +4438,6 @@ class _AccountViewState extends State<AccountView> {
           : context.l10n.signInSignedInAs,
       children: [
         if (email != null) EmailAddress(email),
-        if (method != null) _SignInWay(method),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -4484,25 +4466,6 @@ class _AccountViewState extends State<AccountView> {
       ],
     );
   }
-}
-
-/// The way to sign in of an account without an email address, on a line of
-/// its own, as the page shows the address of an account: a card as the
-/// theme of the app has its cards, with the label of the way to sign in.
-class _SignInWay extends StatelessWidget {
-  const _SignInWay(this.method);
-
-  final SignInMethod method;
-
-  @override
-  Widget build(BuildContext context) => Card.outlined(
-    // In the theme of any app, the card is as wide as the form.
-    margin: EdgeInsets.zero,
-    child: ListTile(
-      leading: const Icon(Icons.account_circle_outlined),
-      title: Text(method.label(context)),
-    ),
-  );
 }
 
 /// The text of the app for [reason], the reason of a failure of the
@@ -6106,7 +6069,9 @@ const _methodIconGap = 12.0;
 ///
 /// While its call is on its way, it spins in the place of its label and
 /// does nothing. In an app that asks for less motion it is disabled with
-/// its label instead, as a button that takes no tap is: lighter.
+/// its label instead. A disabled button of a way to sign in keeps its
+/// colours, as the brand guidelines ask of the logo and the label, and
+/// only takes no tap.
 class SignInMethodButton extends StatelessWidget {
   /// Creates the button of [method].
   const SignInMethodButton({
@@ -6135,35 +6100,31 @@ class SignInMethodButton extends StatelessWidget {
     final themed =
         FilledButtonTheme.of(context).style?.textStyle?.resolve(const {}) ??
         Theme.of(context).textTheme.labelLarge;
-    return Opacity(
-      // A logo keeps its colours, so the whole button is lighter while it
-      // takes no tap.
-      opacity: onPressed == null ? 0.5 : 1,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: _methodFill,
-          foregroundColor: _methodInk,
-          disabledBackgroundColor: _methodFill,
-          disabledForegroundColor: _methodInk,
-          iconColor: _methodInk,
-          disabledIconColor: _methodInk,
-          iconSize: _methodIconSize,
-          side: const BorderSide(color: _methodOutline),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          textStyle: themed?.copyWith(fontWeight: FontWeight.w500),
-        ),
-        onPressed: onPressed,
-        child: Row(
-          children: [
-            // The label names the way to sign in.
-            ExcludeSemantics(child: method.icon),
-            const SizedBox(width: _methodIconGap),
-            Expanded(child: _BusyLabel(method.label(context), spins: spins)),
-            // As wide as the icon and the space after it, so that the label
-            // is in the middle of the button.
-            const SizedBox(width: _methodIconSize + _methodIconGap),
-          ],
-        ),
+    return FilledButton(
+      // The same colours whether the button takes a tap or not.
+      style: FilledButton.styleFrom(
+        backgroundColor: _methodFill,
+        foregroundColor: _methodInk,
+        disabledBackgroundColor: _methodFill,
+        disabledForegroundColor: _methodInk,
+        iconColor: _methodInk,
+        disabledIconColor: _methodInk,
+        iconSize: _methodIconSize,
+        side: const BorderSide(color: _methodOutline),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        textStyle: themed?.copyWith(fontWeight: FontWeight.w500),
+      ),
+      onPressed: onPressed,
+      child: Row(
+        children: [
+          // The label names the way to sign in.
+          ExcludeSemantics(child: method.icon),
+          const SizedBox(width: _methodIconGap),
+          Expanded(child: _BusyLabel(method.label(context), spins: spins)),
+          // As wide as the icon and the space after it, so that the label
+          // is in the middle of the button.
+          const SizedBox(width: _methodIconSize + _methodIconGap),
+        ],
       ),
     );
   }
@@ -6827,7 +6788,7 @@ class DefaultFirebaseOptions {
   "signInCancel": "Cancel",
   "signInDelete": "Delete",
   "signInDeleteUnavailable": "Your account cannot be deleted right now. Try again later.",
-  "signInDeleteOtherAccount": "That is another account. Confirm with the one you are signed in to.",
+  "signInDeleteOtherAccount": "That is a different account. Confirm the deletion with the account you are signed in to.",
   "signInSettingSignedIn": "Signed in",
   "signInNotSignedIn": "Not signed in",
   "flutterCoreFallbackHint": "No start screen yet. Add a feature with a route, or replace this screen.",
@@ -6885,7 +6846,7 @@ class DefaultFirebaseOptions {
   "signInCancel": "Скасувати",
   "signInDelete": "Видалити",
   "signInDeleteUnavailable": "Зараз акаунт не можна видалити. Спробуйте пізніше.",
-  "signInDeleteOtherAccount": "Це інший акаунт. Підтвердьте той, у який ви ввійшли.",
+  "signInDeleteOtherAccount": "Це інший акаунт. Підтвердьте видалення акаунтом, у який ви увійшли.",
   "signInSettingSignedIn": "Вхід виконано",
   "signInNotSignedIn": "Вхід не виконано",
   "flutterCoreFallbackHint": "Стартового екрана ще немає. Додайте фічу з маршрутом або замініть цей екран.",
