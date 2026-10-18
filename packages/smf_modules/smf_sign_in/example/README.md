@@ -23,10 +23,12 @@ class SignInScreen extends StatelessWidget {
       builder: (context, state) => SignInView(
         busy: state.busy,
         failure: state.failure,
+        method: state.method,
         onSubmit: (email, password) => context.read<SignInCubit>().signIn(
           email: email,
           password: password,
         ),
+        onContinueWith: context.read<SignInCubit>().continueWith,
         onCreateAccount: () => context.nav.signIn.signUp().push<void>(),
         onForgotPassword: () => context.nav.signIn.resetPassword().push<void>(),
       ),
@@ -38,21 +40,21 @@ class SignInScreen extends StatelessWidget {
 `SignInCubit` signs in through `appSession`, the session of the app. Its state tells the view whether the call is on its way and why the last one failed. After a sign-in that succeeded it stays busy for as long as the session has the account, since the router takes the screen away then:
 
 ```dart
-  Future<void> signIn({required String email, required String password}) async {
-    if (state.busy) return;
-    _calling = true;
-    emit(const AuthActionState(busy: true));
-    try {
-      await _session.signIn(email: email, password: password);
-    } on AuthFailure catch (failure) {
-      _calling = false;
-      // The user may have left the screen while the call was on its way.
-      if (!isClosed) emit(AuthActionState(failure: failure));
-      return;
-    }
-    _calling = false;
-    _follow();
-  }
+  Future<void> signIn({required String email, required String password}) =>
+      _run(() async {
+        await _session.signIn(email: email, password: password);
+        return true;
+      });
+
+  /// Signs in with [method], a way to sign in of the app: asks its identity
+  /// provider for a credential, with a sheet of its own, and gives it to
+  /// the session.
+  ///
+  /// When the user closes the sheet, the state is again as it was before.
+  /// Once the user is signed in, the router leaves the screen, so the state
+  /// stays busy for as long as the session has the account.
+  Future<void> continueWith(SignInMethod method) =>
+      _run(() => continueWithMethod(_session, method), method: method);
 ```
 
 With `riverpod` in place of `bloc` in the command, the same screen watches a provider. `SignInView` and the other files of the look are the same:
@@ -68,9 +70,11 @@ class SignInScreen extends ConsumerWidget {
     return SignInView(
       busy: state.busy,
       failure: state.failure,
+      method: state.method,
       onSubmit: (email, password) => ref
           .read(signInProvider.notifier)
           .signIn(email: email, password: password),
+      onContinueWith: ref.read(signInProvider.notifier).continueWith,
       onCreateAccount: () => context.nav.signIn.signUp().push<void>(),
       onForgotPassword: () => context.nav.signIn.resetPassword().push<void>(),
     );

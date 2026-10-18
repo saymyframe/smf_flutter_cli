@@ -19,6 +19,7 @@ import 'dart:isolate';
 
 import 'package:contract_app/core/auth/app_session.dart';
 import 'package:contract_app/core/auth/auth_service.dart';
+import 'package:contract_app/core/auth/sign_in_methods.dart';
 import 'package:contract_app/features/sign_in/sign_in_guards.dart';
 import 'package:contract_app/features/sign_in/sign_in_state.dart';
 
@@ -101,14 +102,26 @@ final class Scripted implements AuthService {
   Future<void> deleteAccount({SignInCredential? fresh}) =>
       _answer('deleteAccount', () => null);
 
-  /// The scripts take no credential of an identity provider.
+  /// Signs in to the user of the identity of [credential], whose id is
+  /// `identity`.
   @override
-  Future<void> signInWith(SignInCredential credential) async =>
-      throw const AuthFailure(AuthFailureReason.notConfigured);
+  Future<void> signInWith(SignInCredential credential) {
+    final issuer = (credential as IdTokenCredential).issuer;
+    return _answer(
+      'signInWith $issuer',
+      () => AuthUser(uid: 'identity', isAnonymous: false, issuers: {issuer}),
+    );
+  }
 
+  /// Gives the user who is signed in the identity of [credential].
   @override
-  Future<void> linkWith(SignInCredential credential) async =>
-      throw const AuthFailure(AuthFailureReason.notConfigured);
+  Future<void> linkWith(SignInCredential credential) {
+    final issuer = (credential as IdTokenCredential).issuer;
+    return _answer(
+      'linkWith $issuer',
+      () => AuthUser(uid: user!.uid, isAnonymous: false, issuers: {issuer}),
+    );
+  }
 }
 
 /// A session of an app in [mode], started with [service].
@@ -125,15 +138,18 @@ Future<AppSessionController> sessionOf(
 }
 
 String show(Object? value) => switch (value) {
-  AuthActionState(:final busy, :final failure) =>
-    'busy: $busy, failure: ${failure?.reason.name}',
+  AuthActionState(:final busy, :final failure, :final method) =>
+    'busy: $busy, failure: ${failure?.reason.name}'
+        '${method == null ? '' : ', method: ${method.issuer}'}',
   ResetPasswordState(:final busy, :final failure, :final sentTo) =>
     'busy: $busy, failure: ${failure?.reason.name}, sent to: $sentTo',
-  AccountState(:final busy, :final failure) =>
-    'busy: ${busy?.name}, failure: ${failure?.reason.name}',
+  AccountState(:final busy, :final failure, :final failedAction) =>
+    'busy: ${busy?.name}, failure: ${failure?.reason.name}'
+        '${failedAction == null ? '' : ', failed: ${failedAction.name}'}',
   SignedOutSession() => 'nobody',
   AnonymousSession(:final uid) => 'anonymous $uid',
-  AccountSession(:final uid, :final email) => 'account $uid $email',
+  AccountSession(:final uid, :final email, :final issuers) =>
+    'account $uid $email${issuers.isEmpty ? '' : ' ${issuers.join(' ')}'}',
   _ => '$value',
 };
 
@@ -147,11 +163,17 @@ final class Screen {
     required this.states,
     required this.submit,
     required this.leave,
+    this.value,
     this.other,
+    this.continueWith,
   });
 
   /// The state of the screen now.
   final String Function() state;
+
+  /// The value of the state of the screen now, or `null` for a scenario
+  /// that reads only [state].
+  final Object? Function()? value;
 
   /// Each state that the screen told its listeners of, in order.
   final List<String> states;
@@ -165,6 +187,10 @@ final class Screen {
   /// Makes the other call of a screen with two, or `null` for a screen with
   /// one.
   final Future<void> Function()? other;
+
+  /// Signs in with a way to sign in of the app, as its button does, or
+  /// `null` for a screen without such buttons.
+  final Future<void> Function(SignInMethod method)? continueWith;
 }
 
 /// What a screen does in each scenario, by the name of the scenario:

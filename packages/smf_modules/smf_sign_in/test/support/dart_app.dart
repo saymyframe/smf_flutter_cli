@@ -100,8 +100,9 @@ TargetPlatform get defaultTargetPlatform => TargetPlatform.android;
 
 /// A stand-in for the part of Flutter's widgets library that the files of
 /// the auth role use: what that library exports of the foundation library,
-/// the binding with the observers of the lifecycle of the app, and the
-/// widget and the context that the ways to sign in of the app name.
+/// the binding with the observers of the lifecycle of the app, the widget
+/// and the context that the ways to sign in of the app name, and what the
+/// icon of the way to sign in of the tests builds on.
 const _widgets = '''
 export 'foundation.dart'
     show
@@ -115,8 +116,26 @@ export 'foundation.dart'
 
 enum AppLifecycleState { detached, resumed, inactive, hidden, paused }
 
+class Key {
+  const Key(this.value);
+
+  final String value;
+}
+
 abstract class Widget {
-  const Widget();
+  const Widget({this.key});
+
+  final Key? key;
+}
+
+abstract class StatelessWidget extends Widget {
+  const StatelessWidget({super.key});
+
+  Widget build(BuildContext context);
+}
+
+class SizedBox extends Widget {
+  const SizedBox({super.key});
 }
 
 abstract class BuildContext {}

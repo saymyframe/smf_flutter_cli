@@ -131,13 +131,16 @@ const List<({ModuleId id, String package, List<String> stateFiles})> _variants =
 const _module = ModuleOrigin(SignInModule.id);
 
 /// The names of the texts of the module, in their order: those of the
-/// sign-in, of the sign-up and of the password reset, what a form says of
-/// a field, the texts of the failures, those of the screen of the account
-/// and of the sheet that asks before a deletion, and those of the entry of
-/// the settings screen.
+/// sign-in, with its line of text for an app with ways to sign in, of the
+/// sign-up, with the same, and the "or" below the buttons of the ways to
+/// sign in, those of the password reset, what a form says of a field, the
+/// texts of the failures, those of the screen of the account, of the sheet
+/// that asks before a deletion and of a deletion that failed, and those of
+/// the entry of the settings screen.
 const _textNames = [
   'title',
   'intro',
+  'methodsIntro',
   'email',
   'password',
   'showPassword',
@@ -147,8 +150,10 @@ const _textNames = [
   'createAccount',
   'signUpTitle',
   'signUpIntro',
+  'signUpMethodsIntro',
   'signUpSubmit',
   'haveAccount',
+  'or',
   'resetTitle',
   'resetIntro',
   'sendLink',
@@ -178,6 +183,8 @@ const _textNames = [
   'deleteText',
   'cancel',
   'delete',
+  'deleteUnavailable',
+  'deleteOtherAccount',
   'settingSignedIn',
   'notSignedIn',
 ];
@@ -520,8 +527,10 @@ Screen signInScreen(AppSessionController session) {
   cubit.stream.listen((state) => states.add(show(state)));
   return Screen(
     state: () => show(cubit.state),
+    value: () => cubit.state,
     states: states,
     submit: () => cubit.signIn(email: email, password: password),
+    continueWith: cubit.continueWith,
     leave: cubit.close,
   );
 }
@@ -532,8 +541,10 @@ Screen signUpScreen(AppSessionController session) {
   cubit.stream.listen((state) => states.add(show(state)));
   return Screen(
     state: () => show(cubit.state),
+    value: () => cubit.state,
     states: states,
     submit: () => cubit.signUp(email: email, password: password),
+    continueWith: cubit.continueWith,
     leave: cubit.close,
   );
 }
@@ -588,8 +599,10 @@ const _riverpodScreens = '''
 Screen _screenOf<T>(
   AppSessionController session,
   ProviderListenable<T> provider,
-  Future<void> Function(ProviderContainer container) submit,
-) {
+  Future<void> Function(ProviderContainer container) submit, {
+  Future<void> Function(ProviderContainer container, SignInMethod method)?
+  continueWith,
+}) {
   final container = ProviderContainer(
     overrides: [appSessionProvider.overrideWithValue(session)],
   );
@@ -600,8 +613,12 @@ Screen _screenOf<T>(
   );
   return Screen(
     state: () => show(container.read(provider)),
+    value: () => container.read(provider),
     states: states,
     submit: () => submit(container),
+    continueWith: continueWith == null
+        ? null
+        : (method) => continueWith(container, method),
     leave: () async {
       watching.close();
       await container.pump();
@@ -615,6 +632,8 @@ Screen signInScreen(AppSessionController session) => _screenOf(
   (container) => container
       .read(signInProvider.notifier)
       .signIn(email: email, password: password),
+  continueWith: (container, method) =>
+      container.read(signInProvider.notifier).continueWith(method),
 );
 
 Screen signUpScreen(AppSessionController session) => _screenOf(
@@ -623,6 +642,8 @@ Screen signUpScreen(AppSessionController session) => _screenOf(
   (container) => container
       .read(signUpProvider.notifier)
       .signUp(email: email, password: password),
+  continueWith: (container, method) =>
+      container.read(signUpProvider.notifier).continueWith(method),
 );
 
 Screen resetScreen(AppSessionController session) => _screenOf(
@@ -671,11 +692,199 @@ Screen sessionBridge(AppSessionController session) {
 }
 ''';
 
+/// What a screen with the buttons of the ways to sign in does with the way
+/// to sign in of the tests in each scenario, by the name of the scenario:
+/// [open] creates the state of the screen over a session.
+const _methodScenarios = r'''
+/// A credential of the identity provider of the tests.
+IdTokenCredential credentialOfScript() => const IdTokenCredential(
+  issuer: 'https://accounts.script.example.com',
+  idToken: 'token',
+);
+
+Future<Map<String, Object?>> methodScenariosOf(
+  Screen Function(AppSessionController session) open,
+) async {
+  final result = <String, Object?>{};
+  final method = appSignInMethods.single;
+  result['method'] = method.issuer;
+
+  // The user picks an identity, and the session signs in with it.
+  {
+    scriptedAnswer = () async => credentialOfScript();
+    final service = Scripted();
+    final session = await sessionOf(service);
+    final screen = open(session);
+    final asked = scriptedAsked;
+    await screen.continueWith!(method);
+    await turn();
+    result['success: asked'] = scriptedAsked - asked;
+    result['success: states'] = [...screen.states];
+    result['success: state'] = screen.state();
+    result['success: calls'] = [...service.calls];
+    result['success: session'] = show(session.value);
+  }
+
+  // The user closes the sheet, after a call of the form that failed: the
+  // state is again as it was, and the session gets no call.
+  {
+    final service = Scripted()
+      ..failure = const AuthFailure(AuthFailureReason.network);
+    final session = await sessionOf(service);
+    final screen = open(session);
+    await screen.submit();
+    await turn();
+    service.failure = null;
+    final calls = service.calls.length;
+    scriptedAnswer = () async => null;
+    await screen.continueWith!(method);
+    await turn();
+    result['closed: states'] = [...screen.states];
+    result['closed: state'] = screen.state();
+    result['closed: calls'] = service.calls.length - calls;
+    result['closed: session'] = show(session.value);
+  }
+
+  // The way to sign in fails, with a failure of sign-in and with an error of
+  // another kind, which becomes a failure too; and the session fails.
+  for (final (name, answer) in <(String, Future<SignInCredential?> Function())>[
+    (
+      'the way fails',
+      () async => throw const AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint: 'set it up',
+      ),
+    ),
+    ('the way throws', () async => throw StateError('broken')),
+    ('the session fails', () async => credentialOfScript()),
+  ]) {
+    scriptedAnswer = answer;
+    final service = Scripted();
+    if (name == 'the session fails') {
+      service.failure = const AuthFailure(AuthFailureReason.credentialInUse);
+    }
+    final session = await sessionOf(service);
+    final screen = open(session);
+    await screen.continueWith!(method);
+    await turn();
+    result['$name: states'] = [...screen.states];
+    result['$name: hint'] =
+        (screen.value!() as AuthActionState).failure?.developerHint;
+    result['$name: calls'] = [...service.calls];
+    // The next call is made, and starts without the failure. The user
+    // closes the sheet then, and the failure is back.
+    final told = screen.states.length;
+    scriptedAnswer = () async => null;
+    await screen.continueWith!(method);
+    await turn();
+    result['$name: again'] = screen.states.sublist(told);
+  }
+
+  // While the sheet is open, a second tap and a submit of the form do
+  // nothing.
+  {
+    final sheet = Completer<SignInCredential?>();
+    scriptedAnswer = () => sheet.future;
+    final service = Scripted();
+    final session = await sessionOf(service);
+    final screen = open(session);
+    final asked = scriptedAsked;
+    final first = screen.continueWith!(method);
+    await turn();
+    await screen.continueWith!(method);
+    await screen.submit();
+    await turn();
+    result['sheet open: states'] = [...screen.states];
+    result['sheet open: asked'] = scriptedAsked - asked;
+    result['sheet open: calls'] = [...service.calls];
+    sheet.complete(credentialOfScript());
+    await first;
+    await turn();
+    result['sheet open: calls in the end'] = [...service.calls];
+  }
+
+  // While the call of the form is on its way, a tap on a way to sign in
+  // does nothing.
+  {
+    final service = Scripted()..hold = Completer<void>();
+    final session = await sessionOf(service);
+    final screen = open(session);
+    final submit = screen.submit();
+    await turn();
+    final asked = scriptedAsked;
+    await screen.continueWith!(method);
+    await turn();
+    result['form busy: asked'] = scriptedAsked - asked;
+    result['form busy: states'] = [...screen.states];
+    service.hold!.complete();
+    await submit;
+  }
+
+  // An anonymous user gets the identity and keeps the id.
+  {
+    scriptedAnswer = () async => credentialOfScript();
+    final service = Scripted();
+    final session = await sessionOf(service, mode: AuthMode.anonymous);
+    final screen = open(session);
+    await screen.continueWith!(method);
+    await turn();
+    result['anonymous: calls'] = [...service.calls];
+    result['anonymous: session'] = show(session.value);
+    session.dispose();
+  }
+
+  // The session has no account again after a sign-in that succeeded: the
+  // form is back.
+  {
+    scriptedAnswer = () async => credentialOfScript();
+    final service = Scripted();
+    final session = await sessionOf(service);
+    final screen = open(session);
+    await screen.continueWith!(method);
+    await turn();
+    await session.signOut();
+    await turn();
+    result['signed out: state'] = screen.state();
+  }
+
+  // The user leaves the screen while the sheet is open, and the sheet then
+  // fails or gives a credential.
+  for (final fails in [true, false]) {
+    final name = fails ? 'left, then a failure' : 'left, then a credential';
+    final sheet = Completer<SignInCredential?>();
+    scriptedAnswer = () => sheet.future;
+    final service = Scripted();
+    final session = await sessionOf(service);
+    final screen = open(session);
+    final call = screen.continueWith!(method);
+    await turn();
+    await screen.leave();
+    final told = screen.states.length;
+    if (fails) {
+      sheet.completeError(const AuthFailure(AuthFailureReason.network));
+    } else {
+      sheet.complete(credentialOfScript());
+    }
+    try {
+      await call;
+      await turn();
+      result['$name: error'] = null;
+    } on Object catch (error) {
+      result['$name: error'] = '$error';
+    }
+    result['$name: states told since'] = screen.states.length - told;
+  }
+  return result;
+}
+''';
+
 /// What the script of every variant does: the scenarios of each screen,
 /// and the sign-up of an anonymous user.
 const _scenarios = r'''
   result['sign-in'] = await scenariosOf(signInScreen);
   result['sign-up'] = await scenariosOf(signUpScreen);
+  result['sign-in with a way'] = await methodScenariosOf(signInScreen);
+  result['sign-up with a way'] = await methodScenariosOf(signUpScreen);
   result['reset'] = await scenariosOf(resetScreen);
 
   // An anonymous user signs up, in an app that signs such a user in.
@@ -1601,8 +1810,9 @@ void main() {
         expect(
           _identifiersIn(_parsed(app, path)).intersection(styling),
           // The button that deletes, in the sheet that asks first, has the
-          // colours that the theme has for an error.
-          path == _accountView ? {'styleFrom'} : isEmpty,
+          // colours that the theme has for an error, and the button of a
+          // way to sign in colours of its own.
+          path == _accountView || path == _widgets ? {'styleFrom'} : isEmpty,
           reason: path,
         );
       }
@@ -1619,7 +1829,8 @@ void main() {
 
     test(
         'shows the address and a failure on cards of the theme, and names '
-        'no colour of its own', () {
+        'no colour of its own but those of the buttons of the ways to sign '
+        'in', () {
       final app = localized[SignInModule.blocVariant]!.app!;
       final widgets = _parsed(app, _widgets);
 
@@ -1631,16 +1842,225 @@ void main() {
       for (final path in _look) {
         final unit = _parsed(app, path);
         // A colour is one of the theme, or made of one: no file has the
-        // value of a colour, or a colour of Material by its name.
+        // value of a colour, or a colour of Material by its name, but the
+        // three of the buttons of the ways to sign in.
         expect(
           RegExp(r'\bColor(\.from\w+)?\(\s*\d').allMatches(unit.toSource()),
-          isEmpty,
+          path == _widgets ? hasLength(3) : isEmpty,
           reason: path,
         );
         expect(
           _identifiersIn(unit).intersection({'Colors', 'CupertinoColors'}),
           isEmpty,
           reason: path,
+        );
+      }
+    });
+
+    test(
+        'draws the button of a way to sign in white with a grey hairline, '
+        'and its label and icon black, in a light and in a dark theme, as '
+        'tall as the button of a form, with the label in the weight '
+        'medium, and its icon at a size that the text size does not '
+        'change', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+      final widgets = _parsed(app, _widgets);
+      final button = _classOf(widgets, 'SignInMethodButton');
+
+      // What the brand guidelines of identity providers allow a custom
+      // button of theirs on any background: a logo in its own colours
+      // stays on white, and a logo that takes the colour of the label is
+      // black with it.
+      expect(
+        {
+          for (final name in ['_methodFill', '_methodOutline', '_methodInk'])
+            name: _constantOf(widgets, name),
+        },
+        {
+          '_methodFill': 'Color(0xFFFFFFFF)',
+          '_methodOutline': 'Color(0xFF747775)',
+          '_methodInk': 'Color(0xFF000000)',
+        },
+      );
+      expect(_constantOf(widgets, '_methodIconSize'), '20.0');
+      // The shape, the height and the font of the filled buttons of the
+      // theme, as the button that submits has them: the style names
+      // colours and the size of the icon, and no shape or size.
+      expect(
+        _callsOf(button, 'FilledButton')
+            .where((arguments) => !arguments.containsKey('child'))
+            .single,
+        {
+          'backgroundColor': '_methodFill',
+          'foregroundColor': '_methodInk',
+          'disabledBackgroundColor': '_methodFill',
+          'disabledForegroundColor': '_methodInk',
+          'iconColor': '_methodInk',
+          'disabledIconColor': '_methodInk',
+          'iconSize': '_methodIconSize',
+          'side': 'const BorderSide(color: _methodOutline)',
+          'padding': 'const EdgeInsets.symmetric(horizontal: 16)',
+          'textStyle': 'themed?.copyWith(fontWeight: FontWeight.w500)',
+        },
+      );
+      expect(
+        button.toSource(),
+        contains(
+          'final themed = FilledButtonTheme.of(context).style?.textStyle?'
+          '.resolve(const {}) ?? Theme.of(context).textTheme.labelLarge;',
+        ),
+      );
+      // A logo keeps its colours, so a button that takes no tap is lighter
+      // as a whole.
+      expect(_callsOf(button, 'Opacity').single, {
+        'opacity': 'onPressed == null ? 0.5 : 1',
+        'child': startsWith('FilledButton('),
+      });
+    });
+
+    test(
+        'shows a button for each way to sign in of the platform above the '
+        'form of the sign-in and of the sign-up, with "or" below them, and '
+        'with them a line of text that asks how to sign in', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+      final widgets = _parsed(app, _widgets);
+
+      expect(
+        _functionOf(widgets, 'signInMethodsHere').toSource(),
+        contains('for (final method in appSignInMethods) '
+            'if (method.isAvailable) method'),
+      );
+      for (final (path, intro, methodsIntro) in [
+        (_views[0], 'intro', 'methodsIntro'),
+        (_views[1], 'signUpIntro', 'signUpMethodsIntro'),
+      ]) {
+        final view = _parsed(app, path);
+        final page = _callsOf(view, 'AuthPage').single;
+
+        expect(
+          page['intro'],
+          'methods.isEmpty ? context.l10n.${_getterOf(intro)} : '
+          'context.l10n.${_getterOf(methodsIntro)}',
+          reason: path,
+        );
+        // The first part of the page, before the form.
+        expect(
+          page['children'],
+          startsWith(
+            '[if (methods.isNotEmpty) SignInMethods(methods: methods, busy: '
+            'widget.busy, method: method, failure: method == null ? null : '
+            'widget.failure, onPressed: widget.onContinueWith), '
+            'AbsorbPointer(',
+          ),
+          reason: path,
+        );
+        expect(
+          view.toSource(),
+          contains('final methods = signInMethodsHere();'),
+          reason: path,
+        );
+        // The failure of the form shows above its button, and that of a way
+        // to sign in below the buttons of the ways to sign in.
+        expect(
+          _callsOf(view, 'FailureMessage').single,
+          {'0': 'method == null ? widget.failure : null'},
+          reason: path,
+        );
+        expect(_callsOf(view, 'SubmitButton').single, {
+          'label': startsWith('context.l10n.'),
+          'busy': 'widget.busy && method == null',
+          'onPressed': 'widget.busy && method != null ? null : _submit',
+        });
+      }
+      final methods = _classOf(widgets, 'SignInMethods');
+      expect(_callsOf(methods, 'SignInMethodButton').single, {
+        'method': 'way',
+        'busy': 'busy && method == way',
+        'onPressed': 'busy ? null : () => onPressed(way)',
+      });
+      expect(
+        _callsOf(methods, 'FailureMessage').single,
+        {'0': 'failure'},
+      );
+      expect(
+        _textsReadIn(_classOf(widgets, '_Or')),
+        [_getterOf('or')],
+      );
+    });
+
+    test(
+        'words a deletion of the account that failed for a provider that '
+        'cannot revoke the tokens of the identity provider, or for a '
+        'credential of another user, in texts of its own, and a failure of '
+        'a sign-out as a sign-in has it', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+      final view = _parsed(app, _accountView);
+
+      expect(
+        _functionOf(view, 'deletionFailureText').toSource(),
+        allOf(
+          contains(
+            'AuthFailureReason.notConfigured => '
+            'context.l10n.${_getterOf('deleteUnavailable')}',
+          ),
+          contains(
+            'AuthFailureReason.invalidCredentials => '
+            'context.l10n.${_getterOf('deleteOtherAccount')}',
+          ),
+          contains('_ => authFailureText(context, reason)'),
+        ),
+      );
+      expect(_callsOf(view, 'FailureMessage').single, {
+        '0': 'widget.failure',
+        'textOf': 'widget.failedAction == AccountAction.delete '
+            '? deletionFailureText : authFailureText',
+      });
+      for (final name in ['deleteUnavailable', 'deleteOtherAccount']) {
+        final text = _textOf(name);
+        expect(text.textIn('uk'), isNot(text.en), reason: name);
+        // Neither reads as a failure of a sign-in.
+        expect(
+          {
+            for (final failure in _failureTexts.values) _textOf(failure).en,
+          },
+          isNot(contains(text.en)),
+          reason: name,
+        );
+      }
+    });
+
+    test(
+        'names an account without an email address by the label of its '
+        'way to sign in', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+      final view = _parsed(app, _accountView);
+
+      expect(
+        view.toSource(),
+        contains(
+          'final method = email != null ? null : appSignInMethods.where('
+          '(method) => _issuers.contains(method.issuer)).firstOrNull;',
+        ),
+      );
+      expect(
+        _callsOf(_classOf(view, '_SignInWay'), 'Text').single,
+        {'0': 'method.label(context)'},
+      );
+      for (final variant in _variants) {
+        final screen = _parsed(
+          localized[variant.id]!.app!,
+          _screens['AccountScreen']!,
+        );
+        expect(
+          _callsOf(screen, 'AccountView').single,
+          allOf(
+            containsPair(
+              'issuers',
+              'session is AccountSession ? session.issuers : const {}',
+            ),
+            containsPair('failedAction', 'state.failedAction'),
+          ),
+          reason: '${variant.id}',
         );
       }
     });
@@ -1809,8 +2229,23 @@ void main() {
         );
       }
       expect(buttons.keys, {_views[0], _views[2], _accountView, _widgets});
+      // The button of a way to sign in has its icon before its label.
+      final method = _callsOf(
+        _classOf(_parsed(app, _widgets), 'SignInMethodButton'),
+        'FilledButton',
+      ).singleWhere((arguments) => arguments.containsKey('child'));
       expect(
-        buttons.values.expand((children) => children),
+        method['child'],
+        allOf(
+          startsWith('Row(children: [ExcludeSemantics(child: method.icon), '),
+          contains('Expanded(child: _BusyLabel(method.label(context), '
+              'spins: spins))'),
+        ),
+      );
+      expect(
+        buttons.values
+            .expand((children) => children)
+            .where((child) => child != method['child']),
         everyElement(
           anyOf(startsWith('WholeWords('), startsWith('_BusyLabel(')),
         ),
@@ -2318,8 +2753,15 @@ void main() {
         contains('final hint = kDebugMode ? failure.developerHint : null;'),
       );
       expect(
-        _callsOf(failure, 'authFailureText').single,
+        _callsOf(failure, 'textOf').single,
         {'0': 'context', '1': 'failure.reason'},
+      );
+      // The text of a sign-in, unless a page words a failure of its own.
+      final message =
+          _classOf(_parsed(localized.app!, _widgets), 'FailureMessage');
+      expect(
+        message.toSource(),
+        contains('this.textOf = authFailureText'),
       );
     });
   });
@@ -2335,7 +2777,13 @@ void main() {
           result[screen]! as Map<Object?, Object?>;
 
       setUpAll(() async {
-        app = (await _rendered(variant.id)).app!;
+        // With a way to sign in that the scripts script.
+        app = (await _rendered(
+          variant.id,
+          others: const [GenL10nModule.id, ScriptedMethodModule.id],
+          registry: const [..._modules, ScriptedMethodModule()],
+        ))
+            .app!;
         result = await runState(
           app,
           imports: [
@@ -2343,8 +2791,10 @@ void main() {
             // What a test of providers needs beyond what an app does.
             if (!isBloc) 'package:riverpod/misc.dart',
             for (final path in variant.stateFiles) _import(path),
+            _import('lib/${ScriptedMethodModule.file}'),
           ],
-          declarations: isBloc ? _blocScreens : _riverpodScreens,
+          declarations:
+              '${isBloc ? _blocScreens : _riverpodScreens}\n$_methodScenarios',
           body: '$_scenarios\n${isBloc ? _blocApp : _riverpodApp}',
         );
       });
@@ -2357,12 +2807,183 @@ void main() {
             AuthRole.serviceFile,
             AuthRole.sessionFile,
             AuthRole.guestDataFile,
+            AuthRole.methodsFile,
+            'lib/${ScriptedMethodModule.file}',
             _state,
             _guards,
             ...variant.stateFiles,
           ]),
           isEmpty,
         );
+      });
+
+      test(
+          'signs in with a way to sign in on the sign-in and on the '
+          'sign-up: asks it for a credential, gives it to the session, and '
+          'stays busy with the way to sign in once the user is signed in, '
+          'while the session has the account', () {
+        const way = ScriptedMethodModule.issuer;
+        for (final screen in ['sign-in with a way', 'sign-up with a way']) {
+          final states = of(screen);
+
+          expect(states['method'], way, reason: screen);
+          expect(states['success: asked'], 1, reason: screen);
+          expect(
+            states['success: calls'],
+            ['signInWith $way'],
+            reason: screen,
+          );
+          expect(
+            states['success: session'],
+            'account identity null $way',
+            reason: screen,
+          );
+          expect(
+            states['success: states'],
+            ['busy: true, failure: null, method: $way'],
+            reason: screen,
+          );
+          expect(
+            states['success: state'],
+            'busy: true, failure: null, method: $way',
+            reason: screen,
+          );
+          // Once the session has no account again, the screen is back.
+          expect(
+            states['signed out: state'],
+            'busy: false, failure: null',
+            reason: screen,
+          );
+        }
+      });
+
+      test(
+          'is again as it was before the tap when the user closes the sheet '
+          'of the way to sign in, also with the failure of an earlier call, '
+          'and calls the session for nothing', () {
+        const way = ScriptedMethodModule.issuer;
+        for (final screen in ['sign-in with a way', 'sign-up with a way']) {
+          final states = of(screen);
+
+          expect(
+            states['closed: states'],
+            [
+              'busy: true, failure: null',
+              'busy: false, failure: network',
+              'busy: true, failure: null, method: $way',
+              'busy: false, failure: network',
+            ],
+            reason: screen,
+          );
+          expect(
+            states['closed: state'],
+            'busy: false, failure: network',
+            reason: screen,
+          );
+          expect(states['closed: calls'], 0, reason: screen);
+          expect(states['closed: session'], 'nobody', reason: screen);
+        }
+      });
+
+      test(
+          'ends the busy state with the failure of a way to sign in, of an '
+          'error of another kind of it as a failure, or of the session, '
+          'with the way to sign in, and takes the next call', () {
+        const way = ScriptedMethodModule.issuer;
+        for (final screen in ['sign-in with a way', 'sign-up with a way']) {
+          final states = of(screen);
+
+          for (final (name, reason, hint, calls) in [
+            ('the way fails', 'notConfigured', 'set it up', <String>[]),
+            ('the way throws', 'unknown', 'Bad state: broken', <String>[]),
+            (
+              'the session fails',
+              'credentialInUse',
+              null,
+              ['signInWith $way'],
+            ),
+          ]) {
+            final failed = 'busy: false, failure: $reason, method: $way';
+            expect(
+              states['$name: states'],
+              ['busy: true, failure: null, method: $way', failed],
+              reason: '$screen, $name',
+            );
+            expect(states['$name: hint'], hint, reason: '$screen, $name');
+            expect(states['$name: calls'], calls, reason: '$screen, $name');
+            expect(
+              states['$name: again'],
+              ['busy: true, failure: null, method: $way', failed],
+              reason: '$screen, $name',
+            );
+          }
+        }
+      });
+
+      test(
+          'takes neither a second tap nor a submit of the form while the '
+          'sheet of a way to sign in is open, nor a tap on a way to sign in '
+          'while the call of the form is on its way', () {
+        const way = ScriptedMethodModule.issuer;
+        for (final screen in ['sign-in with a way', 'sign-up with a way']) {
+          final states = of(screen);
+
+          expect(
+            states['sheet open: states'],
+            ['busy: true, failure: null, method: $way'],
+            reason: screen,
+          );
+          expect(states['sheet open: asked'], 1, reason: screen);
+          expect(states['sheet open: calls'], isEmpty, reason: screen);
+          expect(
+            states['sheet open: calls in the end'],
+            ['signInWith $way'],
+            reason: screen,
+          );
+          expect(states['form busy: asked'], 0, reason: screen);
+          expect(
+            states['form busy: states'],
+            ['busy: true, failure: null'],
+            reason: screen,
+          );
+        }
+      });
+
+      test(
+          'gives an anonymous user the identity of a way to sign in through '
+          'the session, which keeps the id', () {
+        const way = ScriptedMethodModule.issuer;
+        for (final screen in ['sign-in with a way', 'sign-up with a way']) {
+          final states = of(screen);
+
+          expect(
+            states['anonymous: calls'],
+            ['signInAnonymously', 'linkWith $way'],
+            reason: screen,
+          );
+          expect(
+            states['anonymous: session'],
+            'account guest null $way',
+            reason: screen,
+          );
+        }
+      });
+
+      test(
+          'tells nothing more, and fails with nothing, once the user has '
+          'left the screen while the sheet of a way to sign in was open', () {
+        for (final screen in ['sign-in with a way', 'sign-up with a way']) {
+          final states = of(screen);
+
+          for (final end in ['a failure', 'a credential']) {
+            expect(states['left, then $end: error'], isNull, reason: screen);
+            expect(
+              states['left, then $end: states told since'],
+              0,
+              reason: '$screen, $end',
+            );
+          }
+        }
       });
 
       test(
@@ -2535,7 +3156,8 @@ void main() {
             expect(result['$name: next call'], 1, reason: name);
             expect(
               result['$name: state then'],
-              'busy: null, failure: network',
+              'busy: null, failure: network, '
+              'failed: ${action == 'delete' ? 'delete' : 'signOut'}',
               reason: name,
             );
             expect(result['$name: listeners after'], isFalse, reason: name);
@@ -2564,7 +3186,10 @@ void main() {
           // A failure ends it, and the next call starts without it.
           expect(
             states['failure: states'],
-            ['busy: $action, failure: null', 'busy: null, failure: network'],
+            [
+              'busy: $action, failure: null',
+              'busy: null, failure: network, failed: $action',
+            ],
             reason: screen,
           );
           expect(states['again: calls'], 2, reason: screen);
