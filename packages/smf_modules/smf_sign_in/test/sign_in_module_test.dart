@@ -2479,6 +2479,53 @@ void main() {
       }
     });
 
+    test(
+        'lets a page and the sheet that asks before a deletion scroll under '
+        'what covers the bottom of the screen, and end above it', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+      final page = _classOf(_parsed(app, _page), '_AuthPageState');
+      final sheet = _classOf(_parsed(app, _accountView), '_DeleteAccountSheet');
+
+      // The scroll view reaches the bottom of the screen, under the bar of
+      // the home gesture, and its content ends above what the context says
+      // covers the bottom: nothing while the keyboard covers it, and
+      // nothing over the bar of a main navigation.
+      for (final (frame, padding) in [
+        (
+          page,
+          'EdgeInsets.fromLTRB(24, back ? 8 : 32, 24, 32 + '
+              'MediaQuery.paddingOf(context).bottom)',
+        ),
+        (
+          sheet,
+          'EdgeInsets.fromLTRB(24, 0, 24, 16 + '
+              'MediaQuery.paddingOf(context).bottom)',
+        ),
+      ]) {
+        final name = frame.namePart.typeName.lexeme;
+        final safeArea = _callsOf(frame, 'SafeArea').single;
+        expect(safeArea['bottom'], 'false', reason: name);
+        expect(
+          safeArea['child'],
+          startsWith('SingleChildScrollView('),
+          reason: name,
+        );
+        expect(
+          _callsOf(frame, 'SingleChildScrollView').single['padding'],
+          padding,
+          reason: name,
+        );
+      }
+      // No other part of the look keeps out of the insets itself.
+      expect(
+        {
+          for (final path in _look)
+            if (_callsOf(_parsed(app, path), 'SafeArea').isNotEmpty) path,
+        },
+        {_page, _accountView},
+      );
+    });
+
     test('shows the symbol and the number of the app in the cell of a page',
         () async {
       final result = await _rendered(

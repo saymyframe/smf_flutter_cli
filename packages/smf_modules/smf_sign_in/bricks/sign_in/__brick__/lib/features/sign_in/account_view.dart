@@ -161,8 +161,16 @@ class _DeleteAccountSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        // As a page, the sheet scrolls under what covers the bottom of the
+        // screen, such as the bar of the home gesture, and ends above it.
+        padding: EdgeInsets.fromLTRB(
+          24,
+          0,
+          24,
+          16 + MediaQuery.paddingOf(context).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
