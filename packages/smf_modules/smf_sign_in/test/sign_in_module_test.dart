@@ -848,9 +848,9 @@ Future<Map<String, Object?>> methodScenariosOf(
   }
 
   // The user leaves the screen while the sheet is open, and the sheet then
-  // fails or gives a credential.
-  for (final fails in [true, false]) {
-    final name = fails ? 'left, then a failure' : 'left, then a credential';
+  // fails, gives a credential, or is closed.
+  for (final end in ['a failure', 'a credential', 'a closed sheet']) {
+    final name = 'left, then $end';
     final sheet = Completer<SignInCredential?>();
     scriptedAnswer = () => sheet.future;
     final service = Scripted();
@@ -860,10 +860,13 @@ Future<Map<String, Object?>> methodScenariosOf(
     await turn();
     await screen.leave();
     final told = screen.states.length;
-    if (fails) {
-      sheet.completeError(const AuthFailure(AuthFailureReason.network));
-    } else {
-      sheet.complete(credentialOfScript());
+    switch (end) {
+      case 'a failure':
+        sheet.completeError(const AuthFailure(AuthFailureReason.network));
+      case 'a credential':
+        sheet.complete(credentialOfScript());
+      default:
+        sheet.complete(null);
     }
     try {
       await call;
@@ -1859,10 +1862,10 @@ void main() {
 
     test(
         'draws the button of a way to sign in white with a grey hairline, '
-        'and its label and icon black, in a light and in a dark theme, as '
-        'tall as the button of a form, with the label in the weight '
-        'medium, and its icon at a size that the text size does not '
-        'change', () {
+        'and its label and icon black, in a light and in a dark theme, also '
+        'while it takes no tap, as tall as the button of a form, with the '
+        'label in the weight medium, and its icon at a size that the text '
+        'size does not change', () {
       final app = localized[SignInModule.blocVariant]!.app!;
       final widgets = _parsed(app, _widgets);
       final button = _classOf(widgets, 'SignInMethodButton');
@@ -1911,12 +1914,16 @@ void main() {
           '?? Theme.of(context).textTheme.labelLarge;',
         ),
       );
-      // A logo keeps its colours, so a button that takes no tap is lighter
-      // as a whole.
-      expect(_callsOf(button, 'Opacity').single, {
-        'opacity': 'onPressed == null ? 0.5 : 1',
-        'child': startsWith('FilledButton('),
-      });
+      // A button that takes no tap looks as one that takes a tap: the
+      // brand guidelines keep the colours of a logo and of its label, and
+      // nothing makes the button lighter.
+      expect(
+        [
+          for (final name in ['Opacity', 'FadeTransition', 'AnimatedOpacity'])
+            ..._callsOf(button, name),
+        ],
+        isEmpty,
+      );
     });
 
     test(
@@ -2016,6 +2023,17 @@ void main() {
         'textOf': 'widget.failedAction == AccountAction.delete '
             '? deletionFailureText : authFailureText',
       });
+      for (final variant in _variants) {
+        final screen = _parsed(
+          localized[variant.id]!.app!,
+          _screens['AccountScreen']!,
+        );
+        expect(
+          _callsOf(screen, 'AccountView').single,
+          containsPair('failedAction', 'state.failedAction'),
+          reason: '${variant.id}',
+        );
+      }
       for (final name in ['deleteUnavailable', 'deleteOtherAccount']) {
         final text = _textOf(name);
         expect(text.textIn('uk'), isNot(text.en), reason: name);
@@ -2026,43 +2044,6 @@ void main() {
           },
           isNot(contains(text.en)),
           reason: name,
-        );
-      }
-    });
-
-    test(
-        'names an account without an email address by the label of its '
-        'way to sign in', () {
-      final app = localized[SignInModule.blocVariant]!.app!;
-      final view = _parsed(app, _accountView);
-
-      expect(
-        view.toSource(),
-        contains(
-          'final method = email != null ? null : '
-          'appSignInMethods.where((method) => '
-          '_issuers.contains(method.issuer)).firstOrNull;',
-        ),
-      );
-      expect(
-        _callsOf(_classOf(view, '_SignInWay'), 'Text').single,
-        {'0': 'method.label(context)'},
-      );
-      for (final variant in _variants) {
-        final screen = _parsed(
-          localized[variant.id]!.app!,
-          _screens['AccountScreen']!,
-        );
-        expect(
-          _callsOf(screen, 'AccountView').single,
-          allOf(
-            containsPair(
-              'issuers',
-              'session is AccountSession ? session.issuers : const {}',
-            ),
-            containsPair('failedAction', 'state.failedAction'),
-          ),
-          reason: '${variant.id}',
         );
       }
     });
@@ -2973,11 +2954,12 @@ void main() {
 
       test(
           'tells nothing more, and fails with nothing, once the user has '
-          'left the screen while the sheet of a way to sign in was open', () {
+          'left the screen while the sheet of a way to sign in was open, '
+          'whether the sheet then fails, gives a credential or is closed', () {
         for (final screen in ['sign-in with a way', 'sign-up with a way']) {
           final states = of(screen);
 
-          for (final end in ['a failure', 'a credential']) {
+          for (final end in ['a failure', 'a credential', 'a closed sheet']) {
             expect(states['left, then $end: error'], isNull, reason: screen);
             expect(
               states['left, then $end: states told since'],

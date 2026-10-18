@@ -30,7 +30,7 @@ A tap asks the way to sign in for a credential, as with the sheet of its identit
 
 ## The account
 
-The screen of the account is at `/sign_in/account`. It shows the email address of the account that the user is signed in to, the button Sign out, and the action Delete account. An account of a way to sign in may have no email address, and the screen then shows the label of its way to sign in.
+The screen of the account is at `/sign_in/account`. It shows the email address of the account that the user is signed in to, the button Sign out, and the action Delete account.
 
 Delete account is a text button in the colour that the theme has for an error. It asks first, in a sheet over the page: the sheet says that the deletion cannot be undone, and has the buttons Delete and Cancel. The screen closes the sheet before it deletes the account. A provider of sign-in may refuse to delete an account whose user signed in long ago. The screen then stays, with a text that tells the user to sign out and sign in again. Some ways to sign in, such as Sign in with Apple, ask the user again before a deletion, so that the provider of sign-in can revoke their tokens. When the provider cannot revoke them, or the user confirms with another account, the screen says so in a text of its own: the texts of a sign-in would not tell the user what happened.
 

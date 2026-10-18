@@ -427,7 +427,9 @@ const _methodIconGap = 12.0;
 ///
 /// While its call is on its way, it spins in the place of its label and
 /// does nothing. In an app that asks for less motion it is disabled with
-/// its label instead, as a button that takes no tap is: lighter.
+/// its label instead. A disabled button of a way to sign in keeps its
+/// colours, as the brand guidelines ask of the logo and the label, and
+/// only takes no tap.
 class SignInMethodButton extends StatelessWidget {
   /// Creates the button of [method].
   const SignInMethodButton({
@@ -456,35 +458,31 @@ class SignInMethodButton extends StatelessWidget {
     final themed =
         FilledButtonTheme.of(context).style?.textStyle?.resolve(const {}) ??
         Theme.of(context).textTheme.labelLarge;
-    return Opacity(
-      // A logo keeps its colours, so the whole button is lighter while it
-      // takes no tap.
-      opacity: onPressed == null ? 0.5 : 1,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: _methodFill,
-          foregroundColor: _methodInk,
-          disabledBackgroundColor: _methodFill,
-          disabledForegroundColor: _methodInk,
-          iconColor: _methodInk,
-          disabledIconColor: _methodInk,
-          iconSize: _methodIconSize,
-          side: const BorderSide(color: _methodOutline),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          textStyle: themed?.copyWith(fontWeight: FontWeight.w500),
-        ),
-        onPressed: onPressed,
-        child: Row(
-          children: [
-            // The label names the way to sign in.
-            ExcludeSemantics(child: method.icon),
-            const SizedBox(width: _methodIconGap),
-            Expanded(child: _BusyLabel(method.label(context), spins: spins)),
-            // As wide as the icon and the space after it, so that the label
-            // is in the middle of the button.
-            const SizedBox(width: _methodIconSize + _methodIconGap),
-          ],
-        ),
+    return FilledButton(
+      // The same colours whether the button takes a tap or not.
+      style: FilledButton.styleFrom(
+        backgroundColor: _methodFill,
+        foregroundColor: _methodInk,
+        disabledBackgroundColor: _methodFill,
+        disabledForegroundColor: _methodInk,
+        iconColor: _methodInk,
+        disabledIconColor: _methodInk,
+        iconSize: _methodIconSize,
+        side: const BorderSide(color: _methodOutline),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        textStyle: themed?.copyWith(fontWeight: FontWeight.w500),
+      ),
+      onPressed: onPressed,
+      child: Row(
+        children: [
+          // The label names the way to sign in.
+          ExcludeSemantics(child: method.icon),
+          const SizedBox(width: _methodIconGap),
+          Expanded(child: _BusyLabel(method.label(context), spins: spins)),
+          // As wide as the icon and the space after it, so that the label
+          // is in the middle of the button.
+          const SizedBox(width: _methodIconSize + _methodIconGap),
+        ],
       ),
     );
   }

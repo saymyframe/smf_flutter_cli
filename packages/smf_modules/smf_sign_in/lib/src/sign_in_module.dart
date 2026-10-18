@@ -406,10 +406,11 @@ final class SignInModule extends SmfModule {
     ),
     LocalizedText(
       'deleteOtherAccount',
-      en: 'That is another account. Confirm with the one you are signed in '
-          'to.',
+      en: 'That is a different account. Confirm the deletion with the account '
+          'you are signed in to.',
       translations: {
-        'uk': 'Це інший акаунт. Підтвердьте той, у який ви ввійшли.',
+        'uk': 'Це інший акаунт. Підтвердьте видалення акаунтом, у який ви '
+            'увійшли.',
       },
     ),
     LocalizedText(
@@ -435,8 +436,8 @@ final class SignInModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description: 'Sign-in and sign-up with email or the ways to sign in '
-            'of the app, and an account screen',
+        description: 'Sign-in, sign-up and password reset with email or the '
+            "app's ways to sign in, and an account screen",
         kind: ModuleKinds.feature,
         requires: {authRole, settingsScreenRole},
         uses: {localizationRole},

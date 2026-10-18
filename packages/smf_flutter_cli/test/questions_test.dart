@@ -188,8 +188,8 @@ Future<_Run> _create(
 }
 
 /// How a run in a terminal offers the feature `sign_in`.
-const _signInChoice = 'sign_in — Sign-in and sign-up with email or the ways '
-    'to sign in of the app, and an account screen';
+const _signInChoice = 'sign_in — Sign-in, sign-up and password reset with '
+    "email or the app's ways to sign in, and an account screen";
 
 void main() {
   test(

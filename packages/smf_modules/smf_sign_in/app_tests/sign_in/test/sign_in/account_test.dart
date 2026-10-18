@@ -27,9 +27,7 @@
 // words of its own where the provider of sign-in could not revoke the tokens
 // of an identity provider, or got a credential of another user: the texts
 // of a sign-in would not tell the user what happened. A sign-out that failed
-// so has the text of a sign-in. An account without an email address, as one
-// of a way to sign in may be, is named by the label of its way to sign in.
-// And when the session ends while the sheet is open, as on the server, the
+// so has the text of a sign-in. And when the session ends while the sheet is open, as on the server, the
 // sheet goes with the page under it. No call of the app ended that
 // session, so the session has nobody then, in every mode: an app that
 // signs an anonymous user in does so again when the user comes back to it.
@@ -63,7 +61,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
-import 'package:{{app_name}}/core/auth/sign_in_methods.dart';
 import 'package:{{app_name}}/features/sign_in/sign_in_widgets.dart';
 
 import 'app.dart';
@@ -724,34 +721,6 @@ void main() {
             'anonymous user in has done so, and no other app has called '
             'its service; no page was opened or closed for it.',
       );
-
-      // An account of a way to sign in without an email address is named
-      // by the label of its way to sign in, in each language.
-      if (appSignInMethods.isNotEmpty) {
-        final method = appSignInMethods.first;
-        await appSession.signInWith(
-          IdTokenCredential(issuer: method.issuer, idToken: 'token'),
-        );
-        await tester.pumpAndSettle();
-        await _openAccount(tester);
-        for (final language in languages) {
-          await useLanguage(tester, language);
-          final label = method.label(tester.element(accountScreen));
-          expect(
-            (
-              find.text(label).evaluate().length,
-              text('signedIn').evaluate().length,
-              text('signedInAs').evaluate().length,
-            ),
-            (1, 1, 0),
-            reason: 'The screen of an account without an email address, of '
-                'the way to sign in of ${method.issuer}, says that the user '
-                'is signed in and shows the label of that way to sign in, '
-                '"$label", in $language.',
-          );
-        }
-        await useLanguage(tester, languages.first);
-      }
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

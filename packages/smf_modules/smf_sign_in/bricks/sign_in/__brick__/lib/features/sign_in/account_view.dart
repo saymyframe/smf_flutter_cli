@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
-import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_state.dart';
 import 'sign_in_widgets.dart';
 
 /// What the screen of the account shows: the email address of the account
-/// that the user is signed in to, or the label of its way to sign in for an
-/// account without one, the button that signs out, and the action that
-/// deletes the account, which asks first.
+/// that the user is signed in to, the button that signs out, and the
+/// action that deletes the account, which asks first.
 ///
 /// It keeps nothing of the calls themselves: the screen gives it the
 /// address and the state of the calls, and takes what the user asks for.
@@ -18,7 +16,6 @@ class AccountView extends StatefulWidget {
   /// Creates the view.
   const AccountView({
     required this.email,
-    required this.issuers,
     required this.busy,
     required this.failure,
     required this.failedAction,
@@ -30,10 +27,6 @@ class AccountView extends StatefulWidget {
   /// The email address of the account, or `null` for an account without
   /// one, and once nobody is signed in to an account.
   final String? email;
-
-  /// The identity providers that the account signs in with, each by the
-  /// issuer of its way to sign in: `AccountSession.issuers`.
-  final Set<String> issuers;
 
   /// The action whose call is on its way, or `null` when none is.
   final AccountAction? busy;
@@ -55,17 +48,14 @@ class AccountView extends StatefulWidget {
 }
 
 class _AccountViewState extends State<AccountView> {
-  /// The address and the identity providers of the account that the page
-  /// shows: those of the account, also once the user is signed out, since
-  /// the page shows until the router closes it.
+  /// The address that the page shows: that of the account, also once the
+  /// user is signed out, since the page shows until the router closes it.
   late String? _email = widget.email;
-  late Set<String> _issuers = widget.issuers;
 
   @override
   void didUpdateWidget(AccountView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.email != null) _email = widget.email;
-    if (widget.issuers.isNotEmpty) _issuers = widget.issuers;
   }
 
   /// Asks whether to delete the account, and deletes it on a yes. The
@@ -79,12 +69,6 @@ class _AccountViewState extends State<AccountView> {
   @override
   Widget build(BuildContext context) {
     final email = _email;
-    // An account without an address is named by its way to sign in.
-    final method = email != null
-        ? null
-        : appSignInMethods
-              .where((method) => _issuers.contains(method.issuer))
-              .firstOrNull;
     final idle = widget.busy == null;
     return AuthPage(
       title: {{{text_account_title}}},
@@ -93,7 +77,6 @@ class _AccountViewState extends State<AccountView> {
           : {{{text_signed_in_as}}},
       children: [
         if (email != null) EmailAddress(email),
-        if (method != null) _SignInWay(method),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -122,25 +105,6 @@ class _AccountViewState extends State<AccountView> {
       ],
     );
   }
-}
-
-/// The way to sign in of an account without an email address, on a line of
-/// its own, as the page shows the address of an account: a card as the
-/// theme of the app has its cards, with the label of the way to sign in.
-class _SignInWay extends StatelessWidget {
-  const _SignInWay(this.method);
-
-  final SignInMethod method;
-
-  @override
-  Widget build(BuildContext context) => Card.outlined(
-    // In the theme of any app, the card is as wide as the form.
-    margin: EdgeInsets.zero,
-    child: ListTile(
-      leading: const Icon(Icons.account_circle_outlined),
-      title: Text(method.label(context)),
-    ),
-  );
 }
 
 /// The text of the app for [reason], the reason of a failure of the
