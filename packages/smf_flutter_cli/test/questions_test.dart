@@ -2124,6 +2124,8 @@ void main() {
       'home',
       'sign_in',
       'firebase_core',
+      'google_sign_in',
+      'apple_sign_in',
       'bottom_tabs',
       'onboarding',
       'gen_l10n',
@@ -2138,7 +2140,7 @@ void main() {
     final run = await _create(
       {
         'Features': ['home', 'sign_in'],
-        'Infrastructure': ['firebase_core'],
+        'Infrastructure': ['firebase_core', 'google_sign_in', 'apple_sign_in'],
         'Layout': ['bottom_tabs'],
         'Onboarding screen': ['onboarding'],
         'Localization': ['gen_l10n'],
