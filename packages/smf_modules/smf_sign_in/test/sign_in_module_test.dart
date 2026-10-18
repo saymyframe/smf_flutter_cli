@@ -694,7 +694,7 @@ Screen sessionBridge(AppSessionController session) {
 
 /// What a screen with the buttons of the ways to sign in does with the way
 /// to sign in of the tests in each scenario, by the name of the scenario:
-/// [open] creates the state of the screen over a session.
+/// `open` creates the state of the screen over a session.
 const _methodScenarios = r'''
 /// A credential of the identity provider of the tests.
 IdTokenCredential credentialOfScript() => const IdTokenCredential(
@@ -1906,8 +1906,9 @@ void main() {
       expect(
         button.toSource(),
         contains(
-          'final themed = FilledButtonTheme.of(context).style?.textStyle?'
-          '.resolve(const {}) ?? Theme.of(context).textTheme.labelLarge;',
+          'final themed = '
+          'FilledButtonTheme.of(context).style?.textStyle?.resolve(const {}) '
+          '?? Theme.of(context).textTheme.labelLarge;',
         ),
       );
       // A logo keeps its colours, so a button that takes no tap is lighter
@@ -2038,8 +2039,9 @@ void main() {
       expect(
         view.toSource(),
         contains(
-          'final method = email != null ? null : appSignInMethods.where('
-          '(method) => _issuers.contains(method.issuer)).firstOrNull;',
+          'final method = email != null ? null : '
+          'appSignInMethods.where((method) => '
+          '_issuers.contains(method.issuer)).firstOrNull;',
         ),
       );
       expect(

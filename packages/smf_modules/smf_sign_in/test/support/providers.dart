@@ -217,7 +217,7 @@ final class ScriptedMethodModule extends SmfModule {
         ),
       ];
 
-  static const _code = r'''
+  static const _code = '''
 import 'package:flutter/widgets.dart';
 
 import '../auth/app_session.dart';
