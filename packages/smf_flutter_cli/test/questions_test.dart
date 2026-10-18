@@ -230,6 +230,7 @@ void main() {
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
+      'google_sign_in — Google sign-in on Android and iOS with google_sign_in',
       'apple_sign_in — Sign in with Apple on iOS with sign_in_with_apple',
     ]);
     expect(run.asked[2].shown, [
@@ -1549,6 +1550,96 @@ void main() {
         contains('This app was generated in the mode `anonymous`'),
       ),
     );
+  });
+
+  group('the warning of guideline 4.8 of the App Store', () {
+    // What `smf create` prints of the ways to sign in of an app with
+    // [modules], without a terminal, and the files of the app.
+    Future<_Run> runOf(
+      String modules, {
+      List<String> options = const [],
+    }) =>
+        _create(
+          {},
+          options: [
+            '--no-input',
+            '--skip-external-setup',
+            '-m',
+            modules,
+            ...options,
+          ],
+        );
+
+    // The warnings of [run] about the ways to sign in, which the auth role
+    // gives: those about the machine leave it out.
+    List<String> ofAuth(_Run run) => [
+          for (final warning in run.warnings)
+            if (warning.startsWith('[role:auth]')) warning,
+        ];
+
+    const ofGoogle = '[role:auth]: The app offers Continue with Google on '
+        'iOS, a login service of a third party, but no way to sign in that '
+        'the App Store takes as an equivalent: one that asks for no more '
+        'than the name and the email address of the user and lets the user '
+        'keep the address private (App Store Review Guideline 4.8). (Add '
+        'such a way to sign in on iOS, such as Sign in with Apple.)';
+
+    test(
+        'is given for an app with Google sign-in alone, which gets the only '
+        'provider of the authentication, and not with Sign in with Apple too',
+        () async {
+      final google = await runOf('google_sign_in');
+
+      const adding = 'Adding firebase_auth: the only provider of the '
+          'authentication role, which google_sign_in requires.';
+      expect(google.code, 0, reason: google.lines.join('\n'));
+      expect(google.lines, contains(adding));
+      expect(ofAuth(google), [ofGoogle]);
+      final app = google.files.directory('/work/my_app');
+      expect(
+        app.childFile('lib/core/auth/sign_in_methods.dart').readAsStringSync(),
+        allOf(
+          contains('credential: method0.googleCredential,'),
+          contains("issuer: 'https://accounts.google.com',"),
+        ),
+      );
+      expect(
+        app.childFile('pubspec.yaml').readAsStringSync(),
+        allOf(
+          contains('  google_sign_in: '),
+          contains('    - "lib/core/google_sign_in/assets/google_logo.png"'),
+        ),
+      );
+      expect(
+        app.childFile('README.md').readAsStringSync(),
+        contains('\n## Google sign-in\n'),
+      );
+
+      final both = await runOf('google_sign_in,apple_sign_in');
+      expect(both.code, 0, reason: both.lines.join('\n'));
+      expect(ofAuth(both), isEmpty);
+    });
+
+    test(
+        'stops a run with --strict, which names its code and creates '
+        'nothing, unless --allow-warning names the code', () async {
+      final strict = await runOf('google_sign_in', options: ['--strict']);
+
+      const stopped = 'Generation stopped because of a warning about the '
+          'app. Without --strict, the run goes on after it.';
+      final cause = '  warning [role:auth] auth.no_equivalent_sign_in'
+          '${ofGoogle.substring('[role:auth]'.length)}';
+      expect(strict.code, SmfExitCodes.generationFailed);
+      expect(strict.lines, containsAllInOrder([stopped, cause]));
+      expect(strict.files.directory('/work/my_app').existsSync(), isFalse);
+
+      final allowed = await runOf(
+        'google_sign_in',
+        options: ['--strict', '--allow-warning=auth.no_equivalent_sign_in'],
+      );
+      expect(allowed.code, 0, reason: allowed.lines.join('\n'));
+      expect(ofAuth(allowed), [ofGoogle]);
+    });
   });
 
   test(

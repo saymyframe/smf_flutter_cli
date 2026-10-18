@@ -1,0 +1,13 @@
+name: google_sign_in
+description: "The way to sign in of an SMF app with Google sign-in on Android and iOS: the function that asks Google for a credential, and the icon of its button with the logo of Google."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: issuer, the issuer of the ID tokens of Google, logo, the path
+# of the image of the logo of Google in the app, and readme, the heading of
+# the section of the module in the README of the app.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

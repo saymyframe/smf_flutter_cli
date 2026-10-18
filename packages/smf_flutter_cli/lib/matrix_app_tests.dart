@@ -10,6 +10,7 @@ import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_settings/smf_settings.dart';
@@ -31,6 +32,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
+  final googleSignIn = await appTestsDirectoryOf('smf_google_sign_in');
   final appleSignIn = await appTestsDirectoryOf('smf_apple_sign_in');
   final home = await appTestsDirectoryOf('smf_home_flutter');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
@@ -136,6 +138,27 @@ Future<MatrixAppTests> smfAppTests() async {
         startProbe: const MatrixStartProbe(
           'integration_test/firebase_auth/probe.dart',
           'probeFirebaseAuth',
+        ),
+      ),
+      // The way to sign in with Google of the module, on the real
+      // google_sign_in package: the package is started once, without the
+      // ids of the clients of Google, and the credential is the ID token of
+      // the Google account; a closed sheet returns null, the errors with
+      // which Google refuses an app that is not set up for it fail with
+      // notConfigured, and any other error with unknown; and the app lists
+      // it on Android and iOS, with the logo of Google from its assets. The
+      // mocks replace the platform implementation of the package with
+      // Google for one account, and the matrix sets them up for the tests
+      // of every module of the app, such as the test of the ways to sign in
+      // of the auth role. The test has no probe for the start check: nobody
+      // can sign in on a device.
+      MatrixAppTest(
+        '$googleSignIn/google_sign_in',
+        appliesTo: _has(GoogleSignInModule.id),
+        devDependencies: const ['google_sign_in_platform_interface'],
+        mocks: const MatrixMocks(
+          'test/google_sign_in_mocks.dart',
+          'mockGoogleSignIn',
         ),
       ),
       // The way to sign in with Apple of the module, on the real
@@ -766,13 +789,13 @@ Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
 /// its own, but for the sign-in with the identical object that `linkWith`
 /// refused just before. The mocks of the module of a way to sign in issue
 /// test tokens too, of one identity of their own and the same each time,
-/// each with the new nonce of its request: the raw nonce, or the SHA-256
-/// hash of that raw nonce for a way to sign in whose request has the hash,
-/// as Sign in with Apple. A provider takes both forms in the tests of an
-/// app, whatever the issuer. It
-/// uses the helpers of the test of the auth role ([authRoleAppTest]), which
-/// every app with the role has. It has no probe for the start check: nobody
-/// can sign in on a device.
+/// each with the nonce of its request: the raw nonce, or the SHA-256 hash
+/// of that raw nonce for a way to sign in whose request has the hash, as
+/// Sign in with Apple, and none for a request without a nonce, as that of
+/// Google sign-in. A provider takes each form in the tests of an app,
+/// whatever the issuer. It uses the helpers of the test of the auth role
+/// ([authRoleAppTest]), which every app with the role has. It has no probe
+/// for the start check: nobody can sign in on a device.
 Future<MatrixAppTest> authMethodsAppTest() async => MatrixAppTest(
       '${await appTestsDirectoryOf('smf_flutter_cli')}/auth_methods',
       appliesTo: (app) {

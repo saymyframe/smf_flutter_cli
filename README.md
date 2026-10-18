@@ -82,6 +82,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`firebase_crashlytics`](https://doc.saymyframe.com/modules/firebase-crashlytics) | Crash reporting with Firebase Crashlytics. |
 | [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |
 | [`firebase_auth`](https://doc.saymyframe.com/modules/firebase-auth) | Sign-in with Firebase Authentication: an email address and a password, or an anonymous user. The sign-in methods are enabled in the Firebase project after generation. |
+| [`google_sign_in`](https://doc.saymyframe.com/modules/google-sign-in) | Google sign-in on Android and iOS, a way to sign in next to email for the provider of sign-in, such as `firebase_auth`. |
 | [`apple_sign_in`](https://doc.saymyframe.com/modules/apple-sign-in) | Sign in with Apple on iOS, a way to sign in next to email for the provider of sign-in, such as `firebase_auth`. |
 | [`sign_in`](https://doc.saymyframe.com/modules/sign-in) | Screens of sign-in, sign-up and password reset with an email address and a password, and the screen of the account with its entry on the settings screen, with BLoC or with Riverpod. |
 

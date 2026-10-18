@@ -226,7 +226,9 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// The harness builds the app of a module with only the modules that it
 /// needs: such an app has no route to start on, since only home has one,
 /// and the destination of its feature has no main navigation to lead to it,
-/// since the app has no layout.
+/// since the app has no layout. An app of Google sign-in has no way to sign
+/// in that the App Store takes as its equivalent on iOS, which the apps
+/// with every module have in Sign in with Apple (guideline 4.8).
 const _warningApps = <String, List<String>>{
   'settings with localization': [
     'router.no_main_navigation',
@@ -243,6 +245,8 @@ const _warningApps = <String, List<String>>{
   ],
   'onboarding with localization': ['router.no_start'],
   'onboarding': ['router.no_start'],
+  'google_sign_in with localization': ['auth.no_equivalent_sign_in'],
+  'google_sign_in': ['auth.no_equivalent_sign_in'],
   'sign_in (bloc) with localization': [
     'router.no_main_navigation',
     'router.no_start',
@@ -273,8 +277,8 @@ void main() {
       'Firebase Analytics with and without the DI container and the router, '
       'which get Firebase, the apps of Firebase Authentication with and '
       'without the localization and the router, which get Firebase, the '
-      'apps of Sign in with Apple with the localization and without, which '
-      'get Firebase Authentication, the '
+      'apps of Google sign-in and of Sign in with Apple with the '
+      'localization and without, which get Firebase Authentication, the '
       'apps of the sign-in for each state manager with the localization '
       'and without, which get Firebase Authentication and the router, one '
       'of Firebase Authentication with the router for each other mode of '
@@ -291,7 +295,7 @@ void main() {
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, onboarding, firebase_core, '
         'firebase_crashlytics, firebase_analytics, firebase_auth, '
-        'apple_sign_in, sign_in)';
+        'google_sign_in, apple_sign_in, sign_in)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -393,6 +397,14 @@ void main() {
         'flutter_core)',
       ),
       'firebase_auth (firebase_auth, firebase_core, flutter_core)',
+      equals(
+        'google_sign_in with localization (google_sign_in, gen_l10n, '
+        'flutter_core, firebase_auth, firebase_core, shared_preferences)',
+      ),
+      equals(
+        'google_sign_in (google_sign_in, flutter_core, firebase_auth, '
+        'firebase_core)',
+      ),
       equals(
         'apple_sign_in with localization (apple_sign_in, gen_l10n, '
         'flutter_core, firebase_auth, firebase_core, shared_preferences)',
