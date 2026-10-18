@@ -47,7 +47,7 @@ With `firebase_analytics`:
 - `appSignInMethods` in `lib/core/auth/sign_in_methods.dart` lists the ways to sign in with an identity provider that the modules of the app add, and is empty without them. A screen of sign-in shows a button for each `SignInMethod` whose `isAvailable` is true, with its `label(context)` and its `icon`.
 - On a tap, the state of the screen awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. `credential()` returns `null` when the user closed the sheet of the identity provider, which is no failure: the screen goes back to how it was. Call `credential()` from the state of a screen, never within a call of `appSession`.
 - `appSession.signInWith` gives an anonymous user the identity with the same id, or signs in to the account that has the identity already, and `takeGuestData()` moves what the anonymous user had. `appSession.deleteAccount()` asks a way to sign in with `revokesOnDeletion` for a credential again itself, and deletes nothing when the user closes its sheet.
-- `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`. Where an account has no `email`, show the `label` of its way to sign in instead.
+- `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`.
 - A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
 
 With `firebase_auth`:
