@@ -192,3 +192,61 @@ final class StartFeature extends SmfModule {
     ];
   }
 }
+
+/// A module for the tests with a step of the onboarding, which it gives the
+/// onboarding screen role in an app with that role: `ask`, whose action
+/// and condition are top-level functions of a file of its brick, and whose
+/// texts are in English, since the module does not list the localization
+/// role.
+final class StepsModule extends SmfModule {
+  /// Creates the module.
+  const StepsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('steps');
+
+  /// The path below `lib/` of the file of the functions of the step.
+  static const file = 'core/steps/steps.dart';
+
+  static const _file = ImportRef.app(file);
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A step of the onboarding (test)',
+        kind: ModuleKinds.infrastructure,
+        uses: {onboardingScreenRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          _bundle('steps', {
+            'lib/$file': [
+              '/// Asks for something, as the action of the step does.',
+              'Future<void> askSomething() async {}',
+              '',
+              '/// Whether the onboarding shows the step.',
+              'bool somethingUnasked() => true;',
+              '',
+            ].join('\n'),
+          }),
+        ),
+        onboardingScreenRole.data(
+          const OnboardingStep(
+            name: 'ask',
+            stage: OnboardingStage.permission,
+            icon: Fragment(
+              'Icons.help_outline',
+              imports: [ImportRef('package:flutter/material.dart')],
+            ),
+            title: LocalizedText('askTitle', en: 'A step that asks'),
+            text: LocalizedText('askText', en: 'Something is asked here.'),
+            action: LocalizedText('askAction', en: 'Ask'),
+            later: LocalizedText('askLater', en: 'Not now'),
+            run: FunctionRef('askSomething', import: _file),
+            showIf: FunctionRef('somethingUnasked', import: _file),
+          ),
+        ),
+      ];
+}

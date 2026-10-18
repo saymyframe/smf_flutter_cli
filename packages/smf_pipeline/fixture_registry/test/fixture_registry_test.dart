@@ -472,6 +472,30 @@ void main() {
         rendered(result, AppEntryRole.gradleAppDependencies).values.single,
         '    implementation("androidx.annotation:annotation:1.9.1")',
       );
+      // Only fake_sockets declares a receiver, which the manifest has once.
+      expect(
+        rendered(result, AppEntryRole.androidManifestApplicationComponents)
+            .values
+            .single,
+        '        <receiver\n'
+        '            android:name="com.example.fixture.FixtureReceiver"\n'
+        '            android:exported="false" />',
+      );
+      // Only fake_sockets runs code at the launch of the iOS app: a second
+      // contribution of the same statement would run it twice.
+      expect(
+        rendered(result, AppEntryRole.iosAppDelegateLaunch).values.single,
+        '    application.applicationSupportsShakeToEdit = true',
+      );
+      // fake_overlap asks for 2.1.3: the highest version of the library
+      // wins, and the switch comes with it.
+      const library = 'com.android.tools:desugar_jdk_libs:2.1.4';
+      expect(rendered(result, AppEntryRole.androidCoreLibraryDesugaring), {
+        'smf_app_entry__android_core_library_desugaring_enabled':
+            '        isCoreLibraryDesugaringEnabled = true',
+        'smf_app_entry__android_core_library_desugaring_library':
+            '    coreLibraryDesugaring("$library")',
+      });
       // The notes for coding agents of both modules make one section of the
       // guide, with the note that both have once.
       final guide = rendered(result, AppEntryRole.agentSections).values.single;
@@ -2451,6 +2475,18 @@ const _cases = [
   // have its label, and without them.
   'fake_sign_in_method with localization',
   'fake_sign_in_method',
+  // The fixture notifications with the fixture onboarding and without it,
+  // and with the localization and without: the notifications role uses the
+  // onboarding screen role and the localization role, and the settings
+  // screen role too, which no fixture provides.
+  'fake_notifications with onboarding_screen, localization',
+  'fake_notifications with onboarding_screen',
+  'fake_notifications with localization',
+  'fake_notifications',
+  // The fixture push messages, with the fixture notifications, which the
+  // push role requires, and the fixture preferences, which those require.
+  // The push role uses no role, so its provider has one case.
+  'fake_push',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',

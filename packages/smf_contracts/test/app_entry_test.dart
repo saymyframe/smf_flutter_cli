@@ -229,6 +229,7 @@ void main() {
           AppEntryRole.infoPlistFile,
           AppEntryRole.xcodeProjectFile,
           AppEntryRole.iosEntitlementsFile,
+          AppEntryRole.appDelegateFile,
         ])
           file.split('/').first,
       };
@@ -240,7 +241,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(19));
+      expect(sockets, hasLength(22));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -249,6 +250,15 @@ void main() {
       expect(tags, contains('smf_app_entry__bootstrap_platform'));
       expect(tags, contains('smf_app_entry__root_wrappers_open'));
       expect(tags, contains('smf_app_entry__agent_sections'));
+      expect(
+        tags,
+        containsAll([
+          'smf_app_entry__android_core_library_desugaring_enabled',
+          'smf_app_entry__android_core_library_desugaring_library',
+          'smf_app_entry__ios_app_delegate_launch',
+          'smf_app_entry__android_manifest_application_components',
+        ]),
+      );
     });
 
     test('bootstrap phases are separate sockets in start-up order', () {
@@ -299,6 +309,8 @@ void main() {
         [
           'app_entry.bootstrap_phases',
           'app_entry.root_wrappers_in_main',
+          'app_entry.launch_code_place',
+          'app_entry.manifest_tag_places',
           'app_entry.tag_lines',
         ],
       );
@@ -1014,6 +1026,38 @@ void main() {
       );
     });
 
+    test(
+        'components of the Android application are XML without imports, '
+        'those of one contribution after those of another', () {
+      const socket = AppEntryRole.androidManifestApplicationComponents;
+      const receiver = '        <receiver\n'
+          '            android:name="com.example.alarms.AlarmReceiver"\n'
+          '            android:exported="false" />';
+      const service = '        <service\n'
+          '            android:name="com.example.sync.SyncService"\n'
+          '            android:exported="false" />';
+
+      expect(socket.name, 'android_manifest_application_components');
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        socket.render(const [
+          SocketContribution.code(socket, Fragment(receiver)),
+          SocketContribution.code(socket, Fragment(service)),
+        ]),
+        {socket.tag: '$receiver\n$service'},
+      );
+      expect(socket.render(const []), {socket.tag: ''});
+      expect(
+        socket.problemsWith(
+          const SocketContribution.code(
+            socket,
+            Fragment(receiver, imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        isNotEmpty,
+      );
+    });
+
     test('Info.plist unites string arrays and keeps scalars unique', () {
       const socket = AppEntryRole.infoPlist;
 
@@ -1116,6 +1160,39 @@ void main() {
       );
     });
 
+    test(
+        'the code at the launch of the iOS app is Swift without imports, the '
+        'statements of one contribution after those of another', () {
+      const socket = AppEntryRole.iosAppDelegateLaunch;
+      const delegate = '    UNUserNotificationCenter.current().delegate = self';
+      const shake = '    application.applicationSupportsShakeToEdit = true';
+
+      expect(socket.name, 'ios_app_delegate_launch');
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        socket.render(const [
+          SocketContribution.code(socket, Fragment(delegate)),
+          SocketContribution.code(socket, Fragment(shake)),
+        ]),
+        {socket.tag: '$delegate\n$shake'},
+      );
+      expect(socket.render(const []), {socket.tag: ''});
+      expect(
+        socket.problemsWith(
+          const SocketContribution.code(
+            socket,
+            Fragment(delegate, imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        [
+          equals(
+            'socket app_entry.ios_app_delegate_launch is not Dart code and '
+            'takes no imports.',
+          ),
+        ],
+      );
+    });
+
     test('Gradle plugins and dependencies take the highest version', () {
       expect(
         _render(AppEntryRole.gradleSettingsPlugins, const [
@@ -1146,6 +1223,63 @@ void main() {
           AppEntryRole.gradleAppDependencies.tag:
               r'    implementation("com.example:lib\$x:1.2")',
         },
+      );
+    });
+
+    test(
+        'core library desugaring takes the highest version of its library, '
+        'and puts the switch and the library into the Gradle file', () {
+      const socket = AppEntryRole.androidCoreLibraryDesugaring;
+      const notifications = ModuleOrigin(ModuleId('notifications'));
+      const calendar = ModuleOrigin(ModuleId('calendar'));
+      const library = 'com.android.tools:desugar_jdk_libs:2.1.4';
+
+      expect(socket.kind.policy, isA<MaxPolicy>());
+      expect(socket.kind.required, isFalse);
+      expect(
+        socket.render([
+          socket.value('2.1.3').withOrigin(calendar),
+          socket.value('2.1.4').withOrigin(notifications),
+          socket.value('2.0.4').withOrigin(calendar),
+        ]),
+        {
+          'smf_app_entry__android_core_library_desugaring_enabled':
+              '        isCoreLibraryDesugaringEnabled = true',
+          'smf_app_entry__android_core_library_desugaring_library':
+              '    coreLibraryDesugaring("$library")',
+        },
+      );
+      // Without a module that needs it, the Gradle file has neither line.
+      expect(socket.render(const []), {
+        'smf_app_entry__android_core_library_desugaring_enabled': '',
+        'smf_app_entry__android_core_library_desugaring_library': '',
+      });
+      // The problems name the socket, whose tags are those of its places.
+      expect(
+        socket.problemsWith(socket.value('two')).single,
+        contains(
+          '"two" of "app_entry.android_core_library_desugaring" cannot be '
+          'compared',
+        ),
+      );
+      expect(
+        () => socket.render([
+          socket.value('2.1.4').withOrigin(notifications),
+          socket.value('2.1.4-beta').withOrigin(calendar),
+        ]),
+        throwsA(
+          isA<MergeConflict>().having(
+            (conflict) => '$conflict',
+            'description',
+            allOf(
+              startsWith(
+                'MergeConflict: "app_entry.android_core_library_desugaring" '
+                'has conflicting values',
+              ),
+              contains('(from notifications and calendar)'),
+            ),
+          ),
+        ),
       );
     });
 
@@ -2090,6 +2224,97 @@ See `lib/missing.dart`.
       );
     });
 
+    test(
+        'report a component of the application that the manifest declares '
+        'twice', () {
+      String component(String element, String name) =>
+          '        <$element android:name="$name" '
+          'android:exported="false" />\n';
+      final manifest = _manifest.replaceFirst(
+        '    </application>',
+        '${component('receiver', 'com.example.AlarmReceiver')}'
+            '${component('service', 'com.example.SyncService')}'
+            '${component('provider', 'com.example.FilesProvider')}'
+            '${component('receiver', 'com.example.AlarmReceiver')}'
+            '${component('service', 'com.example.SyncService')}'
+            '${component('provider', 'com.example.FilesProvider')}'
+            '${component('activity', '.MainActivity')}'
+            // A component of another kind with the same name is another.
+            '${component('service', 'com.example.AlarmReceiver')}'
+            '    </application>',
+      );
+      const path = 'android/app/src/main/AndroidManifest.xml';
+
+      expect(
+        messages(checkTexts({AppEntryRole.androidManifestFile: manifest})),
+        [
+          equals('$path has the activity .MainActivity more than once.'),
+          equals('$path has the service com.example.SyncService more than '
+              'once.'),
+          equals('$path has the receiver com.example.AlarmReceiver more than '
+              'once.'),
+          equals('$path has the provider com.example.FilesProvider more than '
+              'once.'),
+        ],
+      );
+      expect(
+        checkTexts({AppEntryRole.androidManifestFile: manifest}).first.hint,
+        'One module declares a component, and none declares one that the '
+        'template of the app entry role has, such as its main activity.',
+      );
+    });
+
+    test(
+        'resolve the name of a component as Android does, against the '
+        'namespace of the app', () {
+      String component(String element, String name, {String quote = '"'}) =>
+          '        <$element android:name=$quote$name$quote '
+          'android:exported="false" />\n';
+      final manifest = _manifest.replaceFirst(
+        '    </application>',
+        '${component('receiver', '.Receiver')}'
+            '${component('receiver', 'com.example.app.Receiver')}'
+            // A module's main activity next to that of the provider.
+            '${component('activity', 'com.example.app.MainActivity')}'
+            // A name without a dot is relative too.
+            '${component('service', 'Sync')}'
+            '${component('service', 'com.example.app.Sync')}'
+            '${component('activity-alias', '.Launcher')}'
+            "${component('activity-alias', '.Launcher', quote: "'")}"
+            // Another package keeps its name.
+            '${component('provider', 'com.example.other.Files')}'
+            '${component('provider', 'com.example.app.Files')}'
+            '    </application>',
+      );
+      const path = 'android/app/src/main/AndroidManifest.xml';
+      const appGradle = 'android {\n    namespace = "com.example.app"\n}\n';
+
+      expect(
+        messages(
+          checkTexts({
+            AppEntryRole.androidManifestFile: manifest,
+            AppEntryRole.gradleAppFile: appGradle,
+          }),
+        ),
+        [
+          equals('$path has the activity com.example.app.MainActivity more '
+              'than once.'),
+          equals('$path has the activity-alias com.example.app.Launcher more '
+              'than once.'),
+          equals('$path has the service com.example.app.Sync more than once.'),
+          equals('$path has the receiver com.example.app.Receiver more than '
+              'once.'),
+        ],
+      );
+      // Without the namespace of the app, a name is taken as it is written.
+      expect(
+        messages(checkTexts({AppEntryRole.androidManifestFile: manifest})),
+        [
+          equals('$path has the activity-alias .Launcher more than once.'),
+        ],
+      );
+    });
+
     test('tell the meta-data of an activity from those of the application', () {
       final manifest = _manifest.replaceFirst(
         '        </activity>',
@@ -2501,12 +2726,18 @@ Future<void> main() async {
               '<dict>\n{{{smf_app_entry__info_plist}}}\n</dict>\n',
           AppEntryRole.iosEntitlementsFile:
               '<dict>\n{{{smf_app_entry__ios_entitlements}}}\n</dict>\n',
+          AppEntryRole.appDelegateFile: _appDelegateTemplate,
           AppEntryRole.gradleSettingsFile:
               'plugins {\n{{{smf_app_entry__gradle_settings_plugins}}}\n}\n',
           AppEntryRole.gradleAppFile: 'plugins {\n'
               '{{{smf_app_entry__gradle_app_plugins}}}\n}\n\n'
+              'android {\n    compileOptions {\n'
+              '{{{smf_app_entry__android_core_library_desugaring_enabled}}}\n'
+              '    }\n}\n\n'
               'dependencies {\n'
-              '{{{smf_app_entry__gradle_app_dependencies}}}\n}\n',
+              '{{{smf_app_entry__gradle_app_dependencies}}}\n'
+              '{{{smf_app_entry__android_core_library_desugaring_library}}}\n'
+              '}\n',
           AppEntryRole.readmeFile: '# {{app_name}}\n\nAn app.\n'
               '{{{smf_app_entry__readme_sections}}}\n',
         }),
@@ -2742,8 +2973,22 @@ Future<void> main() async {
             '<dict>\n{{{smf_app_entry__ios_entitlements}}}\n</dict>\n',
         AppEntryRole.iosEntitlementsFile:
             '<dict>{{{smf_app_entry__ios_entitlements}}}</dict>\n',
+        'ios/Runner/SceneDelegate.swift':
+            'class SceneDelegate: FlutterSceneDelegate {\n'
+                '{{{smf_app_entry__ios_app_delegate_launch}}}\n}\n',
+        'android/app/src/debug/AndroidManifest.xml': '<application>\n'
+            '{{{smf_app_entry__android_manifest_application_components}}}\n'
+            '</application>\n',
         AppEntryRole.readmeFile:
             '# {{app_name}}\n\nAn app. {{{smf_app_entry__readme_sections}}}\n',
+        // Each place of the desugaring renders lines of the Gradle file of
+        // the app: the switch in compileOptions and the library in the
+        // dependencies.
+        AppEntryRole.gradleSettingsFile:
+            '{{{smf_app_entry__android_core_library_desugaring_enabled}}}\n',
+        AppEntryRole.gradleAppFile: 'dependencies {\n'
+            '    {{{smf_app_entry__android_core_library_desugaring_library}}}\n'
+            '}\n',
       });
 
       expect(issues.map((issue) => issue.message), [
@@ -2752,6 +2997,12 @@ Future<void> main() async {
           'stand alone at the start of a line of '
           'android/app/src/main/AndroidManifest.xml, because its '
           'contributions render as complete lines.',
+        ),
+        equals(
+          'The tag '
+          '{{{smf_app_entry__android_manifest_application_components}}} is in '
+          'android/app/src/debug/AndroidManifest.xml, but its lines belong in '
+          'android/app/src/main/AndroidManifest.xml.',
         ),
         equals(
           'The tag {{{smf_app_entry__info_plist}}} is in ios/Podfile, but its '
@@ -2768,11 +3019,184 @@ Future<void> main() async {
           'contributions render as complete lines.',
         ),
         equals(
+          'The tag {{{smf_app_entry__ios_app_delegate_launch}}} is in '
+          'ios/Runner/SceneDelegate.swift, but its lines belong in '
+          'ios/Runner/AppDelegate.swift.',
+        ),
+        equals(
+          'The tag '
+          '{{{smf_app_entry__android_core_library_desugaring_enabled}}} is in '
+          'android/settings.gradle.kts, but its lines belong in '
+          'android/app/build.gradle.kts.',
+        ),
+        equals(
+          'The tag '
+          '{{{smf_app_entry__android_core_library_desugaring_library}}} must '
+          'stand alone at the start of a line of android/app/build.gradle.kts, '
+          'because its contributions render as complete lines.',
+        ),
+        equals(
           'The tag {{{smf_app_entry__readme_sections}}} must stand alone at '
           'the start of a line of README.md, because its contributions render '
           'as complete lines.',
         ),
       ]);
+    });
+
+    test(
+        'the code at the launch of the iOS app runs in '
+        'application(_:didFinishLaunchingWithOptions:), before Flutter takes '
+        'the launch', () {
+      const tag = '{{{smf_app_entry__ios_app_delegate_launch}}}';
+      const path = AppEntryRole.appDelegateFile;
+      const method = 'application(_:didFinishLaunchingWithOptions:)';
+      List<SmfIssue> issues(String template) => checkModule({path: template});
+      List<String> problems(String template) =>
+          [for (final issue in issues(template)) issue.message];
+      const notInBody = 'The tag $tag is in $path, but not in the body of '
+          '$method, where the code of the modules runs before the launch of '
+          'the app finishes.';
+      const call = 'super.application(_:didFinishLaunchingWithOptions:)';
+      const notFirst = 'The tag $tag is in the body of $method in $path, but '
+          'not before its call of $call, which hands the launch of the app to '
+          'Flutter: the code of the modules runs before it.';
+      const noCall = 'The tag $tag is in the body of $method in $path, which '
+          'has no call of $call: the method hands the launch of the app to '
+          'Flutter with that call, after the code of the modules.';
+      String moved(String to) =>
+          _appDelegateTemplate.replaceFirst('$tag\n', '').replaceFirst(
+                to,
+                '$tag\n$to',
+              );
+
+      expect(problems(_appDelegateTemplate), isEmpty);
+      // Braces in the comments and strings of the method do not end it.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            tag,
+            '    // A } of a comment.\n'
+            '    print("A } of a string")\n'
+            '$tag',
+          ),
+        ),
+        isEmpty,
+      );
+      // A call of super in a comment or a string before the tag is no call,
+      // and a space before the parenthesis of the call is.
+      expect(
+        problems(
+          _appDelegateTemplate
+              .replaceFirst(
+                'super.application(application',
+                'super.application (application',
+              )
+              .replaceFirst(
+                tag,
+                '    // super.application(application, '
+                'didFinishLaunchingWithOptions: launchOptions)\n'
+                '    print("super.application(")\n'
+                '$tag',
+              ),
+        ),
+        isEmpty,
+      );
+      // In the method that registers the plugins, which runs once the scene
+      // of the app connects: too late for a tap that launched the app.
+      expect(problems(moved('    GeneratedPluginRegistrant')), [notInBody]);
+      // In another method that the launch calls, or in no method at all.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            'didFinishLaunchingWithOptions launchOptions',
+            'willFinishLaunchingWithOptions launchOptions',
+          ),
+        ),
+        [notInBody],
+      );
+      expect(
+        problems('import UIKit\n\nclass AppDelegate: FlutterAppDelegate {\n'
+            '$tag\n}\n'),
+        [notInBody],
+      );
+      // After Flutter took the launch, or in a method that never hands it
+      // over.
+      expect(problems(moved('  }\n\n  func didInitialize')), [notFirst]);
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            'return super.application(application, '
+                'didFinishLaunchingWithOptions: launchOptions)',
+            'return true',
+          ),
+        ),
+        [noCall],
+      );
+      final issue = issues(moved('    GeneratedPluginRegistrant')).single;
+      expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
+      expect(issue.path, path);
+
+      // An app delegate without the tag: the rule of the lines of the
+      // native files reports a tag in another file.
+      expect(problems('import UIKit\n'), isEmpty);
+    });
+
+    test(
+        'the tags of the Android manifest are among the children of the '
+        'element that their contributions belong to', () {
+      const path = AppEntryRole.androidManifestFile;
+      const permissions = '{{{smf_app_entry__android_manifest_permissions}}}';
+      const meta = '{{{smf_app_entry__android_manifest_application_meta}}}';
+      const components =
+          '{{{smf_app_entry__android_manifest_application_components}}}';
+      const filters = '{{{smf_app_entry__main_activity_intent_filters}}}';
+      List<String> problems(String template) => [
+            for (final issue in checkModule({path: template})) issue.message,
+          ];
+      String notIn(String tag, String parent) =>
+          'The tag $tag is in $path, but not among the children of '
+          '<$parent>, where its contributions belong.';
+
+      // A comment with an element does not open it.
+      expect(
+        problems(
+          _manifestTemplate.replaceFirst(
+            '    <application>',
+            '    <!-- <application> <activity> -->\n    <application>',
+          ),
+        ),
+        isEmpty,
+      );
+      // Each of the four in the wrong element: the components after the
+      // application, which the Android build refuses.
+      expect(
+        problems('''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="{{app_name.titleCase()}}">
+$permissions
+        <activity android:name=".MainActivity">
+$meta
+        </activity>
+$filters
+    </application>
+$components
+</manifest>
+'''),
+        [
+          equals(notIn(permissions, 'manifest')),
+          equals(notIn(meta, 'application')),
+          equals(notIn(components, 'application')),
+          equals(notIn(filters, 'activity')),
+        ],
+      );
+      // Outside every element.
+      expect(
+        problems('</manifest>\n$permissions\n'),
+        [equals(notIn(permissions, 'manifest'))],
+      );
+      final issue = checkModule({path: '$components\n'}).single;
+      expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
+      expect(issue.path, path);
     });
 
     test('the Gradle sockets refuse the plugins every app declares', () {
@@ -3052,6 +3476,28 @@ const _manifest = r'''
 </manifest>
 ''';
 
+/// The app delegate of a provider, that of `flutter create` 3.44 with the
+/// tag of the code that runs before the launch of the app finishes.
+const _appDelegateTemplate = '''
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+{{{smf_app_entry__ios_app_delegate_launch}}}
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
+''';
+
 /// The manifest of a provider, with the tags of its sockets.
 const _manifestTemplate = '''
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -3061,6 +3507,7 @@ const _manifestTemplate = '''
 {{{smf_app_entry__main_activity_intent_filters}}}
         </activity>
 {{{smf_app_entry__android_manifest_application_meta}}}
+{{{smf_app_entry__android_manifest_application_components}}}
     </application>
 </manifest>
 ''';

@@ -696,6 +696,42 @@ final class BrokenModule extends SmfModule {
   /// The file of the fixture sign-in.
   static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
 
+  /// The fixture notifications whose function forgets the notifications
+  /// that are scheduled each time it opens them, as a provider does that
+  /// keeps them only in memory: the next start of the app has none of them,
+  /// and the system never shows them.
+  static const notificationsForgettingSchedules = BrokenModule._(
+    FakeNotificationsModule(),
+    ModuleId('broken_notifications_forget_schedules'),
+    'Notifications that forget what was scheduled at each start (fixture)',
+    'lib/core/fixture_notifications/fixture_notifications.dart',
+    [
+      (
+        '  await _answer();\n  return FixtureNotifications._();\n',
+        '  await _answer();\n  _scheduled.clear();\n'
+            '  return FixtureNotifications._();\n',
+      ),
+    ],
+  );
+
+  /// The fixture push messages whose function drops the address of the
+  /// device each time it opens them, as a provider does that deletes the
+  /// address at each start: the device registers anew and gets a new
+  /// address a while after each start, so the backend of the app no longer
+  /// reaches it at the one that it kept.
+  static const pushRegisteringAtEachStart = BrokenModule._(
+    FakePushModule(),
+    ModuleId('broken_push_new_address'),
+    'Push messages with a new address at each start (fixture)',
+    'lib/core/fixture_push/fixture_push.dart',
+    [
+      (
+        '  await _answer();\n  if (_address == null)',
+        '  await _answer();\n  _address = null;\n  if (_address == null)',
+      ),
+    ],
+  );
+
   /// The module with the bug.
   final SmfModule of;
 

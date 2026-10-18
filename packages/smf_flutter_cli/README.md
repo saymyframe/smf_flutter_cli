@@ -72,9 +72,11 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`get_it`](https://doc.saymyframe.com/modules/get-it) | Dependency injection: the services of the modules, registered in get_it. |
 | [`event_bus`](https://doc.saymyframe.com/modules/event-bus) | Events between parts of the app that do not know each other, with event_bus. |
 | [`shared_preferences`](https://doc.saymyframe.com/modules/shared-preferences) | The settings of the app that are no secret, such as the theme mode, remembered between its launches with shared_preferences. |
+| [`local_notifications`](https://doc.saymyframe.com/modules/local-notifications) | Notifications with flutter_local_notifications: a notification now or at about a time to come, the permission to show them, and the taps on them. |
 | [`firebase_core`](https://doc.saymyframe.com/modules/firebase-core) | Firebase, set up with `flutterfire configure` after generation. |
 | [`firebase_crashlytics`](https://doc.saymyframe.com/modules/firebase-crashlytics) | Crash reporting with Firebase Crashlytics. |
 | [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |
+| [`firebase_messaging`](https://doc.saymyframe.com/modules/firebase-messaging) | Push messages with Firebase Cloud Messaging: the address of the device for a backend, the messages that arrive and the taps on them. |
 | [`firebase_auth`](https://doc.saymyframe.com/modules/firebase-auth) | Sign-in with Firebase Authentication: an email address and a password, or an anonymous user. The sign-in methods are enabled in the Firebase project after generation. |
 | [`google_sign_in`](https://doc.saymyframe.com/modules/google-sign-in) | Google sign-in on Android and iOS, a way to sign in next to email for the provider of sign-in, such as `firebase_auth`. |
 | [`apple_sign_in`](https://doc.saymyframe.com/modules/apple-sign-in) | Sign in with Apple on iOS, a way to sign in next to email for the provider of sign-in, such as `firebase_auth`. |
