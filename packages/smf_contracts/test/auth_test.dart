@@ -3553,7 +3553,6 @@ void main() {
             'AppSessionController.signInWith',
             'AppSessionController.deleteAccount',
             'AccountSession.issuers',
-            'AccountSession.email',
           ],
           AuthRole.serviceFile: [
             'AuthService',
