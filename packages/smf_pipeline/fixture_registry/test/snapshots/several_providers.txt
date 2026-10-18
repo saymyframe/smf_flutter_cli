@@ -10402,8 +10402,16 @@ class _DeleteAccountSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        // As a page, the sheet scrolls under what covers the bottom of the
+        // screen, such as the bar of the home gesture, and ends above it.
+        padding: EdgeInsets.fromLTRB(
+          24,
+          0,
+          24,
+          16 + MediaQuery.paddingOf(context).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -10833,10 +10841,10 @@ const _cellGap = 8.0;
 /// other, such as the fields and the buttons of a form.
 ///
 /// The page scrolls when it is too small for them, as with the keyboard
-/// open or a large text size, and is no wider than a phone. Its parts rise
-/// in one after another, once, and are there at once in an app that asks
-/// for less motion. Over another page, it has an app bar with the button
-/// that leads back.
+/// open or a large text size, under what covers the bottom of the screen
+/// too, and is no wider than a phone. Its parts rise in one after another,
+/// once, and are there at once in an app that asks for less motion. Over
+/// another page, it has an app bar with the button that leads back.
 class AuthPage extends StatefulWidget {
   /// Creates the page.
   const AuthPage({
@@ -10906,9 +10914,19 @@ class _AuthPageState extends State<AuthPage>
     return Scaffold(
       appBar: back ? AppBar() : null,
       body: SafeArea(
+        bottom: false,
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(24, back ? 8 : 32, 24, 32),
+          // The page scrolls under what covers the bottom of the screen,
+          // such as the bar of the home gesture, and ends above it. While
+          // the keyboard is open, it covers that bar, and the page ends
+          // above the keyboard.
+          padding: EdgeInsets.fromLTRB(
+            24,
+            back ? 8 : 32,
+            24,
+            32 + MediaQuery.paddingOf(context).bottom,
+          ),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
