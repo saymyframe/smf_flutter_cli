@@ -7,10 +7,11 @@ body:
     id: preflight
     attributes:
       label: Preflight
+      description: Questions go to [Q&A in Discussions](https://github.com/saymyframe/smf_flutter_cli/discussions/categories/q-a).
       options:
         - label: I searched open and closed issues and found no duplicate.
           required: true
-        - label: This is not a question. Questions go to [Q&A in Discussions](https://github.com/saymyframe/smf_flutter_cli/discussions/categories/q-a).
+        - label: This is not a question.
           required: true
   - type: dropdown
     id: kind
