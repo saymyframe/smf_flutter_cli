@@ -67,6 +67,11 @@ const appEntryRole = AppEntryRole._();
 /// app, so `flutter test` has a test to run in an app whose modules bring
 /// none.
 ///
+/// In an app with steps of the setup that its developer does by hand (see
+/// [ManualStep]), the template lists them in the section [setupHeading] of
+/// [readmeFile], the first of its sections, and tells coding agents in the
+/// note of the role that only a person does them.
+///
 /// The keyed sockets of the native files and of the README,
 /// [mainActivityIntentFilters], [androidManifestApplicationComponents],
 /// [iosAppDelegateLaunch] and both places of [androidCoreLibraryDesugaring]
@@ -119,6 +124,18 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
+
+  /// The heading of the section of [readmeFile] in which the template of
+  /// the role lists the steps of the setup that the developer of the app
+  /// does by hand, since no command can do them (see [ManualStep]), with
+  /// the link to their guide when the run has one (see
+  /// [RoleHookInput.manualSetup]).
+  ///
+  /// Only an app with such steps has the section, which comes before the
+  /// other sections of [readmeSections]. No other contributor writes it:
+  /// a step by hand is a [ManualStep] of its contributor, which the section
+  /// lists.
+  static const setupHeading = 'Finish the setup';
 
   /// The path of the guide for coding agents that work on the app; see
   /// [agentSections].
@@ -494,9 +511,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// in Markdown, such as how to set up a service that the app uses.
   ///
   /// They follow the description of the app as `## <heading>` sections, in
-  /// the order of the contributions (see [SocketContribution]). A heading is
-  /// one line without spaces around it, a section has text, and two
-  /// different texts under one heading conflict. Without sections, the
+  /// the order of the contributions (see [SocketContribution]), but for the
+  /// section [setupHeading] of the steps by hand, which comes first. A
+  /// heading is one line without spaces around it, a section has text, and
+  /// two different texts under one heading conflict. Only the template of
+  /// the role contributes the section [setupHeading]. Without sections, the
   /// README is that of the provider's template.
   static const readmeSections = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,

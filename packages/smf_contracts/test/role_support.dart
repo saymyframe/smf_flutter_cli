@@ -18,12 +18,14 @@ RoleData<Object> dataOf<D extends Object>(
     role.data(value).withOrigin(ModuleOrigin(ModuleId(module)));
 
 /// The input of the hooks of [role] in an app with [data], where the roles
-/// in [present] and [role] itself are present.
+/// in [present] and [role] itself are present, and whose steps by hand are
+/// [manualSetup], which only a role open to all modules gets.
 RoleHookInput<D> inputOf<D extends Object>(
   Role<D> role, {
   List<RoleData<Object>> data = const [],
   Set<Role> present = const {},
   Object? choice,
+  ManualSetup manualSetup = ManualSetup.none,
 }) =>
     role.hookInput(
       RoleHookRequest(
@@ -31,6 +33,7 @@ RoleHookInput<D> inputOf<D extends Object>(
         presentRoles: {role, ...present},
         context: testContext,
         choices: {role: choice},
+        manualSetup: manualSetup,
       ),
     );
 
@@ -108,20 +111,28 @@ final class RenderedTemplate {
 /// the files that hold the sockets' tags, as are the imports of the
 /// fragment variables to the files that read them. A contribution of the
 /// template applies only when the roles of its [Contribution.when] are in
-/// the app.
+/// the app. The hooks get the steps by hand of [manualSetup] (see
+/// [inputOf]).
 Future<RenderedTemplate> renderTemplate<D extends Object>(
   Role<D> role, {
   List<RoleData<Object>> data = const [],
   Set<Role> present = const {},
   Object? choice,
   List<SocketContribution> fromModules = const [],
+  ManualSetup manualSetup = ManualSetup.none,
 }) async {
   final template = role.template!;
   final contributions = [
     for (final contribution in template.contribute(testContext))
       if (contribution.when.every({role, ...present}.contains)) contribution,
   ];
-  final input = inputOf(role, data: data, present: present, choice: choice);
+  final input = inputOf(
+    role,
+    data: data,
+    present: present,
+    choice: choice,
+    manualSetup: manualSetup,
+  );
   final output = template.render(input);
 
   final fragments = <SocketRef, List<SocketContribution>>{};

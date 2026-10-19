@@ -167,9 +167,28 @@ final class PlistMergePolicy extends MergePolicy<PlistValue> {
 }
 
 /// Keeps one text for each heading of the README, and checks that a
-/// heading is one line and that a section has text.
+/// heading is one line, that a section has text, and that only the template
+/// of the app entry role writes the section of the steps by hand.
 final class _ReadmeSectionPolicy extends MergePolicy<String> {
   const _ReadmeSectionPolicy();
+
+  @override
+  String? problemFrom(ContributionOrigin? origin, String key, String value) {
+    if (key == AppEntryRole.setupHeading &&
+        origin != null &&
+        origin != const RoleTemplateOrigin(appEntryRole)) {
+      final who = switch (origin) {
+        ModuleOrigin(:final module) => 'The module $module',
+        RoleTemplateOrigin(:final role) => 'The template of the $role',
+        PipelineOrigin() => 'The pipeline',
+      };
+      return '$who contributes the section "$key" of the README, which only '
+          'the template of the app entry role writes, from the steps of the '
+          'app that its developer does by hand. A step by hand is a '
+          'ManualStep of its contributor, which that section lists.';
+    }
+    return problemWith(key, value);
+  }
 
   @override
   String? problemWith(String key, String value) {
@@ -199,10 +218,15 @@ final class _ReadmeSectionPolicy extends MergePolicy<String> {
 
 String _renderString(String value) => value;
 
-/// Each section under its heading, after an empty line.
-String _renderReadmeSections(List<MapEntry<String, String>> entries) => entries
-    .map((entry) => '\n## ${entry.key}\n\n${entry.value.trim()}')
-    .join('\n');
+/// Each section under its heading, after an empty line: the section of the
+/// steps by hand first, then the others in the order of the contributions.
+String _renderReadmeSections(List<MapEntry<String, String>> entries) {
+  bool isSetup(MapEntry<String, String> entry) =>
+      entry.key == AppEntryRole.setupHeading;
+  return [...entries.where(isSetup), ...entries.where((e) => !isSetup(e))]
+      .map((entry) => '\n## ${entry.key}\n\n${entry.value.trim()}')
+      .join('\n');
+}
 
 String _renderAndroidPermissions(List<MapEntry<String, NoValue>> entries) =>
     entries
