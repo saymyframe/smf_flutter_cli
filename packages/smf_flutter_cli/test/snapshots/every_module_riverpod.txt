@@ -304,10 +304,14 @@ A new Flutter project.
 
 ## Finish the setup
 
-Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,firebase_messaging.apns_key) shows each one click by click:
+Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key) shows each one click by click:
 
 1. In Xcode, sign the iOS app with your paid Apple Developer team
-2. Give Firebase your Apple push key (APNs key)
+2. Turn on Google Analytics in the Firebase project, unless it is on already
+3. Turn on Sign in with Apple in Firebase Authentication
+4. Give Firebase your Sign in with Apple key, so that deleting an account works
+5. Before releasing on Google Play, give Firebase the SHA of your release keys
+6. Give Firebase your Apple push key (APNs key)
 
 ## Firebase
 
@@ -359,7 +363,9 @@ A release of the Android app is signed with another key, whose SHA-1 and SHA-256
 firebase apps:android:sha:create <appId> <sha>
 ```
 
-Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays.
+The section Finish the setup lists this among the steps that you do by hand.
+
+Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays. The section Finish the setup lists both, adding Apple and entering the key, among the steps that you do by hand.
 
 You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in the project that the app is configured for.
 

@@ -1508,13 +1508,22 @@ void main() {
       ),
     );
     expect(
-      run.lines[run.lines.length - 2],
+      run.lines[run.lines.length - 3],
       startsWith(
         'One step is left for later. Run it in the app:\n'
         '  Configuring Firebase with flutterfire (the run skips external '
         'setup, and ',
       ),
     );
+    // Google Analytics in the Firebase project, which no command turns on,
+    // after the steps that the run left for later.
+    const googleAnalytics = 'firebase_analytics.google_analytics';
+    expect(
+      run.lines[run.lines.length - 2],
+      'Finish the setup by hand in one step:\n'
+      '  https://doc.saymyframe.com/setup?steps=$googleAnalytics',
+    );
+    expect(run.infos, contains(run.lines[run.lines.length - 2]));
   });
 
   test(
@@ -2010,18 +2019,26 @@ void main() {
   });
 
   test(
-      'a run tells of the step by hand that Sign in with Apple needs after '
-      'the line of the app, with the link to its guide on the site of SMF, '
-      'and --explain lists the step with its contributor', () async {
+      'a run tells of the steps by hand that Sign in with Apple needs after '
+      'the line of the app, with the link to their guide on the site of SMF, '
+      'and --explain lists the steps with their contributors', () async {
     const options = ['--no-input', '-m', 'apple_sign_in'];
-    const link = 'https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id';
-    const step = 'app_entry.ios_app_id: In Xcode, sign the iOS app with your '
-        'paid Apple Developer team (apple_sign_in)';
+    const link = 'https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,'
+        'firebase_auth.apple_provider,firebase_auth.apple_revocation';
+    // The App ID of the entitlement of the module, and Apple in the Firebase
+    // project of the provider of the auth role.
+    const appId = 'app_entry.ios_app_id: In Xcode, sign the iOS app with '
+        'your paid Apple Developer team (apple_sign_in)';
+    const appleProvider = 'firebase_auth.apple_provider: Turn on Sign in '
+        'with Apple in Firebase Authentication (firebase_auth)';
+    const appleRevocation = 'firebase_auth.apple_revocation: Give Firebase '
+        'your Sign in with Apple key, so that deleting an account works '
+        '(firebase_auth)';
 
     final run = await _create(const {}, options: options);
 
     expect(run.code, 0, reason: run.lines.join('\n'));
-    const byHand = 'Finish the setup by hand in one step:\n  $link';
+    const byHand = 'Finish the setup by hand in 3 steps:\n  $link';
     expect(run.infos, contains(byHand));
     expect(run.warnings, isNot(contains(byHand)));
     expect(
@@ -2042,7 +2059,14 @@ void main() {
     expect(explained.code, 0, reason: explained.lines.join('\n'));
     expect(
       explained.infos,
-      containsAllInOrder(['After generation', 'By hand', '  $link', '  $step']),
+      containsAllInOrder([
+        'After generation',
+        'By hand',
+        '  $link',
+        '  $appId',
+        '  $appleProvider',
+        '  $appleRevocation',
+      ]),
     );
     expect(
       explained.files.directory('/work/my_app').existsSync(),

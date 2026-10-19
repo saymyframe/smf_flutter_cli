@@ -104,6 +104,14 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// sign in, and one that needs of the project what the script does not set
 /// up for its identity provider.
 ///
+/// What no command can do for a way to sign in of the app, the provider
+/// lists among the steps by hand of the app in its `manualSteps` hook: for
+/// one of Apple, [FirebaseAuthModule.appleProviderStep] and
+/// [FirebaseAuthModule.appleRevocationStep], since the Firebase CLI cannot
+/// enable Apple; and for one that needs the certificate of the Android app,
+/// such as one of Google, [FirebaseAuthModule.googleReleaseShaStep], since
+/// the script registers only the debug key of the machine that runs it.
+///
 /// The README of the app tells how to enable the ways to sign in, with the
 /// script and in the Firebase console, and what the script does to the
 /// project, and in an app with ways to sign in of Google and Apple what it
@@ -117,6 +125,38 @@ final class FirebaseAuthModule extends SmfModule {
 
   /// The id of the module.
   static const id = ModuleId('firebase_auth');
+
+  /// The step by hand of an app with a way to sign in of Apple, in which the
+  /// developer adds Apple to the sign-in methods of the Firebase project in
+  /// the Firebase console: the Firebase CLI, with which the script of the
+  /// app enables the other methods, cannot enable it.
+  static const appleProviderStep = ManualStep(
+    ManualStepId(id, 'apple_provider'),
+    'Turn on Sign in with Apple in Firebase Authentication',
+  );
+
+  /// The step by hand of an app with a way to sign in of Apple, in which the
+  /// developer enters the key for Sign in with Apple of the team in the
+  /// settings of the Apple provider of the Firebase project. Firebase
+  /// revokes the tokens of Apple with it when an account is deleted, and
+  /// the deletion fails without it.
+  static const appleRevocationStep = ManualStep(
+    ManualStepId(id, 'apple_revocation'),
+    'Give Firebase your Sign in with Apple key, so that deleting an account '
+    'works',
+  );
+
+  /// The step by hand of an app with a way to sign in that needs the
+  /// certificate of the Android app, such as one of Google, in which the
+  /// developer gives the Android app in the Firebase project the SHA of the
+  /// keys that sign a release before the first release on Google Play: the
+  /// upload key and the app signing key of Google Play. The script of the
+  /// app registers only the debug key of the machine that runs it.
+  static const googleReleaseShaStep = ManualStep(
+    ManualStepId(id, 'google_release_sha'),
+    'Before releasing on Google Play, give Firebase the SHA of your release '
+    'keys',
+  );
 
   static const _file = ImportRef.app('core/auth/firebase_auth_service.dart');
 
@@ -193,9 +233,10 @@ final class FirebaseAuthModule extends SmfModule {
 /// implement the role, its `validate` hook reports each way to sign in with
 /// an identity provider that a module gives the role whose credential the
 /// service of the module does not take, or that needs of the Firebase
-/// project what the script does not set up, and its `render` hook gives
-/// the script the ways to sign in of the app and writes the section of the
-/// module in the README of the app.
+/// project what the script does not set up, its `manualSteps` hook lists
+/// what the developer of the app sets up by hand for the ways to sign in,
+/// and its `render` hook gives the script the ways to sign in of the app
+/// and writes the section of the module in the README of the app.
 final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
   const _FirebaseAuthProvider();
 
@@ -248,6 +289,27 @@ final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
       hint: hint,
       origin: owner,
     );
+  }
+
+  /// The steps by hand of the ways to sign in of the app, in this order:
+  /// [FirebaseAuthModule.appleProviderStep] and
+  /// [FirebaseAuthModule.appleRevocationStep] for a way to sign in of
+  /// Apple, which the Firebase CLI cannot enable, and
+  /// [FirebaseAuthModule.googleReleaseShaStep] for one that needs the
+  /// certificate of the Android app, of which the script registers only the
+  /// debug key. An app without such ways to sign in has none.
+  @override
+  List<ManualStep> manualSteps(RoleHookInput<AuthData> input) {
+    final methods = firebaseMethodsOf(authRole.methodsIn(input));
+    return [
+      if (methods.containsKey('apple.com')) ...const [
+        FirebaseAuthModule.appleProviderStep,
+        FirebaseAuthModule.appleRevocationStep,
+      ],
+      if (methods.values
+          .any((needs) => needs.contains(SignInNeed.androidCertificate)))
+        FirebaseAuthModule.googleReleaseShaStep,
+    ];
   }
 
   /// The ways to sign in of the app for the script, the section of the

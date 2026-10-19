@@ -24,7 +24,8 @@ const _signInMethods =
 /// [firebaseMethodsOf], it also tells what the script sets up in the
 /// project and in the app for each, by what they need (see
 /// [enableSignInScript]), what it leaves to the developer of the app, such
-/// as the SHA of the key of a release, and how Apple is enabled.
+/// as the SHA of the key of a release, and how Apple is enabled, each with
+/// a word on the section of the steps by hand, which lists them.
 ///
 /// It names the pages of the Firebase console as the documentation of
 /// Firebase does, with the links that the documentation has for them.
@@ -62,7 +63,10 @@ When an anonymous user signs in to an account that exists already, the anonymous
 
 /// What the README tells of the way to sign in of Google, if [google], and
 /// of what the script sets up in the project and in the app for [needs],
-/// which it does only for the project that `firebase.json` names.
+/// which it does only for the project that `firebase.json` names, and of
+/// the keys of a release for the certificate of the Android app, which the
+/// section of the steps by hand lists (see
+/// `FirebaseAuthModule.googleReleaseShaStep`).
 String _googleOf(bool google, Set<SignInNeed> needs) {
   const brand = '''
 
@@ -108,6 +112,8 @@ A release of the Android app is signed with another key, whose SHA-1 and SHA-256
 ```bash
 firebase apps:android:sha:create <appId> <sha>
 ```
+
+The section ${AppEntryRole.setupHeading} lists this among the steps that you do by hand.
 ''';
   return [
     if (google) brand,
@@ -117,8 +123,11 @@ firebase apps:android:sha:create <appId> <sha>
 }
 
 /// What the README tells of the way to sign in of Apple, which no command
-/// of the Firebase CLI enables.
+/// of the Firebase CLI enables, and of the key with which Firebase revokes
+/// the tokens of Apple; the section of the steps by hand lists both (see
+/// `FirebaseAuthModule.appleProviderStep` and
+/// `FirebaseAuthModule.appleRevocationStep`).
 const _apple = '''
 
-Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method]($_signInMethods). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays.
+Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method]($_signInMethods). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays. The section ${AppEntryRole.setupHeading} lists both, adding Apple and entering the key, among the steps that you do by hand.
 ''';

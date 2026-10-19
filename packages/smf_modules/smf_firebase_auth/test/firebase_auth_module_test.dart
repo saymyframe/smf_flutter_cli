@@ -2490,6 +2490,80 @@ void main() {
     });
 
     test(
+        'lists, of the module, the steps by hand of Apple for a way to sign '
+        'in of Apple, and that of the keys of a release for one that needs '
+        'the certificate of the Android app, in that order', () async {
+      const module = ModuleOrigin(FirebaseAuthModule.id);
+      // Each step with its only contributor.
+      List<(ManualStep, ContributionOrigin)> stepsOf(ContractResult result) => [
+            for (final planned in result.manualSteps)
+              (planned.step, planned.contributors.single),
+          ];
+      final apple = await withWays([WayOfTest.apple]);
+      final google = await withWays([WayOfTest.google]);
+      final googleAlone = await withWays([WayOfTest.googleAlone]);
+      final without = await _resultOf(const [FirebaseAuthModule.id]);
+
+      expect(
+        [
+          for (final step in const [
+            FirebaseAuthModule.appleProviderStep,
+            FirebaseAuthModule.appleRevocationStep,
+            FirebaseAuthModule.googleReleaseShaStep,
+          ])
+            (step.id.wire, step.title),
+        ],
+        [
+          (
+            'firebase_auth.apple_provider',
+            'Turn on Sign in with Apple in Firebase Authentication',
+          ),
+          (
+            'firebase_auth.apple_revocation',
+            'Give Firebase your Sign in with Apple key, so that deleting an '
+                'account works',
+          ),
+          (
+            'firebase_auth.google_release_sha',
+            'Before releasing on Google Play, give Firebase the SHA of your '
+                'release keys',
+          ),
+        ],
+      );
+      expect(stepsOf(both), [
+        (FirebaseAuthModule.appleProviderStep, module),
+        (FirebaseAuthModule.appleRevocationStep, module),
+        (FirebaseAuthModule.googleReleaseShaStep, module),
+      ]);
+      expect(stepsOf(apple), [
+        (FirebaseAuthModule.appleProviderStep, module),
+        (FirebaseAuthModule.appleRevocationStep, module),
+      ]);
+      expect(stepsOf(google), [
+        (FirebaseAuthModule.googleReleaseShaStep, module),
+      ]);
+      // Google alone needs nothing of the project that the script does not
+      // set up, and the app without ways to sign in has nothing to do by
+      // hand for them.
+      expect(googleAlone.manualSteps, isEmpty);
+      expect(without.manualSteps, isEmpty);
+      // The section of the steps by hand opens the README and lists them.
+      final readme = withBoth.files[AppEntryRole.readmeFile]!.text;
+      expect(
+        RegExp(r'^## (.+)$', multiLine: true).firstMatch(readme)?[1],
+        AppEntryRole.setupHeading,
+      );
+      expect(
+        readme,
+        contains(
+          '\n1. ${FirebaseAuthModule.appleProviderStep.title}\n'
+          '2. ${FirebaseAuthModule.appleRevocationStep.title}\n'
+          '3. ${FirebaseAuthModule.googleReleaseShaStep.title}\n',
+        ),
+      );
+    });
+
+    test(
         'tells in its section of the README what the script does for Google '
         'and what is left for a release, and how Apple is enabled', () {
       final readme = withBoth.files[AppEntryRole.readmeFile]!.text;
@@ -2538,7 +2612,8 @@ void main() {
           contains('under Test and release > App integrity in the Play '
               'Console.'),
           contains('```bash\nfirebase apps:android:sha:create <appId> <sha>\n'
-              '```\n'),
+              '```\n\nThe section ${AppEntryRole.setupHeading} lists this '
+              'among the steps that you do by hand.\n'),
           contains('\n\nApple is enabled in the Firebase console, which the '
               'Firebase CLI cannot do:'),
           contains('(App Store Review Guideline 5.1.1(v))'),
@@ -2550,7 +2625,9 @@ void main() {
               'your Apple team ID, and the Key ID and the private key of a key '
               'for Sign in with Apple.'),
           contains('never put it into the app or its repository.'),
-          contains('fails with `notConfigured`, and the account stays.'),
+          contains('fails with `notConfigured`, and the account stays. The '
+              'section ${AppEntryRole.setupHeading} lists both, adding Apple '
+              'and entering the key, among the steps that you do by hand.\n'),
           // Each block is a paragraph of its own.
           isNot(contains('\n\n\n')),
         ]),
