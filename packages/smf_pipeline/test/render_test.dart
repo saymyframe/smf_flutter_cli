@@ -64,6 +64,7 @@ RenderedApp _render(
     context: testContext,
     choices: choices,
     pubspec: validation.pubspec,
+    manualSteps: validation.manualSteps,
   );
 }
 
@@ -452,6 +453,54 @@ flutter:
     ]);
     // A socket that got nothing has no order.
     expect(app.socketOrders, isNot(contains(AppEntryRole.bootstrapEarly)));
+  });
+
+  test(
+      'the render hooks of a role open to all modules get the steps by hand '
+      'that stage 5 planned, and those of no other role', () {
+    final open = _Template(const RoleOutput(), const []);
+    final everyone = TestRole<String>(
+      'everyone',
+      openToAllModules: true,
+      template: open,
+    );
+    final rendering = _Rendering();
+    const step = ManualStep(
+      ManualStepId(ModuleId('store'), 'apns_key'),
+      'Give Firebase your Apple push key (APNs key)',
+    );
+    final all = TestModule(
+      'all',
+      providers: [_Provider(everyone, const RoleOutput())],
+    );
+
+    final app = _render([
+      entry,
+      all,
+      TestModule(
+        'store',
+        providers: [rendering.provider],
+        contributions: const [step],
+      ),
+    ]);
+
+    final setup = open.inputs.single.manualSetup;
+    expect(setup.steps, [step]);
+    expect(setup.link, isNull);
+    // The id of a step names a module that the role does not know.
+    final ofShelf = (rendering.role.template! as _Template).inputs.single;
+    expect(ofShelf.manualSetup, same(ManualSetup.none));
+    expect(app.manualSteps.single.step, same(step));
+    expect(
+      app.manualSteps.single.contributors,
+      const [ModuleOrigin(ModuleId('store'))],
+    );
+
+    // An app without steps has none.
+    open.inputs.clear();
+    final without = _render([entry, all]);
+    expect(open.inputs.single.manualSetup, same(ManualSetup.none));
+    expect(without.manualSteps, isEmpty);
   });
 
   test('render hooks follow the rules of their owners', () {

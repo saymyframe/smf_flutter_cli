@@ -12,6 +12,7 @@ final class TestRole<D extends Object> extends Role<D> {
     this.template,
     this.moduleRules = const [],
     this.structuralRules = const [],
+    this.openToAllModules = false,
   })  : _requires = requires,
         _uses = uses;
 
@@ -23,6 +24,9 @@ final class TestRole<D extends Object> extends Role<D> {
 
   @override
   final RoleCardinality cardinality;
+
+  @override
+  final bool openToAllModules;
 
   final Set<Role> _requires;
   final Set<Role> _uses;

@@ -7,6 +7,7 @@ import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/explain.dart';
 import 'package:smf_pipeline/src/host.dart';
 import 'package:smf_pipeline/src/identity.dart';
+import 'package:smf_pipeline/src/manual_steps.dart';
 import 'package:smf_pipeline/src/move.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/postgen.dart';
@@ -43,6 +44,7 @@ final class GenerationPlan {
     required this.collection,
     required this.socketOrders,
     required this.postGenOrder,
+    required this.manualSteps,
     required this.pubspec,
     required this.preflight,
     required this.choices,
@@ -77,6 +79,10 @@ final class GenerationPlan {
   /// The post-generation steps that apply, in the order they run.
   final ContributionOrder postGenOrder;
 
+  /// The steps of the app that its developer does by hand, which stage 5
+  /// planned before the roles chose (see [ValidationResult.manualSteps]).
+  final List<PlannedManualStep> manualSteps;
+
   /// The merged `pubspec.yaml`.
   final MergedPubspec pubspec;
 
@@ -102,6 +108,7 @@ final class GeneratedApp {
     required this.path,
     this.leftOut = const [],
     this.skippedSteps = const [],
+    this.manualSteps = const [],
   });
 
   /// The package name of the app, such as `my_app`.
@@ -116,6 +123,11 @@ final class GeneratedApp {
   /// The post-generation steps that did not run, with their commands for
   /// the user to run later, and their notices.
   final List<SkippedStep> skippedSteps;
+
+  /// The steps of the setup of the app that its developer does by hand,
+  /// since no command can do them, each once and in order (see
+  /// [ManualStep]).
+  final List<ManualStep> manualSteps;
 }
 
 /// The `create` command of SMF: generates a Flutter app from the modules of
@@ -186,6 +198,7 @@ final class CreatePipeline {
         context: plan.context,
         choices: plan.choices,
         pubspec: plan.pubspec,
+        manualSteps: plan.manualSteps,
       );
     } on Object {
       rendering.fail();
@@ -249,6 +262,7 @@ final class CreatePipeline {
       path: target.path,
       leftOut: plan.leftOut,
       skippedSteps: skipped,
+      manualSteps: [for (final planned in plan.manualSteps) planned.step],
     );
   }
 }
@@ -276,7 +290,8 @@ extension CreatePlanning on CreatePipeline {
   /// 2. Identity: the names and platform identifiers of the app.
   /// 3. Resolution: the modules and roles the app needs.
   /// 4. Collection: the contributions of the modules and role templates.
-  /// 5. Validation: the rules of the model and the checks of the roles.
+  /// 5. Validation: the rules of the model and the checks of the roles, and
+  ///    the plan of the steps that the developer of the app does by hand.
   /// 6. Preflight: the machine has what generation needs.
   /// 7. Choices: what only the user can decide, such as the start screen.
   ///    Then the contributions with conditions on what the roles chose
@@ -421,6 +436,7 @@ extension CreatePlanning on CreatePipeline {
         collection: collection.decide(choices, resolution.presentRoles),
         socketOrders: validation.socketOrders,
         postGenOrder: validation.postGenOrder,
+        manualSteps: validation.manualSteps,
         pubspec: validation.pubspec,
         preflight: preflight,
         choices: choices,

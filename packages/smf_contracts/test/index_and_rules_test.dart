@@ -696,6 +696,51 @@ void main() {
     });
 
     test(
+        'gives the steps by hand of the app to the rules of a role open to '
+        'all modules, and of no other role', () {
+      const step = ManualStep(
+        ManualStepId(ModuleId('push'), 'apns_key'),
+        'Give Firebase your Apple push key (APNs key)',
+      );
+      final setup = ManualSetup(
+        steps: const [step],
+        link: Uri.parse('https://example.com/setup?steps=push.apns_key'),
+      );
+      final seen = <String, ManualSetup>{};
+      TestRole<NoDsl> spy(String id, {bool open = false}) => TestRole<NoDsl>(
+            id,
+            openToAllModules: open,
+            structuralRules: [
+              StructuralRule(
+                id: '$id.input',
+                description: 'Keeps the steps.',
+                check: (input) {
+                  seen[id] = input.roleInput.manualSetup;
+                  return const [];
+                },
+              ),
+            ],
+          );
+      final entry = spy('entry', open: true);
+      final router = spy('router');
+      final request = StructuralRuleRequest(
+        hook: RoleHookRequest(
+          data: const [],
+          presentRoles: {entry, router},
+          context: testContext,
+          manualSetup: setup,
+        ),
+        files: files,
+      );
+
+      entry.checkStructure(request);
+      router.checkStructure(request);
+
+      expect(seen['entry'], same(setup));
+      expect(seen['router'], same(ManualSetup.none));
+    });
+
+    test(
         'gives the rules what the hooks of a role of the app that requires '
         'or uses their role get, and of no other role', () {
       late StructuralRuleInput<String> seen;
@@ -860,7 +905,21 @@ void main() {
       const always = PubspecContribution.hosted('a', 'any');
       final withOther = PubspecContribution.hosted('b', 'any', when: {other});
       final dataOfSpy = RoleData<String>(spy, 'routes');
-      final dataOfOther = RoleData<String>(TestRole<String>('absent'), 'x');
+      final absent = TestRole<String>('absent');
+      final dataOfOther = RoleData<String>(absent, 'x');
+      // A step by hand of a role applies only in an app with the role, as
+      // data of a role does; a step of the module applies by its when.
+      const stepOfModule = ManualStep(
+        ManualStepId(ModuleId('home'), 'key'),
+        'Upload the key',
+      );
+      final stepOfSpy = ManualStep(ManualStepId.role(spy, 'id'), 'Sign it');
+      final stepOfOther = ManualStep(ManualStepId.role(absent, 'id'), 'No');
+      final stepWithOther = ManualStep(
+        const ManualStepId(ModuleId('home'), 'other'),
+        'Not here',
+        when: {other},
+      );
 
       spy.checkModule(
         ModuleRuleRequest(
@@ -870,12 +929,21 @@ void main() {
             context: testContext,
           ),
           module: descriptor,
-          contributions: [always, withOther, dataOfSpy, dataOfOther],
+          contributions: [
+            always,
+            withOther,
+            dataOfSpy,
+            dataOfOther,
+            stepOfModule,
+            stepOfSpy,
+            stepOfOther,
+            stepWithOther,
+          ],
         ),
       );
 
       expect(seen.module, same(descriptor));
-      expect(seen.contributions, [always, dataOfSpy]);
+      expect(seen.contributions, [always, dataOfSpy, stepOfModule, stepOfSpy]);
       expect(seen.data, isEmpty);
       expect(seen.roleInput.has(other), isFalse);
     });

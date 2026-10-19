@@ -185,7 +185,9 @@ abstract base class Role<D extends Object> {
   ///
   /// The input holds the data of this role, typed as [D], and only as much
   /// of the rest of the app as the role may see: the data and presence of
-  /// its [visibleRoles]. Data that does not apply, because its role or a
+  /// its [visibleRoles], and for a role that is [openToAllModules] the
+  /// steps by hand of the app (see [RoleHookInput.manualSetup]). Data that
+  /// does not apply, because its role or a
   /// role in its [Contribution.when] is absent, is left out. The conditions
   /// of data on what roles chose ([Contribution.whenChosen]) are the
   /// pipeline's to decide: once the roles have chosen, it leaves the data
@@ -218,6 +220,7 @@ abstract base class Role<D extends Object> {
       },
       choice: request.choices[this],
       context: request.context,
+      manualSetup: openToAllModules ? request.manualSetup : ManualSetup.none,
     );
   }
 
@@ -259,7 +262,12 @@ abstract base class Role<D extends Object> {
       contributions: List.unmodifiable([
         for (final contribution in request.contributions)
           if (contribution.when.every(applies.isPresent) &&
-              (contribution is! RoleData<Object> || applies(contribution)))
+              switch (contribution) {
+                final RoleData<Object> data => applies(data),
+                ManualStep(id: ManualStepId(:final role?)) =>
+                  applies.isPresent(role),
+                _ => true,
+              })
             contribution,
       ]),
     );
