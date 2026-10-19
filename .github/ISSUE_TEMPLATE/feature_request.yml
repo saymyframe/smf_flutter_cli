@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an idea to improve the SMF Flutter CLI repository
+description: A new module, another provider of a role, or a change to smf create
 title: "feat: <short description>"
 labels: [enhancement]
 body:
@@ -8,10 +8,24 @@ body:
     attributes:
       label: Preflight
       options:
-        - label: I searched open/closed issues and did not find a duplicate
+        - label: I searched open and closed issues and found no duplicate.
           required: true
-        - label: This is not a question
+        - label: This is not a question. Questions go to [Q&A in Discussions](https://github.com/saymyframe/smf_flutter_cli/discussions/categories/q-a).
           required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is it?
+      description: Select all that apply.
+      multiple: true
+      options:
+        - A new module, for something SMF does not generate yet
+        - Another provider of a role, such as another router, DI container or state manager
+        - A change to an existing module
+        - A change to smf create (its options, questions or output)
+        - Writing modules (smf_contracts, smf_pipeline)
+        - Documentation
+        - Something else
   - type: textarea
     id: problem
     attributes:
@@ -23,26 +37,13 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: Describe the ideal solution and how it fits this repository (CLI core, generators, bricks, prompts, tooling, or docs).
+      description: What smf create should generate or do. For a module, say what the app would get and which packages it would use.
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
-  - type: dropdown
-    id: scope
-    attributes:
-      label: Affected area (select all that apply)
-      multiple: true
-      options:
-        - CLI core
-        - Bricks / templates
-        - Generators
-        - Prompts / UI
-        - File writers
-        - Utils / Tooling
-        - Docs
   - type: textarea
     id: context
     attributes:
