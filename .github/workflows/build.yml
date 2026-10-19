@@ -87,7 +87,14 @@ jobs:
         if: ${{ always() && steps.dart.outcome == 'success' }}
         run: dart tools/test_annotations.dart
 
+      # Only in the runs of pull requests and of main. The scanner tells
+      # SonarCloud the pull request of the run of a pull request, and
+      # SonarCloud stores the scan of a run by hand on another branch as the
+      # analysis of main, whose issues would then be those of that branch
+      # until the next push to main. The run of the pull request of such a
+      # branch scans it.
       - name: SonarQube Scan
+        if: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
         uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
