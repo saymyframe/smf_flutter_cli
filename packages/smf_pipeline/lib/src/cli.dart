@@ -3,6 +3,7 @@ import 'package:args/command_runner.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/host.dart';
+import 'package:smf_pipeline/src/manual_steps.dart';
 import 'package:smf_pipeline/src/pipeline.dart';
 import 'package:smf_pipeline/src/postgen.dart';
 import 'package:smf_pipeline/src/registry.dart';
@@ -42,7 +43,10 @@ typedef SmfHostFactory = SmfHost Function({required bool verbose});
 /// command or after `create`. With [version], `--version` prints it, then
 /// runs the command, if one is given. Help is wrapped at [usageLineLength],
 /// such as the width of the terminal. [onCreated] gets every app that
-/// `create` generated, after the report of the run.
+/// `create` generated, after the report of the run. [setupLink] names the
+/// page that guides the developer through the steps by hand of an app (see
+/// [SetupLink]), which the end of the run and `--explain` give; without it,
+/// they give none.
 ///
 /// Every error is reported through the host's logger and becomes an exit
 /// code: a usage error of the command line or of a module's choice is 64, a
@@ -57,6 +61,7 @@ Future<int> runSmf(
   String? version,
   int? usageLineLength,
   void Function(GeneratedApp app)? onCreated,
+  SetupLink? setupLink,
 }) async {
   final registry = _registryOf(modules, executableName, hostFor);
   if (registry == null) return SmfExitCodes.software;
@@ -77,7 +82,13 @@ Future<int> runSmf(
     );
   }
   runner.addCommand(
-    _CreateCommand(registry, () => host, onCreated, usageLineLength),
+    _CreateCommand(
+      registry,
+      () => host,
+      onCreated,
+      usageLineLength,
+      setupLink,
+    ),
   );
 
   final ArgResults results;
@@ -188,6 +199,7 @@ final class _CreateCommand extends Command<int> {
     this._host,
     this._onCreated,
     int? usageLineLength,
+    this._setupLink,
   ) : argParser = ArgParser(usageLineLength: usageLineLength) {
     CreateOptions.addTo(argParser, _registry.roles);
     // `--verbose` is global; it is accepted after the command too.
@@ -197,6 +209,7 @@ final class _CreateCommand extends Command<int> {
   final ModuleRegistry _registry;
   final SmfHost Function() _host;
   final void Function(GeneratedApp app)? _onCreated;
+  final SetupLink? _setupLink;
 
   @override
   final ArgParser argParser;
@@ -222,8 +235,11 @@ final class _CreateCommand extends Command<int> {
     } on SmfUsageException catch (error) {
       usageException(error.message);
     }
-    final app =
-        await CreatePipeline(registry: _registry, host: host).run(request);
+    final app = await CreatePipeline(
+      registry: _registry,
+      host: host,
+      setupLink: _setupLink,
+    ).run(request);
     if (app != null) {
       _report(app, host);
       _onCreated?.call(app);
@@ -236,7 +252,9 @@ final class _CreateCommand extends Command<int> {
   /// Only what went wrong is a warning: a module that was left out, and a
   /// step that could not run or failed. The steps that were left for later,
   /// as the user or the options of the run asked, come after the line of
-  /// the app as a list; see [_leftForLater].
+  /// the app as a list; see [_leftForLater]. Then comes the link to the
+  /// guide of the steps that the developer does by hand, which asks
+  /// nothing, so every run gives it; see [_byHand].
   void _report(GeneratedApp app, SmfHost host) {
     final logger = host.logger;
     if (app.leftOut.isNotEmpty) {
@@ -262,6 +280,9 @@ final class _CreateCommand extends Command<int> {
     }
     logger.success('Created ${app.name} in ${app.path}.');
     if (later.isNotEmpty) logger.info(_leftForLater(later));
+    if (app.setupLink case final link?) {
+      logger.info(_byHand(app.manualSteps.length, link));
+    }
     logger.info(
       // After the steps, since the run does not know which of them the app
       // needs to start.
@@ -304,3 +325,10 @@ String _leftForLater(List<SkippedStep> steps) {
   }
   return lines.join('\n');
 }
+
+/// The message of the [count] steps by hand of an app, which no command can
+/// do, with [link] to their guide on a line of its own, whole, since the
+/// user opens it.
+String _byHand(int count, Uri link) =>
+    'Finish the setup by hand in ${count == 1 ? 'one step' : '$count steps'}:'
+    '\n  $link';

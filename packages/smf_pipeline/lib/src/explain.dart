@@ -26,6 +26,10 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   that continues another under it, with the systems of a step that runs
 ///   only on some, and with the notice of a step that has one (see
 ///   [PostGenStep.notice]), which a run asks the user about;
+/// - the steps that the developer of the app does by hand (see
+///   [ManualStep]), in order, each with its contributors, below the link to
+///   their guide if the front end of the pipeline names one (see
+///   [ValidationResult.setupLink]);
 /// - the state of every preflight check, with instructions for what is
 ///   missing and what a missing required check would do, and the versions
 ///   of the Flutter SDK outside the constraints of the app, with what to do
@@ -56,7 +60,8 @@ final class Explanation {
   /// The modules of the app and the roles they provide.
   final Resolution resolution;
 
-  /// The orders of the contributions and the merged pubspec.
+  /// The orders of the contributions, the merged pubspec, and the steps by
+  /// hand with their link.
   final ValidationResult validation;
 
   /// The state of the machine.
@@ -94,6 +99,7 @@ final class Explanation {
         ..._orders(),
         ..._dependencies(),
         ..._steps(),
+        ..._byHand(),
         ..._machine(),
       ];
 
@@ -189,6 +195,20 @@ final class Explanation {
     ];
     if (steps.isEmpty) return const [];
     return ['', 'After generation', ...steps];
+  }
+
+  /// The steps by hand that stage 5 planned, which the run plans before the
+  /// choices, so `--explain` has them too: the link to their guide first,
+  /// whole, then each step with its contributors.
+  List<String> _byHand() {
+    final steps = validation.manualSteps;
+    if (steps.isEmpty) return const [];
+    return [
+      '',
+      'By hand',
+      if (validation.setupLink case final link?) '  $link',
+      for (final step in steps) '  $step',
+    ];
   }
 
   List<String> _machine() => [

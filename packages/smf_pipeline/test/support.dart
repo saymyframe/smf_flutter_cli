@@ -393,6 +393,14 @@ const testContext = ModuleContext(
   ),
 );
 
+/// The link of a front end in the tests to the guide of [steps], the steps
+/// by hand of an app (see [SetupLink]): a page with the wires of the steps,
+/// in order, in its query.
+Uri guideOf(List<ManualStepId> steps) => Uri.parse(
+      'https://guide.example/setup?steps='
+      '${[for (final step in steps) step.wire].join(',')}',
+    );
+
 /// A bundle named [name] with empty files at [paths] and the [files] with
 /// their text.
 MasonBundle bundle(

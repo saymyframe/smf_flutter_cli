@@ -202,7 +202,8 @@ final class _VariableImports {
 ///
 /// 1. Runs the render hooks of the templates and providers of the present
 ///    roles, with the results of [choices], and for the roles that are open
-///    to all modules with the [manualSteps] that stage 5 planned (see
+///    to all modules with the [manualSteps] that stage 5 planned and the
+///    [setupLink] that the front end named for them (see
 ///    [RoleHookInput.manualSetup]). Their fragments follow the rules
 ///    of the contributions of their owner, and their brick variables must
 ///    not be reserved (see [isReservedVar]) or set twice for one owner. A
@@ -252,6 +253,7 @@ RenderedApp renderApp({
   required Map<Role, Object?> choices,
   required MergedPubspec pubspec,
   required List<PlannedManualStep> manualSteps,
+  Uri? setupLink,
 }) {
   final issues = <SmfIssue>[];
   final hooks = _runRenderHooks(
@@ -261,6 +263,7 @@ RenderedApp renderApp({
     context: context,
     choices: choices,
     manualSteps: manualSteps,
+    setupLink: setupLink,
     issues: issues,
   );
   _stopOnErrors(issues);
@@ -489,6 +492,7 @@ _HookOutput _runRenderHooks({
   required ModuleContext context,
   required Map<Role, Object?> choices,
   required List<PlannedManualStep> manualSteps,
+  required Uri? setupLink,
   required List<SmfIssue> issues,
 }) {
   final request = hookRequest(
@@ -498,6 +502,7 @@ _HookOutput _runRenderHooks({
     context: context,
     choices: choices,
     manualSteps: manualSteps,
+    setupLink: setupLink,
   );
   final hooks = _RenderHooks(registry, resolution, issues);
   for (final role in resolution.presentRoles) {

@@ -16,10 +16,12 @@ final class _ThrowingSteps extends RoleProvider<NoDsl> {
       throw StateError('no steps');
 }
 
-/// Validates an app of [modules], all requested, or of [resolution].
+/// Validates an app of [modules], all requested, or of [resolution], for a
+/// front end that names the guide of the steps by hand with [setupLink].
 ValidationResult _validate(
   List<SmfModule> modules, {
   Resolution? resolution,
+  SetupLink? setupLink,
 }) {
   final resolved = resolution ?? resolutionOf(modules);
   return validate(
@@ -27,6 +29,7 @@ ValidationResult _validate(
     resolution: resolved,
     collection: collect(resolved, testContext),
     context: testContext,
+    setupLink: setupLink,
   );
 }
 
@@ -624,6 +627,51 @@ void main() {
 
     test('has no steps for an app without any', () {
       expect(_validate([entry]).manualSteps, isEmpty);
+    });
+
+    test(
+        'has the link that the front end names for the steps, by their ids '
+        'in order', () {
+      final asked = <List<ManualStepId>>[];
+      Uri link(List<ManualStepId> steps) {
+        asked.add(steps);
+        return guideOf(steps);
+      }
+
+      const appId = ManualStepId.role(appEntryRole, 'ios_app_id');
+      final modules = [
+        entry,
+        TestModule(
+          'fcm',
+          contributions: [
+            _step('fcm', 'apns_key'),
+            const ManualStep(appId, 'Sign the iOS app'),
+          ],
+        ),
+      ];
+
+      final result = _validate(modules, setupLink: link);
+
+      expect(result.issues, isEmpty);
+      // The steps of roles come first, in the link too.
+      expect(asked, [
+        [appId, const ManualStepId(ModuleId('fcm'), 'apns_key')],
+      ]);
+      expect(
+        result.setupLink,
+        Uri.parse(
+          'https://guide.example/setup?steps=app_entry.ios_app_id,fcm.apns_key',
+        ),
+      );
+      // The front end cannot change the steps of the plan.
+      expect(() => asked.single.clear(), throwsUnsupportedError);
+      expect(result.manualSteps, hasLength(2));
+
+      // A front end that names no page gives the steps no link.
+      expect(_validate(modules).setupLink, isNull);
+      // An app without steps needs no guide, so the front end is not asked.
+      expect(_validate([entry], setupLink: link).setupLink, isNull);
+      expect(asked, hasLength(1));
     });
   });
 }

@@ -5,6 +5,20 @@ import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/resolver.dart';
 
+/// Names the page that guides the developer of an app through the steps of
+/// the app that are done by hand (see [ManualStep]), given the ids of the
+/// steps in their order, such as
+/// `https://example.com/setup?steps=push.ios_app_id,fcm.apns_key`
+/// for their wires (see [ManualStepId.wire]).
+///
+/// The front end of the pipeline gives it, as the CLI names a page of its
+/// site, since the pipeline knows no site. The pipeline asks for the link
+/// when it plans the steps, and only for an app with steps. The link
+/// reaches the last lines of a run, `--explain`, and the render hooks and
+/// the structural rules of the roles that are open to all modules (see
+/// [ManualSetup.link]). Without it, an app has no link to its steps.
+typedef SetupLink = Uri Function(List<ManualStepId> steps);
+
 /// A step of the app that its developer does by hand (see [ManualStep]),
 /// with every contributor that lists it.
 final class PlannedManualStep {
@@ -126,15 +140,30 @@ final class PlannedManualStep {
   );
 }
 
+/// The link that [setupLink], the front end's, names for [steps], the
+/// planned steps of an app, with their ids in order; `null` for an app
+/// without steps, which needs no guide, and without a [setupLink].
+Uri? setupLinkOf(List<PlannedManualStep> steps, SetupLink? setupLink) =>
+    steps.isEmpty || setupLink == null
+        ? null
+        : setupLink(
+            List.unmodifiable([for (final planned in steps) planned.step.id]),
+          );
+
 /// What the render hooks and the structural rules of a role that is open
-/// to all modules get of [steps], the planned steps of the app (see
-/// [RoleHookInput.manualSetup]): [ManualSetup.none] for an app without
+/// to all modules get of [steps], the planned steps of the app, and of
+/// [link], the link that the front end named for them (see [setupLinkOf]
+/// and [RoleHookInput.manualSetup]): [ManualSetup.none] for an app without
 /// steps.
-ManualSetup manualSetupOf(List<PlannedManualStep> steps) => steps.isEmpty
-    ? ManualSetup.none
-    : ManualSetup(
-        steps: List.unmodifiable([for (final planned in steps) planned.step]),
-      );
+ManualSetup manualSetupOf(List<PlannedManualStep> steps, {Uri? link}) =>
+    steps.isEmpty
+        ? ManualSetup.none
+        : ManualSetup(
+            steps: List.unmodifiable([
+              for (final planned in steps) planned.step,
+            ]),
+            link: link,
+          );
 
 /// The problems of [step] of [origin], which has access to the roles
 /// [access] (see [rolesOf]), with the rules of [ManualStep]:
