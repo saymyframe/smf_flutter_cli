@@ -1,4 +1,16 @@
 {
-  "steps": [],
+  "steps": [
+    {
+      "id": "app_entry.ios_app_id",
+      "title": "In Xcode, sign the iOS app with your paid Apple Developer team",
+      "owner": "app_entry",
+      "ownerKind": "role",
+      "ownerName": "App entry",
+      "neededBy": [
+        "apple_sign_in",
+        "firebase_messaging"
+      ]
+    }
+  ],
   "retired": []
 }

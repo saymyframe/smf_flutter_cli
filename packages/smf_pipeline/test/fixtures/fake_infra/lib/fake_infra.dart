@@ -63,6 +63,11 @@ const _filesAgentNote = 'The assets of the fixture are in `assets/fixture/`, '
 /// The delegate that it gives the root has no texts of the module: a module
 /// gives its texts to the localization role, whose provider knows the
 /// languages of the app.
+///
+/// Its entitlements of the iOS app are of those that only a paid team
+/// signs, so it lists the step by hand of the role for them,
+/// [AppEntryRole.iosAppIdStep], and an app with it has a section of the
+/// steps by hand in its README.
 final class FakeSocketsModule extends SmfModule {
   /// Creates the module.
   const FakeSocketsModule();
@@ -177,11 +182,13 @@ final class FakeSocketsModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        // Only a paid team signs these entitlements, so the app lists the
+        // step by hand of its App ID with each.
+        ...AppEntryRole.paidTeamEntitlement(
           'aps-environment',
           const PlistString('development'),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        ...AppEntryRole.paidTeamEntitlement(
           'com.apple.developer.associated-domains',
           const PlistStringArray(['applinks:example.com']),
         ),
@@ -216,10 +223,10 @@ final class FakeSocketsModule extends SmfModule {
 /// README sections agree, the plist arrays of Info.plist and of the
 /// entitlements are united, the highest versions win, those of Gradle and
 /// of the library of core library desugaring too, the delegate of the
-/// localizations appears once, and so does the note for coding agents that
-/// both have. It puts nothing into the sockets of code of the native files,
-/// such as the components of the Android application, which would have
-/// the same code twice.
+/// localizations appears once, and so do the note for coding agents and the
+/// step by hand that both have. It puts nothing into the sockets of code of
+/// the native files, such as the components of the Android application,
+/// which would have the same code twice.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -257,11 +264,13 @@ final class FakeOverlapModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['remote-notification']),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        // Only a paid team signs these entitlements, so the app lists the
+        // step by hand of its App ID with each.
+        ...AppEntryRole.paidTeamEntitlement(
           'aps-environment',
           const PlistString('development'),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        ...AppEntryRole.paidTeamEntitlement(
           'com.apple.developer.associated-domains',
           const PlistStringArray(['applinks:example.org']),
         ),

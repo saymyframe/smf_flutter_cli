@@ -706,6 +706,38 @@ List<SmfIssue> _checkIosEntitlementsSigned(StructuralRuleInput<NoDsl> input) {
   return issues;
 }
 
+/// The problem of an app whose entitlements have a key of
+/// [AppEntryRole.paidTeamEntitlements] without [AppEntryRole.iosAppIdStep]
+/// among its steps by hand, as the owner of the entitlements; nothing in
+/// an app without the file, such as one that the harness did not render.
+List<SmfIssue> _checkIosAppIdStep(StructuralRuleInput<NoDsl> input) {
+  const path = AppEntryRole.iosEntitlementsFile;
+  final text = input.texts[path];
+  if (text == null) return const [];
+  final keys = {
+    for (final key in _plistKeys(text))
+      if (AppEntryRole.paidTeamEntitlements.contains(key)) key,
+  };
+  const step = AppEntryRole.iosAppIdStep;
+  final steps = input.roleInput.manualSetup.steps;
+  if (keys.isEmpty || steps.any((listed) => listed.id == step.id)) {
+    return const [];
+  }
+  return [
+    SmfIssue(
+      '$path has the ${keys.length == 1 ? 'entitlement' : 'entitlements'} '
+      '${keys.join(', ')}, which only a team of the paid Apple Developer '
+      'Program signs, but the app does not list the step by hand ${step.id}: '
+      '"${step.title}".',
+      hint: 'The module or the template of a role that adds such an '
+          'entitlement lists AppEntryRole.iosAppIdStep with it, under the '
+          'same roles: AppEntryRole.paidTeamEntitlement gives both.',
+      origin: input.owners[path],
+      path: path,
+    ),
+  ];
+}
+
 /// [text] without its XML comments.
 String _withoutXmlComments(String text) =>
     text.replaceAll(RegExp('<!--.*?-->', dotAll: true), '');

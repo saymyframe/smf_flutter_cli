@@ -29,7 +29,8 @@ const pushRole = PushRole._();
 /// The template also gives the iOS app what every provider needs there,
 /// since every push message reaches an iPhone through the Apple Push
 /// Notification service (APNs): the entitlement [apsEnvironment] with the
-/// value `development` in [AppEntryRole.iosEntitlements], and
+/// value `development` in [AppEntryRole.iosEntitlements], with the step by
+/// hand [AppEntryRole.iosAppIdStep] that it needs, and
 /// [remoteNotificationMode] among the [backgroundModes] of the
 /// [AppEntryRole.infoPlist]. It writes the section [readmeHeading] of the
 /// README of the app, and the note of the role in the guide for coding
@@ -320,9 +321,10 @@ final class _PushTemplate extends _ServiceTemplate<RoleImplementation> {
 ''';
 
   /// The brick, the note of the role, the section of the README, and the
-  /// entitlement and the background mode of the iOS app. The role registers
-  /// nothing in a DI container: the code of an app uses `appPush`, not the
-  /// service of the provider.
+  /// entitlement and the background mode of the iOS app, with the step by
+  /// hand that the entitlement needs (see [AppEntryRole.iosAppIdStep]). The
+  /// role registers nothing in a DI container: the code of an app uses
+  /// `appPush`, not the service of the provider.
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(bundle),
@@ -332,8 +334,9 @@ final class _PushTemplate extends _ServiceTemplate<RoleImplementation> {
         ),
         AppEntryRole.readmeSections.entry(PushRole.readmeHeading, _pushReadme),
         // Xcode takes the value of the provisioning profile when it exports
-        // the app for distribution.
-        AppEntryRole.iosEntitlements.entry(
+        // the app for distribution. Only a paid team signs the entitlement,
+        // so the app lists the step by hand of its App ID with it.
+        ...AppEntryRole.paidTeamEntitlement(
           PushRole.apsEnvironment,
           const PlistString('development'),
         ),

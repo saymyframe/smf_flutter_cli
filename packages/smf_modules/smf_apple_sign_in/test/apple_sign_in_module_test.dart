@@ -255,12 +255,12 @@ void main() {
 
     test(
         'contributes its brick, sign_in_with_apple and crypto, its way to '
-        'sign in with its label, the entitlement of Sign in with Apple, its '
-        'section of the README and its note for coding agents, and nothing '
-        'else', () {
+        'sign in with its label, the entitlement of Sign in with Apple with '
+        'the step by hand that it needs, its section of the README and its '
+        'note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(8));
+      expect(contributions, hasLength(9));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(appleSignInBundle));
       expect(brick.bundle.name, 'apple_sign_in');
@@ -316,13 +316,23 @@ void main() {
       expect(entitlement.entryKey, 'com.apple.developer.applesignin');
       expect(entitlement.entryValue, const PlistStringArray(['Default']));
       expect(entitlement.when, isEmpty);
+      expect(
+        AppEntryRole.paidTeamEntitlements,
+        contains(appleSignInEntitlement),
+      );
+      // Only a paid team signs the entitlement, so the module lists the
+      // step of the role of the app entry with it.
+      final step = contributions[6] as ManualStep;
+      expect(step.id, AppEntryRole.iosAppIdStep.id);
+      expect(step.title, AppEntryRole.iosAppIdStep.title);
+      expect(step.when, isEmpty);
 
-      final readme = contributions[6] as SocketContribution;
+      final readme = contributions[7] as SocketContribution;
       expect(readme.socket, AppEntryRole.readmeSections);
       expect(readme.entryKey, 'Sign in with Apple');
       expect(readme.entryValue, readmeSection);
 
-      final note = contributions[7] as SocketContribution;
+      final note = contributions[8] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, 'Sign in with Apple');
       expect(note.entryValue, AgentNote(agentNote));
@@ -564,6 +574,34 @@ void main() {
     });
 
     test(
+        'lists the step by hand in which the developer signs the iOS app with '
+        'a paid team, in the section of the steps by hand that opens the '
+        'README', () {
+      final planned = result.manualSteps.single;
+      expect(planned.step.id, AppEntryRole.iosAppIdStep.id);
+      expect(planned.step.title, AppEntryRole.iosAppIdStep.title);
+      expect(planned.contributors, [_module]);
+      expect(app.manualSteps.single.step.id, AppEntryRole.iosAppIdStep.id);
+      final readme = app.files[AppEntryRole.readmeFile]!.text;
+      final sections = RegExp(r'^## (.+)$', multiLine: true)
+          .allMatches(readme)
+          .map((match) => match[1])
+          .toList();
+      expect(sections.first, AppEntryRole.setupHeading);
+      expect(
+        readme,
+        contains('\n1. ${AppEntryRole.iosAppIdStep.title}\n'),
+      );
+      // The app of the provider of the auth role alone has no entitlement
+      // that needs the step, and no step.
+      expect(without.manualSteps, isEmpty);
+      expect(
+        without.files[AppEntryRole.readmeFile]!.text,
+        isNot(contains('## ${AppEntryRole.setupHeading}')),
+      );
+    });
+
+    test(
         'has the section of the module in the README, after the section of '
         'the auth role, which lists the way to sign in', () {
       final readme = app.files[AppEntryRole.readmeFile]!.text;
@@ -595,6 +633,10 @@ void main() {
           contains('a team of the paid Apple Developer Program'),
           contains('remove the key from `${AppEntryRole.iosEntitlementsFile}`'),
           contains('only the first time that the user signs in'),
+          contains(
+            'forwards to the user only the messages of senders that are '
+            'registered with Apple',
+          ),
           contains('App Store Review Guideline 5.1.1(v)'),
           contains('needs a key of Apple'),
           contains('download that logo and show it in `AppleSignInIcon`'),
