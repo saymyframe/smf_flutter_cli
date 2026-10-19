@@ -6,6 +6,10 @@
 
 # SMF Flutter CLI
 
+<!-- github.com/saymyframe shows the blocks between the profile-sync markers too: a workflow of saymyframe/.github copies them into its profile/README.md once a day. Keep their links absolute. -->
+
+<!-- profile-sync:intro:start -->
+
 Say My Frame (SMF) generates Flutter apps from independent modules. You pick what the app needs, such as a router, tabs at the bottom, sign-in, dependency injection, a state manager, Firebase or a start screen, and `smf create` generates a Flutter project in which these parts already work together. The project does not depend on SMF at run time, so its code is yours from the first commit.
 
 ![smf create in a terminal: it asks for the app name and the modules, adds the modules that the chosen ones need, such as go_router, the settings screen and Firebase Authentication, asks who may use the app without an account, and generates a Flutter app with an onboarding, a start screen, sign-in, tabs at the bottom, a theme, two languages, get_it and BLoC](https://doc.saymyframe.com/demo/0.5/smf_create.gif)
@@ -19,6 +23,8 @@ With the modules `onboarding`, `sign_in`, `home`, `bottom_tabs`, `material_theme
 SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is tested on macOS, Linux and Windows.
 
 The documentation is at [doc.saymyframe.com](https://doc.saymyframe.com).
+
+<!-- profile-sync:intro:end -->
 
 ## Install
 
@@ -63,6 +69,8 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 
 ## Modules
 
+<!-- profile-sync:modules:start -->
+
 | Module | What it adds to the app |
 | --- | --- |
 | [`flutter_core`](https://doc.saymyframe.com/modules/flutter-core) | The Flutter project for Android and iOS, `main()`, the start-up, the root widget, and the screen that an app shows while it has no screen to start on. Every app has it. |
@@ -85,6 +93,8 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`sign_in`](https://doc.saymyframe.com/modules/sign-in) | Screens of sign-in, sign-up and password reset with an email address and a password, and the screen of the account with its entry on the settings screen, with BLoC or with Riverpod. |
 
 A module knows only the modules it depends on. A screen needs *a* router, not go_router, and analytics follows the screens of whichever router the app has. SMF calls these shared parts roles: a module that needs a role works with every module that provides it, and CI generates apps from many combinations of modules and checks each with `flutter analyze`. You can also write modules of your own; see [Extending SMF](https://doc.saymyframe.com/extending).
+
+<!-- profile-sync:modules:end -->
 
 ## Contributing
 
