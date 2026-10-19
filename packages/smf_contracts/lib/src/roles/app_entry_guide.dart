@@ -215,8 +215,9 @@ const _statusBarIcons = Fragment.wrap(
 
 /// The template of the [AppEntryRole], for what an app has whichever module
 /// provides the role: the guide for coding agents, with the note of the
-/// role itself, and the icons of the status bar that suit the theme of the
-/// app, on every screen, with a widget test of them.
+/// role itself, the icons of the status bar that suit the theme of the
+/// app, on every screen, with a widget test of them, and in an app with
+/// steps by hand the section of the README that lists them.
 final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
   const _AppEntryTemplate();
 
@@ -232,7 +233,54 @@ final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
         const PubspecContribution.sdk('flutter'),
         const PubspecContribution.sdk('flutter_test', dev: true),
       ];
+
+  /// The section [AppEntryRole.setupHeading] of the README, with the note
+  /// of the role about it in the guide for coding agents, in an app with
+  /// steps by hand; nothing in an app without them.
+  @override
+  RoleOutput render(RoleHookInput<NoDsl> input) {
+    final setup = input.manualSetup;
+    if (setup.steps.isEmpty) return const RoleOutput();
+    return RoleOutput(
+      fragments: [
+        AppEntryRole.readmeSections.entry(
+          AppEntryRole.setupHeading,
+          _setupSection(setup),
+        ),
+        AppEntryRole.agentSections.entry(
+          appEntryRole.description,
+          AgentNote.ofRole(_setupAgentNote),
+        ),
+      ],
+    );
+  }
 }
+
+/// The section [AppEntryRole.setupHeading] of the README of an app with
+/// the steps of [setup]: that no command can do them, the link to their
+/// guide when [setup] has one, and the titles of the steps as they are, in
+/// a numbered list in their order.
+String _setupSection(ManualSetup setup) {
+  final link = setup.link;
+  const intro = 'Once any commands of the sections below have run, the setup '
+      'still needs these steps, which no command can do';
+  return [
+    if (link == null)
+      '$intro:'
+    else
+      '$intro. [The guide]($link) shows each one click by click:',
+    '',
+    for (final (index, step) in setup.steps.indexed)
+      '${index + 1}. ${step.title}',
+  ].join('\n');
+}
+
+/// The note of the app entry role in the guide for coding agents of an app
+/// with steps by hand: they are for the developer of the app, whom an agent
+/// points to them.
+const String _setupAgentNote = '''
+- The section "${AppEntryRole.setupHeading}" of the README lists the steps of the setup that no command can do, such as a step in the web console of a service that the app uses. Only the developer of the app does them: when a task depends on one of them, point the developer to that section, and do not try to do the step yourself.
+''';
 
 /// The note of the app entry role in the guide for coding agents: what the
 /// role guarantees in every app, whichever module provides it. What depends
