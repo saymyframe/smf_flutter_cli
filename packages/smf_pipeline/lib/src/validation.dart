@@ -22,6 +22,7 @@ final class ValidationResult {
     required this.postGenOrder,
     required this.pubspec,
     this.manualSteps = const [],
+    this.setupLink,
   });
 
   /// The errors and warnings found.
@@ -44,6 +45,12 @@ final class ValidationResult {
   /// so a run that stops before the choices, as `--explain` does, has the
   /// steps that the render hooks of the app get.
   final List<PlannedManualStep> manualSteps;
+
+  /// The link to the page that guides the developer through the
+  /// [manualSteps], which the front end of the pipeline named for them when
+  /// they were planned (see [SetupLink]), or `null` for an app without
+  /// steps or a front end that names no page.
+  final Uri? setupLink;
 
   /// Whether generation cannot continue.
   bool get hasErrors => issues.any((issue) => issue.isError);
@@ -68,8 +75,8 @@ bool isReservedVar(String name) =>
 /// The request that the hooks of the roles get: the data of [collection]
 /// that applies, the present roles of [resolution], the [context], the
 /// [choices] of the roles once they are made, and the [manualSteps] that
-/// stage 5 planned, for the render hooks and the structural rules (see
-/// [RoleHookRequest.manualSetup]).
+/// stage 5 planned with their [setupLink], for the render hooks and the
+/// structural rules (see [RoleHookRequest.manualSetup]).
 ///
 /// With the [choices], [collection] is the one that they decided (see
 /// [Collection.decide]), so that the hooks get only the data whose
@@ -86,6 +93,7 @@ RoleHookRequest hookRequest({
   required ModuleContext context,
   Map<Role, Object?> choices = const {},
   List<PlannedManualStep> manualSteps = const [],
+  Uri? setupLink,
 }) =>
     RoleHookRequest(
       data: [
@@ -99,7 +107,7 @@ RoleHookRequest hookRequest({
       presentRoles: resolution.presentRoles,
       context: context,
       choices: choices,
-      manualSetup: manualSetupOf(manualSteps),
+      manualSetup: manualSetupOf(manualSteps, link: setupLink),
     );
 
 /// The names of the brick variables among [vars] that are not plain data:
@@ -221,7 +229,8 @@ List<Collected> _boundSteps(List<Collected> steps) {
 ///   and the module rules of the roles;
 /// - the steps by hand of the app, which it plans with the `manualSteps`
 ///   hooks of the present roles' templates and providers (see
-///   [planManualSteps]);
+///   [planManualSteps]), and the link to their guide, which [setupLink]
+///   names for an app with steps (see [setupLinkOf]);
 /// - the tags of the sockets in the bricks (see [checkTemplateTags]), that
 ///   every socket and every section of the pubspec with contributions has
 ///   its tag, and that every socket that needs a value has one;
@@ -240,6 +249,7 @@ ValidationResult validate({
   Map<String, String?> optionValues = const {},
   bool interactive = true,
   bool skipExternalSetup = false,
+  SetupLink? setupLink,
 }) {
   // Sockets with a contribution that breaks a rule, whose tags are not
   // worth reporting too.
@@ -350,6 +360,8 @@ ValidationResult validate({
     postGenOrder: postGenOrder,
     pubspec: merged.pubspec,
     manualSteps: manual.steps,
+    // Once, so that every hook and line of the run has the same link.
+    setupLink: setupLinkOf(manual.steps, setupLink),
   );
 }
 

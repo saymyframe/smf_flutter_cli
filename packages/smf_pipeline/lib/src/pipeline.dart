@@ -45,6 +45,7 @@ final class GenerationPlan {
     required this.socketOrders,
     required this.postGenOrder,
     required this.manualSteps,
+    required this.setupLink,
     required this.pubspec,
     required this.preflight,
     required this.choices,
@@ -83,6 +84,10 @@ final class GenerationPlan {
   /// planned before the roles chose (see [ValidationResult.manualSteps]).
   final List<PlannedManualStep> manualSteps;
 
+  /// The link to the guide of the [manualSteps], which the front end named
+  /// for them (see [ValidationResult.setupLink]).
+  final Uri? setupLink;
+
   /// The merged `pubspec.yaml`.
   final MergedPubspec pubspec;
 
@@ -109,6 +114,7 @@ final class GeneratedApp {
     this.leftOut = const [],
     this.skippedSteps = const [],
     this.manualSteps = const [],
+    this.setupLink,
   });
 
   /// The package name of the app, such as `my_app`.
@@ -128,6 +134,11 @@ final class GeneratedApp {
   /// since no command can do them, each once and in order (see
   /// [ManualStep]).
   final List<ManualStep> manualSteps;
+
+  /// The page that guides the developer through the [manualSteps], which
+  /// the [CreatePipeline.setupLink] of the front end named for them, or
+  /// `null` for an app without steps or a front end that names no page.
+  final Uri? setupLink;
 }
 
 /// The `create` command of SMF: generates a Flutter app from the modules of
@@ -136,14 +147,24 @@ final class GeneratedApp {
 /// The pipeline knows no role and no module: everything specific comes from
 /// the [registry] and the hooks of its roles.
 final class CreatePipeline {
-  /// Creates the pipeline for the modules of [registry] on [host].
-  const CreatePipeline({required this.registry, required this.host});
+  /// Creates the pipeline for the modules of [registry] on [host], which
+  /// names the guide of the steps by hand of an app with [setupLink].
+  const CreatePipeline({
+    required this.registry,
+    required this.host,
+    this.setupLink,
+  });
 
   /// The modules the CLI offers.
   final ModuleRegistry registry;
 
   /// The machine the pipeline runs on.
   final SmfHost host;
+
+  /// Names the page that guides the developer through the steps by hand of
+  /// an app (see [SetupLink]), or `null` for a front end that names none:
+  /// then the app has no link to its steps.
+  final SetupLink? setupLink;
 
   /// Generates the app of [request] and returns it, or `null` after
   /// `--explain` printed what would happen.
@@ -199,6 +220,7 @@ final class CreatePipeline {
         choices: plan.choices,
         pubspec: plan.pubspec,
         manualSteps: plan.manualSteps,
+        setupLink: plan.setupLink,
       );
     } on Object {
       rendering.fail();
@@ -263,6 +285,7 @@ final class CreatePipeline {
       leftOut: plan.leftOut,
       skippedSteps: skipped,
       manualSteps: [for (final planned in plan.manualSteps) planned.step],
+      setupLink: plan.setupLink,
     );
   }
 }
@@ -291,7 +314,8 @@ extension CreatePlanning on CreatePipeline {
   /// 3. Resolution: the modules and roles the app needs.
   /// 4. Collection: the contributions of the modules and role templates.
   /// 5. Validation: the rules of the model and the checks of the roles, and
-  ///    the plan of the steps that the developer of the app does by hand.
+  ///    the plan of the steps that the developer of the app does by hand,
+  ///    with the link to their guide (see [CreatePipeline.setupLink]).
   /// 6. Preflight: the machine has what generation needs.
   /// 7. Choices: what only the user can decide, such as the start screen.
   ///    Then the contributions with conditions on what the roles chose
@@ -378,6 +402,7 @@ extension CreatePlanning on CreatePipeline {
         // terminal would do.
         interactive: host.hasTerminal && request.input,
         skipExternalSetup: request.skipExternalSetup,
+        setupLink: setupLink,
       );
       if (lenience.leaveOut(validation.issues)) {
         continue;
@@ -437,6 +462,7 @@ extension CreatePlanning on CreatePipeline {
         socketOrders: validation.socketOrders,
         postGenOrder: validation.postGenOrder,
         manualSteps: validation.manualSteps,
+        setupLink: validation.setupLink,
         pubspec: validation.pubspec,
         preflight: preflight,
         choices: choices,

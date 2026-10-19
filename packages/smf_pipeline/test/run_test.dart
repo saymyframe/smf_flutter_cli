@@ -46,8 +46,12 @@ void main() {
         TestModule('extra', contributions: contributions),
       ];
 
-  CreatePipeline pipeline(List<SmfModule> modules) =>
-      CreatePipeline(registry: ModuleRegistry(modules), host: host.host);
+  CreatePipeline pipeline(List<SmfModule> modules, {SetupLink? setupLink}) =>
+      CreatePipeline(
+        registry: ModuleRegistry(modules),
+        host: host.host,
+        setupLink: setupLink,
+      );
 
   CreateRequest request({
     List<String> modules = const ['extra'],
@@ -139,15 +143,24 @@ void main() {
       'In Xcode, sign the iOS app with your paid Apple Developer team',
     );
 
-    final app =
-        (await pipeline(modulesWith(const [key, appId])).run(request()))!;
-    final without = (await pipeline(modulesWith()).run(
+    final app = (await pipeline(
+      modulesWith(const [key, appId]),
+      setupLink: guideOf,
+    ).run(request()))!;
+    final without = (await pipeline(modulesWith(), setupLink: guideOf).run(
       request(onConflict: OnConflict.replace),
     ))!;
 
-    // The steps of roles come first.
+    // The steps of roles come first, in the link to their guide too.
     expect(app.manualSteps, [appId, key]);
+    expect(
+      app.setupLink,
+      Uri.parse(
+        'https://guide.example/setup?steps=app_entry.ios_app_id,extra.apns_key',
+      ),
+    );
     expect(without.manualSteps, isEmpty);
+    expect(without.setupLink, isNull);
   });
 
   test('writes the files of the render hooks as they are', () async {

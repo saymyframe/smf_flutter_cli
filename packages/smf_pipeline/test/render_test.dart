@@ -23,12 +23,14 @@ String _asIs(String value) => value;
 const _iosVersion = '{{{smf_home__versions__ios}}}';
 
 /// Renders an app of [modules], all requested, with the variants for the
-/// providers in [variants] by module id, after checking that stage 5 finds
-/// no errors.
+/// providers in [variants] by module id, for a front end that names the
+/// guide of the steps by hand with [setupLink], after checking that stage 5
+/// finds no errors.
 RenderedApp _render(
   List<SmfModule> modules, {
   Map<Role, Object?> choices = const {},
   Map<String, String> variants = const {},
+  SetupLink? setupLink,
 }) {
   final registry = ModuleRegistry(modules);
   final resolution = Resolution([
@@ -48,6 +50,7 @@ RenderedApp _render(
     resolution: resolution,
     collection: collection,
     context: testContext,
+    setupLink: setupLink,
   );
   expect(
     [
@@ -65,6 +68,7 @@ RenderedApp _render(
     choices: choices,
     pubspec: validation.pubspec,
     manualSteps: validation.manualSteps,
+    setupLink: validation.setupLink,
   );
 }
 
@@ -501,6 +505,53 @@ flutter:
     final without = _render([entry, all]);
     expect(open.inputs.single.manualSetup, same(ManualSetup.none));
     expect(without.manualSteps, isEmpty);
+  });
+
+  test(
+      'the render hooks of a role open to all modules get the link that the '
+      'front end names for the steps by hand, and those of no other role', () {
+    final open = _Template(const RoleOutput(), const []);
+    final everyone = TestRole<String>(
+      'everyone',
+      openToAllModules: true,
+      template: open,
+    );
+    final rendering = _Rendering();
+    const step = ManualStep(
+      ManualStepId(ModuleId('store'), 'apns_key'),
+      'Give Firebase your Apple push key (APNs key)',
+    );
+    final all = TestModule(
+      'all',
+      providers: [_Provider(everyone, const RoleOutput())],
+    );
+
+    _render(
+      [
+        entry,
+        all,
+        TestModule(
+          'store',
+          providers: [rendering.provider],
+          contributions: const [step],
+        ),
+      ],
+      setupLink: guideOf,
+    );
+
+    final setup = open.inputs.single.manualSetup;
+    expect(setup.steps, [step]);
+    expect(
+      setup.link,
+      Uri.parse('https://guide.example/setup?steps=store.apns_key'),
+    );
+    final ofShelf = (rendering.role.template! as _Template).inputs.single;
+    expect(ofShelf.manualSetup, same(ManualSetup.none));
+
+    // An app without steps has no link, whatever the front end names.
+    open.inputs.clear();
+    _render([entry, all], setupLink: guideOf);
+    expect(open.inputs.single.manualSetup, same(ManualSetup.none));
   });
 
   test('render hooks follow the rules of their owners', () {

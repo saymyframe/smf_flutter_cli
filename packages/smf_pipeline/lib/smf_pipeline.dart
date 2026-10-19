@@ -15,6 +15,7 @@ import 'package:smf_pipeline/src/registry.dart';
 export 'src/cli.dart' show SmfExitCodes, SmfHostFactory, runSmf;
 export 'src/errors.dart' show GenerationFailedException, RegistryException;
 export 'src/host.dart';
+export 'src/manual_steps.dart' show SetupLink;
 export 'src/pipeline.dart' show CreatePipeline, GeneratedApp, LeftOut;
 export 'src/postgen.dart' show SkippedStep;
 export 'src/registry.dart' show ModuleRegistry;
