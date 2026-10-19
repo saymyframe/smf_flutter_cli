@@ -1339,6 +1339,89 @@ void main() {
         );
       }
     });
+
+    test(
+        'the README section of the steps by hand comes first, and the others '
+        'keep the order of the contributions', () {
+      const socket = AppEntryRole.readmeSections;
+
+      expect(AppEntryRole.setupHeading, 'Finish the setup');
+      expect(
+        _render(socket, const [
+          ('Signing', 'The keys go into `android/key.properties`.'),
+          ('Firebase', 'Run `flutterfire configure`.'),
+          (AppEntryRole.setupHeading, '1. Upload a key'),
+          ('Languages', 'The texts are in ARB files.'),
+        ]),
+        {
+          socket.tag: '\n## Finish the setup\n\n1. Upload a key\n'
+              '\n## Signing\n\nThe keys go into `android/key.properties`.\n'
+              '\n## Firebase\n\nRun `flutterfire configure`.\n'
+              '\n## Languages\n\nThe texts are in ARB files.',
+        },
+      );
+      // Without it, the order of the contributions holds for all.
+      expect(
+        _render(socket, const [
+          ('Signing', 'Keys.'),
+          ('Firebase', 'Run it.'),
+        ]),
+        {socket.tag: '\n## Signing\n\nKeys.\n\n## Firebase\n\nRun it.'},
+      );
+    });
+
+    test(
+        'the README section of the steps by hand comes from the template of '
+        'the app entry role alone', () {
+      const socket = AppEntryRole.readmeSections;
+      const own = RoleTemplateOrigin(appEntryRole);
+
+      /// The problems of the section [heading] from [origin].
+      List<String> problemsFrom(
+        ContributionOrigin origin,
+        String heading, {
+        String text = '1. Upload a key',
+      }) =>
+          socket.problemsWith(socket.entry(heading, text).withOrigin(origin));
+
+      for (final (origin, who) in [
+        (const ModuleOrigin(ModuleId('fire')), 'The module fire'),
+        // A variant of a module, and a provider from its render hook, are
+        // the module.
+        (
+          const ModuleOrigin(ModuleId('sign_in'), variant: ModuleId('bloc')),
+          'The module sign_in',
+        ),
+        (
+          const RoleTemplateOrigin(routerRole),
+          'The template of the router role'
+        ),
+        (const PipelineOrigin(), 'The pipeline'),
+      ]) {
+        expect(
+          problemsFrom(origin, AppEntryRole.setupHeading).single,
+          '$who contributes the section "Finish the setup" of the README, '
+          'which only the template of the app entry role writes, from the '
+          'steps of the app that its developer does by hand. A step by hand '
+          'is a ManualStep of its contributor, which that section lists.',
+          reason: who,
+        );
+        // Every other heading is theirs to contribute.
+        expect(problemsFrom(origin, 'Firebase'), isEmpty, reason: who);
+      }
+      expect(problemsFrom(own, AppEntryRole.setupHeading), isEmpty);
+      // A contribution that the pipeline has not collected has no
+      // contributor to check.
+      expect(
+        socket.problemsWith(socket.entry(AppEntryRole.setupHeading, 'Text.')),
+        isEmpty,
+      );
+      // The other problems of a section do not depend on its contributor.
+      expect(
+        problemsFrom(own, AppEntryRole.setupHeading, text: ' '),
+        ['The section "Finish the setup" of the README has no text.'],
+      );
+    });
   });
 
   group('the guide for coding agents', () {
@@ -1694,6 +1777,157 @@ void main() {
       ]) {
         expect(problemsOf(text), isEmpty, reason: text);
       }
+    });
+  });
+
+  group('the steps by hand', () {
+    const readme = AppEntryRole.readmeSections;
+    const guide = AppEntryRole.agentSections;
+    final steps = [
+      const ManualStep(
+        ManualStepId.role(appEntryRole, 'app_id'),
+        'Register the App ID of the iOS app',
+      ),
+      const ManualStep(
+        ManualStepId(ModuleId('fire'), 'apns_key'),
+        'Give Firebase your Apple push key (APNs key)',
+      ),
+    ];
+    final link = Uri.parse(
+      'https://doc.saymyframe.com/setup?steps=app_entry.app_id,fire.apns_key',
+    );
+
+    /// What the render hook of the template returns in an app with [setup].
+    RoleOutput renderWith(ManualSetup setup) =>
+        appEntryRole.template.render(inputOf(appEntryRole, manualSetup: setup));
+
+    /// The section of the README that the template renders for [setup].
+    SocketContribution sectionOf(ManualSetup setup) => renderWith(setup)
+        .fragments
+        .singleWhere((fragment) => fragment.socket == readme);
+
+    test(
+        'are listed in a section of the README, in their order, with the '
+        'link to their guide', () {
+      final section = sectionOf(ManualSetup(steps: steps, link: link));
+
+      expect(section.entryKey, AppEntryRole.setupHeading);
+      expect(section.when, isEmpty);
+      expect(
+        section.entryValue,
+        'Once any commands of the sections below have run, the setup still '
+        'needs these steps, which no command can do. [The guide]($link) '
+        'shows each one click by click:\n'
+        '\n'
+        '1. Register the App ID of the iOS app\n'
+        '2. Give Firebase your Apple push key (APNs key)',
+      );
+      // The template may write the section, which comes before those of
+      // the modules.
+      final ofTemplate =
+          section.withOrigin(const RoleTemplateOrigin(appEntryRole));
+      expect(readme.problemsWith(ofTemplate), isEmpty);
+      final firebase = readme
+          .entry('Firebase', 'Run `flutterfire configure`.')
+          .withOrigin(const ModuleOrigin(ModuleId('fire')));
+      expect(
+        readme.render([firebase, ofTemplate])[readme.tag],
+        startsWith(
+          '\n## Finish the setup\n\nOnce any commands of the sections below '
+          'have run',
+        ),
+      );
+      expect(
+        readme.render([firebase, ofTemplate])[readme.tag],
+        endsWith(
+          '2. Give Firebase your Apple push key (APNs key)\n'
+          '\n## Firebase\n\nRun `flutterfire configure`.',
+        ),
+      );
+    });
+
+    test('are listed without a guide when the run names none', () {
+      expect(
+        sectionOf(ManualSetup(steps: steps.sublist(1))).entryValue,
+        'Once any commands of the sections below have run, the setup still '
+        'needs these steps, which no command can do:\n'
+        '\n'
+        '1. Give Firebase your Apple push key (APNs key)',
+      );
+    });
+
+    test('leave the README and the guide as they are in an app without them',
+        () {
+      for (final setup in [
+        ManualSetup.none,
+        ManualSetup(link: link),
+      ]) {
+        final output = renderWith(setup);
+
+        expect(output.fragments, isEmpty, reason: '${setup.link}');
+        expect(output.vars, isEmpty);
+        expect(output.files, isEmpty);
+      }
+    });
+
+    test(
+        'are for the developer of the app, as the guide for coding agents '
+        'tells after the note of the role, only in an app with them', () async {
+      final rendered = await renderTemplate(
+        appEntryRole,
+        manualSetup: ManualSetup(steps: steps, link: link),
+      );
+      final entry = renderWith(ManualSetup(steps: steps))
+          .fragments
+          .singleWhere((fragment) => fragment.socket == guide);
+      final note = entry.entryValue! as AgentNote;
+
+      expect(entry.entryKey, appEntryRole.description);
+      expect(entry.when, isEmpty);
+      expect(note.isOfRole, isTrue);
+      expect(
+        guide.problemsWith(
+          entry.withOrigin(const RoleTemplateOrigin(appEntryRole)),
+        ),
+        isEmpty,
+      );
+      expect(note.text, contains('"${AppEntryRole.setupHeading}"'));
+      expect(note.text, contains('README'));
+      // It follows the note of the role, in its section.
+      final text = rendered.files[AppEntryRole.agentsFile]!;
+      expect(
+        text,
+        endsWith(
+          '\n## App entry\n\n${agentNoteOf(appEntryRole).text}\n\n'
+          '${note.text}\n',
+        ),
+      );
+      // It names no path that the app may lack.
+      final issues = appEntryRole.checkStructure(
+        StructuralRuleRequest(
+          hook: const RoleHookRequest(
+            data: [],
+            presentRoles: {appEntryRole},
+            context: testContext,
+          ),
+          files: const {},
+          texts: {AppEntryRole.agentsFile: text},
+          owners: {
+            for (final path in appEntryRole.interface.files)
+              path: const RoleTemplateOrigin(appEntryRole),
+            for (final symbol in appEntryRole.interface.symbols)
+              symbol.path: const RoleTemplateOrigin(appEntryRole),
+          },
+        ),
+      );
+      expect([for (final issue in issues) issue.message], isEmpty);
+
+      // Without steps, the section has the note of the role alone.
+      final without = await renderTemplate(appEntryRole);
+      expect(
+        without.files[AppEntryRole.agentsFile],
+        endsWith('\n## App entry\n\n${agentNoteOf(appEntryRole).text}\n'),
+      );
     });
   });
 
