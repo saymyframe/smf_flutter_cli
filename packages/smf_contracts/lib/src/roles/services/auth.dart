@@ -918,13 +918,42 @@ List<SmfIssue> _checkMethods(ModuleRuleInput<AuthData> input) {
         origin: origin,
       ),
     for (final method in methods) ...[
-      for (final problem in [
-        ...method.problems(),
-        ...localizationRole.dataTextProblems(module, method.label),
-        if (!issuers.add(method.issuer))
-          'The module gives two ways to sign in of ${method.issuer}.',
-      ])
+      for (final problem in _methodProblems(method, module, issuers))
         SmfIssue(problem, origin: origin),
+      ..._ungeneratedFileIssues(method, origin, generated),
+    ],
+  ];
+}
+
+/// The problems of [method], a way to sign in of [module], for the module
+/// rule `auth.methods`: those of the way to sign in on its own, those of
+/// its label for the module (see [LocalizationRole.dataTextProblems]), and
+/// a second way to sign in of an issuer that [issuers], the issuers of the
+/// ways to sign in of the module before [method], has already. The issuer
+/// of [method] goes into [issuers].
+List<String> _methodProblems(
+  SignInMethod method,
+  ModuleDescriptor module,
+  Set<String> issuers,
+) =>
+    [
+      ...method.problems(),
+      ...localizationRole.dataTextProblems(module, method.label),
+      if (!issuers.add(method.issuer))
+        'The module gives two ways to sign in of ${method.issuer}.',
+    ];
+
+/// The problems of the files of the function and of the icon of [method], a
+/// way to sign in of the module [origin], for the module rule
+/// `auth.methods`: a file of the app that the bricks of the module do not
+/// generate. [generated] has the templates of the bricks of the module that
+/// apply in the app, by the path of their file.
+List<SmfIssue> _ungeneratedFileIssues(
+  SignInMethod method,
+  ModuleOrigin origin,
+  Map<String, String> generated,
+) =>
+    [
       for (final (what, name, path) in [
         ('function', method.credential.name, _methodFileOf(method.credential)),
         ('icon', method.icon.name, _iconFileOf(method.icon)),
@@ -937,9 +966,7 @@ List<SmfIssue> _checkMethods(ModuleRuleInput<AuthData> input) {
             origin: origin,
             path: path,
           ),
-    ],
-  ];
-}
+    ];
 
 /// Whether [type], the return type of a function as written, is a
 /// `Future` of a type that may be `null`, such as
@@ -962,63 +989,80 @@ bool _returnsCredential(String? type) {
 /// itself.
 ///
 /// The module rule `auth.methods` reports a function outside the app.
-List<SmfIssue> _checkMethodFunctions(StructuralRuleInput<AuthData> input) {
-  final issues = <SmfIssue>[];
-  for (final data in input.roleInput.data) {
-    final origin = data.origin;
-    if (data.value case SignInMethod(:final credential, :final issuer)) {
-      final path = _methodFileOf(credential);
-      if (path == null) continue;
-      final owner = input.owners[path];
-      if (owner != null && !isContributor(owner, origin)) {
-        issues.add(
-          SmfIssue(
-            'The function ${credential.name} of the way to sign in of '
-            '$issuer of $origin is in $path, a file of $owner; a way to sign '
-            'in calls a function of its own module.',
-            origin: origin,
-            path: path,
-          ),
-        );
-        continue;
-      }
-      const hint = 'The screens of sign-in and appSession.deleteAccount() '
-          'call it without arguments, and await a credential or null.';
-      final symbol = RequiredFunction(credential.name, path: path);
-      final problems = [
-        for (final issue in symbol.checkIn(input.files)) issue.message,
-      ];
-      final file = input.files[path];
-      final declaration = file?.declaration(credential.name);
-      if (declaration?.kind == DeclarationKind.function &&
-          !_returnsCredential(declaration!.type)) {
-        problems.add(
-          '$symbol in $path must return a Future of a credential that may be '
-          'null, such as Future<SignInCredential?>, not '
-          '${declaration.type ?? 'an undeclared type'}.',
-        );
-      }
-      for (final problem in problems) {
-        issues.add(SmfIssue(problem, hint: hint, origin: origin, path: path));
-      }
-      if (file != null &&
-          usesSymbols(file, {'appSession'}, AuthRole.sessionFile)) {
-        issues.add(
-          SmfIssue(
-            '$path, the file of the function ${credential.name} of the way to '
-            'sign in of $issuer, uses appSession, which calls that function '
-            'within its own calls when it deletes an account, so a call of '
-            'appSession there would wait for itself.',
-            hint: 'Return the credential, and let the state of the screen give '
-                'it to appSession.signInWith.',
-            origin: origin,
-            path: path,
-          ),
-        );
-      }
-    }
+List<SmfIssue> _checkMethodFunctions(StructuralRuleInput<AuthData> input) => [
+      for (final data in input.roleInput.data)
+        if (data.value case final SignInMethod method)
+          ..._methodFunctionIssues(method, data.origin, input),
+    ];
+
+/// The problems with the function of [method], a way to sign in that
+/// [origin] gave, in the app of [input]; see [_checkMethodFunctions]. A
+/// function outside the app has none here, and a function in a file of
+/// another module only that one.
+List<SmfIssue> _methodFunctionIssues(
+  SignInMethod method,
+  ContributionOrigin? origin,
+  StructuralRuleInput<AuthData> input,
+) {
+  final SignInMethod(:credential, :issuer) = method;
+  final path = _methodFileOf(credential);
+  if (path == null) return const [];
+  final owner = input.owners[path];
+  if (owner != null && !isContributor(owner, origin)) {
+    return [
+      SmfIssue(
+        'The function ${credential.name} of the way to sign in of '
+        '$issuer of $origin is in $path, a file of $owner; a way to sign '
+        'in calls a function of its own module.',
+        origin: origin,
+        path: path,
+      ),
+    ];
   }
-  return issues;
+  const hint = 'The screens of sign-in and appSession.deleteAccount() '
+      'call it without arguments, and await a credential or null.';
+  final file = input.files[path];
+  return [
+    for (final problem
+        in _credentialProblems(credential.name, path, input.files))
+      SmfIssue(problem, hint: hint, origin: origin, path: path),
+    if (file != null && usesSymbols(file, {'appSession'}, AuthRole.sessionFile))
+      SmfIssue(
+        '$path, the file of the function ${credential.name} of the way to '
+        'sign in of $issuer, uses appSession, which calls that function '
+        'within its own calls when it deletes an account, so a call of '
+        'appSession there would wait for itself.',
+        hint: 'Return the credential, and let the state of the screen give '
+            'it to appSession.signInWith.',
+        origin: origin,
+        path: path,
+      ),
+  ];
+}
+
+/// The problems of [name], the function of a way to sign in, in [path],
+/// one of the Dart [files] of the app: a function missing from its file,
+/// and one that requires arguments or does not return a `Future` of a
+/// credential that may be `null`.
+List<String> _credentialProblems(
+  String name,
+  String path,
+  Map<String, DartFileIndex> files,
+) {
+  final symbol = RequiredFunction(name, path: path);
+  final problems = [
+    for (final issue in symbol.checkIn(files)) issue.message,
+  ];
+  final declaration = files[path]?.declaration(name);
+  if (declaration?.kind == DeclarationKind.function &&
+      !_returnsCredential(declaration!.type)) {
+    problems.add(
+      '$symbol in $path must return a Future of a credential that may be '
+      'null, such as Future<SignInCredential?>, not '
+      '${declaration.type ?? 'an undeclared type'}.',
+    );
+  }
+  return problems;
 }
 
 /// The name of the function of [AuthRole.methodsFile] that returns [label],
