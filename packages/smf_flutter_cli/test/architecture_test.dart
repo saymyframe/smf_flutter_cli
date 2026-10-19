@@ -36,6 +36,12 @@ bool _ofModule(String uri) =>
 /// of the binary, or of the matrix, imports it.
 const _appTests = 'lib/matrix_app_tests.dart';
 
+/// The library of the catalog of the steps by hand, which only
+/// `tool/setup_steps.dart` and the tests of the package import: it runs
+/// the contract harness over the modules of `smf create`, which no run of
+/// `smf` needs.
+const _setupSteps = 'lib/setup_steps.dart';
+
 /// The path from the package of the library of the package that [uri]
 /// names in the library at [path], or `null` if it names another.
 String? _ownLibrary(String path, String uri) {
@@ -76,6 +82,19 @@ void main() {
       expect(
         [for (final uri in uris) _ownLibrary(path, uri)],
         isNot(contains(_appTests)),
+        reason: path,
+      );
+    }
+  });
+
+  test(
+      'no library of the package imports the catalog of the steps by hand, '
+      'which runs the contract harness', () {
+    expect(libraries, contains(_setupSteps));
+    for (final MapEntry(key: path, value: uris) in libraries.entries) {
+      expect(
+        [for (final uri in uris) _ownLibrary(path, uri)],
+        isNot(contains(_setupSteps)),
         reason: path,
       );
     }
