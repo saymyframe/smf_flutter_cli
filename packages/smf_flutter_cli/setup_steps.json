@@ -10,6 +10,16 @@
         "apple_sign_in",
         "firebase_messaging"
       ]
+    },
+    {
+      "id": "firebase_messaging.apns_key",
+      "title": "Give Firebase your Apple push key (APNs key)",
+      "owner": "firebase_messaging",
+      "ownerKind": "module",
+      "ownerName": "firebase_messaging",
+      "neededBy": [
+        "firebase_messaging"
+      ]
     }
   ],
   "retired": []

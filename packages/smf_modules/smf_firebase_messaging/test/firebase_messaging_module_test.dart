@@ -331,11 +331,11 @@ void main() {
         'contributes its brick, firebase_messaging below 17, its '
         'implementation of the service, created without waiting, the channel '
         'and the icon of the notifications of the app for the messages that '
-        'Android shows, its section of the README and its note for coding '
-        'agents, and nothing else', () {
+        'Android shows, the step by hand of the APNs key, its section of the '
+        'README and its note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(7));
+      expect(contributions, hasLength(8));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseMessagingBundle));
       expect(brick.bundle.name, 'firebase_messaging');
@@ -384,11 +384,19 @@ void main() {
           ),
         ),
       );
-      final readme = contributions[5] as SocketContribution;
+      final step = contributions[5] as ManualStep;
+      expect(step, same(FirebaseMessagingModule.apnsKeyStep));
+      expect(
+        step.id,
+        const ManualStepId(FirebaseMessagingModule.id, 'apns_key'),
+      );
+      expect(step.id.wire, 'firebase_messaging.apns_key');
+      expect(step.title, 'Give Firebase your Apple push key (APNs key)');
+      final readme = contributions[6] as SocketContribution;
       expect(readme.socket, AppEntryRole.readmeSections);
       expect(readme.entryKey, readmeHeading);
       expect(readme.entryValue, readmeSection);
-      final note = contributions[6] as SocketContribution;
+      final note = contributions[7] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, pushRole.description);
       expect(note.entryValue, AgentNote(agentNote));
@@ -626,20 +634,33 @@ void main() {
 
     test(
         'lists the step by hand in which the developer signs the iOS app with '
-        'a paid team, which the entitlement of the push role needs, first in '
-        'the README', () {
-      final planned = result.manualSteps.single;
-      expect(planned.step.id, AppEntryRole.iosAppIdStep.id);
-      expect(planned.step.title, AppEntryRole.iosAppIdStep.title);
+        'a paid team, which the entitlement of the push role needs, and then '
+        'the step of the APNs key, first in the README', () {
+      final [appId, apnsKey] = result.manualSteps;
+      expect(appId.step.id, AppEntryRole.iosAppIdStep.id);
+      expect(appId.step.title, AppEntryRole.iosAppIdStep.title);
       // The template of the push role lists it, whichever module provides
       // the role.
-      expect(planned.contributors, [const RoleTemplateOrigin(pushRole)]);
+      expect(appId.contributors, [const RoleTemplateOrigin(pushRole)]);
+      // The steps of roles come first, so the App ID that the key sends to
+      // is registered before the key is uploaded.
+      expect(apnsKey.step, same(FirebaseMessagingModule.apnsKeyStep));
+      expect(
+        apnsKey.contributors,
+        [const ModuleOrigin(FirebaseMessagingModule.id)],
+      );
       final readme = app.files[AppEntryRole.readmeFile]!.text;
       expect(
         RegExp(r'^## (.+)$', multiLine: true).firstMatch(readme)?[1],
         AppEntryRole.setupHeading,
       );
-      expect(readme, contains('\n1. ${AppEntryRole.iosAppIdStep.title}\n'));
+      expect(
+        readme,
+        contains(
+          '\n1. ${AppEntryRole.iosAppIdStep.title}\n'
+          '2. ${FirebaseMessagingModule.apnsKeyStep.title}\n',
+        ),
+      );
       // The app of Firebase and the notifications has no such step.
       expect(without.manualSteps, isEmpty);
     });
@@ -871,6 +892,18 @@ void main() {
             contains('Team ID'),
             contains('Cloud Messaging'),
             contains('App ID in that team'),
+          ),
+        );
+      });
+
+      test(
+          'tells that the section of the steps by hand lists the upload of '
+          'the key', () {
+        expect(
+          readmeSection,
+          contains(
+            'The section ${AppEntryRole.setupHeading} lists the upload among '
+            'the steps that you do by hand',
           ),
         );
       });

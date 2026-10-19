@@ -47,6 +47,11 @@ import 'package:smf_firebase_messaging/src/readme.dart';
 /// notifications role as those of a message that Android shows in the
 /// background.
 ///
+/// Firebase sends to iOS only with the key of the Apple Push Notification
+/// service of the team of the app, which its developer uploads to the
+/// Firebase project by hand, so every app of the module lists the step by
+/// hand [apnsKeyStep].
+///
 /// The README of the app tells how to upload the key of the Apple Push
 /// Notification service to Firebase, how to send a test message, and why
 /// the service sets the presentation options. Its guide for coding agents
@@ -59,6 +64,15 @@ final class FirebaseMessagingModule extends SmfModule {
 
   /// The id of the module.
   static const id = ModuleId('firebase_messaging');
+
+  /// The step by hand in which the developer uploads the key of the Apple
+  /// Push Notification service of the team to the Firebase project, without
+  /// which Firebase sends no message to iOS. Every app of the module lists
+  /// it.
+  static const apnsKeyStep = ManualStep(
+    ManualStepId(id, 'apns_key'),
+    'Give Firebase your Apple push key (APNs key)',
+  );
 
   static const _file = ImportRef.app('core/push/firebase_push_service.dart');
 
@@ -91,6 +105,7 @@ final class FirebaseMessagingModule extends SmfModule {
           iconMetaData,
           const AndroidMetaData.resource(iconResource),
         ),
+        apnsKeyStep,
         AppEntryRole.readmeSections.entry(readmeHeading, readmeSection),
         AppEntryRole.agentSections.entry(
           pushRole.description,
