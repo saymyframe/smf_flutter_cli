@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:smf_contracts/core.dart';
+import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/render.dart';
+import 'package:smf_pipeline/src/resolver.dart';
 import 'package:smf_pipeline/src/testing/file_indexer.dart';
 import 'package:smf_pipeline/src/testing/harness.dart';
 
@@ -88,22 +90,7 @@ List<String> roleNoteProblems<V extends Object>(
   required String Function(V value) textOf,
   Map<String, String> allowed = const {},
 }) {
-  final apps = _Apps();
-  // Each note once, with the case of the first app that has it.
-  final notes = <(Role, String, String), String>{};
-  for (final result in results) {
-    final app = result.app;
-    if (app == null) continue;
-    apps.add(result);
-    for (final (origin, heading, value) in app.entriesOf(socket)) {
-      if (origin case RoleTemplateOrigin(:final role)) {
-        notes.putIfAbsent(
-          (role, heading, textOf(value)),
-          () => result.contractCase.name,
-        );
-      }
-    }
-  }
+  final (:apps, :notes) = _notesOf(results, socket, textOf);
   final lines = <String>[];
   final excused = <String>{};
   for (final MapEntry(key: (role, heading, text), value: name)
@@ -128,6 +115,37 @@ List<String> roleNoteProblems<V extends Object>(
     );
   }
   return lines;
+}
+
+/// A note of a role: the role, the heading that the note is under, and its
+/// text.
+typedef _Note = (Role, String, String);
+
+/// The apps of [results] that rendered, and the notes of roles in the
+/// keyed [socket] of those apps, with the text that [textOf] gives: each
+/// note once, with the name of the case of the first app that has it; see
+/// [roleNoteProblems].
+({_Apps apps, Map<_Note, String> notes}) _notesOf<V extends Object>(
+  Iterable<ContractResult> results,
+  SocketRef<KeyedSocket<V>> socket,
+  String Function(V value) textOf,
+) {
+  final apps = _Apps();
+  final notes = <_Note, String>{};
+  for (final result in results) {
+    final app = result.app;
+    if (app == null) continue;
+    apps.add(result);
+    for (final (origin, heading, value) in app.entriesOf(socket)) {
+      if (origin case RoleTemplateOrigin(:final role)) {
+        notes.putIfAbsent(
+          (role, heading, textOf(value)),
+          () => result.contractCase.name,
+        );
+      }
+    }
+  }
+  return (apps: apps, notes: notes);
 }
 
 /// What the apps of the results of a contract harness tell of the modules
@@ -194,37 +212,65 @@ final class _Apps {
       _roleWords
         ..addAll(_wordsOf(role.id))
         ..addAll(_wordsOf(role.description));
-      for (final symbol in role.interface.symbols) {
-        _guaranteedPaths.add(symbol.path);
-        _guaranteedNames
-          ..add(symbol.name)
-          ..addAll(symbol.namedParameters)
-          ..addAll(
-            switch (symbol) {
-              RequiredClass(:final getters) => getters,
-              RequiredExtension(:final getters, :final on) => [
-                  ...getters,
-                  ..._identifiersOf(on),
-                ],
-              RequiredFunction(:final returnType) =>
-                _identifiersOf(returnType ?? ''),
-            },
-          );
-      }
-      for (final description in [
-        for (final rule in role.structuralRules) rule.description,
-        for (final rule in role.moduleRules) rule.description,
-      ]) {
-        _guaranteedNames.addAll(_codeNamesOf(description));
-      }
-      for (final provider in resolution.providersOf(role)) {
-        _providers.putIfAbsent(provider.id, () => role);
-        for (final dependency in resolution.dependencyClosure(provider.id)) {
-          _dependencies.putIfAbsent(dependency, () => provider.id);
-        }
+      _addGuarantees(role);
+      _addProviders(role, resolution);
+    }
+    final packages = _addPackagesOf(result.validation!.pubspec);
+    final atRoot = <String>{};
+    for (final file in app.files.values) {
+      atRoot.add(file.path.split('/').first);
+      _addFile(file, packages, app);
+    }
+    for (final entry in atRoot) {
+      _atRoot[entry] = (_atRoot[entry] ?? 0) + 1;
+    }
+  }
+
+  /// Takes in what [role] guarantees: the files of the symbols of its
+  /// [Role.interface], their names with their named parameters, their
+  /// getters and the types that they are declared with, and the names that
+  /// the descriptions of its rules give as code.
+  void _addGuarantees(Role role) {
+    for (final symbol in role.interface.symbols) {
+      _guaranteedPaths.add(symbol.path);
+      _guaranteedNames
+        ..add(symbol.name)
+        ..addAll(symbol.namedParameters)
+        ..addAll(
+          switch (symbol) {
+            RequiredClass(:final getters) => getters,
+            RequiredExtension(:final getters, :final on) => [
+                ...getters,
+                ..._identifiersOf(on),
+              ],
+            RequiredFunction(:final returnType) =>
+              _identifiersOf(returnType ?? ''),
+          },
+        );
+    }
+    for (final description in [
+      for (final rule in role.structuralRules) rule.description,
+      for (final rule in role.moduleRules) rule.description,
+    ]) {
+      _guaranteedNames.addAll(_codeNamesOf(description));
+    }
+  }
+
+  /// Takes in the providers of [role] in the app of [resolution], and the
+  /// modules that each of them depends on.
+  void _addProviders(Role role, Resolution resolution) {
+    for (final provider in resolution.providersOf(role)) {
+      _providers.putIfAbsent(provider.id, () => role);
+      for (final dependency in resolution.dependencyClosure(provider.id)) {
+        _dependencies.putIfAbsent(dependency, () => provider.id);
       }
     }
-    final pubspec = result.validation!.pubspec;
+  }
+
+  /// Takes in the packages that the modules of an app add from pub.dev,
+  /// with [pubspec], the merged pubspec of the app, and returns the names
+  /// of all the packages of the app.
+  Set<String> _addPackagesOf(MergedPubspec pubspec) {
     final packages = <String>{};
     for (final dependency in [
       ...pubspec.dependencies.values,
@@ -236,35 +282,35 @@ final class _Apps {
         if (origin case ModuleOrigin(:final module)) {
           final package = dependency.package;
           _packages.putIfAbsent(module, () => {}).add(package);
-          _behind.putIfAbsent('package:$package', () => {}).add(module);
+          _behind.putIfAbsent('$_packageScheme$package', () => {}).add(module);
         }
       }
     }
-    final atRoot = <String>{};
-    for (final file in app.files.values) {
-      final owner = switch (file.owner) {
-        ModuleOrigin(:final module) => module,
-        _ => null,
-      };
-      _owners.putIfAbsent(file.path, () => {}).add(owner);
-      atRoot.add(file.path.split('/').first);
-      if (!file.isText || !file.path.endsWith('.dart')) continue;
-      final names = _namesOfText.putIfAbsent(
-        file.text,
-        () => _FileNames.of(file.path, file.text),
-      );
-      final topLevel = _topLevel.putIfAbsent(owner, () => {});
-      for (final name in names.topLevel) {
-        topLevel.putIfAbsent(name, () => file.path);
-      }
-      _members.putIfAbsent(owner, () => {}).addAll(names.members);
-      final outside = _outsideOf(file, names.imports, packages, app);
-      for (final name in names.upperCamel) {
-        _outside[name] = _outside[name]?.intersection(outside) ?? outside;
-      }
+    return packages;
+  }
+
+  /// Takes in [file] of [app], whose packages are [packages]: who generates
+  /// it, and of a Dart file the names that it declares and has in its code
+  /// and what it takes from outside Dart and the files of the app.
+  void _addFile(RenderedFile file, Set<String> packages, RenderedApp app) {
+    final owner = switch (file.owner) {
+      ModuleOrigin(:final module) => module,
+      _ => null,
+    };
+    _owners.putIfAbsent(file.path, () => {}).add(owner);
+    if (!file.isText || !file.path.endsWith('.dart')) return;
+    final names = _namesOfText.putIfAbsent(
+      file.text,
+      () => _FileNames.of(file.path, file.text),
+    );
+    final topLevel = _topLevel.putIfAbsent(owner, () => {});
+    for (final name in names.topLevel) {
+      topLevel.putIfAbsent(name, () => file.path);
     }
-    for (final entry in atRoot) {
-      _atRoot[entry] = (_atRoot[entry] ?? 0) + 1;
+    _members.putIfAbsent(owner, () => {}).addAll(names.members);
+    final outside = _outsideOf(file, names.imports, packages, app);
+    for (final name in names.upperCamel) {
+      _outside[name] = _outside[name]?.intersection(outside) ?? outside;
     }
   }
 
@@ -280,33 +326,45 @@ final class _Apps {
     final outside = <String>{};
     for (final uri in imports) {
       if (uri.startsWith('dart:')) continue;
-      var path = Uri.parse(file.path).resolve(uri).path;
-      if (uri.startsWith('package:')) {
-        final rest = uri.substring('package:'.length).split('/');
-        final package = rest.removeAt(0);
-        if (packages.contains(package)) {
-          outside.add('package:$package');
-          continue;
-        }
-        // No package that the app depends on, so that of the app itself.
-        path = 'lib/${rest.join('/')}';
-      }
-      if (app.files.containsKey(path)) continue;
-      outside.add(path);
-      // Who imports a file that the app does not have: whoever gave the
-      // fragment that the import was added for, or else the owner of the
-      // file.
-      final contributors = [
-        for (final added in file.addedImports)
-          if (added.import.uri == uri) added.contributor,
-      ];
-      for (final origin in contributors.isEmpty ? [file.owner] : contributors) {
-        if (origin case ModuleOrigin(:final module)) {
-          _behind.putIfAbsent(path, () => {}).add(module);
-        }
+      final (:package, :path) = _importOf(uri, file.path);
+      if (package != null && packages.contains(package)) {
+        outside.add('$_packageScheme$package');
+      } else if (!app.files.containsKey(path)) {
+        outside.add(path);
+        _addImporters(path, uri, file);
       }
     }
     return outside;
+  }
+
+  /// What [uri] imports into the file at [path]: the `package` of a
+  /// `package:` URI, and the `path` of the file in an app. The path of a
+  /// `package:` URI is in `lib/`, as if the package were that of the app
+  /// itself, which it is when the app does not depend on the package.
+  static ({String? package, String path}) _importOf(String uri, String path) {
+    var imported = Uri.parse(path).resolve(uri).path;
+    String? package;
+    if (uri.startsWith(_packageScheme)) {
+      final rest = uri.substring(_packageScheme.length).split('/');
+      package = rest.removeAt(0);
+      imported = 'lib/${rest.join('/')}';
+    }
+    return (package: package, path: imported);
+  }
+
+  /// Takes in who imports [path], a file that the app does not have, with
+  /// [uri] in [file]: whoever gave the fragment that the import was added
+  /// for, or else the owner of [file].
+  void _addImporters(String path, String uri, RenderedFile file) {
+    final contributors = [
+      for (final added in file.addedImports)
+        if (added.import.uri == uri) added.contributor,
+    ];
+    for (final origin in contributors.isEmpty ? [file.owner] : contributors) {
+      if (origin case ModuleOrigin(:final module)) {
+        _behind.putIfAbsent(path, () => {}).add(module);
+      }
+    }
   }
 
   /// The modules that a note is held against, in the order of their ids:
@@ -353,30 +411,7 @@ final class _Apps {
     final (:prose, :spans, :blocks) = _partsOf(text);
     final problems = <String, String>{};
     for (final span in spans) {
-      final pathLike = !_notOfPath.hasMatch(span);
-      if (pathLike) {
-        final path =
-            span.endsWith('/') ? span.substring(0, span.length - 1) : span;
-        final under = [
-          for (final file in _owners.keys)
-            if (file == path || file.startsWith('$path/')) file,
-        ];
-        if (under.isNotEmpty) {
-          final owners = {for (final file in under) ..._owners[file]!};
-          if (!under.any(_guaranteedPaths.contains) &&
-              _atRoot[path] != _count &&
-              owners.every(_held.contains)) {
-            problems.putIfAbsent(
-              span,
-              () => '`$span`, which only ${owners.join(' and ')} '
-                  '${owners.length == 1 ? 'generates' : 'generate'} and no '
-                  'role guarantees',
-            );
-          }
-          continue;
-        }
-      }
-      _read(span, problems, names: !(pathLike && span.contains('/')));
+      _readSpan(span, problems);
     }
     for (final line in blocks) {
       final isPath = line.contains('/') && !_notOfPath.hasMatch(line.trim());
@@ -388,6 +423,49 @@ final class _Apps {
       }
     }
     return problems;
+  }
+
+  /// Adds to [problems] what [span], inline code of a note, names of the
+  /// modules that the note is held against. A span that is the path of a
+  /// file or a directory of an app is read as that path only, and other
+  /// code that is a path is not read for the names of code.
+  void _readSpan(String span, Map<String, String> problems) {
+    final pathLike = !_notOfPath.hasMatch(span);
+    if (pathLike) {
+      final path =
+          span.endsWith('/') ? span.substring(0, span.length - 1) : span;
+      final files = _filesAt(path);
+      if (files.isNotEmpty) {
+        if (_pathProblem(span, path, files) case final what?) {
+          problems.putIfAbsent(span, () => what);
+        }
+        return;
+      }
+    }
+    _read(span, problems, names: !(pathLike && span.contains('/')));
+  }
+
+  /// The files of the apps at [path], or under it as a directory.
+  List<String> _filesAt(String path) => [
+        for (final file in _owners.keys)
+          if (file == path || file.startsWith('$path/')) file,
+      ];
+
+  /// What [span], inline code of a note that is the path [path] of [files],
+  /// the files of the apps at it or under it, names of the modules that the
+  /// note is held against, as the end of a sentence, or `null` when a note
+  /// may give it: a file or a directory that only they generate, that no
+  /// role guarantees and that not every app has at its root.
+  String? _pathProblem(String span, String path, List<String> files) {
+    final owners = {for (final file in files) ..._owners[file]!};
+    if (!files.any(_guaranteedPaths.contains) &&
+        _atRoot[path] != _count &&
+        owners.every(_held.contains)) {
+      return '`$span`, which only ${owners.join(' and ')} '
+          '${owners.length == 1 ? 'generates' : 'generate'} and no '
+          'role guarantees';
+    }
+    return null;
   }
 
   /// Adds to [problems] what [code] of a note names of the modules that
@@ -429,7 +507,7 @@ final class _Apps {
     for (final outside in [...?_outside[name]]..sort()) {
       for (final module in _held) {
         if (!(_behind[outside]?.contains(module) ?? false)) continue;
-        return outside.startsWith('package:')
+        return outside.startsWith(_packageScheme)
             ? 'which only code that imports $outside uses, a package of '
                 '$module, ${_describe(module)}'
             : 'which only code that imports $outside uses, a file that no '
@@ -587,6 +665,10 @@ const Set<String> _dartNames = {
   'ZoneDelegate',
   'ZoneSpecification',
 };
+
+/// The start of the URI of a library of a package, its scheme with the
+/// colon, as in `package:<name>/<path>`.
+const String _packageScheme = 'package:';
 
 /// A word of a name or of a text: a run of lower-case letters, with an
 /// upper-case letter before it or not, a run of upper-case letters, or a
