@@ -71,8 +71,16 @@ void main() {
     template: TestTemplate(choice: 'the start'),
   );
 
-  CreatePipeline pipeline(List<SmfModule> modules, FakeHost host) =>
-      CreatePipeline(registry: ModuleRegistry(modules), host: host.host);
+  CreatePipeline pipeline(
+    List<SmfModule> modules,
+    FakeHost host, {
+    SetupLink? setupLink,
+  }) =>
+      CreatePipeline(
+        registry: ModuleRegistry(modules),
+        host: host.host,
+        setupLink: setupLink,
+      );
 
   CreateRequest request(
     List<String> modules, {
@@ -146,8 +154,16 @@ void main() {
       ),
       TestModule('go', providers: [RoleProvider.plain(nav)]),
     ];
+    final asked = <List<ManualStepId>>[];
 
-    final plan = (await pipeline(modules, host).plan(request(['fire', 'go'])))!;
+    final plan = (await pipeline(
+      modules,
+      host,
+      setupLink: (steps) {
+        asked.add(steps);
+        return guideOf(steps);
+      },
+    ).plan(request(['fire', 'go'])))!;
 
     expect(plan.choices[sign], 'chosen');
     expect(template.chosen, hasLength(1));
@@ -163,6 +179,17 @@ void main() {
         '(fire)',
       ),
     ]);
+    // The front end names the guide of the steps once, by their ids.
+    expect(asked, [
+      [
+        ManualStepId.role(sign, 'app_id'),
+        const ManualStepId(ModuleId('fire'), 'apple'),
+      ],
+    ]);
+    expect(
+      plan.setupLink,
+      Uri.parse('https://guide.example/setup?steps=sign.app_id,fire.apple'),
+    );
     await plan.environment.dispose();
   });
 
@@ -222,7 +249,7 @@ void main() {
         ),
       ];
 
-      final plan = (await pipeline(modules, host)
+      final plan = (await pipeline(modules, host, setupLink: guideOf)
           .plan(request(['untitled', 'fire', 'fine'])))!;
 
       expect(plan.leftOut.map((l) => '${l.module}'), ['untitled', 'fire']);
@@ -239,6 +266,11 @@ void main() {
       expect(
         [for (final step in plan.manualSteps) '$step'],
         ['fine.key: Upload a key (fine)'],
+      );
+      // The link is that of the steps of the app without the modules.
+      expect(
+        plan.setupLink,
+        Uri.parse('https://guide.example/setup?steps=fine.key'),
       );
     });
 
@@ -1687,6 +1719,96 @@ void main() {
           'when it cannot ask.\n',
         ),
       );
+    });
+
+    test(
+        'shows the steps by hand under the link to their guide, between the '
+        'steps after generation and the machine', () async {
+      const appId = ManualStep(
+        ManualStepId.role(appEntryRole, 'ios_app_id'),
+        'In Xcode, sign the iOS app with your paid Apple Developer team',
+      );
+      const key = ManualStepId(ModuleId('core'), 'apns_key');
+      final modules = [
+        scaffold(),
+        TestModule(
+          'core',
+          contributions: const [
+            PostGenStep(ToolRef('configure'), []),
+            ManualStep(key, 'Give Firebase your Apple push key (APNs key)'),
+            appId,
+          ],
+        ),
+        // It lists the step of the role too, which the app has once.
+        TestModule(
+          'push',
+          dependsOn: {'core'},
+          contributions: const [appId],
+        ),
+      ];
+      const explain = CreateRequest(
+        appName: 'my_app',
+        modules: [ModuleId('push')],
+        explain: true,
+      );
+      const steps =
+          '  app_entry.ios_app_id: In Xcode, sign the iOS app with your paid '
+          'Apple Developer team (core, push)\n'
+          '  core.apns_key: Give Firebase your Apple push key (APNs key) '
+          '(core)\n';
+
+      final host = FakeHost();
+      final plan =
+          await pipeline(modules, host, setupLink: guideOf).plan(explain);
+
+      expect(plan, isNull);
+      expect(
+        host.logger.infos.join('\n'),
+        contains(
+          'After generation\n'
+          '  configure (core)\n'
+          '\n'
+          'By hand\n'
+          // The steps of roles come first, in the link too.
+          '  ${guideOf([appId.id, key])}\n'
+          '$steps'
+          '\n'
+          'Machine\n',
+        ),
+      );
+
+      // A front end that names no page shows the steps alone.
+      final unlinked = FakeHost();
+      await pipeline(modules, unlinked).plan(explain);
+      expect(
+        unlinked.logger.infos.join('\n'),
+        contains('  configure (core)\n\nBy hand\n$steps\nMachine\n'),
+      );
+    });
+
+    test('shows no steps by hand for an app without any', () async {
+      final host = FakeHost();
+      final asked = <List<ManualStepId>>[];
+
+      await pipeline(
+        [scaffold(), TestModule('core')],
+        host,
+        setupLink: (steps) {
+          asked.add(steps);
+          return guideOf(steps);
+        },
+      ).plan(
+        const CreateRequest(
+          appName: 'my_app',
+          modules: [ModuleId('core')],
+          explain: true,
+        ),
+      );
+
+      final report = host.logger.infos.join('\n');
+      expect(report, contains('Machine'));
+      expect(report, isNot(contains('By hand')));
+      expect(asked, isEmpty);
     });
 
     test('says when generation would stop', () async {

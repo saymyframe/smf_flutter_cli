@@ -23,6 +23,7 @@ void main() {
   late List<bool> flags;
   late List<SmfModule> modules;
   late List<GeneratedApp> created;
+  SetupLink? setupLink;
 
   Future<int> smf(List<String> arguments, {int? usageLineLength}) => runSmf(
         arguments,
@@ -34,12 +35,14 @@ void main() {
         version: '1.2.3',
         usageLineLength: usageLineLength,
         onCreated: created.add,
+        setupLink: setupLink,
       );
 
   setUp(() {
     flags = [];
     modules = modulesWith();
     created = [];
+    setupLink = null;
   });
 
   /// The end of what the run reported, from the line that the app is
@@ -660,6 +663,160 @@ void main() {
         ),
       );
       expect(runner.calls, isEmpty);
+    });
+  });
+
+  group('the steps by hand', () {
+    const key = ManualStep(
+      ManualStepId(ModuleId('extra'), 'apns_key'),
+      'Give Firebase your Apple push key (APNs key)',
+    );
+    const appId = ManualStep(
+      ManualStepId.role(appEntryRole, 'ios_app_id'),
+      'In Xcode, sign the iOS app with your paid Apple Developer team',
+    );
+    const create = [
+      'create',
+      'my_app',
+      '-o',
+      '/work',
+      '-m',
+      'extra',
+      '--no-input',
+    ];
+    const ofKey = 'info: Finish the setup by hand in one step:\n'
+        '  https://guide.example/setup?steps=extra.apns_key';
+    const runIt = 'info: Run it:\n  cd /work/my_app\n  flutter run';
+    late List<List<ManualStepId>> asked;
+
+    setUp(() {
+      asked = [];
+      setupLink = (steps) {
+        asked.add(steps);
+        return guideOf(steps);
+      };
+    });
+
+    test(
+        'are no warning: the link to their guide comes on a line of its own '
+        'after the steps that are left for later, before the lines on '
+        'running the app', () async {
+      modules = modulesWith([
+        const PostGenStep(
+          ToolRef('firebase'),
+          ['login'],
+          description: 'Log in to Firebase',
+          external: true,
+          skippable: true,
+        ),
+        key,
+        appId,
+      ]);
+      final link = guideOf([appId.id, key.id]);
+
+      expect(
+        await smf([...create, '--skip-external-setup']),
+        SmfExitCodes.success,
+      );
+
+      expect(host.logger.warnings, isEmpty);
+      expect(end(), [
+        'success: Created my_app in /work/my_app.',
+        equals(
+          'info: One step is left for later. Run it in the app:\n'
+          '  Log in to Firebase (the run skips external setup):\n'
+          '    firebase login',
+        ),
+        'info: Finish the setup by hand in 2 steps:\n  $link',
+        'info: Then run the app:\n  cd /work/my_app\n  flutter run',
+      ]);
+      // The steps of roles come first, in the link too.
+      expect(asked, [
+        [appId.id, key.id],
+      ]);
+      expect(created.single.manualSteps, [appId, key]);
+      expect(created.single.setupLink, link);
+    });
+
+    test(
+        'are told of with --no-input, and leave the run to end with "Run it", '
+        'which follows only the steps left for later', () async {
+      modules = modulesWith([key]);
+
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(end(), [
+        'success: Created my_app in /work/my_app.',
+        ofKey,
+        runIt,
+      ]);
+    });
+
+    test('ask nothing, so a run in a terminal tells of them the same way',
+        () async {
+      host = FakeHost(processRunner: runner, terminal: true);
+      modules = modulesWith([key]);
+
+      expect(
+        await smf([
+          'create',
+          'my_app',
+          '-o',
+          '/work',
+          '--org',
+          'com.example',
+          '-m',
+          'extra',
+        ]),
+        SmfExitCodes.success,
+      );
+
+      expect(host.prompter.asked, isEmpty);
+      expect(end(), [
+        'success: Created my_app in /work/my_app.',
+        ofKey,
+        runIt,
+      ]);
+    });
+
+    test('are not told of by a front end that names no guide', () async {
+      setupLink = null;
+      modules = modulesWith([key]);
+
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(end(), ['success: Created my_app in /work/my_app.', runIt]);
+      expect(created.single.manualSteps, [key]);
+      expect(created.single.setupLink, isNull);
+    });
+
+    test('are none in an app without any, whose guide nobody asks for',
+        () async {
+      expect(await smf(create), SmfExitCodes.success);
+
+      expect(end(), ['success: Created my_app in /work/my_app.', runIt]);
+      expect(asked, isEmpty);
+      expect(created.single.setupLink, isNull);
+    });
+
+    test('are shown by --explain under the link to their guide', () async {
+      modules = modulesWith([key]);
+
+      expect(
+        await smf(['create', 'my_app', '-m', 'extra', '--explain']),
+        SmfExitCodes.success,
+      );
+
+      expect(
+        host.logger.infos.join('\n'),
+        contains(
+          'By hand\n'
+          '  https://guide.example/setup?steps=extra.apns_key\n'
+          '  extra.apns_key: Give Firebase your Apple push key (APNs key) '
+          '(extra)\n',
+        ),
+      );
+      expect(created, isEmpty);
     });
   });
 
