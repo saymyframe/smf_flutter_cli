@@ -129,6 +129,27 @@ void main() {
     );
   });
 
+  test('keeps the steps by hand of the app, which no command can do', () async {
+    const key = ManualStep(
+      ManualStepId(ModuleId('extra'), 'apns_key'),
+      'Give Firebase your Apple push key (APNs key)',
+    );
+    const appId = ManualStep(
+      ManualStepId.role(appEntryRole, 'ios_app_id'),
+      'In Xcode, sign the iOS app with your paid Apple Developer team',
+    );
+
+    final app =
+        (await pipeline(modulesWith(const [key, appId])).run(request()))!;
+    final without = (await pipeline(modulesWith()).run(
+      request(onConflict: OnConflict.replace),
+    ))!;
+
+    // The steps of roles come first.
+    expect(app.manualSteps, [appId, key]);
+    expect(without.manualSteps, isEmpty);
+  });
+
   test('writes the files of the render hooks as they are', () async {
     // mason would render the tag and remove the backslashes.
     const notes = '{{app_name}}\r\na\\\nb caf\\é\n';

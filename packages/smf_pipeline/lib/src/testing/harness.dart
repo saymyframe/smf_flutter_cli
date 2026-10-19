@@ -7,6 +7,7 @@ import 'package:smf_pipeline/src/environment.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/host.dart';
 import 'package:smf_pipeline/src/identity.dart';
+import 'package:smf_pipeline/src/manual_steps.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
 import 'package:smf_pipeline/src/render.dart';
@@ -102,14 +103,25 @@ final class ContractResult {
 
   /// The data and the roles of the [app], as the hooks of its roles got
   /// them when the harness rendered it: the data of the roles that
-  /// applies, the present roles, the context of the harness and the
-  /// [choices] of the roles; `null` without an [app].
+  /// applies, the present roles, the context of the harness, the [choices]
+  /// of the roles and the [manualSteps]; `null` without an [app].
   ///
   /// A role builds the input of its hooks from it with [Role.hookInput],
   /// so a test reads what the modules gave a role, and what the role
   /// chose, as every provider of the role gets it, whichever module
   /// provides it.
   final RoleHookRequest? hook;
+
+  /// The steps of the app that its developer does by hand, each once, in
+  /// order and with their contributors, as stage 5 planned them, or none if
+  /// the case did not resolve (see [ValidationResult.manualSteps]).
+  ///
+  /// The pipeline plans them before the roles choose, so a harness that
+  /// does not render has them too. The render hooks and the structural
+  /// rules of the roles that are open to all modules get them (see
+  /// [RoleHookInput.manualSetup]).
+  List<PlannedManualStep> get manualSteps =>
+      validation?.manualSteps ?? const [];
 
   /// This result with [more] issues, and with the [collection], the
   /// [choices], the [answers], the [app] and the [hook] if they are given.
@@ -936,6 +948,7 @@ final class ContractHarness {
         context: context,
         choices: choices,
         pubspec: validation.pubspec,
+        manualSteps: validation.manualSteps,
       );
     } on SmfUsageException catch (error) {
       return checked._with([SmfIssue(error.message)]);
@@ -957,6 +970,7 @@ final class ContractHarness {
         collection: decided,
         context: context,
         choices: choices,
+        manualSteps: validation.manualSteps,
       ),
     );
     return rendered._with(checkRendered(rendered, app));
@@ -1441,7 +1455,9 @@ final class ContractHarness {
 
   /// Indexes the Dart files among [files], the text files of the rendered
   /// app of [result] by path, runs the structural rules of its present roles
-  /// with the data it collected and the texts, and checks the symbols of
+  /// with the data it collected, the steps by hand that stage 5 planned
+  /// (see [ContractResult.manualSteps]) and the texts, and checks the
+  /// symbols of
   /// their interfaces: those that the app needs, by the choices of its
   /// roles, are declared, and the app has no file of one that it does not
   /// need (see [RoleInterface.checkSymbols]).
@@ -1596,6 +1612,9 @@ final class ContractHarness {
         collection: collection,
         context: context,
         choices: choices ?? const {},
+        // Planned before the choices, so also in an app that the harness
+        // did not render.
+        manualSteps: result.manualSteps,
       ),
       files: indexes,
       texts: texts,

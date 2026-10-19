@@ -967,6 +967,90 @@ void main() {
     );
   });
 
+  test('exposes the steps by hand of a case, whether it renders or not',
+      () async {
+    const step = ManualStep(
+      ManualStepId(ModuleId('fcm'), 'apns_key'),
+      'Give Firebase your Apple push key (APNs key)',
+    );
+    final registry = ModuleRegistry([
+      scaffold(),
+      TestModule('fcm', contributions: const [step]),
+    ]);
+    const fcm = ContractCase('fcm', requested: [ModuleId('fcm')]);
+
+    final rendered = await ContractHarness(registry).check(fcm);
+    final unrendered =
+        await ContractHarness(registry, render: false).check(fcm);
+
+    expect(rendered.errors, isEmpty);
+    for (final result in [rendered, unrendered]) {
+      expect(
+        [for (final planned in result.manualSteps) '$planned'],
+        ['fcm.apns_key: Give Firebase your Apple push key (APNs key) (fcm)'],
+      );
+    }
+    expect(unrendered.app, isNull);
+    expect(rendered.app!.manualSteps, rendered.manualSteps);
+    expect(rendered.hook!.manualSetup.steps, [step]);
+    // A case that did not resolve has no steps.
+    expect(
+      const ContractResult(ContractCase('none', requested: []), []).manualSteps,
+      isEmpty,
+    );
+  });
+
+  test(
+      'gives the structural rules of a role open to all modules the steps by '
+      'hand, whether the app renders or not, and those of no other role',
+      () async {
+    final seen = <String, ManualSetup>{};
+    TestRole<NoDsl> spy(String id, {bool open = false}) => TestRole<NoDsl>(
+          id,
+          openToAllModules: open,
+          structuralRules: [
+            StructuralRule(
+              id: '$id.steps',
+              description: 'Keeps the steps.',
+              check: (input) {
+                seen[id] = input.roleInput.manualSetup;
+                return const [];
+              },
+            ),
+          ],
+        );
+    const step = ManualStep(
+      ManualStepId(ModuleId('fcm'), 'apns_key'),
+      'Give Firebase your Apple push key (APNs key)',
+    );
+    final registry = ModuleRegistry([
+      scaffold(),
+      TestModule(
+        'fcm',
+        providers: [
+          RoleProvider.plain(spy('everyone', open: true)),
+          RoleProvider.plain(spy('other')),
+        ],
+        contributions: const [step],
+      ),
+    ]);
+    const fcm = ContractCase('fcm', requested: [ModuleId('fcm')]);
+
+    final rendered = await ContractHarness(registry).check(fcm);
+
+    expect(rendered.errors, isEmpty);
+    expect(seen['everyone']!.steps, [step]);
+    expect(seen['other'], same(ManualSetup.none));
+
+    seen.clear();
+    final unrendering = ContractHarness(registry, render: false);
+    final unrendered = await unrendering.check(fcm);
+    expect(seen, isEmpty);
+    unrendering.checkStructure(unrendered, files: const {}, owners: const {});
+    expect(seen['everyone']!.steps, [step]);
+    expect(seen['other'], same(ManualSetup.none));
+  });
+
   test(
       'reports a note of the guide for coding agents that names a file which '
       'the app does not have', () async {

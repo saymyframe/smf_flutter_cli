@@ -9,17 +9,20 @@ part of '../role.dart';
 /// all modules (see [Role.openToAllModules]). Its hooks run at these stages
 /// of generation:
 /// 1. [contribute], while contributions are collected;
-/// 2. [validate], during validation;
+/// 2. [validate] and [manualSteps], during validation;
 /// 3. [choose], after preflight checks, to ask the user what only the user
 ///    can decide;
 /// 4. [render], before the templates are rendered.
 ///
 /// All data is collected before [validate], so the hooks of different roles
-/// never depend on each other's results. Of what the hooks get, only data
-/// can depend on what another role chose (see [Contribution.whenChosen]):
-/// [choose] of a role with such data runs after the hook of the other role
-/// and gets the data whose conditions hold, and the render hooks get only
-/// that data too.
+/// never depend on each other's results, with one exception: the render
+/// hooks of a role that is open to all modules get the steps by hand of
+/// the app, which the [manualSteps] hooks of every role returned during
+/// validation (see [RoleHookInput.manualSetup]). Of what the hooks get,
+/// only data can depend on what another role chose (see
+/// [Contribution.whenChosen]): [choose] of a role with such data runs after
+/// the hook of the other role and gets the data whose conditions hold, and
+/// the render hooks get only that data too.
 abstract base class RoleTemplate<D extends Object> {
   /// Allows subclasses to have constant constructors.
   const RoleTemplate();
@@ -39,6 +42,22 @@ abstract base class RoleTemplate<D extends Object> {
   /// code of the role (see [SmfIssue.code]); a warning that depends on the
   /// choice comes from [choose].
   List<SmfIssue> validate(RoleHookInput<D> input) => const [];
+
+  /// Returns the steps of the app that its developer does by hand and that
+  /// depend on the data of the role, or of the roles that it requires or
+  /// uses (see [ManualStep]).
+  ///
+  /// It runs once, with [validate], before [choose], so
+  /// [RoleHookInput.choice] is `null`: the steps depend on no choice, so a
+  /// run that stops before the choices, as `--explain` does, has them too.
+  /// A step that every app with the role
+  /// has is a contribution of [contribute] instead. A step that the hook
+  /// returns has no [Contribution.when], since the hook asks for the
+  /// presence of the roles itself (see [RoleHookInput.has]), and has an id
+  /// of the role, of a role that it requires or uses, or of a role that is
+  /// open to all modules (see [ManualStepId.role]). A step of a role that
+  /// the app lacks does not apply.
+  List<ManualStep> manualSteps(RoleHookInput<D> input) => const [];
 
   /// Asks the user, or reads the role's options, for a decision that the
   /// data leaves open, such as the start screen of the app.

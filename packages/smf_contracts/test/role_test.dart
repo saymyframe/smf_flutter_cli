@@ -241,6 +241,30 @@ void main() {
       ]);
     });
 
+    test(
+        'gives the steps by hand of the app only to a role open to all '
+        'modules', () {
+      final entry = TestRole<NoDsl>('entry', openToAllModules: true);
+      const step = ManualStep(
+        ManualStepId(ModuleId('push'), 'apns_key'),
+        'Give Firebase your Apple push key (APNs key)',
+      );
+      const setup = ManualSetup(steps: [step]);
+      final withSteps = RoleHookRequest(
+        data: request.data,
+        presentRoles: {router, di, entry},
+        context: testContext,
+        manualSetup: setup,
+      );
+
+      expect(entry.hookInput(withSteps).manualSetup, same(setup));
+      // The ids of the steps name modules that the router does not know.
+      expect(router.hookInput(withSteps).manualSetup, same(ManualSetup.none));
+      // The hooks before the render hooks get none, which they list.
+      expect(request.manualSetup, same(ManualSetup.none));
+      expect(entry.hookInput(request).manualSetup, same(ManualSetup.none));
+    });
+
     test('leaves out data whose when roles are absent', () {
       final conditional = RoleHookRequest(
         data: [
@@ -486,6 +510,7 @@ void main() {
       expect(output.fragments, isEmpty);
       expect(output.vars, isEmpty);
       expect(output.files, isEmpty);
+      expect(template.manualSteps(input), isEmpty);
     });
 
     test('a plain provider only names its role', () {
@@ -493,6 +518,7 @@ void main() {
 
       expect(provider.role, same(role));
       expect(provider.validate(input), isEmpty);
+      expect(provider.manualSteps(input), isEmpty);
       expect(provider.render(input).fragments, isEmpty);
       expect(provider.render(input).files, isEmpty);
     });

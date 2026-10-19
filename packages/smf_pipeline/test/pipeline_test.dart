@@ -12,6 +12,18 @@ final class _OneTab extends LayoutProvider {
   int? get maxDestinations => 1;
 }
 
+/// A provider whose hook of the steps by hand throws.
+final class _ThrowingSteps extends RoleProvider<NoDsl> {
+  _ThrowingSteps(this.role);
+
+  @override
+  final Role<NoDsl> role;
+
+  @override
+  List<ManualStep> manualSteps(RoleHookInput<NoDsl> input) =>
+      throw StateError('no steps');
+}
+
 String _screen(String name) =>
     '${name[0].toUpperCase()}${name.substring(1)}Screen';
 
@@ -112,6 +124,48 @@ void main() {
     await plan.environment.dispose();
   });
 
+  test('plans the steps by hand once, before the roles choose', () async {
+    final host = FakeHost();
+    final steps = <ManualStep>[];
+    final template = TestTemplate<String>(choice: 'chosen', steps: steps);
+    final sign = TestRole<String>('sign', template: template);
+    steps.add(
+      ManualStep(ManualStepId.role(sign, 'app_id'), 'Register the App ID'),
+    );
+    final modules = [
+      scaffold(),
+      TestModule(
+        'fire',
+        providers: [RoleProvider.plain(sign)],
+        contributions: const [
+          ManualStep(
+            ManualStepId(ModuleId('fire'), 'apple'),
+            'Turn on Sign in with Apple in Firebase Authentication',
+          ),
+        ],
+      ),
+      TestModule('go', providers: [RoleProvider.plain(nav)]),
+    ];
+
+    final plan = (await pipeline(modules, host).plan(request(['fire', 'go'])))!;
+
+    expect(plan.choices[sign], 'chosen');
+    expect(template.chosen, hasLength(1));
+    // The steps depend on no choice, so a run that stops before the
+    // choices, as --explain does, has them too.
+    expect(template.listed, hasLength(1));
+    expect(template.listed.single.choice, isNull);
+    final planned = [for (final step in plan.manualSteps) '$step'];
+    expect(planned, [
+      'sign.app_id: Register the App ID (role:sign)',
+      equals(
+        'fire.apple: Turn on Sign in with Apple in Firebase Authentication '
+        '(fire)',
+      ),
+    ]);
+    await plan.environment.dispose();
+  });
+
   group('lenient mode', () {
     final bad = TestModule(
       'bad',
@@ -142,6 +196,50 @@ void main() {
         startsWith('Leaving out bad: bad lists the nav'),
         'Leaving out child: child depends on bad, which was left out.',
       ]);
+    });
+
+    test(
+        'leaves out a module whose step by hand breaks a rule, or whose hook '
+        'of the steps fails', () async {
+      final host = FakeHost();
+      final modules = [
+        scaffold(),
+        TestModule(
+          'untitled',
+          contributions: const [
+            ManualStep(ManualStepId(ModuleId('untitled'), 'key'), ''),
+          ],
+        ),
+        TestModule(
+          'fire',
+          providers: [_ThrowingSteps(TestRole<NoDsl>('sign'))],
+        ),
+        TestModule(
+          'fine',
+          contributions: const [
+            ManualStep(ManualStepId(ModuleId('fine'), 'key'), 'Upload a key'),
+          ],
+        ),
+      ];
+
+      final plan = (await pipeline(modules, host)
+          .plan(request(['untitled', 'fire', 'fine'])))!;
+
+      expect(plan.leftOut.map((l) => '${l.module}'), ['untitled', 'fire']);
+      expect(host.logger.warnings, [
+        startsWith(
+          'Leaving out untitled: The title of the step by hand untitled.key '
+          'of untitled is blank',
+        ),
+        equals(
+          'Leaving out fire: The hook of fire that lists the steps by hand '
+          'failed: Bad state: no steps',
+        ),
+      ]);
+      expect(
+        [for (final step in plan.manualSteps) '$step'],
+        ['fine.key: Upload a key (fine)'],
+      );
     });
 
     test('leaves out a module whose required check fails', () async {
@@ -764,6 +862,7 @@ void main() {
         context: plan.context,
         choices: plan.choices,
         pubspec: plan.pubspec,
+        manualSteps: plan.manualSteps,
       );
       return (plan, app);
     }

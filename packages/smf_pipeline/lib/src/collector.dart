@@ -19,8 +19,8 @@ final class Collected {
   final ContributionOrigin origin;
 
   /// Whether it applies: every role in its [Contribution.when] is present
-  /// and, for [RoleData] and for a [SocketContribution] to a socket of a
-  /// role, that role is.
+  /// and, for [RoleData], for a [SocketContribution] to a socket of a role
+  /// and for a [ManualStep] with an id of a role, that role is.
   ///
   /// A contribution with conditions on what roles chose
   /// ([Contribution.whenChosen]) applies by the roles alone until the
@@ -28,9 +28,10 @@ final class Collected {
   /// that, also only if every condition holds.
   final bool applies;
 
-  /// Whether a render hook of [origin] returned it, as one of
-  /// [RoleOutput.fragments], rather than its `contribute`, which does not
-  /// get the data of the roles.
+  /// Whether a hook of [origin] returned it, rather than its `contribute`,
+  /// which does not get the data of the roles: a render hook, as one of
+  /// [RoleOutput.fragments], or a hook that lists the steps by hand of the
+  /// app, as a [ManualStep] (see [RoleTemplate.manualSteps]).
   final bool fromHook;
 }
 
@@ -114,7 +115,8 @@ final class Collection {
 /// that do not apply are kept, so that validation can check them too.
 ///
 /// Like data, code for a socket of a role applies only when the role is
-/// present: without the role, no template has the socket's tag.
+/// present: without the role, no template has the socket's tag. So does a
+/// step by hand with an id of a role (see [ManualStepId.role]).
 ///
 /// A module or template that fails to contribute gets an issue with its
 /// origin instead, so lenient mode can leave the module out.
@@ -137,7 +139,7 @@ Collection collect(Resolution resolution, ModuleContext context) {
       return;
     }
     for (final contribution in contributions) {
-      all.add(_collected(contribution, origin, present));
+      all.add(collectedOf(contribution, origin, present));
     }
   }
 
@@ -165,15 +167,19 @@ Collection collect(Resolution resolution, ModuleContext context) {
 }
 
 /// The [contribution] of [origin], which applies when the roles of its
-/// [Contribution.when] and the role of its data or socket are [present].
-Collected _collected(
+/// [Contribution.when] and the role of its data, its socket or the id of
+/// its step by hand are [present]; [fromHook] if a hook of [origin]
+/// returned it (see [Collected.fromHook]).
+Collected collectedOf(
   Contribution contribution,
   ContributionOrigin origin,
-  Set<Role> present,
-) {
+  Set<Role> present, {
+  bool fromHook = false,
+}) {
   final role = switch (contribution) {
     RoleData(:final role) => role,
     SocketContribution(:final socket) => socket.role,
+    ManualStep(:final id) => id.role,
     _ => null,
   };
   final applies = contribution.when.every(present.contains) &&
@@ -186,5 +192,6 @@ Collected _collected(
     },
     origin,
     applies: applies,
+    fromHook: fromHook,
   );
 }

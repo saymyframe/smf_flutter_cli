@@ -114,6 +114,46 @@ void main() {
     );
   });
 
+  test('a step by hand of a role applies only with the role', () {
+    final ofUsed = ManualStep(ManualStepId.role(used, 'key'), 'Upload a key');
+    final ofAbsent = ManualStep(ManualStepId.role(absent, 'key'), 'Sign it');
+    const ofModule = ManualStep(ManualStepId(ModuleId('home'), 'id'), 'Do it');
+    final withAbsent = ManualStep(
+      const ManualStepId(ModuleId('home'), 'other'),
+      'Do it too',
+      when: {absent},
+    );
+    final module = TestModule(
+      'home',
+      uses: {used, absent},
+      contributions: [ofUsed, ofAbsent, ofModule, withAbsent],
+    );
+    final provider = TestModule(
+      'prov',
+      providers: [RoleProvider.plain(used)],
+    );
+
+    final collection = collect(resolutionOf([module, provider]), testContext);
+
+    expect(
+      [
+        for (final collected in collection.ofModule(const ModuleId('home')))
+          collected.applies,
+      ],
+      [true, false, true, false],
+    );
+    expect(
+      [
+        for (final collected in collection.applyingOf<ManualStep>())
+          collected.contribution,
+      ],
+      [ofUsed, ofModule],
+    );
+    // The step is collected as it is, with its origin beside it.
+    expect(collection.all.first.contribution, same(ofUsed));
+    expect(collection.all.first.fromHook, isFalse);
+  });
+
   test('when needs every listed role', () {
     final module = TestModule(
       'home',

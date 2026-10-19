@@ -4,6 +4,7 @@ import 'package:smf_contracts/core.dart';
 
 part 'contributions/brick_contribution.dart';
 part 'contributions/codegen_request.dart';
+part 'contributions/manual_step.dart';
 part 'contributions/post_gen_step.dart';
 part 'contributions/preflight.dart';
 part 'contributions/pubspec_contribution.dart';
@@ -25,7 +26,9 @@ part 'contributions/socket_contribution.dart';
 /// - [PubspecContribution]: dependencies and `pubspec.yaml` settings;
 /// - [CodegenRequest]: a request to run `build_runner`;
 /// - [Preflight]: checks of the machine before generation;
-/// - [PostGenStep]: a command to run in the generated app.
+/// - [PostGenStep]: a command to run in the generated app;
+/// - [ManualStep]: a step of the setup that the developer of the app does
+///   by hand.
 @immutable
 sealed class Contribution {
   const Contribution({this.when = const {}, this.whenChosen = const {}});
@@ -43,8 +46,9 @@ sealed class Contribution {
   ///
   /// Only a [BrickContribution] and [RoleData] take them. The pipeline needs
   /// the other kinds before any role chooses: the pubspec, the checks of
-  /// the machine and the steps after generation when it validates the app,
-  /// and the code for sockets when it orders their contributors.
+  /// the machine, the steps after generation and the steps by hand when it
+  /// validates the app, and the code for sockets when it orders their
+  /// contributors.
   ///
   /// Validation treats a contribution with conditions as one that applies,
   /// and the app has it once the roles have chosen only if every condition

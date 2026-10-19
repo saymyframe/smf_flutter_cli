@@ -11,6 +11,7 @@ final class RoleHookRequest {
     required this.presentRoles,
     required this.context,
     this.choices = const {},
+    this.manualSetup = ManualSetup.none,
   });
 
   /// The data of all roles, each with its origin: that of the modules, in
@@ -30,6 +31,15 @@ final class RoleHookRequest {
   /// The results of the roles' [RoleTemplate.choose] hooks, from the stage
   /// they run on.
   final Map<Role, Object?> choices;
+
+  /// The steps of the app that its developer does by hand, as the pipeline
+  /// planned them when it validated the app (see [ManualStep]), for the
+  /// render hooks and the structural rules; [ManualSetup.none] for the
+  /// hooks that run before, which list the steps.
+  ///
+  /// [Role.hookInput] gives them only to a role that is open to all
+  /// modules (see [RoleHookInput.manualSetup]).
+  final ManualSetup manualSetup;
 }
 
 /// The input of a hook of a role's template or of one of its providers.
@@ -43,6 +53,7 @@ final class RoleHookInput<D extends Object> {
     required Map<Role, List<RoleData<Object>>> visibleData,
     required this.choice,
     required this.context,
+    required this.manualSetup,
   })  : _present = present,
         _visibleData = visibleData;
 
@@ -63,6 +74,19 @@ final class RoleHookInput<D extends Object> {
 
   /// The app being generated.
   final ModuleContext context;
+
+  /// The steps of the app that its developer does by hand, each once and
+  /// in order, with the link to their guide, for a role that is open to all
+  /// modules (see [Role.openToAllModules]), such as the app entry, whose
+  /// template tells of them in the README of the app.
+  ///
+  /// Only the render hooks and the structural rules of such a role get the
+  /// steps, which the pipeline planned when it validated the app, from the
+  /// steps of every module and the `manualSteps` hooks of every role (see
+  /// [RoleTemplate.manualSteps]). Every other role gets [ManualSetup.none],
+  /// since the ids of the steps name modules of the app that the role does
+  /// not know of, and so does every hook that runs before the render hooks.
+  final ManualSetup manualSetup;
 
   final Set<Role> _present;
   final Map<Role, List<RoleData<Object>>> _visibleData;
