@@ -3,3 +3,6 @@ contact_links:
   - name: Documentation
     url: https://doc.saymyframe.com
     about: Read the docs for guidance and examples.
+  - name: Questions
+    url: https://github.com/saymyframe/smf_flutter_cli/discussions/categories/q-a
+    about: Ask how to use smf create or how to write a module.

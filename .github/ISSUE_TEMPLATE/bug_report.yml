@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem in the SMF Flutter CLI repository
+description: Something in smf create, a module or a generated app does not work
 title: "bug: <short description>"
 labels: [bug]
 body:
@@ -7,83 +7,81 @@ body:
     id: preflight
     attributes:
       label: Preflight
+      description: Questions go to [Q&A in Discussions](https://github.com/saymyframe/smf_flutter_cli/discussions/categories/q-a).
       options:
-        - label: I searched open/closed issues and did not find a duplicate
+        - label: I searched open and closed issues and found no duplicate.
           required: true
-        - label: This is not a usage question or support request
+        - label: This is not a question.
           required: true
-        - label: I can reproduce this on the latest main branch
+        - label: I can reproduce it with the latest smf_flutter_cli from pub.dev.
           required: false
   - type: dropdown
-    id: scope
+    id: area
     attributes:
-      label: Affected area (select all that apply)
+      label: Where is the problem?
+      description: Select all that apply.
       multiple: true
       options:
-        - CLI core
-        - Bricks / templates
-        - Generators
-        - Prompts / UI
-        - File writers
-        - Utils / Tooling
-        - Docs
-        - Other / unsure
+        - smf create itself (its options, questions, machine checks or setup steps such as flutterfire configure)
+        - The generated app fails flutter analyze or does not build
+        - The generated app does the wrong thing when it runs
+        - Writing a module (smf_contracts, smf_pipeline)
+        - Documentation
+        - Other or not sure
   - type: textarea
-    id: desc
+    id: command
     attributes:
-      label: Description
-      description: Clear, concise description of the bug.
-      placeholder: What happened? What did you expect instead?
-    validations:
-      required: true
+      label: Command
+      description: The full `smf create` command, with `-m` and every option. If smf create asked you questions in the terminal, list your answers too. Leave this empty for a problem in the docs.
+      placeholder: smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
+      render: shell
   - type: textarea
-    id: repro
+    id: steps
     attributes:
-      label: Steps to reproduce
-      description: Provide a minimal, reproducible example (link to repo or gist if possible).
+      label: Steps after smf create
+      description: What you did with the app next, and where it ran (Android, iOS, an emulator or a simulator).
       placeholder: |
-        1. smf create demo_app ...
-        2. Run ...
-        3. Observe ...
+        1. cd my_app
+        2. flutter run on an Android emulator
+        3. Tap ...
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: If the app looks wrong, add a screenshot.
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected behavior
+      label: What you expected
     validations:
       required: true
   - type: textarea
+    id: explain
+    attributes:
+      label: Output of --explain
+      description: Run the same command with `--explain` and paste what it prints. It shows what would be generated and whether your machine is ready, and changes nothing.
+      render: shell
+  - type: textarea
     id: logs
     attributes:
-      label: Logs / screenshots
-      description: Paste relevant logs or screenshots. Redact secrets.
+      label: Logs
+      description: The output of the command that failed. For smf create, run it with `--verbose`. Remove secrets before you paste.
       render: shell
   - type: input
-    id: cli
+    id: smf
     attributes:
-      label: SMF CLI version
-      description: Output of `smf -v` if available.
-      placeholder: e.g., 0.4.1
-  - type: input
+      label: smf version
+      description: The output of `smf -v`.
+  - type: textarea
     id: flutter
     attributes:
       label: Flutter version
-      placeholder: e.g., 3.22.1
-  - type: input
-    id: dart
-    attributes:
-      label: Dart version
-      placeholder: e.g., 3.4.0
+      description: The output of `flutter --version`.
+      render: shell
   - type: input
     id: os
     attributes:
-      label: OS
-      placeholder: e.g., macOS 14.6, Ubuntu 22.04, Windows 11
-  - type: checkboxes
-    id: mre
-    attributes:
-      label: Minimal reproducible example
-      options:
-        - label: I have provided a minimal reproduction or a link to it
-          required: false
+      label: Operating system
+      description: The system you ran smf create on, with its version.
