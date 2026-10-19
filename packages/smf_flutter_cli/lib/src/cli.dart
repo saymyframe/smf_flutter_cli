@@ -6,6 +6,7 @@ import 'package:smf_flutter_cli/src/io/host.dart';
 import 'package:smf_flutter_cli/src/io/interruption.dart';
 import 'package:smf_flutter_cli/src/io/terminal.dart';
 import 'package:smf_flutter_cli/src/modules.dart';
+import 'package:smf_flutter_cli/src/setup_guide.dart';
 import 'package:smf_flutter_cli/version.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 
@@ -14,7 +15,8 @@ import 'package:smf_pipeline/smf_pipeline.dart';
 ///
 /// [modules] are those `smf create` offers, [smfModules] by default.
 /// [onCreated] gets every app that `smf create` generated, after the
-/// community banner unless [banner] is `false`.
+/// community banner unless [banner] is `false`. The steps by hand of an
+/// app lead to their guide on the site of SMF (see [setupGuideLinkOf]).
 Future<int> runCli(
   List<String> arguments, {
   List<SmfModule> modules = smfModules,
@@ -31,6 +33,7 @@ Future<int> runCli(
           (machine = IoHost(verbose: verbose, interruption: interruption)).host,
       version: packageVersion,
       usageLineLength: io.stdout.hasTerminal ? io.stdout.terminalColumns : 80,
+      setupLink: setupGuideLinkOf,
       // coverage:ignore-start
       // It runs once smf has created an app, which takes Flutter, so no
       // test runs it. In CI, the matrix runs it without the banner; the
