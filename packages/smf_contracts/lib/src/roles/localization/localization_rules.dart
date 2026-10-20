@@ -271,66 +271,101 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
   for (final MapEntry(key: path, value: file) in input.files.entries) {
     final generatedBy = input.owners[path];
     if (generatedBy == null) continue;
-    final owner = _ownerOf(generatedBy);
-    final module = switch (owner) {
-      ModuleOrigin(:final module) => input.module(module),
-      _ => null,
-    };
-    if (!_readsTexts(owner, module)) continue;
-    final readable = {
-      owner,
-      for (final dependency in module?.dependsOn ?? const <ModuleId>{})
-        ModuleOrigin(dependency),
-    };
-    // The template of another role renders what the modules give that role,
-    // so it reads the texts of their data too.
-    final rendered = _roleWithTextsOf(owner);
-    final ofData = rendered == null
+    final reader = _textReaderOf(input, _ownerOf(generatedBy));
+    if (reader == null) continue;
+    issues
+      ..addAll(_textReadIssues(path, file, reader, byGetter))
+      ..addAll(_textCallIssues(path, file, reader.owner));
+  }
+  return issues;
+}
+
+/// The code of an owner that reads the texts of the app, see
+/// [_readsTexts]: the `owner`, the owners whose texts it may read,
+/// `readable`, and the texts of the data of a role that it may read too,
+/// `ofData`, each as its owner and its name; `own` tells in a problem what
+/// it may read, and `hint` what to do about another text.
+typedef _TextReader = ({
+  ContributionOrigin owner,
+  Set<ContributionOrigin> readable,
+  Set<(ContributionOrigin, String)> ofData,
+  String own,
+  String hint,
+});
+
+/// The code of [owner] in the app of [input] as a reader of the texts of
+/// the app, or `null` if it reads none: a module reads its own texts and
+/// those of the modules it depends on, and the template of a role that
+/// renders data with texts of the modules also the texts of that data.
+_TextReader? _textReaderOf(
+  StructuralRuleInput<TextsData> input,
+  ContributionOrigin owner,
+) {
+  final module = switch (owner) {
+    ModuleOrigin(:final module) => input.module(module),
+    _ => null,
+  };
+  if (!_readsTexts(owner, module)) return null;
+  final readable = {
+    owner,
+    for (final dependency in module?.dependsOn ?? const <ModuleId>{})
+      ModuleOrigin(dependency),
+  };
+  // The template of another role renders what the modules give that role,
+  // so it reads the texts of their data too.
+  final rendered = _roleWithTextsOf(owner);
+  return (
+    owner: owner,
+    readable: readable,
+    ofData: rendered == null
         ? const <(ContributionOrigin, String)>{}
-        : _textsOfDataFor(input, rendered);
-    final own = switch (owner) {
+        : _textsOfDataFor(input, rendered),
+    own: switch (owner) {
       ModuleOrigin() => 'its own texts and those of the modules it depends on',
       _ when rendered != null => 'its own texts and those that the modules '
           'give its role in their data',
       _ => 'its own texts',
-    };
-    for (final access in file.memberAccesses) {
-      if (!_isTexts(access.target)) continue;
-      final read = '${access.target}.${access.name}';
-      final text = byGetter[access.name];
-      if (text == null) {
-        issues.add(
-          SmfIssue(
-            '$path reads $read, but no text of the app has the getter '
-            '${access.name}.',
-            hint: 'Give the role the text as data of its owner: the text '
-                'title of the module settings is read as settingsTitle. '
-                'The rule matches by name, so rename a variable called '
-                'l10n that is not the texts of the app.',
-            origin: owner,
-            path: path,
-          ),
-        );
-      } else if (!readable.contains(text.owner) &&
-          !ofData.contains((text.owner, text.text.name))) {
-        issues.add(
-          SmfIssue(
-            '$path reads $read, the $text, but ${_named(owner)} may only '
-            'read $own.',
-            hint: _ownTextHint(rendered, module),
-            origin: owner,
-            path: path,
-          ),
-        );
-      }
-    }
-    for (final call in file.invocations) {
-      if (!_isTexts(call.target)) continue;
+    },
+    hint: _ownTextHint(rendered, module),
+  );
+}
+
+/// The problems of what [file], the Dart file at [path] of the code of
+/// [reader], reads of the texts of the app, which [byGetter] has by their
+/// getters: a getter that no text has, and a text that [reader] may not
+/// read.
+List<SmfIssue> _textReadIssues(
+  String path,
+  DartFileIndex file,
+  _TextReader reader,
+  Map<String, AppText> byGetter,
+) {
+  final (:owner, :readable, :ofData, :own, :hint) = reader;
+  final issues = <SmfIssue>[];
+  for (final access in file.memberAccesses) {
+    if (!_isTexts(access.target)) continue;
+    final read = '${access.target}.${access.name}';
+    final text = byGetter[access.name];
+    if (text == null) {
       issues.add(
         SmfIssue(
-          '$path calls ${call.target}.${call.name}(), but the texts of the '
-          'app are getters, each named by the role.',
-          hint: 'Read a text as its getter, without arguments.',
+          '$path reads $read, but no text of the app has the getter '
+          '${access.name}.',
+          hint: 'Give the role the text as data of its owner: the text '
+              'title of the module settings is read as settingsTitle. '
+              'The rule matches by name, so rename a variable called '
+              'l10n that is not the texts of the app.',
+          origin: owner,
+          path: path,
+        ),
+      );
+    } else if (!readable.contains(text.owner) &&
+        !ofData.contains((text.owner, text.text.name))) {
+      issues.add(
+        SmfIssue(
+          '$path reads $read, the $text, but ${_named(owner)} may only '
+          'read $own.',
+          hint: hint,
           origin: owner,
           path: path,
         ),
@@ -339,6 +374,25 @@ List<SmfIssue> _checkTextAccess(StructuralRuleInput<TextsData> input) {
   }
   return issues;
 }
+
+/// The problems of the calls of [file], the Dart file at [path] of the
+/// code of [owner], on the texts of the app, which are getters.
+List<SmfIssue> _textCallIssues(
+  String path,
+  DartFileIndex file,
+  ContributionOrigin owner,
+) =>
+    [
+      for (final call in file.invocations)
+        if (_isTexts(call.target))
+          SmfIssue(
+            '$path calls ${call.target}.${call.name}(), but the texts of the '
+            'app are getters, each named by the role.',
+            hint: 'Read a text as its getter, without arguments.',
+            origin: owner,
+            path: path,
+          ),
+    ];
 
 /// The texts of the app that the provider of the role does not render:
 /// those whose getter none of the text files of the provider names, as the

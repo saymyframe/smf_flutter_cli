@@ -139,6 +139,31 @@ final class ArgsSocket extends SocketKind {
 
   @override
   Map<String, String> _render(SocketRef socket, List<SocketContribution> c) {
+    final byName = _byArgument(c);
+    String codes(List<SocketContribution> items) =>
+        items.map((item) => item.fragment!.code).join(', ');
+    return {
+      socket.tag: [
+        for (final MapEntry(key: name, value: shape) in args.entries)
+          if (byName[name] case final items?)
+            if (shape == ArgShape.scalar)
+              '$name: ${codes(items)},'
+            else
+              '$name: [${codes(items)}],',
+      ].join('\n'),
+    };
+  }
+
+  /// The contributions [c] by the name of the argument that each sets, in
+  /// the order they came, with the first contribution of each expression of
+  /// an argument and none of the others.
+  ///
+  /// Throws a [MergeConflict] for the items of a second contributor of an
+  /// argument that takes the items of one, and for a second value of a
+  /// scalar argument.
+  Map<String, List<SocketContribution>> _byArgument(
+    List<SocketContribution> c,
+  ) {
     final byName = <String, List<SocketContribution>>{};
     for (final contribution in c) {
       final name = contribution.argName!;
@@ -162,19 +187,7 @@ final class ArgsSocket extends SocketKind {
       }
       existing.add(contribution);
     }
-
-    String codes(List<SocketContribution> items) =>
-        items.map((item) => item.fragment!.code).join(', ');
-    return {
-      socket.tag: [
-        for (final MapEntry(key: name, value: shape) in args.entries)
-          if (byName[name] case final items?)
-            if (shape == ArgShape.scalar)
-              '$name: ${codes(items)},'
-            else
-              '$name: [${codes(items)}],',
-      ].join('\n'),
-    };
+    return byName;
   }
 }
 

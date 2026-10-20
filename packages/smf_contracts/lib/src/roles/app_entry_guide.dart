@@ -344,7 +344,38 @@ List<SmfIssue> _checkAgentGuidePaths(StructuralRuleInput<NoDsl> input) {
   final text = input.texts[guide];
   if (text == null) return const [];
 
-  final files = input.owners.keys.toSet();
+  final paths = _pathsOf(input.owners.keys.toSet());
+  final issues = <SmfIssue>[];
+  final reported = <(String?, String)>{};
+  for (final (:heading, :code) in _codeSpansOf(text)) {
+    final found = _pathProblemOf(code, paths);
+    if (found == null || !reported.add((heading, code))) continue;
+    final where =
+        heading == null ? 'The introduction' : 'The section "$heading"';
+    issues.add(
+      SmfIssue(
+        '$where of $guide ${found.problem}',
+        hint: found.hint,
+        origin: input.owners[guide],
+        path: guide,
+      ),
+    );
+  }
+  return issues;
+}
+
+/// The paths of an app: its `files`, the `directories` that have its
+/// files, and the `roots`, the top-level directories below which a path is
+/// one of the app: those of its files and those of a Flutter project.
+typedef _AppPaths = ({
+  Set<String> files,
+  Set<String> directories,
+  Set<String> roots,
+});
+
+/// The paths of the app whose files are [files], each by its path from the
+/// root of the app.
+_AppPaths _pathsOf(Set<String> files) {
   final directories = <String>{};
   final roots = {..._flutterDirectories};
   for (final file in files) {
@@ -354,48 +385,53 @@ List<SmfIssue> _checkAgentGuidePaths(StructuralRuleInput<NoDsl> input) {
     }
     if (segments.length > 1) roots.add(segments.first);
   }
+  return (files: files, directories: directories, roots: roots);
+}
 
-  final issues = <SmfIssue>[];
-  final reported = <(String?, String)>{};
-  for (final (:heading, :code) in _codeSpansOf(text)) {
-    if (!_pathCharacters.hasMatch(code)) continue;
-    final String problem;
-    final String hint;
-    if (code.contains('/')) {
-      if (!roots.contains(code.split('/').first) && !code.endsWith('.dart')) {
-        continue;
-      }
-      final path =
-          code.endsWith('/') ? code.substring(0, code.length - 1) : code;
-      if (files.contains(path) || directories.contains(path)) continue;
-      problem = 'names `$code`, but the app has no such file or directory.';
-      hint = 'A note names a file or a directory of the app by its path from '
-          'the root of the app. What it tells of a file that only some apps '
-          'have is a contribution of its own, with the role of the file in '
-          'its when. A file that a later step writes is a pattern, with <…> '
-          'or *, or left to the README.';
-    } else if (code.endsWith('.dart')) {
-      problem = 'names the Dart file `$code` without its path from the root '
-          'of the app.';
-      hint = 'Write the path from the root of the app, such as '
+/// A problem of a path that the guide for coding agents names: the end of
+/// the sentence that reports it, after the section of the guide, and the
+/// hint for it.
+typedef _PathProblem = ({String problem, String hint});
+
+/// The problem of [code], a code span of the guide for coding agents of
+/// the app with [paths], or `null` if [code] is no path of the app or names
+/// one that the app has; see [_checkAgentGuidePaths].
+_PathProblem? _pathProblemOf(String code, _AppPaths paths) {
+  if (!_pathCharacters.hasMatch(code)) return null;
+  if (code.contains('/')) return _missingPathProblemOf(code, paths);
+  if (code.endsWith('.dart')) {
+    return (
+      problem: 'names the Dart file `$code` without its path from the root '
+          'of the app.',
+      hint: 'Write the path from the root of the app, such as '
           '${AppEntryRole.mainFile}, or, for the files of a kind, a pattern '
-          'with *, such as *_test.dart.';
-    } else {
-      continue;
-    }
-    if (!reported.add((heading, code))) continue;
-    final where =
-        heading == null ? 'The introduction' : 'The section "$heading"';
-    issues.add(
-      SmfIssue(
-        '$where of $guide $problem',
-        hint: hint,
-        origin: input.owners[guide],
-        path: guide,
-      ),
+          'with *, such as *_test.dart.',
     );
   }
-  return issues;
+  return null;
+}
+
+/// The problem of [code], a path with a slash in a code span of the guide
+/// for coding agents of the app with [paths], if the app has neither a file
+/// nor a directory at it, or `null`. A path below no top-level directory of
+/// the app or of a Flutter project is no path of the app, unless it is the
+/// path to a Dart file.
+_PathProblem? _missingPathProblemOf(String code, _AppPaths paths) {
+  if (!paths.roots.contains(code.split('/').first) && !code.endsWith('.dart')) {
+    return null;
+  }
+  final path = code.endsWith('/') ? code.substring(0, code.length - 1) : code;
+  if (paths.files.contains(path) || paths.directories.contains(path)) {
+    return null;
+  }
+  return (
+    problem: 'names `$code`, but the app has no such file or directory.',
+    hint: 'A note names a file or a directory of the app by its path from '
+        'the root of the app. What it tells of a file that only some apps '
+        'have is a contribution of its own, with the role of the file in '
+        'its when. A file that a later step writes is a pattern, with <…> '
+        'or *, or left to the README.',
+  );
 }
 
 /// The inline code spans of [markdown], the guide for coding agents,

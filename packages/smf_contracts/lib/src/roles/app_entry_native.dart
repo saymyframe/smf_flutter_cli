@@ -406,51 +406,51 @@ String? _elementAt(String text, int offset) {
 }
 
 List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
-  final issues = <SmfIssue>[];
-  void once(
-    String path,
-    String what,
-    List<String> keys, {
-    String hint = 'A module cannot contribute a key that the template of the '
-        'app entry role has already.',
-  }) {
-    final seen = <String>{};
-    final reported = <String>{};
-    for (final key in keys) {
-      if (seen.add(key) || !reported.add(key)) continue;
-      issues.add(
-        SmfIssue(
-          '$path has $what $key more than once.',
-          hint: hint,
-          origin: input.owners[path],
-          path: path,
-        ),
-      );
-    }
-  }
-
   final texts = input.texts;
-  for (final path in const [
-    AppEntryRole.infoPlistFile,
-    AppEntryRole.iosEntitlementsFile,
-  ]) {
-    if (texts[path] case final plist?) once(path, 'the key', _plistKeys(plist));
-  }
-  if (texts[AppEntryRole.androidManifestFile] case final manifest?) {
-    const path = AppEntryRole.androidManifestFile;
-    once(
+  return [
+    for (final path in const [
+      AppEntryRole.infoPlistFile,
+      AppEntryRole.iosEntitlementsFile,
+    ])
+      if (texts[path] case final plist?)
+        ..._repeatedIssues(input, path, 'the key', _plistKeys(plist)),
+    if (texts[AppEntryRole.androidManifestFile] case final manifest?)
+      ..._repeatedInManifest(input, manifest),
+    for (final path in const [
+      AppEntryRole.gradleSettingsFile,
+      AppEntryRole.gradleAppFile,
+    ])
+      for (final plugins in _gradlePluginBlocks(texts[path] ?? ''))
+        ..._repeatedIssues(input, path, 'the plugin', plugins),
+  ];
+}
+
+/// The problems of [manifest], the text of the Android manifest of the app
+/// of [input]: each permission, meta-data and component of a kind that it
+/// declares more than once, a component by its name as Android resolves it
+/// against the namespace of the app.
+List<SmfIssue> _repeatedInManifest(
+  StructuralRuleInput<NoDsl> input,
+  String manifest,
+) {
+  const path = AppEntryRole.androidManifestFile;
+  final namespace = _namespaceOf(input.texts[AppEntryRole.gradleAppFile] ?? '');
+  return [
+    ..._repeatedIssues(
+      input,
       path,
       'the permission',
       _childNames(manifest, 'manifest', 'uses-permission'),
-    );
-    once(
+    ),
+    ..._repeatedIssues(
+      input,
       path,
       'the meta-data',
       _childNames(manifest, 'application', 'meta-data'),
-    );
-    final namespace = _namespaceOf(texts[AppEntryRole.gradleAppFile] ?? '');
-    for (final component in _components) {
-      once(
+    ),
+    for (final component in _components)
+      ..._repeatedIssues(
+        input,
         path,
         'the $component',
         [
@@ -460,16 +460,34 @@ List<SmfIssue> _checkNativeKeys(StructuralRuleInput<NoDsl> input) {
         hint: 'One module declares a component, and none declares one that '
             'the template of the app entry role has, such as its main '
             'activity.',
-      );
-    }
-  }
-  for (final path in const [
-    AppEntryRole.gradleSettingsFile,
-    AppEntryRole.gradleAppFile,
-  ]) {
-    for (final plugins in _gradlePluginBlocks(texts[path] ?? '')) {
-      once(path, 'the plugin', plugins);
-    }
+      ),
+  ];
+}
+
+/// The problems of [keys], the keys of a kind [what], such as `the key`,
+/// that the file at [path] of the app of [input] has, in their order: each
+/// key that it has more than once, reported once, with [hint].
+List<SmfIssue> _repeatedIssues(
+  StructuralRuleInput<NoDsl> input,
+  String path,
+  String what,
+  List<String> keys, {
+  String hint = 'A module cannot contribute a key that the template of the '
+      'app entry role has already.',
+}) {
+  final issues = <SmfIssue>[];
+  final seen = <String>{};
+  final reported = <String>{};
+  for (final key in keys) {
+    if (seen.add(key) || !reported.add(key)) continue;
+    issues.add(
+      SmfIssue(
+        '$path has $what $key more than once.',
+        hint: hint,
+        origin: input.owners[path],
+        path: path,
+      ),
+    );
   }
   return issues;
 }
@@ -588,16 +606,24 @@ List<_ProjectObject> _projectObjects(String text) {
 /// settings every target inherits, in the Xcode project of [objects].
 Set<String> _projectConfigurations(List<_ProjectObject> objects) {
   final list = RegExp(r'buildConfigurationList\s*=\s*(\w+)\s*;');
-  final ids = RegExp(r'buildConfigurations\s*=\s*\(([^)]*)\)');
   return {
     for (final project in objects)
       if (project.isa == 'PBXProject')
         if (list.firstMatch(project.body)?[1] case final listId?)
-          for (final configurations in objects)
-            if (configurations.id == listId)
-              if (ids.firstMatch(configurations.body)?[1] case final items?)
-                for (final id in RegExp(r'\w+').allMatches(items)) id[0]!,
+          ..._configurationsIn(listId, objects),
   };
+}
+
+/// The ids of the build configurations in the configuration list [listId]
+/// of the Xcode project of [objects], in their order.
+List<String> _configurationsIn(String listId, List<_ProjectObject> objects) {
+  final ids = RegExp(r'buildConfigurations\s*=\s*\(([^)]*)\)');
+  return [
+    for (final configurations in objects)
+      if (configurations.id == listId)
+        if (ids.firstMatch(configurations.body)?[1] case final items?)
+          ...RegExp(r'\w+').allMatches(items).map((id) => id[0]!),
+  ];
 }
 
 /// The build settings of the build configuration whose object has [body],
@@ -642,58 +668,13 @@ List<SmfIssue> _checkIosEntitlementsSigned(StructuralRuleInput<NoDsl> input) {
   if (text == null) return const [];
   final origin = input.owners[path];
   final infoPlist = _inIosProject(AppEntryRole.infoPlistFile);
-  final entitlements = _inIosProject(file);
-  final objects = _projectObjects(_withoutProjectComments(text));
-  final ofProject = _projectConfigurations(objects);
-  final issues = <SmfIssue>[];
-  void report(String message, String hint) =>
-      issues.add(SmfIssue(message, hint: hint, origin: origin, path: path));
-  var ofApp = 0;
-  for (final object in objects) {
-    if (object.isa != 'XCBuildConfiguration') continue;
-    final (:settings, :name) = _buildConfiguration(object.body);
-    final named = 'The build configuration '
-        '${name == null ? object.id : '$name (${object.id})'}';
-    final signing = [
-      for (final setting in _entitlementsSetting.allMatches(settings))
-        (condition: setting[1], value: setting[2]!.trim()),
-    ];
-    if (ofProject.contains(object.id)) {
-      if (signing.isEmpty) continue;
-      report(
-        '$named of the project in $path names entitlements in '
-            'CODE_SIGN_ENTITLEMENTS, which every target without a setting '
-            'of its own inherits, such as the tests.',
-        'Set CODE_SIGN_ENTITLEMENTS in the build configurations of each '
-            'target that signs with entitlements: $entitlements in those of '
-            'the app target, which read $infoPlist.',
-      );
-    } else if (_infoPlistSetting
-        .allMatches(settings)
-        .any((setting) => setting[1]!.trim() == infoPlist)) {
-      ofApp++;
-      if (signing case [(condition: null, :final value)]
-          when value == entitlements) {
-        continue;
-      }
-      report(
-        '$named of the app target in $path does not sign the app with '
-            '$file.',
-        'Each build configuration with INFOPLIST_FILE = $infoPlist has '
-            'CODE_SIGN_ENTITLEMENTS = $entitlements; and no other '
-            'CODE_SIGN_ENTITLEMENTS. Without it the app builds and signs, but '
-            'has none of the entitlements that the modules add.',
-      );
-    } else if (signing.any((setting) => setting.value == entitlements)) {
-      report(
-        '$named in $path, which is not one of the app target, signs with '
-            'the entitlements of the app, $file.',
-        'Only the app target signs with $file. Another target, such as an '
-            'app extension, signs with entitlements of its own.',
-      );
-    }
-  }
-  if (ofApp == 0) {
+  final configurations = _signingConfigurationsOf(text);
+  final issues = [
+    for (final configuration in configurations)
+      if (_signingProblemOf(configuration) case (:final message, :final hint))
+        SmfIssue(message, hint: hint, origin: origin, path: path),
+  ];
+  if (!configurations.any((configuration) => configuration.ofApp)) {
     issues.add(
       SmfIssue(
         '$path has no build configuration of the app target, with '
@@ -704,6 +685,106 @@ List<SmfIssue> _checkIosEntitlementsSigned(StructuralRuleInput<NoDsl> input) {
     );
   }
   return issues;
+}
+
+/// A build configuration of the Xcode project of the app, as the check of
+/// the entitlements of the app sees it: how a problem names it, `named`,
+/// whether it is one of the project itself, whose settings every target
+/// inherits, `ofProject`, or one of the app target, which reads the
+/// Info.plist of the app, `ofApp`, and its settings of
+/// CODE_SIGN_ENTITLEMENTS, `signing`, each with its condition, if any, and
+/// its value.
+typedef _SigningConfiguration = ({
+  String named,
+  bool ofProject,
+  bool ofApp,
+  List<({String? condition, String value})> signing,
+});
+
+/// The build configurations of the Xcode project [text], in their order.
+List<_SigningConfiguration> _signingConfigurationsOf(String text) {
+  final objects = _projectObjects(_withoutProjectComments(text));
+  final ofProject = _projectConfigurations(objects);
+  return [
+    for (final object in objects)
+      if (object.isa == 'XCBuildConfiguration')
+        _signingConfigurationOf(
+          object,
+          ofProject: ofProject.contains(object.id),
+        ),
+  ];
+}
+
+/// The build configuration whose object in the Xcode project is [object],
+/// one of the project itself if [ofProject].
+_SigningConfiguration _signingConfigurationOf(
+  _ProjectObject object, {
+  required bool ofProject,
+}) {
+  final infoPlist = _inIosProject(AppEntryRole.infoPlistFile);
+  final (:settings, :name) = _buildConfiguration(object.body);
+  return (
+    named: 'The build configuration '
+        '${name == null ? object.id : '$name (${object.id})'}',
+    ofProject: ofProject,
+    ofApp: !ofProject &&
+        _infoPlistSetting
+            .allMatches(settings)
+            .any((setting) => setting[1]!.trim() == infoPlist),
+    signing: [
+      for (final setting in _entitlementsSetting.allMatches(settings))
+        (condition: setting[1], value: setting[2]!.trim()),
+    ],
+  );
+}
+
+/// The problem of [configuration] with the entitlements of the app, its
+/// message and its hint, or `null`: a build configuration of the project
+/// names no entitlements, which every target would inherit, one of the app
+/// target signs the app with its entitlements and with nothing else, and
+/// one of another target does not sign with them.
+({String message, String hint})? _signingProblemOf(
+  _SigningConfiguration configuration,
+) {
+  const path = AppEntryRole.xcodeProjectFile;
+  const file = AppEntryRole.iosEntitlementsFile;
+  final infoPlist = _inIosProject(AppEntryRole.infoPlistFile);
+  final entitlements = _inIosProject(file);
+  final (:named, :ofProject, :ofApp, :signing) = configuration;
+  if (ofProject) {
+    if (signing.isEmpty) return null;
+    return (
+      message: '$named of the project in $path names entitlements in '
+          'CODE_SIGN_ENTITLEMENTS, which every target without a setting of '
+          'its own inherits, such as the tests.',
+      hint: 'Set CODE_SIGN_ENTITLEMENTS in the build configurations of each '
+          'target that signs with entitlements: $entitlements in those of '
+          'the app target, which read $infoPlist.',
+    );
+  }
+  if (ofApp) {
+    if (signing case [(condition: null, :final value)]
+        when value == entitlements) {
+      return null;
+    }
+    return (
+      message: '$named of the app target in $path does not sign the app '
+          'with $file.',
+      hint: 'Each build configuration with INFOPLIST_FILE = $infoPlist has '
+          'CODE_SIGN_ENTITLEMENTS = $entitlements; and no other '
+          'CODE_SIGN_ENTITLEMENTS. Without it the app builds and signs, but '
+          'has none of the entitlements that the modules add.',
+    );
+  }
+  if (signing.any((setting) => setting.value == entitlements)) {
+    return (
+      message: '$named in $path, which is not one of the app target, signs '
+          'with the entitlements of the app, $file.',
+      hint: 'Only the app target signs with $file. Another target, such as '
+          'an app extension, signs with entitlements of its own.',
+    );
+  }
+  return null;
 }
 
 /// The problem of an app whose entitlements have a key of
