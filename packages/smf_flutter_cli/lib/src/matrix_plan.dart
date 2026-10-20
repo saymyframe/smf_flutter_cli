@@ -237,20 +237,11 @@ final class _Covering {
       for (final app in apps) _providersIn(app, providersOf),
     ];
     // The roles with several providers among the apps.
-    final roles = [
-      for (final role in providersOf.keys)
-        if ({for (final byRole in providers) byRole[role]}.nonNulls.length > 1)
-          role,
-    ];
+    final roles = _varying(providersOf.keys, providers);
     final modesOf = _modesOf(modules);
     final modes = [for (final app in apps) _modesIn(app, modesOf)];
     // The mode options with several values among the apps.
-    final options = [
-      for (final option in modesOf.keys)
-        if ({for (final byOption in modes) byOption[option]}.nonNulls.length >
-            1)
-          option,
-    ];
+    final options = _varying(modesOf.keys, modes);
     final parts = roles.length + options.length;
     final size = strength < parts ? strength : parts;
     return _Covering._(
@@ -258,19 +249,41 @@ final class _Covering {
         for (final (index, app) in apps.indexed)
           _itemsOf(
             app,
-            [
-              for (final role in roles)
-                if (providers[index][role] case final provider?)
-                  '${role.id}=$provider',
-              for (final option in options)
-                if (modes[index][option] case final value?) '--$option=$value',
-            ],
+            _partsIn(roles, providers[index], options, modes[index]),
             size,
           ),
       ],
       taken,
     );
   }
+
+  /// Those of [keys] that have several values among [values], the value of
+  /// each key in each app, in the order of [keys].
+  static List<K> _varying<K, V extends Object>(
+    Iterable<K> keys,
+    List<Map<K, V>> values,
+  ) =>
+      [
+        for (final key in keys)
+          if ({for (final byKey in values) byKey[key]}.nonNulls.length > 1) key,
+      ];
+
+  /// The parts of an app with [providers], its provider of each role, and
+  /// [modes], its value of each mode option, for [_itemsOf]: its providers
+  /// of [roles] and its values of [options], such as `router=go_router` and
+  /// `--clock-hours=12`, but for a role or an option that the app lacks.
+  static List<String> _partsIn(
+    List<Role> roles,
+    Map<Role, ModuleId> providers,
+    List<String> options,
+    Map<String, String> modes,
+  ) =>
+      [
+        for (final role in roles)
+          if (providers[role] case final provider?) '${role.id}=$provider',
+        for (final option in options)
+          if (modes[option] case final value?) '--$option=$value',
+      ];
 
   /// The providers of each role that takes one, in the order in which
   /// [modules] provide the roles.

@@ -256,50 +256,73 @@ final class _ModuleSteps {
     required String command,
     required bool followUp,
   }) async {
-    final environment = _environment;
-    final description = step.description ?? command;
     final unmet = _unmetNeeds(step, origin, _checks);
-    // The reason names the checks that have not passed too, since the step
-    // needs them when the user runs it later.
-    String alsoUnmet(String reason) =>
-        unmet.isEmpty ? reason : '$reason, and ${_unmetReason(unmet)}';
-    if (step.external && environment.skipExternalSetup) {
+    if (_leftForLater(step) case final reason?) {
+      // The reason names the checks that have not passed too, since the
+      // step needs them when the user runs it later.
       return (
-        reason: alsoUnmet('the run skips external setup'),
+        reason: unmet.isEmpty ? reason : '$reason, and ${_unmetReason(unmet)}',
         failed: false,
       );
     }
-    final hasNotice = step.notice != null;
-    if ((step.interactive || hasNotice) && !environment.interactive) {
-      return (reason: alsoUnmet('the run cannot ask the user'), failed: false);
-    }
-    if (unmet.isNotEmpty) {
-      final reason = _unmetReason(unmet);
-      if (!step.skippable) {
-        throw GenerationFailedException(
-          'The step "$description" of $origin cannot run, because $reason.',
-        );
-      }
+    if (_whyCannotRun(step, origin, resolved, unmet, command: command)
+        case final reason?) {
       return (reason: reason, failed: true);
-    }
-    if (resolved == null) {
-      if (!step.skippable) {
-        throw GenerationFailedException(
-          'The step "$description" of $origin cannot run, because '
-          '${step.tool.executable} was not found.',
-        );
-      }
-      return (reason: '${step.tool.executable} was not found', failed: true);
     }
     // A step that continues another is part of that step, so only its
     // notice makes a question of its own.
-    final asked = hasNotice || (!followUp && step.skippable);
+    final asked = step.notice != null || (!followUp && step.skippable);
     if (asked &&
-        environment.interactive &&
+        _environment.interactive &&
         !await _confirmRun(step, origin, command)) {
       return (reason: 'you chose to run it later', failed: false);
     }
     return (reason: null, failed: false);
+  }
+
+  /// Why the run leaves [step] for later whether it can run or not, or
+  /// `null`: a run that skips external setup leaves a step that needs it,
+  /// and a run that cannot ask the user leaves a step that talks to the
+  /// user or has a notice.
+  String? _leftForLater(PostGenStep step) {
+    final environment = _environment;
+    if (step.external && environment.skipExternalSetup) {
+      return 'the run skips external setup';
+    }
+    if ((step.interactive || step.notice != null) && !environment.interactive) {
+      return 'the run cannot ask the user';
+    }
+    return null;
+  }
+
+  /// Why [step] of [origin], whose tool is [resolved] and whose [command]
+  /// the user would run, cannot run, or `null` if it can: [unmet] has the
+  /// checks that it needs and that have not passed.
+  ///
+  /// Throws a [GenerationFailedException] if a step that is not skippable
+  /// cannot run.
+  String? _whyCannotRun(
+    PostGenStep step,
+    ContributionOrigin origin,
+    ResolvedTool? resolved,
+    List<CheckResult> unmet, {
+    required String command,
+  }) {
+    final String reason;
+    if (unmet.isNotEmpty) {
+      reason = _unmetReason(unmet);
+    } else if (resolved == null) {
+      reason = '${step.tool.executable} was not found';
+    } else {
+      return null;
+    }
+    if (!step.skippable) {
+      throw GenerationFailedException(
+        'The step "${step.description ?? command}" of $origin cannot run, '
+        'because $reason.',
+      );
+    }
+    return reason;
   }
 
   /// Asks the user whether to run [step] of [origin], whose [command] the
