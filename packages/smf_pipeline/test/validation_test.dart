@@ -1199,8 +1199,7 @@ void main() {
         resolution: resolution,
         collection: collect(resolution, testContext),
         context: testContext,
-        interactive: false,
-        skipExternalSetup: true,
+        run: (interactive: false, skipExternalSetup: true),
       );
 
       expect(result.issues, isEmpty);
@@ -2087,8 +2086,7 @@ void main() {
           resolution: resolution,
           collection: collect(resolution, testContext),
           context: testContext,
-          interactive: interactive,
-          skipExternalSetup: skip,
+          run: (interactive: interactive, skipExternalSetup: skip),
         );
 
     expect(run(interactive: true).issues, isEmpty);

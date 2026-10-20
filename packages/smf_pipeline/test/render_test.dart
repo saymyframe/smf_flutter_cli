@@ -67,8 +67,7 @@ RenderedApp _render(
     context: testContext,
     choices: choices,
     pubspec: validation.pubspec,
-    manualSteps: validation.manualSteps,
-    setupLink: validation.setupLink,
+    manualSetup: (steps: validation.manualSteps, link: validation.setupLink),
   );
 }
 

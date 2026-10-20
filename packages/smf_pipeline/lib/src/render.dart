@@ -193,6 +193,14 @@ final class _VariableImports {
   final Set<(ContributionOrigin, String)> read = {};
 }
 
+/// The setup of an app that its developer does by hand, as stage 5 planned
+/// it: its steps, each once and in order, with their contributors, and the
+/// link to the page that guides the developer through them, which the front
+/// end of the pipeline named for them, or `null` (see
+/// [ValidationResult.manualSteps] and [ValidationResult.setupLink]). The
+/// render hooks get it as a [ManualSetup] (see [manualSetupOf]).
+typedef PlannedManualSetup = ({List<PlannedManualStep> steps, Uri? link});
+
 /// Stage 8 of the pipeline: renders the app in memory.
 ///
 /// [collection] is decided by the [choices] (see [Collection.decide]), so a
@@ -202,8 +210,7 @@ final class _VariableImports {
 ///
 /// 1. Runs the render hooks of the templates and providers of the present
 ///    roles, with the results of [choices], and for the roles that are open
-///    to all modules with the [manualSteps] that stage 5 planned and the
-///    [setupLink] that the front end named for them (see
+///    to all modules with the [manualSetup] that stage 5 planned (see
 ///    [RoleHookInput.manualSetup]). Their fragments follow the rules
 ///    of the contributions of their owner, and their brick variables must
 ///    not be reserved (see [isReservedVar]) or set twice for one owner. A
@@ -252,18 +259,21 @@ RenderedApp renderApp({
   required ModuleContext context,
   required Map<Role, Object?> choices,
   required MergedPubspec pubspec,
-  required List<PlannedManualStep> manualSteps,
-  Uri? setupLink,
+  required PlannedManualSetup manualSetup,
 }) {
   final issues = <SmfIssue>[];
   final hooks = _runRenderHooks(
+    hookRequest(
+      registry: registry,
+      resolution: resolution,
+      collection: collection,
+      context: context,
+      choices: choices,
+      manualSteps: manualSetup.steps,
+      setupLink: manualSetup.link,
+    ),
     registry: registry,
     resolution: resolution,
-    collection: collection,
-    context: context,
-    choices: choices,
-    manualSteps: manualSteps,
-    setupLink: setupLink,
     issues: issues,
   );
   _stopOnErrors(issues);
@@ -326,7 +336,7 @@ RenderedApp renderApp({
   return RenderedApp(
     files.values,
     socketOrders: texts.orders,
-    manualSteps: manualSteps,
+    manualSteps: manualSetup.steps,
   );
 }
 
@@ -484,26 +494,14 @@ RenderedFile _withImports(
 }
 
 /// Runs the render hooks of the templates and providers of the present
-/// roles and checks what they return.
-_HookOutput _runRenderHooks({
+/// roles of [resolution] with [request] and checks what they return, adding
+/// what is wrong with it to [issues].
+_HookOutput _runRenderHooks(
+  RoleHookRequest request, {
   required ModuleRegistry registry,
   required Resolution resolution,
-  required Collection collection,
-  required ModuleContext context,
-  required Map<Role, Object?> choices,
-  required List<PlannedManualStep> manualSteps,
-  required Uri? setupLink,
   required List<SmfIssue> issues,
 }) {
-  final request = hookRequest(
-    registry: registry,
-    resolution: resolution,
-    collection: collection,
-    context: context,
-    choices: choices,
-    manualSteps: manualSteps,
-    setupLink: setupLink,
-  );
   final hooks = _RenderHooks(registry, resolution, issues);
   for (final role in resolution.presentRoles) {
     // The input's runtime type argument is the role's data type, which the

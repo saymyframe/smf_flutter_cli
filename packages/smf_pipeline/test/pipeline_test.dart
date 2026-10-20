@@ -894,7 +894,7 @@ void main() {
         context: plan.context,
         choices: plan.choices,
         pubspec: plan.pubspec,
-        manualSteps: plan.manualSteps,
+        manualSetup: (steps: plan.manualSteps, link: plan.setupLink),
       );
       return (plan, app);
     }
