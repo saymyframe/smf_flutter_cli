@@ -1,3 +1,7 @@
+## 0.4.2
+
+ - Update a dependency to the latest release.
+
 ## 0.4.1
 
  - **FEAT**(material_theme): give text fields the look of the theme ([#160](https://github.com/saymyframe/smf_flutter_cli/issues/160)). ([2d1d6a24](https://github.com/saymyframe/smf_flutter_cli/commit/2d1d6a2446b29a5a5486aba0a97d34909589186b))

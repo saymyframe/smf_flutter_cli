@@ -1,3 +1,7 @@
+## 0.4.2
+
+ - Update a dependency to the latest release.
+
 ## 0.4.1
 
  - **FEAT**(contracts): warn of the destinations of an app without a main navigation ([#175](https://github.com/saymyframe/smf_flutter_cli/issues/175)). ([39a624ba](https://github.com/saymyframe/smf_flutter_cli/commit/39a624ba72cb4d4c878409f46bb8b266820d3ebd))

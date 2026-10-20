@@ -1,3 +1,26 @@
+## 0.6.0
+
+> Note: This release has breaking changes.
+
+ - **REFACTOR**(contracts): split the checks of the ways to sign in that SonarCloud finds too complex ([#228](https://github.com/saymyframe/smf_flutter_cli/issues/228)). ([bc6709e5](https://github.com/saymyframe/smf_flutter_cli/commit/bc6709e512b306b955bfb64c7daf9951b92afb40))
+ - **FEAT**(contracts): the README section "Finish the setup" ([#232](https://github.com/saymyframe/smf_flutter_cli/issues/232)). ([d2114702](https://github.com/saymyframe/smf_flutter_cli/commit/d21147029fedb43e1b8b7f97898096403efd936f))
+ - **FEAT**(sign_in): continue with the sign-in methods of the app ([#219](https://github.com/saymyframe/smf_flutter_cli/issues/219)). ([5c2a7051](https://github.com/saymyframe/smf_flutter_cli/commit/5c2a705198ce2e6ad525ed40983e3d8ce5c53db0))
+ - **FEAT**(firebase_auth): sign in, link and delete with the credentials of the sign-in methods ([#205](https://github.com/saymyframe/smf_flutter_cli/issues/205)). ([caf1e446](https://github.com/saymyframe/smf_flutter_cli/commit/caf1e446f337171ec212aab9ae82a23b2bad18e9))
+ - **FEAT**(contracts): add the push role with the address of the device, its messages and their taps ([#193](https://github.com/saymyframe/smf_flutter_cli/issues/193)). ([1f1a3566](https://github.com/saymyframe/smf_flutter_cli/commit/1f1a3566781392561d7488da6bd8edd95a5b17a3))
+ - **FEAT**(contracts): give every app the icons of the status bar as a widget of its own, with a widget test ([#191](https://github.com/saymyframe/smf_flutter_cli/issues/191)). ([4ab6b288](https://github.com/saymyframe/smf_flutter_cli/commit/4ab6b288cd00e6b94a0a4a27d1440480e21d4a30))
+ - **FEAT**(contracts): add the notifications role with the permission, showing, scheduling and taps ([#189](https://github.com/saymyframe/smf_flutter_cli/issues/189)). ([26dff4e9](https://github.com/saymyframe/smf_flutter_cli/commit/26dff4e90c6920dc553f4f77c120a3fafec32ccf))
+ - **FEAT**(contracts): add the onboarding screen role, to which modules add the steps of the onboarding ([#185](https://github.com/saymyframe/smf_flutter_cli/issues/185)). ([04c269ce](https://github.com/saymyframe/smf_flutter_cli/commit/04c269ceb3003a7993699dc822c25771a8273eae))
+ - **BREAKING** **FEAT**(contracts,apple_sign_in): the App ID among the steps by hand ([#234](https://github.com/saymyframe/smf_flutter_cli/issues/234)). ([e0b73a02](https://github.com/saymyframe/smf_flutter_cli/commit/e0b73a0295316ec57d8a50ec8336d076a1182f87))
+ - **BREAKING** **FEAT**(contracts,pipeline): steps of an app that its developer does by hand ([#230](https://github.com/saymyframe/smf_flutter_cli/issues/230)). ([542e1089](https://github.com/saymyframe/smf_flutter_cli/commit/542e1089bed294361086f39191529267ab652b95))
+ - **BREAKING** **FEAT**(contracts): let modules add components to the Android application ([#201](https://github.com/saymyframe/smf_flutter_cli/issues/201)). ([6dfcaec9](https://github.com/saymyframe/smf_flutter_cli/commit/6dfcaec92bf72dea1922940ea6834b564c24118a))
+ - **BREAKING** **FEAT**(contracts): let modules run code in the AppDelegate before launch finishes ([#200](https://github.com/saymyframe/smf_flutter_cli/issues/200)). ([263b3079](https://github.com/saymyframe/smf_flutter_cli/commit/263b307907e85ea4aee51d7c1fa6330712b6cd1f))
+ - **BREAKING** **FEAT**(contracts): let modules enable core library desugaring of the Android app ([#199](https://github.com/saymyframe/smf_flutter_cli/issues/199)). ([7f760ba7](https://github.com/saymyframe/smf_flutter_cli/commit/7f760ba7d53081d6023607b045cca7e185d09787))
+ - **BREAKING** **FEAT**(contracts): sign in with a credential of an identity provider, and list the ways to sign in of an app ([#197](https://github.com/saymyframe/smf_flutter_cli/issues/197)). ([73e8a21c](https://github.com/saymyframe/smf_flutter_cli/commit/73e8a21cb3807482f53a161baf1b9b0717aea5e4))
+ - **BREAKING** **FEAT**(flutter_core): give the fallback start screen only to an app that no route starts ([#192](https://github.com/saymyframe/smf_flutter_cli/issues/192)). ([9cc0a8f1](https://github.com/saymyframe/smf_flutter_cli/commit/9cc0a8f19515e003b50778cb1c5a627aa1f1daa5))
+ - **BREAKING** **FEAT**(contracts): give each warning about the app a code, and let a choice report one ([#188](https://github.com/saymyframe/smf_flutter_cli/issues/188)). ([80f2c7ed](https://github.com/saymyframe/smf_flutter_cli/commit/80f2c7edd737e63ea3085b8202bb04a9bc9c4b7b))
+ - **BREAKING** **FEAT**(contracts): sign the iOS app with Runner.entitlements and let modules add entitlements ([#187](https://github.com/saymyframe/smf_flutter_cli/issues/187)). ([2f2b0374](https://github.com/saymyframe/smf_flutter_cli/commit/2f2b037442262cec28376137bf2fe35b8adf2852))
+ - **BREAKING** **FEAT**(contracts): let a contribution and a symbol of a role depend on what a role chose ([#184](https://github.com/saymyframe/smf_flutter_cli/issues/184)). ([d5deac8e](https://github.com/saymyframe/smf_flutter_cli/commit/d5deac8ef366a40d24b74bb77ae444cf6ced274f))
+
 ## 0.5.0
 
 > Note: This release has breaking changes.

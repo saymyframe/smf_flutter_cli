@@ -1,3 +1,7 @@
+## 0.3.3
+
+ - Update a dependency to the latest release.
+
 ## 0.3.2
 
  - **FEAT**(bloc,riverpod): tell in the agent note how a screen, shared state and an awaited call are written ([#172](https://github.com/saymyframe/smf_flutter_cli/issues/172)). ([6f819423](https://github.com/saymyframe/smf_flutter_cli/commit/6f8194238bcb957d19409d3acf867445e2b3989e))

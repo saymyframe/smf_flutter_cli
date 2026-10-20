@@ -3,6 +3,208 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 2026-10-20
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - [`smf_apple_sign_in` - `v0.6.0`](#smf_apple_sign_in---v060)
+ - [`smf_firebase_messaging` - `v0.6.0`](#smf_firebase_messaging---v060)
+ - [`smf_contracts` - `v0.6.0`](#smf_contracts---v060)
+ - [`smf_firebase_auth` - `v0.6.0`](#smf_firebase_auth---v060)
+ - [`smf_flutter_cli` - `v0.6.0`](#smf_flutter_cli---v060)
+ - [`smf_flutter_core` - `v0.5.0`](#smf_flutter_core---v050)
+ - [`smf_gen_l10n` - `v0.5.0`](#smf_gen_l10n---v050)
+ - [`smf_go_router` - `v0.6.0`](#smf_go_router---v060)
+ - [`smf_home_flutter` - `v0.5.0`](#smf_home_flutter---v050)
+ - [`smf_pipeline` - `v0.6.0`](#smf_pipeline---v060)
+ - [`smf_sign_in` - `v0.6.0`](#smf_sign_in---v060)
+
+Packages with other changes:
+
+ - [`smf_google_sign_in` - `v0.6.0`](#smf_google_sign_in---v060)
+ - [`smf_local_notifications` - `v0.6.0`](#smf_local_notifications---v060)
+ - [`smf_firebase_analytics` - `v0.4.2`](#smf_firebase_analytics---v042)
+ - [`smf_get_it` - `v0.4.2`](#smf_get_it---v042)
+ - [`smf_onboarding` - `v0.5.1`](#smf_onboarding---v051)
+ - [`smf_bloc` - `v0.3.3`](#smf_bloc---v033)
+ - [`smf_bottom_tabs` - `v0.4.2`](#smf_bottom_tabs---v042)
+ - [`smf_event_bus` - `v0.3.3`](#smf_event_bus---v033)
+ - [`smf_firebase_core` - `v0.4.2`](#smf_firebase_core---v042)
+ - [`smf_firebase_crashlytics` - `v0.4.2`](#smf_firebase_crashlytics---v042)
+ - [`smf_material_theme` - `v0.4.2`](#smf_material_theme---v042)
+ - [`smf_riverpod` - `v0.3.3`](#smf_riverpod---v033)
+ - [`smf_settings` - `v0.4.2`](#smf_settings---v042)
+ - [`smf_shared_preferences` - `v0.4.3`](#smf_shared_preferences---v043)
+
+Packages with dependency updates only:
+
+> Packages listed below depend on other packages in this workspace that have had changes. Their versions have been incremented to bump the minimum dependency versions of the packages they depend upon in this project.
+
+ - `smf_bloc` - `v0.3.3`
+ - `smf_bottom_tabs` - `v0.4.2`
+ - `smf_event_bus` - `v0.3.3`
+ - `smf_firebase_core` - `v0.4.2`
+ - `smf_firebase_crashlytics` - `v0.4.2`
+ - `smf_material_theme` - `v0.4.2`
+ - `smf_riverpod` - `v0.3.3`
+ - `smf_settings` - `v0.4.2`
+ - `smf_shared_preferences` - `v0.4.3`
+
+---
+
+#### `smf_apple_sign_in` - `v0.6.0`
+
+ - **FEAT**(apple_sign_in): add Sign in with Apple on iOS ([#212](https://github.com/saymyframe/smf_flutter_cli/issues/212)). ([79b7c4e4](https://github.com/saymyframe/smf_flutter_cli/commit/79b7c4e44294b3c104e45ca474d2e84eac83ec90))
+ - **BREAKING** **FEAT**(contracts,apple_sign_in): the App ID among the steps by hand ([#234](https://github.com/saymyframe/smf_flutter_cli/issues/234)). ([e0b73a02](https://github.com/saymyframe/smf_flutter_cli/commit/e0b73a0295316ec57d8a50ec8336d076a1182f87))
+
+#### `smf_firebase_messaging` - `v0.6.0`
+
+ - **FEAT**(firebase_messaging): the APNs key among the steps by hand ([#235](https://github.com/saymyframe/smf_flutter_cli/issues/235)). ([b1e02466](https://github.com/saymyframe/smf_flutter_cli/commit/b1e024661876640c0a88fd35ac99e756e2477299))
+ - **FEAT**(firebase_messaging): add Firebase Cloud Messaging as the provider of the push role ([#210](https://github.com/saymyframe/smf_flutter_cli/issues/210)). ([5bbbfa9a](https://github.com/saymyframe/smf_flutter_cli/commit/5bbbfa9ad0835e2344f3241a3f364110796b874e))
+ - **BREAKING** **FEAT**(contracts,apple_sign_in): the App ID among the steps by hand ([#234](https://github.com/saymyframe/smf_flutter_cli/issues/234)). ([e0b73a02](https://github.com/saymyframe/smf_flutter_cli/commit/e0b73a0295316ec57d8a50ec8336d076a1182f87))
+
+#### `smf_contracts` - `v0.6.0`
+
+ - **REFACTOR**(contracts): split the checks of the ways to sign in that SonarCloud finds too complex ([#228](https://github.com/saymyframe/smf_flutter_cli/issues/228)). ([bc6709e5](https://github.com/saymyframe/smf_flutter_cli/commit/bc6709e512b306b955bfb64c7daf9951b92afb40))
+ - **FEAT**(contracts): the README section "Finish the setup" ([#232](https://github.com/saymyframe/smf_flutter_cli/issues/232)). ([d2114702](https://github.com/saymyframe/smf_flutter_cli/commit/d21147029fedb43e1b8b7f97898096403efd936f))
+ - **FEAT**(sign_in): continue with the sign-in methods of the app ([#219](https://github.com/saymyframe/smf_flutter_cli/issues/219)). ([5c2a7051](https://github.com/saymyframe/smf_flutter_cli/commit/5c2a705198ce2e6ad525ed40983e3d8ce5c53db0))
+ - **FEAT**(firebase_auth): sign in, link and delete with the credentials of the sign-in methods ([#205](https://github.com/saymyframe/smf_flutter_cli/issues/205)). ([caf1e446](https://github.com/saymyframe/smf_flutter_cli/commit/caf1e446f337171ec212aab9ae82a23b2bad18e9))
+ - **FEAT**(contracts): add the push role with the address of the device, its messages and their taps ([#193](https://github.com/saymyframe/smf_flutter_cli/issues/193)). ([1f1a3566](https://github.com/saymyframe/smf_flutter_cli/commit/1f1a3566781392561d7488da6bd8edd95a5b17a3))
+ - **FEAT**(contracts): give every app the icons of the status bar as a widget of its own, with a widget test ([#191](https://github.com/saymyframe/smf_flutter_cli/issues/191)). ([4ab6b288](https://github.com/saymyframe/smf_flutter_cli/commit/4ab6b288cd00e6b94a0a4a27d1440480e21d4a30))
+ - **FEAT**(contracts): add the notifications role with the permission, showing, scheduling and taps ([#189](https://github.com/saymyframe/smf_flutter_cli/issues/189)). ([26dff4e9](https://github.com/saymyframe/smf_flutter_cli/commit/26dff4e90c6920dc553f4f77c120a3fafec32ccf))
+ - **FEAT**(contracts): add the onboarding screen role, to which modules add the steps of the onboarding ([#185](https://github.com/saymyframe/smf_flutter_cli/issues/185)). ([04c269ce](https://github.com/saymyframe/smf_flutter_cli/commit/04c269ceb3003a7993699dc822c25771a8273eae))
+ - **BREAKING** **FEAT**(contracts,apple_sign_in): the App ID among the steps by hand ([#234](https://github.com/saymyframe/smf_flutter_cli/issues/234)). ([e0b73a02](https://github.com/saymyframe/smf_flutter_cli/commit/e0b73a0295316ec57d8a50ec8336d076a1182f87))
+ - **BREAKING** **FEAT**(contracts,pipeline): steps of an app that its developer does by hand ([#230](https://github.com/saymyframe/smf_flutter_cli/issues/230)). ([542e1089](https://github.com/saymyframe/smf_flutter_cli/commit/542e1089bed294361086f39191529267ab652b95))
+ - **BREAKING** **FEAT**(contracts): let modules add components to the Android application ([#201](https://github.com/saymyframe/smf_flutter_cli/issues/201)). ([6dfcaec9](https://github.com/saymyframe/smf_flutter_cli/commit/6dfcaec92bf72dea1922940ea6834b564c24118a))
+ - **BREAKING** **FEAT**(contracts): let modules run code in the AppDelegate before launch finishes ([#200](https://github.com/saymyframe/smf_flutter_cli/issues/200)). ([263b3079](https://github.com/saymyframe/smf_flutter_cli/commit/263b307907e85ea4aee51d7c1fa6330712b6cd1f))
+ - **BREAKING** **FEAT**(contracts): let modules enable core library desugaring of the Android app ([#199](https://github.com/saymyframe/smf_flutter_cli/issues/199)). ([7f760ba7](https://github.com/saymyframe/smf_flutter_cli/commit/7f760ba7d53081d6023607b045cca7e185d09787))
+ - **BREAKING** **FEAT**(contracts): sign in with a credential of an identity provider, and list the ways to sign in of an app ([#197](https://github.com/saymyframe/smf_flutter_cli/issues/197)). ([73e8a21c](https://github.com/saymyframe/smf_flutter_cli/commit/73e8a21cb3807482f53a161baf1b9b0717aea5e4))
+ - **BREAKING** **FEAT**(flutter_core): give the fallback start screen only to an app that no route starts ([#192](https://github.com/saymyframe/smf_flutter_cli/issues/192)). ([9cc0a8f1](https://github.com/saymyframe/smf_flutter_cli/commit/9cc0a8f19515e003b50778cb1c5a627aa1f1daa5))
+ - **BREAKING** **FEAT**(contracts): give each warning about the app a code, and let a choice report one ([#188](https://github.com/saymyframe/smf_flutter_cli/issues/188)). ([80f2c7ed](https://github.com/saymyframe/smf_flutter_cli/commit/80f2c7edd737e63ea3085b8202bb04a9bc9c4b7b))
+ - **BREAKING** **FEAT**(contracts): sign the iOS app with Runner.entitlements and let modules add entitlements ([#187](https://github.com/saymyframe/smf_flutter_cli/issues/187)). ([2f2b0374](https://github.com/saymyframe/smf_flutter_cli/commit/2f2b037442262cec28376137bf2fe35b8adf2852))
+ - **BREAKING** **FEAT**(contracts): let a contribution and a symbol of a role depend on what a role chose ([#184](https://github.com/saymyframe/smf_flutter_cli/issues/184)). ([d5deac8e](https://github.com/saymyframe/smf_flutter_cli/commit/d5deac8ef366a40d24b74bb77ae444cf6ced274f))
+
+#### `smf_firebase_auth` - `v0.6.0`
+
+ - **FIX**(firebase_auth): need Firebase CLI 15.34.0, which adds no web app to a project that has apps ([#182](https://github.com/saymyframe/smf_flutter_cli/issues/182)). ([8afc173a](https://github.com/saymyframe/smf_flutter_cli/commit/8afc173a846a6cf6ae3eea227615b902e416932e))
+ - **FEAT**(firebase_auth,firebase_analytics): the steps by hand of Apple, Google Play and Analytics ([#236](https://github.com/saymyframe/smf_flutter_cli/issues/236)). ([e009ede2](https://github.com/saymyframe/smf_flutter_cli/commit/e009ede2c1b205763ef4ad05455defb8fcdf8b9e))
+ - **FEAT**(firebase_auth): enable Google, register the debug key and write the URL scheme for the methods of the app ([#214](https://github.com/saymyframe/smf_flutter_cli/issues/214)). ([313fc8c9](https://github.com/saymyframe/smf_flutter_cli/commit/313fc8c98e0a3c48f74b13ad145efaecc0ce5ecb))
+ - **FEAT**(apple_sign_in): add Sign in with Apple on iOS ([#212](https://github.com/saymyframe/smf_flutter_cli/issues/212)). ([79b7c4e4](https://github.com/saymyframe/smf_flutter_cli/commit/79b7c4e44294b3c104e45ca474d2e84eac83ec90))
+ - **FEAT**(firebase_auth): sign in, link and delete with the credentials of the sign-in methods ([#205](https://github.com/saymyframe/smf_flutter_cli/issues/205)). ([caf1e446](https://github.com/saymyframe/smf_flutter_cli/commit/caf1e446f337171ec212aab9ae82a23b2bad18e9))
+ - **BREAKING** **FEAT**(contracts): sign in with a credential of an identity provider, and list the ways to sign in of an app ([#197](https://github.com/saymyframe/smf_flutter_cli/issues/197)). ([73e8a21c](https://github.com/saymyframe/smf_flutter_cli/commit/73e8a21cb3807482f53a161baf1b9b0717aea5e4))
+
+#### `smf_flutter_cli` - `v0.6.0`
+
+ - **REFACTOR**(pipeline,cli): split the functions that SonarCloud finds too complex ([#229](https://github.com/saymyframe/smf_flutter_cli/issues/229)). ([7ebe3a31](https://github.com/saymyframe/smf_flutter_cli/commit/7ebe3a3157ffab1079ab62500f64efc22e1c39fc))
+ - **FIX**(sign_in): let the pages of the sign-in scroll under the bar of the home gesture ([#223](https://github.com/saymyframe/smf_flutter_cli/issues/223)). ([9faac56b](https://github.com/saymyframe/smf_flutter_cli/commit/9faac56bec27d7a2038484529241f0a8618e9fa7))
+ - **FIX**(firebase_auth): need Firebase CLI 15.34.0, which adds no web app to a project that has apps ([#182](https://github.com/saymyframe/smf_flutter_cli/issues/182)). ([8afc173a](https://github.com/saymyframe/smf_flutter_cli/commit/8afc173a846a6cf6ae3eea227615b902e416932e))
+ - **FEAT**(cli): web addresses of the output are links of the terminal ([#237](https://github.com/saymyframe/smf_flutter_cli/issues/237)). ([dad45266](https://github.com/saymyframe/smf_flutter_cli/commit/dad45266f95c773b07f55c14f6ccad20f32dc0f2))
+ - **FEAT**(firebase_auth,firebase_analytics): the steps by hand of Apple, Google Play and Analytics ([#236](https://github.com/saymyframe/smf_flutter_cli/issues/236)). ([e009ede2](https://github.com/saymyframe/smf_flutter_cli/commit/e009ede2c1b205763ef4ad05455defb8fcdf8b9e))
+ - **FEAT**(firebase_messaging): the APNs key among the steps by hand ([#235](https://github.com/saymyframe/smf_flutter_cli/issues/235)). ([b1e02466](https://github.com/saymyframe/smf_flutter_cli/commit/b1e024661876640c0a88fd35ac99e756e2477299))
+ - **FEAT**(cli): the guide of the steps by hand and its catalog ([#233](https://github.com/saymyframe/smf_flutter_cli/issues/233)). ([a744ff20](https://github.com/saymyframe/smf_flutter_cli/commit/a744ff20e7adbb031aa845ff518aee1832ce49b1))
+ - **FEAT**(sign_in): continue with the sign-in methods of the app ([#219](https://github.com/saymyframe/smf_flutter_cli/issues/219)). ([5c2a7051](https://github.com/saymyframe/smf_flutter_cli/commit/5c2a705198ce2e6ad525ed40983e3d8ce5c53db0))
+ - **FEAT**(google_sign_in): add sign-in with Google ([#216](https://github.com/saymyframe/smf_flutter_cli/issues/216)). ([231156eb](https://github.com/saymyframe/smf_flutter_cli/commit/231156ebe66206968d27022fcff3d6c08e3d03be))
+ - **FEAT**(firebase_auth): enable Google, register the debug key and write the URL scheme for the methods of the app ([#214](https://github.com/saymyframe/smf_flutter_cli/issues/214)). ([313fc8c9](https://github.com/saymyframe/smf_flutter_cli/commit/313fc8c98e0a3c48f74b13ad145efaecc0ce5ecb))
+ - **FEAT**(firebase_messaging): add Firebase Cloud Messaging as the provider of the push role ([#210](https://github.com/saymyframe/smf_flutter_cli/issues/210)). ([5bbbfa9a](https://github.com/saymyframe/smf_flutter_cli/commit/5bbbfa9ad0835e2344f3241a3f364110796b874e))
+ - **FEAT**(apple_sign_in): add Sign in with Apple on iOS ([#212](https://github.com/saymyframe/smf_flutter_cli/issues/212)). ([79b7c4e4](https://github.com/saymyframe/smf_flutter_cli/commit/79b7c4e44294b3c104e45ca474d2e84eac83ec90))
+ - **FEAT**(local_notifications): add a provider of the notifications role on flutter_local_notifications ([#206](https://github.com/saymyframe/smf_flutter_cli/issues/206)). ([d16e9a43](https://github.com/saymyframe/smf_flutter_cli/commit/d16e9a4349cf578660660b535744b66490995fb6))
+ - **FEAT**(firebase_auth): sign in, link and delete with the credentials of the sign-in methods ([#205](https://github.com/saymyframe/smf_flutter_cli/issues/205)). ([caf1e446](https://github.com/saymyframe/smf_flutter_cli/commit/caf1e446f337171ec212aab9ae82a23b2bad18e9))
+ - **FEAT**(onboarding): show the steps that the modules of the app add to the onboarding ([#203](https://github.com/saymyframe/smf_flutter_cli/issues/203)). ([32652cbf](https://github.com/saymyframe/smf_flutter_cli/commit/32652cbf289502cce513a2e2c9a7720d0791fa1c))
+ - **FEAT**(contracts): give every app the icons of the status bar as a widget of its own, with a widget test ([#191](https://github.com/saymyframe/smf_flutter_cli/issues/191)). ([4ab6b288](https://github.com/saymyframe/smf_flutter_cli/commit/4ab6b288cd00e6b94a0a4a27d1440480e21d4a30))
+ - **DOCS**(cli): show the recordings of 0.6 in the READMEs and on pub.dev ([#224](https://github.com/saymyframe/smf_flutter_cli/issues/224)). ([c517cf2f](https://github.com/saymyframe/smf_flutter_cli/commit/c517cf2f6dabef70cd043174456a2bdb7c06d8d1))
+ - **BREAKING** **FEAT**(contracts,apple_sign_in): the App ID among the steps by hand ([#234](https://github.com/saymyframe/smf_flutter_cli/issues/234)). ([e0b73a02](https://github.com/saymyframe/smf_flutter_cli/commit/e0b73a0295316ec57d8a50ec8336d076a1182f87))
+ - **BREAKING** **FEAT**(contracts): let modules run code in the AppDelegate before launch finishes ([#200](https://github.com/saymyframe/smf_flutter_cli/issues/200)). ([263b3079](https://github.com/saymyframe/smf_flutter_cli/commit/263b307907e85ea4aee51d7c1fa6330712b6cd1f))
+ - **BREAKING** **FEAT**(contracts): sign in with a credential of an identity provider, and list the ways to sign in of an app ([#197](https://github.com/saymyframe/smf_flutter_cli/issues/197)). ([73e8a21c](https://github.com/saymyframe/smf_flutter_cli/commit/73e8a21cb3807482f53a161baf1b9b0717aea5e4))
+ - **BREAKING** **FEAT**(flutter_core): give the fallback start screen only to an app that no route starts ([#192](https://github.com/saymyframe/smf_flutter_cli/issues/192)). ([9cc0a8f1](https://github.com/saymyframe/smf_flutter_cli/commit/9cc0a8f19515e003b50778cb1c5a627aa1f1daa5))
+ - **BREAKING** **FEAT**(pipeline): stop a --strict run on a warning about what the app is made of ([#190](https://github.com/saymyframe/smf_flutter_cli/issues/190)). ([530c4f88](https://github.com/saymyframe/smf_flutter_cli/commit/530c4f8865b3b8de5c9672e4f3c78ea802951af1))
+ - **BREAKING** **FEAT**(contracts): give each warning about the app a code, and let a choice report one ([#188](https://github.com/saymyframe/smf_flutter_cli/issues/188)). ([80f2c7ed](https://github.com/saymyframe/smf_flutter_cli/commit/80f2c7edd737e63ea3085b8202bb04a9bc9c4b7b))
+ - **BREAKING** **FEAT**(contracts): sign the iOS app with Runner.entitlements and let modules add entitlements ([#187](https://github.com/saymyframe/smf_flutter_cli/issues/187)). ([2f2b0374](https://github.com/saymyframe/smf_flutter_cli/commit/2f2b037442262cec28376137bf2fe35b8adf2852))
+
+#### `smf_flutter_core` - `v0.5.0`
+
+ - **FEAT**(contracts): give every app the icons of the status bar as a widget of its own, with a widget test ([#191](https://github.com/saymyframe/smf_flutter_cli/issues/191)). ([4ab6b288](https://github.com/saymyframe/smf_flutter_cli/commit/4ab6b288cd00e6b94a0a4a27d1440480e21d4a30))
+ - **BREAKING** **FEAT**(contracts,apple_sign_in): the App ID among the steps by hand ([#234](https://github.com/saymyframe/smf_flutter_cli/issues/234)). ([e0b73a02](https://github.com/saymyframe/smf_flutter_cli/commit/e0b73a0295316ec57d8a50ec8336d076a1182f87))
+ - **BREAKING** **FEAT**(contracts): let modules add components to the Android application ([#201](https://github.com/saymyframe/smf_flutter_cli/issues/201)). ([6dfcaec9](https://github.com/saymyframe/smf_flutter_cli/commit/6dfcaec92bf72dea1922940ea6834b564c24118a))
+ - **BREAKING** **FEAT**(contracts): let modules run code in the AppDelegate before launch finishes ([#200](https://github.com/saymyframe/smf_flutter_cli/issues/200)). ([263b3079](https://github.com/saymyframe/smf_flutter_cli/commit/263b307907e85ea4aee51d7c1fa6330712b6cd1f))
+ - **BREAKING** **FEAT**(contracts): let modules enable core library desugaring of the Android app ([#199](https://github.com/saymyframe/smf_flutter_cli/issues/199)). ([7f760ba7](https://github.com/saymyframe/smf_flutter_cli/commit/7f760ba7d53081d6023607b045cca7e185d09787))
+ - **BREAKING** **FEAT**(flutter_core): give the fallback start screen only to an app that no route starts ([#192](https://github.com/saymyframe/smf_flutter_cli/issues/192)). ([9cc0a8f1](https://github.com/saymyframe/smf_flutter_cli/commit/9cc0a8f19515e003b50778cb1c5a627aa1f1daa5))
+ - **BREAKING** **FEAT**(contracts): sign the iOS app with Runner.entitlements and let modules add entitlements ([#187](https://github.com/saymyframe/smf_flutter_cli/issues/187)). ([2f2b0374](https://github.com/saymyframe/smf_flutter_cli/commit/2f2b037442262cec28376137bf2fe35b8adf2852))
+
+#### `smf_gen_l10n` - `v0.5.0`
+
+ - **BREAKING** **FEAT**(flutter_core): give the fallback start screen only to an app that no route starts ([#192](https://github.com/saymyframe/smf_flutter_cli/issues/192)). ([9cc0a8f1](https://github.com/saymyframe/smf_flutter_cli/commit/9cc0a8f19515e003b50778cb1c5a627aa1f1daa5))
+
+#### `smf_go_router` - `v0.6.0`
+
+ - **FEAT**(contracts): give every app the icons of the status bar as a widget of its own, with a widget test ([#191](https://github.com/saymyframe/smf_flutter_cli/issues/191)). ([4ab6b288](https://github.com/saymyframe/smf_flutter_cli/commit/4ab6b288cd00e6b94a0a4a27d1440480e21d4a30))
+ - **BREAKING** **FEAT**(flutter_core): give the fallback start screen only to an app that no route starts ([#192](https://github.com/saymyframe/smf_flutter_cli/issues/192)). ([9cc0a8f1](https://github.com/saymyframe/smf_flutter_cli/commit/9cc0a8f19515e003b50778cb1c5a627aa1f1daa5))
+
+#### `smf_home_flutter` - `v0.5.0`
+
+ - **BREAKING** **FEAT**(flutter_core): give the fallback start screen only to an app that no route starts ([#192](https://github.com/saymyframe/smf_flutter_cli/issues/192)). ([9cc0a8f1](https://github.com/saymyframe/smf_flutter_cli/commit/9cc0a8f19515e003b50778cb1c5a627aa1f1daa5))
+
+#### `smf_pipeline` - `v0.6.0`
+
+ - **REFACTOR**(pipeline,cli): split the functions that SonarCloud finds too complex ([#229](https://github.com/saymyframe/smf_flutter_cli/issues/229)). ([7ebe3a31](https://github.com/saymyframe/smf_flutter_cli/commit/7ebe3a3157ffab1079ab62500f64efc22e1c39fc))
+ - **FIX**(sign_in): let the pages of the sign-in scroll under the bar of the home gesture ([#223](https://github.com/saymyframe/smf_flutter_cli/issues/223)). ([9faac56b](https://github.com/saymyframe/smf_flutter_cli/commit/9faac56bec27d7a2038484529241f0a8618e9fa7))
+ - **FIX**(firebase_auth): need Firebase CLI 15.34.0, which adds no web app to a project that has apps ([#182](https://github.com/saymyframe/smf_flutter_cli/issues/182)). ([8afc173a](https://github.com/saymyframe/smf_flutter_cli/commit/8afc173a846a6cf6ae3eea227615b902e416932e))
+ - **FEAT**(firebase_auth,firebase_analytics): the steps by hand of Apple, Google Play and Analytics ([#236](https://github.com/saymyframe/smf_flutter_cli/issues/236)). ([e009ede2](https://github.com/saymyframe/smf_flutter_cli/commit/e009ede2c1b205763ef4ad05455defb8fcdf8b9e))
+ - **FEAT**(firebase_messaging): the APNs key among the steps by hand ([#235](https://github.com/saymyframe/smf_flutter_cli/issues/235)). ([b1e02466](https://github.com/saymyframe/smf_flutter_cli/commit/b1e024661876640c0a88fd35ac99e756e2477299))
+ - **FEAT**(pipeline): the link to the guide of the steps by hand ([#231](https://github.com/saymyframe/smf_flutter_cli/issues/231)). ([c5cde6df](https://github.com/saymyframe/smf_flutter_cli/commit/c5cde6dfaa0d501dd76ec920743580c52bfb0780))
+ - **FEAT**(sign_in): continue with the sign-in methods of the app ([#219](https://github.com/saymyframe/smf_flutter_cli/issues/219)). ([5c2a7051](https://github.com/saymyframe/smf_flutter_cli/commit/5c2a705198ce2e6ad525ed40983e3d8ce5c53db0))
+ - **FEAT**(google_sign_in): add sign-in with Google ([#216](https://github.com/saymyframe/smf_flutter_cli/issues/216)). ([231156eb](https://github.com/saymyframe/smf_flutter_cli/commit/231156ebe66206968d27022fcff3d6c08e3d03be))
+ - **FEAT**(firebase_auth): enable Google, register the debug key and write the URL scheme for the methods of the app ([#214](https://github.com/saymyframe/smf_flutter_cli/issues/214)). ([313fc8c9](https://github.com/saymyframe/smf_flutter_cli/commit/313fc8c98e0a3c48f74b13ad145efaecc0ce5ecb))
+ - **FEAT**(firebase_messaging): add Firebase Cloud Messaging as the provider of the push role ([#210](https://github.com/saymyframe/smf_flutter_cli/issues/210)). ([5bbbfa9a](https://github.com/saymyframe/smf_flutter_cli/commit/5bbbfa9ad0835e2344f3241a3f364110796b874e))
+ - **FEAT**(apple_sign_in): add Sign in with Apple on iOS ([#212](https://github.com/saymyframe/smf_flutter_cli/issues/212)). ([79b7c4e4](https://github.com/saymyframe/smf_flutter_cli/commit/79b7c4e44294b3c104e45ca474d2e84eac83ec90))
+ - **FEAT**(local_notifications): add a provider of the notifications role on flutter_local_notifications ([#206](https://github.com/saymyframe/smf_flutter_cli/issues/206)). ([d16e9a43](https://github.com/saymyframe/smf_flutter_cli/commit/d16e9a4349cf578660660b535744b66490995fb6))
+ - **FEAT**(firebase_auth): sign in, link and delete with the credentials of the sign-in methods ([#205](https://github.com/saymyframe/smf_flutter_cli/issues/205)). ([caf1e446](https://github.com/saymyframe/smf_flutter_cli/commit/caf1e446f337171ec212aab9ae82a23b2bad18e9))
+ - **FEAT**(onboarding): show the steps that the modules of the app add to the onboarding ([#203](https://github.com/saymyframe/smf_flutter_cli/issues/203)). ([32652cbf](https://github.com/saymyframe/smf_flutter_cli/commit/32652cbf289502cce513a2e2c9a7720d0791fa1c))
+ - **FEAT**(contracts): give every app the icons of the status bar as a widget of its own, with a widget test ([#191](https://github.com/saymyframe/smf_flutter_cli/issues/191)). ([4ab6b288](https://github.com/saymyframe/smf_flutter_cli/commit/4ab6b288cd00e6b94a0a4a27d1440480e21d4a30))
+ - **BREAKING** **FEAT**(contracts,apple_sign_in): the App ID among the steps by hand ([#234](https://github.com/saymyframe/smf_flutter_cli/issues/234)). ([e0b73a02](https://github.com/saymyframe/smf_flutter_cli/commit/e0b73a0295316ec57d8a50ec8336d076a1182f87))
+ - **BREAKING** **FEAT**(contracts,pipeline): steps of an app that its developer does by hand ([#230](https://github.com/saymyframe/smf_flutter_cli/issues/230)). ([542e1089](https://github.com/saymyframe/smf_flutter_cli/commit/542e1089bed294361086f39191529267ab652b95))
+ - **BREAKING** **FEAT**(contracts): let modules add components to the Android application ([#201](https://github.com/saymyframe/smf_flutter_cli/issues/201)). ([6dfcaec9](https://github.com/saymyframe/smf_flutter_cli/commit/6dfcaec92bf72dea1922940ea6834b564c24118a))
+ - **BREAKING** **FEAT**(contracts): let modules run code in the AppDelegate before launch finishes ([#200](https://github.com/saymyframe/smf_flutter_cli/issues/200)). ([263b3079](https://github.com/saymyframe/smf_flutter_cli/commit/263b307907e85ea4aee51d7c1fa6330712b6cd1f))
+ - **BREAKING** **FEAT**(contracts): let modules enable core library desugaring of the Android app ([#199](https://github.com/saymyframe/smf_flutter_cli/issues/199)). ([7f760ba7](https://github.com/saymyframe/smf_flutter_cli/commit/7f760ba7d53081d6023607b045cca7e185d09787))
+ - **BREAKING** **FEAT**(contracts): sign in with a credential of an identity provider, and list the ways to sign in of an app ([#197](https://github.com/saymyframe/smf_flutter_cli/issues/197)). ([73e8a21c](https://github.com/saymyframe/smf_flutter_cli/commit/73e8a21cb3807482f53a161baf1b9b0717aea5e4))
+ - **BREAKING** **FEAT**(flutter_core): give the fallback start screen only to an app that no route starts ([#192](https://github.com/saymyframe/smf_flutter_cli/issues/192)). ([9cc0a8f1](https://github.com/saymyframe/smf_flutter_cli/commit/9cc0a8f19515e003b50778cb1c5a627aa1f1daa5))
+ - **BREAKING** **FEAT**(pipeline): stop a --strict run on a warning about what the app is made of ([#190](https://github.com/saymyframe/smf_flutter_cli/issues/190)). ([530c4f88](https://github.com/saymyframe/smf_flutter_cli/commit/530c4f8865b3b8de5c9672e4f3c78ea802951af1))
+ - **BREAKING** **FEAT**(contracts): give each warning about the app a code, and let a choice report one ([#188](https://github.com/saymyframe/smf_flutter_cli/issues/188)). ([80f2c7ed](https://github.com/saymyframe/smf_flutter_cli/commit/80f2c7edd737e63ea3085b8202bb04a9bc9c4b7b))
+ - **BREAKING** **FEAT**(contracts): sign the iOS app with Runner.entitlements and let modules add entitlements ([#187](https://github.com/saymyframe/smf_flutter_cli/issues/187)). ([2f2b0374](https://github.com/saymyframe/smf_flutter_cli/commit/2f2b037442262cec28376137bf2fe35b8adf2852))
+ - **BREAKING** **FEAT**(contracts): let a contribution and a symbol of a role depend on what a role chose ([#184](https://github.com/saymyframe/smf_flutter_cli/issues/184)). ([d5deac8e](https://github.com/saymyframe/smf_flutter_cli/commit/d5deac8ef366a40d24b74bb77ae444cf6ced274f))
+
+#### `smf_sign_in` - `v0.6.0`
+
+ - **FIX**(sign_in): let the pages of the sign-in scroll under the bar of the home gesture ([#223](https://github.com/saymyframe/smf_flutter_cli/issues/223)). ([9faac56b](https://github.com/saymyframe/smf_flutter_cli/commit/9faac56bec27d7a2038484529241f0a8618e9fa7))
+ - **FEAT**(sign_in): continue with the sign-in methods of the app ([#219](https://github.com/saymyframe/smf_flutter_cli/issues/219)). ([5c2a7051](https://github.com/saymyframe/smf_flutter_cli/commit/5c2a705198ce2e6ad525ed40983e3d8ce5c53db0))
+ - **BREAKING** **FEAT**(contracts): sign in with a credential of an identity provider, and list the ways to sign in of an app ([#197](https://github.com/saymyframe/smf_flutter_cli/issues/197)). ([73e8a21c](https://github.com/saymyframe/smf_flutter_cli/commit/73e8a21cb3807482f53a161baf1b9b0717aea5e4))
+ - **BREAKING** **FEAT**(contracts): give each warning about the app a code, and let a choice report one ([#188](https://github.com/saymyframe/smf_flutter_cli/issues/188)). ([80f2c7ed](https://github.com/saymyframe/smf_flutter_cli/commit/80f2c7edd737e63ea3085b8202bb04a9bc9c4b7b))
+
+#### `smf_google_sign_in` - `v0.6.0`
+
+ - **FEAT**(google_sign_in): add sign-in with Google ([#216](https://github.com/saymyframe/smf_flutter_cli/issues/216)). ([231156eb](https://github.com/saymyframe/smf_flutter_cli/commit/231156ebe66206968d27022fcff3d6c08e3d03be))
+
+#### `smf_local_notifications` - `v0.6.0`
+
+ - **FEAT**(local_notifications): add a provider of the notifications role on flutter_local_notifications ([#206](https://github.com/saymyframe/smf_flutter_cli/issues/206)). ([d16e9a43](https://github.com/saymyframe/smf_flutter_cli/commit/d16e9a4349cf578660660b535744b66490995fb6))
+
+#### `smf_firebase_analytics` - `v0.4.2`
+
+ - **FEAT**(firebase_auth,firebase_analytics): the steps by hand of Apple, Google Play and Analytics ([#236](https://github.com/saymyframe/smf_flutter_cli/issues/236)). ([e009ede2](https://github.com/saymyframe/smf_flutter_cli/commit/e009ede2c1b205763ef4ad05455defb8fcdf8b9e))
+
+#### `smf_get_it` - `v0.4.2`
+
+ - **FEAT**(contracts): give every app the icons of the status bar as a widget of its own, with a widget test ([#191](https://github.com/saymyframe/smf_flutter_cli/issues/191)). ([4ab6b288](https://github.com/saymyframe/smf_flutter_cli/commit/4ab6b288cd00e6b94a0a4a27d1440480e21d4a30))
+
+#### `smf_onboarding` - `v0.5.1`
+
+ - **FEAT**(local_notifications): add a provider of the notifications role on flutter_local_notifications ([#206](https://github.com/saymyframe/smf_flutter_cli/issues/206)). ([d16e9a43](https://github.com/saymyframe/smf_flutter_cli/commit/d16e9a4349cf578660660b535744b66490995fb6))
+ - **FEAT**(onboarding): show the steps that the modules of the app add to the onboarding ([#203](https://github.com/saymyframe/smf_flutter_cli/issues/203)). ([32652cbf](https://github.com/saymyframe/smf_flutter_cli/commit/32652cbf289502cce513a2e2c9a7720d0791fa1c))
+
+
 ## 2026-10-17
 
 ### Changes
