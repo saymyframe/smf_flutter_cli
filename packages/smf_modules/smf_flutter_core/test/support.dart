@@ -6,9 +6,10 @@ import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
-/// The registry of the tests: flutter_core, a router, the texts of the app
-/// with the preferences that their role requires, and a module that fills
-/// every socket of the app entry.
+/// The registry of the tests: flutter_core, a router, a feature with a
+/// route that starts the app, the texts of the app with the preferences
+/// that their role requires, and a module that fills every socket of the
+/// app entry.
 ///
 /// The providers of the roles are those of this file: the package of
 /// flutter_core depends on no module, since the other modules render the
@@ -16,6 +17,7 @@ import 'package:smf_pipeline/testing.dart';
 ModuleRegistry testRegistry() => ModuleRegistry(const [
       FlutterCoreModule(),
       TestRouterModule(),
+      TestStartModule(),
       TestTextsModule(),
       TestPreferencesModule(),
       EverySocketModule(),
@@ -35,8 +37,11 @@ Future<ContractResult> renderedApp(List<ModuleId> modules) async {
 }
 
 /// A router for the tests: `createAppRouter()` returns a router that shows
-/// the fallback start screen, calls the observer factories of its navigator,
-/// and tells the screen listeners about the fallback start screen once.
+/// the screen that the app starts on, calls the observer factories of its
+/// navigator, and tells the screen listeners about that screen once. The
+/// screen is that of the route that starts the app, a screen without
+/// parameters, or the fallback start screen in an app that no route
+/// starts, which alone imports the file of that screen.
 final class TestRouterModule extends SmfModule {
   /// Creates the module.
   const TestRouterModule();
@@ -49,7 +54,7 @@ final class TestRouterModule extends SmfModule {
         id: id,
         description: 'A router for the tests',
         kind: ModuleKinds.infrastructure,
-        providers: [RoleProvider.plain(routerRole)],
+        providers: [_TestRouterProvider()],
       );
 
   @override
@@ -59,11 +64,11 @@ final class TestRouterModule extends SmfModule {
             RouterRole.appRouterFactoryFile: '''
 import 'package:flutter/material.dart';
 
-import '../app/fallback_start_screen.dart';
 import 'app_router.dart';
 import 'navigation.dart';
 
-/// Creates the router of the app, which shows the fallback start screen.
+/// Creates the router of the app, which shows the screen that the app
+/// starts on.
 AppRouter createAppRouter() => _TestRouter();
 
 final class _TestRouter implements AppRouter {
@@ -92,16 +97,16 @@ final class _TestDelegate extends RouterDelegate<Object> with ChangeNotifier {
 
   @override
   Widget build(BuildContext context) {
-    // The fallback start screen, the only screen, is no route of a module.
+    // The screen that the app starts on is the only screen.
     if (!_shown) {
       _shown = true;
       for (final listener in _screenListeners) {
-        listener(null, '/');
+        listener({{{route}}}, {{{location}}});
       }
     }
     return Navigator(
       observers: _observers,
-      pages: const [MaterialPage<Object?>(child: FallbackStartScreen())],
+      pages: const [MaterialPage<Object?>(child: {{{screen}}})],
       onDidRemovePage: (page) {},
     );
   }
@@ -114,6 +119,95 @@ final class _TestDelegate extends RouterDelegate<Object> with ChangeNotifier {
 }
 ''',
           }),
+        ),
+      ];
+}
+
+/// Renders the screen that the router of the tests shows, with the import
+/// of its file, and the route and the location that the listeners of the
+/// screen hear of.
+final class _TestRouterProvider extends RoleProvider<RoutesData> {
+  const _TestRouterProvider();
+
+  @override
+  Role<RoutesData> get role => routerRole;
+
+  @override
+  RoleOutput render(RoleHookInput<RoutesData> input) {
+    final start = routerRole.startIn(input);
+    if (start == null) {
+      // The fallback start screen is no route of a module.
+      const fallback = AppEntryRole.fallbackStartScreen;
+      return RoleOutput(
+        vars: {
+          'screen':
+              Fragment('${fallback.name}()', imports: [fallback.importRef]),
+          'route': 'null',
+          'location': SmfNames.dartString('/'),
+        },
+      );
+    }
+    final screen = start.route.screen;
+    return RoleOutput(
+      vars: {
+        'screen': Fragment('${screen.className}()', imports: [screen.import]),
+        'route': SmfNames.dartString(start.fullName),
+        'location': SmfNames.dartString(start.fullPath),
+      },
+    );
+  }
+}
+
+/// A feature for the tests whose route is a start candidate, so that a
+/// route starts an app with it.
+final class TestStartModule extends SmfModule {
+  /// Creates the module.
+  const TestStartModule();
+
+  /// The id of the module.
+  static const id = ModuleId('test_start');
+
+  static const _screen = ScreenRef(
+    'TestStartScreen',
+    import: ImportRef.app('features/test_start/test_start_screen.dart'),
+  );
+
+  /// The tag of the annotations of the class of the screen, which a router
+  /// may fill.
+  static final String _annotations = RouterRole.screenAnnotations(
+    (feature: id, screen: _screen.className),
+  ).tag;
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A screen to start on for the tests',
+        kind: ModuleKinds.feature,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          bundleOf('test_start', {
+            'lib/features/test_start/test_start_screen.dart': '''
+import 'package:flutter/material.dart';
+
+/// The screen that the app starts on.
+{{{$_annotations}}}
+class TestStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const TestStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
+}
+''',
+          }),
+        ),
+        routerRole.data(
+          const RoutesData([
+            Route('/', name: 'start', screen: _screen, startCandidate: true),
+          ]),
         ),
       ];
 }
@@ -382,6 +476,14 @@ final class EverySocketModule extends SmfModule {
           const AndroidMetaData.value('every socket'),
         ),
         const SocketContribution.code(
+          AppEntryRole.androidManifestApplicationComponents,
+          Fragment(
+            '        <receiver\n'
+            '            android:name="com.example.every_socket.Receiver"\n'
+            '            android:exported="false" />',
+          ),
+        ),
+        const SocketContribution.code(
           AppEntryRole.mainActivityIntentFilters,
           Fragment(
             '            <intent-filter>\n'
@@ -395,6 +497,14 @@ final class EverySocketModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
+        AppEntryRole.iosEntitlements.entry(
+          'com.apple.developer.associated-domains',
+          const PlistStringArray(['applinks:example.com']),
+        ),
+        const SocketContribution.code(
+          AppEntryRole.iosAppDelegateLaunch,
+          Fragment('    UNUserNotificationCenter.current().delegate = self'),
+        ),
         AppEntryRole.gradleSettingsPlugins.entry(
           'io.github.ben-manes.versions',
           '0.64.0',
@@ -404,6 +514,7 @@ final class EverySocketModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.9.1',
         ),
+        AppEntryRole.androidCoreLibraryDesugaring.value('2.1.4'),
         AppEntryRole.readmeSections.entry(
           'Every socket',
           'The app has something in every socket of its entry.',

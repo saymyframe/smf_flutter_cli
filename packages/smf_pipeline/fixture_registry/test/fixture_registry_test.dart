@@ -8,6 +8,7 @@ import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
 import 'package:fake_router/fake_router.dart';
 import 'package:fake_state/fake_state.dart';
+import 'package:file/file.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_bloc/smf_bloc.dart';
@@ -446,6 +447,19 @@ void main() {
       expect(plist, contains('<string>fetch</string>'));
       expect(plist, contains('<string>remote-notification</string>'));
       expect('<key>FixtureName</key>'.allMatches(plist), hasLength(1));
+      // fake_overlap contributes first, by its id.
+      expect(
+        rendered(result, AppEntryRole.iosEntitlements).values.single,
+        [
+          '\t<key>aps-environment</key>',
+          '\t<string>development</string>',
+          '\t<key>com.apple.developer.associated-domains</key>',
+          '\t<array>',
+          '\t\t<string>applinks:example.org</string>',
+          '\t\t<string>applinks:example.com</string>',
+          '\t</array>',
+        ].join('\n'),
+      );
       expect(
         rendered(result, AppEntryRole.gradleSettingsPlugins).values.single,
         '    id("io.github.ben-manes.versions") version("0.64.0") apply false',
@@ -458,6 +472,30 @@ void main() {
         rendered(result, AppEntryRole.gradleAppDependencies).values.single,
         '    implementation("androidx.annotation:annotation:1.9.1")',
       );
+      // Only fake_sockets declares a receiver, which the manifest has once.
+      expect(
+        rendered(result, AppEntryRole.androidManifestApplicationComponents)
+            .values
+            .single,
+        '        <receiver\n'
+        '            android:name="com.example.fixture.FixtureReceiver"\n'
+        '            android:exported="false" />',
+      );
+      // Only fake_sockets runs code at the launch of the iOS app: a second
+      // contribution of the same statement would run it twice.
+      expect(
+        rendered(result, AppEntryRole.iosAppDelegateLaunch).values.single,
+        '    application.applicationSupportsShakeToEdit = true',
+      );
+      // fake_overlap asks for 2.1.3: the highest version of the library
+      // wins, and the switch comes with it.
+      const library = 'com.android.tools:desugar_jdk_libs:2.1.4';
+      expect(rendered(result, AppEntryRole.androidCoreLibraryDesugaring), {
+        'smf_app_entry__android_core_library_desugaring_enabled':
+            '        isCoreLibraryDesugaringEnabled = true',
+        'smf_app_entry__android_core_library_desugaring_library':
+            '    coreLibraryDesugaring("$library")',
+      });
       // The notes for coding agents of both modules make one section of the
       // guide, with the note that both have once.
       final guide = rendered(result, AppEntryRole.agentSections).values.single;
@@ -2012,7 +2050,8 @@ void main() {
   group('smf create', () {
     test('generates an app of every fixture', () async {
       final runner = RecordingRunner();
-      final host = testHost(processRunner: runner);
+      final logger = RecordingLogger();
+      final host = testHost(processRunner: runner, logger: logger);
 
       GeneratedApp? created;
       final code = await runSmf(
@@ -2025,6 +2064,13 @@ void main() {
           '/fake_feature',
           '--no-input',
           '--skip-external-setup',
+          // The texts of fake_second have a language that no app can be
+          // in, and one without a translation, on purpose. The app has no
+          // layout, so no main navigation leads to the destination of
+          // fake_second.
+          '--allow-warning=${LocalizationRole.unsupportedLanguageWarning}',
+          '--allow-warning=${LocalizationRole.untranslatedWarning}',
+          '--allow-warning=${RouterRole.noMainNavigationWarning}',
           '--strict',
         ],
         modules: fixtureModules(),
@@ -2032,7 +2078,7 @@ void main() {
         onCreated: (app) => created = app,
       );
 
-      expect(code, SmfExitCodes.success);
+      expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
       expect(created?.path, '/work/fixture_app');
       expect(created?.skippedSteps, isEmpty);
       expect(runner.lines, [
@@ -2058,44 +2104,67 @@ void main() {
 
     test(
         'warns of a language of a text that no app can be in, and of a text '
-        'without a translation into a language of the app', () async {
-      final logger = RecordingLogger();
-      final host = testHost(processRunner: RecordingRunner(), logger: logger);
+        'without a translation into a language of the app, on which a run '
+        'with --strict stops', () async {
+      /// Runs `smf create` for the second fixture feature with the fixture
+      /// texts, with [options].
+      Future<(int, RecordingLogger, FileSystem)> create(
+        List<String> options,
+      ) async {
+        final logger = RecordingLogger();
+        final host = testHost(processRunner: RecordingRunner(), logger: logger);
+        final code = await runSmf(
+          [
+            'create',
+            'fixture_app',
+            '-m',
+            [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
+                .join(','),
+            '--no-input',
+            '--skip-external-setup',
+            ...options,
+          ],
+          modules: fixtureModules(),
+          hostFor: ({required verbose}) => host,
+        );
+        return (code, logger, host.fileSystem);
+      }
 
-      final code = await runSmf(
-        [
-          'create',
-          'fixture_app',
-          '-m',
-          [FakeSecondModule.id, FakeRouterModule.id, FakeL10nModule.id]
-              .join(','),
-          '--no-input',
-          '--skip-external-setup',
-          '--strict',
-        ],
-        modules: fixtureModules(),
-        hostFor: ({required verbose}) => host,
-      );
+      const leftOut = 'The app is not in mt, which the text title of the '
+          'module fake_second has a translation into: Flutter has no texts '
+          'for its own widgets in that language.';
+      const untranslated = 'No translation into uk of the text outside of '
+          'the module fake_second: the app shows it in English there.';
 
+      final (code, logger, files) = await create(const []);
       expect(code, SmfExitCodes.success, reason: logger.errors.join('\n'));
-      expect(logger.warnings, hasLength(2));
+      // The template of the localization role reports both.
+      expect(logger.warnings, [
+        '[role:localization]: $leftOut',
+        '[role:localization]: $untranslated',
+      ]);
       expect(
-        logger.warnings.first,
-        'The app is not in mt, which the text title of the module '
-        'fake_second has a translation into: Flutter has no texts for its '
-        'own widgets in that language.',
-      );
-      expect(
-        logger.warnings.last,
-        'No translation into uk of the text outside of the module '
-        'fake_second: the app shows it in English there.',
-      );
-      expect(
-        host.fileSystem
+        files
             .file('/work/fixture_app/${LocalizationRole.appLocaleFile}')
             .readAsStringSync(),
         contains("const appLocales = <Locale>[Locale('en'), Locale('uk')];"),
       );
+
+      final (strictCode, strict, strictFiles) =
+          await create(const ['--strict']);
+      expect(strictCode, SmfExitCodes.generationFailed);
+      const stopped = 'Generation stopped because of 2 warnings about the '
+          'app. Without --strict, the run goes on after them.';
+      // Each with its code, which --allow-warning names.
+      String cause(String code, String message) =>
+          '  warning [role:localization] $code: $message';
+      expect(strict.errors, [
+        stopped,
+        cause(LocalizationRole.unsupportedLanguageWarning, leftOut),
+        cause(LocalizationRole.untranslatedWarning, untranslated),
+      ]);
+      expect(strict.warnings, isEmpty);
+      expect(strictFiles.directory('/work/fixture_app').existsSync(), isFalse);
     });
 
     test('refuses in --locales a language that no app can be in', () async {
@@ -2341,6 +2410,12 @@ const _cases = [
   'fake_late_gate (go_router)',
   'fake_gate (fake_router)',
   'fake_gate (go_router)',
+  // The fixture onboarding with each router, which the onboarding screen
+  // role requires, with the localization role, which it uses, and without.
+  'fake_onboarding (fake_router) with localization',
+  'fake_onboarding (go_router) with localization',
+  'fake_onboarding (fake_router)',
+  'fake_onboarding (go_router)',
   'fake_sockets',
   'fake_overlap',
   'fake_analytics (fake_di, fake_router) with di, router',
@@ -2365,6 +2440,12 @@ const _cases = [
   'fake_preferences',
   'fake_preferences_user with preferences',
   'fake_preferences_user',
+  // The fixture steps of the onboarding, with the fixture onboarding and
+  // the first router, which its role requires, and without them.
+  'fake_steps with onboarding_screen, localization',
+  'fake_steps with onboarding_screen',
+  'fake_steps with localization',
+  'fake_steps',
   'fake_theme with localization',
   'fake_theme',
   // The fixture sign-in with each router and without one: the auth role
@@ -2372,6 +2453,18 @@ const _cases = [
   'fake_auth (fake_router) with router',
   'fake_auth (go_router) with router',
   'fake_auth',
+  // The fixture notifications with the fixture onboarding and without it,
+  // and with the localization and without: the notifications role uses the
+  // onboarding screen role and the localization role, and the settings
+  // screen role too, which no fixture provides.
+  'fake_notifications with onboarding_screen, localization',
+  'fake_notifications with onboarding_screen',
+  'fake_notifications with localization',
+  'fake_notifications',
+  // The fixture push messages, with the fixture notifications, which the
+  // push role requires, and the fixture preferences, which those require.
+  // The push role uses no role, so its provider has one case.
+  'fake_push',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',

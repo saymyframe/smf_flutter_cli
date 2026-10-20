@@ -37,7 +37,7 @@ import 'support/dart_app.dart';
 /// it ends, unless `DEBUG` is set or its exit code is 2 or more.
 ///
 /// `--version` prints the lines of `STAND_IN_VERSION`, which `|` separates,
-/// or 15.14.0, and what `STAND_IN_VERSION_ERRORS` has on the standard
+/// or 15.34.0, and what `STAND_IN_VERSION_ERRORS` has on the standard
 /// error, and exits with `STAND_IN_VERSION_CODE`. Any other call prints a
 /// line on each stream and exits with `STAND_IN_DEPLOY_CODE`. With
 /// `STAND_IN_REMOVES_DIRECTORY`, it removes the directory it ran in first.
@@ -70,7 +70,7 @@ Future<void> main(List<String> arguments) async {
   }
   final int code;
   if (asksVersion) {
-    final version = environment['STAND_IN_VERSION'] ?? '15.14.0';
+    final version = environment['STAND_IN_VERSION'] ?? '15.34.0';
     stdout.writeln(version.split('|').join('\n'));
     stderr.write(environment['STAND_IN_VERSION_ERRORS'] ?? '');
     code = int.parse(environment['STAND_IN_VERSION_CODE'] ?? '0');
@@ -1295,20 +1295,24 @@ void main() {
     });
 
     test(
-        'stops at a Firebase CLI that is older than the command, by the '
-        'rule of the check of the machine, tells how to update it, and does '
-        'not run it', () async {
+        'stops at a Firebase CLI that is older than 15.34.0, such as 15.33.0, '
+        'by the rule of the check of the machine, tells how to update it, '
+        'and does not run it', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
 
       for (final (printed, version) in [
+        // The last version before the first one, whose command adds a web
+        // app to a project that has only Android and iOS apps.
+        ('15.33.0', '15.33.0'),
+        ('15.6.0', '15.6.0'),
         ('15.5.1', '15.5.1'),
         ('14.27.0', '14.27.0'),
         ('9.23.3', '9.23.3'),
         // The last line that is a version is that of the Firebase CLI.
-        ('16.0.0|15.5.1', '15.5.1'),
-        // A pre-release of the first version may lack the command.
-        ('15.6.0-rc.1', '15.6.0-rc.1'),
-        ('15.6.0-rc.1+build.5', '15.6.0-rc.1+build.5'),
+        ('16.0.0|15.33.0', '15.33.0'),
+        // A pre-release of the first version may lack what it has.
+        ('15.34.0-rc.1', '15.34.0-rc.1'),
+        ('15.34.0-rc.1+build.5', '15.34.0-rc.1+build.5'),
       ]) {
         final result = await run(standIn: {'STAND_IN_VERSION': printed});
 
@@ -1316,7 +1320,7 @@ void main() {
         expect(
           result.errors,
           'The Firebase CLI of this machine is $version, and enabling '
-          'sign-in methods needs 15.6.0 or later. Update it with "npm '
+          'sign-in methods needs 15.34.0 or later. Update it with "npm '
           'install -g firebase-tools" if npm installed it, or see '
           'https://firebase.google.com/docs/cli#update-cli\n'
           '${_inConsole('smf-app')}\n',
@@ -1328,29 +1332,29 @@ void main() {
     });
 
     test(
-        'runs the first Firebase CLI with the command and every later one, '
+        'runs the first Firebase CLI that it may run and every later one, '
         'by the last version that it prints, and one whose version it '
         'cannot read', () async {
       File(configOf(app)).writeAsStringSync(_configuredFor('smf-app'));
 
       for (final version in [
-        '15.6.0',
-        '15.6.1',
-        '15.14.0',
+        '15.34.0',
+        '15.34.1',
+        '15.40.0',
         '16.0.0',
         // With notices before the version, which have versions too, and
         // after a line that is another version.
         _withNotices,
-        '15.5.1|15.6.0',
+        '15.33.0|15.34.0',
         // A build of the first version, and a pre-release of a later one.
-        '15.6.0+build.5',
-        '15.6.1-rc.1',
+        '15.34.0+build.5',
+        '15.34.1-rc.1',
         '16.0.0-beta.2',
         // Nothing that the script reads as a version: the Firebase CLI
         // tells itself what it cannot do.
         'a development build',
         '99999999999999999999.0.0',
-        '15.6',
+        '15.34',
       ]) {
         final result = await run(standIn: {'STAND_IN_VERSION': version});
 

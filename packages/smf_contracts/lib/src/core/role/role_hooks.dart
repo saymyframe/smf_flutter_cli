@@ -16,6 +16,9 @@ final class RoleHookRequest {
   /// The data of all roles, each with its origin: that of the modules, in
   /// the order the modules were selected, and then that of the templates of
   /// roles, in the order of the first provider of each role.
+  ///
+  /// Once the roles have chosen, it has only the data whose conditions on
+  /// their choices hold (see [Contribution.whenChosen]).
   final List<RoleData<Object>> data;
 
   /// The roles present in the app.
@@ -100,6 +103,10 @@ final class RoleChoiceRequest {
   /// The data of all roles, each with its origin: that of the modules, in
   /// the order the modules were selected, and then that of the templates of
   /// roles, in the order of the first provider of each role.
+  ///
+  /// Of the data of the role that chooses, it has only the data whose
+  /// conditions on what other roles chose hold (see
+  /// [Contribution.whenChosen]).
   final List<RoleData<Object>> data;
 
   /// The roles present in the app.
@@ -146,6 +153,40 @@ final class RoleChoiceContext<D extends Object> {
 
   final Set<Role> _present;
   final Map<String, String?> _optionValues;
+  final List<SmfIssue> _warnings = [];
+
+  /// The warnings that the hook reported with [warn], in order.
+  List<SmfIssue> get warnings => List.unmodifiable(_warnings);
+
+  /// Reports [warning], a warning about what the app is made of that
+  /// depends on the choice, such as a route that the app cannot start on.
+  ///
+  /// Its code is a code of [role], `<role id>.<name>` (see
+  /// [SmfIssue.code]). Once the hook has chosen, the pipeline reports the
+  /// warnings of the hook as warnings of the role's template, and the
+  /// contract harness adds them to the result of the app. The pipeline
+  /// stops on a code of another role or one of another form, since a code
+  /// says which role reported it. A warning that depends on the data alone
+  /// comes from [RoleTemplate.validate] instead, which runs before the
+  /// machine is checked.
+  ///
+  /// A hook reports no warning through the logger of its [environment],
+  /// whose warnings carry no code: the contract harness reports such a
+  /// warning as an error of the role's template. Throws an [ArgumentError]
+  /// for an error, which the hook throws as an [SmfUsageException] instead,
+  /// and for a warning about the machine, which only the preflight checks
+  /// of the pipeline report.
+  void warn(SmfIssue warning) {
+    if (warning.category != WarningCategory.composition) {
+      throw ArgumentError.value(
+        warning,
+        'warning',
+        'The choice of the $role reports only warnings about what the app '
+            'is made of',
+      );
+    }
+    _warnings.add(warning);
+  }
 
   /// Whether [other] is present in the app.
   ///

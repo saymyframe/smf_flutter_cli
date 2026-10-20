@@ -34,8 +34,15 @@ abstract final class CreateOptions {
   /// `--on-conflict`: what to do if the app's directory exists.
   static const onConflict = 'on-conflict';
 
-  /// `--strict`: fail instead of leaving out modules that cannot work.
+  /// `--strict`: fail instead of leaving out modules that cannot work, and
+  /// on warnings about what the app is made of.
   static const strict = 'strict';
+
+  /// `--allow-warning`: the code of a warning about what the app is made
+  /// of that does not stop a run with `--strict`, such as
+  /// `router.no_start`; hidden, for CI, which generates apps that warn on
+  /// purpose. It is given once for each code, and takes no list.
+  static const allowWarning = 'allow-warning';
 
   /// `--explain`: print what would happen and stop.
   static const explain = 'explain';
@@ -59,6 +66,7 @@ abstract final class CreateOptions {
     output,
     onConflict,
     strict,
+    allowWarning,
     explain,
     skipExternalSetup,
     input,
@@ -105,7 +113,14 @@ abstract final class CreateOptions {
       ..addFlag(
         strict,
         negatable: false,
-        help: 'Fail instead of leaving out modules that cannot work.',
+        help: 'Fail instead of leaving out modules that cannot work, and on '
+            'warnings about what the app is made of.',
+      )
+      ..addMultiOption(
+        allowWarning,
+        valueHelp: 'code',
+        splitCommas: false,
+        hide: true,
       )
       ..addFlag(
         explain,
@@ -148,6 +163,7 @@ final class CreateRequest {
     this.outputDirectory = '.',
     this.onConflict = OnConflict.prompt,
     this.strict = false,
+    this.allowedWarnings = const {},
     this.explain = false,
     this.skipExternalSetup = false,
     this.input = true,
@@ -159,14 +175,25 @@ final class CreateRequest {
   /// Parses [results] of a parser set up with [CreateOptions.addTo] for
   /// [roles].
   ///
-  /// Throws an [SmfUsageException] for more than one app name or for a
-  /// module name that is not a valid id.
+  /// Throws an [SmfUsageException] for more than one app name, for a
+  /// module name that is not a valid id, and for a value of
+  /// `--allow-warning` that is not the code of a warning (see
+  /// [SmfIssue.isWarningCode]).
   factory CreateRequest.fromArgs(ArgResults results, Iterable<Role> roles) {
     if (results.rest.length > 1) {
       throw SmfUsageException(
         'Give one app name, not ${results.rest.length}: '
         '${results.rest.join(' ')}.',
       );
+    }
+    final allowedWarnings = results.multiOption(CreateOptions.allowWarning);
+    for (final code in allowedWarnings) {
+      if (!SmfIssue.isWarningCode(code)) {
+        throw SmfUsageException(
+          '"$code" is not the code of a warning, which is the id of a role, '
+          'a dot and a name in lower snake_case, such as router.no_start.',
+        );
+      }
     }
     return CreateRequest(
       appName: results.rest.firstOrNull,
@@ -176,6 +203,7 @@ final class CreateRequest {
         results.option(CreateOptions.onConflict) ?? OnConflict.prompt.name,
       ),
       strict: results.flag(CreateOptions.strict),
+      allowedWarnings: Set.unmodifiable(allowedWarnings),
       explain: results.flag(CreateOptions.explain),
       skipExternalSetup: results.flag(CreateOptions.skipExternalSetup),
       input: results.flag(CreateOptions.input),
@@ -206,8 +234,15 @@ final class CreateRequest {
   /// What to do if the app's directory exists and is not empty.
   final OnConflict onConflict;
 
-  /// Whether to fail instead of leaving out modules that cannot work.
+  /// Whether to fail instead of leaving out modules that cannot work, and
+  /// on warnings about what the app is made of.
   final bool strict;
+
+  /// The codes of the warnings about what the app is made of that do not
+  /// stop a run with [strict], given with `--allow-warning`, such as
+  /// `router.no_start` (see [SmfIssue.code]). They do nothing in a run
+  /// without [strict], which stops on no warning.
+  final Set<String> allowedWarnings;
 
   /// Whether to print what would happen and stop.
   final bool explain;

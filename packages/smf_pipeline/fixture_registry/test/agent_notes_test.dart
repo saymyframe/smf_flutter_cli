@@ -102,6 +102,12 @@ void main() {
     final hasFixtureSignIn = modules.any(
       (module) => module.descriptor.id == const ModuleId('fake_auth'),
     );
+    final hasFixtureNotifications = modules.any(
+      (module) => module.descriptor.id == const ModuleId('fake_notifications'),
+    );
+    final hasFixturePush = modules.any(
+      (module) => module.descriptor.id == const ModuleId('fake_push'),
+    );
     group('in the apps of the registry $name, the note of a role', () {
       late List<ContractResult> results;
 
@@ -209,6 +215,75 @@ void main() {
               '`lib/core/fixture_auth/fixture_auth.dart`',
               '`FixtureAuth`',
               'fake_auth',
+            ],
+          );
+        });
+      }
+
+      // What only a registry with the fixture notifications can tell: there
+      // the notifications role has a provider, so the check holds its note
+      // against one.
+      if (hasFixtureNotifications) {
+        test(
+            'of the notifications role may name Dart, and may not name the '
+            'fixture notifications, its file or what it declares', () {
+          expect(
+            _namedWith(
+              results,
+              notificationsRole,
+              '- Wait for a tap with a `Completer`, and follow the taps with '
+              'a `StreamSubscription`.',
+            ),
+            isEmpty,
+          );
+          expect(
+            _namedWith(
+              results,
+              notificationsRole,
+              '- `openFixtureNotifications()` of '
+              '`lib/core/fixture_notifications/fixture_notifications.dart` '
+              'returns the `FixtureNotifications`, as fake_notifications '
+              'wants.',
+            ),
+            [
+              '`openFixtureNotifications`',
+              '`lib/core/fixture_notifications/fixture_notifications.dart`',
+              '`FixtureNotifications`',
+              'fake_notifications',
+            ],
+          );
+        });
+      }
+
+      // What only a registry with the fixture push messages can tell: there
+      // the push role has a provider, so the check holds its note against
+      // one.
+      if (hasFixturePush) {
+        test(
+            'of the push role may name Dart, and may not name the fixture '
+            'push messages, its file or what it declares', () {
+          expect(
+            _namedWith(
+              results,
+              pushRole,
+              '- Follow the messages with a `StreamSubscription`, and cancel '
+              'it in `dispose`.',
+            ),
+            isEmpty,
+          );
+          expect(
+            _namedWith(
+              results,
+              pushRole,
+              '- `openFixturePush()` of '
+              '`lib/core/fixture_push/fixture_push.dart` returns the '
+              '`FixturePush`, as fake_push wants.',
+            ),
+            [
+              '`openFixturePush`',
+              '`lib/core/fixture_push/fixture_push.dart`',
+              '`FixturePush`',
+              'fake_push',
             ],
           );
         });

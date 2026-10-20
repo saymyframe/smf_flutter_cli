@@ -14,6 +14,7 @@ import 'dart:convert';
 
 import 'package:fake_broken/bundles/broken_layout_bundle.dart';
 import 'package:fake_broken/bundles/broken_layout_labels_bundle.dart';
+import 'package:fake_broken/bundles/broken_onboarding_bundle.dart';
 import 'package:fake_broken/bundles/broken_settings_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
@@ -677,6 +678,42 @@ final class BrokenModule extends SmfModule {
   /// The file of the fixture sign-in.
   static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
 
+  /// The fixture notifications whose function forgets the notifications
+  /// that are scheduled each time it opens them, as a provider does that
+  /// keeps them only in memory: the next start of the app has none of them,
+  /// and the system never shows them.
+  static const notificationsForgettingSchedules = BrokenModule._(
+    FakeNotificationsModule(),
+    ModuleId('broken_notifications_forget_schedules'),
+    'Notifications that forget what was scheduled at each start (fixture)',
+    'lib/core/fixture_notifications/fixture_notifications.dart',
+    [
+      (
+        '  await _answer();\n  return FixtureNotifications._();\n',
+        '  await _answer();\n  _scheduled.clear();\n'
+            '  return FixtureNotifications._();\n',
+      ),
+    ],
+  );
+
+  /// The fixture push messages whose function drops the address of the
+  /// device each time it opens them, as a provider does that deletes the
+  /// address at each start: the device registers anew and gets a new
+  /// address a while after each start, so the backend of the app no longer
+  /// reaches it at the one that it kept.
+  static const pushRegisteringAtEachStart = BrokenModule._(
+    FakePushModule(),
+    ModuleId('broken_push_new_address'),
+    'Push messages with a new address at each start (fixture)',
+    'lib/core/fixture_push/fixture_push.dart',
+    [
+      (
+        '  await _answer();\n  if (_address == null)',
+        '  await _answer();\n  _address = null;\n  if (_address == null)',
+      ),
+    ],
+  );
+
   /// The module with the bug.
   final SmfModule of;
 
@@ -738,6 +775,7 @@ final class BrokenModule extends SmfModule {
                 name: value is RoleVar ? texts[name] ?? value : value,
             },
             when: contribution.when,
+            whenChosen: contribution.whenChosen,
           )
         else
           contribution,
@@ -1011,4 +1049,51 @@ final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
       },
     );
   }
+}
+
+/// A provider of the onboarding screen role with one known bug: a feature
+/// whose screen shows a page for each step of the onboarding, also for a
+/// step whose showIf would leave it out, which it never asks.
+///
+/// The screen still reads the list of the steps, as the rule
+/// `onboarding_screen.steps_shown` of the role wants, and the app analyzes:
+/// only a running app shows the bug.
+final class BrokenOnboardingModule extends SmfModule {
+  /// Creates the module.
+  const BrokenOnboardingModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_onboarding_ignores_conditions');
+
+  /// The name of the route of the screen.
+  static const _route = 'onboarding';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'An onboarding that shows every step (fixture)',
+        kind: ModuleKinds.feature,
+        providers: [RoleProvider.plain(onboardingScreenRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(brokenOnboardingBundle),
+        routerRole.data(
+          const RoutesData([
+            Route(
+              '/',
+              name: _route,
+              screen: ScreenRef(
+                'BrokenOnboardingScreen',
+                import: ImportRef.app(
+                  'features/broken_onboarding_ignores_conditions/'
+                  'broken_onboarding_screen.dart',
+                ),
+              ),
+            ),
+          ]),
+        ),
+        onboardingScreenRole.data(const OnboardingScreenRoute(_route)),
+      ];
 }

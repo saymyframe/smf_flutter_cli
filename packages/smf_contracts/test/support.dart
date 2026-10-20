@@ -86,6 +86,19 @@ const testContext = ModuleContext(
   ),
 );
 
+/// The request of the hooks of an app with the [presentRoles] and no data,
+/// whose roles made the [choices].
+RoleHookRequest appWith(
+  Set<Role> presentRoles, {
+  Map<Role, Object?> choices = const {},
+}) =>
+    RoleHookRequest(
+      data: const [],
+      presentRoles: presentRoles,
+      context: testContext,
+      choices: choices,
+    );
+
 /// An environment that fails on anything but its flags.
 final class FakeEnvironment implements SmfEnvironment {
   FakeEnvironment({this.interactive = false});

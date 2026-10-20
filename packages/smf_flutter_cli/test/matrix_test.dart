@@ -213,6 +213,70 @@ const _configure = PostGenStep(
   skippable: true,
 );
 
+/// The matrix of the modules of the CLI, which several tests read: built
+/// once, when a test reads it first, since the contract harness renders
+/// each of its apps.
+final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
+    matrixOf(smfModules);
+
+/// The apps of the matrix of the CLI that warn of what they are made of,
+/// by name, each with the codes of its warnings (see [MatrixApp.warnings]),
+/// but the apps with every module, of which none warns.
+///
+/// The harness builds the app of a module with only the modules that it
+/// needs: such an app has no route to start on, since only home has one,
+/// and the destination of its feature has no main navigation to lead to it,
+/// since the app has no layout. The apps of a module with the settings
+/// screen, such as those of the theme and of the notifications, get the
+/// settings feature for it, and the apps of the notifications with the
+/// onboarding screen get the onboarding feature, which has no route to
+/// start on either.
+const _warningApps = <String, List<String>>{
+  'settings with localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'settings': ['router.no_main_navigation', 'router.no_start'],
+  'material_theme with settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'material_theme with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'onboarding with localization': ['router.no_start'],
+  'onboarding': ['router.no_start'],
+  'local_notifications with settings_screen, onboarding_screen, '
+      'localization': ['router.no_main_navigation', 'router.no_start'],
+  'local_notifications with settings_screen, onboarding_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'local_notifications with settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'local_notifications with onboarding_screen, localization': [
+    'router.no_start',
+  ],
+  'local_notifications with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'local_notifications with onboarding_screen': ['router.no_start'],
+  'sign_in (bloc) with localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'sign_in (riverpod) with localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'sign_in (bloc)': ['router.no_main_navigation', 'router.no_start'],
+  'sign_in (riverpod)': ['router.no_main_navigation', 'router.no_start'],
+};
+
 void main() {
   test(
       'the matrix of the CLI has the app of flutter_core with and without the '
@@ -226,17 +290,22 @@ void main() {
       'container, the apps of the events and of the preferences with the '
       'DI container and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
-      'the app of Firebase, the app of Crashlytics '
+      'the apps of the notifications with the settings screen, the '
+      'onboarding screen and the localization and without each, which all '
+      'get the preferences, the '
+      'app of Firebase, the app of Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
-      'which get Firebase, the apps of Firebase Authentication with and '
+      'which get Firebase, the app of Firebase Cloud Messaging, which gets '
+      'Firebase and the notifications with their preferences, the apps of '
+      'Firebase Authentication with and '
       'without the localization and the router, which get Firebase, the '
       'apps of the sign-in for each state manager with the localization '
       'and without, which get Firebase Authentication and the router, one '
       'of Firebase Authentication with the router for each other mode of '
       'the auth role, and one of every module for each state manager, each '
       'once more for each other mode', () async {
-    final (:apps, :failed) = await matrixOf(smfModules);
+    final (:apps, :failed) = await _cliMatrix;
     // The modules whose labels and titles are texts of the app, each with
     // the provider of the texts. The app of settings with it is the app of
     // the localization with the settings screen too.
@@ -245,8 +314,9 @@ void main() {
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, onboarding, firebase_core, '
-        'firebase_crashlytics, firebase_analytics, firebase_auth, sign_in)';
+        'shared_preferences, onboarding, local_notifications, firebase_core, '
+        'firebase_crashlytics, firebase_analytics, firebase_messaging, '
+        'firebase_auth, sign_in)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -311,6 +381,42 @@ void main() {
         'shared_preferences, go_router)',
       ),
       'onboarding (onboarding, flutter_core, shared_preferences, go_router)',
+      equals(
+        'local_notifications with settings_screen, onboarding_screen, '
+        'localization (local_notifications, settings, onboarding, gen_l10n, '
+        'flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with settings_screen, onboarding_screen '
+        '(local_notifications, settings, onboarding, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with settings_screen, localization '
+        '(local_notifications, settings, gen_l10n, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with onboarding_screen, localization '
+        '(local_notifications, onboarding, gen_l10n, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with settings_screen (local_notifications, '
+        'settings, flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with onboarding_screen (local_notifications, '
+        'onboarding, flutter_core, shared_preferences, go_router)',
+      ),
+      equals(
+        'local_notifications with localization (local_notifications, '
+        'gen_l10n, flutter_core, shared_preferences)',
+      ),
+      equals(
+        'local_notifications (local_notifications, flutter_core, '
+        'shared_preferences)',
+      ),
       'firebase_core (firebase_core, flutter_core)',
       equals(
         'firebase_crashlytics with di (firebase_crashlytics, get_it, '
@@ -334,6 +440,10 @@ void main() {
       ),
       equals(
         'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_messaging (firebase_messaging, firebase_core, flutter_core, '
+        'local_notifications, shared_preferences)',
       ),
       equals(
         'firebase_auth with localization, router (firebase_auth, gen_l10n, '
@@ -398,6 +508,55 @@ void main() {
               {'auth-mode': mode},
               {'auth-mode': mode},
             ],
+      ],
+    );
+  });
+
+  test(
+      'no app with every module warns of what it is made of, those that CI '
+      'starts included, and the other apps of the matrix that warn are those '
+      'that the CLI declares, with the codes it declares', () async {
+    final (:apps, :failed) = await _cliMatrix;
+    final started = await everyModuleAppsOf(
+      smfModules,
+      withoutExternalSteps: true,
+    );
+
+    expect(failed, isEmpty);
+    expect(started.failed, isEmpty);
+    // They are the apps that CI builds for Android and iOS, starts on
+    // devices and generates with smf from pub.dev, and what a user gets
+    // with every module.
+    expect(
+      [
+        for (final app in apps)
+          if (app.everyModuleWith != null && app.warnings.isNotEmpty)
+            '${app.name}: ${app.warnings}',
+        for (final app in started.apps)
+          if (app.warnings.isNotEmpty)
+            '${app.name} without external steps: ${app.warnings}',
+      ],
+      isEmpty,
+    );
+    expect(
+      {
+        for (final app in apps)
+          if (app.everyModuleWith == null && app.warnings.isNotEmpty)
+            app.name: app.warnings,
+      },
+      _warningApps,
+      reason: 'smf create --strict allows these warnings in the apps of CI, '
+          'and stops on any other. A new warning of an app is a decision: '
+          'change the modules or the case so that the app does not warn, '
+          'or declare the actual map here.',
+    );
+    final settings = apps.singleWhere((app) => app.name == 'settings');
+    expect(
+      settings.createArguments('app_1', '/apps').reversed.take(3),
+      [
+        '--strict',
+        '--allow-warning=router.no_start',
+        '--allow-warning=router.no_main_navigation',
       ],
     );
   });
@@ -532,7 +691,7 @@ void main() {
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, onboarding, local)';
+        'shared_preferences, onboarding, local_notifications, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -586,7 +745,7 @@ void main() {
   test(
       'an app of the matrix has the data and the roles of its case, and the '
       'choices of the roles, such as the route it starts on', () async {
-    final (:apps, :failed) = await matrixOf(smfModules);
+    final (:apps, :failed) = await _cliMatrix;
     MatrixApp named(String name) => apps.singleWhere((app) => app.name == name);
 
     expect(failed, isEmpty);
@@ -613,11 +772,14 @@ void main() {
     expect(const MatrixApp('home', [HomeModule.id]).hook, isNull);
   });
 
-  test('an app of the matrix names every module and asks nothing', () {
+  test(
+      'an app of the matrix names every module, asks nothing and allows the '
+      'warnings that it has on purpose', () {
     const app = MatrixApp(
       'home with router',
       [ModuleId('flutter_core'), ModuleId('router'), ModuleId('home')],
       roleOptions: {'start': '/home', 'unset': null},
+      warnings: ['router.no_main_navigation', 'router.no_start'],
     );
 
     expect(app.createArguments('app_1', '/apps'), [
@@ -633,8 +795,15 @@ void main() {
       '--no-input',
       '--skip-external-setup',
       '--no-dart-fix',
+      '--allow-warning=router.no_main_navigation',
+      '--allow-warning=router.no_start',
       '--strict',
     ]);
+    // An app without warnings allows none, so --strict stops on any.
+    expect(
+      const MatrixApp('home', [ModuleId('home')]).createArguments('a', '/b'),
+      isNot(contains(startsWith('--allow-warning'))),
+    );
   });
 
   group('the apps of the other values of a mode option of a role', () {
@@ -1228,7 +1397,7 @@ Type type() => Types;
       'those that, with another module in their place, change whether it '
       'applies to an app, the values of its files there or the files it '
       'generates', () async {
-    final (:apps, :failed) = await matrixOf(smfModules);
+    final (:apps, :failed) = await _cliMatrix;
     final withHome = [
       for (final app in apps)
         if (app.modules.contains(HomeModule.id)) app.name,
@@ -2130,6 +2299,7 @@ Type type() => Types;
               'event_bus',
               'shared_preferences',
               'onboarding',
+              'local_notifications',
             ].join(','),
             '-o',
             '/apps',

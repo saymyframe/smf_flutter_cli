@@ -359,7 +359,9 @@ void f() {{{{smf_after__brace}}}
 
     test('a role template holds the tags of families of the roles it sees', () {
       final families = <SocketFamily<Object?, SocketKind>>[];
-      final router = TestRole<NoDsl>('router', socketFamilies: families);
+      // Not the ids of the router role and the layout role, which every
+      // registry has, since the app entry uses the router.
+      final router = TestRole<NoDsl>('paths', socketFamilies: families);
       families.add(
         SocketFamily<String, CodeSocket>.role(
           router,
@@ -377,13 +379,13 @@ void f() {{{{smf_after__brace}}}
                 BrickContribution(
                   bundle(
                     id,
-                    files: {'lib/$id.dart': '{{{smf_router__screens__home}}}'},
+                    files: {'lib/$id.dart': '{{{smf_paths__screens__home}}}'},
                   ),
                 ),
               ],
             ),
           );
-      final layout = holding('layout', uses: {router});
+      final layout = holding('shell', uses: {router});
       final other = holding('other');
 
       expect(
@@ -398,7 +400,7 @@ void f() {{{{smf_after__brace}}}
         ),
         [
           contains('in lib/other.dart:1 of role:other is a tag of the socket '
-              'router.screens.home, which role:other may not hold'),
+              'paths.screens.home, which role:other may not hold'),
         ],
       );
     });
@@ -505,12 +507,58 @@ void f() {{{{smf_after__brace}}}
           ),
         ]),
         [
-          contains('The socket m.one has only its tag smf_m__one_open'),
+          equals(
+            'm: The socket m.one has only smf_m__one_open of its tags, in '
+            'lib/a.dart; a wrapper needs both smf_m__one_open and '
+            'smf_m__one_close.',
+          ),
           contains('The tag smf_m__two_close of the socket m.two comes '
               'before smf_m__two_open'),
           contains('The tags of the socket m.three are in different files'),
         ],
       );
+    });
+
+    test(
+        'a socket for one value at several places has the tag of each, '
+        'since the value goes to all of them', () {
+      String library(String version) => 'library:$version';
+      final versions = SocketRef<ValueSocket<String>>.module(
+        const ModuleId('m'),
+        'versions',
+        ValueSocket.places(
+          policy: const MaxPolicy(),
+          places: {'enabled': library, 'library': library},
+        ),
+      );
+      List<String> issues(Map<String, String> files) => check([
+            scaffold(),
+            TestModule(
+              'm',
+              sockets: [versions],
+              contributions: [
+                brick(files),
+                versions.value('2.1.4'),
+              ],
+            ),
+          ]);
+
+      expect(
+        issues({
+          'android/a.gradle': '{{{smf_m__versions_enabled}}}\n',
+          'android/b.gradle': '{{{smf_m__versions_library}}}\n'
+              '{{{smf_m__versions_library}}}\n',
+        }),
+        isEmpty,
+      );
+      expect(issues({'android/a.gradle': '{{{smf_m__versions_library}}}\n'}), [
+        equals(
+          'm: The socket m.versions has only smf_m__versions_library of its '
+          'tags, in android/a.gradle; its value goes to each of its tags, '
+          'smf_m__versions_enabled and smf_m__versions_library, so the '
+          'templates hold all of them.',
+        ),
+      ]);
     });
 
     test('every socket that must have a tag has it', () {
@@ -594,6 +642,89 @@ void f() {{{{smf_after__brace}}}
             ),
         ],
       );
+    });
+
+    group('in a brick with conditions on what roles chose', () {
+      final sockets = <SocketRef>[];
+      final clock = TestRole<String>('clock', sockets: sockets);
+      sockets
+          .add(SocketRef<CodeSocket>.role(clock, 'ticks', const CodeSocket()));
+      final twelve = ChoiceCondition(
+        clock,
+        'the clock shows 12 hours',
+        holdsFor: (choice) => choice == '12',
+        withoutRole: false,
+      );
+      // The pubspec of the app is in the brick of the dial alone.
+      List<SmfModule> modules({required bool conditional}) => [
+            scaffold(bricks: false),
+            TestModule(
+              'dial',
+              providers: [RoleProvider.plain(clock)],
+              contributions: [
+                BrickContribution(
+                  bundle(
+                    'dial',
+                    files: {
+                      'lib/dial.dart': '{{{smf_clock__ticks}}}\n',
+                      'pubspec.yaml': '{{{smf_pubspec_flutter}}}\n',
+                    },
+                  ),
+                  whenChosen: conditional ? {twelve} : const {},
+                ),
+              ],
+            ),
+          ];
+
+      test(
+          'a tag of a socket is an error: an app where they do not hold '
+          'would lose what the socket gets', () {
+        final issues = check(modules(conditional: true), complete: false);
+
+        expect(issues, [
+          for (final (tag, path) in [
+            ('smf_clock__ticks', 'lib/dial.dart'),
+            ('smf_pubspec_flutter', 'pubspec.yaml'),
+          ])
+            equals(
+              'dial: The tag $tag in $path:1 of dial is in a brick with '
+              'conditions on what roles chose, which an app where they do not '
+              'hold leaves out, and what the socket gets would be lost with '
+              'it; put the tag into a brick without conditions.',
+            ),
+        ]);
+        expect(check(modules(conditional: false), complete: false), isEmpty);
+      });
+
+      test('the harness takes no tag of such a brick for the tag of a socket',
+          () {
+        final resolution = resolutionOf(modules(conditional: true));
+        final missing = missingTemplateTags(
+          registry: ModuleRegistry(modules(conditional: true)),
+          resolution: resolution,
+          collection: collect(resolution, testContext),
+        );
+
+        expect(
+          [for (final issue in missing) issue.message],
+          contains(
+            'No template of the clock role or of its providers has the tag '
+            'of the socket clock.ticks (smf_clock__ticks).',
+          ),
+        );
+        final unconditional = resolutionOf(modules(conditional: false));
+        expect(
+          [
+            for (final issue in missingTemplateTags(
+              registry: ModuleRegistry(modules(conditional: false)),
+              resolution: unconditional,
+              collection: collect(unconditional, testContext),
+            ))
+              issue.message,
+          ],
+          isNot(contains(contains('smf_clock__ticks'))),
+        );
+      });
     });
   });
 }

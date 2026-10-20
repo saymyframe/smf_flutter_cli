@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
@@ -10,6 +11,8 @@ void main() {
   const pbxproj = 'ios/Runner.xcodeproj/project.pbxproj';
   const manifest = 'android/app/src/main/AndroidManifest.xml';
   const infoPlist = 'ios/Runner/Info.plist';
+  const entitlements = 'ios/Runner/Runner.entitlements';
+  const appDelegate = 'ios/Runner/AppDelegate.swift';
   const settingsGradle = 'android/settings.gradle.kts';
   const appGradle = 'android/app/build.gradle.kts';
 
@@ -20,7 +23,7 @@ void main() {
       final brick = const FlutterCoreModule()
           .contribute(ContractHarness.defaultContext)
           .whereType<BrickContribution>()
-          .single;
+          .firstWhere((brick) => brick.bundle == flutterCoreBundle);
       templates = templateFilesOf(brick);
     });
 
@@ -137,6 +140,13 @@ void main() {
         'Contract App',
       );
       expect(app.findElements('uses-permission'), isEmpty);
+      expect(
+        [
+          for (final component in app.getElement('application')!.childElements)
+            component.name.local,
+        ],
+        ['activity', 'meta-data'],
+      );
 
       final root = XmlDocument.parse(every[manifest]!).rootElement;
       final application = root.getElement('application')!;
@@ -154,6 +164,19 @@ void main() {
             meta.getAttribute('android:name'),
         ],
         ['flutterEmbedding', 'com.example.every_socket.KEY'],
+      );
+      // The components of the modules come after the meta-data.
+      expect(
+        [
+          for (final child in application.childElements)
+            '${child.name.local} ${child.getAttribute('android:name')}',
+        ],
+        [
+          'activity .MainActivity',
+          'meta-data flutterEmbedding',
+          'meta-data com.example.every_socket.KEY',
+          'receiver com.example.every_socket.Receiver',
+        ],
       );
       expect(
         [
@@ -173,6 +196,93 @@ void main() {
       final modes = _plistKeys(every[infoPlist]!)['UIBackgroundModes']!;
       expect(modes.name.local, 'array');
       expect(modes.findElements('string').map((e) => e.innerText), ['fetch']);
+    });
+
+    test(
+        'sign the app target with entitlements that parse, empty without '
+        'the entitlements of the modules', () {
+      const path = entitlements;
+
+      expect(alone.keys, contains(path));
+      expect(XmlDocument.parse(alone[path]!).rootElement.name.local, 'plist');
+      expect(_plistKeys(alone[path]!), isEmpty);
+      expect(alone[path], contains('<dict>\n</dict>\n'));
+      final domains =
+          _plistKeys(every[path]!)['com.apple.developer.associated-domains']!;
+      expect(domains.name.local, 'array');
+      expect(
+        domains.findElements('string').map((e) => e.innerText),
+        ['applinks:example.com'],
+      );
+
+      // Each build configuration of the app target, which reads Info.plist,
+      // signs with the file, which Xcode shows in the group of the target.
+      final project = alone[pbxproj]!;
+      final settings = RegExp(r'buildSettings = \{([^{}]*)\};')
+          .allMatches(project)
+          .map((match) => match[1]!)
+          .toList();
+      final ofApp = settings
+          .where((it) => it.contains('INFOPLIST_FILE = Runner/Info.plist;'))
+          .toList();
+      expect(ofApp, hasLength(3));
+      for (final configuration in ofApp) {
+        expect(
+          'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'
+              .allMatches(configuration),
+          hasLength(1),
+        );
+      }
+      expect('CODE_SIGN_ENTITLEMENTS'.allMatches(project), hasLength(3));
+      final reference = RegExp(
+        r'(\w{24}) /\* Runner\.entitlements \*/ = \{isa = PBXFileReference; '
+        r'lastKnownFileType = text\.plist\.entitlements; '
+        r'path = Runner\.entitlements; sourceTree = "<group>"; \};',
+      ).firstMatch(project)!;
+      final group = RegExp(
+        r'/\* Runner \*/ = \{\n\t*isa = PBXGroup;\n\t*children = \(([^)]*)\);',
+      ).firstMatch(project)!;
+      expect(
+        group[1],
+        contains('${reference[1]} /* Runner.entitlements */,'),
+      );
+      // A file of no build phase: Xcode only signs with it.
+      expect(
+        RegExp(RegExp.escape(reference[1]!)).allMatches(project),
+        hasLength(2),
+      );
+    });
+
+    test(
+        'run the code of the modules before the launch of the iOS app '
+        'finishes, before Flutter takes the launch', () {
+      const launch = '  ) -> Bool {\n'
+          '    return super.application(application, '
+          'didFinishLaunchingWithOptions: launchOptions)\n'
+          '  }\n';
+
+      // As flutter create writes it.
+      expect(alone[appDelegate], contains(launch));
+      expect(
+        every[appDelegate],
+        contains(
+          launch.replaceFirst(
+            '{\n',
+            '{\n    UNUserNotificationCenter.current().delegate = self\n',
+          ),
+        ),
+      );
+      // Not where Flutter registers the plugins, once the scene connects.
+      expect(
+        every[appDelegate],
+        contains(
+          'func didInitializeImplicitFlutterEngine(_ engineBridge: '
+          'FlutterImplicitEngineBridge) {\n'
+          '    GeneratedPluginRegistrant.register(with: '
+          'engineBridge.pluginRegistry)\n'
+          '  }\n',
+        ),
+      );
     });
 
     test('have the bundle id and the highest minimum iOS version', () {
@@ -211,11 +321,43 @@ void main() {
       );
       expect(
         _block(every[appGradle]!, 'dependencies'),
-        '\n    implementation("androidx.annotation:annotation:1.9.1")\n',
+        '\n    implementation("androidx.annotation:annotation:1.9.1")\n'
+        '    coreLibraryDesugaring("$_desugaring")\n',
+      );
+    });
+
+    test(
+        'enable core library desugaring only for a module that needs it, '
+        'with the switch and the library together', () {
+      const java17 = '        sourceCompatibility = JavaVersion.VERSION_17\n'
+          '        targetCompatibility = JavaVersion.VERSION_17\n';
+
+      // The compileOptions as flutter create writes them, and the empty
+      // dependencies block of the brick.
+      expect(_compileOptions(alone[appGradle]!), java17);
+      expect(alone[appGradle], isNot(contains('esugaring')));
+      expect(_block(alone[appGradle]!, 'dependencies'), '\n');
+
+      expect(
+        _compileOptions(every[appGradle]!),
+        '$java17        isCoreLibraryDesugaringEnabled = true\n',
+      );
+      expect(
+        _block(every[appGradle]!, 'dependencies'),
+        endsWith('    coreLibraryDesugaring("$_desugaring")\n'),
       );
     });
   });
 }
+
+/// The library of core library desugaring that the modules of the app ask
+/// for.
+const _desugaring = 'com.android.tools:desugar_jdk_libs:2.1.4';
+
+/// The text between the braces of the `compileOptions` of the `android`
+/// block of the Gradle script of the app, [text].
+String _compileOptions(String text) =>
+    RegExp(r'\n    compileOptions \{\n([^{}]*?)    \}\n').firstMatch(text)![1]!;
 
 /// The value elements of the top-level dictionary of the property list
 /// [text], by key.

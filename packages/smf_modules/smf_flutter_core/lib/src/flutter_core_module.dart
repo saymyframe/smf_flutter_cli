@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
+import 'package:smf_flutter_core/bundles/flutter_core_fallback_bundle.dart';
 import 'package:smf_flutter_core/src/agents.dart';
 
 /// The module that creates the app itself, and so provides the app entry
@@ -16,10 +17,14 @@ import 'package:smf_flutter_core/src/agents.dart';
 ///   its `build`, so the arguments that the modules give it read the
 ///   `BuildContext` of `App`, below the root wrappers, and `App` rebuilds
 ///   when an inherited widget that they read notifies;
-/// - `lib/core/app/fallback_start_screen.dart`, the screen that an app
-///   without a route to start on shows, and a widget test of it;
 /// - `pubspec.yaml` with the dependencies of all modules, and the lints of
 ///   a new Flutter app.
+///
+/// Only an app that no route starts, where [RouterRole.noStartRoute] holds,
+/// gets its second brick: `lib/core/app/fallback_start_screen.dart`, the
+/// screen that such an app starts on, and a widget test of it. An app
+/// without a router shows the screen as the home of its root, and the
+/// router of an app without a route to start on builds it at `/`.
 ///
 /// Every socket of the app entry role has its tag in these files, but for
 /// the sections of the guide for coding agents, whose tag is in the template
@@ -36,12 +41,14 @@ import 'package:smf_flutter_core/src/agents.dart';
 /// and the path of the file of the screen, which a tap copies. The hint and
 /// the word that the screen says once the path is copied are texts of the
 /// module, in English and in Ukrainian, which the module gives the
-/// localization role, a role that it uses: with the role, the screen reads
-/// them from the texts of the app, in the language of the app, and without
-/// it they are the English texts. `FallbackStartScreen` only reads the two
-/// texts and gives them to `FallbackStartView`, which shows the rest. So
-/// the widget test of the app shows the view with texts of its own, in an
-/// app with the role too, where only the root of the app has the texts.
+/// localization role, a role that it uses, under the same condition as the
+/// screen: with the role, the screen reads them from the texts of the app,
+/// in the language of the app, and without it they are the English texts.
+/// An app that a route starts has neither the screen nor its texts.
+/// `FallbackStartScreen` only reads the two texts and gives them to
+/// `FallbackStartView`, which shows the rest. So the widget test of the app
+/// shows the view with texts of its own, in an app with the role too, where
+/// only the root of the app has the texts.
 ///
 /// In the guide for coding agents, the module adds to the section of the
 /// app entry what its files bring: the root widget and where its arguments
@@ -92,6 +99,10 @@ final class FlutterCoreModule extends SmfModule {
         providers: [RoleProvider.plain(appEntryRole)],
       );
 
+  /// What only an app that no route starts has: the fallback start screen
+  /// and its texts.
+  static const Set<ChoiceCondition> _fallback = {RouterRole.noStartRoute};
+
   @override
   List<Contribution> contribute(ModuleContext context) {
     final identity = context.appIdentity;
@@ -106,12 +117,18 @@ final class FlutterCoreModule extends SmfModule {
           'android_package_path':
               identity.androidNamespace.replaceAll('.', '/'),
           'ios_bundle_id': identity.iosBundleId,
+        },
+      ),
+      BrickContribution(
+        flutterCoreFallbackBundle,
+        vars: {
           'app_symbol': SmfNames.elementSymbolOf(context.appName),
           'app_number': SmfNames.elementNumberOf(context.appName),
           ...localizationRole.varsOf(id, _texts),
         },
+        whenChosen: _fallback,
       ),
-      localizationRole.data(_texts),
+      localizationRole.data(_texts, whenChosen: _fallback),
       AppEntryRole.iosDeploymentTarget.value(minimumIosVersion),
       const PubspecContribution.environment(
         sdk: '^3.12.0',

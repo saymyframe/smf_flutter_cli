@@ -1029,7 +1029,14 @@ class App extends StatelessWidget {
 
       expect(
         [
-          for (final issue in appEntryRole.interface.checkSymbols(files))
+          for (final issue in appEntryRole.interface.checkSymbols(
+            files,
+            const RoleHookRequest(
+              data: [],
+              presentRoles: {appEntryRole},
+              context: testContext,
+            ),
+          ))
             issue.message,
         ],
         [

@@ -524,7 +524,7 @@ List<SmfIssue> _checkIssues(
     issues.add(
       check.required
           ? SmfIssue(problem, origin: issueOrigin)
-          : SmfIssue.warning(problem, origin: issueOrigin),
+          : SmfIssue.machineWarning(problem, origin: issueOrigin),
     );
   }
   return issues;

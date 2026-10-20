@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
-import 'package:smf_contracts/core.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -195,12 +195,15 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['bloc'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -213,8 +216,11 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Push messages: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -225,7 +231,6 @@ void main() {
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
-      'onboarding — Onboarding on the first launch of the app',
       'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(run.asked[1].shown, [
@@ -241,9 +246,11 @@ void main() {
     ]);
     // The roles come in the order in which the modules of the list bring
     // them: the layout, with the router, brings the localization, whose
-    // labels it shows. The theme follows, and then the preferences of both
-    // and the DI container, all before the state managers.
-    expect(run.asked[8].shown, [
+    // labels it shows. The theme follows, then the push messages before the
+    // notifications that their role requires, and then the preferences of
+    // the localization, the theme and the notifications and the DI
+    // container, all before the state managers.
+    expect(run.asked[11].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -285,12 +292,15 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['riverpod'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -303,8 +313,11 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Push messages: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -354,12 +367,15 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -383,7 +399,6 @@ void main() {
     // The module provides a role, so it is not among the features to pick.
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
-      'onboarding — Onboarding on the first launch of the app',
       'sign_in — Email sign-in: sign-up, password reset and an account screen',
     ]);
     expect(
@@ -444,12 +459,15 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -464,11 +482,14 @@ void main() {
     const added = 'Adding go_router: the only provider of the router role, '
         'which settings requires.';
     // The screen is a destination, which an app without a layout has no
-    // main navigation for, and the app starts on none of its routes.
-    const start = 'No route is marked as a start candidate, so the app starts '
-        'on its fallback screen. Choose a start route with --start.';
-    const destination = 'No module provides the layout role, so the app has '
-        'no main navigation to lead to the destination /settings (settings). '
+    // main navigation for, and the app starts on none of its routes. The
+    // template of the router role reports both.
+    const start = '[role:router]: No route is marked as a start candidate, '
+        'so the app starts on its fallback screen. Choose a start route with '
+        '--start.';
+    const destination = '[role:router]: No module provides the layout role, '
+        'so the app has no main navigation to lead to the destination '
+        '/settings (settings). '
         'Choose a provider of the role, or open it from a screen of yours '
         'with context.nav.';
     expect(run.lines, containsAllInOrder([added, start, destination]));
@@ -492,12 +513,15 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -510,8 +534,11 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Push messages: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -550,6 +577,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['go_router'],
       'State management': ['None'],
@@ -557,6 +585,8 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -569,9 +599,12 @@ void main() {
       'Infrastructure: which do you want?',
       'Layout: which module provides it?',
       'Settings screen: which module provides it?',
+      'Onboarding screen: which module provides it?',
       'Router: which module provides it?',
       'Localization: which module provides it?',
       'Theme: which module provides it?',
+      'Push messages: which module provides it?',
+      'Notifications: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -580,7 +613,7 @@ void main() {
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
     ]);
-    expect(run.asked[4].shown, [
+    expect(run.asked[5].shown, [
       'go_router — Routes and navigation with go_router',
       'None',
     ]);
@@ -603,12 +636,15 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -627,13 +663,15 @@ void main() {
     // the modules of the list bring.
     expect(
       localization,
-      messages.indexOf('Settings screen: which module provides it?') + 1,
+      messages.indexOf('Onboarding screen: which module provides it?') + 1,
     );
     // The preferences have one provider, so the run does not ask for them.
     expect(
-      messages.sublist(localization + 1, localization + 3),
+      messages.sublist(localization + 1, localization + 5),
       [
         'Theme: which module provides it?',
+        'Push messages: which module provides it?',
+        'Notifications: which module provides it?',
         'Dependency injection: which module provides it?',
       ],
     );
@@ -643,9 +681,9 @@ void main() {
     ]);
     final app = run.files.directory('/work/my_app');
     // The texts of the app are those of the start screen, after the label
-    // of that screen in a main navigation, and then the two of the fallback
-    // start screen of the app entry, in English and in Ukrainian, so the
-    // app is in both.
+    // of that screen in a main navigation, in English and in Ukrainian, so
+    // the app is in both. The app starts on that screen, so it has no
+    // fallback start screen, and none of its texts.
     for (final (language, label) in [('en', 'Home'), ('uk', 'Головна')]) {
       final texts = jsonDecode(
         app.childFile('lib/l10n/app_$language.arb').readAsStringSync(),
@@ -655,14 +693,14 @@ void main() {
       expect(texts['homeLabel'], label);
       expect(
         texts.keys.skip(1),
-        [
-          ...texts.keys.where((key) => key.startsWith('home')),
-          'flutterCoreFallbackHint',
-          'flutterCoreFallbackCopied',
-        ],
+        texts.keys.where((key) => key.startsWith('home')),
         reason: language,
       );
     }
+    expect(
+      app.childFile(AppEntryRole.fallbackStartScreenFile).existsSync(),
+      isFalse,
+    );
     expect(
       [
         for (final file in app.childDirectory('lib/l10n').listSync())
@@ -733,12 +771,15 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -798,6 +839,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
@@ -805,6 +847,8 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -864,6 +908,7 @@ void main() {
       'Features': [],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['None'],
       'Router': ['None'],
       'State management': ['None'],
@@ -871,6 +916,8 @@ void main() {
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -883,15 +930,19 @@ void main() {
       'Preferences: which module provides it?',
     );
     // The roles come in the order in which the modules of the list bring
-    // them, and the localization and the theme, whose roles require the
-    // preferences, come before the preferences and before get_it. So the
-    // question of the preferences knows whether the answers on the
-    // localization and on the theme need them.
+    // them, and the localization, the theme and the notifications, whose
+    // roles require the preferences, come before the preferences and
+    // before get_it, and the push messages, whose role requires the
+    // notifications, before the notifications. So the question of the
+    // preferences knows whether the answers on the localization, on the
+    // theme and on the notifications need them.
     expect(
-      messages.sublist(preferences - 2, preferences + 1),
+      messages.sublist(preferences - 4, preferences + 1),
       [
         'Localization: which module provides it?',
         'Theme: which module provides it?',
+        'Push messages: which module provides it?',
+        'Notifications: which module provides it?',
         'Preferences: which module provides it?',
       ],
     );
@@ -949,12 +1000,15 @@ void main() {
       'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['bottom_tabs'],
+      'Onboarding screen': ['None'],
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['material_theme'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1027,25 +1081,43 @@ void main() {
   });
 
   test(
-      'a run in a terminal offers the onboarding among the features, and '
-      'adds the preferences that it requires without a question; the app '
-      'still starts on the start screen', () async {
+      'a run in a terminal asks which module provides the onboarding screen '
+      'after the settings screen, offers onboarding, and adds the '
+      'preferences that it requires without a question; the app still '
+      'starts on the start screen', () async {
     final run = await _create({
-      'Features': ['home', 'onboarding'],
+      'Features': ['home'],
       'Infrastructure': [],
       'Layout': ['None'],
+      'Onboarding screen': ['onboarding'],
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final onboarding = messages.indexOf(
+      'Onboarding screen: which module provides it?',
+    );
+    // Both roles require the router, so their questions come one after the
+    // other, in the order of the roles of the registry.
+    expect(
+      onboarding,
+      messages.indexOf('Settings screen: which module provides it?') + 1,
+    );
+    expect(run.asked[onboarding].shown, [
+      'onboarding — Onboarding on the first launch of the app',
+      'None',
+    ]);
     // shared_preferences is the only module that provides the preferences,
     // which the onboarding requires, so there is nothing to ask.
     expect(
@@ -1060,6 +1132,24 @@ void main() {
       ),
     );
     final app = run.files.directory('/work/my_app');
+    // The screen shows the steps that the modules of the app add, of which
+    // this app has none.
+    expect(
+      app
+          .childFile('lib/core/onboarding/onboarding_steps.dart')
+          .readAsStringSync(),
+      // The run formats nothing: its commands only stand in for those of
+      // Flutter.
+      matches(
+        RegExp(r'const List<OnboardingStep> appOnboardingSteps = \[\s*\];'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/features/onboarding/onboarding_screen.dart')
+          .readAsStringSync(),
+      contains("import '../../core/onboarding/onboarding_steps.dart';"),
+    );
     expect(
       app
           .childFile('lib/features/onboarding/onboarding_pages.dart')
@@ -1113,6 +1203,7 @@ void main() {
         'Features': [],
         'Infrastructure': ['firebase_core'],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1120,6 +1211,8 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1186,6 +1279,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1193,6 +1287,8 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
+        'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1298,12 +1394,15 @@ void main() {
         'Features': ['home'],
         'Infrastructure': [],
         'Layout': ['bottom_tabs'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1402,6 +1501,192 @@ void main() {
   });
 
   test(
+      'a run in a terminal asks which module provides the push messages '
+      'before the notifications, and offers Firebase Cloud Messaging, which '
+      'brings Firebase and the only providers of the notifications and of '
+      'the preferences without a question', () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': [],
+        'Layout': ['None'],
+        'Onboarding screen': ['None'],
+        'Settings screen': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Theme': ['None'],
+        'Localization': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+        'Push messages': ['firebase_messaging'],
+        'Crash reporting': [],
+        'Analytics': [],
+        'Authentication': ['None'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // The push role requires the notifications, so the question of the
+    // push messages comes before theirs, which knows then that the app
+    // needs them. local_notifications is their only provider, and
+    // shared_preferences the only provider of the preferences that the
+    // notifications require, so the run asks for neither.
+    final messages = [for (final question in run.asked) question.message];
+    final push = messages.indexOf('Push messages: which module provides it?');
+    expect(
+      push,
+      messages.indexOf('Theme: which module provides it?') + 1,
+    );
+    expect(run.asked[push].shown, [
+      'firebase_messaging — Firebase Cloud Messaging with firebase_messaging',
+      'None',
+    ]);
+    expect(
+      messages,
+      isNot(
+        anyOf(
+          contains('Notifications: which module provides it?'),
+          contains('Preferences: which module provides it?'),
+        ),
+      ),
+    );
+    expect(
+      run.lines,
+      containsAll([
+        'Adding firebase_core: a dependency of firebase_messaging.',
+        equals(
+          'Adding local_notifications: the only provider of the '
+          'notifications role, which firebase_messaging requires.',
+        ),
+        equals(
+          'Adding shared_preferences: the only provider of the preferences '
+          'role, which local_notifications requires.',
+        ),
+      ]),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/push/firebase_push_service.dart')
+          .readAsStringSync(),
+      contains('FirebaseMessaging.instance'),
+    );
+    // Firebase starts first, then the preferences, the notifications and
+    // the push messages.
+    const bootstrap = 'lib/bootstrap.dart';
+    final calls = DartFileIndexer.index(
+      bootstrap,
+      app.childFile(bootstrap).readAsStringSync(),
+    ).invocations;
+    expect(
+      [
+        for (final call in calls)
+          if (call.enclosingDeclaration == 'bootstrap') call.name,
+      ],
+      ['initializeApp', 'initPreferences', 'initNotifications', 'initPush'],
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(
+        contains('  firebase_messaging: '),
+        contains('  firebase_core: '),
+        contains('  flutter_local_notifications: '),
+      ),
+    );
+  });
+
+  test(
+      'a run in a terminal asks which module provides the notifications '
+      'after the push messages and the two screens that their role adds to, '
+      'offers local_notifications, and adds the preferences that their role '
+      'requires without a question', () async {
+    final run = await _create({
+      'Features': [],
+      'Infrastructure': [],
+      'Layout': ['None'],
+      'Settings screen': ['settings'],
+      'Onboarding screen': ['onboarding'],
+      'Localization': ['None'],
+      'Theme': ['None'],
+      'Push messages': ['None'],
+      'Notifications': ['local_notifications'],
+      'Dependency injection': ['None'],
+      'State management': ['None'],
+      'Events': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+      'Authentication': ['None'],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    final messages = [for (final question in run.asked) question.message];
+    final notifications = messages.indexOf(
+      'Notifications: which module provides it?',
+    );
+    // The push role requires the notifications, so its question comes
+    // right before theirs, which knows then whether the app needs them.
+    expect(
+      notifications,
+      messages.indexOf('Push messages: which module provides it?') + 1,
+    );
+    // The role adds a step to the onboarding and an entry to the settings
+    // screen, which the user has chosen or declined by then.
+    expect(
+      messages.indexOf('Settings screen: which module provides it?'),
+      allOf(isNonNegative, lessThan(notifications)),
+    );
+    expect(
+      messages.indexOf('Onboarding screen: which module provides it?'),
+      allOf(isNonNegative, lessThan(notifications)),
+    );
+    expect(run.asked[notifications].shown, [
+      'local_notifications — Notifications with flutter_local_notifications',
+      'None',
+    ]);
+    // shared_preferences is the only module that provides the preferences,
+    // which the notifications role requires, so there is nothing to ask.
+    expect(messages, isNot(contains(startsWith('Preferences:'))));
+    expect(
+      run.lines,
+      contains(
+        'Adding shared_preferences: the only provider of the preferences '
+        'role, which onboarding requires.',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app
+          .childFile('lib/core/onboarding/onboarding_steps.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('/core/notifications/notifications_step.dart'),
+        contains('.allowNotifications,'),
+      ),
+    );
+    expect(
+      app
+          .childFile('lib/features/settings/settings_screen.dart')
+          .readAsStringSync(),
+      contains('.NotificationsSetting()'),
+    );
+    // The start-up opens the preferences before the notifications, which
+    // read from them whether the app asked for the permission.
+    const bootstrap = 'lib/bootstrap.dart';
+    final calls = DartFileIndexer.index(
+      bootstrap,
+      app.childFile(bootstrap).readAsStringSync(),
+    ).invocations;
+    expect(
+      [
+        for (final call in calls)
+          if (call.enclosingDeclaration == 'bootstrap') call.name,
+      ],
+      ['initPreferences', 'initNotifications'],
+    );
+  });
+
+  test(
       'a run in a terminal gives an app without a router Firebase Analytics '
       'without screen views, and registers its service in the DI container',
       () async {
@@ -1410,6 +1695,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1417,6 +1703,8 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
+        'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1464,6 +1752,7 @@ void main() {
         'Features': [],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'Settings screen': ['None'],
         'Router': ['None'],
         'State management': ['None'],
@@ -1471,6 +1760,8 @@ void main() {
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1558,11 +1849,14 @@ void main() {
         'Features': ['home', 'sign_in'],
         'Infrastructure': [],
         'Layout': ['None'],
+        'Onboarding screen': ['None'],
         'State management': ['riverpod'],
         'Theme': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
+        'Notifications': ['None'],
+        'Push messages': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1663,6 +1957,124 @@ void main() {
   });
 
   test(
+      'a run in a terminal that picks every module asks its questions in '
+      'their order, and none of a role that an earlier answer needs, whose '
+      'only provider it adds', () async {
+    const picked = [
+      'home',
+      'sign_in',
+      'firebase_core',
+      'bottom_tabs',
+      'onboarding',
+      'gen_l10n',
+      'material_theme',
+      'firebase_messaging',
+      'get_it',
+      'bloc',
+      'event_bus',
+      'firebase_crashlytics',
+      'firebase_analytics',
+    ];
+    final run = await _create(
+      {
+        'Features': ['home', 'sign_in'],
+        'Infrastructure': ['firebase_core'],
+        'Layout': ['bottom_tabs'],
+        'Onboarding screen': ['onboarding'],
+        'Localization': ['gen_l10n'],
+        'Theme': ['material_theme'],
+        'Push messages': ['firebase_messaging'],
+        'Dependency injection': ['get_it'],
+        'State management': ['bloc'],
+        'Events': ['event_bus'],
+        'Crash reporting': ['firebase_crashlytics'],
+        'Analytics': ['firebase_analytics'],
+        'Who may use the app': ['Nobody'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // The modules without a role come first, by kind. Then the roles, each
+    // after the roles that require it: the screens, of which the layout,
+    // the settings screen and the onboarding screen require the router and
+    // so come before its question; the look of the app, its languages and
+    // its theme; the push messages, before the notifications that their
+    // role requires, which come after the two screens that the
+    // notifications role adds to; what is under the hood, the preferences
+    // that the localization, the theme, the onboarding and the
+    // notifications require, the DI container, the state manager and the
+    // events; and last the services of crash reporting, analytics and
+    // authentication. The choices of the roles come once the modules are
+    // known.
+    expect(run.asked.map((question) => question.message), [
+      'Features: which do you want?',
+      'Infrastructure: which do you want?',
+      'Layout: which module provides it?',
+      'Onboarding screen: which module provides it?',
+      'Localization: which module provides it?',
+      'Theme: which module provides it?',
+      'Push messages: which module provides it?',
+      'Dependency injection: which module provides it?',
+      equals(
+        'State management: sign_in requires the state management role. '
+        'Which module provides it?',
+      ),
+      'Events: which module provides it?',
+      'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
+      'Who may use the app without an account?',
+    ]);
+    // The answers before the questions of the settings screen, the router,
+    // the notifications, the preferences and the authentication need those
+    // roles, so the run asks none of them and adds their only providers.
+    final added = [
+      for (final line in run.lines)
+        if (line.startsWith('Adding ')) line,
+    ];
+    expect(added, [
+      equals(
+        'Adding flutter_core: the only provider of the app entry role, which '
+        'every app needs.',
+      ),
+      equals(
+        'Adding go_router: the only provider of the router role, which home '
+        'requires.',
+      ),
+      equals(
+        'Adding firebase_auth: the only provider of the authentication role, '
+        'which sign_in requires.',
+      ),
+      equals(
+        'Adding settings: the only provider of the settings screen role, '
+        'which sign_in requires.',
+      ),
+      equals(
+        'Adding shared_preferences: the only provider of the preferences '
+        'role, which onboarding requires.',
+      ),
+      equals(
+        'Adding local_notifications: the only provider of the notifications '
+        'role, which firebase_messaging requires.',
+      ),
+    ]);
+    // So the app has every module of smf create but the other state
+    // manager: a module that the CLI offers next fails this test until its
+    // question has its place here.
+    expect(
+      {
+        ...picked,
+        for (final line in added) line.split(' ')[1].replaceAll(':', ''),
+      },
+      {
+        for (final module in smfModules)
+          if (module.descriptor.id.value != 'riverpod')
+            module.descriptor.id.value,
+      },
+    );
+  });
+
+  test(
       'the router asks the guard of the onboarding before the gate of the '
       'sign-in, whichever of the two features was picked first, so a first '
       'launch shows the onboarding and then the sign-in', () async {
@@ -1727,22 +2139,17 @@ void main() {
       ];
     }
 
-    const ofSettings = 'No module provides the layout role, so the app has no '
-        'main navigation to lead to the destination /settings (settings). '
+    const ofSettings = '[role:router]: No module provides the layout role, '
+        'so the app has no main navigation to lead to the destination '
+        '/settings (settings). '
         'Choose a provider of the role, or open it from a screen of yours '
         'with context.nav.';
 
     test(
         'is given once, with the path and the module of each destination '
-        'that the app does not start in, also with --strict, and not in an '
-        'app with a layout', () async {
+        'that the app does not start in, and not in an app with a layout',
+        () async {
       expect(await warningsOf('home,settings'), [ofSettings]);
-      // --strict stops a run that would leave a module out, and the
-      // warning leaves none out.
-      expect(
-        await warningsOf('home,settings', options: ['--strict']),
-        [ofSettings],
-      );
       // The app starts on the settings screen, so the other destination is
       // the one that it has no main navigation for.
       expect(
@@ -1753,6 +2160,43 @@ void main() {
       expect(await warningsOf('home,settings,bottom_tabs'), isEmpty);
       // The only destination of the app is the screen that it starts on.
       expect(await warningsOf('home'), isEmpty);
+    });
+
+    test(
+        'stops a run with --strict, which names its code and creates '
+        'nothing, unless --allow-warning names the code', () async {
+      final strict = await _create(
+        {},
+        options: [
+          '--no-input',
+          '--skip-external-setup',
+          '-m',
+          'home,settings',
+          '--strict',
+        ],
+      );
+
+      const stopped = 'Generation stopped because of a warning about the '
+          'app. Without --strict, the run goes on after it.';
+      final cause = '  warning [role:router] router.no_main_navigation'
+          '${ofSettings.substring('[role:router]'.length)}';
+
+      expect(strict.code, SmfExitCodes.generationFailed);
+      // After the modules that the run added.
+      expect(strict.lines.skip(2), [stopped, cause]);
+      expect(strict.warnings, isEmpty);
+      expect(strict.files.directory('/work/my_app').existsSync(), isFalse);
+
+      expect(
+        await warningsOf(
+          'home,settings',
+          options: [
+            '--strict',
+            '--allow-warning=router.no_main_navigation',
+          ],
+        ),
+        [ofSettings],
+      );
     });
 
     test(

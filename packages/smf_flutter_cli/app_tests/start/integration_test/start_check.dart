@@ -20,8 +20,9 @@
 // CI. The check writes its result, one line with `passed` or `failed: `
 // and the problems, to the file smf_start_check in the temporary directory
 // of the app, where .github/scripts/start_app.sh of the repository of SMF
-// reads it, and prints the line after `SMF_START_CHECK: ` to the log of the
-// device. The matrix of the apps only analyzes it.
+// reads it from a debug app, and prints the line after `SMF_START_CHECK: `
+// to the log of the device, where the script reads it from a release app,
+// whose files it cannot read. The matrix of the apps only analyzes it.
 import 'dart:async';
 import 'dart:io';
 

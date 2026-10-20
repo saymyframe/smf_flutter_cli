@@ -150,8 +150,12 @@ abstract base class Role<D extends Object> {
 
   /// Creates [value] as data for this role; see [RoleData].
   @nonVirtual
-  RoleData<D> data(D value, {Set<Role> when = const {}}) =>
-      RoleData<D>(this, value, when: when);
+  RoleData<D> data(
+    D value, {
+    Set<Role> when = const {},
+    Set<ChoiceCondition> whenChosen = const {},
+  }) =>
+      RoleData<D>(this, value, when: when, whenChosen: whenChosen);
 
   /// Returns the data of this role in [input], the input of a hook of
   /// another role.
@@ -182,7 +186,11 @@ abstract base class Role<D extends Object> {
   /// The input holds the data of this role, typed as [D], and only as much
   /// of the rest of the app as the role may see: the data and presence of
   /// its [visibleRoles]. Data that does not apply, because its role or a
-  /// role in its [Contribution.when] is absent, is left out.
+  /// role in its [Contribution.when] is absent, is left out. The conditions
+  /// of data on what roles chose ([Contribution.whenChosen]) are the
+  /// pipeline's to decide: once the roles have chosen, it leaves the data
+  /// whose conditions do not hold out of [request], and before, as in
+  /// validation, it takes all of it.
   ///
   /// This is the only place where data is cast to [D], and data of another
   /// type fails here with an [ArgumentError] that names the contributor.
@@ -260,6 +268,10 @@ abstract base class Role<D extends Object> {
 
   /// Builds the input of [RoleTemplate.choose] from the pipeline's
   /// [request]; see [hookInput].
+  ///
+  /// The pipeline puts into [request] only the data of this role whose
+  /// conditions on what other roles chose hold (see
+  /// [Contribution.whenChosen]): those roles choose first.
   @nonVirtual
   RoleChoiceContext<D> choiceContext(RoleChoiceRequest request) {
     final applies = _appliesIn(request.presentRoles);
@@ -292,7 +304,12 @@ abstract base class Role<D extends Object> {
             'the $this, which takes $D',
       );
     }
-    final typed = RoleData<D>(this, value, when: data.when);
+    final typed = RoleData<D>(
+      this,
+      value,
+      when: data.when,
+      whenChosen: data.whenChosen,
+    );
     final origin = data.origin;
     return origin == null ? typed : typed.withOrigin(origin);
   }
@@ -409,10 +426,49 @@ final class RoleInterface {
 
   /// The symbols that other code uses: those every provider of the role
   /// must generate, and those of the files of the role's template.
+  ///
+  /// A symbol with conditions on what roles chose
+  /// ([RequiredSymbol.whenChosen]) has a file of its own, which only the
+  /// apps where the conditions hold have.
   final List<RequiredSymbol> symbols;
 
-  /// Checks that [files], the indexes of an app by path, declare every
-  /// required symbol, and returns the problems found.
-  List<SmfIssue> checkSymbols(Map<String, DartFileIndex> files) =>
-      [for (final symbol in symbols) ...symbol.checkIn(files)];
+  /// Checks that [files], the indexes of the Dart files of the app of
+  /// [hook] by path, declare every symbol that the app needs, and returns
+  /// the problems found.
+  ///
+  /// The app needs a symbol when every condition of its
+  /// [RequiredSymbol.whenChosen] holds with the roles of [hook] and their
+  /// choices, and it is checked with [RequiredSymbol.checkIn]. In an app
+  /// where a condition does not hold, the app must not have the file of
+  /// the symbol: what only some apps need is in no other app.
+  List<SmfIssue> checkSymbols(
+    Map<String, DartFileIndex> files,
+    RoleHookRequest hook,
+  ) =>
+      [for (final symbol in symbols) ..._symbolIssues(symbol, files, hook)];
+
+  /// The problems of [symbol] in [files], the Dart files of the app of
+  /// [hook]; see [checkSymbols].
+  static List<SmfIssue> _symbolIssues(
+    RequiredSymbol symbol,
+    Map<String, DartFileIndex> files,
+    RoleHookRequest hook,
+  ) {
+    final failing = [
+      for (final condition in symbol.whenChosen)
+        if (!condition.holdsIn(hook)) condition.name,
+    ];
+    if (failing.isEmpty) return symbol.checkIn(files);
+    final path = symbol.path;
+    if (!files.containsKey(path)) return const [];
+    return [
+      SmfIssue(
+        'The app has $path, the file of $symbol, which only an app where '
+        '${failing.join(' and where ')} needs.',
+        hint: 'Contribute the file under the conditions of the symbol, with '
+            'whenChosen of its brick.',
+        path: path,
+      ),
+    ];
+  }
 }

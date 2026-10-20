@@ -1230,6 +1230,27 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenOnboardingModule(),
+        role: onboardingScreenRole,
+        bug: 'Its screen shows a page for each step of the onboarding, also '
+            'for a step whose showIf would leave it out, which it never '
+            'asks.',
+        // A router, which the role requires, and the fixture steps, whose
+        // step ask has a showIf that the test of its conditions makes leave
+        // it out.
+        app: [FakeRouterModule.id, FakeStepsModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/onboarding_screen_role/step_conditions_test.dart',
+            'a step whose showIf leaves it out when the onboarding opens is '
+                'not shown, and a step that shows stays once its showIf would '
+                'leave it out',
+            'A step whose condition does not hold when the onboarding starts '
+                'is not shown.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.themeWithLightDarkTheme,
         role: themeRole,
         bug: 'Its createDarkTheme() returns a light theme, the one that its '
@@ -1348,6 +1369,45 @@ List<BrokenProvider> brokenProviders() => const [
             _nextStartTests,
             _leftOnDeviceTest,
             _linkKeptOnDevice,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.notificationsForgettingSchedules,
+        role: notificationsRole,
+        bug: 'Its function forgets the notifications that are scheduled each '
+            'time it opens them, so the next start of the app has none of '
+            'them.',
+        // The fixture preferences, since the role requires the preferences.
+        app: [FakePreferencesModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/notifications_role/next_start_test.dart',
+            'a scheduled notification is still scheduled after the next '
+                'start, until it is cancelled',
+            'The next start keeps the notifications that the app scheduled.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.pushRegisteringAtEachStart,
+        role: pushRole,
+        bug: 'Its function registers the device anew each time it opens the '
+            'push messages, so the device gets a new address a while after '
+            'each start, and the next start of the app does not have the '
+            'address that the backend kept.',
+        // The fixture notifications, which the push role requires, and the
+        // fixture preferences, which those require.
+        app: [FakeNotificationsModule.id, FakePreferencesModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/push_role/next_start_test.dart',
+            'a service that the function of the provider creates again has '
+                'the address that the device kept, so the next start has the '
+                'same one',
+            'A backend keeps the address of a device, so a service that the '
+                'function of the provider creates again has the address that '
+                'the device kept, and the next start has the same one.',
           ),
         ],
       ),

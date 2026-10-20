@@ -8,15 +8,18 @@ import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
+import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
+import 'package:fake_infra/bundles/fake_push_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
+import 'package:fake_infra/bundles/fake_steps_bundle.dart';
 import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
@@ -143,6 +146,14 @@ final class FakeSocketsModule extends SmfModule {
           const AndroidMetaData.resource('@mipmap/ic_launcher'),
         ),
         const SocketContribution.code(
+          AppEntryRole.androidManifestApplicationComponents,
+          Fragment(
+            '        <receiver\n'
+            '            android:name="com.example.fixture.FixtureReceiver"\n'
+            '            android:exported="false" />',
+          ),
+        ),
+        const SocketContribution.code(
           AppEntryRole.mainActivityIntentFilters,
           Fragment(
             '<intent-filter>\n'
@@ -165,6 +176,18 @@ final class FakeSocketsModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
+        AppEntryRole.iosEntitlements.entry(
+          'aps-environment',
+          const PlistString('development'),
+        ),
+        AppEntryRole.iosEntitlements.entry(
+          'com.apple.developer.associated-domains',
+          const PlistStringArray(['applinks:example.com']),
+        ),
+        const SocketContribution.code(
+          AppEntryRole.iosAppDelegateLaunch,
+          Fragment('    application.applicationSupportsShakeToEdit = true'),
+        ),
         // A plugin that only adds a task, so it builds with any version of
         // the Android and Kotlin plugins.
         AppEntryRole.gradleSettingsPlugins.entry(
@@ -176,6 +199,7 @@ final class FakeSocketsModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.9.1',
         ),
+        AppEntryRole.androidCoreLibraryDesugaring.value('2.1.4'),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
         AppEntryRole.agentSections.entry(
@@ -187,10 +211,14 @@ final class FakeSocketsModule extends SmfModule {
 
 /// A module that puts into the sockets of the app entry some of the keys
 /// and values that [FakeSocketsModule] does, so an app with both merges
-/// them: equal permissions, meta-data, plist strings and README sections
-/// agree, the plist arrays are united, the highest versions win, the
-/// delegate of the localizations appears once, and so does the note for
-/// coding agents that both have.
+/// them: equal permissions, meta-data, plist strings, entitlements and
+/// README sections agree, the plist arrays of Info.plist and of the
+/// entitlements are united, the highest versions win, those of Gradle and
+/// of the library of core library desugaring too, the delegate of the
+/// localizations appears once, and so does the note for coding agents that
+/// both have. It puts nothing into the sockets of code of the native files,
+/// such as the components of the Android application, which would have
+/// the same code twice.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -228,6 +256,14 @@ final class FakeOverlapModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['remote-notification']),
         ),
+        AppEntryRole.iosEntitlements.entry(
+          'aps-environment',
+          const PlistString('development'),
+        ),
+        AppEntryRole.iosEntitlements.entry(
+          'com.apple.developer.associated-domains',
+          const PlistStringArray(['applinks:example.org']),
+        ),
         AppEntryRole.gradleSettingsPlugins.entry(
           'io.github.ben-manes.versions',
           '0.63.0',
@@ -237,6 +273,7 @@ final class FakeOverlapModule extends SmfModule {
           'androidx.annotation:annotation',
           '1.8.0',
         ),
+        AppEntryRole.androidCoreLibraryDesugaring.value('2.1.3'),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
       ];
@@ -649,6 +686,117 @@ final class FakePreferencesUserModule extends SmfModule {
       ];
 }
 
+/// A module with two steps of the onboarding, which it gives the onboarding
+/// screen role in an app with that role: `ask`, with the button `later`
+/// and a function that says whether the onboarding shows it, and then
+/// `confirm`, without either. Their actions note each call, and that of
+/// `ask` waits for what a test holds it back with and fails when a test
+/// says so. A test also says whether the onboarding shows `ask`.
+///
+/// It uses the localization role: the texts of the steps are texts of the
+/// module, in English and in Ukrainian, but for the text of `confirm`,
+/// which has no translation and reads in English in every language.
+final class FakeStepsModule extends SmfModule {
+  /// Creates the module.
+  const FakeStepsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_steps');
+
+  static const _file = ImportRef.app('core/fixture_steps/fixture_steps.dart');
+
+  static const _askTitle = LocalizedText(
+    'askTitle',
+    en: 'A step that asks',
+    translations: {'uk': 'Крок, що питає'},
+  );
+  static const _askText = LocalizedText(
+    'askText',
+    en: 'The fixture asks for something here.',
+    translations: {'uk': 'Тут фікстура про щось питає.'},
+  );
+  static const _askAction = LocalizedText(
+    'askAction',
+    en: 'Ask',
+    translations: {'uk': 'Спитати'},
+  );
+  static const _askLater = LocalizedText(
+    'askLater',
+    en: 'Not now',
+    translations: {'uk': 'Не зараз'},
+  );
+  static const _confirmTitle = LocalizedText(
+    'confirmTitle',
+    en: 'A step that confirms',
+    translations: {'uk': 'Крок, що підтверджує'},
+  );
+  static const _confirmText = LocalizedText(
+    'confirmText',
+    en: 'The fixture confirms something here.',
+  );
+  static const _confirmAction = LocalizedText(
+    'confirmAction',
+    en: 'Confirm',
+    translations: {'uk': 'Підтвердити'},
+  );
+
+  static const _icons = [ImportRef('package:flutter/material.dart')];
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Two steps of the onboarding (fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {onboardingScreenRole, localizationRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        // Only an app with an onboarding gets the functions of the steps
+        // and their texts.
+        BrickContribution(
+          fakeStepsBundle,
+          when: const {onboardingScreenRole},
+        ),
+        localizationRole.data(
+          const TextsData([
+            _askTitle,
+            _askText,
+            _askAction,
+            _askLater,
+            _confirmTitle,
+            _confirmText,
+            _confirmAction,
+          ]),
+          when: const {onboardingScreenRole},
+        ),
+        onboardingScreenRole.data(
+          const OnboardingStep(
+            name: 'ask',
+            stage: OnboardingStage.permission,
+            icon: Fragment('Icons.help_outline', imports: _icons),
+            title: _askTitle,
+            text: _askText,
+            action: _askAction,
+            later: _askLater,
+            run: FunctionRef('askFixture', import: _file),
+            showIf: FunctionRef('showsFixtureAsk', import: _file),
+          ),
+        ),
+        onboardingScreenRole.data(
+          const OnboardingStep(
+            name: 'confirm',
+            stage: OnboardingStage.permission,
+            icon: Fragment('Icons.check_circle_outline', imports: _icons),
+            title: _confirmTitle,
+            text: _confirmText,
+            action: _confirmAction,
+            run: FunctionRef('confirmFixture', import: _file),
+          ),
+        ),
+      ];
+}
+
 /// A provider of the theme role, which has at most one provider, whose look
 /// depends on state of its own: its light theme and its dark theme derive
 /// their colours from a colour that it keeps and that a test changes. The
@@ -733,6 +881,98 @@ final class FakeAuthModule extends SmfModule {
           const RoleImplementation.async(
             type: TypeRef('FixtureAuth', import: _file),
             init: FactoryRef('openFixtureAuth', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the notifications role, which has at most one provider,
+/// whose service opens asynchronously, as one does that asks the system for
+/// what it keeps. It keeps in memory whether the app may show notifications
+/// and the notifications that are scheduled, where they stand for the
+/// settings and the alarms of the system, which each start of the app reads
+/// anew.
+///
+/// Its system has no question for the permission, as Android before 13, so
+/// a request opens the settings of the system, where the user of the tests
+/// turns the notifications on, as the mocks of a provider grant the
+/// permission when the app asks. Through the role, that looks like a
+/// question that the user allows. It shows nothing, and tells of no tap.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appNotifications`, which remembers in the
+/// preferences that the app asked.
+final class FakeNotificationsModule extends SmfModule {
+  /// Creates the module.
+  const FakeNotificationsModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_notifications');
+
+  static const _file = ImportRef.app(
+    'core/fixture_notifications/fixture_notifications.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Notifications in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(notificationsRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeNotificationsBundle),
+        notificationsRole.data(
+          const RoleImplementation.async(
+            type: TypeRef('FixtureNotifications', import: _file),
+            init: FactoryRef('openFixtureNotifications', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the push role, which has at most one provider, whose
+/// service opens asynchronously, as one does that asks the system for what
+/// it keeps. It keeps the address of the device in memory, where it stands
+/// for the registration of the device with the service of push messages,
+/// which each start of the app finds as the last one left it: the first
+/// start registers the device, which gets its address a while later, as an
+/// iPhone gets the token of APNs, and the next starts have the same
+/// address.
+///
+/// The device shows nothing itself, so the app shows a message that
+/// arrives in the foreground. No server sends a message and no user taps
+/// one, so the service tells of neither.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appPush`, which shows a message through the
+/// notifications of the app, the role that it requires.
+final class FakePushModule extends SmfModule {
+  /// Creates the module.
+  const FakePushModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_push');
+
+  static const _file = ImportRef.app('core/fixture_push/fixture_push.dart');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Push messages in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(pushRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakePushBundle),
+        pushRole.data(
+          const RoleImplementation.async(
+            type: TypeRef('FixturePush', import: _file),
+            init: FactoryRef('openFixturePush', import: _file),
           ),
         ),
       ];

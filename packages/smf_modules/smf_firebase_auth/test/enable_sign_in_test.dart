@@ -22,14 +22,12 @@
 // a service account of the project, whose path is in
 // SMF_FIREBASE_SERVICE_ACCOUNT, as GOOGLE_APPLICATION_CREDENTIALS, and
 // names no project: the script reads it from firebase.json. The Firebase
-// CLI adds a web app to a project that has none, which registers an app in
-// the project, so the test fails before the command for such a project
-// unless the run may register apps, with SMF_FIREBASE_REGISTER=1, as the
-// test of firebase_core that configures the app does for the Android and
-// iOS apps (see webAppProblem). When the script fails, the test tells a
-// lack of a permission of the service account from the other failures,
-// with the permissions that the Firebase CLI printed as denied or missing
-// and a role to grant for them (see enablingFailure).
+// CLI that the script needs enables the methods through an app of any
+// platform, and the project has the Android and iOS apps that flutterfire
+// registered, so the run adds no app to it. When the script fails, the
+// test tells a lack of a permission of the service account from the other
+// failures, with the permissions that the Firebase CLI printed as denied
+// or missing and a role to grant for them (see enablingFailure).
 @TestOn('vm')
 library;
 
@@ -115,7 +113,6 @@ void main() {
   final project = environment['SMF_FIREBASE_PROJECT'];
   final serviceAccount = environment['SMF_FIREBASE_SERVICE_ACCOUNT'];
   final enables = environment['SMF_FIREBASE_ENABLE_SIGN_IN'] == '1';
-  final register = environment['SMF_FIREBASE_REGISTER'] == '1';
 
   test(
     'the Firebase project of the app has Email/Password enabled, which the '
@@ -147,29 +144,6 @@ void main() {
               'SMF_FIREBASE_SERVICE_ACCOUNT.',
         );
         final credentials = {'GOOGLE_APPLICATION_CREDENTIALS': serviceAccount!};
-
-        // Before the script, whose Firebase CLI adds a web app to a project
-        // that has none. The Firebase CLI keeps its log in the directory
-        // that it runs in, which is none of the repository.
-        final listed = await _run(
-          'firebase',
-          ['apps:list', 'WEB', '--project=$project', '--json'],
-          directory: Directory.systemTemp.path,
-          environment: credentials,
-        );
-        expect(
-          listed.exitCode,
-          0,
-          reason: 'firebase apps:list: ${listed.stdout}${listed.stderr}',
-        );
-        if (webAppProblem(
-          webApps: webAppIdsOf('${listed.stdout}'),
-          project: project!,
-          register: register,
-        )
-            case final problem?) {
-          fail(problem);
-        }
 
         expect(
           File('$app/README.md').readAsStringSync(),
@@ -204,7 +178,7 @@ void main() {
               : null;
           fail(
             enablingFailure(
-              project: project,
+              project: project!,
               code: enabled.exitCode,
               output: output,
               debugOutput: withDebug == null

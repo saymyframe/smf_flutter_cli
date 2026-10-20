@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:fake_broken/fake_broken.dart';
 import 'package:fixture_registry/broken_providers.dart';
 import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
@@ -227,12 +228,24 @@ final class _TestNames extends RecursiveAstVisitor<void> {
   }
 }
 
+/// The results of [MatrixFailingApp.check] by the name of the app, so that
+/// the contract harness builds each app once for all the tests that read
+/// it.
+final _checks = <String, Future<({MatrixApp? app, List<String> problems})>>{};
+
+/// The result of [MatrixFailingApp.check] of [failing], which the first
+/// test that reads it computes.
+Future<({MatrixApp? app, List<String> problems})> _checkOf(
+  MatrixFailingApp failing,
+) =>
+    _checks.putIfAbsent(failing.name, failing.check);
+
 /// Checks that each test that must fail in the app of [failing] is among
 /// the tests that apply to the app, in one file, declared under its name,
 /// and that the file, or a file of its tests that it imports, writes the
 /// reason.
 Future<void> _expectFailuresAmongTests(MatrixFailingApp failing) async {
-  final (:app, problems: _) = await failing.check();
+  final (:app, problems: _) = await _checkOf(failing);
   final tests = [
     for (final test in await brokenProviderAppTests())
       if (test.appliesTo(app!)) test,
@@ -267,6 +280,42 @@ Future<void> _expectFailuresAmongTests(MatrixFailingApp failing) async {
     );
   }
 }
+
+/// The apps of the broken providers, and those of [brokenModuleApps], that
+/// warn of what they are made of, by name, each with the codes of its
+/// warnings (see [MatrixApp.warnings]): an app has only the modules that
+/// its tests need, so the destination of a feature may have no main
+/// navigation, or the app no route to start on, and the texts of
+/// fake_second have a translation into a language that no app can be in,
+/// and a text without a translation, on purpose.
+const _warningApps = <String, List<String>>{
+  'broken_router_asks_guards_at_start': ['router.no_main_navigation'],
+  'broken_router_ignores_guard_changes': ['router.no_main_navigation'],
+  'broken_router_keeps_page_on_guarded_replace': [
+    'router.no_main_navigation',
+  ],
+  'broken_router_names_pushed_pages_after_page_below': [
+    'router.no_main_navigation',
+  ],
+  'broken_router_asks_about_top_level_route': ['router.no_main_navigation'],
+  'broken_router_forgets_waiting_request': ['router.no_main_navigation'],
+  'broken_go_router_asks_within_its_calls': ['router.no_main_navigation'],
+  'broken_layout_keeps_labels': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'broken_texts_delegate_for_english_only': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+  ],
+  'broken_texts_in_first_language': [
+    'localization.unsupported_language',
+    'localization.untranslated',
+    'router.no_main_navigation',
+  ],
+  'fake_gate_stays_closed': ['router.no_start'],
+  'broken_onboarding_ignores_conditions': ['router.no_start'],
+};
 
 void main() {
   final providers = brokenProviders();
@@ -484,7 +533,7 @@ void main() {
     );
     for (final provider in providers) {
       if (!identical(provider.role, authRole)) continue;
-      final (:app, :problems) = await provider.failingApp.check();
+      final (:app, :problems) = await _checkOf(provider.failingApp);
       expect(problems, isEmpty);
       final mode = authRole.modeIn(authRole.hookInput(app!.hook!));
       final ofLinking = provider.module.descriptor.id == linking;
@@ -537,7 +586,7 @@ void main() {
       test(
           'its app is an app with every module of its registry, which the '
           'contract harness renders without errors', () async {
-        final (:app, :problems) = await provider.failingApp.check();
+        final (:app, :problems) = await _checkOf(provider.failingApp);
 
         expect(problems, isEmpty);
         expect(app!.modules, containsAll([id, ...provider.app]));
@@ -556,7 +605,7 @@ void main() {
           'app, such as those of the fixture providers that the tests of '
           'the analytics role and of the crash reporting role look at',
           () async {
-        final (:app, problems: _) = await provider.failingApp.check();
+        final (:app, problems: _) = await _checkOf(provider.failingApp);
         final files = await _filesOfAppOf(provider);
 
         for (final test in await brokenProviderAppTests()) {
@@ -581,7 +630,7 @@ void main() {
       test(
           'its app is the app with every module of its registry, which the '
           'contract harness renders without errors', () async {
-        final (:app, :problems) = await failing.check();
+        final (:app, :problems) = await _checkOf(failing);
 
         expect(problems, isEmpty);
         expect(ModuleRegistry.problemsOf(failing.modules), isEmpty);
@@ -604,13 +653,48 @@ void main() {
   }
 
   test(
+      'a broken module keeps the conditions of each brick of the module '
+      'that it changes, such as the fallback start screen of the broken '
+      'app entry, which only an app that no route starts has', () {
+    /// The conditions of each brick of [module], in their order: the roles
+    /// of its `when`, and its conditions on what roles chose. A broken
+    /// module gives the brick that it changes another name.
+    List<List<Set<Object>>> bricksOf(SmfModule module) => [
+          for (final brick in module
+              .contribute(ContractHarness.defaultContext)
+              .whereType<BrickContribution>())
+            [brick.when, brick.whenChosen],
+        ];
+
+    final broken = [
+      for (final provider in providers)
+        if (provider.module case final BrokenModule module) module,
+    ];
+    expect(broken, isNotEmpty);
+    for (final module in broken) {
+      expect(
+        bricksOf(module),
+        bricksOf(module.of),
+        reason: '${module.descriptor.id}',
+      );
+    }
+    final appEntry = broken.singleWhere(
+      (module) => module.descriptor.provides.contains(appEntryRole),
+    );
+    expect(
+      [for (final [_, chosen] in bricksOf(appEntry)) ...chosen],
+      [RouterRole.noStartRoute],
+    );
+  });
+
+  test(
       'the app of the fixture gates that start closed has guards that do '
       'not allow when it starts, and no mocks that open them, so the test '
       'of the walk of the routes must fail on them', () async {
     final failing = brokenModuleApps().singleWhere(
       (app) => app.name == 'fake_gate_stays_closed',
     );
-    final (:app, problems: _) = await failing.check();
+    final (:app, problems: _) = await _checkOf(failing);
 
     expect(
       routerRole.facadeOf(routerRole.hookInput(app!.hook!)).guards,
@@ -697,6 +781,30 @@ void main() {
             'remove the exemption.',
       );
     }
+  });
+
+  test(
+      'the apps of the broken providers that warn of what they are made of '
+      'are those that the fixtures declare, with the codes they declare',
+      () async {
+    final warnings = <String, List<String>>{};
+    for (final failing in [
+      for (final provider in providers) provider.failingApp,
+      ...brokenModuleApps(),
+    ]) {
+      final (:app, :problems) = await _checkOf(failing);
+      expect(problems, isEmpty, reason: failing.name);
+      if (app!.warnings.isNotEmpty) warnings[app.name] = app.warnings;
+    }
+
+    expect(
+      warnings,
+      _warningApps,
+      reason: 'smf create --strict allows these warnings in the apps of CI, '
+          'and stops on any other. A new warning of an app is a decision: '
+          'change the modules of the app so that it does not warn, or '
+          'declare the actual map here.',
+    );
   });
 
   test('no broken provider is in a registry of apps that must work', () {

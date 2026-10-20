@@ -16,9 +16,10 @@ part of '../contributions.dart';
 /// Paths are relative to the root of the app. A path may use variables,
 /// such as the directory of the app's Kotlin package, but no mustache
 /// sections, partials or includes: files that only some apps have go into a
-/// brick of their own, contributed with [when], and files whose number or
-/// paths depend on the data of a role come from the render hook of the
-/// role's template or provider (see [RoleOutput.files]). Mustache escapes a
+/// brick of their own, contributed with [when], or with [whenChosen] when
+/// they depend on what a role chose, and files whose number or paths depend
+/// on the data of a role come from the render hook of the role's template
+/// or provider (see [RoleOutput.files]). Mustache escapes a
 /// variable in two braces for HTML, so a variable that holds code, or a
 /// path with a slash, takes three: `{{{name}}}`.
 ///
@@ -28,7 +29,12 @@ part of '../contributions.dart';
 /// produce the same path.
 final class BrickContribution extends Contribution {
   /// Creates a contribution of the files of [bundle].
-  const BrickContribution(this.bundle, {this.vars = const {}, super.when});
+  const BrickContribution(
+    this.bundle, {
+    this.vars = const {},
+    super.when,
+    super.whenChosen,
+  });
 
   /// The mason bundle with the template files.
   final MasonBundle bundle;

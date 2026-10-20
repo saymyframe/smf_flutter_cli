@@ -15,7 +15,11 @@ part of '../role.dart';
 /// 4. [render], before the templates are rendered.
 ///
 /// All data is collected before [validate], so the hooks of different roles
-/// never depend on each other's results.
+/// never depend on each other's results. Of what the hooks get, only data
+/// can depend on what another role chose (see [Contribution.whenChosen]):
+/// [choose] of a role with such data runs after the hook of the other role
+/// and gets the data whose conditions hold, and the render hooks get only
+/// that data too.
 abstract base class RoleTemplate<D extends Object> {
   /// Allows subclasses to have constant constructors.
   const RoleTemplate();
@@ -24,12 +28,16 @@ abstract base class RoleTemplate<D extends Object> {
   /// role's interface files.
   ///
   /// Like a module, the template does not branch on other roles; it uses
-  /// [Contribution.when] instead.
+  /// [Contribution.when] instead, and [Contribution.whenChosen] for what a
+  /// role chose.
   List<Contribution> contribute(ModuleContext context) => const [];
 
   /// Checks the data of the role and returns the problems found.
   ///
-  /// It runs before [choose], so [RoleHookInput.choice] is `null`.
+  /// It runs before [choose], so [RoleHookInput.choice] is `null`. A
+  /// warning among the problems is about what the app is made of, with a
+  /// code of the role (see [SmfIssue.code]); a warning that depends on the
+  /// choice comes from [choose].
   List<SmfIssue> validate(RoleHookInput<D> input) => const [];
 
   /// Asks the user, or reads the role's options, for a decision that the
@@ -40,7 +48,9 @@ abstract base class RoleTemplate<D extends Object> {
   /// an [SmfUsageException] for an option value that does not fit the data,
   /// or if the run is not interactive and no option decides. A mode option
   /// that is not given decides with its first value, so the hook never
-  /// throws for the lack of one (see [RoleOption.mode]).
+  /// throws for the lack of one (see [RoleOption.mode]). It reports a
+  /// warning about the app that depends on the decision with
+  /// [RoleChoiceContext.warn], not through the logger.
   Future<Object?> choose(RoleChoiceContext<D> context) async => null;
 
   /// The values of the role's options by name that make [choice], a result

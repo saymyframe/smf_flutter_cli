@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/localization_role_bundle.dart';
 import 'package:smf_contracts/bundles/localization_role_settings_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contracts/src/roles/same_text.dart';
 
 part 'localization/localization_dsl.dart';
 part 'localization/localization_rules.dart';
@@ -227,6 +228,20 @@ final class LocalizationRole extends Role<TextsData> {
         'such as en,uk: the first is the one the app uses when the device '
         'asks for none of them. All of them by default, English first.',
   );
+
+  /// The code of the warning that the app is not in a language that a text
+  /// of a module has a translation into, because no app can be in it (see
+  /// [supportedLanguages]).
+  static const unsupportedLanguageWarning = 'localization.unsupported_language';
+
+  /// The code of the warning that texts of a module have no translation
+  /// into a language of the app, which shows them in English there.
+  static const untranslatedWarning = 'localization.untranslated';
+
+  /// The code of the warning that the setting of the language shows
+  /// languages of the app by their codes, since the role has no names for
+  /// them (see [languageNames]).
+  static const unnamedLanguageWarning = 'localization.unnamed_language';
 
   @override
   String get id => 'localization';

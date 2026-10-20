@@ -1,6 +1,8 @@
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/brick_templates.dart';
+import 'package:smf_contracts/src/roles/contributors.dart';
+import 'package:smf_contracts/src/roles/screen_routes.dart';
 import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
 /// The settings screen role; see [SettingsScreenRole].
@@ -126,18 +128,11 @@ final class SettingsScreenRole extends Role<SettingsData> {
   /// this route is how code that knows only the role finds the screen, such
   /// as a test of the role in a running app: at [FacadeRoute.fullPath],
   /// which needs no values, the app shows the screen of the route.
-  FacadeRoute? screenIn(RoleHookInput<Object> input) {
-    for (final data in dataIn(input)) {
-      if ((data.value, data.origin)
-          case (
-            SettingsScreenRoute(:final name),
-            ModuleOrigin(:final module)
-          )) {
-        return _routeOf(input, module, name);
-      }
-    }
-    return null;
-  }
+  FacadeRoute? screenIn(RoleHookInput<Object> input) => screenRouteIn(
+        input,
+        this,
+        (data) => data is SettingsScreenRoute ? data.name : null,
+      );
 }
 
 /// What the [SettingsScreenRole] takes from the modules of the app: a
@@ -239,6 +234,9 @@ final class SettingsScreenRoute extends SettingsData {
   String toString() => 'settings screen route "$name"';
 }
 
+/// The settings screen as messages name it.
+const _screen = 'settings screen';
+
 /// The note of the settings screen role in the guide for coding agents:
 /// what an entry of the screen is and how code adds one, whichever module
 /// provides the screen. It names no file of the app, since the screen is a
@@ -277,7 +275,11 @@ final class _SettingsScreenTemplate extends RoleTemplate<SettingsData> {
         ...switch (value) {
           final SettingsEntry entry =>
             _entryIssues(entry, origin, contributors),
-          SettingsScreenRoute() => _routeIssues(origin),
+          SettingsScreenRoute() => screenRouteOriginIssues(
+              origin,
+              settingsScreenRole,
+              screen: _screen,
+            ),
         },
     ];
   }
@@ -312,33 +314,6 @@ final class _SettingsScreenTemplate extends RoleTemplate<SettingsData> {
       ),
     ];
   }
-
-  /// The problem of a route of the settings screen that [origin] names,
-  /// unless a module does: the routes of an app are those of its modules.
-  static List<SmfIssue> _routeIssues(ContributionOrigin? origin) => [
-        if (origin is! ModuleOrigin)
-          SmfIssue(
-            'Only the module that provides the $settingsScreenRole names '
-            'the route of the settings screen, not $origin.',
-            origin: origin,
-          ),
-      ];
-}
-
-/// The route [name] of the module [module] among the routes of the app in
-/// [input], or `null` if the module has no route of that name.
-FacadeRoute? _routeOf(
-  RoleHookInput<Object> input,
-  ModuleId module,
-  String name,
-) {
-  for (final feature in routerRole.facadeOf(input).features) {
-    if (feature.module != module) continue;
-    for (final route in feature.allRoutes) {
-      if (route.route.name == name) return route;
-    }
-  }
-  return null;
 }
 
 /// The problems of the files of the widgets of the entries of the module
@@ -414,69 +389,17 @@ List<SmfIssue> _fileIssues(
 /// The problems of the routes that the module of [input] names as the
 /// settings screen: only the provider of the role names one, exactly one,
 /// which is a route of its own that needs no values.
-List<SmfIssue> _checkRoute(ModuleRuleInput<SettingsData> input) {
-  final module = input.module;
-  final origin = ModuleOrigin(module.id);
-  final named = [
-    for (final data in input.data)
-      if (data.value case final SettingsScreenRoute route) route,
-  ];
-  if (!module.provides.contains(settingsScreenRole)) {
-    return [
-      if (named.isNotEmpty)
-        SmfIssue(
-          'The module names the route of the settings screen, which only '
-          'the provider of the $settingsScreenRole does.',
-          origin: origin,
-        ),
-    ];
-  }
-  if (named.length != 1) {
-    return [
-      SmfIssue(
-        'The provider of the $settingsScreenRole names exactly one route as '
-        'the settings screen, but the module names ${named.length}.',
-        hint: 'Contribute one SettingsScreenRoute with the name of the route '
-            'of the screen.',
-        origin: origin,
-      ),
-    ];
-  }
-  final name = named.single.name;
-  final route = _routeOf(input.roleInput, module.id, name);
-  if (route == null) {
-    return [
-      SmfIssue(
-        'The module names its route "$name" as the settings screen, but '
-        'declares no route of that name.',
-        origin: origin,
-      ),
-    ];
-  }
-  final required = route.params.where((param) => param.isRequired);
-  return [
-    if (required.isNotEmpty)
-      SmfIssue(
-        'The route "$name" (${route.fullPath}) of the settings screen needs '
-        '${required.join(', ')}; the settings screen is reached without '
-        'values.',
-        origin: origin,
-      ),
-  ];
-}
-
-/// Whether [owner], who generated a file, is [contributor], who
-/// contributed data: the same module, whichever of its variants, or the
-/// template of the same role.
-bool _isContributor(
-  ContributionOrigin owner,
-  ContributionOrigin? contributor,
-) =>
-    switch ((owner, contributor)) {
-      (ModuleOrigin(:final module), ModuleOrigin(module: final other)) =>
-        module == other,
-      _ => owner == contributor,
-    };
+List<SmfIssue> _checkRoute(ModuleRuleInput<SettingsData> input) =>
+    screenRouteIssues(
+      input,
+      settingsScreenRole,
+      [
+        for (final data in input.data)
+          if (data.value case SettingsScreenRoute(:final name)) name,
+      ],
+      screen: _screen,
+      routeClass: 'SettingsScreenRoute',
+    );
 
 /// The problems with the widgets that the entries of [input] name: a widget
 /// in a file of another contributor, a class missing from its file, and one
@@ -489,7 +412,7 @@ List<SmfIssue> _checkEntryWidgets(StructuralRuleInput<SettingsData> input) {
     final origin = data.origin;
     if (data.value case SettingsEntry(:final widget, file: final path?)) {
       final owner = input.owners[path];
-      if (owner != null && !_isContributor(owner, origin)) {
+      if (owner != null && !isContributor(owner, origin)) {
         issues.add(
           SmfIssue(
             'The widget ${widget.name} of a settings entry of $origin is in '

@@ -435,9 +435,10 @@ void main() {
       }
 
       List<String> problems(List<IndexedDeclaration> declarations) => [
-            for (final issue in themeRole.interface.checkSymbols({
-              file: DartFileIndex(path: file, declarations: declarations),
-            }))
+            for (final issue in themeRole.interface.checkSymbols(
+              {file: DartFileIndex(path: file, declarations: declarations)},
+              appWith({themeRole}),
+            ))
               issue.message,
           ];
       // The context of the root, as a provider declares it.

@@ -13,6 +13,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+{{{smf_app_entry__android_core_library_desugaring_enabled}}}
     }
 
     defaultConfig {
@@ -47,4 +48,5 @@ flutter {
 
 dependencies {
 {{{smf_app_entry__gradle_app_dependencies}}}
+{{{smf_app_entry__android_core_library_desugaring_library}}}
 }

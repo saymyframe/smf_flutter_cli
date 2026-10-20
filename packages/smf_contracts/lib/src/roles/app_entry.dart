@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/app_entry_role_bundle.dart';
-import 'package:smf_contracts/core.dart';
+import 'package:smf_contracts/smf_contracts.dart';
 
 part 'app_entry_guide.dart';
 part 'app_entry_native.dart';
@@ -20,10 +20,13 @@ const appEntryRole = AppEntryRole._();
 /// - `lib/bootstrap.dart`, whose `Future<void> bootstrap()` runs the
 ///   start-up code of all modules and imports neither `material` nor
 ///   `cupertino`;
-/// - [fallbackStartScreen], the screen of an app without a router;
+/// - [fallbackStartScreen], the screen that an app starts on when no route
+///   starts it, in such an app only;
 /// - the project of each platform of the app ([AppIdentity.platforms]), at
 ///   the paths of Flutter's templates, such as [androidManifestFile] and
-///   [xcodeProjectFile];
+///   [xcodeProjectFile]; the iOS project also has [iosEntitlementsFile],
+///   which the app target signs with, and its app delegate in Swift,
+///   [appDelegateFile];
 /// - [readmeFile], the README of the app.
 ///
 /// The provider builds the root of the app, inside the [rootWrappers], as a
@@ -53,21 +56,29 @@ const appEntryRole = AppEntryRole._();
 /// Dart files: each is a file or a directory of the app.
 ///
 /// The template also tells the system which icons of the status bar suit
-/// the theme of the app, on every screen: it puts a widget into
-/// [appBuilder] that reads the brightness of the theme below the root
-/// `MaterialApp`, and asks for dark icons on a light theme and for light
-/// ones on a dark theme. So a screen without an app bar tells nothing of
-/// the status bar itself, in an app with a module that provides the theme
-/// and in one without it; a screen with an `AppBar` gets the icons that
-/// suit its bar.
+/// the theme of the app, on every screen: it generates [statusBarIconsFile]
+/// with the widget `StatusBarIcons`, which reads the brightness of the
+/// theme below the root `MaterialApp` and asks for dark icons on a light
+/// theme and for light ones on a dark theme, and [statusBarIconsTestFile],
+/// a widget test of it, and puts the widget into [appBuilder]. So a screen
+/// without an app bar tells nothing of the status bar itself, in an app
+/// with a module that provides the theme and in one without it; a screen
+/// with an `AppBar` gets the icons that suit its bar. The test is in every
+/// app, so `flutter test` has a test to run in an app whose modules bring
+/// none.
 ///
-/// The keyed sockets of the native files and of the README, and
-/// [mainActivityIntentFilters], render complete lines, so their tags stand
-/// alone at the start of a line of their file, like the tags of
-/// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
-/// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module
-/// rules of the role check these tags in the templates of its provider, and
-/// its structural rules check that the native files name every key once.
+/// The keyed sockets of the native files and of the README,
+/// [mainActivityIntentFilters], [androidManifestApplicationComponents],
+/// [iosAppDelegateLaunch] and both places of [androidCoreLibraryDesugaring]
+/// render complete lines, so their tags stand alone at the start of a line
+/// of their file, like the tags of [PipelineSockets]. The tag of
+/// [iosDeploymentTarget] stands where the version goes, as in
+/// `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module rules of the role
+/// check these tags in the templates of its provider, the element of the
+/// Android manifest that holds each tag of the manifest, and the place of
+/// the tag of [iosAppDelegateLaunch] in its method, and
+/// its structural rules check that the native files name every key once and
+/// that the app target signs with [iosEntitlementsFile].
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -99,6 +110,13 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The path of the Xcode project of the iOS app.
   static const xcodeProjectFile = 'ios/Runner.xcodeproj/project.pbxproj';
 
+  /// The path of the entitlements of the iOS app; see [iosEntitlements].
+  static const iosEntitlementsFile = 'ios/Runner/Runner.entitlements';
+
+  /// The path of the app delegate of the iOS app, in Swift; see
+  /// [iosAppDelegateLaunch].
+  static const appDelegateFile = 'ios/Runner/AppDelegate.swift';
+
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
 
@@ -110,13 +128,35 @@ final class AppEntryRole extends Role<NoDsl> {
   /// `CLAUDE.md` instead: its whole content is `@AGENTS.md`.
   static const claudeFile = 'CLAUDE.md';
 
-  /// The screen an app shows when no router provides one, created as
+  /// The path of the file with `StatusBarIcons`, the widget that the
+  /// template of the role puts around the content of every route (see
+  /// [appBuilder]), which asks the system for the icons of the status bar
+  /// that suit the theme.
+  static const statusBarIconsFile = 'lib/core/app/status_bar_icons.dart';
+
+  /// The path of the widget test of `StatusBarIcons` (see
+  /// [statusBarIconsFile]), which the template of the role generates in
+  /// every app, so that `flutter test` has a test to run in an app whose
+  /// modules bring none.
+  static const statusBarIconsTestFile =
+      'test/core/app/status_bar_icons_test.dart';
+
+  /// The screen that an app starts on when no route starts it, created as
   /// `const FallbackStartScreen()`; import it with
   /// [RequiredSymbol.importRef].
+  ///
+  /// Only an app where [RouterRole.noStartRoute] holds has it: one without a
+  /// router, which shows the screen as the home of its root, and one whose
+  /// router has no route to start on, which builds the screen at `/`. Any
+  /// other app has no file at [fallbackStartScreenFile]. So the provider
+  /// contributes the file, and what only the screen needs, such as its
+  /// texts and its test, under that condition (see
+  /// [Contribution.whenChosen]).
   static const fallbackStartScreen = RequiredClass(
     'FallbackStartScreen',
     path: fallbackStartScreenFile,
     constConstructor: true,
+    whenChosen: {RouterRole.noStartRoute},
   );
 
   /// `Future<void> bootstrap()`, which runs the start-up code of all modules
@@ -279,6 +319,30 @@ final class AppEntryRole extends Role<NoDsl> {
     ),
   );
 
+  /// Components of the `<application>` of the Android manifest, such as
+  /// `<receiver>`, `<service>` and `<provider>` elements, as XML without
+  /// imports, after the meta-data of the application. Each contribution
+  /// indents its elements by eight spaces, as children of `<application>`.
+  ///
+  /// A component is for one that the app itself has to declare, such as a
+  /// receiver of a library whose own manifest leaves it out. The manifest
+  /// declares a component of each kind, an `<activity>`, an
+  /// `<activity-alias>`, a `<service>`, a `<receiver>` or a `<provider>`,
+  /// under one `android:name` once. The Android build fails on two
+  /// declarations of a component that differ in their attributes or
+  /// children, and keeps both of two equal ones in the merged manifest. So
+  /// one module declares a component, and the provider's own, such as the
+  /// main activity, cannot be contributed. The structural rule
+  /// `app_entry.native_keys` checks the names before any build, resolved as
+  /// Android resolves them: a name that starts with a dot, or has none, is
+  /// relative to the `namespace` of [gradleAppFile].
+  static const androidManifestApplicationComponents =
+      SocketRef<CodeSocket>.role(
+    appEntryRole,
+    'android_manifest_application_components',
+    CodeSocket.text(),
+  );
+
   /// `<intent-filter>` elements of the main activity of the Android
   /// manifest, such as deep links, as XML without imports.
   static const mainActivityIntentFilters = SocketRef<CodeSocket>.role(
@@ -295,7 +359,52 @@ final class AppEntryRole extends Role<NoDsl> {
   static const infoPlist = SocketRef<KeyedSocket<PlistValue>>.role(
     appEntryRole,
     'info_plist',
-    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderInfoPlist),
+    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderPlistEntries),
+  );
+
+  /// Entitlements of the iOS app in [iosEntitlementsFile], keyed by
+  /// entitlement, such as `aps-environment`: as in [infoPlist], scalar
+  /// values must agree and string arrays are united.
+  ///
+  /// The provider has the file in every app, also when no module
+  /// contributes, and every build configuration of the app target signs
+  /// with it (`CODE_SIGN_ENTITLEMENTS`), which the structural rule
+  /// `app_entry.ios_entitlements_signed` checks. With nothing in it, the
+  /// file changes nothing of how the app is signed. On a device, a
+  /// capability that an entitlement stands for, such as push
+  /// notifications, may need a paid membership of the Apple Developer
+  /// Program; the simulator signs the app without one.
+  static const iosEntitlements = SocketRef<KeyedSocket<PlistValue>>.role(
+    appEntryRole,
+    'ios_entitlements',
+    KeyedSocket(policy: PlistMergePolicy(), renderer: _renderPlistEntries),
+  );
+
+  /// Swift statements that run in
+  /// `application(_:didFinishLaunchingWithOptions:)` of the app delegate in
+  /// [appDelegateFile], before its call of `super.application`, which hands
+  /// the launch of the app to Flutter: what has to be set before the launch
+  /// finishes, such as the delegate of the notification center of the
+  /// system, so that a tap on a notification that launched the app reaches
+  /// it, as in `UNUserNotificationCenter.current().delegate = self`.
+  ///
+  /// The statements run in the app delegate, a `FlutterAppDelegate`, which
+  /// they read as `self`, with the parameters `application` and
+  /// `launchOptions` of the method. Each contribution indents its lines by
+  /// four spaces, as the body of the method is. The socket takes no
+  /// imports, and the file imports `Flutter` and `UIKit`; `Flutter` brings
+  /// `UserNotifications` with it.
+  ///
+  /// The app of `flutter create` has the scene lifecycle of UIKit, under
+  /// which Flutter registers the plugins once the scene of the app
+  /// connects, after this method. So the statements have no registry of
+  /// plugins, no channel and no `FlutterViewController`. The module rule
+  /// `app_entry.launch_code_place` checks that the tag of the provider is
+  /// in that method, before the call.
+  static const iosAppDelegateLaunch = SocketRef<CodeSocket>.role(
+    appEntryRole,
+    'ios_app_delegate_launch',
+    CodeSocket.text(),
   );
 
   /// Gradle plugins declared in [gradleSettingsFile], keyed by plugin id,
@@ -348,6 +457,37 @@ final class AppEntryRole extends Role<NoDsl> {
     appEntryRole,
     'gradle_app_dependencies',
     KeyedSocket(policy: MaxPolicy(), renderer: _renderGradleDependencies),
+  );
+
+  /// Core library desugaring of the Android app, which a library needs
+  /// when it uses Java APIs that older versions of Android lack, such as
+  /// `java.time`: the version of `com.android.tools:desugar_jdk_libs`, the
+  /// highest any module needs.
+  ///
+  /// The value renders at two places of [gradleAppFile], each with a tag of
+  /// its own (see [ValueSocket.places]): the tag `<tag>_enabled` in the
+  /// `compileOptions` of the `android` block, as
+  /// `isCoreLibraryDesugaringEnabled = true`, and the tag `<tag>_library`
+  /// in the `dependencies` block, as
+  /// `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:<version>")`.
+  /// The build of the app fails with either line alone, so one contribution
+  /// gives both. Without a contribution the file has neither line, as the
+  /// one of `flutter create`.
+  ///
+  /// A module contributes the version that a library of the app asks for,
+  /// such as `2.1.4`, when the Android build of an app with that library
+  /// fails without desugaring.
+  static const androidCoreLibraryDesugaring =
+      SocketRef<ValueSocket<String>>.role(
+    appEntryRole,
+    'android_core_library_desugaring',
+    ValueSocket.places(
+      policy: MaxPolicy(),
+      places: {
+        'enabled': _renderDesugaringEnabled,
+        'library': _renderDesugaringLibrary,
+      },
+    ),
   );
 
   /// Sections of [readmeFile], keyed by their heading, each with its text
@@ -427,6 +567,12 @@ final class AppEntryRole extends Role<NoDsl> {
   @override
   RoleCardinality get cardinality => RoleCardinality.exactlyOne;
 
+  /// The router, whose choice decides whether the app has the
+  /// [fallbackStartScreen]. Every provider of the role uses it too, so it
+  /// may contribute under [RouterRole.noStartRoute].
+  @override
+  Set<Role> get uses => {routerRole};
+
   @override
   bool get openToAllModules => true;
 
@@ -443,18 +589,27 @@ final class AppEntryRole extends Role<NoDsl> {
         appBuilder,
         androidManifestPermissions,
         androidManifestApplicationMeta,
+        androidManifestApplicationComponents,
         mainActivityIntentFilters,
         infoPlist,
+        iosEntitlements,
+        iosAppDelegateLaunch,
         gradleSettingsPlugins,
         gradleAppPlugins,
         gradleAppDependencies,
+        androidCoreLibraryDesugaring,
         readmeSections,
         agentSections,
       ];
 
   @override
   RoleInterface get interface => const RoleInterface(
-        files: [agentsFile, claudeFile],
+        files: [
+          agentsFile,
+          claudeFile,
+          statusBarIconsFile,
+          statusBarIconsTestFile,
+        ],
         symbols: [main, bootstrap, fallbackStartScreen],
       );
 
@@ -477,6 +632,24 @@ final class AppEntryRole extends Role<NoDsl> {
               'them, so the widget that creates the root MaterialApp is '
               'below the widgets that the modules put around the root.',
           check: _checkRootWrappersInMain,
+        ),
+        ModuleRule(
+          id: 'app_entry.launch_code_place',
+          description: 'The tag of the code that runs before the launch of '
+              'the iOS app finishes is in the body of '
+              'application(_:didFinishLaunchingWithOptions:) in '
+              'ios/Runner/AppDelegate.swift, before its call of '
+              'super.application, which hands the launch to Flutter.',
+          check: _checkLaunchCodePlace,
+        ),
+        ModuleRule(
+          id: 'app_entry.manifest_tag_places',
+          description: 'The tag of each socket of the Android manifest is '
+              'among the children of the element that its contributions '
+              'belong to: the permissions of <manifest>, the meta-data and '
+              'the components of <application>, and the intent filters of an '
+              '<activity>.',
+          check: _checkManifestTagPlaces,
         ),
         ModuleRule(
           id: 'app_entry.tag_lines',
@@ -521,10 +694,24 @@ final class AppEntryRole extends Role<NoDsl> {
         StructuralRule(
           id: 'app_entry.native_keys',
           description: 'The native files name every key once: the keys of '
-              'the top-level dictionary of Info.plist, the permissions and '
-              'the meta-data of the application in the Android manifest, and '
-              'the plugins of each plugins block of the Gradle files.',
+              'the top-level dictionary of Info.plist and of the '
+              'entitlements of the iOS app, the permissions in the Android '
+              'manifest, the meta-data of its application and the components '
+              'of each kind there (activity, service, receiver, provider), '
+              'and the plugins of each plugins block of the Gradle files.',
           check: _checkNativeKeys,
+        ),
+        StructuralRule(
+          id: 'app_entry.ios_entitlements_signed',
+          description: 'Every build configuration of the app target in '
+              'ios/Runner.xcodeproj/project.pbxproj, which reads '
+              'Runner/Info.plist, signs the app with '
+              'ios/Runner/Runner.entitlements (CODE_SIGN_ENTITLEMENTS), so '
+              'the entitlements that the modules add reach the app. No other '
+              'target signs with that file, and the build configurations of '
+              'the project, which every target inherits, name no '
+              'entitlements.',
+          check: _checkIosEntitlementsSigned,
         ),
         StructuralRule(
           id: 'app_entry.agent_guide_paths',
@@ -647,16 +834,34 @@ bool _ascending(List<int> offsets) {
 ///
 /// The tags of the template, and the comments and strings of its code, do
 /// not count, so a brace in them does not end the body.
-({int start, int end})? _bodyOf(String template, String name) {
-  final code = template.replaceAllMapped(
-    _notCode,
-    (match) => ' ' * match[0]!.length,
-  );
-  final declaration = RegExp(
-    '\\b${RegExp.escape(name)}\\s*\\([^)]*\\)\\s*(?:async\\s*)?\\{',
-  ).firstMatch(code);
-  if (declaration == null) return null;
-  final start = declaration.end - 1;
+({int start, int end})? _bodyOf(String template, String name) => _bodyAfter(
+      template,
+      RegExp(
+        '\\b${RegExp.escape(name)}\\s*\\([^)]*\\)\\s*(?:async\\s*)?\\{',
+      ),
+    );
+
+/// [template] with the tags of the template, and the comments and strings
+/// of its code, replaced by spaces, so the offsets of the rest stay.
+String _codeOf(String template) =>
+    template.replaceAllMapped(_notCode, (match) => ' ' * match[0]!.length);
+
+/// The offsets from the opening brace to the closing brace of the first
+/// body in [template] whose declaration [declaration] finds, up to its
+/// opening brace, or `null` if it finds none with a closing brace.
+///
+/// The tags of the template, and the comments and strings of its code, do
+/// not count, so neither the declaration nor a brace may be in them. The
+/// scan knows the comments and strings of Dart. Of a template in Swift,
+/// such as that of an app delegate, it reads line comments, block comments
+/// that do not nest, and strings in double quotes with no string inside an
+/// interpolation and no `#` around them; a brace in a comment or a string
+/// of Swift beyond those may end the body early.
+({int start, int end})? _bodyAfter(String template, RegExp declaration) {
+  final code = _codeOf(template);
+  final found = declaration.firstMatch(code);
+  if (found == null) return null;
+  final start = found.end - 1;
   var depth = 0;
   for (var i = start; i < code.length; i++) {
     switch (code[i]) {
@@ -668,6 +873,62 @@ bool _ascending(List<int> offsets) {
   }
   return null;
 }
+
+/// The declaration of `application(_:didFinishLaunchingWithOptions:)` in
+/// the template of an app delegate in Swift, up to the brace that opens its
+/// body.
+final _launchMethod = RegExp(
+  r'\bfunc\s+application\s*\([^)]*\bdidFinishLaunchingWithOptions\b[^)]*\)'
+  r'[^{]*\{',
+);
+
+List<SmfIssue> _checkLaunchCodePlace(ModuleRuleInput<NoDsl> input) {
+  const path = AppEntryRole.appDelegateFile;
+  const method = 'application(_:didFinishLaunchingWithOptions:)';
+  final tag = '{{{${AppEntryRole.iosAppDelegateLaunch.tag}}}}';
+  final text = _templatesOf(input.contributions)[path] ?? '';
+  final offset = text.indexOf(tag);
+  if (offset < 0) return const [];
+  SmfIssue issue(String problem) =>
+      SmfIssue(problem, origin: ModuleOrigin(input.module.id), path: path);
+  final body = _bodyAfter(text, _launchMethod);
+  if (body == null || offset < body.start || offset > body.end) {
+    return [
+      issue(
+        'The tag $tag is in $path, but not in the body of $method, where the '
+        'code of the modules runs before the launch of the app finishes.',
+      ),
+    ];
+  }
+  const call = 'super.application(_:didFinishLaunchingWithOptions:)';
+  final handOver = _superLaunch
+      .firstMatch(_codeOf(text).substring(body.start, body.end))
+      ?.start;
+  if (handOver == null) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, which has no call '
+        'of $call: the method hands the launch of the app to Flutter with '
+        'that call, after the code of the modules.',
+      ),
+    ];
+  }
+  if (body.start + handOver < offset) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, but not before its '
+        'call of $call, which hands the launch of the app to Flutter: the '
+        'code of the modules runs before it.',
+      ),
+    ];
+  }
+  return const [];
+}
+
+/// The call of `super.application(...)` with which
+/// `application(_:didFinishLaunchingWithOptions:)` hands the launch of the
+/// app to Flutter.
+final _superLaunch = RegExp(r'\bsuper\s*\.\s*application\s*\(');
 
 /// The parts of the template of a Dart file that are not code: the tags of
 /// the template, comments and strings, raw or not, on one line or on
