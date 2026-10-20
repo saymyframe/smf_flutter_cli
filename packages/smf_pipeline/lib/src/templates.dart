@@ -701,6 +701,10 @@ Iterable<SmfIssue> _placeIssues(
   }
 }
 
+/// What joins the names, the paths and the tags in the problem of
+/// [_partialTagsIssue], as in `smf_open and smf_close`.
+const String _and = ' and ';
+
 /// The problem of [socket] when the templates hold some of its tags but
 /// not all, among [tags], those found, by tag name, with who holds each: a
 /// wrapper needs both, and a socket for one value at several places (see
@@ -715,11 +719,11 @@ SmfIssue? _partialTagsIssue(
       if (tags[name] case [final place, ...]) place,
   ];
   if (found.length == socket.tags.length) return null;
-  final names = found.map((place) => place.$1.name).join(' and ');
-  final paths = {for (final (tag, _) in found) tag.path}.join(' and ');
+  final names = found.map((place) => place.$1.name).join(_and);
+  final paths = {for (final (tag, _) in found) tag.path}.join(_and);
   final needs = socket.kind is WrapperSocket
-      ? 'a wrapper needs both ${socket.tags.join(' and ')}'
-      : 'its value goes to each of its tags, ${socket.tags.join(' and ')}, so '
+      ? 'a wrapper needs both ${socket.tags.join(_and)}'
+      : 'its value goes to each of its tags, ${socket.tags.join(_and)}, so '
           'the templates hold all of them';
   return SmfIssue(
     'The $socket has only $names of its tags, in $paths; $needs.',

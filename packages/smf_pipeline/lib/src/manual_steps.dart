@@ -70,31 +70,45 @@ final class PlannedManualStep {
   required RoleHookRequest request,
 }) {
   final issues = <SmfIssue>[];
-  final present = resolution.presentRoles;
-  final steps = [...collection.applyingOf<ManualStep>()];
+  final steps = [
+    ...collection.applyingOf<ManualStep>(),
+    ..._hookSteps(registry, resolution, request, issues),
+  ];
+  // Most apps have no steps, and the order of the contributors walks the
+  // edges of every module of the app.
+  if (steps.isEmpty) return (steps: const [], issues: issues);
+  final planned = _plannedOf(
+    orderContributions(steps, resolution).contributions,
+    issues,
+  );
+  return (
+    steps: List.unmodifiable([
+      for (final each in planned)
+        if (each.step.id.role != null) each,
+      for (final each in planned)
+        if (each.step.id.role == null) each,
+    ]),
+    issues: issues,
+  );
+}
 
+/// The steps by hand that the `manualSteps` hooks of the templates and
+/// providers of the present roles of [resolution] return for the data of
+/// [request] and that apply, in the order of the roles, the template of
+/// each role before its providers; see [planManualSteps]. The problems of
+/// the hooks go to [issues].
+List<Collected> _hookSteps(
+  ModuleRegistry registry,
+  Resolution resolution,
+  RoleHookRequest request,
+  List<SmfIssue> issues,
+) {
+  final steps = <Collected>[];
   void addHook(ContributionOrigin origin, List<ManualStep> Function() hook) {
-    final List<ManualStep> listed;
-    try {
-      listed = hook();
-    } on Object catch (error) {
-      issues.add(
-        SmfIssue(
-          'The hook of $origin that lists the steps by hand failed: $error',
-          origin: origin,
-        ),
-      );
-      return;
-    }
-    final access = rolesOf(origin, registry, resolution).access;
-    for (final step in listed) {
-      issues.addAll(_hookStepIssues(step, origin, access));
-      final collected = collectedOf(step, origin, present, fromHook: true);
-      if (collected.applies) steps.add(collected);
-    }
+    steps.addAll(_stepsOfHook(origin, hook, registry, resolution, issues));
   }
 
-  for (final role in present) {
+  for (final role in resolution.presentRoles) {
     // The input's runtime type argument is the role's data type, which the
     // hooks of the role's template and providers take.
     final input = role.hookInput(request);
@@ -106,12 +120,54 @@ final class PlannedManualStep {
       addHook(module.origin, () => provider.manualSteps(input));
     }
   }
+  return steps;
+}
 
-  // Most apps have no steps, and the order of the contributors walks the
-  // edges of every module of the app.
-  if (steps.isEmpty) return (steps: const [], issues: issues);
+/// The steps that [hook], the `manualSteps` hook of [origin], returns and
+/// that apply in the app of [resolution] (see [collectedOf]). The problems
+/// of the steps that it returns (see [_hookStepIssues]) go to [issues], and
+/// so does the failure of a hook that throws, which lists no step then.
+List<Collected> _stepsOfHook(
+  ContributionOrigin origin,
+  List<ManualStep> Function() hook,
+  ModuleRegistry registry,
+  Resolution resolution,
+  List<SmfIssue> issues,
+) {
+  final List<ManualStep> listed;
+  try {
+    listed = hook();
+  } on Object catch (error) {
+    issues.add(
+      SmfIssue(
+        'The hook of $origin that lists the steps by hand failed: $error',
+        origin: origin,
+      ),
+    );
+    return const [];
+  }
+  final access = rolesOf(origin, registry, resolution).access;
+  final present = resolution.presentRoles;
+  final steps = <Collected>[];
+  for (final step in listed) {
+    issues.addAll(_hookStepIssues(step, origin, access));
+    final collected = collectedOf(step, origin, present, fromHook: true);
+    if (collected.applies) steps.add(collected);
+  }
+  return steps;
+}
+
+/// The planned steps among [ordered], the steps by hand of the app in the
+/// order of their contributors: each id once, in the place of its first
+/// step, with the contributors of every step with the id; see
+/// [planManualSteps]. A step whose title differs from that of the first
+/// step with its id adds its problem to [issues].
+List<PlannedManualStep> _plannedOf(
+  List<Collected> ordered,
+  List<SmfIssue> issues,
+) {
   final byId = <ManualStepId, (ManualStep, List<ContributionOrigin>)>{};
-  for (final collected in orderContributions(steps, resolution).contributions) {
+  for (final collected in ordered) {
     final step = collected.contribution as ManualStep;
     final origin = collected.origin;
     final first = byId[step.id];
@@ -125,19 +181,10 @@ final class PlannedManualStep {
     }
     if (!contributors.contains(origin)) contributors.add(origin);
   }
-  final planned = [
+  return [
     for (final (step, contributors) in byId.values)
       PlannedManualStep(step, List.unmodifiable(contributors)),
   ];
-  return (
-    steps: List.unmodifiable([
-      for (final each in planned)
-        if (each.step.id.role != null) each,
-      for (final each in planned)
-        if (each.step.id.role == null) each,
-    ]),
-    issues: issues,
-  );
 }
 
 /// The link that [setupLink], the front end's, names for [steps], the

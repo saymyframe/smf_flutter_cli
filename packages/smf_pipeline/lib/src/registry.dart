@@ -461,45 +461,68 @@ final class _SocketCheck {
 List<String> _symbolConditionProblems(List<Role> roles) {
   final problems = <String>[];
   for (final role in roles) {
-    final byPath = <String, List<RequiredSymbol>>{};
-    for (final symbol in role.interface.symbols) {
-      byPath.putIfAbsent(symbol.path, () => []).add(symbol);
-      for (final condition in symbol.whenChosen) {
-        final other = condition.role;
-        if (identical(other, role) || role.visibleRoles.contains(other)) {
-          continue;
-        }
-        problems.add(
-          'The $symbol of the $role depends on what the $other chose '
-          '(${condition.name}), but the $role neither requires nor uses the '
-          '$other, so its providers may not name the condition.',
-        );
-      }
-    }
-    for (final MapEntry(key: path, value: symbols) in byPath.entries) {
-      final first = symbols.first.whenChosen;
-      if (symbols.every(
-        (symbol) =>
-            symbol.whenChosen.length == first.length &&
-            symbol.whenChosen.containsAll(first),
-      )) {
+    problems
+      ..addAll(_conditionRoleProblems(role))
+      ..addAll(_conditionPathProblems(role));
+  }
+  return problems;
+}
+
+/// The problems of the conditions of the symbols of [role] on what a role
+/// other than [role] chose, which [role] neither requires nor uses, so its
+/// providers may not name them; see [_symbolConditionProblems].
+List<String> _conditionRoleProblems(Role role) {
+  final problems = <String>[];
+  for (final symbol in role.interface.symbols) {
+    for (final condition in symbol.whenChosen) {
+      final other = condition.role;
+      if (identical(other, role) || role.visibleRoles.contains(other)) {
         continue;
       }
-      String conditionsOf(RequiredSymbol symbol) => symbol.whenChosen.isEmpty
-          ? 'no condition'
-          : symbol.whenChosen.join(', ');
-      final listed = [
-        for (final symbol in symbols) '$symbol (${conditionsOf(symbol)})',
-      ].join(', ');
       problems.add(
-        'The symbols of the $role at $path depend on different conditions '
-        'on what roles chose: $listed. An app has the file or not, so all '
-        'its symbols have the same conditions.',
+        'The $symbol of the $role depends on what the $other chose '
+        '(${condition.name}), but the $role neither requires nor uses the '
+        '$other, so its providers may not name the condition.',
       );
     }
   }
   return problems;
 }
+
+/// The problems of the paths of [role] whose symbols depend on different
+/// conditions on what roles chose, since an app has the file at a path or
+/// not; see [_symbolConditionProblems].
+List<String> _conditionPathProblems(Role role) {
+  final problems = <String>[];
+  final byPath = <String, List<RequiredSymbol>>{};
+  for (final symbol in role.interface.symbols) {
+    byPath.putIfAbsent(symbol.path, () => []).add(symbol);
+  }
+  for (final MapEntry(key: path, value: symbols) in byPath.entries) {
+    final first = symbols.first.whenChosen;
+    if (symbols.every(
+      (symbol) =>
+          symbol.whenChosen.length == first.length &&
+          symbol.whenChosen.containsAll(first),
+    )) {
+      continue;
+    }
+    final listed = [
+      for (final symbol in symbols) '$symbol (${_conditionsOf(symbol)})',
+    ].join(', ');
+    problems.add(
+      'The symbols of the $role at $path depend on different conditions '
+      'on what roles chose: $listed. An app has the file or not, so all '
+      'its symbols have the same conditions.',
+    );
+  }
+  return problems;
+}
+
+/// The conditions of [symbol] on what roles chose, as a problem of
+/// [_conditionPathProblems] lists them.
+String _conditionsOf(RequiredSymbol symbol) =>
+    symbol.whenChosen.isEmpty ? 'no condition' : symbol.whenChosen.join(', ');
 
 final RegExp _kebabCase = RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$');
 
