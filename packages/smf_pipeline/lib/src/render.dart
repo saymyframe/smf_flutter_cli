@@ -7,6 +7,7 @@ import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/imports.dart';
 import 'package:smf_pipeline/src/machine_files.dart';
+import 'package:smf_pipeline/src/manual_steps.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
@@ -89,16 +90,19 @@ final class RenderedFile {
 
 /// The app that stage 8 rendered, in memory.
 final class RenderedApp {
-  /// Creates the app of [files], whose sockets got [socketOrders].
+  /// Creates the app of [files], whose sockets got [socketOrders], with the
+  /// [manualSteps] of its developer.
   RenderedApp(
     Iterable<RenderedFile> files, {
     Map<SocketRef, ContributionOrder> socketOrders = const {},
+    List<PlannedManualStep> manualSteps = const [],
   })  : files = Map.unmodifiable({
           for (final file
               in files.toList()..sort((a, b) => a.path.compareTo(b.path)))
             file.path: file,
         }),
-        socketOrders = Map.unmodifiable(socketOrders);
+        socketOrders = Map.unmodifiable(socketOrders),
+        manualSteps = List.unmodifiable(manualSteps);
 
   /// The files by path, relative to the root of the app, sorted by path:
   /// those of the bricks, and those that the render hooks generated.
@@ -114,6 +118,15 @@ final class RenderedApp {
   /// files. The sockets of the pipeline, which render the merged pubspec,
   /// are not among them.
   final Map<SocketRef, ContributionOrder> socketOrders;
+
+  /// The steps of the app that its developer does by hand, each once and in
+  /// order, with their contributors, as stage 5 planned them (see
+  /// [planManualSteps]) and the render hooks of the roles that are open to
+  /// all modules got them (see [RoleHookInput.manualSetup]).
+  ///
+  /// So a test reads the steps that a module lists in an app, whichever
+  /// module provides the role that tells of them.
+  final List<PlannedManualStep> manualSteps;
 
   /// What the contributors gave the keyed [socket], in the order the socket
   /// got them: the contributor, the key and the value of each entry. Empty
@@ -188,7 +201,10 @@ final class _VariableImports {
 /// one that the app leaves out.
 ///
 /// 1. Runs the render hooks of the templates and providers of the present
-///    roles, with the results of [choices]. Their fragments follow the rules
+///    roles, with the results of [choices], and for the roles that are open
+///    to all modules with the [manualSteps] that stage 5 planned and the
+///    [setupLink] that the front end named for them (see
+///    [RoleHookInput.manualSetup]). Their fragments follow the rules
 ///    of the contributions of their owner, and their brick variables must
 ///    not be reserved (see [isReservedVar]) or set twice for one owner. A
 ///    variable may be a [Fragment] of code, see [RoleOutput.vars]. The path
@@ -236,6 +252,8 @@ RenderedApp renderApp({
   required ModuleContext context,
   required Map<Role, Object?> choices,
   required MergedPubspec pubspec,
+  required List<PlannedManualStep> manualSteps,
+  Uri? setupLink,
 }) {
   final issues = <SmfIssue>[];
   final hooks = _runRenderHooks(
@@ -244,6 +262,8 @@ RenderedApp renderApp({
     collection: collection,
     context: context,
     choices: choices,
+    manualSteps: manualSteps,
+    setupLink: setupLink,
     issues: issues,
   );
   _stopOnErrors(issues);
@@ -303,7 +323,11 @@ RenderedApp renderApp({
     }
   }
   _stopOnErrors(issues);
-  return RenderedApp(files.values, socketOrders: texts.orders);
+  return RenderedApp(
+    files.values,
+    socketOrders: texts.orders,
+    manualSteps: manualSteps,
+  );
 }
 
 /// Throws a [GenerationFailedException] with the errors among [issues], if
@@ -467,6 +491,8 @@ _HookOutput _runRenderHooks({
   required Collection collection,
   required ModuleContext context,
   required Map<Role, Object?> choices,
+  required List<PlannedManualStep> manualSteps,
+  required Uri? setupLink,
   required List<SmfIssue> issues,
 }) {
   final request = hookRequest(
@@ -475,6 +501,8 @@ _HookOutput _runRenderHooks({
     collection: collection,
     context: context,
     choices: choices,
+    manualSteps: manualSteps,
+    setupLink: setupLink,
   );
   final hooks = _RenderHooks(registry, resolution, issues);
   for (final role in resolution.presentRoles) {

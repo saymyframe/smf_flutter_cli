@@ -114,13 +114,14 @@ void main() {
       'uses': {'di'},
     });
     // The auth role works with a router, whose routes ask for the account
-    // that it publishes as a condition. It does not work with a DI
+    // that it publishes as a condition, and with the texts of the app, which
+    // the labels of the ways to sign in are. It does not work with a DI
     // container: the code of an app reaches sign-in through the session
     // that the role generates, a top-level variable.
     expect(shape(authRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
-      'uses': {'router'},
+      'uses': {'router', 'localization'},
     });
     // The notifications role remembers in the preferences that it asked
     // for the permission, and gives the settings screen and the onboarding
@@ -443,6 +444,7 @@ void main() {
         'text_light',
         'text_dark',
         'auth_mode',
+        'methods',
         'asked_key',
         'owner_key',
         'channel_id',

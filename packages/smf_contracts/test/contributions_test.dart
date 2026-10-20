@@ -33,6 +33,7 @@ void main() {
       const CodegenRequest(),
       const Preflight([]),
       const PostGenStep(ToolRef('flutter'), ['pub', 'get']),
+      const ManualStep(ManualStepId(ModuleId('push'), 'key'), 'Upload it'),
     ];
 
     for (final contribution in contributions) {

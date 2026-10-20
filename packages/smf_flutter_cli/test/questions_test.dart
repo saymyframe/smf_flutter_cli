@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_flutter_cli/setup_steps.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -76,8 +77,14 @@ final class _Logger implements SmfLogger {
   /// Those of the [lines] that the run reported as warnings.
   final List<String> warnings = [];
 
+  /// Those of the [lines] that the run reported as information.
+  final List<String> infos = [];
+
   @override
-  void info(String message) => lines.add(message);
+  void info(String message) {
+    lines.add(message);
+    infos.add(message);
+  }
 
   @override
   void detail(String message) {}
@@ -136,19 +143,21 @@ final class _Commands implements SmfProcessRunner {
 }
 
 /// What a run of `smf create` in a terminal did: its exit code, the
-/// questions it asked, what it reported, which of that as warnings, and the
-/// file system with the app.
+/// questions it asked, what it reported, which of that as warnings and
+/// which as information, and the file system with the app.
 typedef _Run = ({
   int code,
   List<_Question> asked,
   List<String> lines,
   List<String> warnings,
+  List<String> infos,
   MemoryFileSystem files,
 });
 
 /// Runs `smf create my_app` with [options] and the modules of the CLI in a
 /// terminal that answers with [answers], on a machine with a Flutter SDK
-/// whose commands all succeed; the app goes to `/work/my_app`.
+/// whose commands all succeed; the app goes to `/work/my_app`. The steps by
+/// hand of the app lead to their guide on the site of SMF, as in `runCli`.
 Future<_Run> _create(
   Map<String, List<String>> answers, {
   List<String> options = const [],
@@ -177,15 +186,21 @@ Future<_Run> _create(
       operatingSystem: HostOperatingSystem.macos,
       hasTerminal: true,
     ),
+    setupLink: setupGuideLinkOf,
   );
   return (
     code: code,
     asked: prompter.asked,
     lines: logger.lines,
     warnings: logger.warnings,
+    infos: logger.infos,
     files: files,
   );
 }
+
+/// How a run in a terminal offers the feature `sign_in`.
+const _signInChoice = 'sign_in — Sign-in, sign-up and password reset with '
+    "email or the app's ways to sign in, and an account screen";
 
 void main() {
   test(
@@ -231,10 +246,12 @@ void main() {
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
-      'sign_in — Email sign-in: sign-up, password reset and an account screen',
+      _signInChoice,
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
+      'google_sign_in — Google sign-in on Android and iOS with google_sign_in',
+      'apple_sign_in — Sign in with Apple on iOS with sign_in_with_apple',
     ]);
     expect(run.asked[2].shown, [
       'bottom_tabs — Tabs in a bar at the bottom of the app',
@@ -399,7 +416,7 @@ void main() {
     // The module provides a role, so it is not among the features to pick.
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
-      'sign_in — Email sign-in: sign-up, password reset and an account screen',
+      _signInChoice,
     ]);
     expect(
       run.lines,
@@ -1491,13 +1508,22 @@ void main() {
       ),
     );
     expect(
-      run.lines[run.lines.length - 2],
+      run.lines[run.lines.length - 3],
       startsWith(
         'One step is left for later. Run it in the app:\n'
         '  Configuring Firebase with flutterfire (the run skips external '
         'setup, and ',
       ),
     );
+    // Google Analytics in the Firebase project, which no command turns on,
+    // after the steps that the run left for later.
+    const googleAnalytics = 'firebase_analytics.google_analytics';
+    expect(
+      run.lines[run.lines.length - 2],
+      'Finish the setup by hand in one step:\n'
+      '  https://doc.saymyframe.com/setup?steps=$googleAnalytics',
+    );
+    expect(run.infos, contains(run.lines[run.lines.length - 2]));
   });
 
   test(
@@ -1838,6 +1864,216 @@ void main() {
     );
   });
 
+  group('the warning of guideline 4.8 of the App Store', () {
+    // What `smf create` prints of the ways to sign in of an app with
+    // [modules], without a terminal, and the files of the app.
+    Future<_Run> runOf(
+      String modules, {
+      List<String> options = const [],
+    }) =>
+        _create(
+          {},
+          options: [
+            '--no-input',
+            '--skip-external-setup',
+            '-m',
+            modules,
+            ...options,
+          ],
+        );
+
+    // The warnings of [run] about the ways to sign in, which the auth role
+    // gives: those about the machine leave it out.
+    List<String> ofAuth(_Run run) => [
+          for (final warning in run.warnings)
+            if (warning.startsWith('[role:auth]')) warning,
+        ];
+
+    const ofGoogle = '[role:auth]: The app offers Continue with Google on '
+        'iOS, a login service of a third party, but no way to sign in that '
+        'the App Store takes as an equivalent: one that asks for no more '
+        'than the name and the email address of the user and lets the user '
+        'keep the address private (App Store Review Guideline 4.8). (Add '
+        'such a way to sign in on iOS, such as Sign in with Apple.)';
+
+    test(
+        'is given for an app with Google sign-in alone, which gets the only '
+        'provider of the authentication, and not with Sign in with Apple too',
+        () async {
+      final google = await runOf('google_sign_in');
+
+      const adding = 'Adding firebase_auth: the only provider of the '
+          'authentication role, which google_sign_in requires.';
+      expect(google.code, 0, reason: google.lines.join('\n'));
+      expect(google.lines, contains(adding));
+      expect(ofAuth(google), [ofGoogle]);
+      final app = google.files.directory('/work/my_app');
+      expect(
+        app.childFile('lib/core/auth/sign_in_methods.dart').readAsStringSync(),
+        allOf(
+          contains('credential: method0.googleCredential,'),
+          contains("issuer: 'https://accounts.google.com',"),
+        ),
+      );
+      expect(
+        app.childFile('pubspec.yaml').readAsStringSync(),
+        allOf(
+          contains('  google_sign_in: '),
+          contains('    - "lib/core/google_sign_in/assets/google_logo.png"'),
+        ),
+      );
+      expect(
+        app.childFile('README.md').readAsStringSync(),
+        contains('\n## Google sign-in\n'),
+      );
+
+      final both = await runOf('google_sign_in,apple_sign_in');
+      expect(both.code, 0, reason: both.lines.join('\n'));
+      expect(ofAuth(both), isEmpty);
+    });
+
+    test(
+        'stops a run with --strict, which names its code and creates '
+        'nothing, unless --allow-warning names the code', () async {
+      final strict = await runOf('google_sign_in', options: ['--strict']);
+
+      const stopped = 'Generation stopped because of a warning about the '
+          'app. Without --strict, the run goes on after it.';
+      final cause = '  warning [role:auth] auth.no_equivalent_sign_in'
+          '${ofGoogle.substring('[role:auth]'.length)}';
+      expect(strict.code, SmfExitCodes.generationFailed);
+      expect(strict.lines, containsAllInOrder([stopped, cause]));
+      expect(strict.files.directory('/work/my_app').existsSync(), isFalse);
+
+      final allowed = await runOf(
+        'google_sign_in',
+        options: ['--strict', '--allow-warning=auth.no_equivalent_sign_in'],
+      );
+      expect(allowed.code, 0, reason: allowed.lines.join('\n'));
+      expect(ofAuth(allowed), [ofGoogle]);
+    });
+  });
+
+  test(
+      'a run in a terminal offers Sign in with Apple among the '
+      'infrastructure, adds the only provider of the authentication, which '
+      'it requires, without a question, and gives the app its way to sign in '
+      'and the entitlement of its capability', () async {
+    final run = await _create(
+      {
+        'Features': [],
+        'Infrastructure': ['apple_sign_in'],
+        'Layout': ['None'],
+        'Settings screen': ['None'],
+        'Onboarding screen': ['None'],
+        'Router': ['None'],
+        'State management': ['None'],
+        'Theme': ['None'],
+        'Localization': ['None'],
+        'Dependency injection': ['None'],
+        'Events': ['None'],
+        'Notifications': ['None'],
+        'Push messages': ['None'],
+        'Preferences': ['None'],
+        'Crash reporting': [],
+        'Analytics': [],
+        'Who may use the app': ['Nobody'],
+      },
+      options: ['--skip-external-setup'],
+    );
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    // firebase_auth is the only module that provides the authentication,
+    // which Sign in with Apple requires, so there is nothing to ask.
+    expect(
+      [for (final question in run.asked) question.message],
+      isNot(contains(startsWith('Authentication:'))),
+    );
+    expect(
+      run.lines,
+      contains(
+        'Adding firebase_auth: the only provider of the authentication '
+        'role, which apple_sign_in requires.',
+      ),
+    );
+    final app = run.files.directory('/work/my_app');
+    expect(
+      app.childFile('lib/core/auth/sign_in_methods.dart').readAsStringSync(),
+      allOf(
+        contains('credential: method0.appleCredential,'),
+        contains("issuer: 'https://appleid.apple.com',"),
+      ),
+    );
+    expect(
+      app.childFile('ios/Runner/Runner.entitlements').readAsStringSync(),
+      contains('<key>com.apple.developer.applesignin</key>'),
+    );
+    expect(
+      app.childFile('pubspec.yaml').readAsStringSync(),
+      allOf(contains('  sign_in_with_apple: '), contains('  crypto: ')),
+    );
+    expect(
+      app.childFile('README.md').readAsStringSync(),
+      contains('\n## Sign in with Apple\n'),
+    );
+  });
+
+  test(
+      'a run tells of the steps by hand that Sign in with Apple needs after '
+      'the line of the app, with the link to their guide on the site of SMF, '
+      'and --explain lists the steps with their contributors', () async {
+    const options = ['--no-input', '-m', 'apple_sign_in'];
+    const link = 'https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,'
+        'firebase_auth.apple_provider,firebase_auth.apple_revocation';
+    // The App ID of the entitlement of the module, and Apple in the Firebase
+    // project of the provider of the auth role.
+    const appId = 'app_entry.ios_app_id: In Xcode, sign the iOS app with '
+        'your paid Apple Developer team (apple_sign_in)';
+    const appleProvider = 'firebase_auth.apple_provider: Turn on Sign in '
+        'with Apple in Firebase Authentication (firebase_auth)';
+    const appleRevocation = 'firebase_auth.apple_revocation: Give Firebase '
+        'your Sign in with Apple key, so that deleting an account works '
+        '(firebase_auth)';
+
+    final run = await _create(const {}, options: options);
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    const byHand = 'Finish the setup by hand in 3 steps:\n  $link';
+    expect(run.infos, contains(byHand));
+    expect(run.warnings, isNot(contains(byHand)));
+    expect(
+      run.lines.indexOf(byHand),
+      greaterThan(
+        run.lines.indexOf('Created my_app in /work/my_app.'),
+      ),
+    );
+    // The README of the app links to the same guide.
+    expect(
+      run.files.file('/work/my_app/README.md').readAsStringSync(),
+      contains('[The guide]($link)'),
+    );
+
+    final explained =
+        await _create(const {}, options: [...options, '--explain']);
+
+    expect(explained.code, 0, reason: explained.lines.join('\n'));
+    expect(
+      explained.infos,
+      containsAllInOrder([
+        'After generation',
+        'By hand',
+        '  $link',
+        '  $appId',
+        '  $appleProvider',
+        '  $appleRevocation',
+      ]),
+    );
+    expect(
+      explained.files.directory('/work/my_app').existsSync(),
+      isFalse,
+    );
+  });
+
   test(
       'a run in a terminal offers the sign-in among the features, asks '
       'which module manages the state of its screens, with no choice of '
@@ -1964,6 +2200,8 @@ void main() {
       'home',
       'sign_in',
       'firebase_core',
+      'google_sign_in',
+      'apple_sign_in',
       'bottom_tabs',
       'onboarding',
       'gen_l10n',
@@ -1978,7 +2216,7 @@ void main() {
     final run = await _create(
       {
         'Features': ['home', 'sign_in'],
-        'Infrastructure': ['firebase_core'],
+        'Infrastructure': ['firebase_core', 'google_sign_in', 'apple_sign_in'],
         'Layout': ['bottom_tabs'],
         'Onboarding screen': ['onboarding'],
         'Localization': ['gen_l10n'],

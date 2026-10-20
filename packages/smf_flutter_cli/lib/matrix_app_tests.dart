@@ -3,6 +3,7 @@
 /// providers of the fixture registry. No library of the binary imports it.
 library;
 
+import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
@@ -10,6 +11,7 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
@@ -32,6 +34,8 @@ Future<MatrixAppTests> smfAppTests() async {
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
+  final googleSignIn = await appTestsDirectoryOf('smf_google_sign_in');
+  final appleSignIn = await appTestsDirectoryOf('smf_apple_sign_in');
   final messaging = await appTestsDirectoryOf('smf_firebase_messaging');
   final home = await appTestsDirectoryOf('smf_home_flutter');
   final localNotifications = await appTestsDirectoryOf(
@@ -111,20 +115,23 @@ Future<MatrixAppTests> smfAppTests() async {
         roles: {routerRole},
       ),
       // The sign-in service of the module on Firebase Authentication: what
-      // each of its calls sends to Firebase; the reason that it gives each
-      // code of Firebase, in the form in which Android and iOS send it;
-      // the user whom it finds on the device when it is created; a call
-      // for a user whose session has ended on the server, which signs that
-      // user out; and the language in which it asks Firebase for the
-      // message of a password reset, the one that the app is in (see
-      // _messageLanguagesOf). The tests use the service of the module, and
-      // leave what every provider of the auth role does to the test of the
-      // role. The mocks are a backend in memory with no account and nobody
-      // signed in, and the matrix sets them up for the tests of every
-      // module of the app, since the start-up of the app starts the
-      // session of the app on Firebase Authentication. Its probe compares,
-      // on a device, the user of the session with the one that the Firebase
-      // SDK has there.
+      // each of its calls sends to Firebase, with a password and with the
+      // credentials of Google and Apple; the credential that Firebase gave
+      // with a refused link, which the sign-in after it takes; the
+      // revocation of the tokens of Apple before a deletion; the reason
+      // that it gives each code of Firebase, in the form in which Android
+      // and iOS send it; the user whom it finds on the device when it is
+      // created; a call for a user whose session has ended on the server,
+      // which signs that user out; and the language in which it asks
+      // Firebase for the message of a password reset, the one that the app
+      // is in (see _messageLanguagesOf). The tests use the service of the
+      // module, and leave what every provider of the auth role does to the
+      // test of the role. The mocks are a backend in memory with no account
+      // and nobody signed in, which takes the test tokens of Google and
+      // Apple, and the matrix sets them up for the tests of every module of
+      // the app, since the start-up of the app starts the session of the
+      // app on Firebase Authentication. Its probe compares, on a device, the
+      // user of the session with the one that the Firebase SDK has there.
       MatrixAppTest(
         '$firebaseAuth/firebase_auth',
         appliesTo: _has(FirebaseAuthModule.id),
@@ -137,6 +144,50 @@ Future<MatrixAppTests> smfAppTests() async {
         startProbe: const MatrixStartProbe(
           'integration_test/firebase_auth/probe.dart',
           'probeFirebaseAuth',
+        ),
+      ),
+      // The way to sign in with Google of the module, on the real
+      // google_sign_in package: the package is started once, without the
+      // ids of the clients of Google, and the credential is the ID token of
+      // the Google account; a closed sheet returns null, the errors with
+      // which Google refuses an app that is not set up for it fail with
+      // notConfigured, and any other error with unknown; and the app lists
+      // it on Android and iOS, with the logo of Google from its assets. The
+      // mocks replace the platform implementation of the package with
+      // Google for one account, and the matrix sets them up for the tests
+      // of every module of the app, such as the test of the ways to sign in
+      // of the auth role. The test has no probe for the start check: nobody
+      // can sign in on a device.
+      MatrixAppTest(
+        '$googleSignIn/google_sign_in',
+        appliesTo: _has(GoogleSignInModule.id),
+        devDependencies: const ['google_sign_in_platform_interface'],
+        mocks: const MatrixMocks(
+          'test/google_sign_in_mocks.dart',
+          'mockGoogleSignIn',
+        ),
+      ),
+      // The way to sign in with Apple of the module, on the real
+      // sign_in_with_apple package: on iOS, the request has the SHA-256
+      // hash of a new raw nonce, and the credential is the ID token of
+      // Apple with that raw nonce, the authorization code of the request
+      // and the name, which only the first sign-in has; a closed sheet
+      // returns null, the unknown error of an app without the capability
+      // fails with notConfigured, and any other error with unknown; on
+      // another platform it fails with notConfigured without asking Apple;
+      // and the app lists it on iOS only, with an icon in the colour of the
+      // label. The mocks answer the method channel of the package as Apple
+      // does on iOS, for one user and with the nonce of the request in the
+      // ID token, and the matrix sets them up for the tests of every module
+      // of the app, such as the test of the ways to sign in of the auth
+      // role. The test has no probe for the start check: nobody can sign in
+      // on a device.
+      MatrixAppTest(
+        '$appleSignIn/apple_sign_in',
+        appliesTo: _has(AppleSignInModule.id),
+        mocks: const MatrixMocks(
+          'test/apple_sign_in_mocks.dart',
+          'mockSignInWithApple',
         ),
       ),
       // The push service of the module on Firebase Cloud Messaging: what
@@ -295,9 +346,15 @@ Future<MatrixAppTests> smfAppTests() async {
       // is wrong with an email address and a password, the text of each
       // failure of a call in each language of the app, and that a call is
       // on its way; a password reset tells where the message went; and the
-      // screens fit a small phone with a large text size. The screen of
+      // screens fit a small phone with a large text size. The sign-in and
+      // the sign-up have a button for each way to sign in of the app that
+      // works on the platform, from appSignInMethods of the auth role, which
+      // signs in through the session with the mocks of the module of the way
+      // to sign in, spins while its call is on its way and shows its failure
+      // below the buttons, on Android and on iOS. The screen of
       // the account signs out and deletes the account, which it asks about
-      // first in a sheet, and the entry of the settings screen leads to
+      // first in a sheet, with texts of its own for a deletion that the
+      // provider refused, and the entry of the settings screen leads to
       // it, through the sign-in for a user without an account. For them
       // the matrix writes the settings screen of the app, whether it is a
       // destination of the main navigation, and the entry that the module
@@ -336,6 +393,13 @@ Future<MatrixAppTests> smfAppTests() async {
       // of the provider keeps its contract, and the session of the app
       // does what the mode says.
       await authRoleAppTest(),
+      // The ways to sign in of the apps whose modules give the auth role
+      // one, whichever modules provide the role and the ways to sign in:
+      // the service takes the credentials of identities of each issuer of
+      // the app as the role says, and the session signs in with the
+      // credential that the function of each way to sign in returns, under
+      // the mocks of its module, in each mode of the role.
+      await authMethodsAppTest(),
       // The notifications of the apps with the notifications role,
       // whichever module provides it: the permission follows what the
       // service says and what the app asked, a request asks once, the taps
@@ -775,6 +839,63 @@ Future<MatrixAppTest> authRoleAppTest() async => MatrixAppTest(
       appliesTo: (app) => app.hook!.presentRoles.contains(authRole),
       values: (app) => {
         'auth_mode': authRole.modeIn(authRole.hookInput(app.hook!)).name,
+      },
+      roles: {authRole},
+    );
+
+/// The test of the ways to sign in of the auth role that the CLI keeps in
+/// its `app_tests/auth_methods`, for the apps whose modules give the role a
+/// way to sign in with an identity provider ([AuthRole.methodsIn]),
+/// whichever modules provide the role and the ways to sign in, in each mode
+/// of the role. Each of its two files runs the start-up of the app once,
+/// with `bootstrap()`:
+/// - the service of the provider keeps the contract of `AuthService` for
+///   credentials, with each issuer of the ways to sign in of the app:
+///   signing in with the credential of a new identity creates its user,
+///   whom signing in with it again finds, in place of whoever is signed in;
+///   `linkWith` gives the anonymous user who is signed in the identity with
+///   the same id; `linkWith` of an identity that another user has fails
+///   with `credentialInUse`, and `signInWith` takes the identical credential
+///   then; for an identity whose email address has an account that signs
+///   in with a password, `linkWith` fails with
+///   `accountExistsWithOtherMethod`, and `signInWith` fails so too or signs
+///   in to that account; a call for the user who is signed in fails when
+///   nobody is; and `deleteAccount` with a fresh credential deletes the user
+///   whom a start found on the device, and one of another user fails with
+///   `invalidCredentials`;
+/// - the session of the app signs in with the credential that the function
+///   of each way to sign in returns, on a platform that the way to sign in
+///   works on: an anonymous user gets the identity and keeps the id, a
+///   later anonymous user and a sign-in without a user sign in to the
+///   account of that identity, and once the next start found that account
+///   on the device, `appSession.deleteAccount()` deletes it, for a way to
+///   sign in with `revokesOnDeletion` with a credential that it asks the
+///   way to sign in for again, after which the identity has another user.
+///
+/// The test knows only the role, and reads the ways to sign in of the app
+/// from `appSignInMethods`, which the template of the role generates, so the
+/// matrix writes no file for it. It builds test tokens of identities of its
+/// own for each issuer: JSON Web Tokens without a signature, whose payload
+/// has `iss`, `sub`, maybe `email`, and a `nonce` of its own, which is the
+/// `rawNonce` of the credential. A credential of the issuer of a way to sign
+/// in with `revokesOnDeletion` has an `authorizationCode` of its own too. A
+/// token with a nonce may be taken once, so each call gets a credential of
+/// its own, but for the sign-in with the identical object that `linkWith`
+/// refused just before. The mocks of the module of a way to sign in issue
+/// test tokens too, of one identity of their own and the same each time,
+/// each with the nonce of its request: the raw nonce, or the SHA-256 hash
+/// of that raw nonce for a way to sign in whose request has the hash, as
+/// Sign in with Apple, and none for a request without a nonce, as that of
+/// Google sign-in. A provider takes each form in the tests of an app,
+/// whatever the issuer. It uses the helpers of the test of the auth role
+/// ([authRoleAppTest]), which every app with the role has. It has no probe
+/// for the start check: nobody can sign in on a device.
+Future<MatrixAppTest> authMethodsAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/auth_methods',
+      appliesTo: (app) {
+        final hook = app.hook!;
+        return hook.presentRoles.contains(authRole) &&
+            authRole.methodsIn(authRole.hookInput(hook)).isNotEmpty;
       },
       roles: {authRole},
     );

@@ -5,8 +5,10 @@ import 'package:flutter/widgets.dart';
 
 import 'auth_service.dart';
 import 'guest_data.dart';
+import 'sign_in_methods.dart';
 
-export 'auth_service.dart' show AuthFailure, AuthFailureReason;
+export 'auth_service.dart'
+    show AuthFailure, AuthFailureReason, IdTokenCredential, SignInCredential;
 
 /// Who may use the app without an account.
 enum AuthMode {
@@ -80,20 +82,32 @@ final class AnonymousSession extends AppSession {
 /// The user of an account is signed in.
 final class AccountSession extends AppSession {
   /// Creates the session of the account [uid].
-  const AccountSession(this.uid, {this.email});
+  const AccountSession(this.uid, {this.email, this.issuers = const {}});
 
   @override
   final String uid;
 
-  /// The email address of the account, or `null` if it has none.
+  /// The email address of the account, or `null` if it has none, as an
+  /// account of a way to sign in may not.
   final String? email;
+
+  /// The identity providers that the account signs in with, each by the
+  /// `issuer` of its `SignInMethod` in `appSignInMethods` of
+  /// `sign_in_methods.dart`. It is empty for an account that signs in with
+  /// a password alone.
+  final Set<String> issuers;
 
   @override
   bool operator ==(Object other) =>
-      other is AccountSession && other.uid == uid && other.email == email;
+      other is AccountSession &&
+      other.uid == uid &&
+      other.email == email &&
+      other.issuers.length == issuers.length &&
+      other.issuers.containsAll(issuers);
 
   @override
-  int get hashCode => Object.hash(uid, email);
+  int get hashCode =>
+      Object.hash(uid, email, Object.hashAllUnordered(issuers));
 }
 
 /// The session of the app: who uses it, known before the first frame, and
@@ -203,7 +217,8 @@ final class AppSessionController extends ChangeNotifier
   /// comes back to it.
   ///
   /// A call made before the first start waits for it: [signIn], [signUp],
-  /// [sendPasswordReset], [signOut] and [deleteAccount]. Such calls run in
+  /// [signInWith], [sendPasswordReset], [signOut] and [deleteAccount]. Such
+  /// calls run in
   /// their order once the start has the user, and the future of this start
   /// completes after them, but waits for no call that is made while it
   /// runs. The mocks of the tests of an app use this: a call of [signUp]
@@ -267,6 +282,34 @@ final class AppSessionController extends ChangeNotifier
             : service.signUp(email: email, password: password),
       );
 
+  /// Signs in with [credential], which a way to sign in of
+  /// `appSignInMethods` got from an identity provider.
+  ///
+  /// An anonymous user gets the identity of the credential and keeps the id,
+  /// so everything that the user had stays. When that identity belongs to
+  /// another user already, or its email address has an account that signs
+  /// in in another way, the anonymous user signs in to that account
+  /// instead, or the call fails with
+  /// [AuthFailureReason.accountExistsWithOtherMethod], as the backend of the
+  /// provider decides. What the anonymous user had moves to the account as
+  /// `takeGuestData` says, as with [signIn].
+  Future<void> signInWith(SignInCredential credential) =>
+      _call((service) async {
+        if (_session is AnonymousSession) {
+          try {
+            await service.linkWith(credential);
+            return;
+          } on AuthFailure catch (failure) {
+            if (failure.reason != AuthFailureReason.credentialInUse &&
+                failure.reason !=
+                    AuthFailureReason.accountExistsWithOtherMethod) {
+              rethrow;
+            }
+          }
+        }
+        await _toAccount(() => service.signInWith(credential));
+      });
+
   /// Sends the message with which the owner of the account of [email] sets
   /// a new password. It completes whether [email] has an account or not.
   Future<void> sendPasswordReset(String email) =>
@@ -281,10 +324,27 @@ final class AppSessionController extends ChangeNotifier
   /// after [signOut], and in the mode [AuthMode.anonymous] it signs in
   /// anonymously again.
   ///
+  /// For an account that signs in with a way to sign in that
+  /// `revokesOnDeletion` and is available on this platform, it first asks
+  /// that way for a credential again, such as with the sheet of its
+  /// identity provider, so that the provider of sign-in can revoke the
+  /// tokens of the app. When the user closes the sheet, the call completes
+  /// and deletes nothing, which is no failure.
+  ///
   /// It may fail with [AuthFailureReason.recentSignInRequired]: the user
   /// then signs out, signs in again and repeats it.
-  Future<void> deleteAccount() =>
-      _call((service) => service.deleteAccount(), waitsForAnonymousUser: true);
+  Future<void> deleteAccount() => _call(
+        (service) async {
+          final revoking = _revokingMethod();
+          if (revoking == null) {
+            await service.deleteAccount();
+            return;
+          }
+          final fresh = await revoking.credential();
+          if (fresh != null) await service.deleteAccount(fresh: fresh);
+        },
+        waitsForAnonymousUser: true,
+      );
 
   /// Stops following the service and the lifecycle of the app. A call that
   /// is on its way still ends as it would have, but tells no listener, and
@@ -298,6 +358,22 @@ final class AppSessionController extends ChangeNotifier
     }
     super.dispose();
   }
+
+  /// The way to sign in of the account of the session that asks for a
+  /// credential again before the account is deleted and is available on
+  /// this platform, or `null` if it has none: the first of
+  /// `appSignInMethods` that does.
+  SignInMethod? _revokingMethod() => switch (_session) {
+        AccountSession(:final issuers) => appSignInMethods
+            .where(
+              (method) =>
+                  method.revokesOnDeletion &&
+                  method.isAvailable &&
+                  issuers.contains(method.issuer),
+            )
+            .firstOrNull,
+        _ => null,
+      };
 
   /// The user came back to the app. In the mode [AuthMode.anonymous], an
   /// app without a user then signs in anonymously again: as what follows
@@ -359,7 +435,7 @@ final class AppSessionController extends ChangeNotifier
   }
 
   /// Signs in to an account with [signIn], in whichever way, and moves what
-  /// an anonymous user had to that account.
+  /// an anonymous user had to that account, when it has another id.
   ///
   /// It takes the data before the sign-in, while the anonymous user is
   /// still signed in, and gives it once the user of another id has an
@@ -440,7 +516,11 @@ final class AppSessionController extends ChangeNotifier
     final session = switch (_service!.currentUser) {
       null => const SignedOutSession(),
       AuthUser(isAnonymous: true, :final uid) => AnonymousSession(uid),
-      AuthUser(:final uid, :final email) => AccountSession(uid, email: email),
+      AuthUser(:final uid, :final email, :final issuers) => AccountSession(
+          uid,
+          email: email,
+          issuers: Set.unmodifiable(issuers),
+        ),
     };
     if (session == _session) return;
     _session = session;

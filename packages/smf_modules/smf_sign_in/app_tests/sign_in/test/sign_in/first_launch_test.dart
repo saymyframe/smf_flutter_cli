@@ -33,6 +33,12 @@
 // the screen on top leaves it with what the user typed, and after a
 // sign-in there the user is on the screen that the app starts on.
 //
+// Then the user signs in with each way to sign in of the app on each platform
+// that it works on, through the module of the way to sign in and the module
+// that provides the sign-in, each with its mocks: the router leaves the
+// sign-in, an anonymous user keeps the id with the first identity of a way to
+// sign in, and a later sign-in with that identity finds its account.
+//
 // The screens only change the session of the app: the router of the app,
 // whichever module provides it, shows them and leaves them, as the router
 // role says of the guards of the routes. The matrix writes of_app.dart next
@@ -558,6 +564,58 @@ Future<void> _followsLinks(WidgetTester tester, String? uid) async {
   );
 }
 
+/// Signs in with each way to sign in of the app on each platform that it
+/// works on, with the mocks of its module and of the module that provides
+/// the sign-in: the router leaves the sign-in, an anonymous user keeps the
+/// id with the first identity of a way to sign in, and a later sign-in with
+/// that identity finds its account.
+Future<void> _signInWithEachWay(WidgetTester tester) async {
+  // The account of each identity, by the issuer of its way to sign in.
+  final accounts = <String, String>{};
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    await usePlatform(tester, platform);
+    for (final method in methodsHere()) {
+      await _signOut(tester);
+      if (authMode != AuthMode.required) await pushSignIn(tester);
+      final before = appSession.value;
+      await tapInRealTime(
+        tester,
+        methodButton(method),
+        until: () => appSession.hasAccount.value,
+      );
+      final after = appSession.value;
+      final where = 'the way to sign in of ${method.issuer} on '
+          '${platform.name}';
+      expect(
+        after is AccountSession && after.issuers.contains(method.issuer),
+        isTrue,
+        reason: 'A tap on the button of $where signs in to the account of '
+            'its identity, through the session of the app: it is '
+            '${sessionNow()}.',
+      );
+      final account = accounts[method.issuer];
+      if (account == null) {
+        accounts[method.issuer] = after.uid!;
+        expect(
+          after.uid == before.uid,
+          before is AnonymousSession,
+          reason: 'The first sign-in with $where gives an anonymous user '
+              'the identity with the same id.',
+        );
+      } else {
+        expect(
+          after.uid,
+          account,
+          reason: 'A later sign-in with $where finds the account of its '
+              'identity.',
+        );
+      }
+      _expectApp('Once the user has signed in with $where');
+    }
+  }
+  await usePlatform(tester, null);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   // A tap that reaches no widget fails the test where it misses.
@@ -573,7 +631,9 @@ void main() {
     'in place of the screen that it starts on, and an app that everyone may '
     'use shows it once code asks for it; a sign-up and a sign-in show the '
     'app, the next launch has the account, and a sign-out does what the '
-    'mode of the app says',
+    'mode of the app says; a sign-in with each way to sign in of the app '
+    'shows the app, and an anonymous user keeps the id with the first '
+    'identity',
     (tester) async {
       addTearDown(tester.platformDispatcher.clearAllTestValues);
       useTallPhone(tester);
@@ -586,6 +646,7 @@ void main() {
         case AuthMode.guest || AuthMode.anonymous:
           await _opensForEveryone(tester);
       }
+      await _signInWithEachWay(tester);
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

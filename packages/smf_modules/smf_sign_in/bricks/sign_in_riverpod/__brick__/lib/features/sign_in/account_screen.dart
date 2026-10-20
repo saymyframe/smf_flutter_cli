@@ -25,6 +25,7 @@ class AccountScreen extends ConsumerWidget {
       email: session is AccountSession ? session.email : null,
       busy: state.busy,
       failure: state.failure,
+      failedAction: state.failedAction,
       onSignOut: ref.read(accountProvider.notifier).signOut,
       onDeleteAccount: ref.read(accountProvider.notifier).deleteAccount,
     );

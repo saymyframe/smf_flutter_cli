@@ -23,6 +23,15 @@
 // at once, and the button of a form does not spin while its call is on its
 // way.
 //
+// The buttons of the ways to sign in of the sign-in and of the sign-up, on
+// Android and on iOS, scroll into view in the same way, and keep their labels
+// whole as the other buttons do, while their icons keep their size.
+//
+// Each page, and the sheet, scrolls under the inset at the bottom, such as the
+// bar of the home gesture, rather than stop above it: its scroll view reaches
+// the bottom edge of the screen, and scrolled to its end, it shows its last
+// control above the inset.
+//
 // The screen of the account scrolls to the address, to its button and to
 // its action in the same way, and so does the sheet to its two buttons,
 // which keep out of the insets. The title of the sheet is a header too, and
@@ -84,6 +93,11 @@ RenderParagraph _paragraphOf(WidgetTester tester, Finder finder) =>
 /// [what] names, on the small phone: to its top and to its bottom, each of
 /// which is then on the screen, out of its insets. A text at three times
 /// its size may make a button taller than the screen has room for at once.
+///
+/// The scroll view of a page reaches under the inset at the bottom, so the
+/// test scrolls the bottom of [target] to the inset, as far as the page
+/// scrolls, rather than with Scrollable.ensureVisible(), which aligns it
+/// with the edge of the scroll view, under the inset.
 Future<void> _expectReached(
   WidgetTester tester,
   Finder target,
@@ -93,7 +107,13 @@ Future<void> _expectReached(
   await Scrollable.ensureVisible(element);
   await tester.pumpAndSettle();
   final atTop = tester.getRect(target);
-  await Scrollable.ensureVisible(element, alignment: 1);
+  final position = Scrollable.of(element).position;
+  position.jumpTo(
+    (position.pixels + atTop.bottom - (_phone.height - _inset)).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    ),
+  );
   await tester.pumpAndSettle();
   final atBottom = tester.getRect(target);
   expect(
@@ -108,6 +128,45 @@ Future<void> _expectReached(
     reason: 'On a small phone with a large text size, the page scrolls to '
         'the top of $what and to its bottom, each of which is then on the '
         'screen, out of its insets: it is at $atTop and then at $atBottom.',
+  );
+}
+
+/// Checks that the page that the user sees, or the sheet over it, which
+/// [page] names, scrolls under the inset at the bottom of the small phone,
+/// such as the bar of the home gesture, and ends above it: the scroll view
+/// that holds [last], the last control of the page, which [what] names,
+/// reaches the bottom edge of the screen, and scrolled to its end, it shows
+/// that control above the inset. A scroll view that stops above the inset
+/// cuts what scrolls through it off there, with a hard edge over an empty
+/// strip.
+Future<void> _expectScrollsUnderInset(
+  WidgetTester tester,
+  Finder last, {
+  required String page,
+  required String what,
+}) async {
+  final scrollView =
+      find.ancestor(of: last, matching: find.byType(Scrollable)).first;
+  final shown = tester.getRect(scrollView);
+  expect(
+    shown.bottom,
+    _phone.height,
+    reason: 'On a small phone with an inset at its bottom, such as the bar '
+        'of the home gesture, the scroll view of $page reaches the bottom '
+        'edge of the screen, so that the page scrolls under the inset '
+        'rather than be cut off above it: the scroll view is at $shown on '
+        'a screen ${_phone.height} high.',
+  );
+  final position = tester.state<ScrollableState>(scrollView).position;
+  position.jumpTo(position.maxScrollExtent);
+  await tester.pumpAndSettle();
+  final end = tester.getRect(last);
+  expect(
+    end.bottom <= _phone.height - _inset,
+    isTrue,
+    reason: 'Scrolled to its end on the small phone, $page shows $what, its '
+        'last control, above the inset at the bottom of the screen: it is '
+        'at $end.',
   );
 }
 
@@ -253,6 +312,28 @@ void _expectLabel(
   );
 }
 
+/// Checks the buttons of the ways to sign in of the page that the user
+/// sees, in [language]: the page scrolls to each, its label keeps its words
+/// whole, and its icon keeps its size, whatever the text size of the device.
+Future<void> _expectMethodButtons(WidgetTester tester, String language) async {
+  for (final method in methodsHere()) {
+    final button = methodButton(method);
+    final label = method.label(tester.element(button));
+    await _expectReached(tester, button, 'the button "$label"');
+    _expectLabel(tester, button, label, language);
+    final icon = find.descendant(
+      of: button,
+      matching: find.byWidget(method.icon),
+    );
+    expect(
+      IconTheme.of(tester.element(icon)).size,
+      20,
+      reason: 'The icon of the button "$label" keeps its size with a large '
+          'text size: a logo does not grow with the text.',
+    );
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   // A tap that reaches no widget fails the test where it misses.
@@ -318,9 +399,12 @@ void main() {
 
       // The keyboard of the device, of about half the height of the small
       // phone: the page scrolls a field and the button that submits above
-      // it.
+      // it. The keyboard covers the inset at the bottom, so a device tells
+      // of no padding there while it is open.
       const keyboard = 260.0;
-      tester.view.viewInsets = const FakeViewPadding(bottom: keyboard);
+      tester.view
+        ..viewInsets = const FakeViewPadding(bottom: keyboard)
+        ..padding = const FakeViewPadding(top: _inset);
       await tester.pumpAndSettle();
       for (final (target, what) in [
         (passwordField, 'the field of the password'),
@@ -343,7 +427,9 @@ void main() {
               'begins.',
         );
       }
-      tester.view.viewInsets = FakeViewPadding.zero;
+      tester.view
+        ..viewInsets = FakeViewPadding.zero
+        ..padding = insets;
       await tester.pumpAndSettle();
 
       for (final language in languages) {
@@ -380,6 +466,12 @@ void main() {
           otherScreenAction,
           'the action "${texts['createAccount']}"',
         );
+        await _expectScrollsUnderInset(
+          tester,
+          otherScreenAction,
+          page: 'the sign-in, with the message of a failure',
+          what: 'the action "${texts['createAccount']}"',
+        );
         for (final (button, label) in [
           (_forgotPassword(), texts['forgotPassword']!),
           (submitButton, texts['submit']!),
@@ -387,6 +479,12 @@ void main() {
         ]) {
           _expectLabel(tester, button, label, language);
         }
+        // The buttons of the ways to sign in, on Android and on iOS.
+        for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+          await usePlatform(tester, platform);
+          await _expectMethodButtons(tester, language);
+        }
+        await usePlatform(tester, null);
         final message = failureMessage(AuthFailureReason.notConfigured);
         final hint = find.descendant(
           of: find.byType(FailureMessage),
@@ -460,12 +558,19 @@ void main() {
           otherScreenAction,
           'the action "${texts['haveAccount']}"',
         );
+        await _expectScrollsUnderInset(
+          tester,
+          otherScreenAction,
+          page: 'the screen that creates an account',
+          what: 'the action "${texts['haveAccount']}"',
+        );
         for (final (button, label) in [
           (submitButton, texts['signUpSubmit']!),
           (otherScreenAction, texts['haveAccount']!),
         ]) {
           _expectLabel(tester, button, label, language);
         }
+        await _expectMethodButtons(tester, language);
         await _tap(tester, otherScreenAction);
 
         // The screen that resets a password, and what it says once the
@@ -484,6 +589,12 @@ void main() {
           submitButton,
           'the button "${texts['sendLink']}"',
         );
+        await _expectScrollsUnderInset(
+          tester,
+          submitButton,
+          page: 'the screen that resets a password',
+          what: 'the button "${texts['sendLink']}"',
+        );
         _expectLabel(tester, submitButton, texts['sendLink']!, language);
         service.failure = null;
         await fill(tester, email: _email);
@@ -499,6 +610,12 @@ void main() {
           tester,
           back,
           'the button "${texts['backToSignIn']}"',
+        );
+        await _expectScrollsUnderInset(
+          tester,
+          back,
+          page: 'the page that tells that the message is sent',
+          what: 'the button "${texts['backToSignIn']}"',
         );
         _expectLabel(tester, back, texts['backToSignIn']!, language);
         await _tap(tester, back);
@@ -621,6 +738,12 @@ void main() {
           await _expectReached(tester, action, 'the action "$label"');
           _expectLabel(tester, action, label, language);
         }
+        await _expectScrollsUnderInset(
+          tester,
+          deleteAction,
+          page: 'the screen of the account',
+          what: 'the action "${texts['deleteAccount']}"',
+        );
 
         // The sheet that asks before a deletion.
         await _tap(tester, deleteAction);
@@ -646,6 +769,12 @@ void main() {
           await _expectReached(tester, button, 'the button "$label"');
           _expectLabel(tester, button, label, language);
         }
+        await _expectScrollsUnderInset(
+          tester,
+          cancel,
+          page: 'the sheet that asks before a deletion',
+          what: 'the button "${texts['cancel']}"',
+        );
         await _tap(tester, cancel);
         expect(
           (deleteSheet.evaluate().length, accountScreen.evaluate().length),

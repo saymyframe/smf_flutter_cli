@@ -17,6 +17,7 @@ import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
+import 'package:fake_infra/bundles/fake_sign_in_method_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
 import 'package:fake_infra/bundles/fake_steps_bundle.dart';
@@ -62,6 +63,11 @@ const _filesAgentNote = 'The assets of the fixture are in `assets/fixture/`, '
 /// The delegate that it gives the root has no texts of the module: a module
 /// gives its texts to the localization role, whose provider knows the
 /// languages of the app.
+///
+/// Its entitlements of the iOS app are of those that only a paid team
+/// signs, so it lists the step by hand of the role for them,
+/// [AppEntryRole.iosAppIdStep], and an app with it has a section of the
+/// steps by hand in its README.
 final class FakeSocketsModule extends SmfModule {
   /// Creates the module.
   const FakeSocketsModule();
@@ -176,11 +182,13 @@ final class FakeSocketsModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        // Only a paid team signs these entitlements, so the app lists the
+        // step by hand of its App ID with each.
+        ...AppEntryRole.paidTeamEntitlement(
           'aps-environment',
           const PlistString('development'),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        ...AppEntryRole.paidTeamEntitlement(
           'com.apple.developer.associated-domains',
           const PlistStringArray(['applinks:example.com']),
         ),
@@ -215,10 +223,10 @@ final class FakeSocketsModule extends SmfModule {
 /// README sections agree, the plist arrays of Info.plist and of the
 /// entitlements are united, the highest versions win, those of Gradle and
 /// of the library of core library desugaring too, the delegate of the
-/// localizations appears once, and so does the note for coding agents that
-/// both have. It puts nothing into the sockets of code of the native files,
-/// such as the components of the Android application, which would have
-/// the same code twice.
+/// localizations appears once, and so do the note for coding agents and the
+/// step by hand that both have. It puts nothing into the sockets of code of
+/// the native files, such as the components of the Android application,
+/// which would have the same code twice.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -256,11 +264,13 @@ final class FakeOverlapModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['remote-notification']),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        // Only a paid team signs these entitlements, so the app lists the
+        // step by hand of its App ID with each.
+        ...AppEntryRole.paidTeamEntitlement(
           'aps-environment',
           const PlistString('development'),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        ...AppEntryRole.paidTeamEntitlement(
           'com.apple.developer.associated-domains',
           const PlistStringArray(['applinks:example.org']),
         ),
@@ -854,6 +864,19 @@ final class FakeThemeModule extends SmfModule {
 /// to sign in with again, so the fixture deletes one whenever it is asked
 /// to.
 ///
+/// It takes a credential of any identity provider whose token is a test
+/// token: a JSON Web Token without a signature whose payload has the issuer
+/// of the credential, the subject of the identity, maybe its email address
+/// and maybe a nonce, the `rawNonce` of the credential, as
+/// [FakeSignInMethodModule] gives. It takes a token with a nonce once, as an
+/// identity provider that checks a nonce does. It keeps each identity by
+/// its issuer and its subject: a link keeps the id of the user, an identity
+/// of another user is `credentialInUse`, and one whose address has an
+/// account of another user is `accountExistsWithOtherMethod`. A refused
+/// link takes the token too, and keeps the identity for the credential
+/// object in an `Expando`, which a sign-in with the identical object then
+/// takes, as the role asks of a provider.
+///
 /// The template of the role does the rest in an app with it, whichever
 /// module provides the role: the session of the app, and the mode of the
 /// app, which the fixture has the same code for.
@@ -878,11 +901,77 @@ final class FakeAuthModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(fakeAuthBundle),
         authRole.data(
-          const RoleImplementation.async(
+          const AuthImplementation.async(
             type: TypeRef('FixtureAuth', import: _file),
             init: FactoryRef('openFixtureAuth', import: _file),
           ),
         ),
+      ];
+}
+
+/// A way to sign in with the identity provider of the fixture, which a
+/// module that requires the auth role gives the role: the template of the
+/// role lists it in `appSignInMethods` of the app, whichever module
+/// provides the role.
+///
+/// Its function asks no platform: it returns a credential a turn of the
+/// event loop later, as a sheet of an identity provider does, and each
+/// time of the one identity of the fixture, with a test token that the
+/// fixture sign-in takes, a new nonce and a new authorization code. It
+/// works on Android and on iOS, the App Store takes it as the equivalent
+/// of a login service of a third party, and the deletion of an account
+/// that signs in with it asks it for a credential again. Its label is in
+/// English and in Ukrainian, a text that it gives the localization role,
+/// which it uses.
+final class FakeSignInMethodModule extends SmfModule {
+  /// Creates the module.
+  const FakeSignInMethodModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_sign_in_method');
+
+  /// The issuer of the tokens of the identity provider of the fixture.
+  static const issuer = 'https://accounts.fixture.example.com';
+
+  /// The label of the button of the way to sign in.
+  static const label = LocalizedText(
+    'label',
+    en: 'Continue with the fixture',
+    translations: {'uk': 'Продовжити з фікстурою'},
+  );
+
+  static const _file = ImportRef.app(
+    'core/fixture_sign_in_method/fixture_sign_in_method.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Sign-in with the identity provider of the fixture '
+            '(fixture)',
+        kind: ModuleKinds.infrastructure,
+        requires: {authRole},
+        uses: {localizationRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          fakeSignInMethodBundle,
+          vars: const {'issuer': issuer},
+        ),
+        authRole.data(
+          const SignInMethod(
+            label: label,
+            icon: TypeRef('FixtureSignInIcon', import: _file),
+            platforms: {AppPlatform.android, AppPlatform.ios},
+            credential: FunctionRef('fixtureCredential', import: _file),
+            issuer: issuer,
+            appStore: AppStoreLogin.privacyFocused,
+            revokesOnDeletion: true,
+          ),
+        ),
+        localizationRole.data(const TextsData([label])),
       ];
 }
 

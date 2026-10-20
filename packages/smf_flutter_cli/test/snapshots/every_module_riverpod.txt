@@ -12,6 +12,8 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
 
+- The section "Finish the setup" of the README lists the steps of the setup that no command can do, such as a step in the web console of a service that the app uses. Only the developer of the app does them: when a task depends on one of them, point the developer to that section, and do not try to do the step yourself.
+
 After a change, run:
 
 ```bash
@@ -44,7 +46,11 @@ With `firebase_analytics`:
 - A call of `appSession` fails only with an `AuthFailure`. Catch it and show a text of the app for its `reason`. Show its `developerHint` in debug mode only. After `recentSignInRequired`, tell the user to sign out and sign in again.
 - `authMode` in that file says who may use the app without an account. It gates nothing on its own. What keeps a user from a screen is a guard of the routes. One that reads `appSession.allowsApp` stands before the whole app, and one that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. In an app without such a guard every screen is open, whatever the mode, and that includes a screen that needs an account. A screen does not redirect itself.
 - When an anonymous user signs in to an account that exists already, `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves from that user to the account. As generated it moves nothing: write there what the app keeps under the id of a user. Call no method of `appSession` in it, since the sign-in that calls it would wait for that call.
-- A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure` and `AuthFailureReason`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
+- `appSignInMethods` in `lib/core/auth/sign_in_methods.dart` lists the ways to sign in with an identity provider that the modules of the app add, and is empty without them. A screen of sign-in shows a button for each `SignInMethod` whose `isAvailable` is true, with its `label(context)` and its `icon`.
+- On a tap, the state of the screen awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. `credential()` returns `null` when the user closed the sheet of the identity provider, which is no failure: the screen goes back to how it was. Call `credential()` from the state of a screen, never within a call of `appSession`.
+- `appSession.signInWith` gives an anonymous user the identity with the same id, or signs in to the account that has the identity already, and `takeGuestData()` moves what the anonymous user had. `appSession.deleteAccount()` asks a way to sign in with `revokesOnDeletion` for a credential again itself, and deletes nothing when the user closes its sheet.
+- `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`.
+- A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
 
 With `firebase_auth`:
 
@@ -52,6 +58,9 @@ With `firebase_auth`:
 - That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section Firebase Authentication of `README.md`.
 - `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
+
+- For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`. After `flutterfire configure` for another project, it has to run again: run it only when asked.
+- Apple is enabled in the Firebase console by hand, with the private key of Apple that deleting an account needs. That key is a secret: never put it into the app or its repository.
 
 ## Crash reporting
 
@@ -91,6 +100,15 @@ With `event_bus`:
 - `bootstrap()` initializes Firebase with `DefaultFirebaseOptions` of `lib/firebase_options.dart`. That file is a placeholder until `flutterfire configure` writes it, and the app stops at start-up with an `UnsupportedError` until then. Do not write it by hand.
 - `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
 - A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
+
+## Google sign-in
+
+With `google_sign_in`:
+
+- `googleCredential()` in `lib/core/google_sign_in/google_sign_in.dart` is the function of the way to sign in with Google in `appSignInMethods`, on Android and iOS. In `lib/`, only that file imports the package. It starts the package once with `GoogleSignIn.instance.initialize()`, without ids, so that the package reads the ids of the clients of Google from the files of the app, and then calls `GoogleSignIn.instance.authenticate()`. It returns an `IdTokenCredential` with the `idToken` of the account and no `rawNonce`.
+- A closed sheet, `GoogleSignInExceptionCode.canceled`, returns `null`. These fail with `notConfigured`: `clientConfigurationError`, `providerConfigurationError`, and an `unknownError` whose description has the code `28444`, which Credential Manager answers when the Google project does not know the key that signed the Android app. Any other error fails with `unknown`. On iOS, an app without its iOS client of Google or its URL scheme stops at the sign-in: the Google Sign-In SDK throws a native exception there, which the package does not catch.
+- `GoogleSignInIcon` shows the logo of Google, `lib/core/google_sign_in/assets/google_logo.png`, which `pubspec.yaml` declares among the assets of the app, at the size of the `IconTheme` around it. The branding guidelines of Google allow no other colours or shape of the logo.
+- In a test, the package asks `GoogleSignInPlatform.instance` of google_sign_in_platform_interface, which the test replaces with a subclass of `GoogleSignInPlatform` that answers `init` and `authenticate`, before the first call of `googleCredential()`: the app starts the package once in a test file.
 
 ## Home
 
@@ -228,6 +246,15 @@ With `go_router`:
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
+## Sign in with Apple
+
+With `sign_in_with_apple`:
+
+- `appleCredential()` in `lib/core/apple_sign_in/apple_sign_in.dart` is the function of the way to sign in with Apple in `appSignInMethods`, which works on iOS only. In `lib/`, only that file imports the package. It asks `SignInWithApple.getAppleIDCredential()` with the SHA-256 hash of a nonce of `generateNonce()`, and returns an `IdTokenCredential` with that nonce as its `rawNonce` and the `authorizationCode` of the request.
+- Apple gives `givenName` and `familyName` only the first time that a user signs in to the app. A later credential has none, so do not expect the name there.
+- A closed sheet, `AuthorizationErrorCode.canceled`, returns `null`. `AuthorizationErrorCode.unknown`, which Apple answers when the app is signed without the entitlement `com.apple.developer.applesignin` of `ios/Runner/Runner.entitlements`, fails with `notConfigured`, and any other error with `unknown`.
+- In a test, `appleCredential()` asks Apple only while `debugDefaultTargetPlatformOverride` is `TargetPlatform.iOS`. The package asks the platform on the method channel `com.aboutyou.dart_packages.sign_in_with_apple`, whose method `performAuthorizationRequest` a test answers with a map whose `type` is `appleid`, with `identityToken`, `authorizationCode`, `givenName` and `familyName`.
+
 ## Sign-in
 
 - The sign-in is three screens in `lib/features/sign_in/`: `SignInScreen`, the route `sign_in.signIn` at `/sign_in`, and over it `SignUpScreen` at `/sign_in/sign_up` and `ResetPasswordScreen` at `/sign_in/reset_password`. Two guards of `routeGuards` show them, with the functions of `lib/features/sign_in/sign_in_guards.dart`. `sign_in.gate` reads `appSession.allowsApp` and shows the sign-in in place of every other screen. `sign_in.hasAccount` reads `appSession.hasAccount` and shows it in place of a route that needs an account.
@@ -235,11 +262,12 @@ With `go_router`:
 - The look of a screen and its state are in different files. The look is `SignInView`, `SignUpView` and `ResetPasswordView`, each in a file of its name, such as `lib/features/sign_in/sign_in_view.dart`. They share `AuthPage` of `lib/features/sign_in/sign_in_page.dart`, which is the frame of a screen, and the fields and buttons of `lib/features/sign_in/sign_in_widgets.dart`. All of them are plain Flutter widgets: a view gets the state of its call and callbacks, and imports nothing that manages state. The file of a screen, such as `lib/features/sign_in/sign_in_screen.dart`, only gives its view the state.
 - The fields, the buttons and the cards of the screens are those of the theme of the app. These files give a field no colour, border or padding, so for another look of a field, change the theme of the app. `OtherScreenAction`, the way from the sign-in to the sign-up and back, is a text button of the theme with one colour of its own, `colorScheme.secondary`.
 - The title of a page and the label of each button are each a `WholeWords` of `lib/features/sign_in/sign_in_widgets.dart`, not a `Text`. It breaks a text between its words and never inside one. Where the longest word would not fit, as on a narrow phone with a large text size, the text is only as large as that word allows. Use it for the label of a new button of the feature too.
+- Above the form, the sign-in and the sign-up show a `SignInMethodButton` for each way to sign in of `appSignInMethods` that works on the platform, from `signInMethodsHere()` of `lib/features/sign_in/sign_in_widgets.dart`. A module of a way to sign in adds its button, and this feature adds nothing for it. On a tap, `continueWith(method)` of the state calls `continueWithMethod()` of `lib/features/sign_in/sign_in_state.dart`, which awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. These buttons are white with a grey hairline, with the label and the icon in black, in both themes, so that a logo in its own colours stays on white.
 - That state is an `AuthActionState` or a `ResetPasswordState` of `lib/features/sign_in/sign_in_state.dart`. It stays busy once a sign-in or a sign-up succeeded, for as long as the session has the account, since the router leaves the screen then. When the session has no account again before that, the form is back.
 - A failure gets its text in `authFailureText()` of `lib/features/sign_in/sign_in_widgets.dart`, which has a text for every `AuthFailureReason`. `FailureMessage` shows that text, and the `developerHint` of the failure in debug mode only.
 - While a call is on its way, `SubmitButton` spins. A widget test that waits with `pumpAndSettle()` returns only once the call has ended, so until then it shows frames with `pump()`.
 - The screen of the account is `AccountScreen`, the route `sign_in.account` at `/sign_in/account`, with its look in `AccountView` of `lib/features/sign_in/account_view.dart`. The route needs an account, so for a user without one the router opens the sign-in over the page first. `AccountSetting` of `lib/features/sign_in/account_setting.dart` is the entry of the account on the settings screen. It opens the screen with `context.nav.signIn.account().push<void>()`. In an app without a main navigation, no screen leads to the settings screen: a screen of the app opens it through `context.nav`, or opens the account with that same call.
-- The screen of the account signs out and deletes the account through its state, an `AccountState`. It neither closes itself nor navigates after that: the router closes its page, or shows the sign-in in place of every screen. The state stays busy after a call that succeeded for as long as the session has no account. `confirmDeleteAccount()` asks in a sheet first, and the screen deletes the account only once that sheet is closed. `DestructiveAction` is a text button of the theme in the colour `colorScheme.error`.
+- The screen of the account signs out and deletes the account through its state, an `AccountState`. It neither closes itself nor navigates after that: the router closes its page, or shows the sign-in in place of every screen. The state stays busy after a call that succeeded for as long as the session has no account. `confirmDeleteAccount()` asks in a sheet first, and the screen deletes the account only once that sheet is closed. A failed deletion gets its text in `deletionFailureText()` of `lib/features/sign_in/account_view.dart`. `DestructiveAction` is a text button of the theme in the colour `colorScheme.error`.
 
 - The state of each screen is a provider in a file next to it, with its `Notifier`: `signInProvider`, `signUpProvider`, `resetPasswordProvider` and `accountProvider`. Each lasts as long as its screen. They sign in through `appSessionProvider` of `lib/features/sign_in/session_provider.dart`, which a test overrides with an `AppSessionController` of its own. Apart from the file of the guards, that file is the only one of the feature that names `appSession`.
 - A provider is one for the app, so two pages of one screen that are open at once show the same state.
@@ -274,6 +302,17 @@ With `flutter_riverpod`:
 
 A new Flutter project.
 
+## Finish the setup
+
+Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key) shows each one click by click:
+
+1. In Xcode, sign the iOS app with your paid Apple Developer team
+2. Turn on Google Analytics in the Firebase project, unless it is on already
+3. Turn on Sign in with Apple in Firebase Authentication
+4. Give Firebase your Sign in with Apple key, so that deleting an account works
+5. Before releasing on Google Play, give Firebase the SHA of your release keys
+6. Give Firebase your Apple push key (APNs key)
+
 ## Firebase
 
 The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with the options of `DefaultFirebaseOptions` in `lib/firebase_options.dart`. `flutterfire configure` of the FlutterFire CLI writes these options when it registers the app in a Firebase project, together with `android/app/google-services.json`, `firebase.json` and, on macOS, `ios/Runner/GoogleService-Info.plist`. Until then, the options are a placeholder, and the app stops at start-up with an `UnsupportedError`.
@@ -294,19 +333,39 @@ Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global
 
 The app signs in with [Firebase Authentication](https://firebase.google.com/docs/auth) through `firebase_auth`: `lib/core/auth/firebase_auth_service.dart` implements the sign-in service of the app on it.
 
-The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, and Anonymous when the mode of the app is `anonymous` (see the section Sign-in). Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
+The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, Anonymous when the mode of the app is `anonymous` (see the section Sign-in), and Google and Apple for the ways to sign in of the app. Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
 
-`smf create` enables them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
+`smf create` asks to enable them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart
 ```
 
-The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
+The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app but those that Google needs, as told below. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart --account <email>
 ```
+
+For Google sign-in, the script also gives Google the name of the app and the email address of the account of the Firebase CLI for the consent screen that users see when they sign in. The address is the support email there. When the Firebase CLI runs as no user account, as with a service account, the script leaves Google out and says so: run it with `--account <email>`, or enable Google in the Firebase console.
+
+The script sets up the rest of what Google needs only for the project that `firebase.json` names, not for one that `--project` names:
+
+- It registers the SHA-1 and SHA-256 of the Android debug key of the machine that runs it, which Google uses to recognize the Android app. When the machine has no debug key yet, the script creates it, as the first debug build would. Every machine has a debug key of its own, so run the script on each machine that builds the app for debugging, or add the SHA of its key in the Firebase console, in the settings of the Android app.
+- It downloads the Firebase files of the app again, such as `android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist`, once they have the clients of Google, and writes them where `flutterfire configure` wrote them.
+- It writes the URL scheme of the iOS app, `REVERSED_CLIENT_ID` of `ios/Runner/GoogleService-Info.plist`, into `CFBundleURLTypes` of `ios/Runner/Info.plist`. It adds the scheme and removes none: after a change of the project, remove the scheme of the former project there by hand.
+
+Run the script again after `flutterfire configure` for another project.
+
+A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, with the id of the Android app from `firebase.json`:
+
+```bash
+firebase apps:android:sha:create <appId> <sha>
+```
+
+The section Finish the setup lists this among the steps that you do by hand.
+
+Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays. The section Finish the setup lists both, adding Apple and entering the key, among the steps that you do by hand.
 
 You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in the project that the app is configured for.
 
@@ -365,6 +424,43 @@ To change the mode, change the value of `authMode`. The provider of sign-in has 
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
+Besides an email address and a password, the app signs in with these identity providers, the ways to sign in of `appSignInMethods` in `lib/core/auth/sign_in_methods.dart`:
+
+- Continue with Google, on Android and iOS.
+- Continue with Apple, on iOS. Deleting an account that signs in this way asks the identity provider for a credential again first, so that the provider of sign-in can revoke the tokens that it gave the app. If the user closes its sheet, nothing is deleted.
+
+A screen of sign-in shows the button of a way to sign in only on the platforms that it works on. When an anonymous user signs in this way and no account has the identity yet, the user gets the identity and keeps the id. Otherwise the user signs in to that account, as with a password, and `takeGuestData()` moves what the anonymous user had. The sign-in may also fail, because the address of the identity has an account that signs in in another way: the provider of sign-in decides which.
+
+## Sign in with Apple
+
+The app signs in with Apple on iOS: `appleCredential()` in `lib/core/apple_sign_in/apple_sign_in.dart` asks Apple for a credential with the sheet of Sign in with Apple, and a screen of sign-in shows the button of Apple on iOS only. On Android the app has no Sign in with Apple.
+
+Sign in with Apple is a capability of the app. The key `com.apple.developer.applesignin` in `ios/Runner/Runner.entitlements` asks for it, and the App ID of the app needs it too: when Xcode manages the signing of the app, it adds the capability to the App ID. Signing with the capability needs a team of the paid Apple Developer Program. A free personal team cannot sign the app for an iPhone: to run the app there, remove the key from `ios/Runner/Runner.entitlements`, and signing in with Apple then fails with the reason `notConfigured`. Without the capability, Apple answers with an unknown error, which fails with `notConfigured` too.
+
+Apple gives the name of the user only the first time that the user signs in to the app: the credential has it then, and a later one has none. The user may also hide the email address. The account then gets an address of the private relay of Apple, which forwards to the user only the messages of senders that are registered with Apple. Register the domains or the addresses from which the app and its provider of sign-in send email, such as the message of a password reset, in your Apple Developer account, under Sign in with Apple for Email Communication.
+
+The App Store asks an app with Sign in with Apple to revoke the tokens that Apple gave it when the user deletes the account (App Store Review Guideline 5.1.1(v)). So `appSession.deleteAccount()` asks Apple for a new authorization first, and the provider of sign-in revokes the tokens with its code. The backend of the app needs a key of Apple to revoke them, and the documentation of the provider of sign-in tells where to set it. If the user closes the sheet of Apple, nothing is deleted.
+
+The icon of the button, `AppleSignInIcon` in `lib/core/apple_sign_in/apple_sign_in.dart`, is the Apple logo of the Material icons. Apple asks a custom button of Sign in with Apple to use the logo artwork of [Apple Design Resources](https://developer.apple.com/design/resources/), and App Review checks every such button. Before you submit the app, download that logo and show it in `AppleSignInIcon`.
+
+## Google sign-in
+
+The app signs in with Google on Android and iOS: `googleCredential()` in `lib/core/google_sign_in/google_sign_in.dart` asks Google for a credential with the sheet of Google sign-in. A sign-in screen of the app, such as the one of the `sign_in` module, shows the button of Google.
+
+Google sign-in needs the Google project of the app to know the app, and the app to know the clients of Google:
+
+- On Android, Google knows the app by the name of its package and the SHA-1 of each key that signs it: the debug key of each machine that builds the app, the upload key, and the app signing key of Google Play.
+- On iOS, the app needs the id of its iOS client of Google, and the reversed id of that client as a URL scheme in `CFBundleURLTypes` of `ios/Runner/Info.plist`, through which the sheet of Google returns to the app.
+- On both, Google issues the ID token to the web client of the Google project, the server client, against which the backend of the provider of sign-in checks the token.
+
+`googleCredential()` starts google_sign_in with `GoogleSignIn.instance.initialize()` without ids, so google_sign_in reads them from the files of the app: on iOS `CLIENT_ID` of `GoogleService-Info.plist`, or `GIDClientID` of `ios/Runner/Info.plist`, and on Android the string resource `default_web_client_id`. The section of the provider of sign-in in this README tells which of these it sets up. To use ids of your own, pass them to `initialize()` in `googleCredential()` of `lib/core/google_sign_in/google_sign_in.dart`. Until Google sign-in is set up, signing in with Google fails with the reason `notConfigured`, and the `developerHint` of the failure tells what Google answered.
+
+On iOS, the Google Sign-In SDK stops the app instead when the app has no iOS client of Google or not its URL scheme: google_sign_in does not catch the exception that the SDK throws then. Set both up before you try the button on iOS.
+
+If the button of Google does nothing on Android, check that the SHA-1 of the key that signs the app is registered with Google: Credential Manager may answer a key that Google does not know as if the user had closed the sheet.
+
+The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_sign_in.dart`, shows the "G" of Google from `lib/core/google_sign_in/assets/google_logo.png`, the logo of the Google Sign-In SDK (Apache License 2.0). The [branding guidelines of Sign in with Google](https://developers.google.com/identity/branding-guidelines) ask a custom button to show that logo in its own colours, on a light background, without a change: keep the image as it is.
+
 ## Languages
 
 The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again. The entry `LanguageSetting` of the settings screen, in `lib/core/l10n/language_setting.dart`, lets the user choose.
@@ -392,7 +488,7 @@ Firebase sends messages to iOS through the Apple Push Notification service (APNs
 1. In your Apple Developer account, under Certificates, Identifiers & Profiles, create a key under Keys with the Apple Push Notifications service (APNs) enabled. Download its `.p8` file, and note its Key ID and your Team ID.
 2. In the Firebase console, open the settings of the project, then Cloud Messaging, and upload the key under the configuration of the Apple app, with its Key ID and your Team ID.
 
-A key sends only to the apps of its team, so register the bundle id of the app as an App ID in that team, with Push Notifications. The key matters only for sending: the iOS app gets its address without it, but Firebase cannot send to that address.
+A key sends only to the apps of its team, so register the bundle id of the app as an App ID in that team, with Push Notifications. The key matters only for sending: the iOS app gets its address without it, but Firebase cannot send to that address. The section Finish the setup lists the upload among the steps that you do by hand.
 
 To send this device a test message, run the app in debug mode and copy the address that it prints. In the Firebase console, open Messaging, create a notification campaign, choose Send test message and paste the address. A server sends a message with the HTTP v1 API of Firebase Cloud Messaging: `POST https://fcm.googleapis.com/v1/projects/<project-id>/messages:send`, with an OAuth token of a service account of the project and the address as the `token` of the message.
 
@@ -789,6 +885,10 @@ import UIKit
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 	<key>aps-environment</key>
 	<string>development</string>
 </dict>
@@ -1110,6 +1210,106 @@ class StatusBarIcons extends StatelessWidget {
     );
   }
 }
+=== lib/core/apple_sign_in/apple_sign_in.dart (apple_sign_in) ===
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
+import '../auth/app_session.dart';
+
+/// The issuer of the ID tokens of Apple.
+const String _issuer = 'https://appleid.apple.com';
+
+/// Asks Apple for a credential with the sheet of Sign in with Apple, and
+/// returns it, or `null` when the user closed the sheet.
+///
+/// The request asks for the email address and the full name of the user,
+/// with the SHA-256 hash of a new random nonce, which Apple writes into the
+/// ID token. The credential has the nonce itself, with which the provider
+/// of sign-in checks the token, and the authorization code of this request,
+/// with which the provider can revoke the tokens that Apple gave the app
+/// when the account is deleted. Apple gives the name of the user only the
+/// first time that the user signs in to the app, so a later credential has
+/// none.
+///
+/// It works on iOS only. On another platform it fails with
+/// `notConfigured` without asking Apple. Apple answers an app without the
+/// capability Sign in with Apple with an unknown error, which fails with
+/// `notConfigured` too, and with a hint at the section of the README of the
+/// app on it, "Sign in with Apple". Any other error fails with `unknown`.
+Future<SignInCredential?> appleCredential() async {
+  if (defaultTargetPlatform != TargetPlatform.iOS) {
+    throw AuthFailure(
+      AuthFailureReason.notConfigured,
+      developerHint:
+          'Sign in with Apple works on iOS only, and the app runs on '
+          '${defaultTargetPlatform.name}.',
+    );
+  }
+  final rawNonce = generateNonce();
+  final AuthorizationCredentialAppleID apple;
+  try {
+    apple = await SignInWithApple.getAppleIDCredential(
+      scopes: const [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: sha256.convert(utf8.encode(rawNonce)).toString(),
+    );
+  } on SignInWithAppleAuthorizationException catch (error) {
+    switch (error.code) {
+      case AuthorizationErrorCode.canceled:
+        return null;
+      case AuthorizationErrorCode.unknown:
+        throw AuthFailure(
+          AuthFailureReason.notConfigured,
+          developerHint:
+              'Apple answered with an unknown error (${error.message}). It '
+              'does so when the app is not signed with the capability Sign '
+              'in with Apple, which needs a team of the paid Apple Developer '
+              'Program, and may do so on a device without an Apple Account. '
+              'See the section "Sign in with Apple" of the README of the app.',
+        );
+      default:
+        throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+    }
+  } on Object catch (error) {
+    throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+  }
+  final idToken = apple.identityToken;
+  if (idToken == null) {
+    throw const AuthFailure(
+      AuthFailureReason.unknown,
+      developerHint: 'Apple gave no identity token.',
+    );
+  }
+  return IdTokenCredential(
+    issuer: _issuer,
+    idToken: idToken,
+    rawNonce: rawNonce,
+    authorizationCode: apple.authorizationCode,
+    givenName: apple.givenName,
+    familyName: apple.familyName,
+  );
+}
+
+/// The icon of the button of Sign in with Apple: the Apple logo of the
+/// Material icons, which takes the colour of the label of the button.
+///
+/// Apple asks a custom button of Sign in with Apple for its own logo
+/// artwork, which Apple Design Resources has, and App Review checks every
+/// such button: see the section of the README of the app on it,
+/// "Sign in with Apple".
+class AppleSignInIcon extends StatelessWidget {
+  /// Creates the icon.
+  const AppleSignInIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Icon(Icons.apple);
+}
 === lib/core/auth/app_session.dart (role:auth) ===
 import 'dart:async';
 
@@ -1119,8 +1319,10 @@ import 'package:my_app/core/auth/firebase_auth_service.dart' as impl0;
 
 import 'auth_service.dart';
 import 'guest_data.dart';
+import 'sign_in_methods.dart';
 
-export 'auth_service.dart' show AuthFailure, AuthFailureReason;
+export 'auth_service.dart'
+    show AuthFailure, AuthFailureReason, IdTokenCredential, SignInCredential;
 
 /// Who may use the app without an account.
 enum AuthMode {
@@ -1194,20 +1396,31 @@ final class AnonymousSession extends AppSession {
 /// The user of an account is signed in.
 final class AccountSession extends AppSession {
   /// Creates the session of the account [uid].
-  const AccountSession(this.uid, {this.email});
+  const AccountSession(this.uid, {this.email, this.issuers = const {}});
 
   @override
   final String uid;
 
-  /// The email address of the account, or `null` if it has none.
+  /// The email address of the account, or `null` if it has none, as an
+  /// account of a way to sign in may not.
   final String? email;
+
+  /// The identity providers that the account signs in with, each by the
+  /// `issuer` of its `SignInMethod` in `appSignInMethods` of
+  /// `sign_in_methods.dart`. It is empty for an account that signs in with
+  /// a password alone.
+  final Set<String> issuers;
 
   @override
   bool operator ==(Object other) =>
-      other is AccountSession && other.uid == uid && other.email == email;
+      other is AccountSession &&
+      other.uid == uid &&
+      other.email == email &&
+      other.issuers.length == issuers.length &&
+      other.issuers.containsAll(issuers);
 
   @override
-  int get hashCode => Object.hash(uid, email);
+  int get hashCode => Object.hash(uid, email, Object.hashAllUnordered(issuers));
 }
 
 /// The session of the app: who uses it, known before the first frame, and
@@ -1317,7 +1530,8 @@ final class AppSessionController extends ChangeNotifier
   /// comes back to it.
   ///
   /// A call made before the first start waits for it: [signIn], [signUp],
-  /// [sendPasswordReset], [signOut] and [deleteAccount]. Such calls run in
+  /// [signInWith], [sendPasswordReset], [signOut] and [deleteAccount]. Such
+  /// calls run in
   /// their order once the start has the user, and the future of this start
   /// completes after them, but waits for no call that is made while it
   /// runs. The mocks of the tests of an app use this: a call of [signUp]
@@ -1380,6 +1594,34 @@ final class AppSessionController extends ChangeNotifier
             : service.signUp(email: email, password: password),
       );
 
+  /// Signs in with [credential], which a way to sign in of
+  /// `appSignInMethods` got from an identity provider.
+  ///
+  /// An anonymous user gets the identity of the credential and keeps the id,
+  /// so everything that the user had stays. When that identity belongs to
+  /// another user already, or its email address has an account that signs
+  /// in in another way, the anonymous user signs in to that account
+  /// instead, or the call fails with
+  /// [AuthFailureReason.accountExistsWithOtherMethod], as the backend of the
+  /// provider decides. What the anonymous user had moves to the account as
+  /// `takeGuestData` says, as with [signIn].
+  Future<void> signInWith(SignInCredential credential) => _call((
+    service,
+  ) async {
+    if (_session is AnonymousSession) {
+      try {
+        await service.linkWith(credential);
+        return;
+      } on AuthFailure catch (failure) {
+        if (failure.reason != AuthFailureReason.credentialInUse &&
+            failure.reason != AuthFailureReason.accountExistsWithOtherMethod) {
+          rethrow;
+        }
+      }
+    }
+    await _toAccount(() => service.signInWith(credential));
+  });
+
   /// Sends the message with which the owner of the account of [email] sets
   /// a new password. It completes whether [email] has an account or not.
   Future<void> sendPasswordReset(String email) =>
@@ -1394,10 +1636,24 @@ final class AppSessionController extends ChangeNotifier
   /// after [signOut], and in the mode [AuthMode.anonymous] it signs in
   /// anonymously again.
   ///
+  /// For an account that signs in with a way to sign in that
+  /// `revokesOnDeletion` and is available on this platform, it first asks
+  /// that way for a credential again, such as with the sheet of its
+  /// identity provider, so that the provider of sign-in can revoke the
+  /// tokens of the app. When the user closes the sheet, the call completes
+  /// and deletes nothing, which is no failure.
+  ///
   /// It may fail with [AuthFailureReason.recentSignInRequired]: the user
   /// then signs out, signs in again and repeats it.
-  Future<void> deleteAccount() =>
-      _call((service) => service.deleteAccount(), waitsForAnonymousUser: true);
+  Future<void> deleteAccount() => _call((service) async {
+    final revoking = _revokingMethod();
+    if (revoking == null) {
+      await service.deleteAccount();
+      return;
+    }
+    final fresh = await revoking.credential();
+    if (fresh != null) await service.deleteAccount(fresh: fresh);
+  }, waitsForAnonymousUser: true);
 
   /// Stops following the service and the lifecycle of the app. A call that
   /// is on its way still ends as it would have, but tells no listener, and
@@ -1411,6 +1667,23 @@ final class AppSessionController extends ChangeNotifier
     }
     super.dispose();
   }
+
+  /// The way to sign in of the account of the session that asks for a
+  /// credential again before the account is deleted and is available on
+  /// this platform, or `null` if it has none: the first of
+  /// `appSignInMethods` that does.
+  SignInMethod? _revokingMethod() => switch (_session) {
+    AccountSession(:final issuers) =>
+      appSignInMethods
+          .where(
+            (method) =>
+                method.revokesOnDeletion &&
+                method.isAvailable &&
+                issuers.contains(method.issuer),
+          )
+          .firstOrNull,
+    _ => null,
+  };
 
   /// The user came back to the app. In the mode [AuthMode.anonymous], an
   /// app without a user then signs in anonymously again: as what follows
@@ -1470,7 +1743,7 @@ final class AppSessionController extends ChangeNotifier
   }
 
   /// Signs in to an account with [signIn], in whichever way, and moves what
-  /// an anonymous user had to that account.
+  /// an anonymous user had to that account, when it has another id.
   ///
   /// It takes the data before the sign-in, while the anonymous user is
   /// still signed in, and gives it once the user of another id has an
@@ -1552,7 +1825,11 @@ final class AppSessionController extends ChangeNotifier
     final session = switch (_service!.currentUser) {
       null => const SignedOutSession(),
       AuthUser(isAnonymous: true, :final uid) => AnonymousSession(uid),
-      AuthUser(:final uid, :final email) => AccountSession(uid, email: email),
+      AuthUser(:final uid, :final email, :final issuers) => AccountSession(
+        uid,
+        email: email,
+        issuers: Set.unmodifiable(issuers),
+      ),
     };
     if (session == _session) return;
     _session = session;
@@ -1617,7 +1894,12 @@ Future<void> initAuth() async {
 /// A user as the provider of sign-in knows them.
 final class AuthUser {
   /// Creates the user [uid].
-  const AuthUser({required this.uid, required this.isAnonymous, this.email});
+  const AuthUser({
+    required this.uid,
+    required this.isAnonymous,
+    this.email,
+    this.issuers = const {},
+  });
 
   /// The id of the user. It stays the same for as long as the user exists,
   /// also when an anonymous user gets an account.
@@ -1630,6 +1912,64 @@ final class AuthUser {
   /// The email address of the user, or `null` for a user without one, such
   /// as an anonymous user.
   final String? email;
+
+  /// The identity providers whose identities the user signs in with, each
+  /// by the issuer of its tokens, such as `https://accounts.example.com`:
+  /// the [IdTokenCredential.issuer] of a credential that the user signed in
+  /// or linked with. It is empty for a user who signs in with a password
+  /// alone, and for an anonymous user.
+  final Set<String> issuers;
+}
+
+/// What a way to sign in got from an identity provider, such as the token
+/// of an account of the user at another service, with which the provider
+/// of sign-in signs the user in: [AuthService.signInWith] and
+/// [AuthService.linkWith] take it.
+sealed class SignInCredential {
+  const SignInCredential();
+}
+
+/// An OpenID Connect ID token that an identity provider issued, with what
+/// came with it.
+final class IdTokenCredential extends SignInCredential {
+  /// Creates the credential of [idToken], which [issuer] issued.
+  const IdTokenCredential({
+    required this.issuer,
+    required this.idToken,
+    this.rawNonce,
+    this.authorizationCode,
+    this.givenName,
+    this.familyName,
+  });
+
+  /// The identity provider that issued the token: the `iss` of the token,
+  /// an https URL such as `https://accounts.example.com`.
+  final String issuer;
+
+  /// The ID token, a JSON Web Token.
+  final String idToken;
+
+  /// The nonce whose hash the request for the token had, which the
+  /// identity provider wrote into the token, or `null` if the request had
+  /// none. The provider of sign-in passes it on where its backend checks
+  /// the token against it.
+  final String? rawNonce;
+
+  /// The authorization code that came with the token, or `null`. With it, a
+  /// provider of sign-in revokes the tokens that the identity provider gave
+  /// the app when the account is deleted.
+  final String? authorizationCode;
+
+  /// The given name of the user, or `null`, for an identity provider that
+  /// tells it apart from the token, and maybe only at the first sign-in.
+  final String? givenName;
+
+  /// The family name of the user, as [givenName].
+  final String? familyName;
+
+  /// Names the issuer, and no token, so that a token never reaches a log.
+  @override
+  String toString() => 'IdTokenCredential($issuer)';
 }
 
 /// Why a call of sign-in failed.
@@ -1637,10 +1977,24 @@ enum AuthFailureReason {
   /// The email address and the password match no account. A wrong password
   /// and an address without an account are this one reason, so that nobody
   /// learns from the app which addresses have an account.
+  ///
+  /// It is also the reason of a [SignInCredential] that the provider
+  /// refuses, such as one that expired or that was issued for another app,
+  /// and of one of another user than the one whose account is deleted.
   invalidCredentials,
 
   /// The email address has an account already.
   emailInUse,
+
+  /// The identity of a [SignInCredential] belongs to another user already,
+  /// so [AuthService.linkWith] gives it to nobody else. The session then
+  /// signs in to that user.
+  credentialInUse,
+
+  /// The email address of the identity of a [SignInCredential] has an
+  /// account that signs in in another way, such as with a password. The
+  /// user signs in that way.
+  accountExistsWithOtherMethod,
 
   /// The provider takes no password as weak as this one.
   weakPassword,
@@ -1715,14 +2069,18 @@ final class AuthFailure implements Exception {
 ///   server does not answer, its future completes with
 ///   [AuthFailureReason.network].
 /// - A call that fails leaves the user who is signed in as that user was:
-///   an anonymous user stays signed in when [linkPassword] fails, and so
-///   does whoever is signed in when [signIn] or [signUp] fails. The one
-///   exception is a call for a user whose session has ended on the server.
-/// - [linkPassword] and [deleteAccount] are calls for the user who is
-///   signed in. Made when nobody is signed in, or when the session of that
-///   user has ended on the server, such a call fails with
+///   an anonymous user stays signed in when [linkPassword] or [linkWith]
+///   fails, and so does whoever is signed in when [signIn], [signUp] or
+///   [signInWith] fails. The one exception is a call for a user whose
+///   session has ended on the server.
+/// - [linkPassword], [linkWith] and [deleteAccount] are calls for the user
+///   who is signed in. Made when nobody is signed in, or when the session of
+///   that user has ended on the server, such a call fails with
 ///   [AuthFailureReason.recentSignInRequired], and in the second case it
 ///   signs the user out on the device first.
+/// - A [SignInCredential] whose identity provider the provider does not
+///   take fails with [AuthFailureReason.notConfigured], with the issuer in
+///   the [AuthFailure.developerHint].
 abstract interface class AuthService {
   /// The user who is signed in on this device, or `null`.
   AuthUser? get currentUser;
@@ -1765,6 +2123,44 @@ abstract interface class AuthService {
   /// stays signed in, with the same id.
   Future<void> linkPassword({required String email, required String password});
 
+  /// Signs in with [credential], which a way to sign in got from an
+  /// identity provider: to the user of its identity, whom it creates when
+  /// the identity is new.
+  ///
+  /// It is also called while a user is signed in, an anonymous one or the
+  /// user of another account: the user of the identity then replaces that
+  /// user on the device. When it fails, that user stays signed in.
+  ///
+  /// It takes a credential that [linkWith] refused just before, with
+  /// [AuthFailureReason.credentialInUse] or
+  /// [AuthFailureReason.accountExistsWithOtherMethod]: the session passes
+  /// the identical object. An identity provider may take a credential only
+  /// once, so the service signs in with what its backend answered the
+  /// refused link for that object, or with the credential itself when the
+  /// backend gave nothing. For an identity whose email address has an
+  /// account that signs in in another way, it fails with
+  /// [AuthFailureReason.accountExistsWithOtherMethod] or signs in to that
+  /// account, as the backend of the provider decides.
+  Future<void> signInWith(SignInCredential credential);
+
+  /// Gives the user who is signed in the identity of [credential]: the user
+  /// keeps the [AuthUser.uid], is no longer anonymous, and signs in with
+  /// that identity from then on. The session calls it for an anonymous
+  /// user.
+  ///
+  /// When the identity belongs to another user, it fails with
+  /// [AuthFailureReason.credentialInUse], and when its email address has an
+  /// account of another user, with
+  /// [AuthFailureReason.accountExistsWithOtherMethod]. Either way it changes
+  /// nothing: the user stays signed in, with the same id.
+  ///
+  /// When it fails with either reason, it keeps what its backend answered
+  /// for this credential object, such as a credential to sign in with,
+  /// without holding the token longer than needed. The session passes the
+  /// identical object to [signInWith], which uses that answer, or the
+  /// credential itself when the backend gave nothing.
+  Future<void> linkWith(SignInCredential credential);
+
   /// Creates an anonymous user, with an id of its own, and signs in as that
   /// user.
   Future<void> signInAnonymously();
@@ -1789,7 +2185,16 @@ abstract interface class AuthService {
   /// was created, it may fail with
   /// [AuthFailureReason.recentSignInRequired]. It then succeeds once the
   /// user has signed in again, in whichever way the account allows.
-  Future<void> deleteAccount();
+  ///
+  /// With [fresh], a credential that a way to sign in of the user got just
+  /// before, the service first signs the user in again with it, so the
+  /// deletion needs no recent sign-in, and revokes the tokens that the
+  /// identity provider gave the app where its backend can, such as with
+  /// [IdTokenCredential.authorizationCode]. A credential of another user
+  /// fails with [AuthFailureReason.invalidCredentials], and a revocation
+  /// that fails, such as one that the backend is not set up for, with
+  /// [AuthFailureReason.notConfigured]. Either way nothing is deleted.
+  Future<void> deleteAccount({SignInCredential? fresh});
 }
 === lib/core/auth/firebase_auth_service.dart (firebase_auth) ===
 import 'dart:async';
@@ -1821,17 +2226,56 @@ const _endedSession = {
   'no-current-user',
 };
 
+/// The codes of an answer of Firebase to a revocation that are no matter of
+/// the setup of the Apple sign-in method of the project: a request that did
+/// not reach Firebase, too many attempts, a disabled account, and a session
+/// that has ended.
+const _notOfSetup = {
+  'network-request-failed',
+  'too-many-requests',
+  'user-disabled',
+  ..._endedSession,
+};
+
+/// The issuer of the ID tokens of Google.
+const _google = 'https://accounts.google.com';
+
+/// The issuer of the ID tokens of Apple.
+const _apple = 'https://appleid.apple.com';
+
+/// The identity providers whose credentials the service takes, by the
+/// issuer of their tokens: the id of each in Firebase Authentication, and
+/// its name among the sign-in methods of the Firebase console.
+const _providers = {
+  _google: (id: 'google.com', name: 'Google'),
+  _apple: (id: 'apple.com', name: 'Apple'),
+};
+
+/// The reasons of the codes with which Firebase refuses
+/// [FirebaseAuthService.linkWith] because the identity of the credential,
+/// or its email address, belongs to another user. For
+/// [FirebaseAuthService.linkPassword], the same codes mean that the email
+/// address has an account, `emailInUse`.
+const _linkReasons = {
+  'credential-already-in-use': AuthFailureReason.credentialInUse,
+  'email-already-in-use': AuthFailureReason.accountExistsWithOtherMethod,
+  'account-exists-with-different-credential':
+      AuthFailureReason.accountExistsWithOtherMethod,
+};
+
 /// Sign-in with
 /// [Firebase Authentication](https://firebase.google.com/docs/auth), with
-/// an email address and a password, and as an anonymous user.
+/// an email address and a password, as an anonymous user, and with the
+/// credentials that the ways to sign in of Google and Apple get.
 ///
 /// The code of the app does not use it: it signs in through `appSession` of
 /// `app_session.dart`.
 ///
 /// The ways to sign in are enabled in the Firebase project, not here:
-/// Email/Password, and Anonymous for an app that signs in anonymous users.
-/// `tool/enable_firebase_sign_in.dart` enables them. Until they are, a call
-/// fails with [AuthFailureReason.notConfigured], and its
+/// Email/Password, Anonymous for an app that signs in anonymous users, and
+/// Google and Apple for an app with their ways to sign in.
+/// `tool/enable_firebase_sign_in.dart` enables all but Apple. Until they
+/// are, a call fails with [AuthFailureReason.notConfigured], and its
 /// [AuthFailure.developerHint] tells how to enable them.
 ///
 /// An empty address or password fails here, before Firebase is asked, since
@@ -1839,11 +2283,38 @@ const _endedSession = {
 /// [AuthFailureReason.invalidEmail], and an empty password with
 /// [AuthFailureReason.invalidCredentials] in [signIn] and with
 /// [AuthFailureReason.weakPassword] in [signUp] and [linkPassword].
+///
+/// A credential of Google goes to Firebase with its ID token, and one of
+/// Apple with its ID token, its raw nonce and the name of the user:
+/// `GoogleAuthProvider` takes no nonce, and Firebase does not check the
+/// nonce of a token of Google. A credential of another identity
+/// provider fails with [AuthFailureReason.notConfigured] before Firebase is
+/// asked. Apple takes a credential once, so when Firebase refuses
+/// [linkWith] because the identity or its email address belongs to another
+/// user, the service keeps the credential that Firebase gives with its
+/// answer, and [signInWith] of the identical credential object signs in
+/// with that one.
+///
+/// [deleteAccount] with a fresh credential signs the user in again with it,
+/// and, for a credential of Apple, revokes the tokens that Apple gave the
+/// app with its authorization code before it deletes the account, as the
+/// App Store asks of an app with Sign in with Apple. Firebase revokes them
+/// on iOS and macOS, and has no call for it elsewhere. A revocation needs
+/// the Services ID and the OAuth code flow configuration of the Apple
+/// sign-in method in the Firebase console: without them it fails with
+/// [AuthFailureReason.notConfigured], and the account stays.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
 
   final FirebaseAuth _auth;
+
+  /// What Firebase gave with its answer to a link that it refused, for the
+  /// credential object of the link: a credential of the same identity,
+  /// which the plugin keeps on the platform and names by a number. It may
+  /// carry the token that the platform gave, and is dropped once used. No
+  /// hint names it.
+  final Expando<AuthCredential> _givenForRefusedLink = Expando();
 
   /// Tells that the user may have changed: after each call here, and when
   /// Firebase tells of a change that no call here made, such as the end of
@@ -1870,6 +2341,11 @@ final class FirebaseAuthService implements AuthService {
       // Android has an empty address, not none, for an anonymous user whom
       // it kept on the device.
       email: email == null || email.isEmpty ? null : email,
+      issuers: {
+        for (final MapEntry(key: issuer, value: (:id, name: _))
+            in _providers.entries)
+          if (user.providerData.any((info) => info.providerId == id)) issuer,
+      },
     );
   }
 
@@ -1909,6 +2385,35 @@ final class FirebaseAuthService implements AuthService {
     );
   });
 
+  /// After a link of the identical [credential] that Firebase refused, it
+  /// signs in with the credential that Firebase gave with that answer, once.
+  @override
+  Future<void> signInWith(SignInCredential credential) => _run(() {
+    final given = _givenForRefusedLink[credential];
+    _givenForRefusedLink[credential] = null;
+    return _auth.signInWithCredential(given ?? _firebaseOf(credential));
+  }, credential: credential);
+
+  @override
+  Future<void> linkWith(SignInCredential credential) => _runForUser(
+    (user) async {
+      final ofFirebase = _firebaseOf(credential);
+      try {
+        await user.linkWithCredential(ofFirebase);
+      } on FirebaseAuthException catch (error) {
+        // The sign-in that follows takes the credential that Firebase
+        // gave: Apple takes the token of a credential once, and the
+        // refused link has taken it.
+        if (_linkReasons.containsKey(error.code)) {
+          _givenForRefusedLink[credential] = error.credential;
+        }
+        rethrow;
+      }
+    },
+    credential: credential,
+    reasons: _linkReasons,
+  );
+
   /// While an anonymous user is signed in, Firebase answers with that user
   /// and creates no other.
   @override
@@ -1941,33 +2446,162 @@ final class FirebaseAuthService implements AuthService {
   Future<void> signOut() => _run(_auth.signOut);
 
   @override
-  Future<void> deleteAccount() => _runForUser((user) async {
-    await user.delete();
-    // Firebase signs a deleted user out, but the plugin keeps that user
-    // as the current one until the platform tells it of the sign-out,
-    // which may come after this call is over.
-    await _auth.signOut();
-  });
+  Future<void> deleteAccount({SignInCredential? fresh}) =>
+      _runForUser((user) async {
+        if (fresh != null) await _signInAgain(user, fresh);
+        await user.delete();
+        // Firebase signs a deleted user out, but the plugin keeps that
+        // user as the current one until the platform tells it of the
+        // sign-out, which may come after this call is over.
+        await _auth.signOut();
+      }, credential: fresh);
 
-  /// Runs [call] for the user who is signed in.
+  /// Signs [user] in again with [fresh], so that Firebase deletes the
+  /// account without asking for a recent sign-in, and revokes the tokens of
+  /// Apple with the authorization code of [fresh] where it does.
+  Future<void> _signInAgain(User user, SignInCredential fresh) async {
+    final ofFirebase = _firebaseOf(fresh);
+    final code = _codeToRevoke(fresh);
+    try {
+      await user.reauthenticateWithCredential(ofFirebase);
+    } on FirebaseAuthException catch (error) {
+      if (error.code != 'user-not-found') rethrow;
+      // Firebase answers so for a credential of an identity that has no
+      // user, and for a credential of the user when the account was
+      // deleted on the server, such as on another device. A reload of the
+      // user fails for the second with a code of a session that has ended,
+      // which signs the user out.
+      await user.reload();
+      throw const AuthFailure(AuthFailureReason.invalidCredentials);
+    }
+    if (code != null) await _revoke(code);
+  }
+
+  /// The authorization code with which the service revokes the tokens that
+  /// Apple gave the app before it deletes the account, for a [fresh]
+  /// credential of Apple on iOS and macOS, or `null`: Firebase has no call
+  /// for the revocation on the other platforms. Apple takes a code once, so
+  /// it is the code of the fresh credential, never that of a sign-in
+  /// before.
+  String? _codeToRevoke(SignInCredential fresh) {
+    if (fresh case IdTokenCredential(issuer: _apple, :final authorizationCode)
+        when defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS) {
+      return authorizationCode ??
+          (throw const AuthFailure(
+            AuthFailureReason.notConfigured,
+            developerHint:
+                'The credential of Apple has no authorization '
+                'code, with which Firebase revokes the tokens that Apple '
+                'gave the app before the account is deleted, so the account '
+                'was not deleted. The way to sign in with Apple gives one '
+                'with each credential.',
+          ));
+    }
+    return null;
+  }
+
+  /// Revokes the tokens that Apple gave the app with the authorization
+  /// [code]. A failure keeps the account: it is
+  /// [AuthFailureReason.notConfigured], but for an answer of Firebase that
+  /// is no matter of the setup ([_notOfSetup]), which gets its reason as
+  /// that of any other call.
+  Future<void> _revoke(String code) async {
+    // Firebase never completes the call while nobody is signed in.
+    if (_auth.currentUser == null) {
+      throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+    }
+    try {
+      await _auth.revokeTokenWithAuthorizationCode(code);
+    } on Object catch (error) {
+      if (error is FirebaseAuthException && _notOfSetup.contains(error.code)) {
+        rethrow;
+      }
+      final project = _auth.app.options.projectId;
+      throw AuthFailure(
+        AuthFailureReason.notConfigured,
+        developerHint:
+            'Firebase did not revoke the tokens that Apple gave '
+            'the app (${_answerOf(error)}), so the account was not deleted. '
+            'The revocation needs the Services ID and the OAuth code flow '
+            'configuration, with the Apple team ID, the Key ID and the '
+            'private key, of the Apple sign-in method of the Firebase '
+            'project $project, in the Firebase console under '
+            'Authentication > Sign-in method: ${_consoleOf(project)}. When '
+            'they are set, the authorization code of Apple was older than '
+            'five minutes or used before, and the next deletion asks Apple '
+            'for a new one.',
+      );
+    }
+  }
+
+  /// The credential of Firebase Authentication for [credential]. One of
+  /// Google has the ID token alone: `GoogleAuthProvider` takes no nonce, and
+  /// Firebase does not check the nonce of a token of Google.
+  ///
+  /// It fails with [AuthFailureReason.notConfigured] for a credential of an
+  /// identity provider that the service does not take, and for a credential
+  /// of Apple without the raw nonce, which Firebase checks the token of
+  /// Apple against.
+  AuthCredential _firebaseOf(SignInCredential credential) =>
+      switch (credential) {
+        IdTokenCredential(issuer: _google, :final idToken) =>
+          GoogleAuthProvider.credential(idToken: idToken),
+        IdTokenCredential(
+          issuer: _apple,
+          :final idToken,
+          :final rawNonce?,
+          :final givenName,
+          :final familyName,
+        ) =>
+          AppleAuthProvider.credentialWithIDToken(
+            idToken,
+            rawNonce,
+            AppleFullPersonName(givenName: givenName, familyName: familyName),
+          ),
+        IdTokenCredential(issuer: _apple) => throw const AuthFailure(
+          AuthFailureReason.notConfigured,
+          developerHint:
+              'The credential of Apple has no raw nonce, which '
+              'Firebase checks the token of Apple against. The way to sign '
+              'in with Apple gives the nonce of its request with each '
+              'credential.',
+        ),
+        IdTokenCredential(:final issuer) => throw AuthFailure(
+          AuthFailureReason.notConfigured,
+          developerHint:
+              'The app signs in to Firebase Authentication with '
+              'the credentials of Google ($_google) and Apple ($_apple), '
+              'and takes no credential of $issuer.',
+        ),
+      };
+
+  /// Runs [call] for the user who is signed in, as [_run] runs a call.
   ///
   /// It fails with [AuthFailureReason.recentSignInRequired] when nobody is
   /// signed in, and when Firebase answers that the session of the user has
   /// ended: the user is then signed out on this device first.
-  Future<void> _runForUser(Future<void> Function(User user) call) =>
-      _run(() async {
-        final user = _auth.currentUser;
-        if (user == null) {
-          throw const AuthFailure(AuthFailureReason.recentSignInRequired);
-        }
-        try {
-          await call(user);
-        } on FirebaseAuthException catch (error) {
-          if (!_endedSession.contains(error.code)) rethrow;
-          await _auth.signOut();
-          throw const AuthFailure(AuthFailureReason.recentSignInRequired);
-        }
-      });
+  Future<void> _runForUser(
+    Future<void> Function(User user) call, {
+    SignInCredential? credential,
+    Map<String, AuthFailureReason> reasons = const {},
+  }) => _run(
+    () async {
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+      }
+      try {
+        await call(user);
+      } on FirebaseAuthException catch (error) {
+        if (!_endedSession.contains(error.code)) rethrow;
+        await _auth.signOut();
+        throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+      }
+    },
+    credential: credential,
+    reasons: reasons,
+  );
 
   /// Fails for an [email] that is empty with
   /// [AuthFailureReason.invalidEmail], and for a [password] that is empty
@@ -1989,64 +2623,102 @@ final class FirebaseAuthService implements AuthService {
 
   /// Runs [call], which then fails only with an [AuthFailure], and tells
   /// of the user that it leaves, also when it failed.
-  Future<void> _run(Future<void> Function() call) async {
+  ///
+  /// A code of Firebase gets its reason of [reasons], the reasons of the
+  /// codes for this call, and otherwise that of [_failureOf]. [credential]
+  /// is the credential that the call signs in with, whose way to sign in
+  /// the hint of a failure names.
+  Future<void> _run(
+    Future<void> Function() call, {
+    SignInCredential? credential,
+    Map<String, AuthFailureReason> reasons = const {},
+  }) async {
     try {
       await call();
     } on Object catch (error, stackTrace) {
-      Error.throwWithStackTrace(_failureOf(error), stackTrace);
+      Error.throwWithStackTrace(
+        _failureOf(error, credential, reasons),
+        stackTrace,
+      );
     } finally {
       _changes.add(null);
     }
   }
 
   /// The failure of a call that failed with [error]: the reason for the
-  /// code of Firebase. A code that has no reason yet gets one here.
-  AuthFailure _failureOf(Object error) {
+  /// code of Firebase, from [reasons] first. A code that has no reason yet
+  /// gets one here. The hint of a way to sign in that is not enabled names
+  /// the way to sign in of [credential], or Email/Password and Anonymous.
+  AuthFailure _failureOf(
+    Object error,
+    SignInCredential? credential,
+    Map<String, AuthFailureReason> reasons,
+  ) {
     if (error is AuthFailure) return error;
     if (error is! FirebaseAuthException) {
       return AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
     }
-    final reason = switch (error.code) {
-      // Firebase answers a wrong password and an address without an account
-      // alike, unless the project is without the protection against the
-      // enumeration of email addresses.
-      'invalid-credential' ||
-      'invalid-login-credentials' ||
-      'wrong-password' ||
-      'user-not-found' => AuthFailureReason.invalidCredentials,
-      'email-already-in-use' ||
-      'credential-already-in-use' => AuthFailureReason.emailInUse,
-      'weak-password' ||
-      'password-does-not-meet-requirements' => AuthFailureReason.weakPassword,
-      'invalid-email' || 'missing-email' => AuthFailureReason.invalidEmail,
-      'user-disabled' => AuthFailureReason.userDisabled,
-      'too-many-requests' => AuthFailureReason.tooManyAttempts,
-      'network-request-failed' => AuthFailureReason.network,
-      'requires-recent-login' => AuthFailureReason.recentSignInRequired,
-      _ => null,
-    };
+    final reason =
+        reasons[error.code] ??
+        switch (error.code) {
+          // Firebase answers a wrong password and an address without an
+          // account alike, unless the project is without the protection
+          // against the enumeration of email addresses. It also answers so
+          // for a credential that it refuses, such as one that expired, and
+          // for one whose nonce it took before.
+          'invalid-credential' ||
+          'invalid-login-credentials' ||
+          'wrong-password' ||
+          'user-not-found' ||
+          'missing-or-invalid-nonce' ||
+          // A fresh credential of another user than the one whose account
+          // is deleted.
+          'user-mismatch' => AuthFailureReason.invalidCredentials,
+          'email-already-in-use' ||
+          'credential-already-in-use' => AuthFailureReason.emailInUse,
+          'account-exists-with-different-credential' =>
+            AuthFailureReason.accountExistsWithOtherMethod,
+          'weak-password' || 'password-does-not-meet-requirements' =>
+            AuthFailureReason.weakPassword,
+          'invalid-email' || 'missing-email' => AuthFailureReason.invalidEmail,
+          'user-disabled' => AuthFailureReason.userDisabled,
+          'too-many-requests' => AuthFailureReason.tooManyAttempts,
+          'network-request-failed' => AuthFailureReason.network,
+          'requires-recent-login' => AuthFailureReason.recentSignInRequired,
+          _ => null,
+        };
     if (reason != null) return AuthFailure(reason);
-    // The message on one line: that of iOS may be the description of an
-    // error over many lines.
-    final message = (error.message ?? '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    final answer = message.isEmpty ? error.code : '${error.code}: $message';
+    final answer = _answerOf(error);
     final project = _auth.app.options.projectId;
-    final enable =
+    final console =
+        'the Firebase console under Authentication > Sign-in '
+        'method: ${_consoleOf(project)}';
+    final method = switch (credential) {
+      IdTokenCredential(:final issuer) => _providers[issuer]?.name,
+      null => null,
+    };
+    const script =
         'run `dart tool/enable_firebase_sign_in.dart` in the '
-        'directory of the app, or enable Email/Password, and Anonymous for '
-        'an app that signs in anonymous users, in the Firebase console '
-        'under Authentication > Sign-in method: '
-        'https://console.firebase.google.com/project/$project/'
-        'authentication/providers';
+        'directory of the app';
+    // The way to sign in, after "sign-in", and what enables it: the script
+    // of the app enables Email/Password, Anonymous and Google, and the
+    // Firebase console every way to sign in.
+    final (withMethod, enable) = switch (method) {
+      null => (
+        '',
+        '$script, or enable Email/Password, and Anonymous for an app that '
+            'signs in anonymous users, in $console',
+      ),
+      'Google' => (' with Google', '$script, or enable Google in $console'),
+      _ => (' with $method', 'enable $method in $console'),
+    };
     // A way to sign in that is not enabled, which Firebase tells by its
     // code, and a project in which Authentication was never set up, which
     // it tells only in its message.
     const noConfiguration = 'CONFIGURATION_NOT_FOUND';
     final notEnabled = switch (error.code) {
       'operation-not-allowed' || 'admin-restricted-operation' => error.code,
-      _ when message.contains(noConfiguration) =>
+      _ when answer.contains(noConfiguration) =>
         '${error.code}, $noConfiguration',
       _ => null,
     };
@@ -2054,8 +2726,9 @@ final class FirebaseAuthService implements AuthService {
       return AuthFailure(
         AuthFailureReason.notConfigured,
         developerHint:
-            'Sign-in is not enabled in the Firebase project '
-            '$project (Firebase answered $notEnabled). To fix it, $enable',
+            'Sign-in$withMethod is not enabled in the Firebase '
+            'project $project (Firebase answered $notEnabled). To fix it, '
+            '$enable',
       );
     }
     // On iOS and macOS, Firebase may answer for such a project with an
@@ -2068,13 +2741,30 @@ final class FirebaseAuthService implements AuthService {
         AuthFailureReason.notConfigured,
         developerHint:
             'Firebase reported an internal error ($answer), which '
-            'is also what it answers on iOS and macOS when sign-in is not '
-            'enabled in the Firebase project $project. If that is the '
+            'is also what it answers on iOS and macOS when sign-in$withMethod '
+            'is not enabled in the Firebase project $project. If that is the '
             'cause, $enable',
       );
     }
     return AuthFailure(AuthFailureReason.unknown, developerHint: answer);
   }
+
+  /// What Firebase answered with [error]: its code and its message on one
+  /// line, since the message of iOS may be the description of an error over
+  /// many lines, or the error itself when it is no error of Firebase.
+  String _answerOf(Object error) {
+    if (error is! FirebaseAuthException) return '$error';
+    final message = (error.message ?? '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return message.isEmpty ? error.code : '${error.code}: $message';
+  }
+
+  /// The page of the Firebase console with the sign-in methods of
+  /// [project].
+  String _consoleOf(String project) =>
+      'https://console.firebase.google.com/project/$project/'
+      'authentication/providers';
 }
 === lib/core/auth/guest_data.dart (role:auth) ===
 /// Gives the account [accountUid] what a guest had: the function that
@@ -2110,8 +2800,101 @@ typedef GiveGuestData = Future<void> Function(String accountUid);
 /// so such a call would wait for the sign-in, and the sign-in for it.
 ///
 /// It is not called when a guest signs up, since the guest then keeps the
-/// id and everything under it, nor in an app without anonymous users.
+/// id and everything under it, nor when a guest signs in with a way to sign
+/// in whose identity no user has yet, which the guest then gets with the
+/// id, nor in an app without anonymous users.
 Future<GiveGuestData?> takeGuestData(String guestUid) async => null;
+=== lib/core/auth/sign_in_methods.dart (role:auth) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/apple_sign_in/apple_sign_in.dart' as method1;
+import 'package:my_app/core/google_sign_in/google_sign_in.dart' as method0;
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'auth_service.dart' show SignInCredential;
+
+/// A way to sign in with an identity provider, such as the account of the
+/// user at another service: the label and the icon of its button, the
+/// platforms that it works on, and the function that asks the identity
+/// provider for a credential.
+///
+/// A screen of sign-in shows a button for each method of
+/// [appSignInMethods] that [isAvailable]. On a tap, the state of the screen
+/// calls [credential] and gives what it returns to `appSession.signInWith`
+/// of `app_session.dart`.
+final class SignInMethod {
+  /// Creates a way to sign in with the identity provider [issuer].
+  const SignInMethod({
+    required this.label,
+    required this.icon,
+    required this.platforms,
+    required this.credential,
+    required this.issuer,
+    this.revokesOnDeletion = false,
+  });
+
+  /// Returns the label of the button in the language of the app, for the
+  /// context of the widget that shows it. That widget calls it each time it
+  /// builds, so the text follows the language of the app.
+  final String Function(BuildContext context) label;
+
+  /// The icon of the button, a constant widget: an `Icon` takes the colour
+  /// of the label, and an `Image` keeps its own colours.
+  final Widget icon;
+
+  /// The platforms that the way to sign in works on. On any other,
+  /// [isAvailable] is false.
+  final Set<TargetPlatform> platforms;
+
+  /// Asks the identity provider for a credential, such as with a sheet of
+  /// its own, and returns it, or `null` when the user closed the sheet,
+  /// which is no failure. It fails only with an `AuthFailure`.
+  ///
+  /// The state of a screen calls it, and no code within a call of
+  /// `appSession`: `appSession.deleteAccount()` calls it itself, for a
+  /// method that [revokesOnDeletion].
+  final Future<SignInCredential?> Function() credential;
+
+  /// The identity provider: the issuer of its tokens, an https URL such as
+  /// `https://accounts.example.com`. `AccountSession.issuers` of
+  /// `app_session.dart` lists those of the user of an account.
+  final String issuer;
+
+  /// Whether the deletion of an account that signs in this way asks the
+  /// identity provider for a credential again first, so that the provider
+  /// of sign-in can revoke the tokens that the identity provider gave the
+  /// app. `appSession.deleteAccount()` does it.
+  final bool revokesOnDeletion;
+
+  /// Whether the way to sign in works on the platform that the app runs on.
+  bool get isAvailable => platforms.contains(defaultTargetPlatform);
+}
+
+/// The ways to sign in with an identity provider of the app, in the order
+/// of their modules. An email address and a password are no such way:
+/// `appSession.signIn` and `appSession.signUp` take them.
+const List<SignInMethod> appSignInMethods = [
+  SignInMethod(
+    label: _googleSignInLabel,
+    icon: method0.GoogleSignInIcon(),
+    platforms: {TargetPlatform.android, TargetPlatform.iOS},
+    credential: method0.googleCredential,
+    issuer: 'https://accounts.google.com',
+  ),
+  SignInMethod(
+    label: _appleSignInLabel,
+    icon: method1.AppleSignInIcon(),
+    platforms: {TargetPlatform.iOS},
+    credential: method1.appleCredential,
+    issuer: 'https://appleid.apple.com',
+    revokesOnDeletion: true,
+  ),
+];
+
+String _googleSignInLabel(BuildContext context) =>
+    context.l10n.googleSignInLabel;
+
+String _appleSignInLabel(BuildContext context) => context.l10n.appleSignInLabel;
 === lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
 import 'dart:async';
 
@@ -2465,6 +3248,107 @@ final class EventBusCommunicationService implements CommunicationService {
 
   @override
   Stream<T> on<T extends AppEvent>() => _eventBus.on<T>();
+}
+=== lib/core/google_sign_in/assets/2.0x/google_logo.png (google_sign_in) ===
+<1680 bytes>
+=== lib/core/google_sign_in/assets/3.0x/google_logo.png (google_sign_in) ===
+<4928 bytes>
+=== lib/core/google_sign_in/assets/google_logo.png (google_sign_in) ===
+<711 bytes>
+=== lib/core/google_sign_in/google_sign_in.dart (google_sign_in) ===
+import 'package:flutter/widgets.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+import '../auth/app_session.dart';
+
+/// The issuer of the ID tokens of Google.
+const String _issuer = 'https://accounts.google.com';
+
+/// The logo of Google, the "G", an image that `pubspec.yaml` declares among
+/// the assets of the app. Flutter takes the file of the same name in
+/// `2.0x/` and `3.0x/` next to it for a screen with more pixels.
+const String _logo = 'lib/core/google_sign_in/assets/google_logo.png';
+
+/// The start of google_sign_in, which [googleCredential] waits for: the
+/// package is started once, before its first sign-in.
+Future<void>? _started;
+
+/// Asks Google for a credential with the sheet of Google sign-in, and
+/// returns it, or `null` when the user closed the sheet.
+///
+/// The first call starts google_sign_in with `GoogleSignIn.instance
+/// .initialize()`, without the ids of the clients of Google, so the package
+/// finds them in the files of the app where the provider of sign-in puts
+/// them. The credential is the ID token of the Google account that the user
+/// chose.
+///
+/// A client of Google that is missing in the app, or a Google project that
+/// does not know the app, fails with `notConfigured`, with a hint at the
+/// section of the README of the app on it, "Google sign-in". Any other error
+/// fails with `unknown`. On iOS, the Google Sign-In SDK stops the app
+/// instead when the app has no iOS client of Google or not its URL scheme,
+/// since the package does not catch what the SDK throws then.
+Future<SignInCredential?> googleCredential() async {
+  final GoogleSignInAccount account;
+  try {
+    await (_started ??= GoogleSignIn.instance.initialize());
+    account = await GoogleSignIn.instance.authenticate();
+  } on GoogleSignInException catch (error) {
+    switch (error.code) {
+      case GoogleSignInExceptionCode.canceled:
+        return null;
+      case GoogleSignInExceptionCode.clientConfigurationError:
+      case GoogleSignInExceptionCode.providerConfigurationError:
+        throw _notConfigured(error.description ?? error.code.name);
+      // Credential Manager on Android answers so when the Google project
+      // has no Android client with the name of the package and the SHA-1
+      // of the key that signed the app.
+      case GoogleSignInExceptionCode.unknownError
+          when RegExp(r'\b28444\b').hasMatch(error.description ?? ''):
+        throw _notConfigured(error.description!);
+      default:
+        throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+    }
+  } on Object catch (error) {
+    throw AuthFailure(AuthFailureReason.unknown, developerHint: '$error');
+  }
+  final idToken = account.authentication.idToken;
+  if (idToken == null) {
+    throw const AuthFailure(
+      AuthFailureReason.unknown,
+      developerHint: 'Google gave no ID token.',
+    );
+  }
+  return IdTokenCredential(issuer: _issuer, idToken: idToken);
+}
+
+/// The failure of a sign-in with Google that the app or the Google project
+/// is not set up for, with [message], what Google answered.
+AuthFailure _notConfigured(String message) => AuthFailure(
+  AuthFailureReason.notConfigured,
+  developerHint:
+      'Google sign-in is not set up for the app ($message). See the '
+      'section "Google sign-in" of the README of the app.',
+);
+
+/// The icon of the button of Google sign-in: the "G" of Google in its own
+/// colours, at the size of the icons of the button, as the branding
+/// guidelines of Google ask of a custom button.
+class GoogleSignInIcon extends StatelessWidget {
+  /// Creates the icon.
+  const GoogleSignInIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = IconTheme.of(context).size;
+    // The label of the button names Google.
+    return Image.asset(
+      _logo,
+      width: size,
+      height: size,
+      excludeFromSemantics: true,
+    );
+  }
 }
 === lib/core/l10n/app_locale.dart (role:localization) ===
 import 'package:flutter/widgets.dart';
@@ -8313,7 +9197,9 @@ class AccountNotifier extends Notifier<AccountState> {
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (ref.mounted) state = AccountState(failure: failure);
+      if (ref.mounted) {
+        state = AccountState(failure: failure, failedAction: action);
+      }
       return;
     }
     _calling = false;
@@ -8350,6 +9236,7 @@ class AccountScreen extends ConsumerWidget {
       email: session is AccountSession ? session.email : null,
       busy: state.busy,
       failure: state.failure,
+      failedAction: state.failedAction,
       onSignOut: ref.read(accountProvider.notifier).signOut,
       onDeleteAccount: ref.read(accountProvider.notifier).deleteAccount,
     );
@@ -8456,6 +9343,7 @@ class AccountView extends StatefulWidget {
     required this.email,
     required this.busy,
     required this.failure,
+    required this.failedAction,
     required this.onSignOut,
     required this.onDeleteAccount,
     super.key,
@@ -8470,6 +9358,9 @@ class AccountView extends StatefulWidget {
 
   /// Why the last action failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The action that failed with [failure], or `null` if none did.
+  final AccountAction? failedAction;
 
   /// Signs the user out.
   final VoidCallback onSignOut;
@@ -8515,7 +9406,12 @@ class _AccountViewState extends State<AccountView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 28),
-            FailureMessage(widget.failure),
+            FailureMessage(
+              widget.failure,
+              textOf: widget.failedAction == AccountAction.delete
+                  ? deletionFailureText
+                  : authFailureText,
+            ),
             SubmitButton(
               label: context.l10n.signInSignOut,
               busy: widget.busy == AccountAction.signOut,
@@ -8535,6 +9431,26 @@ class _AccountViewState extends State<AccountView> {
     );
   }
 }
+
+/// The text of the app for [reason], the reason of a failure of the
+/// deletion of the account.
+///
+/// Before the deletion of an account with a way to sign in that
+/// `revokesOnDeletion`, the identity provider asks the user again. A
+/// provider of sign-in that cannot revoke the tokens of the identity
+/// provider, as when that is not set up, fails with
+/// [AuthFailureReason.notConfigured], and one that got a credential of
+/// another user with [AuthFailureReason.invalidCredentials]. The texts of a
+/// sign-in for these reasons would not tell a user who deletes the account
+/// what happened, so this has texts of its own for them, and those of
+/// [authFailureText] for the others.
+String deletionFailureText(BuildContext context, AuthFailureReason reason) =>
+    switch (reason) {
+      AuthFailureReason.notConfigured => context.l10n.signInDeleteUnavailable,
+      AuthFailureReason.invalidCredentials =>
+        context.l10n.signInDeleteOtherAccount,
+      _ => authFailureText(context, reason),
+    };
 
 /// Asks the user whether to delete the account, in a sheet over the page of
 /// [context], as the settings of the app ask in sheets, and returns whether
@@ -8570,8 +9486,16 @@ class _DeleteAccountSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        // As a page, the sheet scrolls under what covers the bottom of the
+        // screen, such as the bar of the home gesture, and ends above it.
+        padding: EdgeInsets.fromLTRB(
+          24,
+          0,
+          24,
+          16 + MediaQuery.paddingOf(context).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -8863,6 +9787,7 @@ ValueListenable<bool> signInHasAccount() => appSession.hasAccount;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'session_provider.dart';
 import 'sign_in_state.dart';
 
@@ -8877,8 +9802,9 @@ final signInProvider =
       SignInNotifier.new,
     );
 
-/// Signs in through the session of the app, and tells whether the sign-in
-/// is on its way and why the last one failed.
+/// Signs in through the session of the app, with the email address and the
+/// password of the form or with a way to sign in of the app, and tells
+/// whether a call is on its way and why the last one failed.
 class SignInNotifier extends Notifier<AuthActionState> {
   /// Whether a call of this notifier is on its way.
   var _calling = false;
@@ -8904,22 +9830,52 @@ class SignInNotifier extends Notifier<AuthActionState> {
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
   /// stays busy for as long as the session has the account.
-  Future<void> signIn({required String email, required String password}) async {
+  Future<void> signIn({required String email, required String password}) =>
+      _run((session) async {
+        await session.signIn(email: email, password: password);
+        return true;
+      });
+
+  /// Signs in with [method], a way to sign in of the app: asks its identity
+  /// provider for a credential, with a sheet of its own, and gives it to
+  /// the session.
+  ///
+  /// When the user closes the sheet, the state is again as it was before.
+  /// Once the user is signed in, the router leaves the screen, so the state
+  /// stays busy for as long as the session has the account.
+  Future<void> continueWith(SignInMethod method) =>
+      _run((session) => continueWithMethod(session, method), method: method);
+
+  /// Makes [call], the call of [method] or of the form, unless a call is on
+  /// its way. [call] returns whether it signed in: `false` when the user
+  /// closed the sheet of a way to sign in, and the state is again as it
+  /// was before then.
+  Future<void> _run(
+    Future<bool> Function(AppSessionController session) call, {
+    SignInMethod? method,
+  }) async {
     if (state.busy) return;
     final session = ref.read(appSessionProvider);
+    final before = state;
     _calling = true;
-    state = const AuthActionState(busy: true);
+    state = AuthActionState(busy: true, method: method);
+    final bool signedIn;
     try {
-      await session.signIn(email: email, password: password);
+      signedIn = await call(session);
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (ref.mounted) state = AuthActionState(failure: failure);
+      if (ref.mounted) {
+        state = AuthActionState(failure: failure, method: method);
+      }
       return;
     }
     _calling = false;
-    // The user may be signed out again already.
-    if (ref.mounted && !session.hasAccount.value) {
+    if (!ref.mounted) return;
+    if (!signedIn) {
+      state = before;
+    } else if (!session.hasAccount.value) {
+      // The user may be signed out again already.
       state = const AuthActionState();
     }
   }
@@ -8957,10 +9913,10 @@ const _cellGap = 8.0;
 /// other, such as the fields and the buttons of a form.
 ///
 /// The page scrolls when it is too small for them, as with the keyboard
-/// open or a large text size, and is no wider than a phone. Its parts rise
-/// in one after another, once, and are there at once in an app that asks
-/// for less motion. Over another page, it has an app bar with the button
-/// that leads back.
+/// open or a large text size, under what covers the bottom of the screen
+/// too, and is no wider than a phone. Its parts rise in one after another,
+/// once, and are there at once in an app that asks for less motion. Over
+/// another page, it has an app bar with the button that leads back.
 class AuthPage extends StatefulWidget {
   /// Creates the page.
   const AuthPage({
@@ -9030,9 +9986,19 @@ class _AuthPageState extends State<AuthPage>
     return Scaffold(
       appBar: back ? AppBar() : null,
       body: SafeArea(
+        bottom: false,
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(24, back ? 8 : 32, 24, 32),
+          // The page scrolls under what covers the bottom of the screen,
+          // such as the bar of the home gesture, and ends above it. While
+          // the keyboard is open, it covers that bar, and the page ends
+          // above the keyboard.
+          padding: EdgeInsets.fromLTRB(
+            24,
+            back ? 8 : 32,
+            24,
+            32 + MediaQuery.paddingOf(context).bottom,
+          ),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
@@ -9312,9 +10278,11 @@ class SignInScreen extends ConsumerWidget {
     return SignInView(
       busy: state.busy,
       failure: state.failure,
+      method: state.method,
       onSubmit: (email, password) => ref
           .read(signInProvider.notifier)
           .signIn(email: email, password: password),
+      onContinueWith: ref.read(signInProvider.notifier).continueWith,
       onCreateAccount: () => context.nav.signIn.signUp().push<void>(),
       onForgotPassword: () => context.nav.signIn.resetPassword().push<void>(),
     );
@@ -9324,14 +10292,16 @@ class SignInScreen extends ConsumerWidget {
 import 'package:flutter/foundation.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 
-/// The state of a form of the sign-in that makes one call, such as the
-/// sign-in itself: whether the call is on its way, and why the last one
-/// failed.
+/// The state of a screen of the sign-in whose form makes one call, such as
+/// the sign-in itself, and whose buttons continue with the ways to sign in
+/// of the app: whether a call is on its way, which one, and why the last
+/// one failed.
 @immutable
 final class AuthActionState {
   /// Creates the state.
-  const AuthActionState({this.busy = false, this.failure});
+  const AuthActionState({this.busy = false, this.failure, this.method});
 
   /// Whether the call is on its way.
   ///
@@ -9346,14 +10316,51 @@ final class AuthActionState {
   /// Why the last call failed, or `null` if none did.
   final AuthFailure? failure;
 
+  /// The way to sign in whose call is on its way or failed last, or `null`
+  /// for the call of the form. So the screen shows the failure of a call
+  /// where the user made it: below the buttons of the ways to sign in, or
+  /// above the button of the form.
+  final SignInMethod? method;
+
   @override
   bool operator ==(Object other) =>
       other is AuthActionState &&
       other.busy == busy &&
-      other.failure == failure;
+      other.failure == failure &&
+      other.method == method;
 
   @override
-  int get hashCode => Object.hash(busy, failure);
+  int get hashCode => Object.hash(busy, failure, method);
+}
+
+/// Signs in with [method] through [session]: asks the identity provider of
+/// the way to sign in for a credential, with a sheet of its own, and gives
+/// the credential to the session, which gives an anonymous user the
+/// identity with the same id.
+///
+/// Returns `false` when the user closed the sheet, which is no failure: the
+/// session gets no call then. It fails only with an [AuthFailure]. A way to
+/// sign in fails so too, and an error of another kind becomes a failure
+/// with the reason [AuthFailureReason.unknown], as the session does with
+/// the errors of its calls.
+Future<bool> continueWithMethod(
+  AppSessionController session,
+  SignInMethod method,
+) async {
+  final SignInCredential? credential;
+  try {
+    credential = await method.credential();
+  } on AuthFailure {
+    rethrow;
+  } on Object catch (error, stackTrace) {
+    Error.throwWithStackTrace(
+      AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+      stackTrace,
+    );
+  }
+  if (credential == null) return false;
+  await session.signInWith(credential);
+  return true;
 }
 
 /// The state of the form that sends the message to reset a password.
@@ -9393,11 +10400,11 @@ enum AccountAction {
 }
 
 /// The state of the screen of the account: which of its two actions is on
-/// its way, and why the last one failed.
+/// its way, and which one failed last and why.
 @immutable
 final class AccountState {
   /// Creates the state.
-  const AccountState({this.busy, this.failure});
+  const AccountState({this.busy, this.failure, this.failedAction});
 
   /// The action whose call is on its way, or `null` when none is. While it
   /// is, the screen takes no other action.
@@ -9412,47 +10419,67 @@ final class AccountState {
   /// Why the last action failed, or `null` if none did.
   final AuthFailure? failure;
 
-  @override
-  bool operator ==(Object other) =>
-      other is AccountState && other.busy == busy && other.failure == failure;
+  /// The action that failed with [failure], or `null` if none did. The
+  /// screen tells of a failed deletion in words of its own.
+  final AccountAction? failedAction;
 
   @override
-  int get hashCode => Object.hash(busy, failure);
+  bool operator ==(Object other) =>
+      other is AccountState &&
+      other.busy == busy &&
+      other.failure == failure &&
+      other.failedAction == failedAction;
+
+  @override
+  int get hashCode => Object.hash(busy, failure, failedAction);
 }
 === lib/features/sign_in/sign_in_view.dart (sign_in) ===
 import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_widgets.dart';
 
-/// What the screen of the sign-in shows: the form with the email address
+/// What the screen of the sign-in shows: a button for each way to sign in
+/// of the app that works on this platform, the form with the email address
 /// and the password of an account, and the ways to the screens that create
 /// an account and reset a password.
 ///
 /// It keeps the form and what the user types, and nothing of the sign-in
-/// itself: the screen gives it the state of the call and takes what the
+/// itself: the screen gives it the state of the calls and takes what the
 /// user asks for. So it is the same whichever way the app manages state.
 class SignInView extends StatefulWidget {
   /// Creates the view.
   const SignInView({
     required this.busy,
     required this.failure,
+    required this.method,
     required this.onSubmit,
+    required this.onContinueWith,
     required this.onCreateAccount,
     required this.onForgotPassword,
     super.key,
   });
 
-  /// Whether the sign-in is on its way.
+  /// Whether a call of the screen is on its way: the sign-in of the form, or
+  /// the call of [method].
   final bool busy;
 
-  /// Why the last sign-in failed, or `null` if none did.
+  /// Why the last call failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The way to sign in whose call is on its way or failed last, or `null`
+  /// for the call of the form.
+  final SignInMethod? method;
 
   /// Signs in with what the form has, once the form has both.
   final void Function(String email, String password) onSubmit;
+
+  /// Signs in with a way to sign in of the app, whose button the user
+  /// tapped.
+  final void Function(SignInMethod method) onContinueWith;
 
   /// Shows the screen that creates an account.
   final VoidCallback onCreateAccount;
@@ -9489,12 +10516,26 @@ class _SignInViewState extends State<SignInView> {
 
   @override
   Widget build(BuildContext context) {
+    final methods = signInMethodsHere();
+    // The failure of a call shows where the user made the call.
+    final method = widget.method;
     return AuthPage(
       title: context.l10n.signInTitle,
-      intro: context.l10n.signInIntro,
+      intro: methods.isEmpty
+          ? context.l10n.signInIntro
+          : context.l10n.signInMethodsIntro,
       children: [
-        // While the sign-in is on its way, the form takes no input: no tap,
-        // and no typing into a field that has the focus.
+        // Above the form, so that a phone shows them without a scroll.
+        if (methods.isNotEmpty)
+          SignInMethods(
+            methods: methods,
+            busy: widget.busy,
+            method: method,
+            failure: method == null ? null : widget.failure,
+            onPressed: widget.onContinueWith,
+          ),
+        // While a call is on its way, the form takes no input: no tap, and
+        // no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -9542,11 +10583,11 @@ class _SignInViewState extends State<SignInView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 12),
-            FailureMessage(widget.failure),
+            FailureMessage(method == null ? widget.failure : null),
             SubmitButton(
               label: context.l10n.signInSubmit,
-              busy: widget.busy,
-              onPressed: _submit,
+              busy: widget.busy && method == null,
+              onPressed: widget.busy && method != null ? null : _submit,
             ),
             const SizedBox(height: 4),
             // The way to the other screen, as on the screen that creates an
@@ -9568,6 +10609,7 @@ import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 
 /// A text that keeps its words whole: it breaks between its words and never
 /// inside one.
@@ -9906,6 +10948,179 @@ class _BusyLabel extends StatelessWidget {
   );
 }
 
+/// The ways to sign in of the app that work on the platform that the app
+/// runs on, in their order: those of `appSignInMethods` that are
+/// available.
+List<SignInMethod> signInMethodsHere() => [
+  for (final method in appSignInMethods)
+    if (method.isAvailable) method,
+];
+
+/// The buttons of [methods], the ways to sign in of a page, one below the
+/// other, then the message of the failure of the last call of one of them,
+/// and the line with "or" that leads to the form below.
+///
+/// While a call of the page is on its way, the button of the way to sign in
+/// that made it spins, and no button takes a tap.
+class SignInMethods extends StatelessWidget {
+  /// Creates the buttons of [methods].
+  const SignInMethods({
+    required this.methods,
+    required this.busy,
+    required this.method,
+    required this.failure,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The ways to sign in, in their order.
+  final List<SignInMethod> methods;
+
+  /// Whether a call of the page is on its way: that of [method], or that of
+  /// the form while [method] is `null`.
+  final bool busy;
+
+  /// The way to sign in whose call is on its way or failed last, or `null`.
+  final SignInMethod? method;
+
+  /// Why the last call of a way to sign in failed, or `null` if none did.
+  final AuthFailure? failure;
+
+  /// Signs in with the way to sign in whose button the user tapped.
+  final void Function(SignInMethod method) onPressed;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final (index, way) in methods.indexed) ...[
+        if (index > 0) const SizedBox(height: 12),
+        SignInMethodButton(
+          method: way,
+          busy: busy && method == way,
+          onPressed: busy ? null : () => onPressed(way),
+        ),
+      ],
+      const SizedBox(height: 20),
+      FailureMessage(failure),
+      const _Or(),
+      const SizedBox(height: 20),
+    ],
+  );
+}
+
+/// The colours of the button of a way to sign in, the same in a light and
+/// in a dark theme: a white button with a grey hairline around it, and a
+/// label and an icon in black. They keep to what the brand guidelines of
+/// identity providers allow a custom button of theirs on any background,
+/// and a logo that keeps its own colours stays on white.
+const _methodFill = Color(0xFFFFFFFF);
+const _methodOutline = Color(0xFF747775);
+const _methodInk = Color(0xFF000000);
+
+/// The size of the icon of a way to sign in, which does not grow with the
+/// text size of the device: a logo keeps its size.
+const _methodIconSize = 20.0;
+
+/// The space between the icon of a way to sign in and its label.
+const _methodIconGap = 12.0;
+
+/// The button of a way to sign in, as wide as the page: its icon at the
+/// start and its label in the middle, in the text style that the theme of
+/// the app gives a filled button, in the weight medium. It is as tall as
+/// the button that submits a form, and in colours of its own, which the
+/// theme does not change. A screen reader reads it as one button with its
+/// label.
+///
+/// While its call is on its way, it spins in the place of its label and
+/// does nothing. In an app that asks for less motion it is disabled with
+/// its label instead. A disabled button of a way to sign in keeps its
+/// colours, as the brand guidelines ask of the logo and the label, and
+/// only takes no tap.
+class SignInMethodButton extends StatelessWidget {
+  /// Creates the button of [method].
+  const SignInMethodButton({
+    required this.method,
+    required this.busy,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The way to sign in, whose label and icon the button shows.
+  final SignInMethod method;
+
+  /// Whether the call of the way to sign in is on its way.
+  final bool busy;
+
+  /// Signs in with the way to sign in, or `null` while the button takes no
+  /// tap, as while another call of its page is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spins = _spins(context, busy: busy);
+    final onPressed = _whileBusy(this.onPressed, busy: busy, spins: spins);
+    // The text style that the theme gives a filled button, as the button
+    // that submits a form has it, in the weight medium.
+    final themed =
+        FilledButtonTheme.of(context).style?.textStyle?.resolve(const {}) ??
+        Theme.of(context).textTheme.labelLarge;
+    return FilledButton(
+      // The same colours whether the button takes a tap or not.
+      style: FilledButton.styleFrom(
+        backgroundColor: _methodFill,
+        foregroundColor: _methodInk,
+        disabledBackgroundColor: _methodFill,
+        disabledForegroundColor: _methodInk,
+        iconColor: _methodInk,
+        disabledIconColor: _methodInk,
+        iconSize: _methodIconSize,
+        side: const BorderSide(color: _methodOutline),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        textStyle: themed?.copyWith(fontWeight: FontWeight.w500),
+      ),
+      onPressed: onPressed,
+      child: Row(
+        children: [
+          // The label names the way to sign in.
+          ExcludeSemantics(child: method.icon),
+          const SizedBox(width: _methodIconGap),
+          Expanded(child: _BusyLabel(method.label(context), spins: spins)),
+          // As wide as the icon and the space after it, so that the label
+          // is in the middle of the button.
+          const SizedBox(width: _methodIconSize + _methodIconGap),
+        ],
+      ),
+    );
+  }
+}
+
+/// The line between the buttons of the ways to sign in and the form, with
+/// "or" in its middle.
+class _Or extends StatelessWidget {
+  const _Or();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        const Expanded(child: Divider()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            context.l10n.signInOr,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider()),
+      ],
+    );
+  }
+}
+
 /// The action of a screen that leads to the other screen of the sign-in:
 /// from the sign-in to the screen that creates an account, and from there
 /// back.
@@ -9999,10 +11214,18 @@ class DestructiveAction extends StatelessWidget {
 /// developer of the app, which is no text for a user.
 class FailureMessage extends StatelessWidget {
   /// Creates the message of [failure].
-  const FailureMessage(this.failure, {super.key});
+  const FailureMessage(
+    this.failure, {
+    this.textOf = authFailureText,
+    super.key,
+  });
 
   /// The failure, or `null` when the last call did not fail.
   final AuthFailure? failure;
+
+  /// The text of the app for the reason of the failure: [authFailureText],
+  /// unless a page tells of a failure of its call in words of its own.
+  final String Function(BuildContext context, AuthFailureReason reason) textOf;
 
   @override
   Widget build(BuildContext context) {
@@ -10011,7 +11234,7 @@ class FailureMessage extends StatelessWidget {
         ? const SizedBox(width: double.infinity)
         : Padding(
             padding: const EdgeInsets.only(bottom: 20),
-            child: _Failure(failure),
+            child: _Failure(failure, textOf: textOf),
           );
     // An app that asks for less motion shows the message at once. It does
     // so without an AnimatedSize: one with a duration of zero fails an
@@ -10029,9 +11252,10 @@ class FailureMessage extends StatelessWidget {
 /// The box with the text of [failure]: a card as the theme of the app has
 /// its cards, in a tint of the colour that the theme has for an error.
 class _Failure extends StatelessWidget {
-  const _Failure(this.failure);
+  const _Failure(this.failure, {required this.textOf});
 
   final AuthFailure failure;
+  final String Function(BuildContext context, AuthFailureReason reason) textOf;
 
   @override
   Widget build(BuildContext context) {
@@ -10066,7 +11290,7 @@ class _Failure extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      authFailureText(context, failure.reason),
+                      textOf(context, failure.reason),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: colors.onSurface,
                       ),
@@ -10110,6 +11334,10 @@ String authFailureText(BuildContext context, AuthFailureReason reason) =>
       AuthFailureReason.invalidCredentials =>
         context.l10n.signInFailureCredentials,
       AuthFailureReason.emailInUse => context.l10n.signInFailureEmailInUse,
+      AuthFailureReason.credentialInUse =>
+        context.l10n.signInFailureCredentialInUse,
+      AuthFailureReason.accountExistsWithOtherMethod =>
+        context.l10n.signInFailureOtherMethod,
       AuthFailureReason.weakPassword => context.l10n.signInFailureWeakPassword,
       AuthFailureReason.invalidEmail => context.l10n.signInEmailInvalid,
       AuthFailureReason.userDisabled => context.l10n.signInFailureDisabled,
@@ -10147,6 +11375,7 @@ class EmailAddress extends StatelessWidget {
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'session_provider.dart';
 import 'sign_in_state.dart';
 
@@ -10161,8 +11390,9 @@ final signUpProvider =
       SignUpNotifier.new,
     );
 
-/// Signs up through the session of the app, and tells whether the sign-up
-/// is on its way and why the last one failed.
+/// Signs up through the session of the app, or signs in with a way to sign
+/// in of the app, and tells whether a call is on its way and why the last
+/// one failed.
 class SignUpNotifier extends Notifier<AuthActionState> {
   /// Whether a call of this notifier is on its way.
   var _calling = false;
@@ -10188,22 +11418,52 @@ class SignUpNotifier extends Notifier<AuthActionState> {
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
   /// stays busy for as long as the session has the account.
-  Future<void> signUp({required String email, required String password}) async {
+  Future<void> signUp({required String email, required String password}) =>
+      _run((session) async {
+        await session.signUp(email: email, password: password);
+        return true;
+      });
+
+  /// Signs in with [method], a way to sign in of the app: asks its identity
+  /// provider for a credential, with a sheet of its own, and gives it to
+  /// the session.
+  ///
+  /// When the user closes the sheet, the state is again as it was before.
+  /// Once the user is signed in, the router leaves the screen, so the state
+  /// stays busy for as long as the session has the account.
+  Future<void> continueWith(SignInMethod method) =>
+      _run((session) => continueWithMethod(session, method), method: method);
+
+  /// Makes [call], the call of [method] or of the form, unless a call is on
+  /// its way. [call] returns whether it signed in: `false` when the user
+  /// closed the sheet of a way to sign in, and the state is again as it
+  /// was before then.
+  Future<void> _run(
+    Future<bool> Function(AppSessionController session) call, {
+    SignInMethod? method,
+  }) async {
     if (state.busy) return;
     final session = ref.read(appSessionProvider);
+    final before = state;
     _calling = true;
-    state = const AuthActionState(busy: true);
+    state = AuthActionState(busy: true, method: method);
+    final bool signedIn;
     try {
-      await session.signUp(email: email, password: password);
+      signedIn = await call(session);
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (ref.mounted) state = AuthActionState(failure: failure);
+      if (ref.mounted) {
+        state = AuthActionState(failure: failure, method: method);
+      }
       return;
     }
     _calling = false;
-    // The user may be signed out again already.
-    if (ref.mounted && !session.hasAccount.value) {
+    if (!ref.mounted) return;
+    if (!signedIn) {
+      state = before;
+    } else if (!session.hasAccount.value) {
+      // The user may be signed out again already.
       state = const AuthActionState();
     }
   }
@@ -10230,9 +11490,11 @@ class SignUpScreen extends ConsumerWidget {
     return SignUpView(
       busy: state.busy,
       failure: state.failure,
+      method: state.method,
       onSubmit: (email, password) => ref
           .read(signUpProvider.notifier)
           .signUp(email: email, password: password),
+      onContinueWith: ref.read(signUpProvider.notifier).continueWith,
       // Closes this page. The screen of the sign-in is the page below it,
       // whether that one is the first page of the app or shown over
       // another screen.
@@ -10245,34 +11507,47 @@ import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'sign_in_page.dart';
 import 'sign_in_widgets.dart';
 
-/// What the screen that creates an account shows: the form with the email
+/// What the screen that creates an account shows: a button for each way to
+/// sign in of the app that works on this platform, the form with the email
 /// address and the password of the new account, and the way back to the
 /// sign-in.
 ///
 /// It keeps the form and what the user types, and nothing of the sign-up
-/// itself: the screen gives it the state of the call and takes what the
+/// itself: the screen gives it the state of the calls and takes what the
 /// user asks for. So it is the same whichever way the app manages state.
 class SignUpView extends StatefulWidget {
   /// Creates the view.
   const SignUpView({
     required this.busy,
     required this.failure,
+    required this.method,
     required this.onSubmit,
+    required this.onContinueWith,
     required this.onSignIn,
     super.key,
   });
 
-  /// Whether the sign-up is on its way.
+  /// Whether a call of the screen is on its way: the sign-up of the form, or
+  /// the call of [method].
   final bool busy;
 
-  /// Why the last sign-up failed, or `null` if none did.
+  /// Why the last call failed, or `null` if none did.
   final AuthFailure? failure;
+
+  /// The way to sign in whose call is on its way or failed last, or `null`
+  /// for the call of the form.
+  final SignInMethod? method;
 
   /// Creates the account with what the form has, once the form has both.
   final void Function(String email, String password) onSubmit;
+
+  /// Signs in with a way to sign in of the app, whose button the user
+  /// tapped.
+  final void Function(SignInMethod method) onContinueWith;
 
   /// Leads back to the sign-in, for a user who has an account.
   final VoidCallback onSignIn;
@@ -10306,12 +11581,26 @@ class _SignUpViewState extends State<SignUpView> {
 
   @override
   Widget build(BuildContext context) {
+    final methods = signInMethodsHere();
+    // The failure of a call shows where the user made the call.
+    final method = widget.method;
     return AuthPage(
       title: context.l10n.signInSignUpTitle,
-      intro: context.l10n.signInSignUpIntro,
+      intro: methods.isEmpty
+          ? context.l10n.signInSignUpIntro
+          : context.l10n.signInSignUpMethodsIntro,
       children: [
-        // While the sign-up is on its way, the form takes no input: no tap,
-        // and no typing into a field that has the focus.
+        // Above the form, so that a phone shows them without a scroll.
+        if (methods.isNotEmpty)
+          SignInMethods(
+            methods: methods,
+            busy: widget.busy,
+            method: method,
+            failure: method == null ? null : widget.failure,
+            onPressed: widget.onContinueWith,
+          ),
+        // While a call is on its way, the form takes no input: no tap, and
+        // no typing into a field that has the focus.
         AbsorbPointer(
           absorbing: widget.busy,
           child: AutofillGroup(
@@ -10348,11 +11637,11 @@ class _SignUpViewState extends State<SignUpView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 24),
-            FailureMessage(widget.failure),
+            FailureMessage(method == null ? widget.failure : null),
             SubmitButton(
               label: context.l10n.signInSignUpSubmit,
-              busy: widget.busy,
-              onPressed: _submit,
+              busy: widget.busy && method == null,
+              onPressed: widget.busy && method != null ? null : _submit,
             ),
             const SizedBox(height: 4),
             OtherScreenAction(
@@ -10448,8 +11737,11 @@ class DefaultFirebaseOptions {
   "onboardingSkip": "Skip",
   "onboardingNext": "Next",
   "onboardingDone": "Get started",
+  "googleSignInLabel": "Continue with Google",
+  "appleSignInLabel": "Continue with Apple",
   "signInTitle": "Sign in",
   "signInIntro": "Enter the email and the password of your account.",
+  "signInMethodsIntro": "Choose how to sign in to your account.",
   "signInEmail": "Email",
   "signInPassword": "Password",
   "signInShowPassword": "Show password",
@@ -10459,8 +11751,10 @@ class DefaultFirebaseOptions {
   "signInCreateAccount": "Create account",
   "signInSignUpTitle": "Create account",
   "signInSignUpIntro": "All it takes is an email and a password.",
+  "signInSignUpMethodsIntro": "Choose how to create your account.",
   "signInSignUpSubmit": "Create account",
   "signInHaveAccount": "I already have an account",
+  "signInOr": "or",
   "signInResetTitle": "Reset password",
   "signInResetIntro": "Enter the email of your account, and we will send you a link to set a new password.",
   "signInSendLink": "Send link",
@@ -10472,6 +11766,8 @@ class DefaultFirebaseOptions {
   "signInPasswordRequired": "Enter a password.",
   "signInFailureCredentials": "The email or the password is wrong.",
   "signInFailureEmailInUse": "This email already has an account. Sign in instead.",
+  "signInFailureCredentialInUse": "This way to sign in is linked to another account already.",
+  "signInFailureOtherMethod": "An account with this email exists already. Sign in the way you did before.",
   "signInFailureWeakPassword": "This password is too weak. Choose a stronger one.",
   "signInFailureDisabled": "This account is disabled.",
   "signInFailureTooManyAttempts": "Too many attempts. Try again later.",
@@ -10488,6 +11784,8 @@ class DefaultFirebaseOptions {
   "signInDeleteText": "This deletes your account for good. You cannot undo it.",
   "signInCancel": "Cancel",
   "signInDelete": "Delete",
+  "signInDeleteUnavailable": "Your account cannot be deleted right now. Try again later.",
+  "signInDeleteOtherAccount": "That is a different account. Confirm the deletion with the account you are signed in to.",
   "signInSettingSignedIn": "Signed in",
   "signInNotSignedIn": "Not signed in",
   "themeTitle": "Theme",
@@ -10529,8 +11827,11 @@ class DefaultFirebaseOptions {
   "onboardingSkip": "Пропустити",
   "onboardingNext": "Далі",
   "onboardingDone": "Почати",
+  "googleSignInLabel": "Продовжити з Google",
+  "appleSignInLabel": "Продовжити з Apple",
   "signInTitle": "Вхід",
   "signInIntro": "Введіть пошту й пароль свого акаунта.",
+  "signInMethodsIntro": "Виберіть, як увійти у свій акаунт.",
   "signInEmail": "Електронна пошта",
   "signInPassword": "Пароль",
   "signInShowPassword": "Показати пароль",
@@ -10540,8 +11841,10 @@ class DefaultFirebaseOptions {
   "signInCreateAccount": "Створити акаунт",
   "signInSignUpTitle": "Новий акаунт",
   "signInSignUpIntro": "Потрібні лише пошта й пароль.",
+  "signInSignUpMethodsIntro": "Виберіть, як створити акаунт.",
   "signInSignUpSubmit": "Створити акаунт",
   "signInHaveAccount": "У мене вже є акаунт",
+  "signInOr": "або",
   "signInResetTitle": "Відновлення пароля",
   "signInResetIntro": "Введіть пошту свого акаунта, і ми надішлемо посилання, щоб задати новий пароль.",
   "signInSendLink": "Надіслати посилання",
@@ -10553,6 +11856,8 @@ class DefaultFirebaseOptions {
   "signInPasswordRequired": "Введіть пароль.",
   "signInFailureCredentials": "Неправильна пошта або пароль.",
   "signInFailureEmailInUse": "Для цієї пошти вже є акаунт. Увійдіть у нього.",
+  "signInFailureCredentialInUse": "Цей спосіб входу вже прив’язано до іншого акаунта.",
+  "signInFailureOtherMethod": "Акаунт із цією поштою вже є. Увійдіть так, як входили раніше.",
   "signInFailureWeakPassword": "Цей пароль надто слабкий. Виберіть надійніший.",
   "signInFailureDisabled": "Цей акаунт заблоковано.",
   "signInFailureTooManyAttempts": "Забагато спроб. Спробуйте пізніше.",
@@ -10569,6 +11874,8 @@ class DefaultFirebaseOptions {
   "signInDeleteText": "Акаунт буде видалено назавжди. Відновити його не можна.",
   "signInCancel": "Скасувати",
   "signInDelete": "Видалити",
+  "signInDeleteUnavailable": "Зараз акаунт не можна видалити. Спробуйте пізніше.",
+  "signInDeleteOtherAccount": "Це інший акаунт. Підтвердьте видалення акаунтом, у який ви увійшли.",
   "signInSettingSignedIn": "Вхід виконано",
   "signInNotSignedIn": "Вхід не виконано",
   "themeTitle": "Тема",
@@ -10621,6 +11928,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  crypto: "^3.0.7"
   event_bus: "^2.0.1"
   firebase_analytics: "^12.6.0"
   firebase_auth: "^6.7.0"
@@ -10631,9 +11939,11 @@ dependencies:
   flutter_riverpod: "^3.4.3"
   get_it: "^9.3.0"
   go_router: "^17.5.0"
+  google_sign_in: "^7.2.0"
   intl: "any"
   shared_preferences: "^2.5.5"
   shared_preferences_android: ">=2.4.28 <2.5.0"
+  sign_in_with_apple: "^8.2.0"
   timezone: "^0.11.0"
 
 dev_dependencies:
@@ -10647,6 +11957,7 @@ flutter:
   assets:
     - "lib/features/home/assets/smf_mark.png"
     - "assets/fonts/geist/OFL.txt"
+    - "lib/core/google_sign_in/assets/google_logo.png"
   fonts:
     - family: "Geist"
       fonts:
@@ -10739,6 +12050,30 @@ void main() {
 // The other arguments go to the Firebase CLI as they are. An account that
 // `firebase login:use` chose for the directory of the app does not apply in
 // the temporary directory: `--account <email>` names the account.
+//
+// For a way to sign in of Google, the script enables Google too, and gives
+// it the name of the app and a support email for its consent screen: the
+// email address of the account of the Firebase CLI, the one that
+// `--account <email>` names, or else the one that the Firebase CLI is
+// logged in as. With no such account, as with a service account, it leaves
+// Google out and says so.
+//
+// The ways to sign in of Google need more of the project and of the app,
+// which the script then sets up for the project that `flutterfire
+// configure` configured the app for, whose apps `firebase.json` names:
+// - it registers the SHA-1 and SHA-256 of the Android debug key of this
+//   machine for the Android app, and creates that key as the first debug
+//   build would when there is none;
+// - it downloads the Firebase files of the app again once they have the
+//   clients of Google, to where `flutterfire configure` wrote them;
+// - it writes the URL scheme that the iOS app needs, the reversed id of its
+//   client of Google, into `ios/Runner/Info.plist`. It adds the scheme and
+//   removes none, and a file that has it already stays as it is.
+// These are the only files of the app that the script changes. Of the
+// other arguments, those calls of the Firebase CLI get only the account.
+//
+// Apple is enabled in the Firebase console, which no command of the
+// Firebase CLI does, so the script tells what to set there.
 
 import 'dart:async';
 import 'dart:convert';
@@ -10753,6 +12088,30 @@ const _sessionFile = 'lib/core/auth/app_session.dart';
 
 /// The mode in which the app signs in anonymous users.
 const _anonymous = 'anonymous';
+
+/// The name of the app, which Google shows on its consent screen.
+const _appName = 'My App';
+
+/// What a way to sign in needs of the Firebase project, besides the
+/// identity provider enabled.
+enum _Need {
+  /// The SHA-1 and SHA-256 of the key that signs the Android app.
+  androidCertificate,
+
+  /// The client of the iOS app in its Firebase file, whose reversed id is a
+  /// URL scheme of the app.
+  iosClient,
+
+  /// The client of the server in the Firebase file of the Android app.
+  serverClient,
+}
+
+/// What the ways to sign in of the app need of the Firebase project. SMF
+/// wrote it from the ways to sign in of the app.
+const _needs = {_Need.androidCertificate, _Need.iosClient, _Need.serverClient};
+
+/// The file of the app with the URL schemes of the iOS app.
+const _infoPlist = 'ios/Runner/Info.plist';
 
 /// The comments of [_sessionFile] and the declarations of `authMode` in it,
 /// in the form that the file keeps: a declaration starts its line and has a
@@ -10786,6 +12145,9 @@ Future<void> main(List<String> arguments) async {
 ///
 /// Throws a [_Stop] when it cannot tell the methods or the project, and
 /// when the Firebase CLI of the machine cannot enable them.
+///
+/// Once the methods are enabled, it sets up what the ways to sign in of the
+/// app need there, and returns 1 when that fails.
 Future<int> _enable(Directory app, List<String> arguments) async {
   final mode = _modeOf(app);
   final anonymous = mode == _anonymous;
@@ -10797,6 +12159,10 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     );
   }
   final project = named ?? _configuredProject(app);
+  final account = _accountIn(passedOn);
+  // What the ways to sign in need is for the apps of the app in the
+  // project.
+  final apps = _appsOf(app, project);
 
   // Every call of the Firebase CLI runs in this directory, also the one for
   // its version: the Firebase CLI keeps its log in the directory that it
@@ -10825,6 +12191,35 @@ Future<int> _enable(Directory app, List<String> arguments) async {
         // On Windows, npm installs the Firebase CLI as `firebase.cmd`.
         runInShell: Platform.isWindows,
       );
+  // Runs the Firebase CLI with [arguments], and returns its exit code, what
+  // it printed and its errors.
+  Future<(int, String, String)> run(List<String> arguments) async {
+    final process = await start(arguments, ProcessStartMode.normal);
+    final printed = process.stdout.transform(systemEncoding.decoder).join();
+    final failed = process.stderr.transform(systemEncoding.decoder).join();
+    final code = await process.exitCode;
+    return (code, await printed, (await failed).trim());
+  }
+
+  // Runs [executable], a tool such as keytool, with [arguments], in a shell
+  // on Windows when [inShell], and returns its exit code, what it printed
+  // and its errors. Ctrl+C reaches it as it reaches the Firebase CLI.
+  Future<(int, String, String)> tool(
+    String executable,
+    List<String> arguments, {
+    bool inShell = false,
+  }) async {
+    final process = firebase = await Process.start(
+      executable,
+      arguments,
+      runInShell: inShell && Platform.isWindows,
+    );
+    final printed = process.stdout.transform(systemEncoding.decoder).join();
+    final failed = process.stderr.transform(systemEncoding.decoder).join();
+    final code = await process.exitCode;
+    return (code, await printed, (await failed).trim());
+  }
+
   try {
     final int asked;
     final String version;
@@ -10858,20 +12253,46 @@ Future<int> _enable(Directory app, List<String> arguments) async {
       );
     }
 
+    // Google shows the name of the app and a support email on its consent
+    // screen: the email address of the account that the arguments name, or
+    // else of the one that the Firebase CLI is logged in as here.
+    final supportEmail = account ?? await _loggedInAs(run);
+    if (interrupted) return 130;
+    if (supportEmail == null) {
+      stdout.writeln(_withoutGoogle(project, named: named != null));
+    }
+    final google = supportEmail != null;
+
     File('${directory.path}/firebase.json').writeAsStringSync(
       jsonEncode({
         'auth': {
           'providers': {
             'emailPassword': true,
             if (anonymous) 'anonymous': true,
+            if (google)
+              'googleSignIn': {
+                'oAuthBrandDisplayName': _appName,
+                'supportEmail': supportEmail,
+              },
           },
         },
       }),
     );
+    final enabled = _listed([
+      'Email/Password',
+      if (anonymous) 'Anonymous',
+      if (google) 'Google',
+    ]);
     stdout.writeln(
-      'Enabling Email/Password${anonymous ? ' and Anonymous' : ''} in the '
-      'Firebase project $project (the mode of the app is $mode).',
+      'Enabling $enabled in the Firebase project $project (the mode of the '
+      'app is $mode).',
     );
+    if (google) {
+      stdout.writeln(
+        'Google shows the name "$_appName" and the support email '
+        '$supportEmail on its consent screen.',
+      );
+    }
     // What the Firebase CLI prints comes after this line.
     await stdout.flush();
     if (interrupted) return 130;
@@ -10888,6 +12309,27 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     final code = await deploy.exitCode;
     if (interrupted) return 130;
     if (code != 0) stderr.writeln(_afterFailure(code, project, passedOn));
+    if (code != 0) return code;
+    if (code == 0) stdout.writeln(_appleInConsole(project));
+    try {
+      await _setUp(
+        app,
+        _Cli(run, tool, project, account, () => interrupted),
+        _needs,
+        apps,
+        waitForClients: google,
+      );
+    } on _Interrupted {
+      return 130;
+    } on _Failed catch (failed) {
+      stderr
+        ..writeln(failed.why)
+        ..writeln(
+          'What this script did before that stays done, and running it '
+          'again does the rest: $_command',
+        );
+      return 1;
+    }
     return code;
   } finally {
     await interrupts.cancel();
@@ -10909,6 +12351,96 @@ final class _Stop implements Exception {
   final String why;
 }
 
+/// Why the script stops once it enabled the sign-in methods, before it set
+/// up all that the ways to sign in need.
+final class _Failed implements Exception {
+  const _Failed(this.why);
+
+  final String why;
+}
+
+/// Ctrl+C, after which the script stops once the process that runs ended.
+final class _Interrupted implements Exception {
+  const _Interrupted();
+}
+
+/// The Firebase CLI and the other tools as the script runs them to set up
+/// what the ways to sign in need: the Firebase CLI for [project], as
+/// [account] if the arguments of the script name one, and the other tools,
+/// both so that Ctrl+C reaches them, with what tells whether the user
+/// pressed Ctrl+C.
+final class _Cli {
+  _Cli(
+    this._firebase,
+    this._tool,
+    this.project,
+    this.account,
+    this._interrupted,
+  );
+
+  final Future<(int, String, String)> Function(List<String> arguments)
+  _firebase;
+  final Future<(int, String, String)> Function(
+    String executable,
+    List<String> arguments, {
+    bool inShell,
+  })
+  _tool;
+  final String project;
+  final String? account;
+  final bool Function() _interrupted;
+
+  /// Runs [executable] with [arguments], in a shell on Windows when
+  /// [inShell], and returns its exit code, its output and its errors.
+  /// Throws an [_Interrupted] after Ctrl+C.
+  Future<(int, String, String)> run(
+    String executable,
+    List<String> arguments, {
+    bool inShell = false,
+  }) async {
+    final result = await _tool(executable, arguments, inShell: inShell);
+    if (_interrupted()) throw const _Interrupted();
+    return result;
+  }
+
+  /// Runs the Firebase CLI with [arguments], for the project and as the
+  /// account of the script, and returns the result that it gives as JSON.
+  ///
+  /// Throws a [_Failed] that tells that the Firebase CLI did not do [what]
+  /// when it fails or gives no result, and an [_Interrupted] after Ctrl+C.
+  Future<Object?> json(List<String> arguments, String what) async {
+    final (code, printed, errors) = await _firebase([
+      ...arguments,
+      '--project=$project',
+      '--non-interactive',
+      '--json',
+      if (account case final account?) '--account=$account',
+    ]);
+    if (_interrupted()) throw const _Interrupted();
+    final start = printed.indexOf('{');
+    Object? answer;
+    try {
+      answer = start < 0 ? null : jsonDecode(printed.substring(start));
+    } on FormatException {
+      answer = null;
+    }
+    if (answer case {
+      'status': 'success',
+      'result': final result,
+    } when code == 0) {
+      return result;
+    }
+    final error = switch (answer) {
+      {'error': final String error} => error,
+      _ => [printed.trim(), errors].where((text) => text.isNotEmpty).join(' '),
+    };
+    throw _Failed(
+      'The Firebase CLI did not $what (exit code $code)'
+      '${error.isEmpty ? '' : ': $error'}\n${_accountHint(account)}',
+    );
+  }
+}
+
 /// An id of a Firebase project, as the Firebase CLI takes it: lower-case
 /// letters, digits and hyphens, after the domain of an organization, if it
 /// has one.
@@ -10926,6 +12458,76 @@ String _inConsole([String project = '_']) =>
 String _notRunning(String why, String project) =>
     'The Firebase CLI did not run ($why). Install it, or put it on the '
     'PATH: https://firebase.google.com/docs/cli\n${_inConsole(project)}';
+
+/// What the script tells of Apple, which only the Firebase console of
+/// [project] enables.
+String _appleInConsole(String project) =>
+    'Apple is enabled in the Firebase console, which the Firebase CLI '
+    'cannot do: https://console.firebase.google.com/project/$project/'
+    'authentication/providers\nThe deletion of an account of Apple also '
+    'needs the Services ID and the OAuth code flow configuration of Apple '
+    'there; see the section Firebase Authentication of README.md.';
+
+/// [items] as a sentence lists them, such as `A, B and C`.
+String _listed(List<String> items) => items.length < 2
+    ? items.join()
+    : '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}';
+
+/// The page of the Firebase console with the sign-in methods of [project].
+String _consoleOf(String project) =>
+    'https://console.firebase.google.com/project/$project/authentication/'
+    'providers';
+
+/// What the script tells when it leaves Google out in [project], since the
+/// Firebase CLI runs as no user account, and how to run it again, with the
+/// project if its arguments [named] it.
+String _withoutGoogle(String project, {required bool named}) =>
+    'Google is left out: its consent screen needs a support email, the '
+    'email address of a user account of the Firebase CLI, and the Firebase '
+    'CLI runs as none here, as with a service account. To enable Google, '
+    'run: $_command${named ? ' --project $project' : ''} --account <email>, '
+    'or enable it in the Firebase console: ${_consoleOf(project)}';
+
+/// The account that [options], the arguments of the script for the Firebase
+/// CLI, name: the last one before `--`, as the Firebase CLI takes it, if
+/// any.
+String? _accountIn(List<String> options) {
+  final before = options.takeWhile((argument) => argument != '--').toList();
+  String? account;
+  for (final (index, option) in before.indexed) {
+    if (option.startsWith('--account=')) {
+      account = option.substring('--account='.length);
+    } else if (option == '--account' && index + 1 < before.length) {
+      account = before[index + 1];
+    }
+  }
+  return account;
+}
+
+/// The email address of the user account that the Firebase CLI is logged
+/// in as, as [run] runs it, or `null` if it is logged in as none, as with a
+/// service account. It reads what `firebase login:list` prints, not what it
+/// gives with `--json`, which has the tokens of the accounts.
+Future<String?> _loggedInAs(
+  Future<(int, String, String)> Function(List<String> arguments) run,
+) async {
+  final (code, printed, _) = await run(const ['login:list']);
+  if (code != 0) return null;
+  return RegExp(
+    r'^Logged in as (\S+@\S+)$',
+    multiLine: true,
+  ).firstMatch(printed.replaceAll('\r', ''))?[1];
+}
+
+/// What the script tells of [account], the one that its arguments name,
+/// after a call of the Firebase CLI failed.
+String _accountHint(String? account) => account != null
+    ? '- The arguments name the account $account for it. "firebase '
+          'login:list" shows the accounts that the Firebase CLI has.'
+    : '- If it ran as the wrong account: this script runs the Firebase CLI '
+          'in a temporary directory, where an account that "firebase '
+          'login:use" chose for the directory of the app does not apply. To '
+          'name the account, run: $_command --account <email>';
 
 /// What the script tells after the Firebase CLI failed with the exit code
 /// [code] for [project], with the arguments [passedOn]: which account it
@@ -11114,4 +12716,558 @@ String? _olderCli(String printed) {
     if (found < number) return version[0];
   }
   return version[4] == null ? null : version[0];
+}
+
+/// The configurations of the platforms that `flutterfire configure` wrote
+/// into `firebase.json` of [app], under `flutter`, or `null` when the file
+/// is missing or is not JSON.
+Object? _flutterfireOf(Directory app) {
+  final file = File('${app.path}/firebase.json');
+  if (!file.existsSync()) return null;
+  try {
+    return switch (jsonDecode(_textOf(file))) {
+      {'flutter': final Object? flutter} => flutter,
+      _ => null,
+    };
+  } on FormatException {
+    return null;
+  }
+}
+
+/// A Firebase app of the app, as `flutterfire configure` wrote it into
+/// `firebase.json`: its platform, `android` or `ios`, its id, and the path
+/// of its Firebase file in the app.
+typedef _App = ({String platform, String id, String file});
+
+/// The Firebase apps of [app] in [project], each once, as `firebase.json`
+/// of the app names them: for each platform, the app of the platform, and
+/// those of the build types of Android and of the build configurations and
+/// the targets of iOS, if it has them.
+List<_App> _appsOf(Directory app, String project) {
+  final apps = <_App>{};
+  void collect(String platform, Object? node) {
+    if (node is! Map) return;
+    if (node case {
+      'projectId': final String id,
+      'appId': final String appId,
+      'fileOutput': final String file,
+    } when id == project) {
+      apps.add((platform: platform, id: appId, file: file));
+    }
+    for (final value in node.values) {
+      collect(platform, value);
+    }
+  }
+
+  if (_flutterfireOf(app) case {'platforms': final Map<Object?, Object?> of}) {
+    for (final platform in const ['android', 'ios']) {
+      collect(platform, of[platform]);
+    }
+  }
+  return apps.toList();
+}
+
+/// Sets up in its Firebase project what the ways to sign in of [app] need,
+/// [needs], for [apps], the Firebase apps of the app in that project.
+/// [waitForClients] tells that this run enabled Google, whose clients may
+/// come to the Firebase files a moment later.
+///
+/// Throws a [_Failed] when a step fails.
+Future<void> _setUp(
+  Directory app,
+  _Cli cli,
+  Set<_Need> needs,
+  List<_App> apps, {
+  required bool waitForClients,
+}) async {
+  if (apps.isEmpty) {
+    stdout.writeln(
+      'firebase.json of the app names no app of the project ${cli.project} '
+      'that "flutterfire configure" configured the app for, so this run '
+      'registers no debug key, downloads no Firebase file and writes no URL '
+      'scheme there. To set the app up for that project, run "flutterfire '
+      'configure" for it first, and then this script again.',
+    );
+    return;
+  }
+  final android = [
+    for (final app in apps)
+      if (app.platform == 'android') app,
+  ];
+  final ios = [
+    for (final app in apps)
+      if (app.platform == 'ios') app,
+  ];
+  if (needs.contains(_Need.androidCertificate) && android.isNotEmpty) {
+    await _registerDebugKey(cli, {for (final app in android) app.id});
+  }
+  final files = [
+    if (needs.contains(_Need.serverClient)) ...android,
+    if (needs.contains(_Need.iosClient)) ...ios,
+  ];
+  if (files.isEmpty) return;
+  final schemes = await _downloadFiles(
+    app,
+    cli,
+    files,
+    waitForClients: waitForClients,
+  );
+  if (schemes != null && schemes.isNotEmpty) _writeUrlSchemes(app, schemes);
+}
+
+/// A hash of a certificate as the script compares it: its hexadecimal
+/// digits in lower case, without the colons that keytool prints.
+String _hashOf(String printed) =>
+    printed.replaceAll(':', '').toLowerCase().trim();
+
+/// Registers the SHA-1 and SHA-256 of the debug key of this machine for the
+/// Android apps [ids] in the project of [cli], those of each that the
+/// project does not have yet, and creates the debug key as the first debug
+/// build would when there is none.
+Future<void> _registerDebugKey(_Cli cli, Set<String> ids) async {
+  final keystore = _debugKeystore();
+  stdout.writeln(
+    'Registering the SHA-1 and SHA-256 of the Android debug key of this '
+    'machine, ${keystore.path}, for the Android app ${_listed([...ids])}.',
+  );
+  final keytool =
+      await _keytool(cli) ??
+      (throw _Failed(
+        'keytool, which reads the debug key, was not found on the PATH, in '
+        'JAVA_HOME or in Android Studio at ${_androidStudioKeytool()}. '
+        'Install a JDK or Android Studio, or put keytool on the PATH, and '
+        'run this script again.',
+      ));
+  final inShell = keytool == 'keytool';
+  if (!keystore.existsSync()) {
+    stdout.writeln(
+      'There is no debug key yet, so this script creates it, as the first '
+      'debug build would.',
+    );
+    keystore.parent.createSync(recursive: true);
+    // As the Android Gradle plugin creates the debug key (KeystoreHelper of
+    // the plugin 9): an RSA key of 2048 bits for 30 years in the keystore
+    // of the default type of the JDK.
+    final (code, _, errors) = await cli.run(keytool, [
+      '-genkeypair',
+      '-keystore',
+      keystore.path,
+      '-storepass',
+      'android',
+      '-alias',
+      'androiddebugkey',
+      '-keypass',
+      'android',
+      '-keyalg',
+      'RSA',
+      '-keysize',
+      '2048',
+      '-sigalg',
+      'SHA256withRSA',
+      '-validity',
+      '10950',
+      '-dname',
+      'CN=Android Debug,O=Android,C=US',
+    ], inShell: inShell);
+    if (code != 0) {
+      throw _Failed(
+        'keytool did not create the debug key ${keystore.path} (exit code '
+        '$code)${errors.isEmpty ? '' : ': $errors'}',
+      );
+    }
+  }
+  final (code, printed, errors) = await cli.run(keytool, [
+    '-list',
+    '-v',
+    '-keystore',
+    keystore.path,
+    '-alias',
+    'androiddebugkey',
+    '-storepass',
+    'android',
+  ], inShell: inShell);
+  final hashes = [
+    for (final name in const ['SHA1', 'SHA256'])
+      RegExp(
+        '^\\s*$name:\\s*([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2})+)\\s*\$',
+        multiLine: true,
+      ).firstMatch(printed)?[1],
+  ];
+  if (code != 0 || hashes.contains(null)) {
+    throw _Failed(
+      'keytool did not read the SHA-1 and SHA-256 of the debug key '
+      '${keystore.path} (exit code $code)'
+      '${errors.isEmpty ? '' : ': $errors'}',
+    );
+  }
+  stdout.writeln(
+    'The SHA-1 of the key is ${hashes[0]}, and its SHA-256 is ${hashes[1]}.',
+  );
+  for (final id in ids) {
+    final listed = await cli.json([
+      'apps:android:sha:list',
+      id,
+    ], 'list the SHA certificate hashes of the Android app $id');
+    final known = {
+      if (listed is List)
+        for (final certificate in listed)
+          if (certificate case {'shaHash': final String hash}) _hashOf(hash),
+    };
+    final missing = [
+      for (final hash in hashes.nonNulls)
+        if (!known.contains(_hashOf(hash))) hash,
+    ];
+    for (final hash in missing) {
+      // As keytool prints it, with colons, which the API of Firebase takes,
+      // as a check against a real project showed.
+      await cli.json([
+        'apps:android:sha:create',
+        id,
+        hash,
+      ], 'register $hash for the Android app $id');
+    }
+    stdout.writeln(
+      missing.isEmpty
+          ? 'The Android app $id has them already.'
+          : 'Registered them for the Android app $id.',
+    );
+  }
+}
+
+/// The debug key of Android of this machine, where the Android Gradle
+/// plugin keeps it and creates it for the first debug build:
+/// `debug.keystore` in the directory of the preferences of the Android
+/// tools (`AbstractAndroidLocations` of the plugin 9). That is the
+/// directory that ANDROID_USER_HOME names, or `.android` in the one that
+/// ANDROID_PREFS_ROOT or ANDROID_SDK_HOME name, which are deprecated, or
+/// else `.android` in the first directory that exists of TEST_TMPDIR,
+/// XDG_CONFIG_HOME and the home directory.
+File _debugKeystore() {
+  final environment = Platform.environment;
+  final separator = Platform.pathSeparator;
+  String? named(String variable) => switch (environment[variable]) {
+    final value? when value.isNotEmpty => value,
+    _ => null,
+  };
+  String? dotAndroidIn(List<String?> directories) => [
+    for (final directory in directories.nonNulls)
+      if (Directory(directory).existsSync()) '$directory$separator.android',
+  ].firstOrNull;
+  final preferences =
+      named('ANDROID_USER_HOME') ??
+      dotAndroidIn([named('ANDROID_PREFS_ROOT'), named('ANDROID_SDK_HOME')]) ??
+      dotAndroidIn([
+        named('TEST_TMPDIR'),
+        named('XDG_CONFIG_HOME'),
+        named(Platform.isWindows ? 'USERPROFILE' : 'HOME'),
+      ]);
+  if (preferences == null) {
+    throw const _Failed(
+      'Cannot tell where the Android Gradle plugin keeps the debug key of '
+      'this machine: no directory of ANDROID_USER_HOME and of the home '
+      'directory exists.',
+    );
+  }
+  return File('$preferences${separator}debug.keystore');
+}
+
+/// Where Android Studio has keytool, in the JDK that Flutter builds with
+/// when JAVA_HOME is not set, at the default place of Android Studio on
+/// this system.
+String _androidStudioKeytool() {
+  if (Platform.isMacOS) {
+    return '/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/'
+        'keytool';
+  }
+  if (Platform.isWindows) {
+    final programs =
+        Platform.environment['ProgramFiles'] ?? r'C:\Program Files';
+    return '$programs\\Android\\Android Studio\\jbr\\bin\\keytool.exe';
+  }
+  return '/opt/android-studio/jbr/bin/keytool';
+}
+
+/// The keytool of a JDK of this machine that runs: the one on the PATH, the
+/// one in JAVA_HOME or the one of Android Studio, or `null` if none runs.
+/// A keytool that does not run, such as the one of macOS on a machine
+/// without a JDK that macOS knows, is passed over.
+Future<String?> _keytool(_Cli cli) async {
+  final javaHome = Platform.environment['JAVA_HOME'] ?? '';
+  final separator = Platform.pathSeparator;
+  for (final keytool in [
+    'keytool',
+    if (javaHome.isNotEmpty)
+      [
+        javaHome,
+        'bin',
+        Platform.isWindows ? 'keytool.exe' : 'keytool',
+      ].join(separator),
+    _androidStudioKeytool(),
+  ]) {
+    final onPath = keytool == 'keytool';
+    if (!onPath && !File(keytool).existsSync()) continue;
+    try {
+      final (code, _, _) = await cli.run(keytool, ['-help'], inShell: onPath);
+      if (code == 0) return keytool;
+    } on ProcessException {
+      continue;
+    }
+  }
+  return null;
+}
+
+/// Downloads the Firebase files of [files], apps of [app], from the project
+/// of [cli], and writes those that have the clients of Google to their
+/// paths in the app. Returns the URL schemes that the iOS files among them
+/// have, or `null` when a file lacks the clients, which the script then
+/// tells.
+///
+/// When [waitForClients], Google was enabled a moment ago, so the script
+/// downloads a file without the clients again, three times at most, five
+/// seconds apart, and fails when it still lacks them.
+Future<List<String>?> _downloadFiles(
+  Directory app,
+  _Cli cli,
+  List<_App> files, {
+  required bool waitForClients,
+}) async {
+  stdout.writeln(
+    'Downloading the Firebase files of the app again, with the clients of '
+    'Google: ${_listed([for (final file in files) file.file])}.',
+  );
+  final contents = <_App, String>{};
+  for (var attempt = 1; ; attempt++) {
+    for (final file in files) {
+      if (contents[file] case final text? when _clientsOf(file, text) != null) {
+        continue;
+      }
+      final result = await cli.json([
+        'apps:sdkconfig',
+        file.platform.toUpperCase(),
+        file.id,
+      ], 'download the Firebase file of the app ${file.id}');
+      contents[file] = switch (result) {
+        {'fileContents': final String text} => text,
+        _ => throw _Failed(
+          'The Firebase CLI gave no Firebase file of the app ${file.id}.',
+        ),
+      };
+    }
+    final lacking = [
+      for (final file in files)
+        if (_clientsOf(file, contents[file]!) == null) file,
+    ];
+    if (lacking.isEmpty || !waitForClients || attempt > 3) {
+      final written = <String>[];
+      for (final file in files) {
+        if (lacking.contains(file)) continue;
+        if (_write(app, file.file, contents[file]!)) written.add(file.file);
+      }
+      stdout.writeln(
+        written.isEmpty
+            ? 'The files of the app are as Firebase has them already.'
+            : 'Wrote ${_listed(written)}.',
+      );
+      if (lacking.isEmpty) {
+        return [
+          for (final file in files)
+            if (file.platform == 'ios') ...?_clientsOf(file, contents[file]!),
+        ];
+      }
+      final names = _listed([for (final file in lacking) file.file]);
+      if (waitForClients) {
+        throw _Failed(
+          'Firebase has not added the clients of Google yet, so this script '
+          'has not written $names.',
+        );
+      }
+      stdout.writeln(
+        'Firebase has no clients of Google, as in a project in which Google '
+        'is not enabled, so this script has not written $names, and writes '
+        'no URL scheme. Enable Google, and run this script again.',
+      );
+      return null;
+    }
+    await Future<void>.delayed(const Duration(seconds: 5));
+  }
+}
+
+/// The URL schemes of the clients of Google in [text], the Firebase file of
+/// [file], or `null` if it lacks a client that the app needs: for an iOS
+/// app, `REVERSED_CLIENT_ID`, its client of Google reversed, and for an
+/// Android app none, with the client of the server, an OAuth client of the
+/// type 3.
+List<String>? _clientsOf(_App file, String text) {
+  if (file.platform == 'ios') {
+    final scheme = RegExp(
+      r'<key>REVERSED_CLIENT_ID</key>\s*<string>([A-Za-z0-9.-]+)</string>',
+    ).firstMatch(text)?[1];
+    return scheme == null ? null : [scheme];
+  }
+  bool hasServer(Object? node) => switch (node) {
+    {'client_type': 3} => true,
+    Map() => node.values.any(hasServer),
+    List() => node.any(hasServer),
+    _ => false,
+  };
+  try {
+    return hasServer(jsonDecode(text)) ? const [] : null;
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Writes [text] to [path] of [app], unless the file has it already, and
+/// returns whether it wrote it.
+///
+/// Throws a [_Failed] when [path] is outside the app, and when the file
+/// cannot be read or written.
+bool _write(Directory app, String path, String text) {
+  final segments = path.split(RegExp(r'[/\\]'));
+  if (path.isEmpty ||
+      path.startsWith('/') ||
+      path.startsWith(r'\') ||
+      path.contains(':') ||
+      segments.contains('..')) {
+    throw _Failed(
+      'firebase.json of the app names "$path" as a Firebase file of the app, '
+      'which is outside the app.',
+    );
+  }
+  final file = File('${app.path}/$path');
+  try {
+    if (file.existsSync() && file.readAsStringSync() == text) return false;
+    file
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+  } on FileSystemException catch (error) {
+    throw _Failed('$path could not be written (${error.message}).');
+  }
+  return true;
+}
+
+/// Writes [schemes] into the URL schemes of [_infoPlist] of [app], those
+/// that it does not have, as a URL type of their own, and leaves the file
+/// as it is when it has them all.
+///
+/// Throws a [_Failed] with what to add by hand when the file is not in a
+/// form that the script knows, and when it cannot be read or written.
+void _writeUrlSchemes(Directory app, List<String> schemes) {
+  final file = File('${app.path}/$_infoPlist');
+  if (!file.existsSync()) {
+    throw _Failed(
+      '$_infoPlist is missing, so this script cannot write the URL scheme '
+      'of Google, ${_listed(schemes)}, into it.',
+    );
+  }
+  final String text;
+  try {
+    text = file.readAsStringSync();
+  } on FileSystemException catch (error) {
+    throw _Failed('$_infoPlist could not be read (${error.message}).');
+  }
+  final missing = [
+    for (final scheme in {...schemes})
+      if (!text.contains('<string>$scheme</string>')) scheme,
+  ];
+  if (missing.isEmpty) {
+    stdout.writeln('$_infoPlist has the URL scheme of Google already.');
+    return;
+  }
+  stdout.writeln(
+    'Writing the URL scheme of Google, ${_listed(missing)}, into '
+    '$_infoPlist.',
+  );
+  final changed = _withUrlSchemes(text, missing);
+  final newline = text.contains('\r\n') ? '\r\n' : '\n';
+  if (changed == null) {
+    throw _Failed(
+      '$_infoPlist is not in a form in which this script can add the URL '
+      'scheme. Add this to CFBundleURLTypes there by hand:\n'
+      '${_urlTypesOf(missing, '', newline).trimRight()}',
+    );
+  }
+  try {
+    file.writeAsStringSync(changed);
+  } on FileSystemException catch (error) {
+    throw _Failed(
+      '$_infoPlist could not be written (${error.message}). Add this to '
+      'CFBundleURLTypes there by hand:\n'
+      '${_urlTypesOf(missing, '', newline).trimRight()}',
+    );
+  }
+}
+
+/// The URL types of [schemes] as the items of `CFBundleURLTypes`, each line
+/// after [indent], one tab further in for each level, and ending with
+/// [newline].
+String _urlTypesOf(List<String> schemes, String indent, String newline) => [
+  for (final scheme in schemes) ...[
+    '$indent<dict>',
+    '$indent\t<key>CFBundleTypeRole</key>',
+    '$indent\t<string>Editor</string>',
+    '$indent\t<key>CFBundleURLSchemes</key>',
+    '$indent\t<array>',
+    '$indent\t\t<string>$scheme</string>',
+    '$indent\t</array>',
+    '$indent</dict>',
+  ],
+].map((line) => '$line$newline').join();
+
+/// [text], an Info.plist in XML, with the URL types of [schemes] added: at
+/// the end of `CFBundleURLTypes`, or in a `CFBundleURLTypes` of their own
+/// at the end of the dictionary of the file. Returns `null` when [text] is
+/// not in a form that the script knows.
+String? _withUrlSchemes(String text, List<String> schemes) {
+  final newline = text.contains('\r\n') ? '\r\n' : '\n';
+  // The start of the line of the tag at [index], when only spaces and tabs
+  // come before it there.
+  int? lineOf(int index) {
+    final start = text.lastIndexOf('\n', index - 1) + 1;
+    return text.substring(start, index).trim().isEmpty ? start : null;
+  }
+
+  String insert(int at, String lines) =>
+      '${text.substring(0, at)}$lines${text.substring(at)}';
+  final key = RegExp(r'<key>CFBundleURLTypes</key>\s*');
+  final keys = key.allMatches(text).toList();
+  if (keys.length > 1) return null;
+  if (keys case [final found]) {
+    if (text.startsWith('<array/>', found.end)) {
+      final line = lineOf(found.start);
+      if (line == null) return null;
+      final indent = text.substring(line, found.start);
+      return text.replaceRange(
+        found.end,
+        found.end + '<array/>'.length,
+        '<array>$newline${_urlTypesOf(schemes, '$indent\t', newline)}'
+        '$indent</array>',
+      );
+    }
+    if (!text.startsWith('<array>', found.end)) return null;
+    // The end of that array, after the arrays within it.
+    var depth = 0;
+    for (final tag in RegExp(r'<(/?)array>').allMatches(text, found.end)) {
+      depth += tag[1]!.isEmpty ? 1 : -1;
+      if (depth > 0) continue;
+      final line = lineOf(tag.start);
+      if (line == null) return null;
+      final indent = text.substring(line, tag.start);
+      return insert(line, _urlTypesOf(schemes, '$indent\t', newline));
+    }
+    return null;
+  }
+  // The dictionary of the file ends with its last `</dict>`, right before
+  // `</plist>`.
+  final end = RegExp(r'</dict>\s*</plist>\s*$').firstMatch(text);
+  final line = end == null ? null : lineOf(end.start);
+  if (end == null || line == null) return null;
+  final indent = '${text.substring(line, end.start)}\t';
+  return insert(
+    line,
+    '$indent<key>CFBundleURLTypes</key>$newline'
+    '$indent<array>$newline'
+    '${_urlTypesOf(schemes, '$indent\t', newline)}'
+    '$indent</array>$newline',
+  );
 }

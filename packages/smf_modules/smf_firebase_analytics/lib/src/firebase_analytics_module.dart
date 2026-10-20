@@ -36,6 +36,11 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// shows after `bootstrap()`. When the app has a DI container, the role
 /// registers the service in it.
 ///
+/// The events of the app reach Google Analytics only once the Firebase
+/// project is linked to it, which a project that `flutterfire configure`
+/// creates is not, so every app of the module lists the step by hand
+/// [googleAnalyticsStep].
+///
 /// In the guide for coding agents of an app with a router, the module adds
 /// to the section of the analytics that the screen views need no code.
 final class FirebaseAnalyticsModule extends SmfModule {
@@ -44,6 +49,17 @@ final class FirebaseAnalyticsModule extends SmfModule {
 
   /// The id of the module.
   static const id = ModuleId('firebase_analytics');
+
+  /// The step by hand in which the developer turns on Google Analytics for
+  /// the Firebase project, under Project settings > Integrations of the
+  /// Firebase console: a project that `flutterfire configure` creates has
+  /// none, and the events of the app reach nothing until it is on. Every
+  /// app of the module lists it.
+  static const googleAnalyticsStep = ManualStep(
+    ManualStepId(id, 'google_analytics'),
+    'Turn on Google Analytics in the Firebase project, unless it is on '
+    'already',
+  );
 
   static const _file = ImportRef.app(
     'core/analytics/firebase_analytics_service.dart',
@@ -68,6 +84,7 @@ final class FirebaseAnalyticsModule extends SmfModule {
             create: FactoryRef('createFirebaseAnalyticsService', import: _file),
           ),
         ),
+        googleAnalyticsStep,
         // The router tells the listener, a function of the file of the
         // module, which the file has only in an app with a router, about
         // each screen the user sees.

@@ -96,6 +96,7 @@ final class TestTemplate<D extends Object> extends RoleTemplate<D> {
     this.issues = const [],
     this.choice,
     this.warnings = const [],
+    this.steps = const [],
   });
 
   final List<Contribution> contributions;
@@ -105,8 +106,14 @@ final class TestTemplate<D extends Object> extends RoleTemplate<D> {
   /// The warnings that [choose] reports with [RoleChoiceContext.warn].
   final List<SmfIssue> warnings;
 
+  /// The steps by hand that [manualSteps] returns.
+  final List<ManualStep> steps;
+
   /// The inputs of [validate], in order.
   final List<RoleHookInput<D>> validated = [];
+
+  /// The inputs of [manualSteps], in order.
+  final List<RoleHookInput<D>> listed = [];
 
   /// The contexts of [choose], in order.
   final List<RoleChoiceContext<D>> chosen = [];
@@ -121,6 +128,12 @@ final class TestTemplate<D extends Object> extends RoleTemplate<D> {
   }
 
   @override
+  List<ManualStep> manualSteps(RoleHookInput<D> input) {
+    listed.add(input);
+    return steps;
+  }
+
+  @override
   Future<Object?> choose(RoleChoiceContext<D> context) async {
     chosen.add(context);
     warnings.forEach(context.warn);
@@ -128,14 +141,18 @@ final class TestTemplate<D extends Object> extends RoleTemplate<D> {
   }
 }
 
-/// A provider for tests that returns [issues] from [validate].
+/// A provider for tests that returns [issues] from [validate] and [steps]
+/// from [manualSteps].
 final class TestProvider<D extends Object> extends RoleProvider<D> {
-  TestProvider(this.role, {this.issues = const []});
+  TestProvider(this.role, {this.issues = const [], this.steps = const []});
 
   @override
   final Role<D> role;
 
   final List<SmfIssue> issues;
+
+  /// The steps by hand that [manualSteps] returns.
+  final List<ManualStep> steps;
 
   /// The inputs of [validate], in order.
   final List<RoleHookInput<D>> validated = [];
@@ -145,6 +162,9 @@ final class TestProvider<D extends Object> extends RoleProvider<D> {
     validated.add(input);
     return issues;
   }
+
+  @override
+  List<ManualStep> manualSteps(RoleHookInput<D> input) => steps;
 }
 
 /// A module for tests with a fixed descriptor and contributions.
@@ -372,6 +392,14 @@ const testContext = ModuleContext(
     androidNamespace: 'com.example.my_app',
   ),
 );
+
+/// The link of a front end in the tests to the guide of [steps], the steps
+/// by hand of an app (see [SetupLink]): a page with the wires of the steps,
+/// in order, in its query.
+Uri guideOf(List<ManualStepId> steps) => Uri.parse(
+      'https://guide.example/setup?steps='
+      '${[for (final step in steps) step.wire].join(',')}',
+    );
 
 /// A bundle named [name] with empty files at [paths] and the [files] with
 /// their text.

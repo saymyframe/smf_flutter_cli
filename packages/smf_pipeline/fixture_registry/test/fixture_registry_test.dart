@@ -1877,20 +1877,27 @@ void main() {
         'which the matrix generates with the option, and the other apps with '
         'the role get no value of the option and the mode required', () async {
       // The auth role uses the router role, for the routes that ask for an
-      // account, so its provider is checked with each router and without
-      // one.
-      const withRouter = 'fake_auth (fake_router) with router';
+      // account, and the localization role, for the labels of the ways to
+      // sign in, so its provider is checked with each router and without
+      // one, with the texts of the app and without them.
+      const withRouter = 'fake_auth (fake_router) with router, localization';
       expect(harness.casesOfModule(FakeAuthModule.id).map((c) => '$c'), [
         withRouter,
+        'fake_auth (go_router) with router, localization',
+        'fake_auth (fake_router) with router',
         'fake_auth (go_router) with router',
+        'fake_auth with localization',
         'fake_auth',
       ]);
       // The case of another mode is the first case of the provider, which
       // has every role that the role uses: the app of such a mode has a
-      // router, the first one of the registry.
+      // router, the first one of the registry, and the texts of the app.
       expect(harness.casesOfRole(authRole).map((c) => '$c'), [
         'auth by $withRouter',
+        'auth by fake_auth (go_router) with router, localization',
+        'auth by fake_auth (fake_router) with router',
         'auth by fake_auth (go_router) with router',
+        'auth by fake_auth with localization',
         'auth by fake_auth',
         'auth by $withRouter --auth-mode=guest',
         'auth by $withRouter --auth-mode=anonymous',
@@ -1926,14 +1933,16 @@ void main() {
             app,
       ];
       // The apps of the fixture alone, without a router and with each of
-      // the two, and each app with every module, with a clock of 24 hours
-      // and with one of 12.
+      // the two, with the texts of the app and without them, the apps of
+      // the fixture way to sign in, with the texts and without them, and
+      // each app with every module, with a clock of 24 hours and with one
+      // of 12.
       expect(withoutMode, contains(named('fake_auth')));
       expect(
         named('fake_auth').hook!.presentRoles,
         isNot(contains(routerRole)),
       );
-      expect(withoutMode, hasLength(19));
+      expect(withoutMode, hasLength(24));
       for (final app in withoutMode) {
         expect(
           app.createArguments('app_1', '/apps'),
@@ -2297,10 +2306,14 @@ RoleImplementation? _implementationOf(SmfModule? module, Role role) {
   if (module == null) return null;
   for (final contribution
       in module.contribute(ContractHarness.defaultContext)) {
-    if (contribution
-        case RoleData<RoleImplementation>(role: final of, :final value)
+    if (contribution case RoleData(role: final of, :final value)
         when identical(of, role)) {
-      return value;
+      switch (value) {
+        case final RoleImplementation implementation:
+          return implementation;
+        case AuthImplementation(:final implementation):
+          return implementation;
+      }
     }
   }
   return null;
@@ -2448,11 +2461,20 @@ const _cases = [
   'fake_steps',
   'fake_theme with localization',
   'fake_theme',
-  // The fixture sign-in with each router and without one: the auth role
-  // uses the router role.
+  // The fixture sign-in with each router and without one, with the texts of
+  // the app and without them: the auth role uses the router role and the
+  // localization role.
+  'fake_auth (fake_router) with router, localization',
+  'fake_auth (go_router) with router, localization',
   'fake_auth (fake_router) with router',
   'fake_auth (go_router) with router',
+  'fake_auth with localization',
   'fake_auth',
+  // The fixture way to sign in, with the fixture sign-in, which provides
+  // the auth role that it requires, and with the texts of the app, which
+  // have its label, and without them.
+  'fake_sign_in_method with localization',
+  'fake_sign_in_method',
   // The fixture notifications with the fixture onboarding and without it,
   // and with the localization and without: the notifications role uses the
   // onboarding screen role and the localization role, and the settings
@@ -2476,14 +2498,19 @@ const _cases = [
   'bottom_tabs (fake_router) with localization',
   'bottom_tabs (go_router) with localization',
   // The other values of the mode option of the auth role, with the
-  // fixture sign-in, which provides it, and the first router, since the
-  // role uses the router role.
-  'auth by fake_auth (fake_router) with router --auth-mode=guest',
-  'auth by fake_auth (fake_router) with router --auth-mode=anonymous',
+  // fixture sign-in, which provides it, the first router and the texts of
+  // the app, since the role uses the router role and the localization role.
+  '$_authOfModes --auth-mode=guest',
+  '$_authOfModes --auth-mode=anonymous',
   // The other value of the mode option of the fixture clock, with its
   // provider.
   'clock by fake_clock_badge --clock-hours=12',
 ];
+
+/// The case of the auth role whose app the other values of its mode
+/// option have.
+const _authOfModes = 'auth by fake_auth (fake_router) with router, '
+    'localization';
 
 /// Whether [text] is a text of the app entry of the fixtures, which every
 /// app has besides the texts of the fixtures.

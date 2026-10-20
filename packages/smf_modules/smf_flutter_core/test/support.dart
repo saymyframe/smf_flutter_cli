@@ -392,7 +392,8 @@ final class TestAppPreferences implements AppPreferences {
 }
 
 /// A module that puts something into every socket of the app entry, as
-/// other modules would.
+/// other modules would, with the step by hand that its entitlement of the
+/// iOS app needs.
 final class EverySocketModule extends SmfModule {
   /// Creates the module.
   const EverySocketModule();
@@ -497,7 +498,9 @@ final class EverySocketModule extends SmfModule {
           'UIBackgroundModes',
           const PlistStringArray(['fetch']),
         ),
-        AppEntryRole.iosEntitlements.entry(
+        // Only a paid team signs the entitlement, so the app lists the step
+        // by hand of its App ID with it.
+        ...AppEntryRole.paidTeamEntitlement(
           'com.apple.developer.associated-domains',
           const PlistStringArray(['applinks:example.com']),
         ),

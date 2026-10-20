@@ -22,6 +22,8 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_firebase_analytics` | `firebase_analytics`, analytics |
 | `smf_firebase_messaging` | `firebase_messaging`, push messages |
 | `smf_firebase_auth` | `firebase_auth`, sign-in |
+| `smf_google_sign_in` | `google_sign_in`, Google sign-in on Android and iOS |
+| `smf_apple_sign_in` | `apple_sign_in`, Sign in with Apple on iOS |
 | `smf_sign_in` | `sign_in`, the screens of sign-in and of the account |
 
 `smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.

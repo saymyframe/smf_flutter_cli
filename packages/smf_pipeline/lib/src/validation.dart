@@ -5,6 +5,7 @@ import 'package:smf_pipeline/src/choices.dart';
 import 'package:smf_pipeline/src/collector.dart';
 import 'package:smf_pipeline/src/errors.dart';
 import 'package:smf_pipeline/src/machine_files.dart';
+import 'package:smf_pipeline/src/manual_steps.dart';
 import 'package:smf_pipeline/src/order.dart';
 import 'package:smf_pipeline/src/pubspec.dart';
 import 'package:smf_pipeline/src/registry.dart';
@@ -20,6 +21,8 @@ final class ValidationResult {
     required this.socketOrders,
     required this.postGenOrder,
     required this.pubspec,
+    this.manualSteps = const [],
+    this.setupLink,
   });
 
   /// The errors and warnings found.
@@ -34,6 +37,20 @@ final class ValidationResult {
 
   /// The merged `pubspec.yaml`.
   final MergedPubspec pubspec;
+
+  /// The steps of the app that its developer does by hand, each once, in
+  /// their order, with their contributors (see [planManualSteps]).
+  ///
+  /// The pipeline plans them here, before the roles choose, and only here,
+  /// so a run that stops before the choices, as `--explain` does, has the
+  /// steps that the render hooks of the app get.
+  final List<PlannedManualStep> manualSteps;
+
+  /// The link to the page that guides the developer through the
+  /// [manualSteps], which the front end of the pipeline named for them when
+  /// they were planned (see [SetupLink]), or `null` for an app without
+  /// steps or a front end that names no page.
+  final Uri? setupLink;
 
   /// Whether generation cannot continue.
   bool get hasErrors => issues.any((issue) => issue.isError);
@@ -56,8 +73,10 @@ bool isReservedVar(String name) =>
     masonVariables.contains(name);
 
 /// The request that the hooks of the roles get: the data of [collection]
-/// that applies, the present roles of [resolution], the [context] and the
-/// [choices] of the roles once they are made.
+/// that applies, the present roles of [resolution], the [context], the
+/// [choices] of the roles once they are made, and the [manualSteps] that
+/// stage 5 planned with their [setupLink], for the render hooks and the
+/// structural rules (see [RoleHookRequest.manualSetup]).
 ///
 /// With the [choices], [collection] is the one that they decided (see
 /// [Collection.decide]), so that the hooks get only the data whose
@@ -73,6 +92,8 @@ RoleHookRequest hookRequest({
   required Collection collection,
   required ModuleContext context,
   Map<Role, Object?> choices = const {},
+  List<PlannedManualStep> manualSteps = const [],
+  Uri? setupLink,
 }) =>
     RoleHookRequest(
       data: [
@@ -86,6 +107,7 @@ RoleHookRequest hookRequest({
       presentRoles: resolution.presentRoles,
       context: context,
       choices: choices,
+      manualSetup: manualSetupOf(manualSteps, link: setupLink),
     );
 
 /// The names of the brick variables among [vars] that are not plain data:
@@ -205,6 +227,10 @@ List<Collected> _boundSteps(List<Collected> steps) {
 ///   dependency;
 /// - the `validate` hooks of the present roles' templates and providers,
 ///   and the module rules of the roles;
+/// - the steps by hand of the app, which it plans with the `manualSteps`
+///   hooks of the present roles' templates and providers (see
+///   [planManualSteps]), and the link to their guide, which [setupLink]
+///   names for an app with steps (see [setupLinkOf]);
 /// - the tags of the sockets in the bricks (see [checkTemplateTags]), that
 ///   every socket and every section of the pubspec with contributions has
 ///   its tag, and that every socket that needs a value has one;
@@ -223,6 +249,7 @@ ValidationResult validate({
   Map<String, String?> optionValues = const {},
   bool interactive = true,
   bool skipExternalSetup = false,
+  SetupLink? setupLink,
 }) {
   // Sockets with a contribution that breaks a rule, whose tags are not
   // worth reporting too.
@@ -252,10 +279,23 @@ ValidationResult validate({
     ...collection.all,
   ]);
   final pubspec = merged.pubspec;
+  final request = hookRequest(
+    registry: registry,
+    resolution: resolution,
+    collection: collection,
+    context: context,
+  );
+  final manual = planManualSteps(
+    registry: registry,
+    resolution: resolution,
+    collection: collection,
+    request: request,
+  );
   issues
     ..addAll(_appPubspecIssues(merged, context))
     ..addAll(merged.issues)
-    ..addAll(_hookIssues(registry, resolution, collection, context));
+    ..addAll(_hookIssues(resolution, collection, request))
+    ..addAll(manual.issues);
   final tags = scanBricks(
     registry: registry,
     resolution: resolution,
@@ -319,6 +359,9 @@ ValidationResult validate({
     socketOrders: orders,
     postGenOrder: postGenOrder,
     pubspec: merged.pubspec,
+    manualSteps: manual.steps,
+    // Once, so that every hook and line of the run has the same link.
+    setupLink: setupLinkOf(manual.steps, setupLink),
   );
 }
 
@@ -448,8 +491,9 @@ Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
 /// The problems of [collected] with the rules of the pipeline: the roles in
 /// its [Contribution.when] and of the conditions in its
 /// [Contribution.whenChosen], who may use which role and socket, for a brick,
-/// its hooks, variables and files, and for a post-generation step, its id,
-/// its notice and the step it continues; see [_stepIssues].
+/// its hooks, variables and files, for a post-generation step, its id, its
+/// notice and the step it continues (see [_stepIssues]), and for a step by
+/// hand, its id and its title (see [manualStepIssues]).
 ///
 /// Stage 8 checks the fragments of the render hooks with it too.
 Iterable<SmfIssue> contributionIssues(
@@ -493,6 +537,8 @@ Iterable<SmfIssue> contributionIssues(
       }
     case final PostGenStep step:
       yield* _stepIssues(step, origin, resolution);
+    case final ManualStep step:
+      yield* manualStepIssues(step, origin, roles.access);
     case Preflight() || PubspecContribution():
       break;
   }
@@ -1429,19 +1475,12 @@ String _and(List<String> names) => names.length == 1
     : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 
 /// Runs the `validate` hooks of the present roles' templates and providers
-/// and the module rules of the roles.
+/// and the module rules of the roles, with [request].
 Iterable<SmfIssue> _hookIssues(
-  ModuleRegistry registry,
   Resolution resolution,
   Collection collection,
-  ModuleContext context,
+  RoleHookRequest request,
 ) sync* {
-  final request = hookRequest(
-    registry: registry,
-    resolution: resolution,
-    collection: collection,
-    context: context,
-  );
   for (final role in resolution.presentRoles) {
     // The input's runtime type argument is the role's data type, which the
     // hooks of the role's template and providers take.

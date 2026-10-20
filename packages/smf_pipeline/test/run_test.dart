@@ -46,8 +46,12 @@ void main() {
         TestModule('extra', contributions: contributions),
       ];
 
-  CreatePipeline pipeline(List<SmfModule> modules) =>
-      CreatePipeline(registry: ModuleRegistry(modules), host: host.host);
+  CreatePipeline pipeline(List<SmfModule> modules, {SetupLink? setupLink}) =>
+      CreatePipeline(
+        registry: ModuleRegistry(modules),
+        host: host.host,
+        setupLink: setupLink,
+      );
 
   CreateRequest request({
     List<String> modules = const ['extra'],
@@ -127,6 +131,36 @@ void main() {
       files.directory(temporaryOf(runner.calls.first)).existsSync(),
       isFalse,
     );
+  });
+
+  test('keeps the steps by hand of the app, which no command can do', () async {
+    const key = ManualStep(
+      ManualStepId(ModuleId('extra'), 'apns_key'),
+      'Give Firebase your Apple push key (APNs key)',
+    );
+    const appId = ManualStep(
+      ManualStepId.role(appEntryRole, 'ios_app_id'),
+      'In Xcode, sign the iOS app with your paid Apple Developer team',
+    );
+
+    final app = (await pipeline(
+      modulesWith(const [key, appId]),
+      setupLink: guideOf,
+    ).run(request()))!;
+    final without = (await pipeline(modulesWith(), setupLink: guideOf).run(
+      request(onConflict: OnConflict.replace),
+    ))!;
+
+    // The steps of roles come first, in the link to their guide too.
+    expect(app.manualSteps, [appId, key]);
+    expect(
+      app.setupLink,
+      Uri.parse(
+        'https://guide.example/setup?steps=app_entry.ios_app_id,extra.apns_key',
+      ),
+    );
+    expect(without.manualSteps, isEmpty);
+    expect(without.setupLink, isNull);
   });
 
   test('writes the files of the render hooks as they are', () async {

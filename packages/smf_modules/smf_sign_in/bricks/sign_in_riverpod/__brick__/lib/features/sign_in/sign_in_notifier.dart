@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/app_session.dart';
+import '../../core/auth/sign_in_methods.dart';
 import 'session_provider.dart';
 import 'sign_in_state.dart';
 
@@ -15,8 +16,9 @@ final signInProvider =
       SignInNotifier.new,
     );
 
-/// Signs in through the session of the app, and tells whether the sign-in
-/// is on its way and why the last one failed.
+/// Signs in through the session of the app, with the email address and the
+/// password of the form or with a way to sign in of the app, and tells
+/// whether a call is on its way and why the last one failed.
 class SignInNotifier extends Notifier<AuthActionState> {
   /// Whether a call of this notifier is on its way.
   var _calling = false;
@@ -42,22 +44,54 @@ class SignInNotifier extends Notifier<AuthActionState> {
   ///
   /// Once the user is signed in, the router leaves the screen, so the state
   /// stays busy for as long as the session has the account.
-  Future<void> signIn({required String email, required String password}) async {
+  Future<void> signIn({required String email, required String password}) =>
+      _run((session) async {
+        await session.signIn(email: email, password: password);
+        return true;
+      });
+
+  /// Signs in with [method], a way to sign in of the app: asks its identity
+  /// provider for a credential, with a sheet of its own, and gives it to
+  /// the session.
+  ///
+  /// When the user closes the sheet, the state is again as it was before.
+  /// Once the user is signed in, the router leaves the screen, so the state
+  /// stays busy for as long as the session has the account.
+  Future<void> continueWith(SignInMethod method) => _run(
+    (session) => continueWithMethod(session, method),
+    method: method,
+  );
+
+  /// Makes [call], the call of [method] or of the form, unless a call is on
+  /// its way. [call] returns whether it signed in: `false` when the user
+  /// closed the sheet of a way to sign in, and the state is again as it
+  /// was before then.
+  Future<void> _run(
+    Future<bool> Function(AppSessionController session) call, {
+    SignInMethod? method,
+  }) async {
     if (state.busy) return;
     final session = ref.read(appSessionProvider);
+    final before = state;
     _calling = true;
-    state = const AuthActionState(busy: true);
+    state = AuthActionState(busy: true, method: method);
+    final bool signedIn;
     try {
-      await session.signIn(email: email, password: password);
+      signedIn = await call(session);
     } on AuthFailure catch (failure) {
       _calling = false;
       // The user may have left the screen while the call was on its way.
-      if (ref.mounted) state = AuthActionState(failure: failure);
+      if (ref.mounted) {
+        state = AuthActionState(failure: failure, method: method);
+      }
       return;
     }
     _calling = false;
-    // The user may be signed out again already.
-    if (ref.mounted && !session.hasAccount.value) {
+    if (!ref.mounted) return;
+    if (!signedIn) {
+      state = before;
+    } else if (!session.hasAccount.value) {
+      // The user may be signed out again already.
       state = const AuthActionState();
     }
   }

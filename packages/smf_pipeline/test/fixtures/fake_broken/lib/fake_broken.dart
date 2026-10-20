@@ -675,6 +675,24 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture sign-in whose `linkWith()` creates a new user for the
+  /// identity, rather than giving it to the anonymous user who is signed
+  /// in: the user of the identity has another id than the anonymous user
+  /// had, so what the app keeps under that id is left behind.
+  static const authLinkingCredentialAsNewUser = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_links_credential_as_new_user'),
+    'Sign-in that gives an anonymous user a new id with an identity (fixture)',
+    _fixtureAuthFile,
+    [
+      (
+        '    // The user who is signed in keeps the id with the identity.\n'
+            '    final uid = user.uid;\n',
+        '    final uid = _newUid();\n',
+      ),
+    ],
+  );
+
   /// The file of the fixture sign-in.
   static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
 

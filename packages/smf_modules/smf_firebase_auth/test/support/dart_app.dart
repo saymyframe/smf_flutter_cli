@@ -146,20 +146,36 @@ Locale basicLocaleListResolution(
 /// - `userChanges()` returns a new stream each time, which first has the
 ///   current user and then what the platform tells of;
 /// - an anonymous user whom Android kept on the device has an empty text
-///   for its address, not none.
+///   for its address, not none;
+/// - `revokeTokenWithAuthorizationCode()` throws an `UnimplementedError`
+///   on a platform other than iOS and macOS, and its future never completes
+///   while nobody is signed in, as that of the Firebase SDK.
+///
+/// A credential of Google or Apple signs in to the user `uid of <the ID
+/// token>`, whom a link gives the identity too, with the id of the
+/// provider of the credential in `providerData`. A credential that the
+/// plugin keeps on the platform, which a failure of Firebase may carry,
+/// has its number as its `token`.
 ///
 /// A test scripts and reads it through the top-level names: `failNext`,
-/// the error that the next call of a method fails with; `firebaseCalls`,
-/// each call that reached it, with its arguments; `userChangesListeners`,
-/// how many of its streams of the user have a listener;
-/// `platformSignsOut()` and `platformFails()`, what the platform tells of
-/// without a call; and `restoreAnonymousUserOfAndroid()`, the user that a
-/// start of the app on Android finds.
+/// the error that the next call of a method fails with; `onNext`, what the
+/// platform does when the next call of a method reaches it, before it
+/// answers; `firebaseCalls`, each call that reached it, with its
+/// arguments; `userChangesListeners`, how many of its streams of the user
+/// have a listener; `platformSignsOut()` and `platformFails()`, what the
+/// platform tells of without a call; and `restoreAnonymousUserOfAndroid()`,
+/// the user that a start of the app on Android finds.
 const _firebaseAuth = r'''
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 /// The error that the next call of a method fails with, by the method.
 final Map<String, Object> failNext = {};
+
+/// What the platform does when the next call of a method reaches it, by the
+/// method.
+final Map<String, void Function()> onNext = {};
 
 /// The calls that reached Firebase, each with its arguments.
 final List<String> firebaseCalls = [];
@@ -185,15 +201,17 @@ void restoreAnonymousUserOfAndroid(String uid) =>
 
 void _called(String method, [List<Object?> arguments = const []]) {
   firebaseCalls.add('$method(${arguments.join(', ')})');
+  onNext.remove(method)?.call();
   final failure = failNext.remove(method);
   if (failure != null) throw failure;
 }
 
 class FirebaseAuthException implements Exception {
-  FirebaseAuthException({required this.code, this.message});
+  FirebaseAuthException({required this.code, this.message, this.credential});
 
   final String code;
   final String? message;
+  final AuthCredential? credential;
 
   @override
   String toString() => '[firebase_auth/$code] $message';
@@ -212,12 +230,52 @@ class FirebaseApp {
 }
 
 class AuthCredential {
-  const AuthCredential(this.description);
+  const AuthCredential({
+    required this.providerId,
+    required this.signInMethod,
+    this.token,
+    this.accessToken,
+  });
 
-  final String description;
+  final String providerId;
+  final String signInMethod;
+  final int? token;
+  final String? accessToken;
 
   @override
-  String toString() => description;
+  String toString() => '$providerId credential $token';
+}
+
+class EmailAuthCredential extends AuthCredential {
+  const EmailAuthCredential._(this.email, this.password)
+      : super(providerId: 'password', signInMethod: 'password');
+
+  final String email;
+  final String password;
+
+  @override
+  String toString() => 'password of $email: $password';
+}
+
+class OAuthCredential extends AuthCredential {
+  const OAuthCredential._({
+    required super.providerId,
+    this.idToken,
+    this.rawNonce,
+    this.appleFullPersonName,
+  }) : super(signInMethod: providerId);
+
+  final String? idToken;
+  final String? rawNonce;
+  final AppleFullPersonName? appleFullPersonName;
+
+  @override
+  String toString() => [
+        '$providerId of $idToken',
+        if (rawNonce != null) 'nonce $rawNonce',
+        if (appleFullPersonName case final name?)
+          'name ${name.givenName} ${name.familyName}',
+      ].join(', ');
 }
 
 abstract class EmailAuthProvider {
@@ -225,10 +283,53 @@ abstract class EmailAuthProvider {
     required String email,
     required String password,
   }) =>
-      AuthCredential('password of $email: $password');
+      EmailAuthCredential._(email, password);
+}
+
+abstract class GoogleAuthProvider {
+  static OAuthCredential credential({String? idToken, String? accessToken}) =>
+      OAuthCredential._(providerId: 'google.com', idToken: idToken);
+}
+
+class AppleFullPersonName {
+  AppleFullPersonName({
+    this.givenName,
+    this.familyName,
+    this.middleName,
+    this.nickname,
+    this.namePrefix,
+    this.nameSuffix,
+  });
+
+  final String? givenName;
+  final String? familyName;
+  final String? middleName;
+  final String? nickname;
+  final String? namePrefix;
+  final String? nameSuffix;
+}
+
+abstract class AppleAuthProvider {
+  static OAuthCredential credentialWithIDToken(
+    String idToken,
+    String rawNonce,
+    AppleFullPersonName appleFullPersonName,
+  ) =>
+      OAuthCredential._(
+        providerId: 'apple.com',
+        idToken: idToken,
+        rawNonce: rawNonce,
+        appleFullPersonName: appleFullPersonName,
+      );
 }
 
 class ActionCodeSettings {}
+
+class UserInfo {
+  UserInfo._(this.providerId);
+
+  final String providerId;
+}
 
 class UserCredential {
   UserCredential._(this.user);
@@ -237,18 +338,48 @@ class UserCredential {
 }
 
 class User {
-  User._(this.uid, {this.email, bool? isAnonymous})
-      : isAnonymous = isAnonymous ?? email == null;
+  User._(
+    this.uid, {
+    this.email,
+    bool? isAnonymous,
+    this.providers = const [],
+  }) : isAnonymous = isAnonymous ?? (email == null && providers.isEmpty);
 
   final String uid;
   final String? email;
   final bool isAnonymous;
+  final List<String> providers;
+
+  List<UserInfo> get providerData => [
+        if (email != null && !isAnonymous) UserInfo._('password'),
+        for (final provider in providers) UserInfo._(provider),
+      ];
 
   Future<UserCredential> linkWithCredential(AuthCredential credential) async {
     await null;
     _called('linkWithCredential', [credential]);
-    final email = credential.description.split(' ')[2].replaceAll(':', '');
-    return FirebaseAuth.instance._signIn(User._(uid, email: email));
+    return FirebaseAuth.instance._signIn(switch (credential) {
+      EmailAuthCredential(:final email) =>
+        User._(uid, email: email, providers: providers),
+      _ => User._(
+          uid,
+          email: email,
+          providers: [...providers, credential.providerId],
+        ),
+    });
+  }
+
+  Future<UserCredential> reauthenticateWithCredential(
+    AuthCredential credential,
+  ) async {
+    await null;
+    _called('reauthenticateWithCredential', [credential]);
+    return UserCredential._(this);
+  }
+
+  Future<void> reload() async {
+    await null;
+    _called('reload');
   }
 
   /// The plugin keeps the user as its current one.
@@ -315,10 +446,37 @@ class FirebaseAuth {
     return _signIn(User._('uid of $email', email: email));
   }
 
+  Future<UserCredential> signInWithCredential(AuthCredential credential) async {
+    await null;
+    _called('signInWithCredential', [credential]);
+    final idToken = credential is OAuthCredential ? credential.idToken : null;
+    return _signIn(
+      User._(
+        'uid of ${idToken ?? credential.token}',
+        providers: [credential.providerId],
+      ),
+    );
+  }
+
   Future<UserCredential> signInAnonymously() async {
     await null;
     _called('signInAnonymously');
     return _signIn(User._('guest ${++_anonymous}'));
+  }
+
+  Future<void> revokeTokenWithAuthorizationCode(String authorizationCode) {
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.macOS) {
+      throw UnimplementedError(
+        'revokeTokenWithAuthorizationCode() is only available on apple '
+        'platforms.',
+      );
+    }
+    return Future(() {
+      _called('revokeTokenWithAuthorizationCode', [authorizationCode]);
+      // The future of the Firebase SDK never completes without a user.
+      if (_current == null) return Completer<void>().future;
+    });
   }
 
   Future<void> sendPasswordResetEmail({

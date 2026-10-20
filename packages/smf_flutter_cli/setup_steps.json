@@ -1,0 +1,66 @@
+{
+  "steps": [
+    {
+      "id": "app_entry.ios_app_id",
+      "title": "In Xcode, sign the iOS app with your paid Apple Developer team",
+      "owner": "app_entry",
+      "ownerKind": "role",
+      "ownerName": "App entry",
+      "neededBy": [
+        "apple_sign_in",
+        "firebase_messaging"
+      ]
+    },
+    {
+      "id": "firebase_analytics.google_analytics",
+      "title": "Turn on Google Analytics in the Firebase project, unless it is on already",
+      "owner": "firebase_analytics",
+      "ownerKind": "module",
+      "ownerName": "firebase_analytics",
+      "neededBy": [
+        "firebase_analytics"
+      ]
+    },
+    {
+      "id": "firebase_auth.apple_provider",
+      "title": "Turn on Sign in with Apple in Firebase Authentication",
+      "owner": "firebase_auth",
+      "ownerKind": "module",
+      "ownerName": "firebase_auth",
+      "neededBy": [
+        "firebase_auth"
+      ]
+    },
+    {
+      "id": "firebase_auth.apple_revocation",
+      "title": "Give Firebase your Sign in with Apple key, so that deleting an account works",
+      "owner": "firebase_auth",
+      "ownerKind": "module",
+      "ownerName": "firebase_auth",
+      "neededBy": [
+        "firebase_auth"
+      ]
+    },
+    {
+      "id": "firebase_auth.google_release_sha",
+      "title": "Before releasing on Google Play, give Firebase the SHA of your release keys",
+      "owner": "firebase_auth",
+      "ownerKind": "module",
+      "ownerName": "firebase_auth",
+      "neededBy": [
+        "firebase_auth"
+      ]
+    },
+    {
+      "id": "firebase_messaging.apns_key",
+      "title": "Give Firebase your Apple push key (APNs key)",
+      "owner": "firebase_messaging",
+      "ownerKind": "module",
+      "ownerName": "firebase_messaging",
+      "neededBy": [
+        "firebase_messaging"
+      ]
+    }
+  ],
+  "retired": []
+}

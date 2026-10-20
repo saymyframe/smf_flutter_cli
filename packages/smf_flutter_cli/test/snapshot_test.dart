@@ -8,6 +8,7 @@ import 'package:dart_style/dart_style.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/setup_steps.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -131,6 +132,9 @@ Future<void> main() async {
         androidNamespace: 'com.example.my_app',
       ),
     ),
+    // An app with steps by hand gets the link to their guide that smf
+    // create names, for the files that tell of the steps.
+    setupLink: setupGuideLinkOf,
   );
   final appEntry = {
     for (final module in registry.providersOf(appEntryRole))

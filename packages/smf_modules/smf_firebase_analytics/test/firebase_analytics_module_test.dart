@@ -202,9 +202,10 @@ final Set<ContributionOrigin> _analytics = {
 
 /// Checks that [app] is [without] but for the files of the analytics, the
 /// dependency on firebase_analytics, the section of the analytics in the
-/// guide for coding agents and the files that the modules [changedBy]
-/// generate; its `bootstrap()` included, since the service starts without
-/// waiting.
+/// guide for coding agents, the step by hand of the module, which opens the
+/// README and adds the note of the app entry on the steps by hand to the
+/// guide, and the files that the modules [changedBy] generate; its
+/// `bootstrap()` included, since the service starts without waiting.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
@@ -223,7 +224,10 @@ void _expectTheAppWithout(
     const ModuleOrigin(FirebaseAnalyticsModule.id),
   );
   for (final MapEntry(key: path, value: file) in without.files.entries) {
-    if (path == 'pubspec.yaml' || path == AppEntryRole.agentsFile) continue;
+    if (const {'pubspec.yaml', AppEntryRole.readmeFile, AppEntryRole.agentsFile}
+        .contains(path)) {
+      continue;
+    }
     if (file.owner case ModuleOrigin(:final module)
         when changedBy.contains(module)) {
       continue;
@@ -235,13 +239,45 @@ void _expectTheAppWithout(
     _pubspecWithoutAnalytics(app),
     _yamlOf(without.files['pubspec.yaml']!.text),
   );
-  // The guide has the notes of the app without the analytics, and those of
-  // the analytics under the heading of the role.
-  final notes = app.entriesOf(AppEntryRole.agentSections);
+  // The README is that of the app without the analytics, opened by the
+  // section of the steps by hand, which lists the step of the module alone.
+  final readme = app.files[AppEntryRole.readmeFile]!.text;
+  final setup = RegExp(
+    '## ${AppEntryRole.setupHeading}\n[\\s\\S]*?\n(?=## )',
+  ).firstMatch(readme)!;
   expect(
-    notes.where((note) => !_analytics.contains(note.$1)),
-    without.entriesOf(AppEntryRole.agentSections),
+    readme.replaceRange(setup.start, setup.end, ''),
+    without.files[AppEntryRole.readmeFile]!.text,
   );
+  expect(
+    [
+      for (final step
+          in RegExp(r'^\d+\. (.+)$', multiLine: true).allMatches(setup[0]!))
+        step[1],
+    ],
+    [FirebaseAnalyticsModule.googleAnalyticsStep.title],
+  );
+  // The guide has the notes of the app without the analytics, the note of
+  // the app entry on the steps by hand under the heading of that role, and
+  // the notes of the analytics under the heading of the role.
+  final notes = app.entriesOf(AppEntryRole.agentSections);
+  final withoutNotes = without.entriesOf(AppEntryRole.agentSections);
+  final others = [
+    for (final note in notes)
+      if (!_analytics.contains(note.$1)) note,
+  ];
+  final added = [
+    for (final note in others)
+      if (!withoutNotes.contains(note)) note,
+  ];
+  expect(
+    [
+      for (final (origin, heading, note) in added)
+        (origin, heading, note.isOfRole),
+    ],
+    [(const RoleTemplateOrigin(appEntryRole), appEntryRole.description, true)],
+  );
+  expect(others.where((note) => !added.contains(note)), withoutNotes);
   expect(
     [
       for (final (origin, heading, note) in notes)
@@ -415,11 +451,12 @@ void main() {
 
     test(
         'contributes its brick, firebase_analytics, its implementation of the '
-        'service, created without waiting, a listener of the screen for a '
-        'router and its note for coding agents, and nothing else', () {
+        'service, created without waiting, the step by hand of Google '
+        'Analytics, a listener of the screen for a router and its note for '
+        'coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(5));
+      expect(contributions, hasLength(6));
       // Of the listener of the screen, which only an app with a router has.
       final note = contributions.last as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
@@ -453,11 +490,26 @@ void main() {
       );
       expect(implementation.create!.import, implementation.type.import);
 
+      // In every app of the module.
+      final step = contributions[3] as ManualStep;
+      expect(step, same(FirebaseAnalyticsModule.googleAnalyticsStep));
+      expect(step.when, isEmpty);
+      expect(
+        step.id,
+        const ManualStepId(FirebaseAnalyticsModule.id, 'google_analytics'),
+      );
+      expect(step.id.wire, 'firebase_analytics.google_analytics');
+      expect(
+        step.title,
+        'Turn on Google Analytics in the Firebase project, unless it is on '
+        'already',
+      );
+
       // The router tells the listener, a function of the file of the module,
       // about the screen the user sees; only an app with a router gets it.
       // The module gives the navigators no observer, which would log the
       // pages that enter their stacks.
-      final listener = contributions[3] as SocketContribution;
+      final listener = contributions[4] as SocketContribution;
       expect(listener.socket, RouterRole.screenListeners);
       expect(listener.when, {routerRole});
       expect(listener.fragment!.code, _listener);
@@ -542,6 +594,28 @@ void main() {
 
     test('starts nothing in bootstrap(), as the service needs no waiting', () {
       expect(_startUpOf(result), ['firebase_core: $_initializeFirebase']);
+    });
+
+    test(
+        'lists the step by hand of Google Analytics, of the module, in the '
+        'section of the steps by hand that opens the README', () {
+      final planned = result.manualSteps.single;
+      expect(planned.step, same(FirebaseAnalyticsModule.googleAnalyticsStep));
+      expect(
+        planned.contributors,
+        [const ModuleOrigin(FirebaseAnalyticsModule.id)],
+      );
+      final readme = withAnalytics.files[AppEntryRole.readmeFile]!.text;
+      expect(
+        RegExp(r'^## (.+)$', multiLine: true).firstMatch(readme)?[1],
+        AppEntryRole.setupHeading,
+      );
+      expect(
+        readme,
+        contains(
+          '\n1. ${FirebaseAnalyticsModule.googleAnalyticsStep.title}\n',
+        ),
+      );
     });
 
     test(

@@ -12,11 +12,11 @@
 
 Say My Frame (SMF) generates Flutter apps from independent modules. You pick what the app needs, such as a router, tabs at the bottom, sign-in, dependency injection, a state manager, Firebase or a start screen, and `smf create` generates a Flutter project in which these parts already work together. The project does not depend on SMF at run time, so its code is yours from the first commit.
 
-![smf create in a terminal: it asks for the app name and the modules, adds the modules that the chosen ones need, such as go_router, the settings screen and Firebase Authentication, asks who may use the app without an account, and generates a Flutter app with an onboarding, a start screen, sign-in, tabs at the bottom, a theme, two languages, get_it and BLoC](https://doc.saymyframe.com/demo/0.5/smf_create.gif)
+![smf create in a terminal: it asks for the app name and the modules, among them Google sign-in, Sign in with Apple, the onboarding and the notifications, adds the modules that the chosen ones need, such as go_router, the settings screen and Firebase Authentication, asks who may use the app without an account, and generates a Flutter app with an onboarding, a start screen, sign-in with email, Google and Apple, tabs at the bottom, a theme, two languages, notifications, get_it and BLoC](https://doc.saymyframe.com/demo/0.6/smf_create.gif)
 
-With the modules `onboarding`, `sign_in`, `home`, `bottom_tabs`, `material_theme` and `gen_l10n`, the app opens on an onboarding and then asks the user to sign in. It has a start screen, an account screen, a settings screen with a theme mode and a language, and a light and a dark theme:
+With the modules `onboarding`, `sign_in`, `google_sign_in`, `apple_sign_in`, `home`, `bottom_tabs`, `material_theme`, `gen_l10n` and `local_notifications`, the app opens on an onboarding that asks for the permission to show notifications, and then asks the user to sign in with Google, with Apple on iOS or with an email address. It has a start screen, an account screen, a settings screen with a theme mode, a language and the notifications, and a light and a dark theme:
 
-![The app that smf create generates, on a phone: the onboarding, the sign-in, the start screen, and the account screen in the dark theme and in Ukrainian](https://doc.saymyframe.com/demo/0.5/app_look.png)
+![The app that smf create generates, on a phone: the onboarding, the sign-in with Google, Apple and an email address, the start screen, and the account screen in the dark theme and in Ukrainian](https://doc.saymyframe.com/demo/0.6/app_look.png)
 
 `sign_in` needs a Firebase project for its accounts. The other modules of this app need none.
 
@@ -92,7 +92,9 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |
 | [`firebase_messaging`](https://doc.saymyframe.com/modules/firebase-messaging) | Push messages with Firebase Cloud Messaging: the address of the device for a backend, the messages that arrive and the taps on them. |
 | [`firebase_auth`](https://doc.saymyframe.com/modules/firebase-auth) | Sign-in with Firebase Authentication: an email address and a password, or an anonymous user. The sign-in methods are enabled in the Firebase project after generation. |
-| [`sign_in`](https://doc.saymyframe.com/modules/sign-in) | Screens of sign-in, sign-up and password reset with an email address and a password, and the screen of the account with its entry on the settings screen, with BLoC or with Riverpod. |
+| [`google_sign_in`](https://doc.saymyframe.com/modules/google-sign-in) | Google sign-in on Android and iOS, a way to sign in next to email for the provider of sign-in, such as `firebase_auth`. |
+| [`apple_sign_in`](https://doc.saymyframe.com/modules/apple-sign-in) | Sign in with Apple on iOS, a way to sign in next to email for the provider of sign-in, such as `firebase_auth`. |
+| [`sign_in`](https://doc.saymyframe.com/modules/sign-in) | Screens of sign-in, sign-up and password reset with an email address and a password, with a button for each way to sign in of the app, and the screen of the account with its entry on the settings screen, with BLoC or with Riverpod. |
 
 A module knows only the modules it depends on. A screen needs *a* router, not go_router, and analytics follows the screens of whichever router the app has. SMF calls these shared parts roles: a module that needs a role works with every module that provides it, and CI generates apps from many combinations of modules and checks each with `flutter analyze`. You can also write modules of your own; see [Extending SMF](https://doc.saymyframe.com/extending).
 

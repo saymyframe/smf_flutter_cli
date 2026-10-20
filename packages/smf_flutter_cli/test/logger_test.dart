@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:mason_logger/mason_logger.dart' show overrideAnsiOutput;
 import 'package:smf_flutter_cli/src/io/greeting.dart';
 import 'package:smf_flutter_cli/src/io/logger.dart';
 import 'package:test/test.dart';
@@ -44,7 +45,79 @@ final class _Stream implements Stdout {
   return ('${out.text}', '${err.text}');
 }
 
+/// The link of a terminal (OSC 8) to [address] that shows the address.
+String _link(String address) => '\x1B]8;;$address\x1B\\$address\x1B]8;;\x1B\\';
+
 void main() {
+  group('web addresses', () {
+    const guide = 'https://doc.saymyframe.com/setup?steps=a.b,c.d';
+
+    test(
+        'are links of the terminal that show the address, where the output '
+        'takes the escapes of ANSI', () {
+      final (out, err) = overrideAnsiOutput(
+        true,
+        () => _capture(() {
+          IoLogger(verbose: true)
+            ..info('Finish the setup by hand in 2 steps:\n  $guide')
+            ..detail('Asked http://localhost:8080/x')
+            ..success('Read https://doc.saymyframe.com')
+            ..warn('See https://saymyframe.com/discord')
+            ..error('Broken: https://github.com/saymyframe/smf_flutter_cli');
+        }),
+      );
+
+      expect(
+        out,
+        contains('Finish the setup by hand in 2 steps:\n  ${_link(guide)}\n'),
+      );
+      expect(out, contains(_link('http://localhost:8080/x')));
+      expect(out, contains(_link('https://doc.saymyframe.com')));
+      expect(err, contains(_link('https://saymyframe.com/discord')));
+      expect(
+        err,
+        contains(_link('https://github.com/saymyframe/smf_flutter_cli')),
+      );
+    });
+
+    test(
+        'leave out the marks that end a sentence, the frame of the banner and '
+        'what is no address', () {
+      final (out, _) = overrideAnsiOutput(
+        true,
+        () => _capture(() {
+          IoLogger(verbose: false)
+            ..info('See https://doc.saymyframe.com/setup. Then run it.')
+            ..info('(https://doc.saymyframe.com), and more.')
+            ..info('| Docs: https://doc.saymyframe.com      |')
+            ..info('Not one: https://[oops');
+        }),
+      );
+
+      expect(
+        out,
+        'See ${_link('https://doc.saymyframe.com/setup')}. Then run it.\n'
+        '(${_link('https://doc.saymyframe.com')}), and more.\n'
+        '| Docs: ${_link('https://doc.saymyframe.com')}      |\n'
+        'Not one: https://[oops\n',
+      );
+    });
+
+    test('stay plain text where the output takes no escapes, as in CI', () {
+      final (out, err) = overrideAnsiOutput(
+        false,
+        () => _capture(() {
+          IoLogger(verbose: false)
+            ..info('Finish the setup by hand in one step:\n  $guide')
+            ..warn('See $guide.');
+        }),
+      );
+
+      expect(out, 'Finish the setup by hand in one step:\n  $guide\n');
+      expect(err, '[WARN] See $guide.\n');
+    });
+  });
+
   test('reports messages, and details only when verbose', () {
     final (out, err) = _capture(() {
       IoLogger(verbose: false)

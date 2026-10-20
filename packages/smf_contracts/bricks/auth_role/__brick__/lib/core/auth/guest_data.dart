@@ -31,5 +31,7 @@ typedef GiveGuestData = Future<void> Function(String accountUid);
 /// so such a call would wait for the sign-in, and the sign-in for it.
 ///
 /// It is not called when a guest signs up, since the guest then keeps the
-/// id and everything under it, nor in an app without anonymous users.
+/// id and everything under it, nor when a guest signs in with a way to sign
+/// in whose identity no user has yet, which the guest then gets with the
+/// id, nor in an app without anonymous users.
 Future<GiveGuestData?> takeGuestData(String guestUid) async => null;

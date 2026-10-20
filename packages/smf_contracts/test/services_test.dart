@@ -32,11 +32,12 @@ RoleData<Object> _data(
     );
 
 /// The issues of the module rule of [role] for a module that [provides] the
-/// role or only uses it, and contributes [implementations].
-List<SmfIssue> _moduleIssues(
-  Role<RoleImplementation> role, {
+/// role or only uses it, and contributes [implementations], the data of the
+/// role.
+List<SmfIssue> _moduleIssues<D extends Object>(
+  Role<D> role, {
   required bool provides,
-  required List<RoleImplementation> implementations,
+  required List<D> implementations,
 }) =>
     role.checkModule(
       ModuleRuleRequest(
@@ -111,44 +112,109 @@ void main() {
   });
 
   group('the module rule of the service roles', () {
+    /// Checks that the module rule of [role] lets each provider contribute
+    /// one implementation, [one] or [other], and no other module: no
+    /// implementation, or two, is an issue.
+    void expectOneImplementation<D extends Object>(
+      Role<D> role,
+      D one,
+      D other,
+    ) {
+      expect(
+        _moduleIssues(role, provides: true, implementations: [one]),
+        isEmpty,
+      );
+      expect(
+        _moduleIssues(role, provides: false, implementations: <D>[]),
+        isEmpty,
+      );
+      expect(
+        _moduleIssues(role, provides: true, implementations: <D>[])
+            .single
+            .message,
+        contains('exactly one implementation, but the module contributes 0'),
+      );
+      expect(
+        _moduleIssues(role, provides: true, implementations: [one, other])
+            .single
+            .message,
+        contains('exactly one implementation, but the module contributes 2'),
+      );
+      final issue = _moduleIssues(
+        role,
+        provides: false,
+        implementations: [one],
+      ).single;
+      expect(issue.message, contains('which only its providers do'));
+      expect(issue.origin, const ModuleOrigin(ModuleId('vendor')));
+    }
+
     for (final role in [
       eventsRole,
       preferencesRole,
       analyticsRole,
       crashReportingRole,
-      authRole,
       notificationsRole,
       pushRole,
     ]) {
       test('lets each provider of the ${role.id} contribute one implementation',
           () {
-        expect(
-          _moduleIssues(
-            role,
-            provides: true,
-            implementations: [_implementation('A')],
-          ),
-          isEmpty,
-        );
-        expect(
-          _moduleIssues(role, provides: false, implementations: const []),
-          isEmpty,
-        );
-        expect(
-          _moduleIssues(role, provides: true, implementations: const [])
-              .single
-              .message,
-          contains('exactly one implementation, but the module contributes 0'),
-        );
-        final issue = _moduleIssues(
+        expectOneImplementation(
           role,
-          provides: false,
-          implementations: [_implementation('A')],
-        ).single;
-        expect(issue.message, contains('which only its providers do'));
-        expect(issue.origin, const ModuleOrigin(ModuleId('vendor')));
+          _implementation('A'),
+          _implementation('B'),
+        );
       });
     }
+
+    test(
+        'lets each provider of the auth role contribute one implementation, '
+        'whatever ways to sign in it gives the role too', () {
+      AuthImplementation implementation(String name) => AuthImplementation(
+            type: TypeRef(name, import: const ImportRef.app('fakes/a.dart')),
+            create: FactoryRef(
+              'create$name',
+              import: const ImportRef.app('fakes/a.dart'),
+            ),
+          );
+      const method = SignInMethod(
+        label: LocalizedText('label', en: 'Continue with Example'),
+        icon: TypeRef(
+          'ExampleIcon',
+          import: ImportRef.app('core/example/example.dart'),
+        ),
+        platforms: {AppPlatform.android},
+        credential: FunctionRef(
+          'exampleCredential',
+          import: ImportRef.app('core/example/example.dart'),
+        ),
+        issuer: 'https://id.example.com',
+        appStore: AppStoreLogin.thirdParty,
+      );
+
+      expectOneImplementation<AuthData>(
+        authRole,
+        implementation('A'),
+        implementation('B'),
+      );
+      // A way to sign in is no implementation.
+      expect(
+        _moduleIssues<AuthData>(
+          authRole,
+          provides: true,
+          implementations: [implementation('A'), method],
+        ).map((issue) => issue.message),
+        isNot(contains(contains('implementation'))),
+      );
+      expect(
+        _moduleIssues<AuthData>(
+          authRole,
+          provides: false,
+          implementations: [method],
+        ).map((issue) => issue.message),
+        isNot(contains(contains('implementation'))),
+      );
+    });
   });
 
   group('the templates of the service roles', () {

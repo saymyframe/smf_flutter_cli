@@ -23,8 +23,11 @@
 // out of the sheet, the back button of the system and a tap outside the
 // sheet close it and delete nothing. While a
 // call is on its way, its action shows it and neither action takes a tap.
-// A deletion that failed leaves the screen with the text of the failure.
-// And when the session ends while the sheet is open, as on the server, the
+// A deletion that failed leaves the screen with the text of the failure, in
+// words of its own where the provider of sign-in could not revoke the tokens
+// of an identity provider, or got a credential of another user: the texts
+// of a sign-in would not tell the user what happened. A sign-out that failed
+// so has the text of a sign-in. And when the session ends while the sheet is open, as on the server, the
 // sheet goes with the page under it. No call of the app ended that
 // session, so the session has nobody then, in every mode: an app that
 // signs an anonymous user in does so again when the user comes back to it.
@@ -571,6 +574,57 @@ void main() {
         reason: 'A deletion that needs a recent sign-in leaves the user on '
             'the screen of the account, which tells to sign out and sign '
             'in again.',
+      );
+
+      // A deletion that the provider refused after the identity provider
+      // asked the user again has texts of its own, in each language.
+      for (final (reason, name) in const [
+        (AuthFailureReason.notConfigured, 'deleteUnavailable'),
+        (AuthFailureReason.invalidCredentials, 'deleteOtherAccount'),
+      ]) {
+        service.failure = AuthFailure(reason);
+        await tester.tap(deleteAction);
+        await tester.pumpAndSettle();
+        await tester.tap(inDeleteSheet(find.byType(FilledButton)));
+        await tester.pumpAndSettle();
+        for (final language in languages) {
+          await useLanguage(tester, language);
+          expect(
+            (
+              find
+                  .descendant(
+                    of: find.byType(FailureMessage),
+                    matching: text(name),
+                  )
+                  .evaluate()
+                  .length,
+              failureMessage(reason).evaluate().length,
+              accountScreen.evaluate().length,
+              sessionNow(),
+            ),
+            (1, 0, 1, 'the account of $_email'),
+            reason: 'A deletion that failed with the reason ${reason.name} '
+                'leaves the user on the screen of the account, with a text '
+                'of its own, "${texts[name]}", and not the one of a sign-in, '
+                'in $language.',
+          );
+        }
+        await useLanguage(tester, languages.first);
+      }
+      // A sign-out that fails so has the text of a sign-in.
+      service.failure = const AuthFailure(AuthFailureReason.notConfigured);
+      await tester.tap(submitButton);
+      await tester.pumpAndSettle();
+      expect(
+        (
+          service.calls.last,
+          failureMessage(AuthFailureReason.notConfigured).evaluate().length,
+          text('deleteUnavailable').evaluate().length,
+        ),
+        ('signOut', 1, 0),
+        reason: 'A sign-out that failed with the reason notConfigured shows '
+            'the text of a sign-in for it: only a deletion has texts of its '
+            'own.',
       );
       service.failure = null;
 

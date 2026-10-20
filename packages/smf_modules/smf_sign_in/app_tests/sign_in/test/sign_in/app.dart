@@ -4,7 +4,9 @@
 // in the language that the device asks for, the way to the sign-in through
 // the navigation of the router role, the screen of the account with its
 // entry on the settings screen, and a service of sign-in of the test, which
-// a test gives the session of the app to script what a call does.
+// a test gives the session of the app to script what a call does. The ways
+// to sign in of the app are those of appSignInMethods of the auth role, each
+// with the mocks of its module, which answer at once.
 //
 // They know the module, and of the rest of the app only its roles: the session
 // of the auth role, whichever module provides the sign-in, in the mode that
@@ -24,6 +26,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
 import 'package:{{app_name}}/core/auth/auth_service.dart';
+import 'package:{{app_name}}/core/auth/sign_in_methods.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/sign_in/account_screen.dart';
@@ -103,6 +106,8 @@ Finder text(String name) => find.text(texts[name]!);
 String failureTextOf(AuthFailureReason reason) => switch (reason) {
       AuthFailureReason.invalidCredentials => 'failureCredentials',
       AuthFailureReason.emailInUse => 'failureEmailInUse',
+      AuthFailureReason.credentialInUse => 'failureCredentialInUse',
+      AuthFailureReason.accountExistsWithOtherMethod => 'failureOtherMethod',
       AuthFailureReason.weakPassword => 'failureWeakPassword',
       AuthFailureReason.invalidEmail => 'emailInvalid',
       AuthFailureReason.userDisabled => 'failureDisabled',
@@ -112,6 +117,39 @@ String failureTextOf(AuthFailureReason reason) => switch (reason) {
       AuthFailureReason.notConfigured => 'failureNotSetUp',
       AuthFailureReason.unknown => 'failureUnknown',
     };
+
+/// The ways to sign in of the app that work on the platform that the app
+/// runs on, as the screens of the sign-in show their buttons: those of
+/// appSignInMethods of the auth role that are available, in their order.
+List<SignInMethod> methodsHere() => [
+      for (final method in appSignInMethods)
+        if (method.isAvailable) method,
+    ];
+
+/// The button of [method], a way to sign in, on the screen that the user
+/// sees.
+Finder methodButton(SignInMethod method) => find.byWidgetPredicate(
+      (widget) => widget is SignInMethodButton && widget.method == method,
+      description: 'the button of the way to sign in of ${method.issuer}',
+    );
+
+/// The button itself in [button], a button of a way to sign in, which a
+/// screen reader reads and which takes a tap or does not.
+Finder buttonIn(Finder button) =>
+    find.descendant(of: button, matching: find.byType(FilledButton));
+
+/// Has the app run on [platform], as the platform that the app runs on, or
+/// on the platform of the test again for `null`, and builds it again, so
+/// that a screen of the sign-in shows the buttons of the ways to sign in
+/// that work there. A test that calls it calls it with `null` before it
+/// ends: flutter_test checks that the test put the platform back.
+Future<void> usePlatform(WidgetTester tester, TargetPlatform? platform) async {
+  debugDefaultTargetPlatformOverride = platform;
+  // Every widget builds again, as after a hot reload: the theme of the app
+  // and the screens read the platform when they build.
+  tester.binding.buildOwner!.reassemble(tester.binding.rootElement!);
+  await tester.pumpAndSettle();
+}
 
 /// The field of the email address of the form that the user sees.
 final Finder emailField = find.byType(EmailField);
@@ -340,7 +378,8 @@ bool submitSpins() => find
 String sessionNow() => switch (appSession.value) {
       SignedOutSession() => 'nobody',
       AnonymousSession() => 'an anonymous user',
-      AccountSession(:final email) => 'the account of $email',
+      AccountSession(:final email?) => 'the account of $email',
+      AccountSession(:final issuers) => 'the account of ${issuers.join(', ')}',
     };
 
 /// A service of sign-in of the test, which keeps its user in memory: a
@@ -427,7 +466,38 @@ final class ScriptedAuthService implements AuthService {
   Future<void> signOut() => _answer('signOut', () => null);
 
   @override
-  Future<void> deleteAccount() => _answer('deleteAccount', () => null);
+  Future<void> deleteAccount({SignInCredential? fresh}) =>
+      _answer('deleteAccount', () => null);
+
+  /// The issuer of [credential], which names it in the calls.
+  String _issuerOf(SignInCredential credential) => switch (credential) {
+        IdTokenCredential(:final issuer) => issuer,
+      };
+
+  /// Signs in to the user of the identity of [credential], an account
+  /// without an email address.
+  @override
+  Future<void> signInWith(SignInCredential credential) {
+    final issuer = _issuerOf(credential);
+    return _answer(
+      'signInWith $issuer',
+      () => AuthUser(
+        uid: 'identity-of-$issuer',
+        isAnonymous: false,
+        issuers: {issuer},
+      ),
+    );
+  }
+
+  /// Gives the user who is signed in the identity of [credential].
+  @override
+  Future<void> linkWith(SignInCredential credential) {
+    final issuer = _issuerOf(credential);
+    return _answer(
+      'linkWith $issuer',
+      () => AuthUser(uid: _user!.uid, isAnonymous: false, issuers: {issuer}),
+    );
+  }
 }
 
 /// Gives the session of the app [service], a service of the test with

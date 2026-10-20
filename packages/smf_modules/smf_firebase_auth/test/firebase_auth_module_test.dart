@@ -10,6 +10,7 @@ import 'package:smf_firebase_auth/bundles/firebase_auth_bundle.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_auth/src/agents.dart';
 import 'package:smf_firebase_auth/src/enable_sign_in.dart';
+import 'package:smf_firebase_auth/src/identity_providers.dart';
 import 'package:smf_firebase_auth/src/readme.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
@@ -22,6 +23,8 @@ import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
 import 'support/dart_app.dart';
+import 'support/sign_in_methods.dart';
+import 'support/sign_in_ways.dart';
 
 /// The modules of the tests: flutter_core, which creates the app,
 /// go_router, a provider of the router role, which the auth role uses,
@@ -208,7 +211,11 @@ const password = 'secret';
 
 String userOf(AuthUser? user) => user == null
     ? 'nobody'
-    : '${user.uid} <${user.email}>${user.isAnonymous ? ', anonymous' : ''}';
+    : [
+        '${user.uid} <${user.email}>',
+        if (user.isAnonymous) ', anonymous',
+        if (user.issuers.isNotEmpty) ' with ${user.issuers.join(', ')}',
+      ].join();
 
 Future<String> outcomeOf(Future<void> Function() call) async {
   try {
@@ -337,6 +344,278 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['user after what is empty'] = userOf(service.currentUser);
   await signIn();
 
+  // Credentials of identity providers. The tokens and the codes are no
+  // part of a hint.
+  const google = 'https://accounts.google.com';
+  const apple = 'https://appleid.apple.com';
+  IdTokenCredential credentialOf(
+    String issuer,
+    String token, {
+    String? nonce,
+    String? code,
+  }) =>
+      IdTokenCredential(
+        issuer: issuer,
+        idToken: 'token-$token',
+        rawNonce: nonce,
+        authorizationCode: code,
+        givenName: issuer == apple ? 'Ada' : null,
+        familyName: issuer == apple ? 'Lovelace' : null,
+      );
+  IdTokenCredential appleOf(String token, {String? code}) =>
+      credentialOf(apple, token, nonce: 'nonce-$token', code: code);
+
+  await service.signOut();
+  await service.signInAnonymously();
+  result['credentials'] = {
+    'signInWith of Google': await step(
+      () => service.signInWith(credentialOf(google, 'g', nonce: 'nonce-g')),
+    ),
+    'signInWith of Apple': await step(() => service.signInWith(appleOf('a'))),
+    'signInWith of Apple without a nonce': await step(
+      () => service.signInWith(credentialOf(apple, 'a-without-nonce')),
+    ),
+    'signInWith of another identity provider': await step(
+      () => service.signInWith(
+        credentialOf('https://accounts.example.com', 'other'),
+      ),
+    ),
+    'signInAnonymously': await step(service.signInAnonymously),
+    'linkWith of Google': await step(
+      () => service.linkWith(credentialOf(google, 'linked')),
+    ),
+    'linkWith of another identity provider': await step(
+      () => service.linkWith(
+        credentialOf('https://accounts.example.com', 'other'),
+      ),
+    ),
+    'signOut': await step(service.signOut),
+    'linkWith without a user': await step(
+      () => service.linkWith(credentialOf(google, 'nobody')),
+    ),
+  };
+
+  // A link that Firebase refuses because the identity or its email address
+  // belongs to another user, and the sign-ins with the identical credential
+  // object after it.
+  const given = AuthCredential(
+    providerId: 'apple.com',
+    signInMethod: 'apple.com',
+    token: 7,
+  );
+  final refused = <String, Object?>{};
+  for (final (name, code, withCredential) in const [
+    ('credential-already-in-use', 'credential-already-in-use', true),
+    ('email-already-in-use', 'email-already-in-use', true),
+    (
+      'account-exists-with-different-credential',
+      'account-exists-with-different-credential',
+      true
+    ),
+    ('a refusal without a credential', 'credential-already-in-use', false),
+    ('provider-already-linked', 'provider-already-linked', true),
+  ]) {
+    await service.signOut();
+    await service.signInAnonymously();
+    final credential = appleOf('refused');
+    failNext['linkWithCredential'] = FirebaseAuthException(
+      code: code,
+      message: code == 'provider-already-linked'
+          ? 'User has already been linked to the given provider.'
+          : null,
+      credential: withCredential ? given : null,
+    );
+    refused[name] = [
+      await step(() => service.linkWith(credential)),
+      await step(() => service.signInWith(credential)),
+      await step(() => service.signInWith(credential)),
+    ];
+  }
+  result['refused links'] = refused;
+
+  // A sign-in with another credential object between a refused link and
+  // the sign-in with the identical one, as after a sign-out when the
+  // session failed to move the data of the guest.
+  await service.signOut();
+  await service.signInAnonymously();
+  final refusedOne = appleOf('refused');
+  failNext['linkWithCredential'] = FirebaseAuthException(
+    code: 'credential-already-in-use',
+    credential: given,
+  );
+  result['another credential after a refused link'] = [
+    await step(() => service.linkWith(refusedOne)),
+    await step(service.signOut),
+    await step(() => service.signInWith(credentialOf(google, 'between'))),
+    await step(() => service.signInWith(refusedOne)),
+  ];
+
+  // The same codes for a link of a password.
+  final ofPassword = <String, Object?>{};
+  for (final code in const [
+    'email-already-in-use',
+    'credential-already-in-use',
+  ]) {
+    await service.signOut();
+    await service.signInAnonymously();
+    failNext['linkWithCredential'] = FirebaseAuthException(code: code);
+    ofPassword[code] = await outcomeOf(
+      () => service.linkPassword(email: 'b@x.dev', password: password),
+    );
+  }
+  result['refused links of a password'] = ofPassword;
+
+  Future<String> signingInWith(
+    IdTokenCredential credential,
+    String code, [
+    String? message,
+  ]) {
+    failNext['signInWithCredential'] =
+        FirebaseAuthException(code: code, message: message);
+    return outcomeOf(() => service.signInWith(credential));
+  }
+
+  await service.signOut();
+  result['refused sign-ins'] = {
+    'account-exists-with-different-credential': await signingInWith(
+      credentialOf(google, 'g'),
+      'account-exists-with-different-credential',
+    ),
+    'missing-or-invalid-nonce': await signingInWith(
+      appleOf('spent'),
+      'missing-or-invalid-nonce',
+      'Duplicate credential received.',
+    ),
+    'invalid-credential': await signingInWith(
+      credentialOf(google, 'expired'),
+      'invalid-credential',
+    ),
+    'operation-not-allowed of Google': await signingInWith(
+      credentialOf(google, 'g'),
+      'operation-not-allowed',
+    ),
+    'operation-not-allowed of Apple': await signingInWith(
+      appleOf('a'),
+      'operation-not-allowed',
+    ),
+  };
+  defaultTargetPlatform = TargetPlatform.iOS;
+  final internalOfApple = await signingInWith(
+    appleOf('a'),
+    'internal-error',
+    'Internal.',
+  );
+  defaultTargetPlatform = TargetPlatform.android;
+  result['an internal error of a sign-in with Apple on iOS'] = internalOfApple;
+
+  // Deletions with a fresh credential: the user signs in with the identity,
+  // and the deletion runs on [platform], with what Firebase answers.
+  Future<List<Object?>> deleting(
+    IdTokenCredential fresh, {
+    TargetPlatform platform = TargetPlatform.android,
+    IdTokenCredential? signedIn,
+    Map<String, Object> failing = const {},
+    void Function()? onReauthentication,
+  }) async {
+    await service.signOut();
+    await service.signInWith(signedIn ?? appleOf('deleted'));
+    failNext.addAll(failing);
+    if (onReauthentication != null) {
+      onNext['reauthenticateWithCredential'] = onReauthentication;
+    }
+    defaultTargetPlatform = platform;
+    try {
+      return await step(() => service.deleteAccount(fresh: fresh));
+    } finally {
+      defaultTargetPlatform = TargetPlatform.android;
+    }
+  }
+
+  const code = 'code-fresh';
+  result['deletions'] = {
+    'of Google': await deleting(
+      credentialOf(google, 'deleted'),
+      signedIn: credentialOf(google, 'deleted'),
+    ),
+    // A code of Google revokes nothing either.
+    'of Google on iOS': await deleting(
+      credentialOf(google, 'deleted', code: 'code-of-google'),
+      signedIn: credentialOf(google, 'deleted'),
+      platform: TargetPlatform.iOS,
+    ),
+    'of Apple on Android': await deleting(appleOf('fresh', code: code)),
+    for (final platform in const [TargetPlatform.iOS, TargetPlatform.macOS])
+      'of Apple on ${platform.name}':
+          await deleting(appleOf('fresh', code: code), platform: platform),
+    'of Apple on iOS without a code': await deleting(
+      appleOf('fresh'),
+      platform: TargetPlatform.iOS,
+    ),
+    for (final reauthenticationCode in const [
+      'user-mismatch',
+      'user-not-found',
+      'invalid-credential',
+      'user-token-expired',
+    ])
+      'when Firebase answers the sign-in again with $reauthenticationCode':
+          await deleting(
+        appleOf('fresh', code: code),
+        platform: TargetPlatform.iOS,
+        failing: {
+          'reauthenticateWithCredential':
+              FirebaseAuthException(code: reauthenticationCode),
+        },
+      ),
+    // A credential of the user, whose account was deleted on the server.
+    'when the account was deleted on the server': await deleting(
+      appleOf('fresh', code: code),
+      platform: TargetPlatform.iOS,
+      failing: {
+        'reauthenticateWithCredential':
+            FirebaseAuthException(code: 'user-not-found'),
+        'reload': FirebaseAuthException(code: 'user-not-found'),
+      },
+    ),
+    'when the reload after user-not-found fails with network-request-failed':
+        await deleting(
+      appleOf('fresh', code: code),
+      platform: TargetPlatform.iOS,
+      failing: {
+        'reauthenticateWithCredential':
+            FirebaseAuthException(code: 'user-not-found'),
+        'reload': FirebaseAuthException(code: 'network-request-failed'),
+      },
+    ),
+    for (final (revocationCode, message) in const [
+      ('invalid-credential', 'Code flow is not enabled for Apple.'),
+      ('internal-error', 'An internal error has occurred.'),
+      ('network-request-failed', 'Network error.'),
+      ('too-many-requests', 'Too many requests.'),
+      ('user-disabled', 'The user account has been disabled.'),
+      ('user-token-expired', 'The user token has expired.'),
+    ])
+      'when Firebase answers the revocation with $revocationCode':
+          await deleting(
+        appleOf('fresh', code: code),
+        platform: TargetPlatform.iOS,
+        failing: {
+          'revokeTokenWithAuthorizationCode':
+              FirebaseAuthException(code: revocationCode, message: message),
+        },
+      ),
+    'when the revocation fails with no error of Firebase': await deleting(
+      appleOf('fresh', code: code),
+      platform: TargetPlatform.iOS,
+      failing: {'revokeTokenWithAuthorizationCode': StateError('broken')},
+    ),
+    'when the platform signs out during the sign-in again': await deleting(
+      appleOf('fresh', code: code),
+      platform: TargetPlatform.iOS,
+      onReauthentication: platformSignsOut,
+    ),
+  };
+  await signIn();
+
   final ended = <String, Object?>{};
   for (final code in const [
     'user-token-expired',
@@ -454,11 +733,12 @@ void main() {
     test(
         'contributes its brick, firebase_auth, its implementation of the '
         'service, created without waiting, the check and the step that '
-        'enable the ways to sign in, its section of the README and its note '
-        'for coding agents, and nothing else', () {
+        'enable the ways to sign in and its note for coding agents, and '
+        'nothing else: its provider writes its section of the README, from '
+        'the ways to sign in of the app', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(7));
+      expect(contributions, hasLength(6));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseAuthBundle));
       expect(brick.bundle.name, 'firebase_auth');
@@ -473,7 +753,7 @@ void main() {
       expect(dependency.dev, isFalse);
       final data = contributions[2] as RoleData<Object>;
       expect(data.role, authRole);
-      final implementation = data.value as RoleImplementation;
+      final implementation = (data.value as AuthImplementation).implementation;
       expect(implementation.isAsync, isFalse);
       expect(implementation.type.name, 'FirebaseAuthService');
       expect(implementation.create!.name, 'createFirebaseAuthService');
@@ -489,12 +769,7 @@ void main() {
       expect(preflight.checks, [same(firebaseCliWithSignIn)]);
       expect(preflight.when, isEmpty);
       expect(contributions[4], same(enableSignIn));
-      final readme = contributions[5] as SocketContribution;
-      expect(readme.socket, AppEntryRole.readmeSections);
-      expect(readme.entryKey, readmeHeading);
-      expect(readme.entryValue, readmeSection);
-      expect(readme.when, isEmpty);
-      final note = contributions[6] as SocketContribution;
+      final note = contributions[5] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, authRole.description);
       expect(note.entryValue, AgentNote(agentNote));
@@ -612,7 +887,7 @@ void main() {
     test(
         'continues the step of firebase_core that runs flutterfire '
         'configure with the script of the app that enables the ways to sign '
-        'in, which is part of that step', () {
+        'in, with a notice of what it does for Google sign-in', () {
       final step = module
           .contribute(ContractHarness.defaultContext)
           .whereType<PostGenStep>()
@@ -631,10 +906,24 @@ void main() {
         step.description,
         'Enabling the sign-in methods of the app in its Firebase project',
       );
-      // The Firebase CLI that the step needs adds no app to a project with
-      // the apps that flutterfire registered, so a run asks only about
-      // flutterfire configure.
-      expect(step.notice, isNull);
+      // For Google sign-in, the script changes the project and files of the
+      // app, and a step is the same in every app, so a run asks about it in
+      // every app, with what it does for Google.
+      expect(step.notice, enableSignInNotice);
+      expect(
+        enableSignInNotice,
+        allOf(
+          startsWith('If the app signs in with Google, it also '),
+          contains("the app's name and the Firebase CLI account's email for "
+              'its consent screen'),
+          contains("the SHA-1 and SHA-256 of this machine's Android debug key "
+              '(creating the key if there is none, as the first debug build '
+              'would)'),
+          contains("downloads the app's Firebase files again"),
+          endsWith('writes the iOS URL scheme into ios/Runner/Info.plist.'),
+          isNot(contains('\n')),
+        ),
+      );
       expect(step.skippable, isTrue);
       expect(step.external, isTrue);
       // The script passes --non-interactive to the Firebase CLI, so the
@@ -669,8 +958,8 @@ void main() {
         'firebase_auth with router',
         'firebase_auth',
         'shared_preferences',
-        'auth by firebase_auth with router --auth-mode=guest',
-        'auth by firebase_auth with router --auth-mode=anonymous',
+        for (final mode in ['guest', 'anonymous'])
+          'auth by firebase_auth with router, localization --auth-mode=$mode',
       ]);
     });
 
@@ -683,6 +972,122 @@ void main() {
         );
         expect(result.app, isNotNull, reason: '${result.contractCase}');
       }
+    });
+
+    test(
+        'takes an app with the ways to sign in of Google and Apple, and '
+        'refuses one with a way to sign in of another identity provider, '
+        'whose credential the service does not take, in the validate hook of '
+        'its provider', () async {
+      final harness = ContractHarness(
+        ModuleRegistry([
+          ..._modules,
+          WayOfTest.google,
+          WayOfTest.apple,
+          WayOfTest.other,
+        ]),
+      );
+      final taken = await harness.check(
+        ContractCase(
+          'firebase_auth with the ways to sign in of Google and Apple',
+          requested: [
+            FirebaseAuthModule.id,
+            WayOfTest.google.id,
+            WayOfTest.apple.id,
+          ],
+        ),
+      );
+      final refused = await harness.check(
+        ContractCase(
+          'firebase_auth with a way to sign in of another identity provider',
+          requested: [
+            FirebaseAuthModule.id,
+            WayOfTest.apple.id,
+            WayOfTest.other.id,
+          ],
+        ),
+      );
+
+      expect(taken.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        [
+          for (final AppSignInMethod(:method)
+              in authRole.methodsIn(authRole.hookInput(taken.hook!)))
+            method.issuer,
+        ],
+        identityProviders.keys,
+      );
+      expect(
+        [
+          for (final issue in refused.errors)
+            (issue.origin, issue.message, issue.hint),
+        ],
+        [
+          (
+            ModuleOrigin(WayOfTest.other.id),
+            'The module way_of_test gives the app a way to sign in with '
+                'https://accounts.example.com, whose credential firebase_auth '
+                'does not take: it signs in to Firebase Authentication with '
+                'the credentials of Google (https://accounts.google.com) and '
+                'Apple (https://appleid.apple.com), besides an email address '
+                'and a password, and as an anonymous user. A sign-in with it '
+                'would fail with notConfigured.',
+            'Leave way_of_test out of an app with firebase_auth.',
+          ),
+        ],
+      );
+      // The apps of the module alone have no way to sign in, and no error.
+      expect(
+        [
+          for (final result in results)
+            for (final issue in result.errors) '${result.contractCase}: $issue',
+        ],
+        isEmpty,
+      );
+    });
+
+    test(
+        'renders a service that takes the credentials of the identity '
+        'providers that its provider takes, and only those', () {
+      final app = results
+          .firstWhere(
+            (result) => result.app!.files.containsKey(_implementation),
+          )
+          .app!;
+      final constants = {
+        for (final declaration in _unitOf(app, _implementation)
+            .declarations
+            .whereType<TopLevelVariableDeclaration>())
+          for (final variable in declaration.variables.variables)
+            variable.name.lexeme: variable.initializer,
+      };
+      String valueOf(Expression? expression) =>
+          (expression! as SimpleStringLiteral).value;
+      final providers = constants['_providers']! as SetOrMapLiteral;
+
+      expect(
+        {
+          for (final entry in providers.elements.cast<MapLiteralEntry>())
+            valueOf(constants[(entry.key as SimpleIdentifier).name]):
+                '${entry.value}',
+        },
+        {
+          for (final MapEntry(key: issuer, value: provider)
+              in identityProviders.entries)
+            issuer: "(id: '${provider.id}', name: '${provider.name}')",
+        },
+      );
+      expect(
+        {
+          for (final MapEntry(key: issuer, value: provider)
+              in identityProviders.entries)
+            issuer: (provider.id, provider.name),
+        },
+        {
+          'https://accounts.google.com': ('google.com', 'Google'),
+          'https://appleid.apple.com': ('apple.com', 'Apple'),
+        },
+      );
     });
 
     test(
@@ -725,26 +1130,38 @@ void main() {
         'auth role, in an app with a router and in one without', () {
       final services = [
         for (final result in results)
-          if (result.app!.files[_implementation] case final file?
-              when !result.hook!.presentRoles.contains(localizationRole))
+          if (result.app!.files[_implementation] case final file?)
             (
               mode: authRole.modeIn(authRole.hookInput(result.hook!)),
               router: result.hook!.presentRoles.contains(routerRole),
+              texts: result.hook!.presentRoles.contains(localizationRole),
               service: file.text,
               script: result.app!.files[enableSignInScript]!.text,
             ),
       ];
 
       expect(
-        [for (final app in services) (app.mode, app.router)],
+        [for (final app in services) (app.mode, app.router, app.texts)],
         [
-          (AuthMode.required, true),
-          (AuthMode.required, false),
-          (AuthMode.guest, true),
-          (AuthMode.anonymous, true),
+          (AuthMode.required, true, true),
+          (AuthMode.required, false, true),
+          (AuthMode.required, true, false),
+          (AuthMode.required, false, false),
+          (AuthMode.guest, true, true),
+          (AuthMode.anonymous, true, true),
         ],
       );
-      expect({for (final app in services) app.service}, hasLength(1));
+      // The service asks Firebase for the language of the app only in an
+      // app with the texts of the app.
+      for (final texts in [true, false]) {
+        expect(
+          {
+            for (final app in services)
+              if (app.texts == texts) app.service,
+          },
+          hasLength(1),
+        );
+      }
       // The script reads the mode from the file of the auth role when it
       // runs, so it follows a mode that the developer of the app changed.
       expect({for (final app in services) app.script}, hasLength(1));
@@ -807,6 +1224,7 @@ void main() {
         AuthRole.serviceFile,
         AuthRole.sessionFile,
         AuthRole.guestDataFile,
+        AuthRole.methodsFile,
         _implementation,
         enableSignInScript,
       });
@@ -956,7 +1374,7 @@ void main() {
               name: signatureOf(method),
           },
         );
-        expect(interface.keys, hasLength(9));
+        expect(interface.keys, hasLength(11));
       });
 
       test('asks Firebase for no language before a password reset', () {
@@ -1065,6 +1483,413 @@ void main() {
           ],
         });
         expect(sent['a broadcast stream'], isTrue);
+      });
+
+      group('with the credentials of identity providers', () {
+        const google = 'https://accounts.google.com';
+        const apple = 'https://appleid.apple.com';
+        const link = 'https://console.firebase.google.com/project/'
+            'stand-in-project/authentication/providers';
+        const ofApple = 'apple.com of token-refused, nonce nonce-refused, '
+            'name Ada Lovelace';
+        const deleted = 'uid of token-deleted <null> with $apple';
+        const reauthentication = 'reauthenticateWithCredential(apple.com of '
+            'token-fresh, nonce nonce-fresh, name Ada Lovelace)';
+        const revocation = 'revokeTokenWithAuthorizationCode(code-fresh)';
+        const notOfFirebase = 'notConfigured: The app signs in to Firebase '
+            'Authentication with the credentials of Google ($google) and '
+            'Apple ($apple), and takes no credential of '
+            'https://accounts.example.com.';
+
+        /// A step that failed with [outcome] and left [user] signed in,
+        /// with the calls [calls] of Firebase.
+        List<Object?> leaving(
+          String outcome,
+          String user, [
+          List<String> calls = const [],
+        ]) =>
+            [
+              outcome,
+              user,
+              calls,
+              [user],
+            ];
+
+        test(
+            'signs in and links with the credential of Google, with its ID '
+            'token, and of Apple, with its ID token, its raw nonce and the '
+            'name of the user, and lists the issuers of the identities of '
+            'the user', () {
+          final credentials = sent['credentials']! as Map<Object?, Object?>;
+          const ofGoogle = 'uid of token-g <null> with $google';
+          const ofAppleUser = 'uid of token-a <null> with $apple';
+          const linked = 'guest 4 <null> with $google';
+          const signInOfApple = 'signInWithCredential(apple.com of token-a, '
+              'nonce nonce-a, name Ada Lovelace)';
+          expect(credentials, {
+            // GoogleAuthProvider takes no nonce, and Firebase does not check
+            // the nonce of a token of Google.
+            'signInWith of Google': [
+              'completed',
+              ofGoogle,
+              ['signInWithCredential(google.com of token-g)'],
+              [ofGoogle],
+            ],
+            'signInWith of Apple': [
+              'completed',
+              ofAppleUser,
+              [signInOfApple],
+              [ofAppleUser],
+            ],
+            'signInWith of Apple without a nonce': leaving(
+              'notConfigured: The credential of Apple has no raw nonce, which '
+              'Firebase checks the token of Apple against. The way to '
+              'sign in with Apple gives the nonce of its request with each '
+              'credential.',
+              ofAppleUser,
+            ),
+            'signInWith of another identity provider':
+                leaving(notOfFirebase, ofAppleUser),
+            'signInAnonymously': [
+              'completed',
+              'guest 4 <null>, anonymous',
+              ['signInAnonymously()'],
+              ['guest 4 <null>, anonymous'],
+            ],
+            // The anonymous user keeps the id.
+            'linkWith of Google': [
+              'completed',
+              linked,
+              ['linkWithCredential(google.com of token-linked)'],
+              [linked],
+            ],
+            'linkWith of another identity provider':
+                leaving(notOfFirebase, linked),
+            'signOut': [
+              'completed',
+              'nobody',
+              ['signOut()'],
+              ['nobody'],
+            ],
+            'linkWith without a user':
+                leaving('recentSignInRequired', 'nobody'),
+          });
+        });
+
+        test(
+            'fails a link that Firebase refuses for an identity or an email '
+            'address of another user with the reason of the auth role, and '
+            'signs in with the credential that Firebase gave with its answer '
+            'when the identical credential object comes next, once', () {
+          /// The steps of a link of the anonymous user [guest] that
+          /// failed with [outcome], and of the two sign-ins with the
+          /// identical credential after it, the first of which signs in
+          /// with [first], what Firebase gave or the credential itself.
+          List<Object?> refusedLink(
+            String outcome,
+            String guest, {
+            required String first,
+          }) {
+            final user = 'uid of $first <null> with $apple';
+            const again = 'uid of token-refused <null> with $apple';
+            return [
+              leaving(outcome, '$guest <null>, anonymous', [
+                'linkWithCredential($ofApple)',
+              ]),
+              [
+                'completed',
+                user,
+                [
+                  if (first == '7')
+                    'signInWithCredential(apple.com credential 7)'
+                  else
+                    'signInWithCredential($ofApple)',
+                ],
+                [user],
+              ],
+              [
+                'completed',
+                again,
+                ['signInWithCredential($ofApple)'],
+                [again],
+              ],
+            ];
+          }
+
+          expect(sent['refused links'], {
+            'credential-already-in-use':
+                refusedLink('credentialInUse', 'guest 5', first: '7'),
+            'email-already-in-use': refusedLink(
+              'accountExistsWithOtherMethod',
+              'guest 6',
+              first: '7',
+            ),
+            'account-exists-with-different-credential': refusedLink(
+              'accountExistsWithOtherMethod',
+              'guest 7',
+              first: '7',
+            ),
+            // Without what Firebase gives, the credential itself.
+            'a refusal without a credential': refusedLink(
+              'credentialInUse',
+              'guest 8',
+              first: 'token-refused',
+            ),
+            // The session links an identity only to an anonymous user.
+            'provider-already-linked': refusedLink(
+              'unknown: provider-already-linked: User has already been '
+                  'linked to the given provider.',
+              'guest 9',
+              first: 'token-refused',
+            ),
+          });
+          // A sign-in with another credential object between the two
+          // signs in with its own token, and leaves what Firebase gave to
+          // the identical object.
+          const between = 'uid of token-between <null> with $google';
+          const owner = 'uid of 7 <null> with $apple';
+          expect(sent['another credential after a refused link'], [
+            leaving('credentialInUse', 'guest 10 <null>, anonymous', [
+              'linkWithCredential($ofApple)',
+            ]),
+            [
+              'completed',
+              'nobody',
+              ['signOut()'],
+              ['nobody'],
+            ],
+            [
+              'completed',
+              between,
+              ['signInWithCredential(google.com of token-between)'],
+              [between],
+            ],
+            [
+              'completed',
+              owner,
+              ['signInWithCredential(apple.com credential 7)'],
+              [owner],
+            ],
+          ]);
+          // The same codes for a link of a password are an email address
+          // with an account.
+          expect(sent['refused links of a password'], {
+            'email-already-in-use': 'emailInUse',
+            'credential-already-in-use': 'emailInUse',
+          });
+        });
+
+        test(
+            'gives a sign-in with a credential the reason of the auth role '
+            'for each code of Firebase, and names its way to sign in in the '
+            'hint of one that is not enabled', () {
+          // The script of the app enables Google, and only the Firebase
+          // console Apple.
+          const script = 'run `$enableSignInCommand` in the directory of the '
+              'app, or ';
+          String notEnabled(String method) =>
+              'notConfigured: Sign-in with $method is not enabled in the '
+              'Firebase project stand-in-project (Firebase answered '
+              'operation-not-allowed). To fix it, '
+              "${method == 'Google' ? script : ''}enable $method in the "
+              'Firebase console under Authentication > Sign-in method: $link';
+          expect(sent['refused sign-ins'], {
+            'account-exists-with-different-credential':
+                'accountExistsWithOtherMethod',
+            'missing-or-invalid-nonce': 'invalidCredentials',
+            'invalid-credential': 'invalidCredentials',
+            'operation-not-allowed of Google': notEnabled('Google'),
+            'operation-not-allowed of Apple': notEnabled('Apple'),
+          });
+          expect(
+            sent['an internal error of a sign-in with Apple on iOS'],
+            'notConfigured: Firebase reported an internal error '
+            '(internal-error: Internal.), which is also what it answers on '
+            'iOS and macOS when sign-in with Apple is not enabled in the '
+            'Firebase project stand-in-project. If that is the cause, enable '
+            'Apple in the Firebase console under Authentication > Sign-in '
+            'method: $link',
+          );
+        });
+
+        test(
+            'deletes an account with a fresh credential once it signed the '
+            'user in again with it, and revokes the tokens of Apple with the '
+            'authorization code of the credential first, on iOS and macOS', () {
+          final deletions = sent['deletions']! as Map<Object?, Object?>;
+          const ofGoogle = 'reauthenticateWithCredential(google.com of '
+              'token-deleted)';
+          expect(
+            {
+              for (final name in [
+                'of Google',
+                'of Google on iOS',
+                'of Apple on Android',
+                'of Apple on iOS',
+                'of Apple on macOS',
+              ])
+                name: deletions[name],
+            },
+            {
+              for (final name in ['of Google', 'of Google on iOS'])
+                name: [
+                  'completed',
+                  'nobody',
+                  [ofGoogle, 'delete()', 'signOut()'],
+                  ['nobody'],
+                ],
+              // Firebase revokes nothing on Android.
+              'of Apple on Android': [
+                'completed',
+                'nobody',
+                [reauthentication, 'delete()', 'signOut()'],
+                ['nobody'],
+              ],
+              for (final platform in ['iOS', 'macOS'])
+                'of Apple on $platform': [
+                  'completed',
+                  'nobody',
+                  [reauthentication, revocation, 'delete()', 'signOut()'],
+                  ['nobody'],
+                ],
+            },
+          );
+        });
+
+        test(
+            'deletes nothing when the sign-in again or the revocation fails, '
+            'and fails with invalidCredentials for a credential of another '
+            'identity and with notConfigured for a revocation, with a hint '
+            'that tells how to set the revocation up', () {
+          final deletions = sent['deletions']! as Map<Object?, Object?>;
+          const byRevocation = 'when Firebase answers the revocation with';
+          String notRevoked(String answer) =>
+              'notConfigured: Firebase did not revoke the tokens that Apple '
+              'gave the app ($answer), so the account was not deleted. The '
+              'revocation needs the Services ID and the OAuth code flow '
+              'configuration, with the Apple team ID, the Key ID and the '
+              'private key, of the Apple sign-in method of the Firebase '
+              'project stand-in-project, in the Firebase console under '
+              'Authentication > Sign-in method: $link. When they are set, the '
+              'authorization code of Apple was older than five minutes or '
+              'used before, and the next deletion asks Apple for a new one.';
+          expect(
+            {
+              for (final MapEntry(:key, :value) in deletions.entries)
+                if (!'$key'.startsWith('of ')) key: value,
+              'of Apple on iOS without a code':
+                  deletions['of Apple on iOS without a code'],
+            },
+            {
+              'of Apple on iOS without a code': leaving(
+                'notConfigured: The credential of Apple has no authorization '
+                'code, with which Firebase revokes the tokens that Apple '
+                'gave the app before the account is deleted, so the '
+                'account was not deleted. The way to sign in with Apple '
+                'gives one with each credential.',
+                deleted,
+              ),
+              // A credential of another user.
+              for (final code in ['user-mismatch', 'invalid-credential'])
+                'when Firebase answers the sign-in again with $code': leaving(
+                  'invalidCredentials',
+                  deleted,
+                  [reauthentication],
+                ),
+              // A credential of an identity without a user, which Firebase
+              // answers as for a user whose session has ended: the reload
+              // of the user tells it from an account deleted on the server.
+              'when Firebase answers the sign-in again with user-not-found':
+                  leaving(
+                'invalidCredentials',
+                deleted,
+                [reauthentication, 'reload()'],
+              ),
+              'when the account was deleted on the server': [
+                'recentSignInRequired',
+                'nobody',
+                [reauthentication, 'reload()', 'signOut()'],
+                ['nobody'],
+              ],
+              'when the reload after user-not-found fails with '
+                  'network-request-failed': leaving(
+                'network',
+                deleted,
+                [reauthentication, 'reload()'],
+              ),
+              'when Firebase answers the sign-in again with user-token-expired':
+                  [
+                'recentSignInRequired',
+                'nobody',
+                [reauthentication, 'signOut()'],
+                ['nobody'],
+              ],
+              '$byRevocation invalid-credential': leaving(
+                notRevoked(
+                  'invalid-credential: Code flow is not enabled for Apple.',
+                ),
+                deleted,
+                [reauthentication, revocation],
+              ),
+              '$byRevocation internal-error': leaving(
+                notRevoked('internal-error: An internal error has occurred.'),
+                deleted,
+                [reauthentication, revocation],
+              ),
+              // An answer that is no matter of the setup.
+              for (final (code, reason) in [
+                ('network-request-failed', 'network'),
+                ('too-many-requests', 'tooManyAttempts'),
+                ('user-disabled', 'userDisabled'),
+              ])
+                '$byRevocation $code': leaving(
+                  reason,
+                  deleted,
+                  [reauthentication, revocation],
+                ),
+              '$byRevocation user-token-expired': [
+                'recentSignInRequired',
+                'nobody',
+                [reauthentication, revocation, 'signOut()'],
+                ['nobody'],
+              ],
+              'when the revocation fails with no error of Firebase': leaving(
+                notRevoked('Bad state: broken'),
+                deleted,
+                [reauthentication, revocation],
+              ),
+              // The future of the revocation would never complete.
+              'when the platform signs out during the sign-in again': [
+                'recentSignInRequired',
+                'nobody',
+                [reauthentication],
+                ['nobody'],
+              ],
+            },
+          );
+        });
+
+        test('names no token and no authorization code in a hint', () {
+          final outcomes = [
+            for (final section in [
+              sent['credentials'],
+              sent['deletions'],
+            ])
+              for (final step in (section! as Map<Object?, Object?>).values)
+                (step! as List<Object?>).first,
+            for (final steps
+                in (sent['refused links']! as Map<Object?, Object?>).values)
+              for (final step in steps! as List<Object?>)
+                (step! as List<Object?>).first,
+            for (final step in sent['another credential after a refused link']!
+                as List<Object?>)
+              (step! as List<Object?>).first,
+            ...(sent['refused sign-ins']! as Map<Object?, Object?>).values,
+          ];
+          expect(outcomes, hasLength(53));
+          expect(outcomes, everyElement(isNot(contains('token-'))));
+          expect(outcomes, everyElement(isNot(contains('code-'))));
+        });
       });
 
       test(
@@ -1215,14 +2040,14 @@ void main() {
 
         expect(
           readme,
-          contains('\n## $readmeHeading\n\n$readmeSection'),
+          contains('\n## $readmeHeading\n\n${readmeSectionOf(const {})}'),
         );
         // The section of firebase_core, which tells how the app gets its
         // Firebase project, comes first.
         expect(at('Firebase'), inExclusiveRange(0, at(readmeHeading)));
         expect(at(AuthRole.readmeHeading), isNonNegative);
         expect(
-          readmeSection,
+          readmeSectionOf(const {}),
           contains('(see the section ${AuthRole.readmeHeading})'),
         );
       });
@@ -1231,7 +2056,7 @@ void main() {
           'tells which ways to sign in the modes of the app need, and what '
           'the app does until they are enabled', () {
         expect(
-          readmeSection,
+          readmeSectionOf(const {}),
           allOf(
             contains(
               'Email/Password in every mode of the app, and Anonymous when '
@@ -1240,7 +2065,7 @@ void main() {
             contains('fail with the reason `notConfigured`'),
           ),
         );
-        expect(_codeOf(readmeSection), contains(_implementation));
+        expect(_codeOf(readmeSectionOf(const {})), contains(_implementation));
       });
 
       test(
@@ -1248,7 +2073,7 @@ void main() {
           'another account, and tells what the script reads, what it needs '
           'and what it leaves as it is', () {
         expect(
-          readmeSection,
+          readmeSectionOf(const {}),
           allOf(
             contains('```bash\n$enableSignInCommand\n```\n'),
             contains('```bash\n$enableSignInCommand --account <email>\n```\n'),
@@ -1258,10 +2083,16 @@ void main() {
             ),
             contains('It never disables a method, and it changes no file of '
                 'the app.'),
+            // The step has a notice, so a run asks about it.
+            contains('`smf create` asks to enable them right after '
+                '`flutterfire configure` has configured the app.'),
+            // Of no way to sign in with an identity provider.
+            isNot(contains('Google')),
+            isNot(contains('Apple')),
           ),
         );
         // What the script reads, each a file of the app or a name in it.
-        final code = _codeOf(readmeSection);
+        final code = _codeOf(readmeSectionOf(const {}));
         expect(
           code,
           containsAll([
@@ -1293,7 +2124,7 @@ void main() {
             'authentication/providers';
         const console = '[Authentication > Sign-in method]($page)';
         expect(
-          readmeSection,
+          readmeSectionOf(const {}),
           allOf(
             contains('enable the methods in the Firebase console, under '
                 '$console'),
@@ -1443,6 +2274,448 @@ void main() {
       expect(
         readme,
         contains('(https://doc.saymyframe.com/modules/firebase-auth)'),
+      );
+    });
+  });
+
+  group('an app with ways to sign in with an identity provider', () {
+    final harness = ContractHarness(
+      ModuleRegistry([..._modules, ...WayOfTest.all]),
+    );
+
+    /// What the contract harness finds for the app of this module with the
+    /// ways to sign in of [ways].
+    Future<ContractResult> withWays(List<WayOfTest> ways) => harness.check(
+          ContractCase(
+            'firebase_auth with ${[for (final way in ways) way.id].join(', ')}',
+            requested: [
+              FirebaseAuthModule.id,
+              for (final way in ways) way.id,
+            ],
+          ),
+        );
+
+    /// The declarations of the script of [app] for its ways to sign in:
+    /// `_appName`, the name of the app for the consent screen of Google,
+    /// `_Need` and `_needs`, what they need of the project, as written.
+    Map<String, String> declarationsOf(RenderedApp app) => {
+          for (final declaration
+              in _unitOf(app, enableSignInScript).declarations)
+            ...switch (declaration) {
+              TopLevelVariableDeclaration(:final variables) => {
+                  for (final variable in variables.variables)
+                    if (const {'_appName', '_needs'}
+                        .contains(variable.name.lexeme))
+                      variable.name.lexeme: '${variable.initializer}',
+                },
+              EnumDeclaration(:final namePart)
+                  when namePart.typeName.lexeme == '_Need' =>
+                {'_Need': 'enum'},
+              _ => const <String, String>{},
+            },
+        };
+
+    late ContractResult both;
+    late RenderedApp withBoth;
+
+    setUpAll(() async {
+      both = await withWays([WayOfTest.google, WayOfTest.apple]);
+      withBoth = both.app!;
+    });
+
+    test(
+        'refuses a way to sign in that needs of the backend what the script '
+        'does not set up for its identity provider, in the validate hook of '
+        'its provider, and takes one of Google with what it needs', () async {
+      final refused = await withWays([WayOfTest.appleWithServer]);
+
+      expect(both.errors.map((issue) => '$issue'), isEmpty);
+      expect(
+        [
+          for (final issue in refused.errors)
+            (issue.origin, issue.message, issue.hint),
+        ],
+        [
+          (
+            ModuleOrigin(WayOfTest.appleWithServer.id),
+            'The module apple_server_of_test gives the app a way to sign in '
+                'with Apple (https://appleid.apple.com) that needs '
+                'androidCertificate and serverClient of the backend, which '
+                'firebase_auth does not set up for Apple. A sign-in with it '
+                'would fail.',
+            'Leave apple_server_of_test out of an app with firebase_auth.',
+          ),
+        ],
+      );
+      expect(
+        identityProviders['https://accounts.google.com']!.needs,
+        SignInNeed.values.toSet(),
+        reason: 'The script sets up all that a way to sign in of Google may '
+            'need.',
+      );
+      expect(identityProviders['https://appleid.apple.com']!.needs, isEmpty);
+    });
+
+    test(
+        'gives the script the code that enables Google only in an app with a '
+        'way to sign in of Google, and what the ways to sign in need of the '
+        'project only in an app with one that needs something', () async {
+      final googleAlone = await withWays([WayOfTest.googleAlone]);
+      final apple = await withWays([WayOfTest.apple]);
+      final without = await _resultOf(const [FirebaseAuthModule.id]);
+
+      expect(declarationsOf(withBoth), {
+        '_appName': "'Contract App'",
+        '_Need': 'enum',
+        '_needs':
+            '{_Need.androidCertificate, _Need.iosClient, _Need.serverClient}',
+      });
+      // A way to sign in of Google that needs nothing of the project: the
+      // script enables Google and sets up nothing.
+      expect(declarationsOf(googleAlone.app!), {'_appName': "'Contract App'"});
+      // Apple is enabled in the Firebase console, and the script only tells
+      // what to set there.
+      expect(declarationsOf(apple.app!), isEmpty);
+      expect(declarationsOf(without.app!), isEmpty);
+      expect(
+        apple.app!.files[enableSignInScript]!.text,
+        allOf(
+          contains('String _appleInConsole(String project) =>'),
+          contains('stdout.writeln(_appleInConsole(project));'),
+        ),
+      );
+      expect(
+        without.app!.files[enableSignInScript]!.text,
+        isNot(contains('_appleInConsole')),
+      );
+      // As the test that CI runs against its Firebase project reads them.
+      final ofBoth = scriptWaysOf(withBoth.files[enableSignInScript]!.text);
+      expect(ofBoth.google, isTrue);
+      expect(ofBoth.needs, {'androidCertificate', 'iosClient', 'serverClient'});
+      final ofNone = scriptWaysOf(without.app!.files[enableSignInScript]!.text);
+      expect(ofNone.google, isFalse);
+      expect(ofNone.needs, isEmpty);
+      // The values of `_Need` are named after the needs of the auth role.
+      final script = _unitOf(withBoth, enableSignInScript);
+      final needs =
+          script.declarations.whereType<EnumDeclaration>().singleWhere(
+                (declaration) =>
+                    declaration.namePart.typeName.lexeme == '_Need',
+              );
+      expect(
+        [for (final value in needs.body.constants) value.name.lexeme],
+        [for (final need in SignInNeed.values) need.name],
+      );
+      // Google gets the name of the app for its consent screen, as
+      // flutter_core names the app on the devices.
+      expect(
+        withBoth.files[enableSignInScript]!.text,
+        contains("const _appName = 'Contract App';"),
+      );
+      expect(
+        withBoth.files['ios/Runner/Info.plist']!.text,
+        contains('<string>Contract App</string>'),
+      );
+    });
+
+    test(
+        'renders a script that type-checks with the Dart SDK alone, with '
+        'ways to sign in, with what they need and without it', () async {
+      for (final result in [
+        both,
+        await withWays([WayOfTest.googleAlone, WayOfTest.apple]),
+        await withWays([WayOfTest.apple]),
+      ]) {
+        final app = DartApp.write(result.app!);
+        try {
+          expect(
+            await app.analysisProblems(
+              {const ModuleOrigin(FirebaseAuthModule.id)},
+            ),
+            isEmpty,
+            reason: '${result.contractCase}',
+          );
+        } finally {
+          app.delete();
+        }
+      }
+    });
+
+    test(
+        'gives the brick of the script the section that enables Google, the '
+        'section that sets up what the ways to sign in need, and the needs',
+        () {
+      expect(scriptVarsOf(const {}), {
+        'google': false,
+        'apple': false,
+        'setup': false,
+        'needs': '{}',
+      });
+      expect(
+        scriptVarsOf(const {
+          'google.com': {
+            SignInNeed.serverClient,
+            SignInNeed.androidCertificate,
+          },
+          'apple.com': {},
+        }),
+        {
+          'google': true,
+          'apple': true,
+          'setup': true,
+          'needs': '{_Need.androidCertificate, _Need.serverClient}',
+        },
+      );
+      expect(scriptVarsOf(const {'apple.com': {}}), {
+        'google': false,
+        'apple': true,
+        'setup': false,
+        'needs': '{}',
+      });
+      expect(scriptVarsOf(const {'google.com': {}}), {
+        'google': true,
+        'apple': false,
+        'setup': false,
+        'needs': '{}',
+      });
+      expect(
+        firebaseMethodsOf(
+          authRole.methodsIn(authRole.hookInput(both.hook!)),
+        ),
+        {
+          'google.com': WayOfTest.google.needs,
+          'apple.com': <SignInNeed>{},
+        },
+      );
+    });
+
+    test(
+        'lists, of the module, the steps by hand of Apple for a way to sign '
+        'in of Apple, and that of the keys of a release for one that needs '
+        'the certificate of the Android app, in that order', () async {
+      const module = ModuleOrigin(FirebaseAuthModule.id);
+      // Each step with its only contributor.
+      List<(ManualStep, ContributionOrigin)> stepsOf(ContractResult result) => [
+            for (final planned in result.manualSteps)
+              (planned.step, planned.contributors.single),
+          ];
+      final apple = await withWays([WayOfTest.apple]);
+      final google = await withWays([WayOfTest.google]);
+      final googleAlone = await withWays([WayOfTest.googleAlone]);
+      final without = await _resultOf(const [FirebaseAuthModule.id]);
+
+      expect(
+        [
+          for (final step in const [
+            FirebaseAuthModule.appleProviderStep,
+            FirebaseAuthModule.appleRevocationStep,
+            FirebaseAuthModule.googleReleaseShaStep,
+          ])
+            (step.id.wire, step.title),
+        ],
+        [
+          (
+            'firebase_auth.apple_provider',
+            'Turn on Sign in with Apple in Firebase Authentication',
+          ),
+          (
+            'firebase_auth.apple_revocation',
+            'Give Firebase your Sign in with Apple key, so that deleting an '
+                'account works',
+          ),
+          (
+            'firebase_auth.google_release_sha',
+            'Before releasing on Google Play, give Firebase the SHA of your '
+                'release keys',
+          ),
+        ],
+      );
+      expect(stepsOf(both), [
+        (FirebaseAuthModule.appleProviderStep, module),
+        (FirebaseAuthModule.appleRevocationStep, module),
+        (FirebaseAuthModule.googleReleaseShaStep, module),
+      ]);
+      expect(stepsOf(apple), [
+        (FirebaseAuthModule.appleProviderStep, module),
+        (FirebaseAuthModule.appleRevocationStep, module),
+      ]);
+      expect(stepsOf(google), [
+        (FirebaseAuthModule.googleReleaseShaStep, module),
+      ]);
+      // Google alone needs nothing of the project that the script does not
+      // set up, and the app without ways to sign in has nothing to do by
+      // hand for them.
+      expect(googleAlone.manualSteps, isEmpty);
+      expect(without.manualSteps, isEmpty);
+      // The section of the steps by hand opens the README and lists them.
+      final readme = withBoth.files[AppEntryRole.readmeFile]!.text;
+      expect(
+        RegExp(r'^## (.+)$', multiLine: true).firstMatch(readme)?[1],
+        AppEntryRole.setupHeading,
+      );
+      expect(
+        readme,
+        contains(
+          '\n1. ${FirebaseAuthModule.appleProviderStep.title}\n'
+          '2. ${FirebaseAuthModule.appleRevocationStep.title}\n'
+          '3. ${FirebaseAuthModule.googleReleaseShaStep.title}\n',
+        ),
+      );
+    });
+
+    test(
+        'tells in its section of the README what the script does for Google '
+        'and what is left for a release, and how Apple is enabled', () {
+      final readme = withBoth.files[AppEntryRole.readmeFile]!.text;
+      final section = readmeSectionOf(const {
+        'google.com': {
+          SignInNeed.androidCertificate,
+          SignInNeed.iosClient,
+          SignInNeed.serverClient,
+        },
+        'apple.com': {},
+      });
+
+      const page = 'https://console.firebase.google.com/project/_/'
+          'authentication/providers';
+
+      expect(readme, contains('\n## $readmeHeading\n\n$section'));
+      expect(
+        section,
+        allOf([
+          contains('Email/Password in every mode of the app, Anonymous when '
+              'the mode of the app is `anonymous` (see the section '
+              '${AuthRole.readmeHeading}), and Google and Apple for the ways '
+              'to sign in of the app.'),
+          contains('It never disables a method, and it changes no file of '
+              'the app but those that Google needs, as told below.'),
+          // The brand goes to whichever project the script enables the
+          // methods in, and the rest only to the project of firebase.json.
+          contains('\n\nFor Google sign-in, the script also gives Google the '
+              'name of the app and the email address of the account of the '
+              'Firebase CLI for the consent screen that users see when they '
+              'sign in.'),
+          contains('\n\nThe script sets up the rest of what Google needs only '
+              'for the project that `firebase.json` names, not for one that '
+              '`--project` names:\n\n- It registers'),
+          contains('run it with `--account <email>`, or enable Google in the '
+              'Firebase console.'),
+          contains('\n- It registers the SHA-1 and SHA-256 of the Android '
+              'debug key of the machine that runs it'),
+          contains('the script creates it, as the first debug build would.'),
+          contains('\n- It downloads the Firebase files of the app again'),
+          contains('\n- It writes the URL scheme of the iOS app, '
+              '`REVERSED_CLIENT_ID` of `ios/Runner/GoogleService-Info.plist`, '
+              'into `CFBundleURLTypes` of `ios/Runner/Info.plist`.'),
+          contains('\n\nRun the script again after `flutterfire configure` '
+              'for another project.\n'),
+          contains('under Test and release > App integrity in the Play '
+              'Console.'),
+          contains('```bash\nfirebase apps:android:sha:create <appId> <sha>\n'
+              '```\n\nThe section ${AppEntryRole.setupHeading} lists this '
+              'among the steps that you do by hand.\n'),
+          contains('\n\nApple is enabled in the Firebase console, which the '
+              'Firebase CLI cannot do:'),
+          contains('(App Store Review Guideline 5.1.1(v))'),
+          contains('Apple is enabled in the Firebase console, which the '
+              'Firebase CLI cannot do: add Apple under [Authentication > '
+              'Sign-in method]($page).'),
+          contains('the Services ID and the OAuth code flow configuration, '
+              'which you enter in the settings of the Apple provider there: '
+              'your Apple team ID, and the Key ID and the private key of a key '
+              'for Sign in with Apple.'),
+          contains('never put it into the app or its repository.'),
+          contains('fails with `notConfigured`, and the account stays. The '
+              'section ${AppEntryRole.setupHeading} lists both, adding Apple '
+              'and entering the key, among the steps that you do by hand.\n'),
+          // Each block is a paragraph of its own.
+          isNot(contains('\n\n\n')),
+        ]),
+      );
+      // Google alone, which needs nothing of the project: the script only
+      // enables it, and changes no file of the app.
+      final alone = readmeSectionOf(const {'google.com': {}});
+      expect(
+        alone,
+        allOf([
+          contains('and Google for the ways to sign in of the app.'),
+          contains('it changes no file of the app.'),
+          contains('For Google sign-in, the script also gives Google the '
+              'name of the app'),
+          isNot(contains('the rest of what Google needs')),
+          isNot(contains('SHA')),
+          isNot(contains('Info.plist')),
+          isNot(contains('Apple')),
+          isNot(contains('\n\n\n')),
+        ]),
+      );
+      // The app without a way to sign in has the section of before, but
+      // that a run asks about the step.
+      expect(readmeSectionOf(const {}), isNot(contains('\n\n\n')));
+      expect(
+        readmeSectionOf(const {'apple.com': {}}),
+        allOf(
+          contains('and Apple for the ways to sign in of the app.'),
+          contains('Apple is enabled in the Firebase console'),
+          isNot(contains('For Google sign-in')),
+        ),
+      );
+    });
+
+    test(
+        'adds a note for coding agents on what the script does for Google '
+        'and on the key of Apple, only in an app with them', () async {
+      List<String> notesOf(RenderedApp app) => [
+            for (final (origin, heading, note)
+                in app.entriesOf(AppEntryRole.agentSections))
+              if (origin == const ModuleOrigin(FirebaseAuthModule.id))
+                '$heading: ${note.text}',
+          ];
+      final without = await _resultOf(const [FirebaseAuthModule.id]);
+      final note = methodsAgentNote(
+        firebaseMethodsOf(authRole.methodsIn(authRole.hookInput(both.hook!))),
+      )!;
+
+      final heading = authRole.description;
+
+      expect(notesOf(without.app!), ['$heading: ${AgentNote(agentNote).text}']);
+      expect(notesOf(withBoth), [
+        '$heading: ${AgentNote(agentNote).text}',
+        '$heading: ${AgentNote(note).text}',
+      ]);
+      // In the guide, right after the first note of the module.
+      expect(
+        withBoth.files[AppEntryRole.agentsFile]!.text,
+        contains('${agentNote.trim()}\n\n${note.trim()}\n'),
+      );
+      expect(
+        note,
+        allOf(
+          startsWith('- For Google sign-in, `$enableSignInScript` also '
+              'registers the SHA of the Android debug key'),
+          contains('run it only when asked.'),
+          contains('\n- Apple is enabled in the Firebase console by hand'),
+          contains('never put it into the app or its repository.\n'),
+        ),
+      );
+      // The paths that it names are files of the app.
+      expect(
+        _codeOf(note),
+        containsAll([enableSignInScript, 'ios/Runner/Info.plist']),
+      );
+      for (final path in [enableSignInScript, 'ios/Runner/Info.plist']) {
+        expect(withBoth.files.keys, contains(path));
+      }
+      expect(methodsAgentNote(const {}), isNull);
+      expect(
+        methodsAgentNote(const {'apple.com': {}}),
+        startsWith('- Apple is enabled'),
+      );
+      expect(
+        methodsAgentNote(const {'google.com': {}}),
+        isNull,
+        reason: 'The script only enables a way to sign in of Google that '
+            'needs nothing of the project, as the note of the module says.',
       );
     });
   });

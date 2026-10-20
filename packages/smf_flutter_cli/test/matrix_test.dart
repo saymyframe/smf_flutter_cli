@@ -230,7 +230,9 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// screen, such as those of the theme and of the notifications, get the
 /// settings feature for it, and the apps of the notifications with the
 /// onboarding screen get the onboarding feature, which has no route to
-/// start on either.
+/// start on either. An app of Google sign-in has no way to sign in
+/// that the App Store takes as its equivalent on iOS, which the apps with
+/// every module have in Sign in with Apple (guideline 4.8).
 const _warningApps = <String, List<String>>{
   'settings with localization': [
     'router.no_main_navigation',
@@ -247,6 +249,8 @@ const _warningApps = <String, List<String>>{
   ],
   'onboarding with localization': ['router.no_start'],
   'onboarding': ['router.no_start'],
+  'google_sign_in with localization': ['auth.no_equivalent_sign_in'],
+  'google_sign_in': ['auth.no_equivalent_sign_in'],
   'local_notifications with settings_screen, onboarding_screen, '
       'localization': ['router.no_main_navigation', 'router.no_start'],
   'local_notifications with settings_screen, onboarding_screen': [
@@ -300,6 +304,8 @@ void main() {
       'Firebase and the notifications with their preferences, the apps of '
       'Firebase Authentication with and '
       'without the localization and the router, which get Firebase, the '
+      'apps of Google sign-in and of Sign in with Apple with the '
+      'localization and without, which get Firebase Authentication, the '
       'apps of the sign-in for each state manager with the localization '
       'and without, which get Firebase Authentication and the router, one '
       'of Firebase Authentication with the router for each other mode of '
@@ -316,7 +322,7 @@ void main() {
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, onboarding, local_notifications, firebase_core, '
         'firebase_crashlytics, firebase_analytics, firebase_messaging, '
-        'firebase_auth, sign_in)';
+        'firebase_auth, google_sign_in, apple_sign_in, sign_in)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -326,11 +332,11 @@ void main() {
           'firebase_auth, firebase_core, settings, go_router, $stateManager',
           '${localized ? ', shared_preferences' : ''})',
         ].join();
-    // The app of Firebase Authentication with the router in another mode of
-    // the auth role.
-    String inMode(String mode) => 'auth by firebase_auth with router '
-        '--auth-mode=$mode (firebase_auth, go_router, firebase_core, '
-        'flutter_core)';
+    // The app of Firebase Authentication with the router and the
+    // localization in another mode of the auth role, which uses both.
+    String inMode(String mode) => 'auth by firebase_auth with router, '
+        'localization --auth-mode=$mode (firebase_auth, go_router, gen_l10n, '
+        'firebase_core, flutter_core, shared_preferences)';
     // An app with every module in another mode of the auth role.
     String everyModuleIn(String stateManager, String mode) =>
         everyModule(stateManager).replaceFirst(
@@ -458,6 +464,22 @@ void main() {
         'flutter_core)',
       ),
       'firebase_auth (firebase_auth, firebase_core, flutter_core)',
+      equals(
+        'google_sign_in with localization (google_sign_in, gen_l10n, '
+        'flutter_core, firebase_auth, firebase_core, shared_preferences)',
+      ),
+      equals(
+        'google_sign_in (google_sign_in, flutter_core, firebase_auth, '
+        'firebase_core)',
+      ),
+      equals(
+        'apple_sign_in with localization (apple_sign_in, gen_l10n, '
+        'flutter_core, firebase_auth, firebase_core, shared_preferences)',
+      ),
+      equals(
+        'apple_sign_in (apple_sign_in, flutter_core, firebase_auth, '
+        'firebase_core)',
+      ),
       signIn('bloc', localized: true),
       signIn('riverpod', localized: true),
       signIn('bloc'),
@@ -498,7 +520,7 @@ void main() {
       ],
       [
         for (final name in const [
-          'auth by firebase_auth with router',
+          'auth by firebase_auth with router, localization',
           'every module (bloc)',
           'every module (riverpod)',
         ])

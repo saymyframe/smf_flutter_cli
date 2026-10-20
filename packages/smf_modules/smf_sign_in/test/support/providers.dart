@@ -47,7 +47,7 @@ final class MemoryAuthModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(_bundle('memory_auth', {'lib/$file': _code})),
         authRole.data(
-          const RoleImplementation(
+          const AuthImplementation(
             type: TypeRef('MemoryAuthService', import: _file),
             create: FactoryRef('createMemoryAuthService', import: _file),
           ),
@@ -151,12 +151,97 @@ final class MemoryAuthService implements AuthService {
   }
 
   @override
-  Future<void> deleteAccount() async {
+  Future<void> deleteAccount({SignInCredential? fresh}) async {
     await _answer();
     final user = _signedIn();
     memoryAccounts.removeWhere((email, account) => account.uid == user.uid);
     _set(null);
   }
+
+  /// It takes no credential of an identity provider.
+  @override
+  Future<void> signInWith(SignInCredential credential) async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
+
+  @override
+  Future<void> linkWith(SignInCredential credential) async =>
+      throw const AuthFailure(AuthFailureReason.notConfigured);
+}
+''';
+}
+
+/// A way to sign in for the tests, which a script of the state of the
+/// screens scripts: the function of the way to sign in answers what
+/// `scriptedAnswer` returns, as the sheet of an identity provider does, and
+/// counts its calls in `scriptedAsked`. It works on Android, the platform
+/// of the stand-in of Flutter, and on iOS, and has its label in English
+/// alone, since the module does not use the localization role.
+///
+/// So the state of the screens is tested with a way to sign in that the
+/// module does not know.
+final class ScriptedMethodModule extends SmfModule {
+  /// Creates the module.
+  const ScriptedMethodModule();
+
+  /// The id of the module.
+  static const id = ModuleId('scripted_method');
+
+  /// The issuer of the tokens of the identity provider of the tests.
+  static const issuer = 'https://accounts.script.example.com';
+
+  /// The path below `lib/` of the file of the way to sign in.
+  static const file = 'core/scripted_method/scripted_method.dart';
+
+  static const _file = ImportRef.app(file);
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A way to sign in that a script scripts (test)',
+        kind: ModuleKinds.infrastructure,
+        requires: {authRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(_bundle('scripted_method', {'lib/$file': _code})),
+        authRole.data(
+          const SignInMethod(
+            label: LocalizedText('label', en: 'Continue with the script'),
+            icon: TypeRef('ScriptedSignInIcon', import: _file),
+            platforms: {AppPlatform.android, AppPlatform.ios},
+            credential: FunctionRef('scriptedCredential', import: _file),
+            issuer: issuer,
+            appStore: AppStoreLogin.privacyFocused,
+          ),
+        ),
+      ];
+
+  static const _code = '''
+import 'package:flutter/widgets.dart';
+
+import '../auth/app_session.dart';
+
+/// What the next call of [scriptedCredential] answers, which a script sets:
+/// no credential at first, as when the user closes the sheet.
+Future<SignInCredential?> Function() scriptedAnswer = () async => null;
+
+/// How many times the app asked the way to sign in for a credential.
+int scriptedAsked = 0;
+
+/// Asks the identity provider of the tests for a credential.
+Future<SignInCredential?> scriptedCredential() {
+  scriptedAsked++;
+  return scriptedAnswer();
+}
+
+/// The icon of the way to sign in.
+class ScriptedSignInIcon extends StatelessWidget {
+  /// Creates the icon.
+  const ScriptedSignInIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
 }
 ''';
 }

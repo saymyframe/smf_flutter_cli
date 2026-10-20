@@ -28,6 +28,21 @@ abstract base class RoleProvider<D extends Object> {
   /// with a code of the role (see [SmfIssue.code]).
   List<SmfIssue> validate(RoleHookInput<D> input) => const [];
 
+  /// Returns the steps of the app that its developer does by hand and that
+  /// depend on the data of the role, or of the roles that it requires or
+  /// uses, such as a step in the backend of the provider for a way to sign
+  /// in that a module gives the role (see [ManualStep]).
+  ///
+  /// It runs once, with [validate], before [RoleTemplate.choose], so
+  /// [RoleHookInput.choice] is `null`. A step that every app with the
+  /// provider has is a contribution of its module instead. A step that the
+  /// hook returns has no [Contribution.when], since the hook asks for the
+  /// presence of the roles itself (see [RoleHookInput.has]), and has an id
+  /// of the module of the provider, or of a role that the module provides,
+  /// requires or uses, or that is open to all modules. A step of a role
+  /// that the app lacks does not apply.
+  List<ManualStep> manualSteps(RoleHookInput<D> input) => const [];
+
   /// Returns the fragments, the variables of the module's bricks and the
   /// files that depend on the data, such as the routes of a router.
   RoleOutput render(RoleHookInput<D> input) => const RoleOutput();

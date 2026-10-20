@@ -212,9 +212,9 @@ final class ModuleRuleInput<D extends Object> {
   final List<RoleData<D>> data;
 
   /// The contributions of the module and its variant that apply in this
-  /// app: those whose [Contribution.when] roles, and for [RoleData] whose
-  /// role, are present. Those with conditions on what roles chose
-  /// ([Contribution.whenChosen]) are among them, since the rules run before
-  /// the roles choose.
+  /// app: those whose [Contribution.when] roles, for [RoleData] whose role,
+  /// and for a [ManualStep] with an id of a role that role, are present.
+  /// Those with conditions on what roles chose ([Contribution.whenChosen])
+  /// are among them, since the rules run before the roles choose.
   final List<Contribution> contributions;
 }

@@ -366,10 +366,19 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // it, the test that the CLI keeps: in every app with the role, since
       // it must hold in each mode of the role. Those are the apps of the
       // fixture sign-in alone, without a router and with each of the two in
-      // the default mode and with a router in each other mode, and the apps
-      // with every module, which the matrix has once more for the other
-      // modes.
+      // the default mode and with a router in each other mode, the apps of
+      // the fixture way to sign in, and the apps with every module, which
+      // the matrix has once more for the other modes.
       await authRoleAppTest(),
+      // The ways to sign in of the apps with the auth role whose modules
+      // give the role one, whichever modules provide the role and the ways
+      // to sign in, the test that the CLI keeps: the service takes the
+      // credentials of identities of each issuer of the app as the role
+      // says, and the session signs in with the credential that the
+      // function of each way to sign in returns, in each mode of the role.
+      // Those are the apps of the fixture way to sign in, with the fixture
+      // sign-in, and the apps with every module.
+      await authMethodsAppTest(),
       // The notifications of the apps with the notifications role,
       // whichever module provides it, the test that the CLI keeps: only in
       // the apps with every module, which run flutter test for other tests

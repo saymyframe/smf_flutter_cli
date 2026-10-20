@@ -868,12 +868,21 @@ void main() {
       );
     });
 
-    test('has the sections of the modules in its README', () {
+    test(
+        'has the sections of the modules in its README, after the steps by '
+        'hand that its entitlement of the iOS app needs', () {
       expect(
         texts['README.md'],
         '# contract_app\n'
         '\n'
         'A new Flutter project.\n'
+        '\n'
+        '## ${AppEntryRole.setupHeading}\n'
+        '\n'
+        'Once any commands of the sections below have run, the setup still '
+        'needs these steps, which no command can do:\n'
+        '\n'
+        '1. ${AppEntryRole.iosAppIdStep.title}\n'
         '\n'
         '## Every socket\n'
         '\n'

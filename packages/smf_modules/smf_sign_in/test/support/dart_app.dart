@@ -11,8 +11,8 @@ import 'package:yaml/yaml.dart';
 
 /// A stand-in for the part of Flutter's foundation library that the files
 /// of the auth role and the state of the sign-in screens use, with the
-/// signatures of Flutter 3.44: the app runs in debug mode, what it prints
-/// goes to `debugPrinted`, and the errors that it reports go to
+/// signatures of Flutter 3.44: the app runs on Android in debug mode, what
+/// it prints goes to `debugPrinted`, and the errors that it reports go to
 /// `reportedErrors`.
 const _foundation = r'''
 const bool kDebugMode = true;
@@ -92,11 +92,17 @@ class FlutterError {
   static void reportError(FlutterErrorDetails details) =>
       reportedErrors.add(details);
 }
+
+enum TargetPlatform { android, fuchsia, iOS, linux, macOS, windows }
+
+TargetPlatform get defaultTargetPlatform => TargetPlatform.android;
 ''';
 
 /// A stand-in for the part of Flutter's widgets library that the files of
 /// the auth role use: what that library exports of the foundation library,
-/// and the binding with the observers of the lifecycle of the app.
+/// the binding with the observers of the lifecycle of the app, the widget
+/// and the context that the ways to sign in of the app name, and what the
+/// icon of the way to sign in of the tests builds on.
 const _widgets = '''
 export 'foundation.dart'
     show
@@ -109,6 +115,30 @@ export 'foundation.dart'
         immutable;
 
 enum AppLifecycleState { detached, resumed, inactive, hidden, paused }
+
+class Key {
+  const Key(this.value);
+
+  final String value;
+}
+
+abstract class Widget {
+  const Widget({this.key});
+
+  final Key? key;
+}
+
+abstract class StatelessWidget extends Widget {
+  const StatelessWidget({super.key});
+
+  Widget build(BuildContext context);
+}
+
+class SizedBox extends Widget {
+  const SizedBox({super.key});
+}
+
+abstract class BuildContext {}
 
 abstract mixin class WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {}

@@ -1,0 +1,15 @@
+This product includes software developed by SayMyFrame (https://saymyframe.com).
+
+Licensed under the Apache License, Version 2.0 (the "License");
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+The images of the Google "G" logo in
+bricks/google_sign_in/__brick__/lib/core/google_sign_in/assets/, which
+lib/bundles/google_sign_in_bundle.dart holds in the published package, are
+the files GoogleSignIn/Sources/Resources/google.png, google@2x.png and
+google@3x.png of the Google Sign-In SDK for iOS 10.0.0
+(https://github.com/google/GoogleSignIn-iOS), Copyright Google LLC,
+licensed under the Apache License, Version 2.0. Google and the Google "G"
+logo are trademarks of Google LLC. The generated app shows the logo in its
+button of Google sign-in, as the Sign in with Google branding guidelines
+(https://developers.google.com/identity/branding-guidelines) allow.

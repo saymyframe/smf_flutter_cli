@@ -12,6 +12,18 @@ final class _OneTab extends LayoutProvider {
   int? get maxDestinations => 1;
 }
 
+/// A provider whose hook of the steps by hand throws.
+final class _ThrowingSteps extends RoleProvider<NoDsl> {
+  _ThrowingSteps(this.role);
+
+  @override
+  final Role<NoDsl> role;
+
+  @override
+  List<ManualStep> manualSteps(RoleHookInput<NoDsl> input) =>
+      throw StateError('no steps');
+}
+
 String _screen(String name) =>
     '${name[0].toUpperCase()}${name.substring(1)}Screen';
 
@@ -59,8 +71,16 @@ void main() {
     template: TestTemplate(choice: 'the start'),
   );
 
-  CreatePipeline pipeline(List<SmfModule> modules, FakeHost host) =>
-      CreatePipeline(registry: ModuleRegistry(modules), host: host.host);
+  CreatePipeline pipeline(
+    List<SmfModule> modules,
+    FakeHost host, {
+    SetupLink? setupLink,
+  }) =>
+      CreatePipeline(
+        registry: ModuleRegistry(modules),
+        host: host.host,
+        setupLink: setupLink,
+      );
 
   CreateRequest request(
     List<String> modules, {
@@ -112,6 +132,67 @@ void main() {
     await plan.environment.dispose();
   });
 
+  test('plans the steps by hand once, before the roles choose', () async {
+    final host = FakeHost();
+    final steps = <ManualStep>[];
+    final template = TestTemplate<String>(choice: 'chosen', steps: steps);
+    final sign = TestRole<String>('sign', template: template);
+    steps.add(
+      ManualStep(ManualStepId.role(sign, 'app_id'), 'Register the App ID'),
+    );
+    final modules = [
+      scaffold(),
+      TestModule(
+        'fire',
+        providers: [RoleProvider.plain(sign)],
+        contributions: const [
+          ManualStep(
+            ManualStepId(ModuleId('fire'), 'apple'),
+            'Turn on Sign in with Apple in Firebase Authentication',
+          ),
+        ],
+      ),
+      TestModule('go', providers: [RoleProvider.plain(nav)]),
+    ];
+    final asked = <List<ManualStepId>>[];
+
+    final plan = (await pipeline(
+      modules,
+      host,
+      setupLink: (steps) {
+        asked.add(steps);
+        return guideOf(steps);
+      },
+    ).plan(request(['fire', 'go'])))!;
+
+    expect(plan.choices[sign], 'chosen');
+    expect(template.chosen, hasLength(1));
+    // The steps depend on no choice, so a run that stops before the
+    // choices, as --explain does, has them too.
+    expect(template.listed, hasLength(1));
+    expect(template.listed.single.choice, isNull);
+    final planned = [for (final step in plan.manualSteps) '$step'];
+    expect(planned, [
+      'sign.app_id: Register the App ID (role:sign)',
+      equals(
+        'fire.apple: Turn on Sign in with Apple in Firebase Authentication '
+        '(fire)',
+      ),
+    ]);
+    // The front end names the guide of the steps once, by their ids.
+    expect(asked, [
+      [
+        ManualStepId.role(sign, 'app_id'),
+        const ManualStepId(ModuleId('fire'), 'apple'),
+      ],
+    ]);
+    expect(
+      plan.setupLink,
+      Uri.parse('https://guide.example/setup?steps=sign.app_id,fire.apple'),
+    );
+    await plan.environment.dispose();
+  });
+
   group('lenient mode', () {
     final bad = TestModule(
       'bad',
@@ -142,6 +223,55 @@ void main() {
         startsWith('Leaving out bad: bad lists the nav'),
         'Leaving out child: child depends on bad, which was left out.',
       ]);
+    });
+
+    test(
+        'leaves out a module whose step by hand breaks a rule, or whose hook '
+        'of the steps fails', () async {
+      final host = FakeHost();
+      final modules = [
+        scaffold(),
+        TestModule(
+          'untitled',
+          contributions: const [
+            ManualStep(ManualStepId(ModuleId('untitled'), 'key'), ''),
+          ],
+        ),
+        TestModule(
+          'fire',
+          providers: [_ThrowingSteps(TestRole<NoDsl>('sign'))],
+        ),
+        TestModule(
+          'fine',
+          contributions: const [
+            ManualStep(ManualStepId(ModuleId('fine'), 'key'), 'Upload a key'),
+          ],
+        ),
+      ];
+
+      final plan = (await pipeline(modules, host, setupLink: guideOf)
+          .plan(request(['untitled', 'fire', 'fine'])))!;
+
+      expect(plan.leftOut.map((l) => '${l.module}'), ['untitled', 'fire']);
+      expect(host.logger.warnings, [
+        startsWith(
+          'Leaving out untitled: The title of the step by hand untitled.key '
+          'of untitled is blank',
+        ),
+        equals(
+          'Leaving out fire: The hook of fire that lists the steps by hand '
+          'failed: Bad state: no steps',
+        ),
+      ]);
+      expect(
+        [for (final step in plan.manualSteps) '$step'],
+        ['fine.key: Upload a key (fine)'],
+      );
+      // The link is that of the steps of the app without the modules.
+      expect(
+        plan.setupLink,
+        Uri.parse('https://guide.example/setup?steps=fine.key'),
+      );
     });
 
     test('leaves out a module whose required check fails', () async {
@@ -764,6 +894,7 @@ void main() {
         context: plan.context,
         choices: plan.choices,
         pubspec: plan.pubspec,
+        manualSteps: plan.manualSteps,
       );
       return (plan, app);
     }
@@ -1588,6 +1719,96 @@ void main() {
           'when it cannot ask.\n',
         ),
       );
+    });
+
+    test(
+        'shows the steps by hand under the link to their guide, between the '
+        'steps after generation and the machine', () async {
+      const appId = ManualStep(
+        ManualStepId.role(appEntryRole, 'ios_app_id'),
+        'In Xcode, sign the iOS app with your paid Apple Developer team',
+      );
+      const key = ManualStepId(ModuleId('core'), 'apns_key');
+      final modules = [
+        scaffold(),
+        TestModule(
+          'core',
+          contributions: const [
+            PostGenStep(ToolRef('configure'), []),
+            ManualStep(key, 'Give Firebase your Apple push key (APNs key)'),
+            appId,
+          ],
+        ),
+        // It lists the step of the role too, which the app has once.
+        TestModule(
+          'push',
+          dependsOn: {'core'},
+          contributions: const [appId],
+        ),
+      ];
+      const explain = CreateRequest(
+        appName: 'my_app',
+        modules: [ModuleId('push')],
+        explain: true,
+      );
+      const steps =
+          '  app_entry.ios_app_id: In Xcode, sign the iOS app with your paid '
+          'Apple Developer team (core, push)\n'
+          '  core.apns_key: Give Firebase your Apple push key (APNs key) '
+          '(core)\n';
+
+      final host = FakeHost();
+      final plan =
+          await pipeline(modules, host, setupLink: guideOf).plan(explain);
+
+      expect(plan, isNull);
+      expect(
+        host.logger.infos.join('\n'),
+        contains(
+          'After generation\n'
+          '  configure (core)\n'
+          '\n'
+          'By hand\n'
+          // The steps of roles come first, in the link too.
+          '  ${guideOf([appId.id, key])}\n'
+          '$steps'
+          '\n'
+          'Machine\n',
+        ),
+      );
+
+      // A front end that names no page shows the steps alone.
+      final unlinked = FakeHost();
+      await pipeline(modules, unlinked).plan(explain);
+      expect(
+        unlinked.logger.infos.join('\n'),
+        contains('  configure (core)\n\nBy hand\n$steps\nMachine\n'),
+      );
+    });
+
+    test('shows no steps by hand for an app without any', () async {
+      final host = FakeHost();
+      final asked = <List<ManualStepId>>[];
+
+      await pipeline(
+        [scaffold(), TestModule('core')],
+        host,
+        setupLink: (steps) {
+          asked.add(steps);
+          return guideOf(steps);
+        },
+      ).plan(
+        const CreateRequest(
+          appName: 'my_app',
+          modules: [ModuleId('core')],
+          explain: true,
+        ),
+      );
+
+      final report = host.logger.infos.join('\n');
+      expect(report, contains('Machine'));
+      expect(report, isNot(contains('By hand')));
+      expect(asked, isEmpty);
     });
 
     test('says when generation would stop', () async {

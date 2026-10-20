@@ -11,6 +11,7 @@
 library;
 
 export 'src/collector.dart' show Collected, Collection;
+export 'src/manual_steps.dart' show PlannedManualStep, SetupLink;
 export 'src/order.dart' show ContributionOrder, OrderEdge;
 export 'src/pubspec.dart' show MergedDependency, MergedPubspec;
 export 'src/render.dart' show AddedImport, RenderedApp, RenderedFile;

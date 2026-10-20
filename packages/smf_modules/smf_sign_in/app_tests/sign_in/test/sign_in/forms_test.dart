@@ -18,6 +18,23 @@
 // screen that resets a password tells where the message went. And the button
 // of the field of a password shows and hides it.
 //
+// Above the form, the sign-in and the sign-up show a button for each way to
+// sign in of the app that works on the platform that the app runs on, in the
+// order of appSignInMethods, as wide as the button of the form and at least
+// as tall, with "or" between them and the form, and a line of text that asks
+// how to sign in. A screen reader reads each as one button with its label. A
+// tap calls the way to sign in, whose module answers with its mocks, and
+// gives the credential to the session: the router leaves the sign-in, and
+// an anonymous user keeps the id. While the call is on its way, its button
+// spins, and neither another button nor the form takes a tap; in an app that
+// asks for less motion the button is disabled with its label instead. A
+// call that failed shows its failure below the buttons, not above the button
+// of the form. An app without ways to sign in shows no button and no "or".
+// When the user closes the sheet of a way to sign in, the screen is as it
+// was before the tap: the mocks of a way to sign in always give a
+// credential, so the tests of the package of the module check that, with a
+// way to sign in of their own.
+//
 // The matrix writes of_app.dart next to this file, with the texts of the
 // module in each language of the app. The test starts the app once, since
 // the start-up of an app may not run twice, and each expectation gives its
@@ -27,6 +44,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
+import 'package:{{app_name}}/core/auth/sign_in_methods.dart';
 import 'package:{{app_name}}/features/sign_in/sign_in_widgets.dart';
 
 import 'app.dart';
@@ -194,6 +212,309 @@ Future<void> _expectBusyUntilTheCallEnds(
   service.failure = null;
 }
 
+/// Checks the buttons of the ways to sign in of the screen that the user
+/// sees, which [screen] names, on [platform]: one for each way to sign in
+/// that works there, in their order, above the form, with "or" between them
+/// and the form, and the line of text [methodsIntro] in place of [intro]. A
+/// screen reader reads each as one button with its label. Without such ways
+/// to sign in, the screen shows no button, no "or" and the text [intro].
+void _expectMethods(
+  WidgetTester tester,
+  String screen,
+  TargetPlatform platform, {
+  required String intro,
+  required String methodsIntro,
+}) {
+  final methods = methodsHere();
+  final buttons = find.byType(SignInMethodButton);
+  final where = '$screen on ${platform.name}';
+  if (methods.isEmpty) {
+    expect(
+      (
+        buttons.evaluate().length,
+        text('or').evaluate().length,
+        text(intro).evaluate().length,
+      ),
+      (0, 0, 1),
+      reason: 'In an app without a way to sign in that works on '
+          '${platform.name}, $screen shows no button of a way to sign in, no '
+          '"or", and the line of text "${texts[intro]}".',
+    );
+    return;
+  }
+  expect(
+    [
+      for (final button in tester.widgetList<SignInMethodButton>(buttons))
+        button.method.issuer,
+    ],
+    [for (final method in methods) method.issuer],
+    reason: '$where shows a button for each way to sign in that works there, '
+        'in the order of appSignInMethods.',
+  );
+  expect(
+    (text(methodsIntro).evaluate().length, text(intro).evaluate().length),
+    (1, 0),
+    reason: 'With buttons of ways to sign in, $screen asks how to sign in: '
+        '"${texts[methodsIntro]}".',
+  );
+  final submit = tester.getRect(buttonIn(submitButton));
+  final or = tester.getRect(text('or'));
+  final email = tester.getRect(emailField);
+  var above = tester.getRect(text(methodsIntro)).bottom;
+  for (final method in methods) {
+    final rect = tester.getRect(buttonIn(methodButton(method)));
+    final label = method.label(tester.element(methodButton(method)));
+    expect(
+      (
+        rect.top >= above,
+        rect.bottom < or.top,
+        rect.left,
+        rect.width,
+        rect.height >= submit.height,
+      ),
+      (true, true, submit.left, submit.width, true),
+      reason: 'On $where, the button "$label" is below the one before it, '
+          'above "or" and the form, as wide as the button of the form and at '
+          'least as tall: it is at $rect, and the button of the form at '
+          '$submit.',
+    );
+    expect(
+      tester.getSemantics(buttonIn(methodButton(method))),
+      isSemantics(
+        label: label,
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        hasTapAction: true,
+        isFocusable: true,
+      ),
+      reason: 'A screen reader reads the button of a way to sign in as one '
+          'button with its label, "$label", on $where: its icon adds nothing.',
+    );
+    above = rect.bottom;
+  }
+  expect(
+    or.bottom < email.top,
+    isTrue,
+    reason: 'On $where, "or" is between the buttons of the ways to sign in '
+        'and the form.',
+  );
+}
+
+/// Checks the button of [method] on the screen that the user sees, which
+/// [screen] names, with a call that [service] holds back and then fails:
+/// while the call is on its way, the button spins, or in an app that asks
+/// for less motion is disabled with its label, and no other button and no
+/// form takes a tap. Then the failure shows below the buttons of the ways
+/// to sign in, and the screen stays as it was.
+Future<void> _expectBusyMethod(
+  WidgetTester tester,
+  ScriptedAuthService service,
+  SignInMethod method,
+  String screen, {
+  required bool lessMotion,
+}) async {
+  final hold = service.hold = Completer<void>();
+  service.failure = const AuthFailure(AuthFailureReason.network);
+  final calls = service.calls.length;
+  final session = sessionNow();
+  final button = methodButton(method);
+  final label = method.label(tester.element(button));
+  // An anonymous user gets the identity of the credential with the same id.
+  final call = authMode == AuthMode.anonymous ? 'linkWith' : 'signInWith';
+  await tester.tap(button);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  final spins = find
+      .descendant(of: button, matching: find.byType(CircularProgressIndicator))
+      .evaluate()
+      .isNotEmpty;
+  expect(
+    (
+      service.calls.sublist(calls).join(', '),
+      spins,
+      tester.widget<FilledButton>(buttonIn(button)).onPressed != null,
+      find.descendant(of: button, matching: find.text(label)).evaluate().length,
+    ),
+    (
+      '$call ${method.issuer}',
+      !lessMotion,
+      !lessMotion,
+      1,
+    ),
+    reason: lessMotion
+        ? 'In an app that asks for less motion, the button "$label" of '
+            '$screen whose call is on its way takes no tap and keeps its '
+            'label, and does not spin.'
+        : 'While the call of the button "$label" of $screen is on its way, '
+            'the button spins and keeps its colours: it does nothing on a '
+            'tap. The call gives the credential of the way to sign in to '
+            'the session.',
+  );
+  expect(
+    [
+      for (final other in tester.widgetList<SignInMethodButton>(
+        find.byType(SignInMethodButton),
+      ))
+        if (other.method != method)
+          tester
+              .widget<FilledButton>(buttonIn(methodButton(other.method)))
+              .onPressed,
+      tester.widget<FilledButton>(buttonIn(submitButton)).onPressed,
+    ],
+    everyElement(isNull),
+    reason: 'While the call of the button "$label" of $screen is on its way, '
+        'no other button of a way to sign in and not the button of the form '
+        'takes a tap.',
+  );
+  expect(
+    tester
+        .widgetList<AbsorbPointer>(
+          find.ancestor(
+            of: find.byType(TextFormField),
+            matching: find.byType(AbsorbPointer),
+          ),
+        )
+        .map((form) => form.absorbing),
+    contains(true),
+    reason: 'While the call of a way to sign in of $screen is on its way, '
+        'the form takes no input.',
+  );
+  await tester.tap(button, warnIfMissed: false);
+  await tester.pump();
+  expect(
+    service.calls.length - calls,
+    1,
+    reason: 'A second tap on the button "$label" of $screen while its call '
+        'is on its way makes no second call.',
+  );
+  hold.complete();
+  service.hold = null;
+  await tester.pumpAndSettle();
+  final message = text(failureTextOf(AuthFailureReason.network));
+  expect(
+    (
+      find
+          .descendant(of: find.byType(SignInMethods), matching: message)
+          .evaluate()
+          .length,
+      failureMessage(AuthFailureReason.network).evaluate().length,
+      sessionNow(),
+    ),
+    (1, 1, session),
+    reason: 'A call of the button "$label" of $screen that failed shows its '
+        'failure below the buttons of the ways to sign in, and not above '
+        'the button of the form, and leaves the session as it was.',
+  );
+  final shown = tester.getRect(
+    find.descendant(of: find.byType(SignInMethods), matching: message),
+  );
+  final lastButton = tester.getRect(
+    buttonIn(methodButton(methodsHere().last)),
+  );
+  final or = tester.getRect(text('or'));
+  expect(
+    (shown.top >= lastButton.bottom, shown.bottom <= or.top),
+    (true, true),
+    reason: 'The failure of a call of a way to sign in of $screen is between '
+        'the last button of a way to sign in and "or": it is at $shown, the '
+        'last button at $lastButton and "or" at $or.',
+  );
+  service.failure = null;
+}
+
+/// Checks the buttons of the ways to sign in of the sign-in and of the
+/// sign-up, on Android and on iOS, with the calls that [service] answers:
+/// where they are, what a screen reader reads, a call that is on its way
+/// and one that fails, also in an app that asks for less motion, and a
+/// sign-in with each way to sign in, which the router leaves, and which
+/// gives an anonymous user the identity with the same id.
+Future<void> _expectWaysToSignIn(
+  WidgetTester tester,
+  ScriptedAuthService service,
+) async {
+  // The sign-in, for a user without an account.
+  await appSession.signOut();
+  await tester.pumpAndSettle();
+  if (authMode != AuthMode.required) await pushSignIn(tester);
+
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    await usePlatform(tester, platform);
+    _expectMethods(
+      tester,
+      'the sign-in',
+      platform,
+      intro: 'intro',
+      methodsIntro: 'methodsIntro',
+    );
+    for (final method in methodsHere()) {
+      await _expectBusyMethod(
+        tester,
+        service,
+        method,
+        'the sign-in',
+        lessMotion: false,
+      );
+    }
+    await tester.tap(otherScreenAction);
+    await tester.pumpAndSettle();
+    _expectMethods(
+      tester,
+      'the screen that creates an account',
+      platform,
+      intro: 'signUpIntro',
+      methodsIntro: 'signUpMethodsIntro',
+    );
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    for (final method in methodsHere()) {
+      await _expectBusyMethod(
+        tester,
+        service,
+        method,
+        'the screen that creates an account',
+        lessMotion: true,
+      );
+    }
+    tester.platformDispatcher.clearAccessibilityFeaturesTestValue();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    // A sign-in with each way to sign in: the router leaves the
+    // sign-in, and an anonymous user keeps the id.
+    for (final method in methodsHere()) {
+      final before = appSession.value;
+      await tester.tap(methodButton(method));
+      await tester.pumpAndSettle();
+      final after = appSession.value;
+      expect(
+        (
+          after is AccountSession && after.issuers.contains(method.issuer),
+          after.uid == before.uid,
+        ),
+        (true, before is AnonymousSession),
+        reason: 'A tap on the button of the way to sign in of '
+            '${method.issuer} gives the session the account of its '
+            'identity, and an anonymous user keeps the id.',
+      );
+      expect(
+        (
+          anySignInScreen.evaluate().length,
+          find.byType(startScreen).evaluate().length,
+        ),
+        (0, 1),
+        reason: 'Once the user has an account through a way to sign in, '
+            'the router leaves the sign-in, and the app shows the screen '
+            'that it starts on: no screen closes itself.',
+      );
+      await appSession.signOut();
+      await tester.pumpAndSettle();
+      if (authMode != AuthMode.required) await pushSignIn(tester);
+    }
+  }
+  await usePlatform(tester, null);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   // A tap that reaches no widget fails the test where it misses.
@@ -205,7 +526,11 @@ void main() {
     'the forms of the sign-in tell of what is missing without a call, show '
     'that a call is on its way and take no input then, show the text of the '
     'app for each failure of a call in each language of the app, and tell '
-    'where the message of a password reset went',
+    'where the message of a password reset went; the buttons of the ways to '
+    'sign in of the platform are above the form, a tap gives the credential '
+    'of a way to sign in to the session, a call that is on its way spins in '
+    'its button and takes no other tap, and its failure shows below the '
+    'buttons',
     (tester) async {
       addTearDown(tester.platformDispatcher.clearAllTestValues);
       useTallPhone(tester);
@@ -485,6 +810,8 @@ void main() {
         reason: 'Once the user has an account, the app shows the screen '
             'that it starts on.',
       );
+
+      await _expectWaysToSignIn(tester, service);
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

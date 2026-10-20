@@ -91,7 +91,7 @@ List<SmfIssue> _checkAnalyticsFactory(
 ) =>
     _checkFactoryCalls(input, 'createAnalyticsService', AnalyticsRole.file);
 
-final class _AnalyticsTemplate extends _ServiceTemplate {
+final class _AnalyticsTemplate extends _ServiceTemplate<RoleImplementation> {
   const _AnalyticsTemplate();
 
   @override

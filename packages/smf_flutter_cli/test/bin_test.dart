@@ -805,7 +805,7 @@ void main() {
       test(
         '--explain shows the module chosen for the sign-in, with Firebase, '
         'which it depends on, the Firebase CLI that its step needs, and the '
-        'step, which runs after flutterfire configure as part of it',
+        'step, which runs after flutterfire configure once the user agreed',
         () async {
           final result = await _smf(
             [
@@ -841,14 +841,24 @@ void main() {
                 '  ✗ Firebase CLI 15.34.0 or later (for firebase_auth): '
                 'missing\n',
               ),
-              // The step continues flutterfire configure, without a notice
-              // of its own. The step of the other module that continues
-              // flutterfire configure comes after it, by the names of the
-              // two modules, and runs whatever becomes of this one.
+              // The step continues flutterfire configure, and has what the
+              // user has to know before it runs. The step of the other
+              // module that continues flutterfire configure comes after
+              // it, by the names of the two modules, and runs whatever
+              // becomes of this one.
               contains(
                 '--android-package-name=com.example.my_app (firebase_core)\n'
                 '    then dart tool/enable_firebase_sign_in.dart '
                 '(firebase_auth)\n'
+                '      If the app signs in with Google, it also gives '
+                "Google the app's name and the Firebase CLI account's email "
+                'for its consent screen, registers the SHA-1 and SHA-256 of '
+                "this machine's Android debug key (creating the key if there "
+                'is none, as the first debug build would), downloads the '
+                "app's Firebase files again and writes the iOS URL scheme "
+                'into ios/Runner/Info.plist.\n'
+                '      A run asks before it runs this step, and leaves it '
+                'for later when it cannot ask.\n'
                 "    then ruby -e 'f = ARGV[0]; ",
               ),
               contains(
