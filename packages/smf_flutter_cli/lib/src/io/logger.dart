@@ -9,7 +9,9 @@ import 'package:smf_flutter_cli/src/io/greeting.dart';
 ///
 /// In a terminal a progress indicator animates on its own line, which a
 /// message clears first; otherwise, as in CI, a progress is a line when it
-/// starts and one when it ends.
+/// starts and one when it ends. Where the output takes the escapes of ANSI,
+/// as the styles do, each web address of a message is a link of the
+/// terminal (see [_linked]).
 final class IoLogger implements SmfLogger {
   /// Creates the logger, which shows the details only if [verbose], and
   /// drops [greeting], if given, once it has printed something.
@@ -45,7 +47,7 @@ final class IoLogger implements SmfLogger {
   @override
   void info(String message) {
     _beforeMessage();
-    _logger.info(message);
+    _logger.info(_linked(message));
   }
 
   @override
@@ -53,25 +55,25 @@ final class IoLogger implements SmfLogger {
     // Details are shown only in verbose output.
     if (!_verbose) return;
     _beforeMessage();
-    _logger.detail(message);
+    _logger.detail(_linked(message));
   }
 
   @override
   void warn(String message) {
     _beforeMessage();
-    _logger.warn(message);
+    _logger.warn(_linked(message));
   }
 
   @override
   void error(String message) {
     _beforeMessage();
-    _logger.err(message);
+    _logger.err(_linked(message));
   }
 
   @override
   void success(String message) {
     _beforeMessage();
-    _logger.success(message);
+    _logger.success(_linked(message));
   }
 
   @override
@@ -83,6 +85,32 @@ final class IoLogger implements SmfLogger {
       logger: _logger,
     );
   }
+}
+
+/// A web address of a message: `http://` or `https://` and what follows up
+/// to a space, a quote, an angle bracket, a pipe or an escape.
+final _webAddress = RegExp(r'''https?://[^\s<>"'`|\x1B]+''');
+
+/// The marks of punctuation at the end of a web address of a message, which
+/// end the sentence rather than the address, such as the period of
+/// `See https://doc.saymyframe.com.`
+final _closingMarks = RegExp(r'[.,;:!?)\]}]+$');
+
+/// [message] with each web address in it a link of the terminal, an escape
+/// of OSC 8 that shows the address itself, so that a click opens it, also
+/// where a long address wraps; a terminal without such links shows the
+/// address as it is. Where the output takes no escapes of ANSI, as in CI,
+/// in a pipe or in a log, the message stays as it is.
+String _linked(String message) {
+  if (!ansiOutputEnabled) return message;
+  return message.replaceAllMapped(_webAddress, (match) {
+    final text = match[0]!;
+    final closing = _closingMarks.firstMatch(text)?[0] ?? '';
+    final address = text.substring(0, text.length - closing.length);
+    final uri = Uri.tryParse(address);
+    if (uri == null) return text;
+    return '${link(uri: uri, message: address)}$closing';
+  });
 }
 
 /// A progress: the animation of `mason_logger` in a terminal, or lines.
