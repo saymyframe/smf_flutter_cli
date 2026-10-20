@@ -194,54 +194,99 @@ Future<List<SetupStep>> setupStepsOf(List<SmfModule> modules) async {
     );
   }
 
-  final steps = <String, (ManualStep, String)>{};
-  final neededBy = <String, Set<String>>{};
-  final ordered = <String>[];
-  final conflicts = <(String, String), String>{};
+  final steps = _StepsOfApps();
   for (final (index, result) in results.indexed) {
+    steps.add(result, everyModule: index < everyModule.length);
+  }
+  return steps.inOrder();
+}
+
+/// The steps by hand that [setupStepsOf] collects from its apps, one app
+/// after another, each step once by its id ([ManualStepId.wire]).
+final class _StepsOfApps {
+  /// Each step as the first app that has it gives it, with the name of
+  /// that app.
+  final _steps = <String, (ManualStep, String)>{};
+
+  /// The modules that bring each step into an app, in any of the apps.
+  final _neededBy = <String, Set<String>>{};
+
+  /// The ids of the steps of the apps with every module, in the order in
+  /// which those apps list them, those of the first app first.
+  final _ordered = <String>[];
+
+  /// The lines of the error about the steps that an app gives another
+  /// title than the first app with the step gave them, by the id of the
+  /// step and that title, each from the first app with that title.
+  final _conflicts = <(String, String), String>{};
+
+  /// Adds the steps of the app of [result], an app with every module if
+  /// [everyModule].
+  void add(ContractResult result, {required bool everyModule}) {
     for (final planned in result.manualSteps) {
       final step = planned.step;
       final wire = step.id.wire;
       final app = result.contractCase.name;
-      if (steps[wire] case (final first, final firstApp)) {
+      if (_steps[wire] case (final first, final firstApp)) {
         if (first.title != step.title) {
-          conflicts.putIfAbsent(
+          _conflicts.putIfAbsent(
             (wire, step.title),
             () => '$wire: "${first.title}" in $firstApp, "${step.title}" in '
                 '$app',
           );
         }
       } else {
-        steps[wire] = (step, app);
-        if (index < everyModule.length) ordered.add(wire);
+        _steps[wire] = (step, app);
+        if (everyModule) _ordered.add(wire);
       }
-      final modules = neededBy.putIfAbsent(wire, () => {});
-      for (final origin in planned.contributors) {
-        if (origin case ModuleOrigin(:final module)) modules.add('$module');
-        if (origin case RoleTemplateOrigin(:final role)) {
-          modules.addAll([
-            for (final provider in result.resolution!.providersOf(role))
-              '${provider.id}',
-          ]);
-        }
-      }
+      _neededBy
+          .putIfAbsent(wire, () => {})
+          .addAll(_neededByIn(planned, result));
     }
   }
-  if (conflicts.isNotEmpty) {
-    throw StateError(
-      'Steps by hand have two titles, but the catalog has one for each '
-      'step:\n${conflicts.values.join('\n')}',
-    );
+
+  /// The steps in the order of the catalog, each with the modules that
+  /// bring it into an app: those of the apps with every module in their
+  /// order, then the others by id (see [setupStepsOf]).
+  ///
+  /// Throws a [StateError] when two apps gave one step two titles.
+  List<SetupStep> inOrder() {
+    if (_conflicts.isNotEmpty) {
+      throw StateError(
+        'Steps by hand have two titles, but the catalog has one for each '
+        'step:\n${_conflicts.values.join('\n')}',
+      );
+    }
+    final others = [
+      for (final wire in _steps.keys)
+        if (!_ordered.contains(wire)) wire,
+    ]..sort();
+    return List.unmodifiable([
+      for (final wire in [..._ordered, ...others])
+        _catalogStep(_steps[wire]!.$1, _neededBy[wire]!),
+    ]);
   }
 
-  final others = [
-    for (final wire in steps.keys)
-      if (!ordered.contains(wire)) wire,
-  ]..sort();
-  return List.unmodifiable([
-    for (final wire in [...ordered, ...others])
-      _catalogStep(steps[wire]!.$1, neededBy[wire]!),
-  ]);
+  /// The modules that bring [planned], a step of the app of [result], into
+  /// that app: each module among its contributors, itself or in a variant,
+  /// and for the template of a role among them, the modules that provide
+  /// the role in the app.
+  static List<String> _neededByIn(
+    PlannedManualStep planned,
+    ContractResult result,
+  ) {
+    final modules = <String>[];
+    for (final origin in planned.contributors) {
+      if (origin case ModuleOrigin(:final module)) modules.add('$module');
+      if (origin case RoleTemplateOrigin(:final role)) {
+        modules.addAll([
+          for (final provider in result.resolution!.providersOf(role))
+            '${provider.id}',
+        ]);
+      }
+    }
+    return modules;
+  }
 }
 
 /// [step] as the catalog has it, with [neededBy], the modules that bring
