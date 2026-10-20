@@ -1,3 +1,7 @@
+## 0.4.2
+
+ - **FEAT**(contracts): give every app the icons of the status bar as a widget of its own, with a widget test ([#191](https://github.com/saymyframe/smf_flutter_cli/issues/191)). ([4ab6b288](https://github.com/saymyframe/smf_flutter_cli/commit/4ab6b288cd00e6b94a0a4a27d1440480e21d4a30))
+
 ## 0.4.1
 
  - Update a dependency to the latest release.

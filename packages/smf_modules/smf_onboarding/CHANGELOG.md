@@ -1,3 +1,8 @@
+## 0.5.1
+
+ - **FEAT**(local_notifications): add a provider of the notifications role on flutter_local_notifications ([#206](https://github.com/saymyframe/smf_flutter_cli/issues/206)). ([d16e9a43](https://github.com/saymyframe/smf_flutter_cli/commit/d16e9a4349cf578660660b535744b66490995fb6))
+ - **FEAT**(onboarding): show the steps that the modules of the app add to the onboarding ([#203](https://github.com/saymyframe/smf_flutter_cli/issues/203)). ([32652cbf](https://github.com/saymyframe/smf_flutter_cli/commit/32652cbf289502cce513a2e2c9a7720d0791fa1c))
+
 ## 0.5.0
 
 > Note: This release has breaking changes.

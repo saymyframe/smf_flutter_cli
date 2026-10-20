@@ -1,3 +1,7 @@
+## 0.4.2
+
+ - **FEAT**(firebase_auth,firebase_analytics): the steps by hand of Apple, Google Play and Analytics ([#236](https://github.com/saymyframe/smf_flutter_cli/issues/236)). ([e009ede2](https://github.com/saymyframe/smf_flutter_cli/commit/e009ede2c1b205763ef4ad05455defb8fcdf8b9e))
+
 ## 0.4.1
 
  - Update a dependency to the latest release.
