@@ -429,7 +429,7 @@ final flutterCoreBundle = MasonBundle.fromJson(<String, dynamic>{
     {
       "path": "README.md",
       "data":
-          "IyB7e2FwcF9uYW1lfX0KCkEgbmV3IEZsdXR0ZXIgcHJvamVjdC4Ke3t7c21mX2FwcF9lbnRyeV9fcmVhZG1lX3NlY3Rpb25zfX19Cg==",
+          "IyB7e2FwcF9uYW1lfX0KCkEgbmV3IEZsdXR0ZXIgcHJvamVjdC4KCkdlbmVyYXRlZCB3aXRoIFtTYXkgTXkgRnJhbWVdKGh0dHBzOi8vZG9jLnNheW15ZnJhbWUuY29tKS4Ke3t7c21mX2FwcF9lbnRyeV9fcmVhZG1lX3NlY3Rpb25zfX19Cg==",
       "type": "text"
     }
   ],

@@ -93,6 +93,8 @@ With `firebase_messaging`:
 
 A new Flutter project.
 
+Generated with [Say My Frame](https://doc.saymyframe.com).
+
 ## Finish the setup
 
 Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,firebase_messaging.apns_key) shows each one click by click:

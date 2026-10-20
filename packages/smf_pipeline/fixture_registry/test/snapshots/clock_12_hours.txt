@@ -33,6 +33,8 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 # fixture_app
 
 A new Flutter project.
+
+Generated with [Say My Frame](https://doc.saymyframe.com).
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")

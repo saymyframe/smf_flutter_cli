@@ -481,8 +481,17 @@ void main() {
       });
     });
 
-    test('names the app in a README without sections', () {
-      expect(texts['README.md'], '# contract_app\n\nA new Flutter project.\n');
+    test(
+        'names the app, and Say My Frame as what generated it, in a README '
+        'without sections', () {
+      expect(
+        texts['README.md'],
+        '# contract_app\n'
+        '\n'
+        'A new Flutter project.\n'
+        '\n'
+        '${AppEntryRole.generatedWith}\n',
+      );
     });
 
     test(
@@ -876,6 +885,8 @@ void main() {
         '# contract_app\n'
         '\n'
         'A new Flutter project.\n'
+        '\n'
+        '${AppEntryRole.generatedWith}\n'
         '\n'
         '## ${AppEntryRole.setupHeading}\n'
         '\n'

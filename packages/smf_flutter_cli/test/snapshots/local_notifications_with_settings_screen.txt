@@ -92,6 +92,8 @@ With `go_router`:
 
 A new Flutter project.
 
+Generated with [Say My Frame](https://doc.saymyframe.com).
+
 ## flutter_local_notifications
 
 The app shows its notifications with [flutter_local_notifications](https://pub.dev/packages/flutter_local_notifications): `lib/core/notifications/local_notifications_service.dart` implements the notifications service of the app on it (see the section Notifications).

@@ -43,6 +43,8 @@ With `event_bus`:
 # my_app
 
 A new Flutter project.
+
+Generated with [Say My Frame](https://doc.saymyframe.com).
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
