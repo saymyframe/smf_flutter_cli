@@ -1116,10 +1116,21 @@ void main() {
 
     test(
         'registers nothing in a DI container, and gives the iOS app the '
-        'entitlement of push messages and their background mode in every '
-        'app', () {
+        'entitlement of push messages, with the step by hand of the App ID '
+        'that it needs, and their background mode in every app', () {
       final contributions = _contributions();
       expect(contributions.whereType<RoleData<Object>>(), isEmpty);
+      // Only a paid team signs the entitlement, so the app lists the step
+      // of the role of the app entry with it, which a module that adds
+      // another such entitlement lists too.
+      final step = contributions.whereType<ManualStep>().single;
+      expect(step.id, AppEntryRole.iosAppIdStep.id);
+      expect(step.title, AppEntryRole.iosAppIdStep.title);
+      expect(step.when, isEmpty);
+      expect(
+        AppEntryRole.paidTeamEntitlements,
+        contains(PushRole.apsEnvironment),
+      );
 
       final native = [
         for (final contribution

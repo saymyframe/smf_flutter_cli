@@ -34,13 +34,17 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// provider meets for the issuer. It uses the localization role for the
 /// label of the button, in English and in Ukrainian. It signs the iOS app
 /// with the entitlement of the capability, `com.apple.developer.applesignin`
-/// with the value `Default`, through [AppEntryRole.iosEntitlements].
+/// with the value `Default`, through [AppEntryRole.iosEntitlements], which
+/// only a team of the paid Apple Developer Program signs: so the app lists
+/// the step by hand [AppEntryRole.iosAppIdStep], in which its developer
+/// signs the app with such a team (see [AppEntryRole.paidTeamEntitlement]).
 ///
 /// The README of the app tells what the capability needs of the team that
-/// signs the app, what Apple gives only at the first sign-in, what a
-/// deletion asks of Apple and of the backend, and that App Review checks the
-/// logo of the button, and its guide for coding agents how the function asks
-/// Apple and what a test of the app sets for it.
+/// signs the app, what Apple gives only at the first sign-in, which senders
+/// the private relay of Apple forwards, what a deletion asks of Apple and
+/// of the backend, and that App Review checks the logo of the button, and
+/// its guide for coding agents how the function asks Apple and what a test
+/// of the app sets for it.
 final class AppleSignInModule extends SmfModule {
   /// Creates the module.
   const AppleSignInModule();
@@ -91,7 +95,9 @@ final class AppleSignInModule extends SmfModule {
           ),
         ),
         localizationRole.data(const TextsData([label])),
-        AppEntryRole.iosEntitlements.entry(
+        // Only a paid team signs the entitlement, so the app lists the step
+        // by hand of its App ID with it.
+        ...AppEntryRole.paidTeamEntitlement(
           appleSignInEntitlement,
           const PlistStringArray(['Default']),
         ),

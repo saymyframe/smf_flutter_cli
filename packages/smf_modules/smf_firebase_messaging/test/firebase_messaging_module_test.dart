@@ -624,6 +624,26 @@ void main() {
       );
     });
 
+    test(
+        'lists the step by hand in which the developer signs the iOS app with '
+        'a paid team, which the entitlement of the push role needs, first in '
+        'the README', () {
+      final planned = result.manualSteps.single;
+      expect(planned.step.id, AppEntryRole.iosAppIdStep.id);
+      expect(planned.step.title, AppEntryRole.iosAppIdStep.title);
+      // The template of the push role lists it, whichever module provides
+      // the role.
+      expect(planned.contributors, [const RoleTemplateOrigin(pushRole)]);
+      final readme = app.files[AppEntryRole.readmeFile]!.text;
+      expect(
+        RegExp(r'^## (.+)$', multiLine: true).firstMatch(readme)?[1],
+        AppEntryRole.setupHeading,
+      );
+      expect(readme, contains('\n1. ${AppEntryRole.iosAppIdStep.title}\n'));
+      // The app of Firebase and the notifications has no such step.
+      expect(without.manualSteps, isEmpty);
+    });
+
     group('the implementation', () {
       late CompilationUnit unit;
 

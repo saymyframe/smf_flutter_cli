@@ -6,7 +6,7 @@ The module gives the auth role of SMF a way to sign in, with the label "Continue
 
 The App Store takes Sign in with Apple as the equivalent of a login service of a third party, such as Google, which an app on iOS with such a service needs (App Store Review Guideline 4.8). Deleting an account that signs in with Apple asks Apple again first, so that the provider of sign-in can revoke the tokens of Apple, as Guideline 5.1.1(v) asks. The backend of the provider needs a key of Apple for that.
 
-The module signs the iOS app with the entitlement of the capability, `com.apple.developer.applesignin`. Signing with it needs a team of the paid Apple Developer Program. The README of the app tells how to run the app on an iPhone with a free team, and that Apple asks for its own logo artwork in the button, which App Review checks.
+The module signs the iOS app with the entitlement of the capability, `com.apple.developer.applesignin`. Signing with it needs a team of the paid Apple Developer Program, so the README of the app lists that signing among the steps that you do by hand, in its section "Finish the setup". The README also tells how to run the app on an iPhone with a free team, and that Apple asks for its own logo artwork in the button, which App Review checks.
 
 ## Use with the SMF CLI
 

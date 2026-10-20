@@ -70,7 +70,9 @@ const appEntryRole = AppEntryRole._();
 /// In an app with steps of the setup that its developer does by hand (see
 /// [ManualStep]), the template lists them in the section [setupHeading] of
 /// [readmeFile], the first of its sections, and tells coding agents in the
-/// note of the role that only a person does them.
+/// note of the role that only a person does them. The role publishes one
+/// such step itself, [iosAppIdStep], which every contributor of an
+/// entitlement of [paidTeamEntitlements] lists.
 ///
 /// The keyed sockets of the native files and of the README,
 /// [mainActivityIntentFilters], [androidManifestApplicationComponents],
@@ -82,8 +84,9 @@ const appEntryRole = AppEntryRole._();
 /// check these tags in the templates of its provider, the element of the
 /// Android manifest that holds each tag of the manifest, and the place of
 /// the tag of [iosAppDelegateLaunch] in its method, and
-/// its structural rules check that the native files name every key once and
-/// that the app target signs with [iosEntitlementsFile].
+/// its structural rules check that the native files name every key once,
+/// that the app target signs with [iosEntitlementsFile], and that an app
+/// with an entitlement of [paidTeamEntitlements] lists [iosAppIdStep].
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -391,11 +394,76 @@ final class AppEntryRole extends Role<NoDsl> {
   /// capability that an entitlement stands for, such as push
   /// notifications, may need a paid membership of the Apple Developer
   /// Program; the simulator signs the app without one.
+  ///
+  /// An entitlement of [paidTeamEntitlements] always needs such a
+  /// membership on a device, so its contributor lists [iosAppIdStep] with
+  /// it, under the same roles: [paidTeamEntitlement] gives both. The
+  /// structural rule `app_entry.ios_app_id_step` checks that an app with
+  /// such an entitlement lists the step.
   static const iosEntitlements = SocketRef<KeyedSocket<PlistValue>>.role(
     appEntryRole,
     'ios_entitlements',
     KeyedSocket(policy: PlistMergePolicy(), renderer: _renderPlistEntries),
   );
+
+  /// The entitlements of [iosEntitlements] whose capability needs a team of
+  /// the paid Apple Developer Program, and an App ID that Apple registered
+  /// with the capability, to sign the app for a device: push messages
+  /// (`aps-environment`), Sign in with Apple
+  /// (`com.apple.developer.applesignin`) and associated domains, such as
+  /// universal links (`com.apple.developer.associated-domains`).
+  ///
+  /// A free personal team signs none of them, so an app with one needs
+  /// [iosAppIdStep].
+  static const paidTeamEntitlements = {
+    'aps-environment',
+    'com.apple.developer.applesignin',
+    'com.apple.developer.associated-domains',
+  };
+
+  /// The step by hand of an iOS app that is signed with an entitlement of
+  /// [paidTeamEntitlements], such as that of push messages, of Sign in with
+  /// Apple or of associated domains: the developer signs the app in Xcode
+  /// once with a team of the paid Apple Developer Program, which registers
+  /// the App ID of the app with the capabilities of [iosEntitlementsFile].
+  ///
+  /// Every contributor of such an entitlement lists the step, best through
+  /// [paidTeamEntitlement]. The contributors do not know each other, so the
+  /// step is of the role, and the app has it once (see [ManualStep]). The
+  /// structural rule `app_entry.ios_app_id_step` checks that an app whose
+  /// entitlements have a key of [paidTeamEntitlements] lists it.
+  static const iosAppIdStep = ManualStep(
+    ManualStepId.role(appEntryRole, 'ios_app_id'),
+    'In Xcode, sign the iOS app with your paid Apple Developer team',
+  );
+
+  /// The entitlement [key] of the iOS app with [value], in
+  /// [iosEntitlements], and [iosAppIdStep], which an app with it needs, both
+  /// under the roles [when]: what a module or the template of a role
+  /// contributes for an entitlement of [paidTeamEntitlements], as in
+  /// `...AppEntryRole.paidTeamEntitlement('aps-environment', value)`.
+  ///
+  /// Throws an [ArgumentError] for a [key] that is not one of
+  /// [paidTeamEntitlements]: a free team signs any other entitlement, so it
+  /// needs no step, and is an entry of [iosEntitlements] alone.
+  static List<Contribution> paidTeamEntitlement(
+    String key,
+    PlistValue value, {
+    Set<Role> when = const {},
+  }) {
+    if (!paidTeamEntitlements.contains(key)) {
+      throw ArgumentError.value(
+        key,
+        'key',
+        'A free team signs this entitlement, so it needs no step by hand: '
+            'contribute it with AppEntryRole.iosEntitlements.entry',
+      );
+    }
+    return [
+      iosEntitlements.entry(key, value, when: when),
+      ManualStep(iosAppIdStep.id, iosAppIdStep.title, when: when),
+    ];
+  }
 
   /// Swift statements that run in
   /// `application(_:didFinishLaunchingWithOptions:)` of the app delegate in
@@ -731,6 +799,17 @@ final class AppEntryRole extends Role<NoDsl> {
               'the project, which every target inherits, name no '
               'entitlements.',
           check: _checkIosEntitlementsSigned,
+        ),
+        StructuralRule(
+          id: 'app_entry.ios_app_id_step',
+          description: 'An app whose ios/Runner/Runner.entitlements has an '
+              'entitlement that only a team of the paid Apple Developer '
+              'Program signs (aps-environment, '
+              'com.apple.developer.applesignin or '
+              'com.apple.developer.associated-domains) lists the step by hand '
+              'app_entry.ios_app_id, in which its developer signs the app '
+              'with such a team.',
+          check: _checkIosAppIdStep,
         ),
         StructuralRule(
           id: 'app_entry.agent_guide_paths',

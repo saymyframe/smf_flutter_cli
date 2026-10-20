@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_flutter_cli/setup_steps.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -76,8 +77,14 @@ final class _Logger implements SmfLogger {
   /// Those of the [lines] that the run reported as warnings.
   final List<String> warnings = [];
 
+  /// Those of the [lines] that the run reported as information.
+  final List<String> infos = [];
+
   @override
-  void info(String message) => lines.add(message);
+  void info(String message) {
+    lines.add(message);
+    infos.add(message);
+  }
 
   @override
   void detail(String message) {}
@@ -136,19 +143,21 @@ final class _Commands implements SmfProcessRunner {
 }
 
 /// What a run of `smf create` in a terminal did: its exit code, the
-/// questions it asked, what it reported, which of that as warnings, and the
-/// file system with the app.
+/// questions it asked, what it reported, which of that as warnings and
+/// which as information, and the file system with the app.
 typedef _Run = ({
   int code,
   List<_Question> asked,
   List<String> lines,
   List<String> warnings,
+  List<String> infos,
   MemoryFileSystem files,
 });
 
 /// Runs `smf create my_app` with [options] and the modules of the CLI in a
 /// terminal that answers with [answers], on a machine with a Flutter SDK
-/// whose commands all succeed; the app goes to `/work/my_app`.
+/// whose commands all succeed; the app goes to `/work/my_app`. The steps by
+/// hand of the app lead to their guide on the site of SMF, as in `runCli`.
 Future<_Run> _create(
   Map<String, List<String>> answers, {
   List<String> options = const [],
@@ -177,12 +186,14 @@ Future<_Run> _create(
       operatingSystem: HostOperatingSystem.macos,
       hasTerminal: true,
     ),
+    setupLink: setupGuideLinkOf,
   );
   return (
     code: code,
     asked: prompter.asked,
     lines: logger.lines,
     warnings: logger.warnings,
+    infos: logger.infos,
     files: files,
   );
 }
@@ -1995,6 +2006,47 @@ void main() {
     expect(
       app.childFile('README.md').readAsStringSync(),
       contains('\n## Sign in with Apple\n'),
+    );
+  });
+
+  test(
+      'a run tells of the step by hand that Sign in with Apple needs after '
+      'the line of the app, with the link to its guide on the site of SMF, '
+      'and --explain lists the step with its contributor', () async {
+    const options = ['--no-input', '-m', 'apple_sign_in'];
+    const link = 'https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id';
+    const step = 'app_entry.ios_app_id: In Xcode, sign the iOS app with your '
+        'paid Apple Developer team (apple_sign_in)';
+
+    final run = await _create(const {}, options: options);
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    const byHand = 'Finish the setup by hand in one step:\n  $link';
+    expect(run.infos, contains(byHand));
+    expect(run.warnings, isNot(contains(byHand)));
+    expect(
+      run.lines.indexOf(byHand),
+      greaterThan(
+        run.lines.indexOf('Created my_app in /work/my_app.'),
+      ),
+    );
+    // The README of the app links to the same guide.
+    expect(
+      run.files.file('/work/my_app/README.md').readAsStringSync(),
+      contains('[The guide]($link)'),
+    );
+
+    final explained =
+        await _create(const {}, options: [...options, '--explain']);
+
+    expect(explained.code, 0, reason: explained.lines.join('\n'));
+    expect(
+      explained.infos,
+      containsAllInOrder(['After generation', 'By hand', '  $link', '  $step']),
+    );
+    expect(
+      explained.files.directory('/work/my_app').existsSync(),
+      isFalse,
     );
   });
 
