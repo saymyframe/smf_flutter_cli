@@ -303,6 +303,7 @@ void main() {
           'app_entry.ios_entitlements_signed',
           'app_entry.ios_app_id_step',
           'app_entry.agent_guide_paths',
+          'app_entry.readme_generated_with',
         ],
       );
       expect(
@@ -2464,6 +2465,82 @@ See `lib/missing.dart`.
             ),
         ],
       );
+    });
+  });
+
+  group('the line of the README that names Say My Frame', () {
+    const readme = AppEntryRole.readmeFile;
+    const owner = ModuleOrigin(ModuleId('flutter_core'));
+
+    /// What the rules of the role find in an app whose README is [text].
+    List<SmfIssue> check(String text) => appEntryRole.checkStructure(
+          StructuralRuleRequest(
+            hook: const RoleHookRequest(
+              data: [],
+              presentRoles: {appEntryRole},
+              context: testContext,
+            ),
+            files: const {},
+            texts: {readme: text},
+            owners: const {readme: owner},
+          ),
+        );
+
+    test('links the documentation of Say My Frame', () {
+      expect(
+        AppEntryRole.generatedWith,
+        'Generated with [Say My Frame](https://doc.saymyframe.com).',
+      );
+    });
+
+    test(
+        'is in the README, under the title or among the lines before the '
+        'first section', () {
+      expect(
+        check('# my_app\n\n${AppEntryRole.generatedWith}\n'),
+        isEmpty,
+      );
+      expect(
+        check(
+          '# my_app\n'
+          '\n'
+          'A new Flutter project.\n'
+          '\n'
+          '${AppEntryRole.generatedWith}  \n'
+          '\n'
+          '## Firebase\n'
+          '\n'
+          'Run flutterfire configure.\n',
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+        'is reported when the README lacks it, has it only in a section or '
+        'only inside a line', () {
+      for (final text in [
+        '# my_app\n\nA new Flutter project.\n',
+        '# my_app\n\n## About\n\n${AppEntryRole.generatedWith}\n',
+        '# my_app\n\nThis app: ${AppEntryRole.generatedWith}\n',
+      ]) {
+        final issues = check(text);
+
+        expect(issues, hasLength(1), reason: text);
+        expect(
+          issues.single.message,
+          'README.md does not say that Say My Frame generated the app: it '
+          'has no line "${AppEntryRole.generatedWith}" before its first '
+          'section.',
+        );
+        expect(
+          issues.single.hint,
+          'Write the line of AppEntryRole.generatedWith under the title of '
+          'the README of the provider.',
+        );
+        expect(issues.single.origin, owner);
+        expect(issues.single.path, readme);
+      }
     });
   });
 

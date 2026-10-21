@@ -46,6 +46,8 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 
 A new Flutter project.
 
+Generated with [Say My Frame](https://doc.saymyframe.com).
+
 ## Sign-in
 
 The sign-in mode of the app says who may use it without an account. This app was generated in the mode `anonymous`: `authMode` in `lib/core/auth/app_session.dart` is `AuthMode.anonymous`.

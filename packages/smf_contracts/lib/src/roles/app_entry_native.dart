@@ -228,6 +228,27 @@ String _renderReadmeSections(List<MapEntry<String, String>> entries) {
       .join('\n');
 }
 
+List<SmfIssue> _checkReadmeGeneratedWith(StructuralRuleInput<NoDsl> input) {
+  const path = AppEntryRole.readmeFile;
+  final text = input.texts[path];
+  if (text == null) return const [];
+  final introduction =
+      text.split('\n').takeWhile((line) => !line.startsWith('## '));
+  if (introduction.any((line) => line.trim() == AppEntryRole.generatedWith)) {
+    return const [];
+  }
+  return [
+    SmfIssue(
+      '$path does not say that Say My Frame generated the app: it has no '
+      'line "${AppEntryRole.generatedWith}" before its first section.',
+      hint: 'Write the line of AppEntryRole.generatedWith under the title of '
+          'the README of the provider.',
+      origin: input.owners[path],
+      path: path,
+    ),
+  ];
+}
+
 String _renderAndroidPermissions(List<MapEntry<String, NoValue>> entries) =>
     entries
         .map(

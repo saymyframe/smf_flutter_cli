@@ -27,7 +27,8 @@ const appEntryRole = AppEntryRole._();
 ///   [xcodeProjectFile]; the iOS project also has [iosEntitlementsFile],
 ///   which the app target signs with, and its app delegate in Swift,
 ///   [appDelegateFile];
-/// - [readmeFile], the README of the app.
+/// - [readmeFile], the README of the app, which says under its title that
+///   Say My Frame generated the app, with the line [generatedWith].
 ///
 /// The provider builds the root of the app, inside the [rootWrappers], as a
 /// `MaterialApp`, or a `MaterialApp.router` when the router role is present.
@@ -127,6 +128,17 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
+
+  /// The line of [readmeFile] that says that Say My Frame generated the
+  /// app, with a link to its documentation.
+  ///
+  /// The provider writes it on a line of its own under the title of the
+  /// README, before the first section, and the structural rule
+  /// `app_entry.readme_generated_with` checks that it is there. So a search
+  /// for the line finds the published apps that kept it. The developer of
+  /// the app may remove it.
+  static const generatedWith =
+      'Generated with [Say My Frame](https://doc.saymyframe.com).';
 
   /// The heading of the section of [readmeFile] in which the template of
   /// the role lists the steps of the setup that the developer of the app
@@ -818,6 +830,14 @@ final class AppEntryRole extends Role<NoDsl> {
               'project, or to a Dart file, is a file or a directory of the '
               'app, written from the root of the app.',
           check: _checkAgentGuidePaths,
+        ),
+        StructuralRule(
+          id: 'app_entry.readme_generated_with',
+          description: 'The README of the app has the line '
+              'AppEntryRole.generatedWith, which says that Say My Frame '
+              'generated the app, on a line of its own before its first '
+              'section.',
+          check: _checkReadmeGeneratedWith,
         ),
       ];
 }
