@@ -309,18 +309,19 @@ final class MockFirebaseAuth {
             (codec.decodeMessage(message)! as List<Object?>).sublist(1);
         // The plugin asks for its streams when it starts, not the app.
         if (!_streams.containsKey(method)) calls.add([method, ...arguments]);
+        final Object? answer;
         try {
           if (_failures.remove(method) case final failure?) throw failure;
-          final answer = handle(arguments);
-          if (identical(answer, _noAnswer)) {
-            return Completer<ByteData?>().future;
-          }
-          return codec.encodeMessage(<Object?>[answer]);
+          answer = handle(arguments);
         } on _Failure catch (failure) {
           return codec.encodeMessage(
             <Object?>[failure.code, failure.message, failure.details],
           );
         }
+        if (identical(answer, _noAnswer)) {
+          return Completer<ByteData?>().future;
+        }
+        return codec.encodeMessage(<Object?>[answer]);
       });
     }
 
