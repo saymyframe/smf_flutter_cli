@@ -219,8 +219,7 @@ final class CreatePipeline {
         context: plan.context,
         choices: plan.choices,
         pubspec: plan.pubspec,
-        manualSteps: plan.manualSteps,
-        setupLink: plan.setupLink,
+        manualSetup: (steps: plan.manualSteps, link: plan.setupLink),
       );
     } on Object {
       rendering.fail();
@@ -398,10 +397,12 @@ extension CreatePlanning on CreatePipeline {
         collection: collection,
         context: context,
         optionValues: request.roleOptions,
-        // --explain asks nothing, but tells what a run with the same
-        // terminal would do.
-        interactive: host.hasTerminal && request.input,
-        skipExternalSetup: request.skipExternalSetup,
+        run: (
+          // --explain asks nothing, but tells what a run with the same
+          // terminal would do.
+          interactive: host.hasTerminal && request.input,
+          skipExternalSetup: request.skipExternalSetup,
+        ),
         setupLink: setupLink,
       );
       if (lenience.leaveOut(validation.issues)) {
@@ -592,10 +593,9 @@ String _stoppedBy(int errors, int warnings) {
     else if (warnings > 1)
       '$warnings warnings about the app',
   ];
-  final goesOn = errors > 0
-      ? ''
-      : ' Without --strict, the run goes on after '
-          '${warnings == 1 ? 'it' : 'them'}.';
+  final them = warnings == 1 ? 'it' : 'them';
+  final goesOn =
+      errors > 0 ? '' : ' Without --strict, the run goes on after $them.';
   return 'Generation stopped because of ${causes.join(' and ')}.$goesOn';
 }
 

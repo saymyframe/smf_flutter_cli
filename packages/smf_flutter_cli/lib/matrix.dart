@@ -400,11 +400,7 @@ MatrixApp? _appOf(
   final resolution = result.resolution;
   if (result.errors.isNotEmpty || resolution == null) return null;
   final options = result.contractCase.roleOptions;
-  final modes = {
-    for (final role in harness.registry.roles)
-      for (final option in role.options)
-        if (option.isMode) option.name,
-  };
+  final modes = _modeNamesOf(harness.registry);
   return MatrixApp(
     '${result.contractCase}',
     [for (final module in resolution.modules) module.id],
@@ -425,6 +421,14 @@ MatrixApp? _appOf(
     ),
   );
 }
+
+/// The names of the mode options of the roles of [registry] (see
+/// [RoleOption.isMode]), in the order of the roles and of their options.
+Set<String> _modeNamesOf(ModuleRegistry registry) => {
+      for (final role in registry.roles)
+        for (final option in role.options)
+          if (option.isMode) option.name,
+    };
 
 /// What tells [app] apart from the other apps of the matrix: its modules,
 /// which the variants of the modules follow from, and its

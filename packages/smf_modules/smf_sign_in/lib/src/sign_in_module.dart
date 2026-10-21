@@ -158,6 +158,11 @@ final class SignInModule extends SmfModule {
   /// reads.
   static const accountGuard = 'hasAccount';
 
+  /// The English text of three texts of [texts]: the action of the sign-in
+  /// that leads to the sign-up, the title of the sign-up and its button
+  /// that submits. Each is a text of its own, with a translation of its own.
+  static const _createAccount = 'Create account';
+
   /// The texts of the screens: those of the sign-in, of the sign-up and of
   /// the password reset, with the line of text of the first two above the
   /// buttons of the ways to sign in and the "or" below them, what a form
@@ -204,12 +209,12 @@ final class SignInModule extends SmfModule {
     ),
     LocalizedText(
       'createAccount',
-      en: 'Create account',
+      en: _createAccount,
       translations: {'uk': 'Створити акаунт'},
     ),
     LocalizedText(
       'signUpTitle',
-      en: 'Create account',
+      en: _createAccount,
       translations: {'uk': 'Новий акаунт'},
     ),
     LocalizedText(
@@ -224,7 +229,7 @@ final class SignInModule extends SmfModule {
     ),
     LocalizedText(
       'signUpSubmit',
-      en: 'Create account',
+      en: _createAccount,
       translations: {'uk': 'Створити акаунт'},
     ),
     LocalizedText(

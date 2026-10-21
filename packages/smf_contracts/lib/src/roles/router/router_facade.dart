@@ -88,9 +88,20 @@ final class RouterFacade {
   List<FacadeGuard> get guards => [
         for (final isGate in const [true, false])
           for (final stage in GuardStage.values)
-            for (final feature in features)
-              for (final guard in feature.guards)
-                if (guard.isGate == isGate && guard.guard.stage == stage) guard,
+            ..._guardsOf(isGate: isGate, stage: stage),
+      ];
+
+  /// The guards of the features that are gates if [isGate], or that stand
+  /// for a condition otherwise, and that have [stage], in the order of the
+  /// features and of their guards; see [guards].
+  List<FacadeGuard> _guardsOf({
+    required bool isGate,
+    required GuardStage stage,
+  }) =>
+      [
+        for (final feature in features)
+          for (final guard in feature.guards)
+            if (guard.isGate == isGate && guard.guard.stage == stage) guard,
       ];
 
   /// The guard that stands for [condition] in the app, the first of

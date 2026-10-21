@@ -197,6 +197,12 @@ List<Collected> _boundSteps(List<Collected> steps) {
   ];
 }
 
+/// What a run of the pipeline lets the post-generation steps of the app do:
+/// whether it is `interactive`, so that a step can talk to the user, and
+/// whether it skips the steps that need external setup
+/// (`skipExternalSetup`, see [PostGenStep.external]).
+typedef PostGenRun = ({bool interactive, bool skipExternalSetup});
+
 /// Stage 5 of the pipeline: checks the contributions against the rules of
 /// the module model and the hooks of the roles, orders the contributions of
 /// every socket, and merges the pubspec.
@@ -237,18 +243,16 @@ List<Collected> _boundSteps(List<Collected> steps) {
 /// - the order of every socket, and a dry render of its contributions, so
 ///   that a merge conflict names its contributors before anything is
 ///   generated;
-/// - that every post-generation step that applies can run in this run,
-///   [interactive] and with [skipExternalSetup] as given, or may be
-///   skipped; a step that continues a step which does not apply does not
-///   apply either (see [PostGenStep.followUpOf]).
+/// - that every post-generation step that applies can run in this run, as
+///   [run] tells, or may be skipped; a step that continues a step which
+///   does not apply does not apply either (see [PostGenStep.followUpOf]).
 ValidationResult validate({
   required ModuleRegistry registry,
   required Resolution resolution,
   required Collection collection,
   required ModuleContext context,
   Map<String, String?> optionValues = const {},
-  bool interactive = true,
-  bool skipExternalSetup = false,
+  PostGenRun run = (interactive: true, skipExternalSetup: false),
   SetupLink? setupLink,
 }) {
   // Sockets with a contribution that breaks a rule, whose tags are not
@@ -324,8 +328,8 @@ ValidationResult validate({
       _runIssues(
         collected.contribution as PostGenStep,
         collected.origin,
-        interactive: interactive,
-        skipExternalSetup: skipExternalSetup,
+        interactive: run.interactive,
+        skipExternalSetup: run.skipExternalSetup,
       ),
     );
   }
@@ -488,6 +492,10 @@ Iterable<SmfIssue> _orderIssues(String what, ContributionOrder order) sync* {
   );
 }
 
+/// The hint of a problem of a contribution that names a role which its
+/// contributor does not provide, require or use.
+const _addRoleHint = 'Add the role to the uses of the module.';
+
 /// The problems of [collected] with the rules of the pipeline: the roles in
 /// its [Contribution.when] and of the conditions in its
 /// [Contribution.whenChosen], who may use which role and socket, for a brick,
@@ -510,7 +518,7 @@ Iterable<SmfIssue> contributionIssues(
       yield SmfIssue(
         '$origin lists the $role in the condition of a contribution, '
         'but does not provide, require or use it.',
-        hint: 'Add the role to the uses of the module.',
+        hint: _addRoleHint,
         origin: origin,
       );
     }
@@ -559,7 +567,7 @@ Iterable<SmfIssue> _whenChosenIssues(
       yield SmfIssue(
         '$origin makes a contribution depend on what the $role chose '
         '(${condition.name}), but does not provide, require or use it.',
-        hint: 'Add the role to the uses of the module.',
+        hint: _addRoleHint,
         origin: origin,
       );
     }
@@ -637,15 +645,7 @@ Iterable<SmfIssue> _brickVarIssues(
       );
     }
   }
-  // What mason renders of each variable in any app: of one that depends on
-  // a role, both of its values.
-  final rendered = {
-    for (final MapEntry(:key, :value) in brick.vars.entries)
-      key: value is RoleVar
-          ? [_renderedOf(value.present), _renderedOf(value.absent)]
-          : value,
-  };
-  for (final name in strippedVars(rendered)) {
+  for (final name in strippedVars(_renderedVarsOf(brick))) {
     yield SmfIssue(
       'The variable $name of the brick ${brick.bundle.name} of $origin '
       'has a backslash before a line break or a non-ASCII character, '
@@ -653,10 +653,7 @@ Iterable<SmfIssue> _brickVarIssues(
       origin: origin,
     );
   }
-  for (final name in nonPlainVars({
-    for (final MapEntry(:key, :value) in brick.vars.entries)
-      if (value is! RoleVar) key: value,
-  })) {
+  for (final name in nonPlainVars(_dataVarsOf(brick))) {
     yield SmfIssue(
       'The variable $name of the brick ${brick.bundle.name} of $origin '
       'is not plain data: strings, numbers, booleans, and lists and maps '
@@ -670,6 +667,22 @@ Iterable<SmfIssue> _brickVarIssues(
     }
   }
 }
+
+/// What mason renders of each variable of [brick] in any app, by name: of
+/// one that depends on a role, both of its values; see [_brickVarIssues].
+Map<String, Object?> _renderedVarsOf(BrickContribution brick) => {
+      for (final MapEntry(:key, :value) in brick.vars.entries)
+        key: value is RoleVar
+            ? [_renderedOf(value.present), _renderedOf(value.absent)]
+            : value,
+    };
+
+/// The variables of [brick] whose value does not depend on a role, by
+/// name, which mason gets as they are; see [_brickVarIssues].
+Map<String, Object?> _dataVarsOf(BrickContribution brick) => {
+      for (final MapEntry(:key, :value) in brick.vars.entries)
+        if (value is! RoleVar) key: value,
+    };
 
 /// What mason renders of [value], a value of a variable that depends on a
 /// role: the code of a fragment, or the string of code itself.
@@ -692,7 +705,7 @@ Iterable<SmfIssue> _roleVarIssues(
     yield SmfIssue(
       'The variable $name of the brick $brick of $origin depends on the '
       '$role, but $origin does not provide, require or use it.',
-      hint: 'Add the role to the uses of the module.',
+      hint: _addRoleHint,
       origin: origin,
     );
   }
@@ -1233,20 +1246,31 @@ Iterable<SmfIssue> _ownerIssues(Collection collection) sync* {
       final existing = owners[file.path];
       owners[file.path] = collected.origin;
       if (existing != null) {
-        final who = existing == collected.origin
-            ? 'Two bricks of $existing generate'
-            : 'Both $existing and ${collected.origin} generate';
-        yield SmfIssue(
-          '$who ${file.path}; every file has one brick.',
-          origin:
-              collected.origin is RoleTemplateOrigin && existing is ModuleOrigin
-                  ? existing
-                  : collected.origin,
-          path: file.path,
-        );
+        yield _twoBricksIssue(file.path, existing, collected.origin);
       }
     }
   }
+}
+
+/// The issue of two bricks that generate [path], a brick of [earlier] and a
+/// later one of [later]: an issue of [later], or, when [later] is the
+/// template of a role and [earlier] a module, of the module; see
+/// [_ownerIssues].
+SmfIssue _twoBricksIssue(
+  String path,
+  ContributionOrigin earlier,
+  ContributionOrigin later,
+) {
+  final who = earlier == later
+      ? 'Two bricks of $earlier generate'
+      : 'Both $earlier and $later generate';
+  return SmfIssue(
+    '$who $path; every file has one brick.',
+    origin: later is RoleTemplateOrigin && earlier is ModuleOrigin
+        ? earlier
+        : later,
+    path: path,
+  );
 }
 
 Iterable<SmfIssue> _kindIssues(

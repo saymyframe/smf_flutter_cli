@@ -572,35 +572,58 @@ final class ContractHarness {
     ];
     final byProvider = [
       for (final provider in registry.providersOf(role))
-        [
-          for (final subset in _subsets(used))
-            for (final picks in _fittingPicks(
-              _withDependencies(provider),
-              _picksOf([...provider.descriptor.effectiveRequires, ...subset]),
-            ))
-              _case(
-                _caseName(
-                  '${role.id} by ${provider.descriptor.id}',
-                  picks,
-                  subset,
-                ),
-                [provider.descriptor.id],
-                picks: {...picks, role: provider.descriptor.id},
-                present: subset,
-              ),
-        ],
+        _casesOfProvider(role, provider, used),
     ];
     final modes = _openModesOf([role]);
     return [
       for (final cases in byProvider) ...cases,
       // The subsets come the largest first, so the first case of a provider
       // has every role that the role uses.
-      for (final cases in byProvider)
+      for (final cases in byProvider) ..._modeCasesOf(cases, modes),
+    ];
+  }
+
+  /// The cases of [provider], a provider of [role], before those of the
+  /// mode options: for each subset of [used], the roles that the role uses
+  /// and that a module of the registry provides, the largest first, one
+  /// case for each combination of a provider of each role that [provider]
+  /// requires and of each role of the subset, of those that can be in one
+  /// app with [provider] (see [_fittingPicks]); see [casesOfRole].
+  List<ContractCase> _casesOfProvider(
+    Role role,
+    SmfModule provider,
+    List<Role> used,
+  ) =>
+      [
+        for (final subset in _subsets(used))
+          for (final picks in _fittingPicks(
+            _withDependencies(provider),
+            _picksOf([...provider.descriptor.effectiveRequires, ...subset]),
+          ))
+            _case(
+              _caseName(
+                '${role.id} by ${provider.descriptor.id}',
+                picks,
+                subset,
+              ),
+              [provider.descriptor.id],
+              picks: {...picks, role: provider.descriptor.id},
+              present: subset,
+            ),
+      ];
+
+  /// The first of [cases], the cases of a provider, once more for each
+  /// value of each of [modes], mode options, after the first value of the
+  /// option; see [casesOfRole].
+  static List<ContractCase> _modeCasesOf(
+    List<ContractCase> cases,
+    List<RoleOption> modes,
+  ) =>
+      [
         for (final option in modes)
           for (final value in option.allowed!.skip(1))
             _withModes(cases.first, {option.name: value}),
-    ];
-  }
+      ];
 
   /// The mode options of [roles] that [roleOptions] give no value, so that
   /// their values set the apps of the cases apart.
@@ -876,8 +899,10 @@ final class ContractHarness {
       context: context,
       // The options that `smf create` gets for the app of the case.
       optionValues: options,
-      interactive: environment.interactive,
-      skipExternalSetup: environment.skipExternalSetup,
+      run: (
+        interactive: environment.interactive,
+        skipExternalSetup: environment.skipExternalSetup,
+      ),
       setupLink: setupLink,
     );
     final checked = ContractResult(
@@ -943,9 +968,7 @@ final class ContractHarness {
         );
       }
       final replayed = await _replayProblems(
-        choices,
-        chosen: chosen,
-        asked: {...answered.keys},
+        (choices: choices, issues: chosen, asked: {...answered.keys}),
         resolution: resolution,
         collection: collection,
         options: options,
@@ -971,8 +994,10 @@ final class ContractHarness {
         context: context,
         choices: choices,
         pubspec: validation.pubspec,
-        manualSteps: validation.manualSteps,
-        setupLink: validation.setupLink,
+        manualSetup: (
+          steps: validation.manualSteps,
+          link: validation.setupLink,
+        ),
       );
     } on SmfUsageException catch (error) {
       return checked._with([SmfIssue(error.message)]);
@@ -1135,11 +1160,10 @@ final class ContractHarness {
   }
 
   /// The problems of the run without a terminal in which the matrices
-  /// generate the app, whose roles made [choices] in a terminal with
-  /// [options], where the harness answered the questions of the roles in
-  /// [asked] as a user who presses Enter; see [check]. [answers] are the
-  /// options that make the choices that the harness answered, and [chosen]
-  /// the issues of the run in a terminal.
+  /// generate the app, whose roles chose in [terminal], the run in a
+  /// terminal with [options], where the harness answered the questions of
+  /// the roles as a user who presses Enter; see [check]. [answers] are the
+  /// options that make the choices that the harness answered.
   ///
   /// It makes the choices again without a terminal, as the matrices
   /// generate every app, with [options] and [answers] but no answer for a
@@ -1163,58 +1187,28 @@ final class ContractHarness {
   ///
   /// [logged] notes what the hooks warn of through the logger in that run.
   Future<List<SmfIssue>> _replayProblems(
-    Map<Role, Object?> choices, {
-    required List<SmfIssue> chosen,
-    required Set<Role> asked,
+    _TerminalRun terminal, {
     required Resolution resolution,
     required Collection collection,
     required Map<String, String?> options,
     required Map<String, String> answers,
     required _LoggedWarnings logged,
   }) async {
-    final modes = <Role, List<RoleOption>>{};
-    for (final role in resolution.presentRoles) {
-      for (final option in role.options) {
-        if (option.isMode) modes.putIfAbsent(role, () => []).add(option);
-      }
-    }
+    final modes = _modesByRole(resolution.presentRoles);
     final names = {
       for (final ofRole in modes.values)
         for (final option in ofRole) option.name,
     };
-
-    // The choices of the run without a terminal, of the roles that made
-    // one before a role failed.
-    final again = <Role, Object?>{};
-    List<SmfIssue>? warned;
-    String? failure;
-    try {
-      warned = (await chooseRoles(
-        resolution: resolution,
-        collection: collection,
-        optionValues: {
-          ...options,
-          for (final MapEntry(:key, :value) in answers.entries)
-            if (!names.contains(key)) key: value,
-        },
-        environment: PipelineEnvironment(
-          _silentHostWith(logged),
-          interactive: false,
-          skipExternalSetup: true,
-        ),
-        context: context,
-        onChoice: (role, choice) {
-          logged.chose(role);
-          again[role] = choice;
-        },
-      ))
-          .issues;
-    } on SmfUsageException catch (error) {
-      failure = error.message;
-    } on GenerationFailedException catch (error) {
-      // As when the template asks, which the harness cannot answer there.
-      failure = error.message;
-    }
+    final (:again, :warned, :failure) = await _chooseWithoutTerminal(
+      resolution: resolution,
+      collection: collection,
+      optionValues: {
+        ...options,
+        for (final MapEntry(:key, :value) in answers.entries)
+          if (!names.contains(key)) key: value,
+      },
+      logged: logged,
+    );
     return [
       if (failure != null)
         _failedWithoutTerminal(
@@ -1230,21 +1224,70 @@ final class ContractHarness {
       if (warned != null)
         ..._warningProblems(
           resolution.presentRoles,
-          chosen: chosen,
+          chosen: terminal.issues,
           again: warned,
           run: 'a run without a terminal',
         ),
       for (final MapEntry(key: role, value: ofRole) in modes.entries)
-        ..._choiceProblems(
+        ..._ModeChoices(
           role,
-          ofRole,
           options: options,
-          inTerminal: choices[role],
-          asked: asked.contains(role),
+          inTerminal: terminal.choices[role],
+          asked: terminal.asked.contains(role),
           choseAgain: again.containsKey(role),
           again: again[role],
-        ),
+        ).problemsWith(ofRole),
     ];
+  }
+
+  /// The mode options of each of [roles] that has any (see
+  /// [RoleOption.mode]), in the order of [roles]; see [_replayProblems].
+  static Map<Role, List<RoleOption>> _modesByRole(Iterable<Role> roles) {
+    final modes = <Role, List<RoleOption>>{};
+    for (final role in roles) {
+      for (final option in role.options) {
+        if (option.isMode) modes.putIfAbsent(role, () => []).add(option);
+      }
+    }
+    return modes;
+  }
+
+  /// Makes the choices of the roles of the app of [resolution] again, in a
+  /// run without a terminal with [optionValues], as the matrices generate
+  /// every app, and returns what the run gave; see [_replayProblems].
+  ///
+  /// [logged] notes what the hooks warn of through the logger in that run.
+  Future<_Replay> _chooseWithoutTerminal({
+    required Resolution resolution,
+    required Collection collection,
+    required Map<String, String?> optionValues,
+    required _LoggedWarnings logged,
+  }) async {
+    final again = <Role, Object?>{};
+    try {
+      final warned = (await chooseRoles(
+        resolution: resolution,
+        collection: collection,
+        optionValues: optionValues,
+        environment: PipelineEnvironment(
+          _silentHostWith(logged),
+          interactive: false,
+          skipExternalSetup: true,
+        ),
+        context: context,
+        onChoice: (role, choice) {
+          logged.chose(role);
+          again[role] = choice;
+        },
+      ))
+          .issues;
+      return (again: again, warned: warned, failure: null);
+    } on SmfUsageException catch (error) {
+      return (again: again, warned: null, failure: error.message);
+    } on GenerationFailedException catch (error) {
+      // As when the template asks, which the harness cannot answer there.
+      return (again: again, warned: null, failure: error.message);
+    }
   }
 
   /// The problems of the roles among [roles] whose warnings about the app
@@ -1310,78 +1353,6 @@ final class ContractHarness {
               'that value and asks nothing.',
       origin: RoleTemplateOrigin(role),
     );
-  }
-
-  /// The problems of the choices of [role], a role with the mode options
-  /// [modes], with [options]: [inTerminal], where the harness answered a
-  /// question of the role if it [asked], and [again], in the run without a
-  /// terminal, if the role chose there ([choseAgain]); see [_replayProblems].
-  static List<SmfIssue> _choiceProblems(
-    Role role,
-    List<RoleOption> modes, {
-    required Map<String, String?> options,
-    required Object? inTerminal,
-    required bool asked,
-    required bool choseAgain,
-    required Object? again,
-  }) {
-    // The registry takes no role with an option and no template.
-    final template = role.template!;
-    final terminal =
-        asked ? 'when the user presses Enter at its question' : 'in a terminal';
-    const script = 'in a run without a terminal';
-    final problems = <SmfIssue>[];
-    var sameValues = true;
-    for (final option in modes) {
-      final name = option.name;
-      final given = options[name];
-      final expected = given ?? option.allowed!.first;
-      final first = template.optionsOf(inTerminal)[name];
-      final second = choseAgain ? template.optionsOf(again)[name] : first;
-
-      /// The problem of [choice], whose option has [value], not [expected].
-      SmfIssue problem(Object? choice, String? value, String where) {
-        final gives = value == null ? 'no --$name' : '--$name $value';
-        final run = given == null ? 'Without --$name' : 'With --$name $given';
-        final rule = given == null
-            ? 'the first value of a mode option is its default'
-            : 'the choice of a mode option is its value';
-        return SmfIssue(
-          '$run, the $role makes the choice $choice $where, for which its '
-          'template gives $gives, not --$name $expected: $rule.',
-          hint: 'In choose() of the template, read the option, and choose '
-              'its first value without it, which a question offers first. '
-              'In optionsOf(), give the option for every choice.',
-          origin: RoleTemplateOrigin(role),
-        );
-      }
-
-      if (first != expected) {
-        // One problem when both runs have the same other value.
-        final both = choseAgain && second == first;
-        problems.add(
-          problem(inTerminal, first, both ? '$terminal and $script' : terminal),
-        );
-      }
-      if (second != first) {
-        sameValues = false;
-        if (second != expected) problems.add(problem(again, second, script));
-      }
-    }
-    // Choices with different values of a mode option are reported above.
-    if (choseAgain && sameValues && again != inTerminal) {
-      problems.add(
-        SmfIssue(
-          'The $role makes the choice $again $script, not $inTerminal, its '
-          'choice in a terminal with the same options: a run without a '
-          'terminal would generate another app than the harness renders.',
-          hint: 'The choices of a role with a mode option compare by value, '
-              'and are the same with a terminal and without one.',
-          origin: RoleTemplateOrigin(role),
-        ),
-      );
-    }
-    return problems;
   }
 
   /// Checks every case of every module and every role of the registry, and
@@ -1602,6 +1573,10 @@ final class ContractHarness {
     return (indexes: indexes, issues: issues);
   }
 
+  /// The problems that the structural rules of the present roles of the app
+  /// of [result] find in it, with [indexes] of its Dart files, its [texts]
+  /// and the [owners] of its files, and those of the symbols of their
+  /// interfaces; see [checkStructure].
   List<SmfIssue> _structureIssues(
     ContractResult result,
     Map<String, DartFileIndex> indexes,
@@ -1610,26 +1585,7 @@ final class ContractHarness {
   ) {
     final (:resolution, :collection) = _resolved(result);
     final choices = result.choices;
-    if (choices == null) {
-      final present = resolution.presentRoles;
-      for (final role in present) {
-        final deciding = {
-          for (final symbol in role.interface.symbols)
-            for (final condition in symbol.whenChosen) condition.role,
-        };
-        // With no choices, a condition of a role of the app would hold or
-        // fail by a choice of null, which that role may never make. A
-        // condition of a role that the app lacks holds or fails without a
-        // choice.
-        if (deciding.any(present.contains)) {
-          throw StateError(
-            'The app of the case ${result.contractCase} was not rendered, so '
-            'the roles made no choice, and the $role has symbols that depend '
-            'on what roles chose.',
-          );
-        }
-      }
-    }
+    if (choices == null) _checkNoChoiceDecides(result, resolution);
     final request = StructuralRuleRequest(
       hook: hookRequest(
         registry: registry,
@@ -1654,6 +1610,34 @@ final class ContractHarness {
         ...role.interface.checkSymbols(indexes, request.hook),
       ],
     ];
+  }
+
+  /// Throws a [StateError] if a present role of [resolution], the app of
+  /// [result], which the harness did not render, so that its roles made no
+  /// choice, has a symbol with a condition of a role that the app has:
+  /// whether the app needs the symbol cannot be told; see [checkStructure].
+  static void _checkNoChoiceDecides(
+    ContractResult result,
+    Resolution resolution,
+  ) {
+    final present = resolution.presentRoles;
+    for (final role in present) {
+      final deciding = {
+        for (final symbol in role.interface.symbols)
+          for (final condition in symbol.whenChosen) condition.role,
+      };
+      // With no choices, a condition of a role of the app would hold or
+      // fail by a choice of null, which that role may never make. A
+      // condition of a role that the app lacks holds or fails without a
+      // choice.
+      if (deciding.any(present.contains)) {
+        throw StateError(
+          'The app of the case ${result.contractCase} was not rendered, so '
+          'the roles made no choice, and the $role has symbols that depend '
+          'on what roles chose.',
+        );
+      }
+    }
   }
 
   /// [issue], which a structural rule of [role] reported, or an error for
@@ -1718,6 +1702,145 @@ final class ContractHarness {
         if (app.files[path] case final file?)
           ...check.issuesOf(path, file, index),
     ];
+  }
+}
+
+/// The run in a terminal in which the harness makes the choices of the
+/// roles of an app, answering their questions as a user who presses Enter:
+/// the choice of each role, the issues of the run, and the roles whose
+/// question the harness answered; see [ContractHarness._replayProblems].
+typedef _TerminalRun = ({
+  Map<Role, Object?> choices,
+  List<SmfIssue> issues,
+  Set<Role> asked,
+});
+
+/// What the run without a terminal of [ContractHarness._replayProblems]
+/// gave: `again`, the choices of the roles that made one, and `warned`,
+/// the issues of the run, or, when a role failed or asked, `failure`, its
+/// message, with the choices of the roles that made one before it in
+/// `again`.
+typedef _Replay = ({
+  Map<Role, Object?> again,
+  List<SmfIssue>? warned,
+  String? failure,
+});
+
+/// The choices of [role], a role with mode options (see [RoleOption.mode]),
+/// in the two runs of [ContractHarness._replayProblems] with [options]:
+/// [inTerminal], where the harness answered a question of the role if it
+/// asked one, and [again], in the run without a terminal, if the role chose
+/// there ([choseAgain]).
+final class _ModeChoices {
+  _ModeChoices(
+    this.role, {
+    required this.options,
+    required this.inTerminal,
+    required bool asked,
+    required this.choseAgain,
+    required this.again,
+  }) : _terminal = asked
+            ? 'when the user presses Enter at its question'
+            : 'in a terminal';
+
+  /// Where the role makes [again], as the end of a sentence.
+  static const _script = 'in a run without a terminal';
+
+  final Role role;
+  final Map<String, String?> options;
+  final Object? inTerminal;
+  final bool choseAgain;
+  final Object? again;
+
+  /// Where the role made [inTerminal], as the end of a sentence.
+  final String _terminal;
+
+  /// The problems of the choices with [modes], the mode options of [role]:
+  /// the values that its template gives the options for them (see
+  /// [_valueProblems]), and a choice in the run without a terminal that
+  /// differs from [inTerminal] though each option has the same value for
+  /// both.
+  List<SmfIssue> problemsWith(List<RoleOption> modes) {
+    // The registry takes no role with an option and no template.
+    final template = role.template!;
+    final problems = <SmfIssue>[];
+    var sameValues = true;
+    for (final option in modes) {
+      final first = template.optionsOf(inTerminal)[option.name];
+      final second =
+          choseAgain ? template.optionsOf(again)[option.name] : first;
+      if (second != first) sameValues = false;
+      problems.addAll(_valueProblems(option, first, second));
+    }
+    // Choices with different values of a mode option are reported above.
+    if (choseAgain && sameValues && again != inTerminal) {
+      problems.add(
+        SmfIssue(
+          'The $role makes the choice $again $_script, not $inTerminal, its '
+          'choice in a terminal with the same options: a run without a '
+          'terminal would generate another app than the harness renders.',
+          hint: 'The choices of a role with a mode option compare by value, '
+              'and are the same with a terminal and without one.',
+          origin: RoleTemplateOrigin(role),
+        ),
+      );
+    }
+    return problems;
+  }
+
+  /// The problems of [first] and [second], the values that the template of
+  /// [role] gives [option], a mode option, for [inTerminal] and for
+  /// [again], which is [first] if the role did not choose again: each value
+  /// that is not the one that [options] give the option, or else its first
+  /// value. The value of [again] is a problem only when it differs from
+  /// that of [inTerminal], and both runs with the same other value are one
+  /// problem.
+  List<SmfIssue> _valueProblems(
+    RoleOption option,
+    String? first,
+    String? second,
+  ) {
+    final expected = options[option.name] ?? option.allowed!.first;
+    // One problem when both runs have the same other value.
+    final both = choseAgain && second == first;
+    return [
+      if (first != expected)
+        _problem(
+          option,
+          inTerminal,
+          first,
+          both ? '$_terminal and $_script' : _terminal,
+        ),
+      if (second != first && second != expected)
+        _problem(option, again, second, _script),
+    ];
+  }
+
+  /// The problem of [choice], made [where], for which the template of
+  /// [role] gives [option], a mode option, [value], not the value that
+  /// [options] give the option, or else its first value.
+  SmfIssue _problem(
+    RoleOption option,
+    Object? choice,
+    String? value,
+    String where,
+  ) {
+    final name = option.name;
+    final given = options[name];
+    final expected = given ?? option.allowed!.first;
+    final gives = value == null ? 'no --$name' : '--$name $value';
+    final run = given == null ? 'Without --$name' : 'With --$name $given';
+    final rule = given == null
+        ? 'the first value of a mode option is its default'
+        : 'the choice of a mode option is its value';
+    return SmfIssue(
+      '$run, the $role makes the choice $choice $where, for which its '
+      'template gives $gives, not --$name $expected: $rule.',
+      hint: 'In choose() of the template, read the option, and choose '
+          'its first value without it, which a question offers first. '
+          'In optionsOf(), give the option for every choice.',
+      origin: RoleTemplateOrigin(role),
+    );
   }
 }
 
