@@ -778,8 +778,52 @@ esac''');
       expect(linesOf('answered'), isEmpty);
     });
 
-    test('fails when the app gives no verdict in its time after the answer',
-        () {
+    test(
+        'runs the answer again when the app gives no verdict in its time '
+        'after it, with the same request, and passes on the verdict that '
+        'comes then', () {
+      final result = run(
+        seconds: 240,
+        result: 'passed',
+        files: {request: asked},
+        answers: [
+          answer(
+            'messages',
+            '[ "\$(wc -l < "${temp.path}/answered" | tr -d " ")" -lt 2 ] || '
+                '${verdict(report, 'passed')}',
+          ),
+        ],
+        sleepSeconds: 10,
+      );
+
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      expect(linesOf('answered'), ['messages', 'messages']);
+      expect(linesOf('messages.asked'), [asked, asked]);
+      for (final path in linesOf('messages.paths')) {
+        expect(File(path).existsSync(), isFalse, reason: path);
+      }
+      expect(
+        '${result.stdout}',
+        allOf(
+          contains(
+            '::warning::The app gave no verdict on the answer messages in the '
+            '150 s after the answer, attempt 1 of 3; running the answer '
+            'again, since what it sent may not have reached the app.\n',
+          ),
+          isNot(contains('attempt 2 of 3')),
+          matches(
+            RegExp(
+              'The check of the answer messages in the app passed [0-9]+ s '
+              r'after its start check passed\.\n',
+            ),
+          ),
+        ),
+      );
+    });
+
+    test(
+        'fails when the app gives no verdict in its time after each of three '
+        'answers', () {
       final result = run(
         seconds: 240,
         result: 'passed',
@@ -789,12 +833,18 @@ esac''');
       );
 
       expect(result.exitCode, 1);
+      expect(linesOf('answered'), ['messages', 'messages', 'messages']);
       expect(
         '${result.stdout}',
-        endsWith('::error::The app wrote no verdict on the answer messages in '
-            'the 150 s after the answer: its check of the answer writes '
-            'smf_start_report_messages into the temporary directory of the '
-            'app.\n'),
+        allOf(
+          contains('attempt 1 of 3; running the answer again'),
+          contains('attempt 2 of 3; running the answer again'),
+          isNot(contains('attempt 3 of 3')),
+          endsWith('::error::The app wrote no verdict on the answer messages '
+              'in the 150 s after each of the 3 answers: its check of the '
+              'answer writes smf_start_report_messages into the temporary '
+              'directory of the app.\n'),
+        ),
       );
     });
 

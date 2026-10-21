@@ -46,17 +46,21 @@
 # Once the start check passed, the script waits for the request of the
 # probe, smf_start_request_<name> in the temporary directory of the app,
 # copies it into a file that only the user of the script may read, and
-# runs the command once, with bash, in the directory of the app, with the
-# path of that file in SMF_START_REQUEST. Then it waits for the verdict of
-# the app, smf_start_report_<name> there: `passed`, or `failed: ` and the
-# problem. An app that gives its verdict without a request, as when it has
-# nothing to ask for, gets no command. The app writes each file next to its
-# place and renames it, so that it is there only whole. The answers run one
-# after another, in their order. The script fails when the app writes
-# neither file in 150 s after its start check passed, when the command
-# fails or takes more than 300 s, when the app gives no verdict in 150 s
-# after the command, when the app stops before it, and when the verdict is
-# not `passed`. It prints no request and removes its copy, but the log of
+# runs the command, with bash, in the directory of the app, with the path
+# of that file in SMF_START_REQUEST. Then it waits for the verdict of the
+# app, smf_start_report_<name> there: `passed`, or `failed: ` and the
+# problem. When no verdict comes in 150 s, it runs the command again, three
+# times in all, since what the command sent may not have reached the app,
+# as a push message that the server took now and then never reaches the
+# emulator. So an answer is a command that may run more than once for one
+# request. An app that gives its verdict without a request, as
+# when it has nothing to ask for, gets no command. The app writes each file
+# next to its place and renames it, so that it is there only whole. The
+# answers run one after another, in their order. The script fails when the
+# app writes neither file in 150 s after its start check passed, when the
+# command fails or takes more than 300 s, when the app gives no verdict in
+# 150 s after each of the three commands, when the app stops before it, and
+# when the verdict is not `passed`. It prints no request and removes its copy, but the log of
 # the app that it prints shows what the app printed itself, such as the
 # address for push messages that a debug app prints. Answers need a debug
 # app, whose files the script reads; without them, it is done once the
@@ -270,30 +274,39 @@ answer() {
   fi
   if [ -z "$reported" ]; then
     echo "The app asked for the answer $name $((SECONDS - passed)) s after its start check passed."
-    # mktemp makes a file that only the user of the script may read.
-    copy="$(mktemp "${TMPDIR:-/tmp}/smf_start_request_$name.XXXXXX")"
-    printf '%s\n' "$line" > "$copy"
-    began=$SECONDS
-    within 300 env SMF_START_REQUEST="$copy" bash -c "$command" < /dev/null || code=$?
-    rm -f "$copy"
-    copy=
-    if [ "$code" -ne 0 ]; then
-      show_log
-      if [ "$code" -eq 142 ]; then
-        echo "::error::The answer $name did not finish in 300 s."
-      else
-        echo "::error::The answer $name failed with the exit code $code."
+    local request="$line" attempt
+    for attempt in 1 2 3; do
+      # mktemp makes a file that only the user of the script may read.
+      copy="$(mktemp "${TMPDIR:-/tmp}/smf_start_request_$name.XXXXXX")"
+      printf '%s\n' "$request" > "$copy"
+      began=$SECONDS
+      code=0
+      within 300 env SMF_START_REQUEST="$copy" bash -c "$command" < /dev/null || code=$?
+      rm -f "$copy"
+      copy=
+      if [ "$code" -ne 0 ]; then
+        show_log
+        if [ "$code" -eq 142 ]; then
+          echo "::error::The answer $name did not finish in 300 s."
+        else
+          echo "::error::The answer $name failed with the exit code $code."
+        fi
+        exit 1
       fi
-      exit 1
-    fi
-    echo "The answer $name took $((SECONDS - began)) s."
-    allow 150 "that the app has to give its verdict on the answer $name"
-    poll got "${platform}_file" "smf_start_report_$name" || code=$?
-    if [ "$code" -eq 1 ]; then
-      echo "::error::The app stopped $((SECONDS - began)) s after the answer $name began, before it gave its verdict on it."
-      exit 1
-    elif [ "$code" -ne 0 ]; then
-      echo "::error::The app wrote no verdict on the answer $name in the $limit s after the answer: its check of the answer writes smf_start_report_$name into the temporary directory of the app."
+      echo "The answer $name took $((SECONDS - began)) s."
+      allow 150 "that the app has to give its verdict on the answer $name"
+      poll got "${platform}_file" "smf_start_report_$name" || code=$?
+      if [ "$code" -eq 0 ]; then
+        break
+      elif [ "$code" -eq 1 ]; then
+        echo "::error::The app stopped $((SECONDS - began)) s after the answer $name began, before it gave its verdict on it."
+        exit 1
+      elif [ "$attempt" -lt 3 ]; then
+        echo "::warning::The app gave no verdict on the answer $name in the $limit s after the answer, attempt $attempt of 3; running the answer again, since what it sent may not have reached the app."
+      fi
+    done
+    if [ "$code" -ne 0 ]; then
+      echo "::error::The app wrote no verdict on the answer $name in the $limit s after each of the 3 answers: its check of the answer writes smf_start_report_$name into the temporary directory of the app."
       exit 1
     fi
   fi
