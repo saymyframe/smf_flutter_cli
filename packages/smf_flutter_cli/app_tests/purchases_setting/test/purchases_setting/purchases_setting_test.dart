@@ -186,6 +186,25 @@ void main() {
         return scripted.calls.sublist(before);
       }
 
+      // Checks that a screen reader reads [result], what the restore found,
+      // which [what] tells, once it comes: the result is in a live region.
+      Future<void> expectLiveRegion(String result, String what) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          await tester.pump();
+          expect(
+            tester.getSemantics(
+              find.descendant(of: entry, matching: find.textContaining(result)),
+            ),
+            isSemantics(isLiveRegion: true),
+            reason: 'A screen reader reads $what once it comes: the result is '
+                'in a live region.',
+          );
+        } finally {
+          semantics.dispose();
+        }
+      }
+
       // The store account of the user bought nothing.
       expect(
         await tap(),
@@ -196,6 +215,7 @@ void main() {
         (texts) => [texts.title, texts.none],
         'that there was nothing to restore',
       );
+      await expectLiveRegion(texts.none, 'that there was nothing to restore');
 
       // The store account of the user bought a plan, such as on another
       // device.
@@ -209,18 +229,7 @@ void main() {
         (texts) => [texts.title, texts.active],
         'that the premium access is back',
       );
-      final semantics = tester.ensureSemantics();
-      await tester.pump();
-      expect(
-        tester.getSemantics(
-          find.descendant(
-              of: entry, matching: find.textContaining(texts.active)),
-        ),
-        isSemantics(isLiveRegion: true),
-        reason: 'A screen reader reads what the restore found once it comes: '
-            'the result is in a live region.',
-      );
-      semantics.dispose();
+      await expectLiveRegion(texts.active, 'that the premium access is back');
 
       // A restore that takes a while, as one that waits for the store: the
       // service holds it back until the test lets it go. The test creates
@@ -307,6 +316,7 @@ void main() {
         reason: 'A failure without the words of the provider shows only that '
             'the restore failed, below the title.',
       );
+      await expectLiveRegion(texts.failed, 'that the restore failed');
       final error = StateError('The store went away.');
       service.restoreError = error;
       await tap();
