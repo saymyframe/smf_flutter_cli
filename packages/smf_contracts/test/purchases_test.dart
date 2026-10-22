@@ -2023,7 +2023,9 @@ void main() {
           for (final directive in unit.directives.whereType<ImportDirective>())
             directive.uri.stringValue,
         ],
+        // The material library does not export kDebugMode.
         unorderedEquals([
+          'package:flutter/foundation.dart',
           'package:flutter/material.dart',
           'app_purchases.dart',
           'package:my_app/core/l10n/l10n.dart',
