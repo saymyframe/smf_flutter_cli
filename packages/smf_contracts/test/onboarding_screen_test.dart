@@ -245,9 +245,15 @@ List<SmfIssue> _moduleIssues(
   );
 }
 
+/// The functions of the tests that are conditions of steps, which take no
+/// argument; the others are actions of steps, which take the context of
+/// the onboarding screen.
+const _conditions = {'permissionUnasked'};
+
 /// The index of the file at [path] that declares the functions
 /// [functions], each with the return type that it is written with, or
-/// without one for `null`, and with no parameters.
+/// without one for `null`: a condition of [_conditions] with no
+/// parameters, and an action with the parameter `BuildContext context`.
 DartFileIndex _functionsFile(String path, Map<String, String?> functions) =>
     DartFileIndex(
       path: path,
@@ -257,9 +263,20 @@ DartFileIndex _functionsFile(String path, Map<String, String?> functions) =>
             name: name,
             kind: DeclarationKind.function,
             type: type,
+            parameters: [
+              if (!_conditions.contains(name)) _context,
+            ],
           ),
       ],
     );
+
+/// The parameter of an action of a step: the context of the onboarding
+/// screen.
+const _context = IndexedParameter(
+  'context',
+  kind: ParameterKind.requiredPositional,
+  type: 'BuildContext',
+);
 
 /// The issues of the structural rules of the role in an app with [data],
 /// the [files] with their [owners], and [modules].
@@ -334,21 +351,26 @@ String _textsFile(List<String> getters) => [
     ].join('\n');
 
 /// The files of the functions of the steps of the tests, which note each
-/// call of an action in `calls` of the first.
+/// call of an action in `calls` of the first, with the language of the
+/// context that the action got.
 const Map<String, String> _functionFiles = {
-  _permissionPath: '''
+  _permissionPath: r'''
+import 'package:flutter/widgets.dart';
+
 /// The actions that ran, in order.
 final List<String> calls = [];
 
-Future<void> askPermission() async => calls.add('askPermission');
+Future<void> askPermission(BuildContext context) async =>
+    calls.add('askPermission ${context.language}');
 
 bool permissionUnasked() => false;
 ''',
-  _tipsPath: '''
+  _tipsPath: r'''
+import 'package:flutter/widgets.dart';
 import 'package:my_app/core/permissions/permission_step.dart';
 
-Future<bool> showTips() async {
-  calls.add('showTips');
+Future<bool> showTips(BuildContext context) async {
+  calls.add('showTips ${context.language}');
   return true;
 }
 ''',
@@ -357,7 +379,7 @@ Future<bool> showTips() async {
 /// A script that sends the steps of the app: for each, its labels, each in
 /// English and in Ukrainian, the code point of its icon and whether its
 /// condition shows it, and then the actions that ran once it called the
-/// action of each step in turn.
+/// action of each step in turn, with a context in Ukrainian.
 const _readSteps = r'''
 import 'dart:isolate';
 
@@ -382,7 +404,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
       ],
   ];
   for (final step in appOnboardingSteps) {
-    await step.run();
+    await step.run(const BuildContext('uk'));
   }
   port.send([...steps, calls]);
 }
@@ -857,7 +879,7 @@ void main() {
         'final String Function(BuildContext context) title;',
         'final String Function(BuildContext context) text;',
         'final String Function(BuildContext context) action;',
-        'final Future<void> Function() run;',
+        'final Future<void> Function(BuildContext context) run;',
         'final String Function(BuildContext context)? later;',
         'final bool Function()? showIf;',
       ]) {
@@ -973,7 +995,7 @@ void main() {
           '1',
           'always',
         ],
-        ['askPermission', 'showTips', 'askPermission'],
+        ['askPermission uk', 'showTips uk', 'askPermission uk'],
       ]);
     });
 
@@ -1056,7 +1078,7 @@ void main() {
             '1',
             'always',
           ],
-          ['askPermission', 'showTips', 'showTips'],
+          ['askPermission uk', 'showTips uk', 'showTips uk'],
         ],
       );
     });
@@ -1563,8 +1585,9 @@ void main() {
         ];
 
     test(
-        'accepts top-level functions of the contributor that require no '
-        'arguments, a Future for the action and a bool for the condition', () {
+        'accepts top-level functions of the contributor, an action that '
+        'takes the context of the screen and returns a Future, and a '
+        'condition that requires no arguments and returns a bool', () {
       for (final type in [
         'Future<void>',
         'Future<bool>',
@@ -1585,31 +1608,39 @@ void main() {
           reason: type,
         );
       }
-      // An optional parameter takes nothing from the onboarding.
-      expect(
-        messagesOf(
-          [_stepOf(_step('ask'))],
-          [
-            const DartFileIndex(
-              path: _permissionPath,
-              declarations: [
-                IndexedDeclaration(
-                  name: 'askPermission',
-                  kind: DeclarationKind.function,
-                  type: 'Future<void>',
-                  parameters: [
-                    IndexedParameter(
-                      'again',
-                      kind: ParameterKind.optionalNamed,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-        isEmpty,
-      );
+      // An optional parameter takes nothing from the onboarding, and the
+      // context may be optional too.
+      for (final kind in [
+        ParameterKind.requiredPositional,
+        ParameterKind.optionalPositional,
+      ]) {
+        expect(
+          messagesOf(
+            [_stepOf(_step('ask'))],
+            [
+              DartFileIndex(
+                path: _permissionPath,
+                declarations: [
+                  IndexedDeclaration(
+                    name: 'askPermission',
+                    kind: DeclarationKind.function,
+                    type: 'Future<void>',
+                    parameters: [
+                      IndexedParameter('context', kind: kind),
+                      const IndexedParameter(
+                        'again',
+                        kind: ParameterKind.optionalNamed,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          isEmpty,
+          reason: '$kind',
+        );
+      }
     });
 
     test('rejects a missing file and a missing function', () {
@@ -1676,6 +1707,51 @@ void main() {
       expect(issue.path, _permissionPath);
     });
 
+    test(
+        'rejects an action that does not take the context of the screen, or '
+        'requires more', () {
+      DartFileIndex actionWith(List<IndexedParameter> parameters) =>
+          DartFileIndex(
+            path: _permissionPath,
+            declarations: [
+              IndexedDeclaration(
+                name: 'askPermission',
+                kind: DeclarationKind.function,
+                type: 'Future<void>',
+                parameters: parameters,
+              ),
+            ],
+          );
+      const function = 'function askPermission() in $_permissionPath';
+
+      final issue = _structureIssues(
+        [_stepOf(_step('ask'))],
+        files: [actionWith(const [])],
+        owners: {_permissionPath: _permissions},
+      ).single;
+      expect(issue.message, '$function must accept 1 positional arguments.');
+      expect(
+        issue.hint,
+        'The button of the action of a step calls run with the BuildContext '
+        'of the onboarding screen and awaits the future that it returns.',
+      );
+      expect(
+        messagesOf(
+          [_stepOf(_step('ask'))],
+          [
+            actionWith(const [
+              _context,
+              IndexedParameter(
+                'again',
+                kind: ParameterKind.requiredPositional,
+              ),
+            ]),
+          ],
+        ),
+        ['$function must not require more than 1 positional arguments.'],
+      );
+    });
+
     test('rejects a function that requires arguments, or is no function', () {
       final issues = _structureIssues(
         [_stepOf(_step('ask', showIf: _unasked))],
@@ -1688,6 +1764,7 @@ void main() {
                 kind: DeclarationKind.function,
                 type: 'Future<void>',
                 parameters: [
+                  _context,
                   IndexedParameter('again', kind: ParameterKind.requiredNamed),
                 ],
               ),
@@ -1714,7 +1791,7 @@ void main() {
         'function permissionUnasked() in $_permissionPath must be a function, '
         'not a variable.',
       );
-      expect(issues.first.hint, contains('calls run without arguments'));
+      expect(issues.first.hint, contains('calls run with the BuildContext'));
     });
 
     test('rejects a function in a file of another contributor', () {
@@ -1975,6 +2052,7 @@ void main() {
         'false',
         'step.title(context)',
         'build',
+        'Navigator.of(context, rootNavigator: true)',
       });
     });
 

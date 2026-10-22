@@ -1172,6 +1172,7 @@ Map<String, String> _notificationsStepOf(MatrixApp app, String packageName) {
   final shows = codeOf(showIf);
   final action = codeOf(steps.single.run);
   final imports = [
+    "import 'package:flutter/widgets.dart';",
     for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
       "import '$uri' as $prefix;",
   ]..sort();
@@ -1188,8 +1189,8 @@ ${imports.join('\n')}
 const bool Function() stepShows = $shows;
 
 /// What the button of the step does: its action, which asks for the
-/// permission.
-const Future<void> Function() stepAction = $action;
+/// permission, for the context of the onboarding screen.
+const Future<void> Function(BuildContext context) stepAction = $action;
 ''',
   };
 }

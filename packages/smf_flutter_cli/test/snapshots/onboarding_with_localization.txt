@@ -53,7 +53,7 @@ With `gen-l10n` of Flutter:
 ## Onboarding screen
 
 - The onboarding shows the steps of `appOnboardingSteps` in `lib/core/onboarding/onboarding_steps.dart`, each on a page of its own, in the order of the list. A step is an `OnboardingStep`: an `icon`, a `title`, a `text`, the label of its `action` and the function `run` that the action calls. Its `later` is the label of a button that goes on without calling `run`, and the onboarding leaves the step out when its `showIf` returns `false` as the onboarding opens.
-- To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` returns a `Future`, and `showIf` returns a `bool` at once. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
+- To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` takes the `BuildContext` of the onboarding screen and returns a `Future`, and `showIf` returns a `bool` at once. The onboarding goes on once the future of `run` completes. A `run` that shows a screen of its own over the onboarding pushes it with `Navigator.of(context, rootNavigator: true)` and completes once that screen is closed. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
 - Skipping the onboarding skips its steps. So the app does not rely on `run` alone for what a step does, such as asking for a permission: the code that needs it calls the same function too.
 
 ## Preferences
@@ -840,10 +840,15 @@ final class OnboardingStep {
   /// Returns the label of the button that calls [run], as [title] does.
   final String Function(BuildContext context) action;
 
-  /// What the button [action] does, such as asking for a permission. The
-  /// onboarding goes on to its next page once the future completes, also
-  /// when it fails.
-  final Future<void> Function() run;
+  /// What the button [action] does, such as asking for a permission, for
+  /// the context of the onboarding screen. The onboarding goes on to its
+  /// next page once the future completes, also when it fails.
+  ///
+  /// To show a screen of its own over the onboarding, it pushes a route on
+  /// the navigator at the root of the app, with
+  /// `Navigator.of(context, rootNavigator: true)`, and completes once that
+  /// route is popped.
+  final Future<void> Function(BuildContext context) run;
 
   /// Returns the label of the button that goes on to the next page without
   /// calling [run], as [title] does, or is `null` for a step without that
@@ -2800,13 +2805,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  /// Calls the action of [step], and shows the next page once its future
-  /// completes, also when it fails: the error goes on to the handlers of
-  /// the errors of the app that nothing caught.
+  /// Calls the action of [step] with the context of the screen, and shows
+  /// the next page once its future completes, also when it fails: the error
+  /// goes on to the handlers of the errors of the app that nothing caught.
   Future<void> _run(OnboardingStep step) async {
     setState(() => _running = true);
     try {
-      await step.run();
+      await step.run(context);
     } finally {
       if (mounted) {
         setState(() => _running = false);

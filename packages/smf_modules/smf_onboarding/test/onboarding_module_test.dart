@@ -1426,7 +1426,7 @@ void main() {
           (run.body as BlockFunctionBody).block.statements;
 
       expect(start.toSource(), 'setState(() => _running = true);');
-      expect(attempt.body.toSource(), '{await step.run();}');
+      expect(attempt.body.toSource(), '{await step.run(context);}');
       // Nothing catches the error.
       expect(attempt.catchClauses, isEmpty);
       expect(

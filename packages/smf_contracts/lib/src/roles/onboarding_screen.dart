@@ -49,16 +49,28 @@ const onboardingScreenRole = OnboardingScreenRole._();
 ///   the functions of the labels in the `build` of the widget that shows
 ///   them, so that they follow the language of the app;
 /// - calls [OnboardingStep.run] once when the user taps the button of the
-///   action, and takes no tap on the buttons of the step until the future
-///   completes. Then it goes on to the next page, also when the future
-///   fails, and leaves the error uncaught or reports it with
-///   `FlutterError.reportError`, so that it reaches the handlers of the
-///   errors of the app. The button of `later` goes on without calling the
-///   function;
+///   action, with the `BuildContext` of the screen, and takes no tap on the
+///   buttons of the step until the future completes. Then it goes on to the
+///   next page, also when the future fails, and leaves the error uncaught
+///   or reports it with `FlutterError.reportError`, so that it reaches the
+///   handlers of the errors of the app. The button of `later` goes on
+///   without calling the function;
 /// - turns its pages with a swipe too, and calls no [OnboardingStep.run]
 ///   when the user swipes past a step or skips the onboarding;
 /// - works also when code pushes it over the app as a new screen, as a
 ///   test of the role in a running app does.
+///
+/// The action of a step may show a screen of its own over the onboarding,
+/// such as an offer whose route the router would not show while a guard
+/// of the routes keeps the user on the onboarding. It pushes a route
+/// without a page on the navigator at the root of the app, with
+/// `Navigator.of(context, rootNavigator: true)`, and its future completes
+/// once that route is popped. Such a route stays over the onboarding while
+/// the guards of the routes notify, also when one of them starts or stops
+/// allowing, as long as the router keeps the page below it, so neither the
+/// router nor the onboarding takes it away for a notification. A guard
+/// that keeps the user from the page below it, such as a gate that stops
+/// allowing, takes it away with that page.
 ///
 /// The contract harness checks the functions of the steps (the rule
 /// `onboarding_screen.step_functions`) and that the provider reads the
@@ -86,9 +98,10 @@ final class OnboardingScreenRole extends Role<OnboardingData> {
   /// `OnboardingStep(icon: ..., title: ..., text: ..., action: ..., run:
   /// ..., later: ..., showIf: ...)`, with an `IconData` icon, labels of the
   /// type `String Function(BuildContext context)`, which return the text in
-  /// the language of the app, `run` of the type `Future<void> Function()`
-  /// and `showIf` of the type `bool Function()`. `later` and `showIf` may be
-  /// `null`.
+  /// the language of the app, `run` of the type
+  /// `Future<void> Function(BuildContext context)`, which the onboarding
+  /// calls with the context of its screen, and `showIf` of the type
+  /// `bool Function()`. `later` and `showIf` may be `null`.
   ///
   /// Its constructor is `const`, and the template creates the steps as
   /// constants in [appOnboardingSteps], each with top-level functions. The
@@ -164,9 +177,10 @@ final class OnboardingScreenRole extends Role<OnboardingData> {
         StructuralRule(
           id: 'onboarding_screen.step_functions',
           description: 'The functions of every onboarding step are '
-              'top-level functions in files of the contributor of the step '
-              'that require no arguments: run returns a Future, and showIf '
-              'a bool.',
+              'top-level functions in files of the contributor of the step: '
+              'run takes the BuildContext of the onboarding screen and '
+              'returns a Future, and showIf requires no arguments and '
+              'returns a bool.',
           check: _checkStepFunctions,
         ),
         StructuralRule(
@@ -338,8 +352,15 @@ final class OnboardingStep extends OnboardingData implements DataWithTexts {
 
   /// The function that the button [action] calls, such as one that asks
   /// for a permission: a top-level function of a file of the app that the
-  /// contributor generates, which requires no arguments and returns a
-  /// `Future`.
+  /// contributor generates, which takes the `BuildContext` of the
+  /// onboarding screen, requires no other argument and returns a `Future`,
+  /// such as `Future<void> askNotificationPermission(BuildContext context)`.
+  ///
+  /// The onboarding goes on once the future completes. A function that
+  /// shows a screen of its own over the onboarding pushes it on the
+  /// navigator at the root of the app with the context, and completes once
+  /// that screen is closed (see [OnboardingScreenRole]). A function that
+  /// needs no context takes it all the same, as `BuildContext _`.
   ///
   /// The template of the role imports the file with a prefix of its own,
   /// so [ImportRef.prefix] and [ImportRef.show] do not apply.
@@ -480,7 +501,7 @@ String? _fileOf(FunctionRef function) =>
 /// provider.
 final String _agentNote = '''
 - The onboarding shows the steps of `${OnboardingScreenRole.appOnboardingSteps}` in `${OnboardingScreenRole.stepsFile}`, each on a page of its own, in the order of the list. A step is an `${OnboardingScreenRole.step.name}`: an `icon`, a `title`, a `text`, the label of its `action` and the function `run` that the action calls. Its `later` is the label of a button that goes on without calling `run`, and the onboarding leaves the step out when its `showIf` returns `false` as the onboarding opens.
-- To add a step, add an `${OnboardingScreenRole.step.name}` to `${OnboardingScreenRole.appOnboardingSteps}`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` returns a `Future`, and `showIf` returns a `bool` at once. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
+- To add a step, add an `${OnboardingScreenRole.step.name}` to `${OnboardingScreenRole.appOnboardingSteps}`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` takes the `BuildContext` of the onboarding screen and returns a `Future`, and `showIf` returns a `bool` at once. The onboarding goes on once the future of `run` completes. A `run` that shows a screen of its own over the onboarding pushes it with `Navigator.of(context, rootNavigator: true)` and completes once that screen is closed. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
 - Skipping the onboarding skips its steps. So the app does not rely on `run` alone for what a step does, such as asking for a permission: the code that needs it calls the same function too.
 ''';
 
@@ -742,9 +763,10 @@ bool _isFuture(String? type) {
 
 /// The problems with the functions that the steps of [input] name: a
 /// function in a file of another contributor, a function missing from its
-/// file, one that requires arguments, and one that does not return what
-/// the list of the steps takes, a `Future` for `run` and a `bool` for
-/// `showIf`.
+/// file, one that does not take what the onboarding calls it with, the
+/// context of the screen for `run` and nothing for `showIf`, and one that
+/// does not return what the list of the steps takes, a `Future` for `run`
+/// and a `bool` for `showIf`.
 ///
 /// The template of the role and the module rule `onboarding_screen.steps`
 /// report a function outside the app.
@@ -776,10 +798,12 @@ List<SmfIssue> _checkStepFunctions(StructuralRuleInput<OnboardingData> input) {
           function.name,
           path: path,
           returnType: isRun ? null : 'bool',
+          positionalArguments: isRun ? 1 : 0,
         );
         final hint = isRun
-            ? 'The button of the action of a step calls run without '
-                'arguments and awaits the future that it returns.'
+            ? 'The button of the action of a step calls run with the '
+                'BuildContext of the onboarding screen and awaits the future '
+                'that it returns.'
             : 'The onboarding asks showIf without arguments whether it '
                 'shows the step, and takes the answer at once.';
         final problems = [
