@@ -155,8 +155,9 @@ void main() {
         contains("import 'package:start_app/main.dart' as app;"),
       );
       // The probes of the tests of the app, in the order of the tests, those
-      // of the preferences, of the onboarding and of the notifications among
-      // them: the apps without external steps have their modules too. They
+      // of the preferences, of the purchases, of the onboarding and of the
+      // notifications among them: the apps without external steps have
+      // their modules too. They
       // lack Firebase, whose configuration needs an account, and so
       // Firebase Authentication and Firebase Cloud Messaging, which depend
       // on it, with their probes, and the push messages, which only Firebase
@@ -173,6 +174,7 @@ void main() {
             if (!withoutExternalSteps) ('firebase_auth', 'probeFirebaseAuth'),
             if (!withoutExternalSteps)
               ('firebase_messaging', 'probeFirebaseMessaging'),
+            ('revenuecat', 'probeRevenueCat'),
             ('onboarding', 'probeOnboarding'),
             ('shared_preferences', 'probeSharedPreferences'),
             ('local_notifications', 'probeLocalNotifications'),
@@ -180,6 +182,7 @@ void main() {
             ('preferences_role', 'probePreferences'),
             ('notifications_role', 'probeNotifications'),
             if (!withoutExternalSteps) ('push_role', 'probePush'),
+            ('purchases_role', 'probePurchases'),
             ('router_walk', 'probeRoutes'),
             ('localization_role', 'probeLanguages'),
           ].indexed)

@@ -15,6 +15,7 @@ import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
 import 'package:test/test.dart';
 
@@ -251,6 +252,17 @@ const _lnSettings = '$_ln with settings_screen';
 const _lnOnboarding = '$_ln with onboarding_screen';
 const _lnL10n = '$_ln with localization';
 
+/// The app of revenuecat alone, and its apps with the roles that the
+/// purchases role uses: the auth, the settings screen and the localization.
+const _rc = 'revenuecat';
+const _rcAll = '$_rc with auth, settings_screen, localization';
+const _rcAuthSettings = '$_rc with auth, settings_screen';
+const _rcAuthL10n = '$_rc with auth, localization';
+const _rcSettingsL10n = '$_rc with settings_screen, localization';
+const _rcAuth = '$_rc with auth';
+const _rcSettings = '$_rc with settings_screen';
+const _rcL10n = '$_rc with localization';
+
 /// Those of them with the localization.
 const _localizedSignIn = [
   'sign_in (bloc) with localization',
@@ -330,7 +342,12 @@ void main() {
     );
     expect(matrixEnv.keys(const MatrixApp('outside', [])), isEmpty);
     // The keys of an app are those of the role, each with the module that
-    // gives it; no module of the CLI gives the role a key yet.
+    // gives it, such as the keys of revenuecat.
+    expect(matrixEnv.keys(app(_rc)), {
+      'REVENUECAT_APPLE_KEY': RevenueCatModule.id,
+      'REVENUECAT_GOOGLE_KEY': RevenueCatModule.id,
+      'REVENUECAT_TEST_KEY': RevenueCatModule.id,
+    });
     for (final app in apps) {
       expect(
         matrixEnv.keys(app),
@@ -347,11 +364,11 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the DI role, '
-      'of the events role, of the preferences role, of the auth role, of '
-      'the notifications role, of the push role, of the settings screen '
-      'role, of the theme role, of the localization role and of the app '
-      'entry role with every provider of each, which they tell apart by the '
-      'roles of the app only', () {
+      'of the events role, of the preferences role, of the env role, of the '
+      'auth role, of the notifications role, of the push role, of the '
+      'purchases role, of the settings screen role, of the theme role, of '
+      'the localization role and of the app entry role with every provider '
+      'of each, which they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -359,9 +376,11 @@ void main() {
         diRole,
         eventsRole,
         preferencesRole,
+        envRole,
         authRole,
         notificationsRole,
         pushRole,
+        purchasesRole,
         settingsScreenRole,
         themeRole,
         appEntryRole,
@@ -374,6 +393,7 @@ void main() {
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('preferences_role').roles, {preferencesRole});
+    expect(named('env_role').roles, {envRole});
     expect(named('auth_role').roles, {authRole});
     // The test of the provider of the role checks what only it does.
     expect(named('firebase_auth').roles, isEmpty);
@@ -388,6 +408,11 @@ void main() {
     expect(named('push_role').roles, {pushRole});
     // And the test of the provider of the push role.
     expect(named('firebase_messaging').roles, isEmpty);
+    expect(named('purchases_role').roles, {purchasesRole});
+    expect(named('purchases_session').roles, {purchasesRole});
+    expect(named('purchases_device').roles, {purchasesRole});
+    // And the test of the provider of the purchases role.
+    expect(named('revenuecat').roles, isEmpty);
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
     // The test of the theme role checks that the root of the app, which the
@@ -1085,6 +1110,11 @@ void main() {
         'apple_sign_in with localization',
         'sign_in (bloc) with localization',
         'sign_in (riverpod) with localization',
+        // The apps of revenuecat with the localization.
+        _rcAll,
+        _rcAuthL10n,
+        _rcSettingsL10n,
+        _rcL10n,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1207,6 +1237,13 @@ void main() {
         'apple_sign_in with localization',
         'sign_in (bloc) with localization',
         'sign_in (riverpod) with localization',
+        // The apps of revenuecat with the localization: the purchases role
+        // gives the texts of its entry of the settings screen, and an app
+        // without a router has the texts of the fallback start screen.
+        _rcAll,
+        _rcAuthL10n,
+        _rcSettingsL10n,
+        _rcL10n,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1235,6 +1272,8 @@ void main() {
         'bottom_tabs with localization': ['en', 'uk'],
         'material_theme with settings_screen, localization': ['en', 'uk'],
         'material_theme with localization': ['en', 'uk'],
+        for (final app in [_rcAll, _rcAuthL10n, _rcSettingsL10n, _rcL10n])
+          app: ['en', 'uk'],
         'onboarding with localization': ['en', 'uk'],
         for (final app in [_lnAll, _lnSettingsL10n, _lnOnboardingL10n, _lnL10n])
           app: ['en', 'uk'],
@@ -1577,6 +1616,8 @@ void main() {
         _lnAll,
         _lnSettingsL10n,
         ..._localizedSignIn,
+        _rcAll,
+        _rcSettingsL10n,
         ..._everyModule,
       ],
     );
@@ -1863,9 +1904,9 @@ void main() {
       'of a first launch, the languages of the localization role, the '
       'permission of the notifications role and the channel of '
       'local_notifications, the push messages of the role and the address '
-      'of Firebase Cloud Messaging, each '
-      'a function of a file of its tests that takes the one that waits '
-      'until the screen settles', () async {
+      'of Firebase Cloud Messaging, the purchases of the role and those of '
+      'RevenueCat, each a function of a file of its tests that takes the one '
+      'that waits until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -1878,6 +1919,7 @@ void main() {
             'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
             'probeFirebaseMessaging',
+        'revenuecat': 'integration_test/revenuecat/probe.dart probeRevenueCat',
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
@@ -1890,6 +1932,8 @@ void main() {
         'notifications_role':
             'integration_test/notifications_role/probe.dart probeNotifications',
         'push_role': 'integration_test/push_role/probe.dart probePush',
+        'purchases_role':
+            'integration_test/purchases_role/probe.dart probePurchases',
         'router_walk': 'integration_test/router_walk/walk.dart probeRoutes',
         'localization_role':
             'integration_test/localization_role/probe.dart probeLanguages',
@@ -1920,9 +1964,9 @@ void main() {
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
     // the routes of the app past it. Those of Firebase Authentication, of
-    // Firebase Cloud Messaging, of the notifications role, of
-    // local_notifications and of the push role only read, so they hold
-    // wherever they come.
+    // Firebase Cloud Messaging, of RevenueCat, of the notifications role,
+    // of local_notifications, of the push role and of the purchases role
+    // only read, so they hold wherever they come.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
@@ -1931,6 +1975,7 @@ void main() {
         'start',
         'firebase_auth',
         'firebase_messaging',
+        'revenuecat',
         'onboarding',
         'shared_preferences',
         'local_notifications',
@@ -1938,6 +1983,7 @@ void main() {
         'preferences_role',
         'notifications_role',
         'push_role',
+        'purchases_role',
         'router_walk',
         'localization_role',
       ],
@@ -1973,40 +2019,36 @@ void main() {
       [
         'probe0: firebase_auth/probe.dart',
         'probe1: firebase_messaging/probe.dart',
-        'probe2: onboarding/probe.dart',
-        'probe3: shared_preferences/probe.dart',
-        'probe4: local_notifications/probe.dart',
-        'probe5: di_role/probe.dart',
-        'probe6: preferences_role/probe.dart',
-        'probe7: notifications_role/probe.dart',
-        'probe8: push_role/probe.dart',
-        'probe9: router_walk/walk.dart',
-        'probe10: localization_role/probe.dart',
+        'probe2: revenuecat/probe.dart',
+        'probe3: onboarding/probe.dart',
+        'probe4: shared_preferences/probe.dart',
+        'probe5: local_notifications/probe.dart',
+        'probe6: di_role/probe.dart',
+        'probe7: preferences_role/probe.dart',
+        'probe8: notifications_role/probe.dart',
+        'probe9: push_role/probe.dart',
+        'probe10: purchases_role/probe.dart',
+        'probe11: router_walk/walk.dart',
+        'probe12: localization_role/probe.dart',
       ],
     );
-    expect(list, contains("('firebase_auth', probe0.probeFirebaseAuth),"));
-    expect(
-      list,
-      contains("('firebase_messaging', probe1.probeFirebaseMessaging),"),
-    );
-    expect(list, contains("('onboarding', probe2.probeOnboarding),"));
-    expect(
-      list,
-      contains("('shared_preferences', probe3.probeSharedPreferences),"),
-    );
-    expect(
-      list,
-      contains("('local_notifications', probe4.probeLocalNotifications),"),
-    );
-    expect(list, contains("('di_role', probe5.probeServices),"));
-    expect(list, contains("('preferences_role', probe6.probePreferences),"));
-    expect(
-      list,
-      contains("('notifications_role', probe7.probeNotifications),"),
-    );
-    expect(list, contains("('push_role', probe8.probePush),"));
-    expect(list, contains("('router_walk', probe9.probeRoutes),"));
-    expect(list, contains("('localization_role', probe10.probeLanguages),"));
+    for (final (name, probe) in [
+      ('firebase_auth', 'probe0.probeFirebaseAuth'),
+      ('firebase_messaging', 'probe1.probeFirebaseMessaging'),
+      ('revenuecat', 'probe2.probeRevenueCat'),
+      ('onboarding', 'probe3.probeOnboarding'),
+      ('shared_preferences', 'probe4.probeSharedPreferences'),
+      ('local_notifications', 'probe5.probeLocalNotifications'),
+      ('di_role', 'probe6.probeServices'),
+      ('preferences_role', 'probe7.probePreferences'),
+      ('notifications_role', 'probe8.probeNotifications'),
+      ('push_role', 'probe9.probePush'),
+      ('purchases_role', 'probe10.probePurchases'),
+      ('router_walk', 'probe11.probeRoutes'),
+      ('localization_role', 'probe12.probeLanguages'),
+    ]) {
+      expect(list, contains("('$name', $probe),"));
+    }
   });
 
   test(
@@ -2578,6 +2620,10 @@ void main() {
         _lnSettingsL10n,
         _lnSettings,
         ..._signIn,
+        _rcAll,
+        _rcAuthSettings,
+        _rcSettingsL10n,
+        _rcSettings,
         ..._everyModule,
       ],
     );
@@ -2594,8 +2640,10 @@ void main() {
     // the apps with the localization, after that of the theme, as the
     // modules that provide the two roles are in the list of the CLI; and
     // the entry of the notifications, which the template of the
-    // notifications role contributes, in the apps with the notifications,
-    // in the order of the templates of the roles of each app.
+    // notifications role contributes, in the apps with the notifications;
+    // and the entry that restores purchases, which the template of the
+    // purchases role contributes, in the apps with the purchases, in the
+    // order of the templates of the roles of each app.
     List<SettingsEntry> entriesOf(MatrixApp app) =>
         settingsScreenRole.entriesIn(settingsScreenRole.hookInput(app.hook!));
     expect(
@@ -2611,6 +2659,10 @@ void main() {
           'LanguageSetting',
         ],
         'material_theme with settings_screen': ['ThemeModeSetting'],
+        for (final app in [_rcAll, _rcSettingsL10n])
+          app: ['RestorePurchasesSetting', 'LanguageSetting'],
+        for (final app in [_rcAuthSettings, _rcSettings])
+          app: ['RestorePurchasesSetting'],
         for (final app in [_lnAll, _lnSettingsL10n])
           app: ['NotificationsSetting', 'LanguageSetting'],
         for (final app in [_lnSettingsOnboarding, _lnSettings])
@@ -2625,6 +2677,7 @@ void main() {
             'ThemeModeSetting',
             'LanguageSetting',
             'NotificationsSetting',
+            'RestorePurchasesSetting',
           ],
       },
     );
@@ -3075,6 +3128,10 @@ void main() {
         _lnSettingsL10n,
         _lnSettings,
         ..._signIn,
+        _rcAll,
+        _rcAuthSettings,
+        _rcSettingsL10n,
+        _rcSettings,
         ..._everyModule,
       ],
     );
@@ -3098,6 +3155,8 @@ void main() {
         _lnSettings,
         'sign_in (bloc)',
         'sign_in (riverpod)',
+        _rcAuthSettings,
+        _rcSettings,
       ],
     );
     for (final app in withoutRole) {
@@ -3156,6 +3215,8 @@ void main() {
           _lnAll,
           _lnSettingsL10n,
           ..._localizedSignIn,
+          _rcAll,
+          _rcSettingsL10n,
           ..._everyModule,
         ],
         reason: languages,
@@ -3294,13 +3355,17 @@ void main() {
         'settings': (0, false),
         'material_theme with settings_screen, localization': (2, false),
         'material_theme with settings_screen': (1, false),
+        // The entry that restores purchases, and the setting of the
+        // language.
+        for (final app in [_rcAll, _rcSettingsL10n]) app: (2, false),
+        for (final app in [_rcAuthSettings, _rcSettings]) app: (1, false),
         for (final app in [_lnAll, _lnSettingsL10n]) app: (2, false),
         for (final app in [_lnSettingsOnboarding, _lnSettings]) app: (1, false),
         // The entry of the account, and the setting of the language.
         for (final app in _localizedSignIn) app: (2, false),
         'sign_in (bloc)': (1, false),
         'sign_in (riverpod)': (1, false),
-        for (final app in _everyModule) app: (4, true),
+        for (final app in _everyModule) app: (5, true),
       },
     );
     for (final app in apps.where(settings.appliesTo)) {
@@ -3515,6 +3580,12 @@ void main() {
       },
       {
         for (final name in const [
+          // The apps of revenuecat with the auth role, which the purchases
+          // role uses.
+          _rcAll,
+          _rcAuthSettings,
+          _rcAuthL10n,
+          _rcAuth,
           'firebase_auth with localization, router',
           'firebase_auth with localization',
           'firebase_auth with router',
@@ -4347,11 +4418,28 @@ void main() {
       expect(test.values, isNull);
       expect(test.generatedFiles, isNull);
       expect(test.mocks, isNull);
-      // No module of the CLI provides the role yet, so the matrix of the
-      // CLI does not run it.
+      // The matrix of the CLI runs it in every app with the role, which
+      // revenuecat provides there: the apps of the module and the apps with
+      // every module.
+      final registered = named('purchases_role');
+      expect(registered.roles, test.roles);
+      expect(registered.startProbe!.path, test.startProbe!.path);
       expect(
-        appTests.tests.map((test) => p.basename(test.directory)),
-        isNot(contains('purchases_role')),
+        [
+          for (final app in apps)
+            if (registered.appliesTo(app)) app.name,
+        ],
+        [
+          _rcAll,
+          _rcAuthSettings,
+          _rcAuthL10n,
+          _rcSettingsL10n,
+          _rcAuth,
+          _rcSettings,
+          _rcL10n,
+          _rc,
+          ..._everyModule,
+        ],
       );
 
       // As the fixtures take it, only in the apps with every module.
@@ -4416,9 +4504,15 @@ void main() {
       expect(test.generatedFiles, isNull);
       expect(test.mocks, isNull);
       expect(test.startProbe, isNull);
+      // The matrix of the CLI runs it in the apps of revenuecat with the
+      // auth role and in the apps with every module, in each mode of the
+      // auth role.
       expect(
-        appTests.tests.map((test) => p.basename(test.directory)),
-        isNot(contains('purchases_session')),
+        [
+          for (final app in apps)
+            if (named('purchases_session').appliesTo(app)) app.name,
+        ],
+        [_rcAll, _rcAuthSettings, _rcAuthL10n, _rcAuth, ..._everyModule],
       );
 
       final everyModule = await purchasesSessionAppTest(
@@ -4454,9 +4548,14 @@ void main() {
       expect(test.generatedFiles, isNull);
       expect(test.mocks, isNull);
       expect(test.startProbe, isNull);
+      // The matrix of the CLI runs it in the apps of revenuecat without the
+      // auth role.
       expect(
-        appTests.tests.map((test) => p.basename(test.directory)),
-        isNot(contains('purchases_device')),
+        [
+          for (final app in apps)
+            if (named('purchases_device').appliesTo(app)) app.name,
+        ],
+        [_rcSettingsL10n, _rcSettings, _rcL10n, _rc],
       );
       // It imports no file of another test, which need not run in its apps.
       final files = Directory(test.directory)
@@ -4538,11 +4637,25 @@ void main() {
       expect(test.values, isNull);
       expect(test.mocks, isNull);
       expect(test.startProbe, isNull);
-      // No module of the CLI gives the role keys yet, so the matrix of the
-      // CLI does not run it.
+      // The matrix of the CLI runs it in the apps whose modules give the
+      // role keys: those of revenuecat, whose test gives the keys values in
+      // .env, and those with every module.
       expect(
-        appTests.tests.map((test) => p.basename(test.directory)),
-        isNot(contains('env_role')),
+        [
+          for (final app in apps)
+            if (named('env_role').appliesTo(app)) app.name,
+        ],
+        [
+          _rcAll,
+          _rcAuthSettings,
+          _rcAuthL10n,
+          _rcSettingsL10n,
+          _rcAuth,
+          _rcSettings,
+          _rcL10n,
+          _rc,
+          ..._everyModule,
+        ],
       );
 
       // As the fixtures take it, only in the apps with every module.
@@ -4697,6 +4810,91 @@ void main() {
   });
 
   test(
+      'the test of revenuecat applies to the apps with the module, whatever '
+      'else they have, gives the keys of the module values of the tests in '
+      '.env, declares the mocks of its platform side for the tests of every '
+      'module of those apps, and has a probe for the start check', () {
+    final test = named('revenuecat');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        _rcAll,
+        _rcAuthSettings,
+        _rcAuthL10n,
+        _rcSettingsL10n,
+        _rcAuth,
+        _rcSettings,
+        _rcL10n,
+        _rc,
+        ..._everyModule,
+      ],
+    );
+    // It tests what only this provider of the purchases role does, so it
+    // names no role: the tests of the role check what every provider keeps
+    // to.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    expect(test.devDependencies, isEmpty);
+    // Keys for the stores of the platforms, which only the mocks take, and
+    // none for the Test Store, which a debug build would take instead, the
+    // same in every app.
+    for (final app in apps.where(test.appliesTo)) {
+      expect(
+        test.envValues!(app),
+        {
+          'REVENUECAT_APPLE_KEY': 'appl_tests',
+          'REVENUECAT_GOOGLE_KEY': 'goog_tests',
+          'REVENUECAT_TEST_KEY': '',
+        },
+        reason: app.name,
+      );
+    }
+    expect(test.mocks!.path, 'test/revenuecat_mocks.dart');
+    expect(test.mocks!.function, 'mockRevenueCat');
+    expect(test.startProbe!.path, 'integration_test/revenuecat/probe.dart');
+    expect(test.startProbe!.function, 'probeRevenueCat');
+    // The mocks are a function of their file that takes nothing and
+    // returns RevenueCat in memory, as the configuration of the tests of an
+    // app calls it, and the probe a function of its file that takes the one
+    // that waits until the screen settles, as the start check calls it.
+    String fileOf(String path) =>
+        File(p.joinAll([test.directory, ...path.split('/')]))
+            .readAsStringSync();
+    final mocks = DartFileIndexer.parse(
+      test.mocks!.path,
+      fileOf(test.mocks!.path),
+    );
+    expect(mocks.errors, isEmpty);
+    final function = mocks.index.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'MockRevenueCat');
+    expect(function.parameters, isEmpty);
+    final probe = DartFileIndexer.parse(
+      test.startProbe!.path,
+      fileOf(test.startProbe!.path),
+    );
+    expect(probe.errors, isEmpty);
+    final probing = probe.index.declarations.singleWhere(
+      (declaration) => declaration.name == test.startProbe!.function,
+    );
+    expect(probing.kind, DeclarationKind.function);
+    expect(probing.type, 'Future<List<String>>');
+    expect(
+      [
+        for (final parameter in probing.parameters)
+          '${parameter.kind.name} ${parameter.type}',
+      ],
+      ['requiredPositional Future<void> Function()'],
+    );
+  });
+
+  test(
       'the test of firebase_messaging applies to the apps with the module, '
       'whatever else they have, declares the mocks of its platform side for '
       'the tests of every module of those apps, and has a probe for the '
@@ -4778,10 +4976,15 @@ void main() {
         'firebase_auth with router',
         'firebase_auth',
         // The apps of Google sign-in, of Sign in with Apple and of the
-        // sign-in get the provider of the auth role.
+        // sign-in get the provider of the auth role, and so do the apps of
+        // revenuecat with the auth role, which the purchases role uses.
         ..._googleSignIn,
         ..._appleSignIn,
         ..._signIn,
+        _rcAll,
+        _rcAuthSettings,
+        _rcAuthL10n,
+        _rcAuth,
         ..._authModes,
         ..._everyModule,
       ],

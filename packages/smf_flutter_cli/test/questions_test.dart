@@ -220,6 +220,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -241,6 +242,7 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
@@ -321,6 +323,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -342,6 +345,7 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
@@ -398,6 +402,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -491,6 +496,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -546,6 +552,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -567,6 +574,7 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
@@ -613,6 +621,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -635,6 +644,7 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
@@ -673,6 +683,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -809,6 +820,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -879,6 +891,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -949,6 +962,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1041,6 +1055,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1131,6 +1146,7 @@ void main() {
       'Notifications': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1247,6 +1263,7 @@ void main() {
         'Notifications': ['None'],
         'Push messages': ['None'],
         'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1324,6 +1341,7 @@ void main() {
         'Notifications': ['None'],
         'Push messages': ['None'],
         'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1439,6 +1457,7 @@ void main() {
         'Notifications': ['None'],
         'Push messages': ['None'],
         'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1565,6 +1584,7 @@ void main() {
         'Events': ['None'],
         'Push messages': ['firebase_messaging'],
         'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
@@ -1657,6 +1677,7 @@ void main() {
       'Theme': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Notifications': ['local_notifications'],
       'Dependency injection': ['None'],
       'State management': ['None'],
@@ -1753,6 +1774,7 @@ void main() {
         'Notifications': ['None'],
         'Push messages': ['None'],
         'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1811,6 +1833,7 @@ void main() {
         'Notifications': ['None'],
         'Push messages': ['None'],
         'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1998,6 +2021,7 @@ void main() {
         'Notifications': ['None'],
         'Push messages': ['None'],
         'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2118,6 +2142,7 @@ void main() {
         'Notifications': ['None'],
         'Push messages': ['None'],
         'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2235,7 +2260,7 @@ void main() {
       'get_it',
       'bloc',
       'event_bus',
-      'dart_define',
+      'revenuecat',
       'firebase_crashlytics',
       'firebase_analytics',
     ];
@@ -2248,7 +2273,7 @@ void main() {
         'Localization': ['gen_l10n'],
         'Theme': ['material_theme'],
         'Push messages': ['firebase_messaging'],
-        'Values in .env': ['dart_define'],
+        'Purchases': ['revenuecat'],
         'Dependency injection': ['get_it'],
         'State management': ['bloc'],
         'Events': ['event_bus'],
@@ -2269,9 +2294,10 @@ void main() {
     // notifications role adds to; what is under the hood, the preferences
     // that the localization, the theme, the onboarding and the
     // notifications require, the DI container, the state manager, the
-    // events and the values of .env; and last the services of crash
-    // reporting, analytics and authentication. The choices of the roles
-    // come once the modules are known.
+    // events, and the purchases, whose provider needs the values of .env;
+    // and last the services of crash reporting, analytics and
+    // authentication. The choices of the roles come once the modules are
+    // known.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
       'Infrastructure: which do you want?',
@@ -2286,14 +2312,15 @@ void main() {
         'Which module provides it?',
       ),
       'Events: which module provides it?',
-      'Values in .env: which module provides it?',
+      'Purchases: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Who may use the app without an account?',
     ]);
     // The answers before the questions of the settings screen, the router,
-    // the notifications, the preferences and the authentication need those
-    // roles, so the run asks none of them and adds their only providers.
+    // the notifications, the preferences, the values of .env and the
+    // authentication need those roles, so the run asks none of them and
+    // adds their only providers.
     final added = [
       for (final line in run.lines)
         if (line.startsWith('Adding ')) line,
@@ -2322,6 +2349,10 @@ void main() {
       equals(
         'Adding local_notifications: the only provider of the notifications '
         'role, which firebase_messaging requires.',
+      ),
+      equals(
+        'Adding dart_define: the only provider of the values in .env role, '
+        'which revenuecat requires.',
       ),
     ]);
     // So the app has every module of smf create but the other state

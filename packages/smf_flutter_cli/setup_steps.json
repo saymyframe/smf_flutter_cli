@@ -12,6 +12,26 @@
       ]
     },
     {
+      "id": "purchases.store_agreements",
+      "title": "Set up payments in App Store Connect and Google Play Console",
+      "owner": "purchases",
+      "ownerKind": "role",
+      "ownerName": "Purchases",
+      "neededBy": [
+        "revenuecat"
+      ]
+    },
+    {
+      "id": "purchases.store_products",
+      "title": "Create the products of your plans in App Store Connect and Google Play Console",
+      "owner": "purchases",
+      "ownerKind": "role",
+      "ownerName": "Purchases",
+      "neededBy": [
+        "revenuecat"
+      ]
+    },
+    {
       "id": "firebase_analytics.google_analytics",
       "title": "Turn on Google Analytics in the Firebase project, unless it is on already",
       "owner": "firebase_analytics",
@@ -59,6 +79,46 @@
       "ownerName": "firebase_messaging",
       "neededBy": [
         "firebase_messaging"
+      ]
+    },
+    {
+      "id": "revenuecat.entitlement_and_offering",
+      "title": "Set up the entitlement premium and a current offering in RevenueCat",
+      "owner": "revenuecat",
+      "ownerKind": "module",
+      "ownerName": "revenuecat",
+      "neededBy": [
+        "revenuecat"
+      ]
+    },
+    {
+      "id": "revenuecat.api_keys",
+      "title": "Copy the API keys of your RevenueCat apps into .env",
+      "owner": "revenuecat",
+      "ownerKind": "module",
+      "ownerName": "revenuecat",
+      "neededBy": [
+        "revenuecat"
+      ]
+    },
+    {
+      "id": "revenuecat.app_store_key",
+      "title": "Give RevenueCat your In-App Purchase key from App Store Connect",
+      "owner": "revenuecat",
+      "ownerKind": "module",
+      "ownerName": "revenuecat",
+      "neededBy": [
+        "revenuecat"
+      ]
+    },
+    {
+      "id": "revenuecat.play_service_account",
+      "title": "Give RevenueCat access to Google Play with a service account",
+      "owner": "revenuecat",
+      "ownerKind": "module",
+      "ownerName": "revenuecat",
+      "neededBy": [
+        "revenuecat"
       ]
     }
   ],

@@ -5,6 +5,15 @@
 # put a secret here. An empty value counts as missing.
 #
 # Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The public API key of the App Store app in RevenueCat, which starts with appl_
+REVENUECAT_APPLE_KEY=
+
+# The public API key of the Play Store app in RevenueCat, which starts with goog_
+REVENUECAT_GOOGLE_KEY=
+
+# The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
+REVENUECAT_TEST_KEY=
 === .env.example (role:env) ===
 # This file lists the keys of the values that the app reads, each under a
 # comment that says what goes there. After a clone, copy it to .env and fill
@@ -13,6 +22,15 @@
 # counts as missing.
 #
 # Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The public API key of the App Store app in RevenueCat, which starts with appl_
+REVENUECAT_APPLE_KEY=
+
+# The public API key of the Play Store app in RevenueCat, which starts with goog_
+REVENUECAT_GOOGLE_KEY=
+
+# The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
+REVENUECAT_TEST_KEY=
 === .gitignore (flutter_core) ===
 # Miscellaneous
 *.class
@@ -277,6 +295,28 @@ With `shared_preferences`:
 - In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
 - `pubspec.yaml` keeps `shared_preferences_android` below 2.5.0. With 2.5.0, a release build fails to open the preferences on Android, because R8 renames Kotlin classes that the package looks up by name. Before you raise the constraint, check that a release build of the app starts on Android.
 
+## Purchases
+
+- `appPurchases` in `lib/core/purchases/app_purchases.dart` tells whether the user has premium access, and knows it before the first frame. Its `value` is `NoAccess` or `PremiumAccess`, and `appPurchases.hasPremium` is the `ValueListenable<bool>` that widgets and guards of the routes read. Every plan gives the same premium access. The app has one controller, so create no other `AppPurchasesController`.
+- `appPurchases.plans()` gives the plans to sell, each a `Plan` with its `price`, its `period` (`null` for a plan paid once) and its `introOffer`. `appPurchases.purchase(plan)` returns `false` when the user cancels, which is no failure, and `appPurchases.restore()` gives the user what the store account bought. A call fails only with a `PurchasesFailure`: show a text of the app for its `reason`, and its `developerHint` in debug mode only. After `pending`, the access arrives later without another call.
+- A screen that sells shows the full price of each period most clearly, the length of a free trial and the price after it, that the plan renews until the user cancels, a way to restore purchases, links to the terms of use and the privacy policy, and a visible way to close it, as the App Store and Google Play ask.
+- `PremiumAccess.manageUrl` is the page of the store where the user manages or cancels the plan. A screen only for users with premium access stands behind a guard of the routes that reads `appPurchases.hasPremium`. A screen does not redirect itself.
+- While the provider lacks what it needs, such as a key, `value` stays `NoAccess` and every call fails with the reason `notConfigured`, whose `developerHint` names what is missing.
+- A new provider implements `PurchasesService` of `lib/core/purchases/purchases_service.dart`, and only the files of that implementation import it. The code of the app imports `lib/core/purchases/app_purchases.dart`, which exports the types of the answers, and calls neither `initPurchases()` nor `createPurchasesService()` nor `appPurchases.start()`.
+
+- The purchases belong to the user of `appSession`, by `appSession.value.uid`, and to the user of this device while nobody is signed in. A user who buys before signing up keeps the purchase in the new account, which takes it over from the user of this device. A user who signs in to an account that exists already leaves the purchases with the user of this device, and after a sign-out the user of this device is a new one, with nothing bought. A purchase then comes back only through a restore, which may also move purchases from another user, as the backend of the provider decides. The app does not restore on its own: call `appPurchases.restore()` where the user asks for it.
+
+- `RestorePurchasesSetting` in `lib/core/purchases/restore_purchases_setting.dart`, an entry of the settings screen, restores purchases on a tap and shows what it found.
+
+With `purchases_flutter`:
+
+- `RevenueCatPurchasesService` in `lib/core/purchases/revenuecat_purchases_service.dart` implements `PurchasesService` on `Purchases`. In `lib/`, only that file imports the package: other code buys and restores through `appPurchases`.
+- The premium access is the entitlement `premium` in RevenueCat, which every package of the current offering unlocks. The id of a `Plan` is the identifier of its package.
+- `revenueCatKey()` chooses the key from `.env`: `REVENUECAT_TEST_KEY` only when `kDebugMode` is true and it is filled in, and otherwise `REVENUECAT_APPLE_KEY` on iOS and `REVENUECAT_GOOGLE_KEY` on Android. Keep that rule: RevenueCat stops a profile or release build that is configured with a key of the Test Store. A secret key (`sk_`) never goes into the app.
+- Never call `Purchases` before `Purchases.configure()` has completed, or without a key: iOS stops the app. Every call of the service waits for its configuration, and without a key it fails with `notConfigured` and calls nothing.
+- RevenueCat answers from a cache of the customer info. A grant made on the dashboard or with the API of RevenueCat shows after `Purchases.invalidateCustomerInfoCache()` and the next read of the customer info.
+- The package has no platform side for tests. A test that runs `bootstrap()` answers the method channel `purchases_flutter` itself, with `setMockMethodCallHandler` of `TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger`. The listeners and the last customer info of `Purchases` are static, so they last for a whole test file.
+
 ## Push messages
 
 - `appPush` in `lib/core/push/app_push.dart` receives the push messages of the app. A message is a `PushMessage` with `data`, and with an `id`, a `title` and a `body` when it has them.
@@ -403,14 +443,20 @@ Generated with [Say My Frame](https://doc.saymyframe.com).
 
 ## Finish the setup
 
-Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key) shows each one click by click:
+Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,purchases.store_agreements,purchases.store_products,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key,revenuecat.entitlement_and_offering,revenuecat.api_keys,revenuecat.app_store_key,revenuecat.play_service_account) shows each one click by click:
 
 1. In Xcode, sign the iOS app with your paid Apple Developer team
-2. Turn on Google Analytics in the Firebase project, unless it is on already
-3. Turn on Sign in with Apple in Firebase Authentication
-4. Give Firebase your Sign in with Apple key, so that deleting an account works
-5. Before releasing on Google Play, give Firebase the SHA of your release keys
-6. Give Firebase your Apple push key (APNs key)
+2. Set up payments in App Store Connect and Google Play Console
+3. Create the products of your plans in App Store Connect and Google Play Console
+4. Turn on Google Analytics in the Firebase project, unless it is on already
+5. Turn on Sign in with Apple in Firebase Authentication
+6. Give Firebase your Sign in with Apple key, so that deleting an account works
+7. Before releasing on Google Play, give Firebase the SHA of your release keys
+8. Give Firebase your Apple push key (APNs key)
+9. Set up the entitlement premium and a current offering in RevenueCat
+10. Copy the API keys of your RevenueCat apps into .env
+11. Give RevenueCat your In-App Purchase key from App Store Connect
+12. Give RevenueCat access to Google Play with a service account
 
 ## Run, test and build with .env
 
@@ -593,9 +639,31 @@ The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_si
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
-No module of the app reads a value yet.
+The keys of the app:
+
+- `REVENUECAT_APPLE_KEY`, read as `AppEnv.revenuecatAppleKey`, from the module `revenuecat`: The public API key of the App Store app in RevenueCat, which starts with appl_
+- `REVENUECAT_GOOGLE_KEY`, read as `AppEnv.revenuecatGoogleKey`, from the module `revenuecat`: The public API key of the Play Store app in RevenueCat, which starts with goog_
+- `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+## RevenueCat
+
+The app sells its premium access with [RevenueCat](https://www.revenuecat.com) and [purchases_flutter](https://pub.dev/packages/purchases_flutter): `lib/core/purchases/revenuecat_purchases_service.dart` implements the purchases service of the app on it (see the section Purchases). The premium access is the entitlement `premium` in RevenueCat, and the plans of the app are the packages of the current offering. Every package of that offering unlocks the same access, so attach each of its products to `premium`.
+
+To buy a plan right after generating the app, with no account in a store:
+
+1. Create a project in RevenueCat. A new project has a Test Store with products.
+2. Create an entitlement with the identifier `premium` and attach the products to it.
+3. Add the packages of those products to an offering, and make that offering the current one.
+4. Copy the public API key of the Test Store, which starts with `test_`, into `REVENUECAT_TEST_KEY` in `.env`.
+5. Run a debug build as the section Values in .env says, and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
+
+For a release, add the App Store app and the Play Store app to the project in RevenueCat. Give RevenueCat the In-App Purchase key of App Store Connect and a service account of Google Play, so that it checks the purchases in the stores. Create the products in the stores, attach them to `premium` and add their packages to the offering. Then copy the public API keys of the two apps into `REVENUECAT_APPLE_KEY` (`appl_`) and `REVENUECAT_GOOGLE_KEY` (`goog_`). The section Finish the setup lists these steps.
+
+A debug build takes `REVENUECAT_TEST_KEY` when it is filled in, and the key of the store of the platform otherwise. A profile or release build never takes it: RevenueCat stops such a build that is configured with a key of the Test Store, on purpose. So to try the sandbox of a store in a debug build, leave `REVENUECAT_TEST_KEY` empty.
+
+These keys are the public API keys of RevenueCat, which go into the app, where anyone can read them. A secret API key of RevenueCat, which starts with `sk_`, never goes into `.env`, and the app refuses one. While the key that a build takes has no value, the app runs without purchases: it never calls RevenueCat, every call of `appPurchases` fails with the reason `notConfigured`, and a debug build prints which key to fill in.
 
 ## Languages
 
@@ -633,6 +701,27 @@ To send this device a test message, run the app in debug mode and copy the addre
 On iOS, firebase_messaging answers the system for every notification that arrives while the app is in the foreground, the notifications that the app shows itself too. So the service sets its presentation options to an alert, a badge and a sound when the app starts (`setForegroundNotificationPresentationOptions()`): without them, iOS would show none of these notifications in the foreground.
 
 The app runs no code for a message that arrives in the background. To handle one, register a top-level function with `FirebaseMessaging.onBackgroundMessage()` in `main()`. It runs in an isolate of its own, without what `bootstrap()` sets up.
+
+## Purchases
+
+The app sells premium access through `appPurchases` in `lib/core/purchases/app_purchases.dart`. Every plan of the current offer gives the same access, whether it renews or the user pays once.
+
+`appPurchases.value` is `NoAccess` or `PremiumAccess`, and `appPurchases.hasPremium` tells which. The app knows it before the first frame, from what the device keeps. `PremiumAccess` tells when the access ends (`expiresAt`, `null` for an access that never ends), whether the plan `renews`, whether the access is a free trial (`inTrial`), and `manageUrl`, the page of the store where the user manages or cancels the plan. `appPurchases.plans()` gives the plans to sell, `appPurchases.purchase(plan)` buys one and returns `false` when the user cancels, and `appPurchases.restore()` gives the user what the store account bought. A call fails only with a `PurchasesFailure`: show a text of the app for its `reason`, and its `developerHint` in debug mode only.
+
+A screen that sells a plan shows what the App Store and Google Play ask of it:
+- the name of the plan, how long a period lasts and what the user gets;
+- the full price that the store charges for each period, shown more clearly than any other price on the screen, and for a yearly plan never mainly as a price per month;
+- for a free trial or a lower price at first, how long it lasts and the price after it;
+- that the plan renews until the user cancels, and how to cancel it in the store;
+- a way to restore purchases;
+- links to the terms of use and the privacy policy of the app;
+- a visible way to close the screen without buying.
+
+A screen that only users with premium access may see stands behind a guard of the routes that reads `appPurchases.hasPremium`. Without such a guard, every user gets to it.
+
+The purchases belong to the user of `appSession`, by the id of the user: the user of an account, or an anonymous user. While nobody is signed in, they belong to the user of this device. A user who buys before signing up keeps the purchase in the new account, which takes it over from the user of this device, and an anonymous user keeps it when the account takes the id of that user. A user who signs in to an account that exists already leaves the purchases with the user of this device. After a sign-out, the user of this device is a new one, with nothing bought. In both cases a purchase comes back only through a restore, which may also move purchases from another user, as the backend of the provider decides. Without a restore, the next user of the device never gets the purchases of a user who signed out. The entry `RestorePurchasesSetting` of the settings screen, in `lib/core/purchases/restore_purchases_setting.dart`, restores purchases.
+
+Until the provider of purchases has what it needs, such as its keys, the app runs without purchases: `appPurchases.value` stays `NoAccess`, every call fails with the reason `notConfigured`, whose `developerHint` names what is missing, and in debug mode the app prints that hint once.
 
 ## Push messages
 
@@ -1076,6 +1165,7 @@ import 'package:my_app/core/crash_reporting/crash_reporter.dart';
 import 'package:my_app/core/di/dependencies.dart';
 import 'package:my_app/core/notifications/app_notifications.dart';
 import 'package:my_app/core/preferences/app_preferences.dart';
+import 'package:my_app/core/purchases/app_purchases.dart';
 import 'package:my_app/core/push/app_push.dart';
 import 'package:my_app/firebase_options.dart';
 
@@ -1088,6 +1178,7 @@ Future<void> bootstrap() async {
   installCrashReporting();
   await initPreferences();
   await initNotifications();
+  await initPurchases();
   await initPush();
   await registerDependencies();
 }
@@ -3346,7 +3437,28 @@ abstract interface class ServiceLocator {
 /// each value into the app, where `String.fromEnvironment` reads it as a
 /// constant. Without that argument every value is empty, and so every
 /// getter is `null`.
-abstract final class AppEnv {}
+abstract final class AppEnv {
+  /// The public API key of the App Store app in RevenueCat, which starts with
+  /// appl_.
+  static String? get revenuecatAppleKey {
+    const value = String.fromEnvironment('REVENUECAT_APPLE_KEY');
+    return value.isEmpty ? null : value;
+  }
+
+  /// The public API key of the Play Store app in RevenueCat, which starts with
+  /// goog_.
+  static String? get revenuecatGoogleKey {
+    const value = String.fromEnvironment('REVENUECAT_GOOGLE_KEY');
+    return value.isEmpty ? null : value;
+  }
+
+  /// The public API key of the Test Store in RevenueCat, which starts with
+  /// test_, for debug builds only.
+  static String? get revenuecatTestKey {
+    const value = String.fromEnvironment('REVENUECAT_TEST_KEY');
+    return value.isEmpty ? null : value;
+  }
+}
 === lib/core/events/communication_service.dart (role:events) ===
 import 'package:my_app/core/events/event_bus_communication_service.dart'
     as impl0;
@@ -5159,6 +5271,1454 @@ final class SharedAppPreferences implements AppPreferences {
         ? List<String>.from(items)
         : null;
   }
+}
+=== lib/core/purchases/app_purchases.dart (role:purchases) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/auth/app_session.dart';
+import 'package:my_app/core/purchases/revenuecat_purchases_service.dart'
+    as impl0;
+
+import 'purchases_service.dart';
+
+export 'purchases_service.dart' hide PurchasesService;
+
+/// The purchases of the app: whether the user has premium access, known
+/// before the first frame, the plans that the app sells, and the way to buy
+/// and to restore them.
+///
+/// Its `value` is the [AppAccess] of the user, and it tells its listeners
+/// when that changes. A widget follows it with a `ValueListenableBuilder`.
+final appPurchases = AppPurchasesController();
+
+/// Keeps the access of the user up to date with the service of the provider
+/// of purchases, and buys and restores through that service. The app has
+/// one, [appPurchases].
+///
+/// Every call here fails only with a [PurchasesFailure], whose reason the
+/// app shows in a text of its own. An error of another kind becomes a
+/// failure with the reason [PurchasesFailureReason.unknown] and the error as
+/// its [PurchasesFailure.developerHint].
+///
+/// The calls run one after another, in the order they were made, and so
+/// does what the controller does itself when the user of the app changes or
+/// comes back to the app. Before each, the controller identifies the user
+/// with the service, unless the service has that user already. So a
+/// purchase belongs to the user who made it: a change of the user waits for
+/// it.
+///
+/// An error that no caller sees, of the start, of a change of the user, of
+/// the return of the user to the app or of the changes that the service
+/// tells of, changes nothing. A failure [PurchasesFailureReason.notConfigured]
+/// prints its hint once in debug mode. [PurchasesFailureReason.network],
+/// [PurchasesFailureReason.unavailable] and
+/// [PurchasesFailureReason.storeProblem], which pass, say nothing. Any other
+/// error reaches the handlers of the uncaught errors of the app. So the app
+/// starts and runs without purchases when the provider is not set up or the
+/// store does not answer.
+final class AppPurchasesController extends ChangeNotifier
+    implements ValueListenable<AppAccess> {
+  /// Creates a controller. The app creates [appPurchases] and no other. A
+  /// test creates one to start it with a service of its own, or with a
+  /// shorter [startWait], and disposes of it.
+  AppPurchasesController({this.startWait = const Duration(seconds: 3)});
+
+  /// How long [start] waits at most for the access of the user and for the
+  /// calls made before it.
+  final Duration startWait;
+
+  PurchasesService? _service;
+  StreamSubscription<AppAccess>? _accessChanges;
+  String? Function()? _userId;
+  Listenable? _userChanges;
+  AppAccess _access = const NoAccess();
+  bool _disposed = false;
+
+  /// The service and the user that the service was last identified with,
+  /// or `null` while no identification with the service succeeded.
+  _Identity? _identified;
+
+  /// Whether [start] was called.
+  bool _starting = false;
+
+  /// Whether the controller has started for the first time.
+  bool _started = false;
+
+  /// Completes at the first start. Only the first call made before it waits
+  /// for it, and each later call waits for the call before it. That call
+  /// creates it, so the start completes it in the zone of the call: created
+  /// with the controller, it would complete in a microtask of the zone that
+  /// read [appPurchases] first, which may run none any more, as the fake
+  /// time of a widget test that is over before a later test starts the app
+  /// in real time.
+  Completer<void>? _untilStarted;
+
+  /// The call that was made last, while a call is on its way: the next one
+  /// waits for it. It is `null` when none is, and a call then awaits
+  /// nothing. A future that completed in another zone would hold the call
+  /// back in a widget test, where the app starts in real time and the test
+  /// goes on in fake time.
+  Future<void>? _lastCall;
+
+  /// Whether a look at the user and at the access waits for its turn, so
+  /// that the changes and returns that come meanwhile need no other.
+  bool _lookWaits = false;
+
+  /// Tells when the user comes back to the app.
+  _ResumeObserver? _observer;
+
+  /// The hints of the failures [PurchasesFailureReason.notConfigured] that
+  /// the controller printed.
+  final Set<String?> _printed = {};
+
+  /// The access of the user.
+  @override
+  AppAccess get value => _access;
+
+  /// Whether the user has premium access, as a guard of the routes reads it.
+  ///
+  /// It is computed from [value] each time it is read, and its listeners
+  /// are those of the controller. A listener is also called for a change of
+  /// [value] that leaves this value as it was, such as a plan that renews.
+  late final ValueListenable<bool> hasPremium = _PremiumFlag(this);
+
+  /// Starts with [service]: identifies the user with it, takes the access of
+  /// the user, and follows the changes of the access that the service tells
+  /// of.
+  ///
+  /// [userId] returns the id of the user of the app, or `null` for the user
+  /// of this device, and [userChanges] tells when it may have changed, such
+  /// as the session of an app with sign-in. Without them, the purchases are
+  /// those of the user of this device. When the user changes, [value] is
+  /// [NoAccess] until the service has the new user, and the controller takes
+  /// no change of the access that the service tells of meanwhile.
+  ///
+  /// `initPurchases()` calls it in `bootstrap()`, so [value] is known before
+  /// the first frame. It waits for the access at most [startWait]: an access
+  /// that comes later still becomes [value], and the app starts without
+  /// waiting for it.
+  ///
+  /// A call made before the first start waits for it: [plans], [purchase]
+  /// and [restore]. Such calls run in their order once the start has the
+  /// access, and the future of this start completes after them, and after
+  /// the calls that their completions make right away: it completes once no
+  /// call is on its way in the microtask after the last one ended. The mocks
+  /// of the tests of an app use this: `plans().then(...)` that buys a plan,
+  /// made before `bootstrap()`, gives the app premium access before its first
+  /// frame. A test makes such a call outside the body of a test, as in a
+  /// `setUpAll`: made in the body of a widget test, it waits in the fake time
+  /// of that body, and a start that runs in real time completes after
+  /// [startWait] without it.
+  ///
+  /// It may be called again, with the service that the controller has from
+  /// then on: `initPurchases()` does so in a test of the next launch of the
+  /// app, and a test gives it a service of its own. Such a start takes its
+  /// turn after the calls that are on their way, and [value] is then that of
+  /// the new service.
+  Future<void> start(
+    PurchasesService service, {
+    String? Function()? userId,
+    Listenable? userChanges,
+  }) =>
+      _start(service, userId, userChanges).timeout(startWait, onTimeout: () {});
+
+  /// The plans of the current offer of the app, at least one, in the order
+  /// of the provider. Show them only to a user without premium access.
+  Future<List<Plan>> plans() => _call((service, _) => service.plans());
+
+  /// Buys [plan] through the sheet of the store, and completes with `true`
+  /// once the user has bought it, or with `false` when the user cancelled,
+  /// which is no failure. The access that the purchase gave becomes [value],
+  /// unless the user of the app changed meanwhile.
+  ///
+  /// A payment that waits for an approval fails with
+  /// [PurchasesFailureReason.pending]: the access comes once the store took
+  /// the payment. A purchase whose answer gives no premium access, as with a
+  /// plan that the backend of the provider does not tie to the access, fails
+  /// with [PurchasesFailureReason.notConfigured]: the user paid, and a
+  /// restore gives the access once the provider is set up.
+  Future<bool> purchase(Plan plan) => _call((service, identity) async {
+    final access = await service.purchase(plan);
+    if (access == null) return false;
+    if (access is! PremiumAccess) {
+      throw const PurchasesFailure(
+        PurchasesFailureReason.notConfigured,
+        developerHint:
+            'The plan was bought, but it gives no premium '
+            'access: check the setup of the provider.',
+      );
+    }
+    _take(identity, access);
+    return true;
+  });
+
+  /// Gives the user what the store account of the user bought, such as on a
+  /// new device, and completes with the access of the user then. That access
+  /// becomes [value], unless the user of the app changed meanwhile.
+  Future<AppAccess> restore() => _call((service, identity) async {
+    final access = await service.restore();
+    _take(identity, access);
+    return access;
+  });
+
+  /// Stops following the service, the user and the lifecycle of the app. A
+  /// call that is on its way still ends as it would have, but tells no
+  /// listener. A start or a look at the access that waits for its turn does
+  /// nothing then.
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_accessChanges?.cancel());
+    _userChanges?.removeListener(_onUserChange);
+    if (_observer case final observer?) {
+      WidgetsBinding.instance.removeObserver(observer);
+    }
+    super.dispose();
+  }
+
+  Future<void> _start(
+    PurchasesService service,
+    String? Function()? userId,
+    Listenable? userChanges,
+  ) async {
+    if (_starting) {
+      await _turn(() => _use(service, userId, userChanges));
+    } else {
+      _starting = true;
+      await _use(service, userId, userChanges);
+      _started = true;
+      _untilStarted?.complete();
+    }
+    await _settled();
+  }
+
+  /// Takes [service] as the service of the controller, with the user of
+  /// [userId], and looks at the user and at the access, unless the
+  /// controller was disposed of while the start waited for its turn.
+  Future<void> _use(
+    PurchasesService service,
+    String? Function()? userId,
+    Listenable? userChanges,
+  ) async {
+    if (_disposed) return;
+    unawaited(_accessChanges?.cancel());
+    _userChanges?.removeListener(_onUserChange);
+    _service = service;
+    _userId = userId;
+    _userChanges = userChanges?..addListener(_onUserChange);
+    _identified = null;
+    _set(const NoAccess());
+    _accessChanges = service.accessChanges.listen(
+      (access) => _onAccessChange(service, access),
+      onError: _report,
+    );
+    if (_observer == null) {
+      final observer = _observer = _ResumeObserver(_lookLater);
+      WidgetsBinding.instance.addObserver(observer);
+    }
+    await _quietly(_look);
+  }
+
+  /// Completes once no call is on its way, and none was made in the
+  /// microtask after the last one ended.
+  Future<void> _settled() async {
+    while (true) {
+      final last = _lastCall;
+      if (last != null) {
+        await last;
+        continue;
+      }
+      await Future<void>.microtask(() {});
+      if (_lastCall == null) return;
+    }
+  }
+
+  /// Runs [call] with the service and the user of the app, once the calls
+  /// made before it are over, and turns whatever it throws that is no
+  /// [PurchasesFailure] into one.
+  Future<T> _call<T>(
+    Future<T> Function(PurchasesService service, _Identity identity) call,
+  ) => _turn(() async {
+    try {
+      final service = _service!;
+      final before = _identified;
+      final identity = await _identify(service);
+      // A call that identified the user again, as after an
+      // identification that failed, is followed by a look at the access
+      // of the user.
+      if (identity != before) _lookLater();
+      return await call(service, identity);
+    } on PurchasesFailure {
+      rethrow;
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PurchasesFailure(
+          PurchasesFailureReason.unknown,
+          developerHint: '$error',
+        ),
+        stackTrace,
+      );
+    }
+  });
+
+  /// Runs [job] once the calls made before it are over, and not before the
+  /// controller has started for the first time.
+  Future<T> _turn<T>(Future<T> Function() job) async {
+    final earlier =
+        _lastCall ??
+        (_started ? null : (_untilStarted ??= Completer<void>()).future);
+    final done = Completer<void>();
+    final own = _lastCall = done.future;
+    if (earlier != null) await earlier;
+    try {
+      return await job();
+    } finally {
+      if (identical(_lastCall, own)) _lastCall = null;
+      done.complete();
+    }
+  }
+
+  /// Identifies the user of the app with [service], unless [service] has
+  /// that user already, and returns the identity.
+  Future<_Identity> _identify(PurchasesService service) async {
+    final user = _userId?.call();
+    final identified = _identified;
+    if (identified != null &&
+        identical(identified.service, service) &&
+        identified.user == user) {
+      return identified;
+    }
+    // Until the identification succeeds, the service has no user that the
+    // controller knows of, and the user has no access.
+    _identified = null;
+    _set(const NoAccess());
+    await service.identify(user);
+    final identity = (service: service, user: user);
+    if (identical(service, _service)) _identified = identity;
+    return identity;
+  }
+
+  /// Identifies the user, and takes the access of that user, unless the
+  /// controller was disposed of while the look waited for its turn.
+  Future<void> _look() async {
+    if (_disposed) return;
+    final service = _service!;
+    final identity = await _identify(service);
+    _take(identity, await service.access());
+  }
+
+  /// Looks at the user and at the access in its turn, unless a look waits
+  /// for its turn already.
+  void _lookLater() {
+    if (_lookWaits || _disposed) return;
+    _lookWaits = true;
+    unawaited(
+      _turn(() {
+        _lookWaits = false;
+        return _quietly(_look);
+      }),
+    );
+  }
+
+  /// The user of the app may have changed. If it has, [value] is [NoAccess]
+  /// until the service has the new user.
+  void _onUserChange() {
+    final identified = _identified;
+    if (identified != null && identified.user == _userId?.call()) return;
+    _set(const NoAccess());
+    _lookLater();
+  }
+
+  /// Takes [access], which [service] told of, while [service] has the user
+  /// of the app.
+  void _onAccessChange(PurchasesService service, AppAccess access) {
+    final identified = _identified;
+    if (identified != null && identical(identified.service, service)) {
+      _take(identified, access);
+    }
+  }
+
+  /// Takes [access], the answer of the service of [identity], as [value],
+  /// while the controller has that service and the service has the user of
+  /// [identity], who is still the user of the app. The answer for a user
+  /// who is no longer the user of the app changes nothing.
+  void _take(_Identity identity, AppAccess access) {
+    final identified = _identified;
+    if (identified != null &&
+        identical(identified.service, identity.service) &&
+        identical(identity.service, _service) &&
+        identified.user == identity.user &&
+        identity.user == _userId?.call()) {
+      _set(access);
+    }
+  }
+
+  /// Takes [access] as [value], and tells the listeners when that changes
+  /// it, unless the controller was disposed of.
+  void _set(AppAccess access) {
+    if (_disposed || access == _access) return;
+    _access = access;
+    notifyListeners();
+  }
+
+  /// Runs [job], whose errors no caller sees, and reports what it throws.
+  Future<void> _quietly(Future<void> Function() job) async {
+    try {
+      await job();
+    } on Object catch (error, stackTrace) {
+      _report(error, stackTrace);
+    }
+  }
+
+  /// Reports [error], which no caller sees.
+  void _report(Object error, StackTrace stackTrace) {
+    switch (error) {
+      case PurchasesFailure(
+        reason: PurchasesFailureReason.notConfigured,
+        :final developerHint,
+      ):
+        if (kDebugMode && _printed.add(developerHint)) {
+          debugPrint(
+            'Purchases are not set up, so the app runs without them: '
+            '$developerHint',
+          );
+        }
+      case PurchasesFailure(
+        reason: PurchasesFailureReason.network ||
+            PurchasesFailureReason.unavailable ||
+            PurchasesFailureReason.storeProblem,
+      ):
+        break;
+      default:
+        Zone.current.handleUncaughtError(error, stackTrace);
+    }
+  }
+}
+
+/// A service and the user that it was identified with.
+typedef _Identity = ({PurchasesService service, String? user});
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// Whether the user of a controller has premium access: its value is
+/// computed from the access each time it is read, and its listeners are
+/// those of the controller.
+final class _PremiumFlag implements ValueListenable<bool> {
+  const _PremiumFlag(this._controller);
+
+  final AppPurchasesController _controller;
+
+  @override
+  bool get value => _controller.value is PremiumAccess;
+
+  @override
+  void addListener(VoidCallback listener) => _controller.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _controller.removeListener(listener);
+}
+
+/// Returns the service of the provider of purchases, which [initPurchases]
+/// created: `bootstrap()` awaits it before the first frame, and there is
+/// none to return before that.
+///
+/// The code of the app does not call it: it uses [appPurchases].
+PurchasesService createPurchasesService() => _purchasesService;
+
+late PurchasesService _purchasesService;
+
+/// Creates the service of the provider of purchases and starts
+/// [appPurchases] with it; `bootstrap()` awaits it before the first frame,
+/// and nothing else in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with what the store and the provider
+/// kept, and starts [appPurchases] with it.
+Future<void> initPurchases() async {
+  _purchasesService = impl0.createRevenueCatPurchasesService();
+  await appPurchases.start(
+    _purchasesService,
+    userId: () => appSession.value.uid,
+    userChanges: appSession,
+  );
+}
+=== lib/core/purchases/purchases_service.dart (role:purchases) ===
+/// What the user may use of the app: [NoAccess], or [PremiumAccess] while a
+/// plan that the user bought is active.
+sealed class AppAccess {
+  const AppAccess();
+}
+
+/// The user has no plan that is active, or the app does not know of one.
+final class NoAccess extends AppAccess {
+  /// Creates the access of a user without premium access.
+  const NoAccess();
+
+  @override
+  bool operator ==(Object other) => other is NoAccess;
+
+  @override
+  int get hashCode => (NoAccess).hashCode;
+
+  @override
+  String toString() => 'NoAccess()';
+}
+
+/// The user has premium access: a plan that the user bought is active.
+/// Every plan of the app gives the same access.
+final class PremiumAccess extends AppAccess {
+  /// Creates the premium access of a plan, with what the provider knows of
+  /// it.
+  const PremiumAccess({
+    this.expiresAt,
+    this.renews = false,
+    this.inTrial = false,
+    this.period,
+    this.manageUrl,
+  });
+
+  /// When the access ends unless the plan renews, or `null` for an access
+  /// that never ends, as that of a plan paid once.
+  final DateTime? expiresAt;
+
+  /// Whether the store renews the plan when [expiresAt] comes: `false` once
+  /// the user cancelled, and for a plan paid once.
+  final bool renews;
+
+  /// Whether the access is the free trial of its plan: the store charges the
+  /// price of the plan once the trial ends, unless the user cancels.
+  final bool inTrial;
+
+  /// How often the plan is billed, or `null` for a plan paid once, or when
+  /// the provider does not know.
+  final BillingPeriod? period;
+
+  /// The page of the store where the user manages or cancels the plan, or
+  /// `null` when the store has none for it, as for a plan paid once.
+  final Uri? manageUrl;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PremiumAccess &&
+      other.expiresAt == expiresAt &&
+      other.renews == renews &&
+      other.inTrial == inTrial &&
+      other.period == period &&
+      other.manageUrl == manageUrl;
+
+  @override
+  int get hashCode =>
+      Object.hash(expiresAt, renews, inTrial, period, manageUrl);
+
+  @override
+  String toString() =>
+      'PremiumAccess(expiresAt: $expiresAt, renews: $renews, '
+      'inTrial: $inTrial, period: $period, manageUrl: $manageUrl)';
+}
+
+/// The unit of a [BillingPeriod].
+enum BillingUnit {
+  /// A day.
+  day,
+
+  /// A week.
+  week,
+
+  /// A month.
+  month,
+
+  /// A year.
+  year,
+}
+
+/// How often a plan is billed, or how long a period of an [IntroOffer]
+/// lasts: [count] times the [unit], such as 3 months.
+final class BillingPeriod {
+  /// Creates the period of [count] times [unit].
+  const BillingPeriod(this.count, this.unit);
+
+  /// How many units the period lasts, 1 or more.
+  final int count;
+
+  /// The unit of the period.
+  final BillingUnit unit;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BillingPeriod && other.count == count && other.unit == unit;
+
+  @override
+  int get hashCode => Object.hash(count, unit);
+
+  @override
+  String toString() => 'BillingPeriod($count ${unit.name})';
+}
+
+/// What a plan costs for a first while, for a user who may take it: a free
+/// trial, or a lower price.
+final class IntroOffer {
+  /// Creates the offer of [cycles] periods of [period] at [price].
+  const IntroOffer({
+    required this.price,
+    required this.amount,
+    required this.period,
+    this.cycles = 1,
+  });
+
+  /// The price of a [period] of the offer as the store shows it, such as
+  /// `$0.99`.
+  final String price;
+
+  /// The price of a [period] of the offer as a number in the currency of
+  /// its plan: 0 for a free trial.
+  final num amount;
+
+  /// How long a period of the offer lasts.
+  final BillingPeriod period;
+
+  /// How many periods the offer lasts, 1 or more.
+  final int cycles;
+
+  /// Whether the offer is a free trial.
+  bool get isFree => amount == 0;
+}
+
+/// A plan of the current offer of the app, which the user can buy. Every
+/// plan gives premium access.
+final class Plan {
+  /// Creates the plan [id].
+  const Plan({
+    required this.id,
+    required this.title,
+    required this.price,
+    required this.amount,
+    required this.currencyCode,
+    this.period,
+    this.introOffer,
+  });
+
+  /// The id that the provider gives the plan. The app does not read it.
+  final String id;
+
+  /// The name of the product of the plan in the store.
+  final String title;
+
+  /// The full price of the plan as the store shows it, in the currency of
+  /// the user, such as `$4.99`: what a [period] costs, or what the plan
+  /// costs once.
+  final String price;
+
+  /// The full price as a number in [currencyCode].
+  final num amount;
+
+  /// The ISO 4217 code of the currency of the price, such as `USD`.
+  final String currencyCode;
+
+  /// How often the plan renews, or `null` for a plan paid once, which gives
+  /// premium access for good.
+  final BillingPeriod? period;
+
+  /// What the plan costs for a first while, if this user may take that, or
+  /// `null`.
+  final IntroOffer? introOffer;
+}
+
+/// Why a call of purchases failed.
+enum PurchasesFailureReason {
+  /// The device did not reach the store or the provider.
+  network,
+
+  /// The payment waits for an approval, as one that a parent approves, or
+  /// for a payment method that takes a while. The access comes once the
+  /// store took the payment, and the service tells of it then.
+  pending,
+
+  /// The store account of the user owns the plan already: a restore gives
+  /// the user its access.
+  alreadyOwned,
+
+  /// The user may not pay on this device, as with parental controls or
+  /// payments that are turned off.
+  notAllowed,
+
+  /// The store, or the plan, is not available on this device or for this
+  /// store account, as on a device without the store.
+  unavailable,
+
+  /// The store failed on its side. Trying again later may help.
+  storeProblem,
+
+  /// Purchases are not set up, such as a key of the provider that is
+  /// missing, or an offer without plans. This is a mistake in the setup of
+  /// the app, which [PurchasesFailure.developerHint] explains.
+  notConfigured,
+
+  /// Anything else. [PurchasesFailure.developerHint] has the error.
+  unknown,
+}
+
+/// The failure of a call of purchases: the only thing that such a call
+/// throws. A user who cancels a purchase is no failure.
+final class PurchasesFailure implements Exception {
+  /// Creates the failure for [reason].
+  const PurchasesFailure(this.reason, {this.developerHint});
+
+  /// Why the call failed. The app shows a text of its own for each reason.
+  final PurchasesFailureReason reason;
+
+  /// What went wrong in the words of the provider, for the developer of the
+  /// app, or `null`. It is no text for the user: show it in debug mode
+  /// only.
+  final String? developerHint;
+
+  @override
+  String toString() => developerHint == null
+      ? 'PurchasesFailure: ${reason.name}'
+      : 'PurchasesFailure: ${reason.name} ($developerHint)';
+}
+
+/// The purchases of the users of the app, as the provider of purchases and
+/// the store keep them.
+///
+/// The provider implements it. The code of the app does not call it: it
+/// uses `appPurchases` of `app_purchases.dart`, which calls this service and
+/// does what is the same with every provider.
+///
+/// Every implementation keeps to this:
+/// - The function that creates the service creates it without a user, asks
+///   the user nothing, and never throws. It may be called again, and the
+///   service that it returns then has what the store and the provider kept.
+/// - [identify] comes before any other call, so a provider can set itself up
+///   with the user. Each call is for the user that [identify] last gave.
+/// - `identify(null)` makes the user of this device the user whose
+///   purchases count. When it follows another user, also one of an earlier
+///   launch of the app, it starts a new user of this device, with nothing
+///   bought: what a user of the device had before comes back only through
+///   [restore].
+/// - When the user of this device is identified as a user that no
+///   [identify] named before, on any device, that user takes over the
+///   purchases of the user of this device, who no longer has them. So a
+///   purchase before a sign-up stays with the new account.
+/// - Any other [identify] keeps the purchases of each user apart.
+/// - [restore] gives the user what the store account bought, and may move
+///   purchases from another user to this one, as the backend of the
+///   provider decides. So no test relies on a restore that moves them, or on
+///   one that leaves them.
+/// - [access] completes from what the device keeps, without the network
+///   when it keeps anything.
+/// - A call fails only with a [PurchasesFailure]. Without what it needs,
+///   such as a key, the service fails every call with
+///   [PurchasesFailureReason.notConfigured] and a
+///   [PurchasesFailure.developerHint] that names what is missing, and it
+///   never stops the app.
+abstract interface class PurchasesService {
+  /// Makes [userId] the user whose purchases count: the id of a user of the
+  /// app, or `null` for the user of this device, who has no account of the
+  /// app.
+  ///
+  /// `null` that follows another user starts a new user of this device,
+  /// with nothing bought. The user of this device identified as a user that
+  /// no call named before, on any device, takes over the purchases of the
+  /// user of this device. Identifying the user who is identified already
+  /// does nothing and does not fail, `null` too.
+  Future<void> identify(String? userId);
+
+  /// The access of the user, from what the device keeps, without the
+  /// network when it keeps anything.
+  Future<AppAccess> access();
+
+  /// Tells of each change of the access of the user that the provider
+  /// learns of, such as a renewal, an expiry, or a grant made elsewhere: a
+  /// broadcast stream. It may also tell of an access that has not changed.
+  Stream<AppAccess> get accessChanges;
+
+  /// The plans of the current offer of the app, at least one, in the order
+  /// of the provider. With nothing to offer, it fails with
+  /// [PurchasesFailureReason.notConfigured] and a hint.
+  Future<List<Plan>> plans();
+
+  /// Buys [plan] for the user, through the sheet of the store, and
+  /// completes with the access of the user once the store took the
+  /// payment: a [PremiumAccess], since every plan gives premium access.
+  ///
+  /// It completes with `null` when the user cancelled, which is no failure.
+  /// A payment that waits for an approval fails with
+  /// [PurchasesFailureReason.pending], and [accessChanges] tells of the
+  /// access once the store took it. A plan that the store account owns
+  /// already fails with [PurchasesFailureReason.alreadyOwned].
+  Future<AppAccess?> purchase(Plan plan);
+
+  /// Gives the user what the store account of the user bought, such as on a
+  /// new device, and completes with the access of the user then. It may
+  /// move purchases from another user to this one, as the backend of the
+  /// provider decides.
+  Future<AppAccess> restore();
+}
+=== lib/core/purchases/restore_purchases_setting.dart (role:purchases) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'app_purchases.dart';
+
+/// The entry of the settings screen that restores purchases: a tap gives
+/// the user what the store account of the user bought, such as on a new
+/// device, and the entry tells what it found.
+///
+/// While a restore is on its way, the entry shows a spinner and takes no
+/// other tap. A failure shows its text, and in debug mode the words of the
+/// provider below it.
+class RestorePurchasesSetting extends StatefulWidget {
+  /// Creates the setting.
+  const RestorePurchasesSetting({super.key});
+
+  @override
+  State<RestorePurchasesSetting> createState() =>
+      _RestorePurchasesSettingState();
+}
+
+/// What the last restore found.
+enum _Outcome { premium, nothing, failed }
+
+class _RestorePurchasesSettingState extends State<RestorePurchasesSetting> {
+  bool _restoring = false;
+  _Outcome? _outcome;
+  String? _hint;
+
+  Future<void> _restore() async {
+    if (_restoring) return;
+    setState(() {
+      _restoring = true;
+      _outcome = null;
+      _hint = null;
+    });
+    _Outcome outcome;
+    String? hint;
+    try {
+      final access = await appPurchases.restore();
+      outcome = access is PremiumAccess ? _Outcome.premium : _Outcome.nothing;
+    } on PurchasesFailure catch (failure) {
+      outcome = _Outcome.failed;
+      hint = failure.developerHint;
+    }
+    if (!mounted) return;
+    setState(() {
+      _restoring = false;
+      _outcome = outcome;
+      _hint = hint;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final message = switch (_outcome) {
+      null => null,
+      _Outcome.premium => context.l10n.purchasesRestoreActive,
+      _Outcome.nothing => context.l10n.purchasesRestoreNone,
+      _Outcome.failed => [
+        context.l10n.purchasesRestoreFailed,
+        // The words of the provider are for the developer of the app.
+        if (_hint case final hint? when kDebugMode) hint,
+      ].join('\n'),
+    };
+    return ListTile(
+      leading: const Icon(Icons.restore),
+      title: Text(context.l10n.purchasesRestoreTitle),
+      // A screen reader reads what the restore found once it comes.
+      subtitle: message == null
+          ? null
+          : Semantics(liveRegion: true, child: Text(message)),
+      trailing: _restoring
+          ? const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      onTap: _restore,
+    );
+  }
+}
+=== lib/core/purchases/revenuecat_purchases_service.dart (revenuecat) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:my_app/core/env/app_env.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
+
+import 'purchases_service.dart';
+
+/// The identifier of the entitlement in RevenueCat that every plan of the
+/// app unlocks: the premium access of the app.
+const _entitlement = 'premium';
+
+/// The names of the keys of RevenueCat in `.env`.
+const _appleKey = 'REVENUECAT_APPLE_KEY';
+const _googleKey = 'REVENUECAT_GOOGLE_KEY';
+const _testKey = 'REVENUECAT_TEST_KEY';
+
+/// Returns the purchases of the app on RevenueCat, with the key of `.env`
+/// that [revenueCatKey] chooses for this platform and build. It asks the
+/// user nothing and never throws: without a key, every call fails with
+/// [PurchasesFailureReason.notConfigured].
+PurchasesService createRevenueCatPurchasesService() =>
+    RevenueCatPurchasesService(
+      revenueCatKey(
+        platform: defaultTargetPlatform,
+        debug: kDebugMode,
+        apple: AppEnv.revenuecatAppleKey,
+        google: AppEnv.revenuecatGoogleKey,
+        test: AppEnv.revenuecatTestKey,
+      ),
+    );
+
+/// The key with which the app configures RevenueCat, or why it has none.
+final class RevenueCatKey {
+  /// The key [value], which `.env` has under [name].
+  const RevenueCatKey(String this.name, String this.value) : hint = null;
+
+  /// No key, for the reason that [hint] tells the developer of the app.
+  const RevenueCatKey.none(String this.hint) : name = null, value = null;
+
+  /// The name of the key in `.env`, or `null` without a key.
+  final String? name;
+
+  /// The public API key of RevenueCat, or `null` without a key.
+  final String? value;
+
+  /// Why the app has no key, for the developer of the app, or `null` with a
+  /// key.
+  final String? hint;
+}
+
+/// The key with which the app configures RevenueCat on [platform], in a
+/// debug build when [debug], from the values of `.env`: [apple], [google]
+/// and [test], each `null` while it is empty.
+///
+/// A debug build takes the key of the Test Store, [test], when `.env` has
+/// one, so that a purchase works with nothing but a RevenueCat account. A
+/// profile or release build never takes it: RevenueCat stops such a build
+/// that is configured with a key of the Test Store, on purpose. Otherwise
+/// the app takes the key of the store of the platform: [apple] on iOS and
+/// [google] on Android.
+///
+/// It takes no key when that key has no value in the build, when it is a
+/// secret key of RevenueCat (`sk_`), which never goes into an app, and in a
+/// profile or release build when it is a key of the Test Store (`test_`).
+/// The hint of [RevenueCatKey.none] then names the key and tells what to
+/// do.
+RevenueCatKey revenueCatKey({
+  required TargetPlatform platform,
+  required bool debug,
+  required String? apple,
+  required String? google,
+  required String? test,
+}) {
+  final (String, String?, String)? chosen = debug && test != null
+      ? (_testKey, test, 'the Test Store')
+      : switch (platform) {
+          TargetPlatform.iOS => (_appleKey, apple, 'the App Store app'),
+          TargetPlatform.android => (_googleKey, google, 'the Play Store app'),
+          _ => null,
+        };
+  if (chosen == null) {
+    return RevenueCatKey.none(
+      'The app sells through RevenueCat on Android and iOS only, and runs '
+      'on ${platform.name} here.',
+    );
+  }
+  final (name, value, app) = chosen;
+  if (value == null) {
+    return RevenueCatKey.none(
+      '$name has no value in this build. In .env, give it the public API key '
+      'of $app in RevenueCat${debug ? ', or give $_testKey the public API key '
+                'of the Test Store' : ''}. Then build the app as the section '
+      '"Values in .env" of its README says.',
+    );
+  }
+  if (value.startsWith('sk_')) {
+    return RevenueCatKey.none(
+      '$name in .env is a secret key of RevenueCat, which never goes into an '
+      'app: use the public API key of $app.',
+    );
+  }
+  if (!debug && value.startsWith('test_')) {
+    return RevenueCatKey.none(
+      '$name in .env is a key of the Test Store, which RevenueCat refuses in '
+      'a profile or release build: use the public API key of $app.',
+    );
+  }
+  return RevenueCatKey(name, value);
+}
+
+/// The infos of the customer that RevenueCat tells of, for every service:
+/// the listeners of `Purchases` are static, so the services of the app share
+/// one.
+final StreamController<CustomerInfo> _customerInfos =
+    StreamController<CustomerInfo>.broadcast();
+
+/// Whether the listener of [_customerInfos] is added to `Purchases`.
+bool _listening = false;
+
+/// How often each product of the offerings that RevenueCat gave is billed,
+/// by the id of the product in the store, and whether the app read the
+/// offerings once: they tell the period of the plan of an access, which the
+/// info of the customer does not.
+final Map<String, BillingPeriod> _periods = {};
+bool _periodsRead = false;
+
+/// How long an access waits for the offerings. RevenueCat gives them from
+/// what the device keeps at once, and the wait ends a read that would wait
+/// for the network, so that the access comes well within the time that the
+/// start of the purchases waits for it.
+const _offeringsWait = Duration(seconds: 1);
+
+/// The purchases of the app on [RevenueCat](https://www.revenuecat.com),
+/// with purchases_flutter.
+///
+/// The code of the app does not use it: it buys and restores through
+/// `appPurchases` of `app_purchases.dart`.
+///
+/// The service configures RevenueCat when it is created, with the key of
+/// [RevenueCatKey], and every call waits for that: RevenueCat stops an iOS
+/// app that calls it before it is configured. Without a key it never calls
+/// RevenueCat, and every call fails with
+/// [PurchasesFailureReason.notConfigured] and the hint of the key.
+///
+/// The premium access of the app is the entitlement `premium` in
+/// RevenueCat, which every product of the current offering unlocks. The id
+/// of a [Plan] is the identifier of its package in that offering.
+final class RevenueCatPurchasesService implements PurchasesService {
+  /// Creates the service, which configures RevenueCat with [key], if it has
+  /// a value.
+  RevenueCatPurchasesService(this.key) {
+    final value = key.value;
+    _configured = value == null ? Future.value(false) : _configure(value);
+  }
+
+  /// The key that the service configures RevenueCat with, or why it has
+  /// none.
+  final RevenueCatKey key;
+
+  /// Completes with whether RevenueCat is configured, once it is or failed.
+  late final Future<bool> _configured;
+
+  /// Completes with whether the service configured RevenueCat, once it did
+  /// or failed: `false` without a key, or when RevenueCat refused the key.
+  Future<bool> get configured => _configured;
+
+  /// Why configuring RevenueCat failed, or `null`.
+  String? _configureHint;
+
+  /// The packages of the current offering that [plans] gave, by their
+  /// identifiers, which a purchase needs.
+  final Map<String, Package> _packages = {};
+
+  /// Configures RevenueCat with [value], and completes with whether it did.
+  /// It never fails, since nothing may wait for it.
+  Future<bool> _configure(String value) async {
+    try {
+      await Purchases.configure(PurchasesConfiguration(value));
+    } on PlatformException catch (error) {
+      _configureHint =
+          'RevenueCat refused to start with ${key.name}: ${error.message}';
+      return false;
+    } on MissingPluginException catch (error) {
+      _configureHint =
+          'RevenueCat did not start with ${key.name}: the app '
+          'has no platform side of purchases_flutter, as in a test without '
+          'mocks of the method channel purchases_flutter (${error.message}).';
+      return false;
+    } on Object catch (error) {
+      _configureHint = 'RevenueCat did not start with ${key.name}: $error';
+      return false;
+    }
+    if (!_listening) {
+      _listening = true;
+      Purchases.addCustomerInfoUpdateListener(_customerInfos.add);
+    }
+    return true;
+  }
+
+  /// Runs [call] once RevenueCat is configured, and turns what it fails
+  /// with into a [PurchasesFailure]: an error of RevenueCat into the reason
+  /// of its code, and any other error into the reason
+  /// [PurchasesFailureReason.unknown].
+  Future<T> _call<T>(Future<T> Function() call) async {
+    if (!await _configured) {
+      throw PurchasesFailure(
+        PurchasesFailureReason.notConfigured,
+        developerHint: key.hint ?? _configureHint,
+      );
+    }
+    try {
+      return await call();
+    } on PurchasesFailure {
+      rethrow;
+    } on PlatformException catch (error, stackTrace) {
+      Error.throwWithStackTrace(_failureOf(error, key.name), stackTrace);
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PurchasesFailure(
+          PurchasesFailureReason.unknown,
+          developerHint: '$error',
+        ),
+        stackTrace,
+      );
+    }
+  }
+
+  @override
+  Future<void> identify(String? userId) => _call(() async {
+    if (userId != null) {
+      await Purchases.logIn(userId);
+    } else if (!await Purchases.isAnonymous) {
+      try {
+        await Purchases.logOut();
+      } on PlatformException catch (error) {
+        // RevenueCat has an anonymous user already, as after another
+        // call that logged out meanwhile: that is the user of this
+        // device.
+        if (_codeOf(error) != PurchasesErrorCode.logOutWithAnonymousUserError) {
+          rethrow;
+        }
+      }
+    }
+  });
+
+  @override
+  Future<AppAccess> access() =>
+      _call(() async => _accessAfter(await Purchases.getCustomerInfo()));
+
+  @override
+  Stream<AppAccess> get accessChanges => key.value == null
+      ? const Stream<AppAccess>.empty()
+      : _customerInfos.stream.map(_accessOf);
+
+  @override
+  Future<List<Plan>> plans() => _call(() async {
+    final offerings = await Purchases.getOfferings();
+    _read(offerings);
+    final current = offerings.current;
+    final packages = current?.availablePackages ?? const <Package>[];
+    if (current == null || packages.isEmpty) {
+      throw PurchasesFailure(
+        PurchasesFailureReason.notConfigured,
+        developerHint: current == null
+            ? 'RevenueCat has no current offering: make the offering with '
+                  'the packages of the app current in RevenueCat.'
+            : 'The current offering ${current.identifier} of RevenueCat '
+                  'has no packages: add the packages of the app to it.',
+      );
+    }
+    _packages
+      ..clear()
+      ..addEntries([
+        for (final package in packages) MapEntry(package.identifier, package),
+      ]);
+    final withIntro = await _withIntro(packages);
+    return [for (final package in packages) _planOf(package, withIntro)];
+  });
+
+  @override
+  Future<AppAccess?> purchase(Plan plan) => _call(() async {
+    final package = _packages[plan.id] ?? await _packageAgain(plan.id);
+    final CustomerInfo info;
+    try {
+      info = (await Purchases.purchase(
+        PurchaseParams.package(package),
+      )).customerInfo;
+    } on PlatformException catch (error) {
+      if (_cancelled(error)) return null;
+      rethrow;
+    }
+    final access = await _accessAfter(info);
+    if (access is! PremiumAccess) {
+      throw PurchasesFailure(
+        PurchasesFailureReason.notConfigured,
+        developerHint:
+            'The user bought '
+            '${package.storeProduct.identifier}, but RevenueCat gives no '
+            'active entitlement $_entitlement for it: attach the product '
+            'to the entitlement $_entitlement in RevenueCat, and a '
+            'restore gives the access.',
+      );
+    }
+    return access;
+  });
+
+  @override
+  Future<AppAccess> restore() =>
+      _call(() async => _accessAfter(await Purchases.restorePurchases()));
+
+  /// The package [id] of the current offering, which RevenueCat gives again.
+  /// Fails with [PurchasesFailureReason.unavailable] when the offering has
+  /// none of that id.
+  Future<Package> _packageAgain(String id) async {
+    final offerings = await Purchases.getOfferings();
+    _read(offerings);
+    final package = offerings.current?.getPackage(id);
+    if (package == null) {
+      throw PurchasesFailure(
+        PurchasesFailureReason.unavailable,
+        developerHint:
+            'The current offering of RevenueCat has no package '
+            '$id.',
+      );
+    }
+    return _packages[id] = package;
+  }
+
+  /// The access of [info], once the app read the offerings that tell the
+  /// period of a plan that renews, if it has not yet. It waits for them at
+  /// most [_offeringsWait]: the access then has no period, and the periods
+  /// come with offerings that RevenueCat gives later.
+  Future<AppAccess> _accessAfter(CustomerInfo info) async {
+    final premium = info.entitlements.active[_entitlement];
+    if (premium?.expirationDate != null && !_periodsRead) {
+      final read = Purchases.getOfferings().then(_read);
+      try {
+        await read.timeout(_offeringsWait);
+      } on Object {
+        // The access then has no period, as when the offerings do not have
+        // its product. A read that ends later keeps the periods, or fails
+        // with nobody to tell.
+        unawaited(read.then((_) {}, onError: (Object _) {}));
+      }
+    }
+    return _accessOf(info);
+  }
+}
+
+/// Keeps the periods of the products of [offerings].
+void _read(Offerings offerings) {
+  for (final offering in offerings.all.values) {
+    for (final package in offering.availablePackages) {
+      final product = package.storeProduct;
+      final period = _periodIn(product.subscriptionPeriod);
+      if (period != null) _periods[product.identifier] = period;
+    }
+  }
+  _periodsRead = true;
+}
+
+/// The access of the customer of [info]: premium while the entitlement
+/// [_entitlement] is active.
+AppAccess _accessOf(CustomerInfo info) {
+  final premium = info.entitlements.active[_entitlement];
+  if (premium == null || !premium.isActive) return const NoAccess();
+  final expiration = premium.expirationDate;
+  final manageUrl = info.managementURL;
+  return PremiumAccess(
+    expiresAt: expiration == null ? null : DateTime.tryParse(expiration),
+    renews: premium.willRenew,
+    inTrial: premium.periodType == PeriodType.trial,
+    period: expiration == null ? null : _periodOf(premium),
+    manageUrl: manageUrl == null ? null : Uri.tryParse(manageUrl),
+  );
+}
+
+/// How often the product of [premium] is billed, if the offerings have
+/// it. On Android the product of a plan in the store is the subscription
+/// and its base plan.
+BillingPeriod? _periodOf(EntitlementInfo premium) {
+  final product = premium.productIdentifier;
+  final basePlan = premium.productPlanIdentifier;
+  return (basePlan == null ? null : _periods['$product:$basePlan']) ??
+      _periods[product];
+}
+
+/// The ids of the products of [packages] whose intro offer the user may
+/// take. Android gives a product only the offers that the user may take,
+/// and on iOS the app asks: it shows an offer only when iOS says the user
+/// may take it, so that it promises no trial that the store does not give.
+Future<Set<String>> _withIntro(List<Package> packages) async {
+  final ids = [
+    for (final package in packages)
+      if (package.storeProduct.introductoryPrice != null)
+        package.storeProduct.identifier,
+  ];
+  if (ids.isEmpty || defaultTargetPlatform != TargetPlatform.iOS) {
+    return ids.toSet();
+  }
+  try {
+    final eligibility =
+        await Purchases.checkTrialOrIntroductoryPriceEligibility(ids);
+    return {
+      for (final MapEntry(key: id, value: of) in eligibility.entries)
+        if (of.status == IntroEligibilityStatus.introEligibilityStatusEligible)
+          id,
+    };
+  } on PlatformException {
+    return const {};
+  }
+}
+
+/// [package] as a plan of the app, with its intro offer if its product is
+/// among [withIntro].
+Plan _planOf(Package package, Set<String> withIntro) {
+  final product = package.storeProduct;
+  final intro = product.introductoryPrice;
+  return Plan(
+    id: package.identifier,
+    title: _titleOf(product),
+    price: product.priceString,
+    amount: product.price,
+    currencyCode: product.currencyCode,
+    period: _periodIn(product.subscriptionPeriod),
+    introOffer: intro == null || !withIntro.contains(product.identifier)
+        ? null
+        : _introOf(intro),
+  );
+}
+
+/// The title of [product]. Google Play appends the name of the app in
+/// parentheses to the title of a product, which the app leaves out.
+String _titleOf(StoreProduct product) {
+  if (defaultTargetPlatform != TargetPlatform.android) return product.title;
+  final title = product.title.replaceFirst(RegExp(r'\s*\([^()]*\)$'), '');
+  return title.isEmpty ? product.title : title;
+}
+
+/// [intro] as an intro offer of a plan, or `null` when RevenueCat gives it
+/// no period that the app knows.
+IntroOffer? _introOf(IntroductoryPrice intro) {
+  final unit = _units[intro.periodUnit];
+  if (unit == null || intro.periodNumberOfUnits < 1 || intro.cycles < 1) {
+    return null;
+  }
+  return IntroOffer(
+    price: intro.priceString,
+    amount: intro.price,
+    period: BillingPeriod(intro.periodNumberOfUnits, unit),
+    cycles: intro.cycles,
+  );
+}
+
+/// The units of the periods of RevenueCat.
+const _units = {
+  PeriodUnit.day: BillingUnit.day,
+  PeriodUnit.week: BillingUnit.week,
+  PeriodUnit.month: BillingUnit.month,
+  PeriodUnit.year: BillingUnit.year,
+};
+
+/// The period of a subscription in ISO 8601, such as `P1M`, or `null` for a
+/// product that the user pays for once.
+BillingPeriod? _periodIn(String? iso) {
+  final match = RegExp(r'^P(\d+)([DWMY])$').firstMatch(iso ?? '');
+  if (match == null) return null;
+  final count = int.parse(match[1]!);
+  if (count < 1) return null;
+  return BillingPeriod(count, switch (match[2]!) {
+    'D' => BillingUnit.day,
+    'W' => BillingUnit.week,
+    'M' => BillingUnit.month,
+    _ => BillingUnit.year,
+  });
+}
+
+/// The code of RevenueCat in [error], or `null` when it is no code of
+/// RevenueCat, as for an error of the plugin itself, whose code is no
+/// number.
+PurchasesErrorCode? _codeOf(PlatformException error) {
+  final number = int.tryParse(error.code);
+  if (number == null ||
+      number < 0 ||
+      number >= PurchasesErrorCode.values.length) {
+    return null;
+  }
+  return PurchasesErrorCode.values[number];
+}
+
+/// Whether [error] tells that the user cancelled a purchase.
+bool _cancelled(PlatformException error) {
+  final details = error.details;
+  return _codeOf(error) == PurchasesErrorCode.purchaseCancelledError ||
+      (details is Map && details['userCancelled'] == true);
+}
+
+/// [error] of RevenueCat, configured with the key [keyName] of `.env`, as a
+/// failure of the purchases of the app.
+PurchasesFailure _failureOf(PlatformException error, String? keyName) {
+  final code = _codeOf(error);
+  final reason = switch (code) {
+    PurchasesErrorCode.paymentPendingError => PurchasesFailureReason.pending,
+    PurchasesErrorCode.networkError ||
+    PurchasesErrorCode.offlineConnectionError ||
+    PurchasesErrorCode.productRequestTimeout ||
+    PurchasesErrorCode.apiEndpointBlocked => PurchasesFailureReason.network,
+    PurchasesErrorCode.productAlreadyPurchasedError ||
+    PurchasesErrorCode.receiptAlreadyInUseError ||
+    PurchasesErrorCode.receiptInUseByOtherSubscriberError ||
+    PurchasesErrorCode.purchaseBelongsToOtherUser =>
+      PurchasesFailureReason.alreadyOwned,
+    PurchasesErrorCode.purchaseNotAllowedError =>
+      PurchasesFailureReason.notAllowed,
+    PurchasesErrorCode.productNotAvailableForPurchaseError ||
+    PurchasesErrorCode.purchaseInvalidError ||
+    PurchasesErrorCode.ineligibleError => PurchasesFailureReason.unavailable,
+    PurchasesErrorCode.configurationError ||
+    PurchasesErrorCode.invalidCredentialsError ||
+    PurchasesErrorCode.invalidAppleSubscriptionKeyError ||
+    PurchasesErrorCode.insufficientPermissionsError =>
+      PurchasesFailureReason.notConfigured,
+    PurchasesErrorCode.storeProblemError ||
+    PurchasesErrorCode.invalidReceiptError ||
+    PurchasesErrorCode.missingReceiptFileError ||
+    PurchasesErrorCode.unexpectedBackendResponseError ||
+    PurchasesErrorCode.unknownBackendError ||
+    PurchasesErrorCode.customerInfoError ||
+    PurchasesErrorCode.systemInfoError ||
+    PurchasesErrorCode.signatureVerificationFailed ||
+    PurchasesErrorCode.testStoreSimulatedPurchaseError =>
+      PurchasesFailureReason.storeProblem,
+    _ => PurchasesFailureReason.unknown,
+  };
+  return PurchasesFailure(reason, developerHint: _hintOf(error, code, keyName));
+}
+
+/// What [error] with [code] tells the developer of the app, whose app
+/// configured RevenueCat with the key [keyName] of `.env`.
+String _hintOf(
+  PlatformException error,
+  PurchasesErrorCode? code,
+  String? keyName,
+) {
+  final details = error.details;
+  final underlying = details is Map ? details['underlyingErrorMessage'] : null;
+  final said = [
+    '${code?.name ?? 'code ${error.code}'}: ${error.message}',
+    if (underlying is String && underlying.isNotEmpty) underlying,
+  ].join(' ');
+  return switch (code) {
+    PurchasesErrorCode.invalidCredentialsError =>
+      'RevenueCat refused $keyName of .env ($said): copy the public API key '
+          'of the app in RevenueCat into .env.',
+    PurchasesErrorCode.productAlreadyPurchasedError ||
+    PurchasesErrorCode.receiptAlreadyInUseError ||
+    PurchasesErrorCode.receiptInUseByOtherSubscriberError ||
+    PurchasesErrorCode.purchaseBelongsToOtherUser =>
+      'The store account owns the product already ($said).',
+    PurchasesErrorCode.testStoreSimulatedPurchaseError =>
+      'The Test Store of RevenueCat failed the purchase, as its dialog was '
+          'told to ($said).',
+    _ => said,
+  };
 }
 === lib/core/push/app_push.dart (role:push) ===
 import 'dart:async';
@@ -9260,6 +10820,7 @@ import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 import 'package:my_app/core/l10n/language_setting.dart' as entry2;
 import 'package:my_app/core/notifications/notifications_setting.dart' as entry3;
+import 'package:my_app/core/purchases/restore_purchases_setting.dart' as entry4;
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry1;
 import 'package:my_app/features/sign_in/account_setting.dart' as entry0;
 
@@ -9308,6 +10869,7 @@ class SettingsScreen extends StatelessWidget {
                 entry1.ThemeModeSetting(),
                 entry2.LanguageSetting(),
                 entry3.NotificationsSetting(),
+                entry4.RestorePurchasesSetting(),
               ],
             ),
           ],
@@ -12008,7 +13570,11 @@ class DefaultFirebaseOptions {
   "notificationsStepTitle": "Turn on notifications",
   "notificationsStepText": "The app tells you when something needs your attention, even when it is closed.",
   "notificationsStepAction": "Allow notifications",
-  "notificationsStepLater": "Not now"
+  "notificationsStepLater": "Not now",
+  "purchasesRestoreTitle": "Restore purchases",
+  "purchasesRestoreActive": "Your premium access is back.",
+  "purchasesRestoreNone": "No purchases to restore.",
+  "purchasesRestoreFailed": "Couldn't restore purchases. Try again."
 }
 === lib/l10n/app_uk.arb (gen_l10n) ===
 {
@@ -12098,7 +13664,11 @@ class DefaultFirebaseOptions {
   "notificationsStepTitle": "Увімкніть сповіщення",
   "notificationsStepText": "Застосунок повідомить, коли щось потребує вашої уваги, навіть коли він закритий.",
   "notificationsStepAction": "Дозволити сповіщення",
-  "notificationsStepLater": "Не зараз"
+  "notificationsStepLater": "Не зараз",
+  "purchasesRestoreTitle": "Відновити покупки",
+  "purchasesRestoreActive": "Преміум-доступ відновлено.",
+  "purchasesRestoreNone": "Немає покупок для відновлення.",
+  "purchasesRestoreFailed": "Не вдалося відновити покупки. Спробуйте ще раз."
 }
 === lib/main.dart (flutter_core) ===
 import 'package:flutter/widgets.dart';
@@ -12155,6 +13725,7 @@ dependencies:
   go_router: "^17.5.0"
   google_sign_in: "^7.2.0"
   intl: "any"
+  purchases_flutter: "^10.18.0"
   shared_preferences: "^2.5.5"
   shared_preferences_android: ">=2.4.28 <2.5.0"
   sign_in_with_apple: "^8.2.0"
