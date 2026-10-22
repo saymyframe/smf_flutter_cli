@@ -33,12 +33,13 @@ void main() {
     (tester) async {
       await startUp(tester);
       await identifyThrowaway(tester);
-      final user = freshUser('next start');
+      final user = freshUser('next_start');
       await startAs(tester, createPurchasesService(), user);
       Object? failure;
       await inRealTime(tester, 'buying a plan', () async {
         final plans = await appPurchases.plans();
         failure = await errorOf(() => appPurchases.purchase(plans.first));
+        await aMoment();
       });
       final bought = describe(appPurchases.value);
 

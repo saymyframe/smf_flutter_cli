@@ -10,24 +10,40 @@
 // It knows only the role. The tests rely on the convention that the mocks
 // of the platform side of every provider keep to, as the role says:
 // - a first launch finds nothing bought, and the offer has at least one
-//   plan;
+//   plan, each with an id of its own, a title and a price that are not
+//   empty, an amount of 0 or more and a currency of three upper-case
+//   letters;
+// - any text is the id of a user of the app;
 // - a purchase by a user without premium access completes at once and
-//   succeeds;
+//   succeeds. Its answer, as that of a restore, is the access that access()
+//   gives right after it, field by field, and the provider tells of no
+//   other change of the access while the purchase is on its way or right
+//   after it;
+// - a plan with a free intro offer that the user may take gives an access
+//   in trial, and any other plan an access that is not in trial. A plan
+//   with a period renews, and its access ends after the time of the device
+//   at the purchase;
 // - the purchases are kept for each user of the app, also from one launch
-//   of the app to the next, by the rules of the user of the device:
-//   identify(null) after another user starts a new user of the device with
-//   nothing bought; a user that no identification named before, identified
-//   while the user of the device is, takes over the purchases of the user
-//   of the device; and any other identification keeps the purchases of
-//   each user apart;
+//   of the app to the next, where the user has the same access as before,
+//   not one computed anew from the time of the start. They are kept by the
+//   rules of the user of the device: identify(null) after another user
+//   starts a new user of the device with nothing bought; a user that no
+//   identification named before, identified while the user of the device
+//   is, takes over the purchases of the user of the device; and any other
+//   identification keeps the purchases of each user apart;
 // - a restore gives the user who is identified what was bought on the
 //   device. Whether it takes the purchases away from another user is up to
 //   the backend of each provider, so no test relies on it.
 //
+// In an app with sign-in, the tests also rely on the session of the app,
+// which tells appPurchases of a change of its user before the call of the
+// session that made the change completes.
+//
 // So a test that needs a user without purchases identifies a throwaway user
-// first, which takes over whatever the user of the device bought, such as a
-// plan that the mocks of a module bought before the app started, and then a
-// fresh user of its own, which follows a user of the app.
+// first, and then a fresh user of its own, which follows a user of the app.
+// When the user of the device is the user of the app at that time, the
+// throwaway takes over whatever the user of the device bought, such as a
+// plan that the mocks of a module bought before the app started.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -135,8 +151,9 @@ Future<void> startAs(
 
 /// Identifies a throwaway user with the service of the provider. A fresh
 /// user identified after it follows a user of the app, so it has nothing
-/// bought: the throwaway takes over what the user of the device bought, as
-/// a user that no identification named before does.
+/// bought. When the user of the device is the user of the app at that time,
+/// the throwaway takes over what the user of the device bought, as a user
+/// that no identification named before does.
 Future<void> identifyThrowaway(WidgetTester tester) =>
     startAs(tester, createPurchasesService(), freshUser('throwaway'));
 

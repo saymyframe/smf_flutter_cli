@@ -130,7 +130,8 @@ void main() {
   testWidgets(
     'a fresh user who buys a plan has premium access as the plan gives it, '
     'the listeners hear of it once, the probe finds no problem, and a '
-    'restore gives the access, for each plan',
+    'restore gives the access, for each plan; and a fresh user who restores '
+    'then gets premium access from what the device bought',
     (tester) async {
       await startUp(tester);
       await identifyThrowaway(tester);
@@ -148,6 +149,7 @@ void main() {
         List<String> probe,
         String restored,
         String afterRestore,
+        List<String> probeAfterRestore,
       })>{};
       var ids = const <String>[];
       await inRealTime(tester, 'asking for the plans', () async {
@@ -165,10 +167,16 @@ void main() {
           appPurchases.addListener(listener);
           final boughtAt = DateTime.now();
           final failure = await errorOf(() => appPurchases.purchase(plan));
+          // A change of the access that the provider tells of a moment
+          // later shows too.
+          await aMoment();
           final value = appPurchases.value;
           appPurchases.removeListener(listener);
           final probe = await probePurchases(() async {});
           final restored = await appPurchases.restore();
+          await aMoment();
+          final afterRestore = describe(appPurchases.value);
+          final probeAfterRestore = await probePurchases(() async {});
           ofPlans[id] = (
             plan: plan,
             failure: failure,
@@ -178,10 +186,21 @@ void main() {
             heard: [...heard],
             probe: probe,
             restored: describe(restored),
-            afterRestore: describe(appPurchases.value),
+            afterRestore: afterRestore,
+            probeAfterRestore: probeAfterRestore,
           );
         });
       }
+      // A fresh user, identified after the buyers, restores what the device
+      // bought.
+      await startAs(tester, createPurchasesService(), freshUser('restorer'));
+      late String restoredByFresh;
+      late String afterRestoreByFresh;
+      await inRealTime(tester, 'a restore of a fresh user', () async {
+        restoredByFresh = describe(await appPurchases.restore());
+        await aMoment();
+        afterRestoreByFresh = describe(appPurchases.value);
+      });
 
       expect(
         {
@@ -230,7 +249,8 @@ void main() {
           ofPlan.heard,
           [ofPlan.access],
           reason: 'The listeners of appPurchases hear of the access that a '
-              'purchase gave once ($id).',
+              'purchase gave once, and of no other change while the purchase '
+              'is on its way or right after it ($id).',
         );
         expect(
           ofPlan.probe,
@@ -245,7 +265,20 @@ void main() {
               'which has the plan of the user, and that access becomes the '
               'value ($id).',
         );
+        expect(
+          ofPlan.probeAfterRestore,
+          isEmpty,
+          reason: 'The answer of a restore is the access that the service of '
+              'the provider gives right after it ($id).',
+        );
       }
+      expect(
+        (restoredByFresh.startsWith('premium access'), afterRestoreByFresh),
+        (true, restoredByFresh),
+        reason: 'A restore gives the user who is identified what was bought on '
+            'the device, also a fresh user who bought nothing, and that access '
+            'becomes the value.',
+      );
     },
     timeout: timeout,
   );
@@ -270,6 +303,7 @@ void main() {
       await inRealTime(tester, 'buying a plan', () async {
         final plans = await appPurchases.plans();
         failure = await errorOf(() => appPurchases.purchase(plans.first));
+        await aMoment();
       });
       bought = describe(appPurchases.value);
       await startAs(tester, createPurchasesService(), second);
