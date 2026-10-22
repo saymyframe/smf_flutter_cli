@@ -42,6 +42,10 @@ const _materialDelegate = Fragment(
 const _readmeSection = 'The app has something in every socket of its entry, '
     'with `code` and a [link](https://example.com).';
 
+/// The comment of the pattern of `.gitignore` that [FakeSocketsModule] and
+/// [FakeOverlapModule] both add.
+const _logsComment = 'The logs of the fixture';
+
 /// The note for coding agents that [FakeSocketsModule] and
 /// [FakeOverlapModule] both add.
 const _agentNote = 'The modules of the fixture fill the sockets of the app '
@@ -208,6 +212,13 @@ final class FakeSocketsModule extends SmfModule {
           '1.9.1',
         ),
         AppEntryRole.androidCoreLibraryDesugaring.value('2.1.4'),
+        // .gitignore has the patterns in their order, whatever the order of
+        // their contributions.
+        AppEntryRole.gitignore.entry(
+          '/fixture.local',
+          'The values of the fixture that each developer keeps',
+        ),
+        AppEntryRole.gitignore.entry('*.fixture.log', _logsComment),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
         AppEntryRole.agentSections.entry(
@@ -219,10 +230,11 @@ final class FakeSocketsModule extends SmfModule {
 
 /// A module that puts into the sockets of the app entry some of the keys
 /// and values that [FakeSocketsModule] does, so an app with both merges
-/// them: equal permissions, meta-data, plist strings, entitlements and
-/// README sections agree, the plist arrays of Info.plist and of the
-/// entitlements are united, the highest versions win, those of Gradle and
-/// of the library of core library desugaring too, the delegate of the
+/// them: equal permissions, meta-data, plist strings, entitlements,
+/// patterns of `.gitignore` and README sections agree, the plist arrays of
+/// Info.plist and of the entitlements and the comments of a pattern of
+/// `.gitignore` are united, the highest versions win, those of Gradle and of
+/// the library of core library desugaring too, the delegate of the
 /// localizations appears once, and so do the note for coding agents and the
 /// step by hand that both have. It puts nothing into the sockets of code of
 /// the native files, such as the components of the Android application,
@@ -284,6 +296,12 @@ final class FakeOverlapModule extends SmfModule {
           '1.8.0',
         ),
         AppEntryRole.androidCoreLibraryDesugaring.value('2.1.3'),
+        AppEntryRole.gitignore.entry('*.fixture.log', _logsComment),
+        // The pattern of fake_sockets in other words: .gitignore has both.
+        AppEntryRole.gitignore.entry(
+          '/fixture.local',
+          'What the fixture keeps on one machine',
+        ),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
       ];

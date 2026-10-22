@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
@@ -307,6 +309,27 @@ void main() {
           '.gitignore',
           '.metadata',
         ]),
+      );
+    });
+
+    test(
+        'keeps out of git what flutter create keeps out, and leaves out the '
+        'line of the patterns of the modules, which it has none of', () {
+      final tag = '{{{${AppEntryRole.gitignore.tag}}}}';
+      final template = utf8.decode(
+        base64.decode(
+          flutterCoreBundle.files
+              .singleWhere((file) => file.path == AppEntryRole.gitignoreFile)
+              .data,
+        ),
+      );
+
+      // The tag stands alone on the last line, after the lines of flutter
+      // create.
+      expect(template, endsWith('\n/android/app/release\n$tag\n'));
+      expect(
+        texts[AppEntryRole.gitignoreFile],
+        template.replaceFirst('$tag\n', ''),
       );
     });
 
@@ -898,6 +921,20 @@ void main() {
         '## Every socket\n'
         '\n'
         'The app has something in every socket of its entry.\n',
+      );
+    });
+
+    test(
+        'keeps the patterns of the modules out of git, after the lines of '
+        'flutter create', () {
+      expect(
+        texts[AppEntryRole.gitignoreFile],
+        endsWith(
+          '\n/android/app/release\n'
+          '\n'
+          '# What each developer keeps of every socket\n'
+          '/every_socket.local\n',
+        ),
       );
     });
 

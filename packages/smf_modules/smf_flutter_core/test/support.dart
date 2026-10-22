@@ -518,6 +518,10 @@ final class EverySocketModule extends SmfModule {
           '1.9.1',
         ),
         AppEntryRole.androidCoreLibraryDesugaring.value('2.1.4'),
+        AppEntryRole.gitignore.entry(
+          '/every_socket.local',
+          'What each developer keeps of every socket',
+        ),
         AppEntryRole.readmeSections.entry(
           'Every socket',
           'The app has something in every socket of its entry.',
