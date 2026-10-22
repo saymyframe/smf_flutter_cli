@@ -717,9 +717,12 @@ final class FakePreferencesUserModule extends SmfModule {
 /// A module with two steps of the onboarding, which it gives the onboarding
 /// screen role in an app with that role: `ask`, with the button `later`
 /// and a function that says whether the onboarding shows it, and then
-/// `confirm`, without either. Their actions note each call, and that of
-/// `ask` waits for what a test holds it back with and fails when a test
-/// says so. A test also says whether the onboarding shows `ask`.
+/// `confirm`, without either. Their actions note each call. That of `ask`
+/// fails when a test says so, and otherwise shows a screen of its own over
+/// the onboarding, as a route without a page on the navigator at the root
+/// of the app, which it finds from the context of the onboarding screen.
+/// It waits until that screen is closed, and then for what a test holds it
+/// back with. A test also says whether the onboarding shows `ask`.
 ///
 /// It uses the localization role: the texts of the steps are texts of the
 /// module, in English and in Ukrainian, but for the text of `confirm`,
