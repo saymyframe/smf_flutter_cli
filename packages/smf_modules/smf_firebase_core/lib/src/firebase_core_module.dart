@@ -80,7 +80,7 @@ final class FirebaseCoreModule extends SmfModule {
     ];
     return [
       BrickContribution(firebaseCoreBundle),
-      const PubspecContribution.hosted('firebase_core', '^4.15.0'),
+      const PubspecContribution.hosted('firebase_core', '^5.0.0'),
       const SocketContribution.code(
         AppEntryRole.bootstrapPlatform,
         Fragment(

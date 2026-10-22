@@ -13,8 +13,9 @@ import 'push_service.dart';
 /// Firebase is initialized first, as `bootstrap()` does. On iOS it sets the
 /// presentation options of a notification that arrives while the app is in
 /// the foreground to an alert, a badge and a sound. firebase_messaging
-/// answers iOS for every such notification, the local notifications of the
-/// app too, with those options: without them, iOS would show none of them.
+/// answers iOS with those options for every push message, and for the local
+/// notifications of the app too while it is the delegate of the
+/// notification center: without them, iOS would show none of them.
 PushService createFirebasePushService() {
   final service = FirebasePushService(FirebaseMessaging.instance);
   if (service.platformShowsInForeground) {
@@ -56,15 +57,21 @@ const _longestWatch = Duration(minutes: 2);
 /// `appPush` of `app_push.dart`.
 ///
 /// The address of the device is the registration token of Firebase Cloud
-/// Messaging. On iOS it needs the token of the Apple Push Notification
-/// service, which may come a while after the app started, or never, as on a
-/// build that is not signed for push messages: [address] is `null` until
-/// then. When that token comes, firebase_messaging tells the app of no
-/// registration token. So while something listens to [addressChanges], the
-/// service asks iOS for the token now and then, which needs no network,
-/// for at most two minutes, and tells of the registration token once iOS
-/// has the token. [addressChanges] also tells of each new token that
-/// Firebase gives the device.
+/// Messaging, to which the HTTP v1 API of Firebase Cloud Messaging sends.
+/// firebase_messaging 17 deprecates the calls for that token in favour of
+/// the Firebase Installation ID, which the app does not use, so the service
+/// ignores the deprecation where it makes them.
+///
+/// On iOS the registration token needs the token of the Apple Push
+/// Notification service, which may come a while after the app started, or
+/// never, as on a build that is not signed for push messages: [address] is
+/// `null` until then. When that token comes, firebase_messaging tells the
+/// app of the registration token only if it changed, which it does not at
+/// a later start of the app. So while something listens to
+/// [addressChanges], the service asks iOS for the token now and then, which
+/// needs no network, for at most two minutes, and tells of the registration
+/// token once iOS has the token. [addressChanges] also tells of each new
+/// token that Firebase gives the device.
 ///
 /// On Android, the system shows a message that arrives in the background,
 /// in the channel and with the icon that the manifest of the app names, and
@@ -77,6 +84,7 @@ final class FirebasePushService implements PushService {
   /// It reads the stream of the new tokens at once, which sets up the
   /// plugin, so that the messages and the taps that the platform tells of
   /// from then on reach the streams of the service.
+  // ignore: deprecated_member_use
   FirebasePushService(this._messaging) : _tokens = _messaging.onTokenRefresh;
 
   final FirebaseMessaging _messaging;
@@ -122,6 +130,7 @@ final class FirebasePushService implements PushService {
   @override
   Future<String?> address() async {
     try {
+      // ignore: deprecated_member_use
       return await _messaging.getToken();
     } on FirebaseException catch (error) {
       _printWithoutAddress(error);
@@ -210,6 +219,7 @@ final class FirebasePushService implements PushService {
     if (apnsToken == null) return _scheduleCheck();
     _awaitingApnsToken = false;
     try {
+      // ignore: deprecated_member_use
       final address = await _messaging.getToken();
       if (address != null && _addresses.hasListener) _addresses.add(address);
     } on Object catch (error) {

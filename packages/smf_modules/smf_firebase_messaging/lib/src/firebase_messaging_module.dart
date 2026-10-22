@@ -29,17 +29,24 @@ import 'package:smf_firebase_messaging/src/readme.dart';
 ///   the package fails, as it does on iOS before the token of the Apple
 ///   Push Notification service comes;
 /// - on iOS it tells of the first address once that token comes, of which
-///   the package tells the app nothing: while the app listens to the new
-///   addresses, it asks iOS for the token, a read without the network,
-///   with waits that double from half a second up to eight seconds, for at
-///   most two minutes;
+///   the package tells the app only when the registration token changed,
+///   which it does not at a later start of the app: while the app listens
+///   to the new addresses, it asks iOS for the token, a read without the
+///   network, with waits that double from half a second up to eight
+///   seconds, for at most two minutes;
 /// - a value of the data of a message that is no string, which iOS may
 ///   give, is its JSON;
 /// - on iOS it sets the presentation options of a notification in the
 ///   foreground to an alert, a badge and a sound when it is created: the
-///   package answers iOS for every notification in the foreground, the
-///   local notifications of the app too, with those options, and with
-///   none of them by default.
+///   package answers iOS for every push message in the foreground, and for
+///   the local notifications of the app too while it is the delegate of
+///   the notification center, with those options, and with none of them by
+///   default.
+///
+/// firebase_messaging 17 deprecates the calls for the registration token in
+/// favour of the Firebase Installation ID. The address stays the
+/// registration token, to which the HTTP v1 API of Firebase Cloud Messaging
+/// sends, so the service ignores that deprecation.
 ///
 /// The template of the push role gives the iOS app the entitlement and the
 /// background mode that push messages need. In the manifest of the Android
@@ -88,9 +95,7 @@ final class FirebaseMessagingModule extends SmfModule {
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(firebaseMessagingBundle),
-        // 16.7 is the last version on firebase_core 4, which the Firebase
-        // modules share; 17 needs firebase_core 5.
-        const PubspecContribution.hosted('firebase_messaging', '^16.7.0'),
+        const PubspecContribution.hosted('firebase_messaging', '^17.0.0'),
         pushRole.data(
           const RoleImplementation(
             type: TypeRef('FirebasePushService', import: _file),

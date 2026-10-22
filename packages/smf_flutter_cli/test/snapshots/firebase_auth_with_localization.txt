@@ -2722,8 +2722,8 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  firebase_auth: "^6.7.0"
-  firebase_core: "^4.15.0"
+  firebase_auth: "^7.0.0"
+  firebase_core: "^5.0.0"
   intl: "any"
   shared_preferences: "^2.5.5"
   shared_preferences_android: ">=2.4.28 <2.5.0"

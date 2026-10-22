@@ -19,7 +19,7 @@ name: my_app
 dependencies:
   flutter:
     sdk: flutter
-  firebase_crashlytics: "^5.4.0"
+  firebase_crashlytics: "^6.0.0"
 dev_dependencies:
   firebase_crashlytics_platform_interface: any
 ''');

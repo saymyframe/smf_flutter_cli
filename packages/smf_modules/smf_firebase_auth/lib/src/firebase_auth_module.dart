@@ -34,10 +34,10 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   app which enables it, and has the link to the page of the project
 ///   where it is enabled. Firebase tells of a project in
 ///   which Authentication was never set up only in the message of an
-///   error, an unknown one on Android and an internal one on iOS, where the
-///   message is the description of the error over many lines: the hint
-///   names the code and what the service found there, not that
-///   description. An internal error of iOS and macOS whose message says no
+///   error, an unknown one on Android and an internal one on iOS, whose
+///   message ends with what the server answered in brackets on both: the
+///   hint names the code and what the service found there, not the rest of
+///   the message. An internal error of iOS and macOS whose message says no
 ///   more is `notConfigured` there too, with a hint that says that it may
 ///   be another error;
 /// - an empty address or password fails before Firebase is asked, with the
@@ -213,7 +213,7 @@ final class FirebaseAuthModule extends SmfModule {
             'minimum_firebase_cli': firstFirebaseCliWithSignIn,
           },
         ),
-        const PubspecContribution.hosted('firebase_auth', '^6.7.0'),
+        const PubspecContribution.hosted('firebase_auth', '^7.0.0'),
         authRole.data(
           const AuthImplementation(
             type: TypeRef('FirebaseAuthService', import: _file),

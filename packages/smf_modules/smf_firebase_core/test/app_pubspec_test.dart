@@ -19,7 +19,7 @@ name: my_app
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: "^4.15.0"
+  firebase_core: "^5.0.0"
 dev_dependencies:
   firebase_core_platform_interface: any
 ''');

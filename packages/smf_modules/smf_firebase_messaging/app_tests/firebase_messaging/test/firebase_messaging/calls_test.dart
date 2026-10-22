@@ -61,9 +61,10 @@ void main() {
     expect(
       device.calls.single.arguments,
       {'appName': '[DEFAULT]', 'alert': true, 'badge': true, 'sound': true},
-      reason: 'firebase_messaging answers iOS for every notification that '
-          'arrives in the foreground, the local notifications of the app '
-          'too, with these options, and with none of them by default: the '
+      reason: 'firebase_messaging answers iOS for every push message that '
+          'arrives in the foreground, and for the local notifications of '
+          'the app too while it is the delegate of the notification center, '
+          'with these options, and with none of them by default: the '
           'service sets them, as the push role asks of a provider.',
     );
     expect(onIOSService.platformShowsInForeground, isTrue);
@@ -255,7 +256,8 @@ void main() {
 
     final before = await service.address();
     // iOS registers the device a while after the app started, and the
-    // plugin of firebase_messaging tells the app nothing then.
+    // plugin of firebase_messaging tells the app nothing then at a later
+    // start of the app, whose registration token stays the same.
     device.apnsToken = 'an APNs token that came late';
     final until = DateTime.now().add(const Duration(seconds: 5));
     while (changes.isEmpty && DateTime.now().isBefore(until)) {

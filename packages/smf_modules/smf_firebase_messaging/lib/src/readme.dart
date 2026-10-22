@@ -40,7 +40,7 @@ To send this device a test message, run the app in debug mode and copy the addre
 
 `${AppEntryRole.androidManifestFile}` names the channel `${NotificationsRole.defaultChannel}` of the notifications of the app (`$channelMetaData`) and their small icon `$iconResource` (`$iconMetaData`). Android shows a message that arrives in the background with them.
 
-On iOS, firebase_messaging answers the system for every notification that arrives while the app is in the foreground, the notifications that the app shows itself too. So the service sets its presentation options to an alert, a badge and a sound when the app starts (`setForegroundNotificationPresentationOptions()`): without them, iOS would show none of these notifications in the foreground.
+On iOS, firebase_messaging answers the system for every push message that arrives while the app is in the foreground, and for the notifications that the app shows itself too while it is the delegate of the notification center. So the service sets its presentation options to an alert, a badge and a sound when the app starts (`setForegroundNotificationPresentationOptions()`): without them, iOS would show none of these notifications in the foreground.
 
 The app runs no code for a message that arrives in the background. To handle one, register a top-level function with `FirebaseMessaging.onBackgroundMessage()` in `main()`. It runs in an isolate of its own, without what `bootstrap()` sets up.
 ''';
