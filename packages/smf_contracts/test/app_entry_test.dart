@@ -241,7 +241,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(22));
+      expect(sockets, hasLength(23));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -257,6 +257,7 @@ void main() {
           'smf_app_entry__android_core_library_desugaring_library',
           'smf_app_entry__ios_app_delegate_launch',
           'smf_app_entry__android_manifest_application_components',
+          'smf_app_entry__gitignore',
         ]),
       );
     });
@@ -1423,6 +1424,100 @@ void main() {
         problemsFrom(own, AppEntryRole.setupHeading, text: ' '),
         ['The section "Finish the setup" of the README has no text.'],
       );
+    });
+
+    test(
+        'the patterns of .gitignore come in their order, each under its '
+        'comment after an empty line, and nothing without patterns', () {
+      const socket = AppEntryRole.gitignore;
+
+      expect(AppEntryRole.gitignoreFile, '.gitignore');
+      expect(socket.kind.carriesImports, isFalse);
+      // The pipeline takes the patterns by the ids of their contributors,
+      // and the order of the patterns is the order of the file.
+      expect(socket.kind.followsOrderEdges, isFalse);
+      expect(
+        _render(socket, const [
+          ('/coverage/', 'The reports of the coverage of the tests'),
+          ('.env', 'The values that each developer fills in'),
+          ('/coverage/', 'The reports of the coverage of the tests'),
+        ]),
+        {
+          socket.tag: '\n# The values that each developer fills in\n.env\n'
+              '\n# The reports of the coverage of the tests\n/coverage/',
+        },
+      );
+      expect(
+        () => _render(socket, const [
+          ('.env', 'The values of the app'),
+          ('.env', 'The keys of the app'),
+        ]),
+        throwsA(isA<MergeConflict>()),
+      );
+      // A tag that gets nothing renders nothing, and the pipeline removes
+      // its line.
+      expect(socket.render(const []), {socket.tag: ''});
+    });
+
+    test(
+        'a pattern of .gitignore is one line that neither comments nor '
+        'brings back, under a comment of one line', () {
+      const socket = AppEntryRole.gitignore;
+      List<String> problems(String pattern, [String comment = 'Values']) =>
+          socket.problemsWith(socket.entry(pattern, comment));
+
+      expect(problems('.env'), isEmpty);
+      expect(
+        problems('/build output/', 'The output of a tool, ünïcode'),
+        isEmpty,
+      );
+      for (final pattern in ['', ' .env', '.env ', '.e\nnv', '.e\rnv']) {
+        expect(
+          problems(pattern).single,
+          'The pattern "$pattern" of .gitignore is not one line of text '
+          'without spaces around it.',
+          reason: pattern,
+        );
+      }
+      for (final pattern in [r'\#notes', r'build\ dir', r'C:\temp']) {
+        expect(
+          problems(pattern).single,
+          'The pattern "$pattern" of .gitignore has a backslash, which git '
+          'reads as an escape.',
+          reason: pattern,
+        );
+      }
+      expect(
+        problems('#notes').single,
+        'The pattern "#notes" of .gitignore starts with "#", which makes its '
+        'line a comment.',
+      );
+      expect(
+        problems('!keep.env').single,
+        'The pattern "!keep.env" of .gitignore starts with "!", which brings '
+        'back what a line before it ignores. The patterns come in the order '
+        'of their text, so none may bring back what another ignores.',
+      );
+      for (final comment in ['', ' Values', 'Values ', 'Val\nues']) {
+        expect(
+          problems('.env', comment).single,
+          'The comment "$comment" of the pattern ".env" of .gitignore is not '
+          'one line of text without spaces around it.',
+          reason: comment,
+        );
+      }
+      // mason drops a backslash before a line break, which follows the
+      // comment, or before a non-ASCII character.
+      for (final comment in [r'Values of C:\', r'Values \ü']) {
+        expect(
+          problems('.env', comment).single,
+          'The comment "$comment" of the pattern ".env" of .gitignore has a '
+          'backslash at its end or before a non-ASCII character, which mason '
+          'removes.',
+          reason: comment,
+        );
+      }
+      expect(problems('.env', r'Values of C:\temp'), isEmpty);
     });
   });
 
@@ -3280,6 +3375,8 @@ Future<void> main() async {
               '}\n',
           AppEntryRole.readmeFile: '# {{app_name}}\n\nAn app.\n'
               '{{{smf_app_entry__readme_sections}}}\n',
+          AppEntryRole.gitignoreFile:
+              '/build/\n{{{smf_app_entry__gitignore}}}\n',
         }),
         isEmpty,
       );
@@ -3529,6 +3626,10 @@ Future<void> main() async {
         AppEntryRole.gradleAppFile: 'dependencies {\n'
             '    {{{smf_app_entry__android_core_library_desugaring_library}}}\n'
             '}\n',
+        // The patterns of the modules are lines of the .gitignore at the
+        // root of the app, not of another one.
+        'android/.gitignore': '{{{smf_app_entry__gitignore}}}\n',
+        AppEntryRole.gitignoreFile: '/build/ {{{smf_app_entry__gitignore}}}\n',
       });
 
       expect(issues.map((issue) => issue.message), [
@@ -3574,6 +3675,15 @@ Future<void> main() async {
           '{{{smf_app_entry__android_core_library_desugaring_library}}} must '
           'stand alone at the start of a line of android/app/build.gradle.kts, '
           'because its contributions render as complete lines.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__gitignore}}} is in android/.gitignore, '
+          'but its lines belong in .gitignore.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__gitignore}}} must stand alone at the '
+          'start of a line of .gitignore, because its contributions render as '
+          'complete lines.',
         ),
         equals(
           'The tag {{{smf_app_entry__readme_sections}}} must stand alone at '

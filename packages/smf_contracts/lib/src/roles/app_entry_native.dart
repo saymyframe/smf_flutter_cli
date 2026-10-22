@@ -216,6 +216,63 @@ final class _ReadmeSectionPolicy extends MergePolicy<String> {
       const ConflictPolicy<String>().merge(key, existing, incoming);
 }
 
+/// Keeps one comment for each pattern of `.gitignore`, and checks that a
+/// pattern is one line that neither comments nor brings back what another
+/// line ignores, without a backslash, under a comment of one line.
+final class _GitignorePolicy extends MergePolicy<String> {
+  const _GitignorePolicy();
+
+  @override
+  String? problemWith(String key, String value) {
+    if (!_isOneLine(key)) {
+      return 'The pattern "$key" of .gitignore is not one line of text '
+          'without spaces around it.';
+    }
+    if (key.contains(r'\')) {
+      return 'The pattern "$key" of .gitignore has a backslash, which git '
+          'reads as an escape.';
+    }
+    if (key.startsWith('#')) {
+      return 'The pattern "$key" of .gitignore starts with "#", which makes '
+          'its line a comment.';
+    }
+    if (key.startsWith('!')) {
+      return 'The pattern "$key" of .gitignore starts with "!", which brings '
+          'back what a line before it ignores. The patterns come in the '
+          'order of their text, so none may bring back what another ignores.';
+    }
+    if (!_isOneLine(value)) {
+      return 'The comment "$value" of the pattern "$key" of .gitignore is '
+          'not one line of text without spaces around it.';
+    }
+    // As it renders: before a line break.
+    if (Fragment.hasStrippedBackslash('$value\n')) {
+      return 'The comment "$value" of the pattern "$key" of .gitignore has a '
+          'backslash at its end or before a non-ASCII character, which mason '
+          'removes.';
+    }
+    return null;
+  }
+
+  @override
+  String merge(String key, String existing, String incoming) =>
+      const ConflictPolicy<String>().merge(key, existing, incoming);
+}
+
+/// Whether [text] is one line of text without spaces around it.
+bool _isOneLine(String text) =>
+    text.isNotEmpty &&
+    text == text.trim() &&
+    !text.contains('\n') &&
+    !text.contains('\r');
+
+/// Each pattern of `.gitignore` under its comment, after an empty line, in
+/// the order of the patterns.
+String _renderGitignore(List<MapEntry<String, String>> entries) =>
+    ([...entries]..sort((a, b) => a.key.compareTo(b.key)))
+        .map((entry) => '\n# ${entry.value}\n${entry.key}')
+        .join('\n');
+
 String _renderString(String value) => value;
 
 /// Each section under its heading, after an empty line: the section of the
@@ -340,6 +397,7 @@ const _lineSockets = <(SocketRef, String)>[
   (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
   (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),
   (AppEntryRole.androidCoreLibraryDesugaring, AppEntryRole.gradleAppFile),
+  (AppEntryRole.gitignore, AppEntryRole.gitignoreFile),
   (AppEntryRole.readmeSections, AppEntryRole.readmeFile),
 ];
 

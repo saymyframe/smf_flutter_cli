@@ -28,7 +28,9 @@ const appEntryRole = AppEntryRole._();
 ///   which the app target signs with, and its app delegate in Swift,
 ///   [appDelegateFile];
 /// - [readmeFile], the README of the app, which says under its title that
-///   Say My Frame generated the app, with the line [generatedWith].
+///   Say My Frame generated the app, with the line [generatedWith];
+/// - [gitignoreFile], which keeps out of git what Flutter and its tools
+///   write, followed by the patterns of the modules ([gitignore]).
 ///
 /// The provider builds the root of the app, inside the [rootWrappers], as a
 /// `MaterialApp`, or a `MaterialApp.router` when the router role is present.
@@ -75,11 +77,12 @@ const appEntryRole = AppEntryRole._();
 /// such step itself, [iosAppIdStep], which every contributor of an
 /// entitlement of [paidTeamEntitlements] lists.
 ///
-/// The keyed sockets of the native files and of the README,
-/// [mainActivityIntentFilters], [androidManifestApplicationComponents],
-/// [iosAppDelegateLaunch] and both places of [androidCoreLibraryDesugaring]
-/// render complete lines, so their tags stand alone at the start of a line
-/// of their file, like the tags of [PipelineSockets]. The tag of
+/// The keyed sockets of the native files, of [gitignoreFile] and of the
+/// README, [mainActivityIntentFilters],
+/// [androidManifestApplicationComponents], [iosAppDelegateLaunch] and both
+/// places of [androidCoreLibraryDesugaring] render complete lines, so their
+/// tags stand alone at the start of a line of their file, like the tags of
+/// [PipelineSockets]. The tag of
 /// [iosDeploymentTarget] stands where the version goes, as in
 /// `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module rules of the role
 /// check these tags in the templates of its provider, the element of the
@@ -128,6 +131,9 @@ final class AppEntryRole extends Role<NoDsl> {
 
   /// The path of the README of the app.
   static const readmeFile = 'README.md';
+
+  /// The path of the `.gitignore` of the app; see [gitignore].
+  static const gitignoreFile = '.gitignore';
 
   /// The line of [readmeFile] that says that Say My Frame generated the
   /// app, with a link to its documentation.
@@ -587,6 +593,37 @@ final class AppEntryRole extends Role<NoDsl> {
     ),
   );
 
+  /// Patterns of [gitignoreFile], keyed by pattern, each with a comment of
+  /// one line that says what it keeps out of git, such as a file of values
+  /// that each developer fills in for themselves.
+  ///
+  /// They follow the lines of the provider's `.gitignore`, each after an
+  /// empty line and under `# <comment>`, in the order of the patterns. No
+  /// pattern brings back what another ignores, so their order does not
+  /// matter, and the file is the same whatever the order of the modules:
+  /// the socket does not follow the order edges of its contributors (see
+  /// [SocketKind.followsOrderEdges]). A pattern is one line without spaces
+  /// around it and without a backslash, and starts with neither `#`, which
+  /// makes its line a comment, nor `!`, which brings back what a line
+  /// before it ignores. A comment is one line of text without spaces around
+  /// it. Two different comments for one pattern conflict. Without patterns,
+  /// the file is that of the provider's template.
+  ///
+  /// The tag of the socket stands alone on the last line of the provider's
+  /// `.gitignore`, and every provider of the role has it. A provider
+  /// without it takes no patterns: `smf create` stops on a pattern that a
+  /// module contributes then, and the contract harness reports the
+  /// provider in every app.
+  static const gitignore = SocketRef<KeyedSocket<String>>.role(
+    appEntryRole,
+    'gitignore',
+    KeyedSocket(
+      policy: _GitignorePolicy(),
+      renderer: _renderGitignore,
+      followsOrderEdges: false,
+    ),
+  );
+
   /// Sections of [readmeFile], keyed by their heading, each with its text
   /// in Markdown, such as how to set up a service that the app uses.
   ///
@@ -697,6 +734,7 @@ final class AppEntryRole extends Role<NoDsl> {
         gradleAppPlugins,
         gradleAppDependencies,
         androidCoreLibraryDesugaring,
+        gitignore,
         readmeSections,
         agentSections,
       ];
