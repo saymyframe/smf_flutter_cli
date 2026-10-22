@@ -1468,7 +1468,10 @@ final class GuardedNavigation<L> {
   }
 
   /// What the router does now that a guard started or stopped allowing, or
-  /// `null` to leave its pages as they are.
+  /// `null` to leave its pages as they are. With `null` the router changes
+  /// nothing: its pages stay, and so do the routes without a page that code
+  /// pushed over them, such as a dialog or the screen that the action of an
+  /// onboarding step shows.
   ///
   /// [pages] are the pages that the user can get back to, the one on top
   /// first: those of the root navigator and of the selected branch of the

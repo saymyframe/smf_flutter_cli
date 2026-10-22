@@ -352,7 +352,11 @@ final class RouterRole extends Role<RoutesData> {
   ///
   /// When the answer is `null`, the provider leaves everything as it is:
   /// the stack stays, the listeners of [screenListeners] hear nothing, and
-  /// each `push()` still completes with the value of its page. Otherwise:
+  /// each `push()` still completes with the value of its page. The routes
+  /// without a page that code pushed over its pages stay too, such as a
+  /// dialog, or the screen that the action of an onboarding step pushes on
+  /// the root navigator: a provider neither pops them nor builds its pages
+  /// anew, with other keys, for a notification. Otherwise:
   /// - `ShowInstead(location)`: it shows the location as it shows that
   ///   answer of `asked`, in place of its whole stack, and the target of a
   ///   gate in place of the stacks of every branch too, so no page that a
