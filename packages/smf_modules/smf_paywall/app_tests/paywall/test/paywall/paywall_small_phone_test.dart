@@ -21,6 +21,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/purchases/app_purchases.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
@@ -47,6 +48,34 @@ void _useSmallPhone(WidgetTester tester) {
 /// The texts of the paywall on top, the last one that the app built.
 Finder _inPaywall(Finder matching) =>
     find.descendant(of: find.byType(PaywallScreen).last, matching: matching);
+
+/// Checks that [shown], a text of the paywall on top with the text [text],
+/// keeps its words whole on the small phone: each word is on one line.
+void _expectWholeWords(
+  WidgetTester tester,
+  Finder shown,
+  String text, {
+  required String when,
+}) {
+  final paragraph = tester.renderObject<RenderParagraph>(
+    find.descendant(
+        of: shown, matching: find.byType(RichText), matchRoot: true),
+  );
+  var start = 0;
+  for (final word in text.split(' ')) {
+    final boxes = paragraph.getBoxesForSelection(
+      TextSelection(baseOffset: start, extentOffset: start + word.length),
+    );
+    expect(
+      {for (final box in boxes) box.top},
+      hasLength(1),
+      reason: '$when, "$text" breaks between its words and not inside '
+          '"$word": where a word would not fit, the text is as large as the '
+          'word allows.',
+    );
+    start += word.length + 1;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -107,6 +136,28 @@ void main() {
             reason: '$when, the paywall scrolls to its links, which end '
                 'above the inset at the bottom.',
           );
+          final afterOffer =
+              '${texts['oneWeek']} ${texts['free']}, ${texts['then']} '
+              r'$29.99'
+              ' ${texts['perYear']}';
+          await tester.scrollUntilVisible(
+            _inPaywall(find.text(afterOffer)),
+            100,
+            scrollable: scrollable,
+          );
+          for (final text in [
+            afterOffer,
+            texts['startTrial']!,
+            texts['planYearly']!,
+            texts['benefitNew']!,
+          ]) {
+            _expectWholeWords(
+              tester,
+              _inPaywall(find.text(text)).first,
+              text,
+              when: when,
+            );
+          }
           final scale = MediaQuery.textScalerOf(
             tester.element(
               _inPaywall(

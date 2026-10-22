@@ -157,7 +157,7 @@ class _PaywallViewState extends State<PaywallView>
               ),
               if (afterOffer != null) ...[
                 const SizedBox(height: 10),
-                Text(
+                WholeWords(
                   afterOffer,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -173,7 +173,7 @@ class _PaywallViewState extends State<PaywallView>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (selected != null && state.loadFailure == null) ...[
-          Text(
+          WholeWords(
             termsTextOf(context, selected),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(

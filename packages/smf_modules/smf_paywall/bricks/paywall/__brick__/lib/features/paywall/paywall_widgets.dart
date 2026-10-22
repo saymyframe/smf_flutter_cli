@@ -376,7 +376,10 @@ class PlanCard extends StatelessWidget {
                           runSpacing: 6,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Text(name, style: theme.textTheme.titleMedium),
+                            WholeWords(
+                              name,
+                              style: theme.textTheme.titleMedium,
+                            ),
                             ?switch (badge) {
                               final badge? => Pill(badge, strong: true),
                               null => null,
