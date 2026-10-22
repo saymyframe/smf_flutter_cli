@@ -227,13 +227,13 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// needs: such an app has no route to start on, since only home has one,
 /// and the destination of its feature has no main navigation to lead to it,
 /// since the app has no layout. The apps of a module with the settings
-/// screen, such as those of the theme, of RevenueCat and of the
-/// notifications, get the settings feature for it, and the apps of the
-/// notifications with the
-/// onboarding screen get the onboarding feature, which has no route to
-/// start on either. An app of Google sign-in has no way to sign in
-/// that the App Store takes as its equivalent on iOS, which the apps with
-/// every module have in Sign in with Apple (guideline 4.8).
+/// screen, such as those of the theme, of RevenueCat, of the paywall and of
+/// the notifications, get the settings feature for it, and the apps of the
+/// notifications with the onboarding screen get the onboarding feature,
+/// which has no route to start on either, and neither has the paywall. An
+/// app of Google sign-in has no way to sign in that the App Store takes as
+/// its equivalent on iOS, which the apps with every module have in Sign in
+/// with Apple (guideline 4.8).
 const _warningApps = <String, List<String>>{
   'settings with localization': [
     'router.no_main_navigation',
@@ -264,6 +264,26 @@ const _warningApps = <String, List<String>>{
     'router.no_main_navigation',
     'router.no_start',
   ],
+  'paywall (bloc) with localization, settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'paywall (riverpod) with localization, settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'paywall (bloc) with localization': ['router.no_start'],
+  'paywall (riverpod) with localization': ['router.no_start'],
+  'paywall (bloc) with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'paywall (riverpod) with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'paywall (bloc)': ['router.no_start'],
+  'paywall (riverpod)': ['router.no_start'],
   'onboarding with localization': ['router.no_start'],
   'onboarding': ['router.no_start'],
   'google_sign_in with localization': ['auth.no_equivalent_sign_in'],
@@ -312,7 +332,9 @@ void main() {
       'DI container and without, the app of the values of .env, the apps '
       'of RevenueCat with the sign-in, the settings screen and the '
       'localization and without each, which all get the values of .env, the '
-      'apps of the onboarding with the '
+      'apps of the paywall for each state manager with the localization and '
+      'the settings screen and without each, which get RevenueCat, the '
+      'values of .env and the router, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
       'onboarding screen and the localization and without each, which all '
@@ -343,7 +365,7 @@ void main() {
         'shared_preferences, dart_define, onboarding, local_notifications, '
         'firebase_core, firebase_crashlytics, firebase_analytics, '
         'firebase_messaging, firebase_auth, google_sign_in, apple_sign_in, '
-        'sign_in, revenuecat)';
+        'sign_in, revenuecat, paywall)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -540,6 +562,31 @@ void main() {
         'dart_define, shared_preferences)',
       ),
       'revenuecat (revenuecat, flutter_core, dart_define)',
+      // The paywall with each state manager and each subset of the roles
+      // that it uses, with RevenueCat and its values of .env for the
+      // purchases, and the router.
+      for (final (uses, others) in [
+        (
+          ' with localization, settings_screen',
+          'gen_l10n, settings, flutter_core, revenuecat, dart_define, '
+              'go_router, %, shared_preferences',
+        ),
+        (
+          ' with localization',
+          'gen_l10n, flutter_core, revenuecat, dart_define, go_router, %, '
+              'shared_preferences',
+        ),
+        (
+          ' with settings_screen',
+          'settings, flutter_core, revenuecat, dart_define, go_router, %',
+        ),
+        ('', 'flutter_core, revenuecat, dart_define, go_router, %'),
+      ])
+        for (final stateManager in ['bloc', 'riverpod'])
+          [
+            'paywall ($stateManager)$uses (paywall,',
+            '${others.replaceFirst('%', stateManager)})',
+          ].join(' '),
       inMode('guest'),
       inMode('anonymous'),
       everyModule('bloc'),
@@ -770,7 +817,7 @@ void main() {
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, dart_define, onboarding, local_notifications, '
-        'revenuecat, local)';
+        'revenuecat, paywall, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2527,6 +2574,7 @@ Type type() => Types;
               'onboarding',
               'local_notifications',
               'revenuecat',
+              'paywall',
             ].join(','),
             '-o',
             '/apps',

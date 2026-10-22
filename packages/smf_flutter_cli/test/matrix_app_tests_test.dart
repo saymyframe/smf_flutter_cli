@@ -14,6 +14,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
@@ -264,6 +265,26 @@ const _rcSettings = '$_rc with settings_screen';
 const _rcL10n = '$_rc with localization';
 
 /// Those of them with the localization.
+const _pwAll = 'paywall (bloc) with localization, settings_screen';
+const _pwAllRiverpod = 'paywall (riverpod) with localization, settings_screen';
+const _pwL10n = 'paywall (bloc) with localization';
+const _pwL10nRiverpod = 'paywall (riverpod) with localization';
+const _pwSettings = 'paywall (bloc) with settings_screen';
+const _pwSettingsRiverpod = 'paywall (riverpod) with settings_screen';
+const _pw = 'paywall (bloc)';
+const _pwRiverpod = 'paywall (riverpod)';
+
+const List<String> _paywall = [
+  _pwAll,
+  _pwAllRiverpod,
+  _pwL10n,
+  _pwL10nRiverpod,
+  _pwSettings,
+  _pwSettingsRiverpod,
+  _pw,
+  _pwRiverpod,
+];
+
 const _localizedSignIn = [
   'sign_in (bloc) with localization',
   'sign_in (riverpod) with localization',
@@ -1113,6 +1134,11 @@ void main() {
         _rcAuthL10n,
         _rcSettingsL10n,
         _rcL10n,
+        // And the apps of the paywall with it.
+        _pwAll,
+        _pwAllRiverpod,
+        _pwL10n,
+        _pwL10nRiverpod,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1242,6 +1268,11 @@ void main() {
         _rcAuthL10n,
         _rcSettingsL10n,
         _rcL10n,
+        // The paywall, whose screens have texts.
+        _pwAll,
+        _pwAllRiverpod,
+        _pwL10n,
+        _pwL10nRiverpod,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1281,6 +1312,8 @@ void main() {
         'apple_sign_in with localization': ['en', 'uk'],
         'sign_in (bloc) with localization': ['en', 'uk'],
         'sign_in (riverpod) with localization': ['en', 'uk'],
+        for (final app in [_pwAll, _pwAllRiverpod, _pwL10n, _pwL10nRiverpod])
+          app: ['en', 'uk'],
         for (final app in _authModes) app: ['en', 'uk'],
         for (final app in _everyModule) app: ['en', 'uk'],
       },
@@ -1616,6 +1649,8 @@ void main() {
         ..._localizedSignIn,
         _rcAll,
         _rcSettingsL10n,
+        _pwAll,
+        _pwAllRiverpod,
         ..._everyModule,
       ],
     );
@@ -2622,6 +2657,10 @@ void main() {
         _rcAuthSettings,
         _rcSettingsL10n,
         _rcSettings,
+        _pwAll,
+        _pwAllRiverpod,
+        _pwSettings,
+        _pwSettingsRiverpod,
         ..._everyModule,
       ],
     );
@@ -2630,8 +2669,9 @@ void main() {
     expect(settings.startProbe, isNull);
     // The entries of each app, as the role gives them: none in the app of
     // the settings module alone, whose modules have no setting; the entry
-    // of the account, which the sign-in module gives the role, in the apps
-    // with that module, before the entries of the templates of the roles;
+    // of the account and the entry of the subscription, which the sign-in
+    // module and the paywall module give the role, in the apps with those
+    // modules, before the entries of the templates of the roles;
     // the entry of the theme mode, which the template of the theme role
     // contributes, in the apps with the theme; the setting of the
     // language, which the template of the localization role contributes, in
@@ -2669,9 +2709,20 @@ void main() {
           app: ['AccountSetting', 'LanguageSetting'],
         'sign_in (bloc)': ['AccountSetting'],
         'sign_in (riverpod)': ['AccountSetting'],
+        // The entry of the subscription, which the paywall module gives
+        // the role, before the entries of the templates of the roles.
+        for (final app in [_pwAll, _pwAllRiverpod])
+          app: [
+            'SubscriptionSetting',
+            'LanguageSetting',
+            'RestorePurchasesSetting',
+          ],
+        for (final app in [_pwSettings, _pwSettingsRiverpod])
+          app: ['SubscriptionSetting', 'RestorePurchasesSetting'],
         for (final app in _everyModule)
           app: [
             'AccountSetting',
+            'SubscriptionSetting',
             'ThemeModeSetting',
             'LanguageSetting',
             'NotificationsSetting',
@@ -3130,6 +3181,10 @@ void main() {
         _rcAuthSettings,
         _rcSettingsL10n,
         _rcSettings,
+        _pwAll,
+        _pwAllRiverpod,
+        _pwSettings,
+        _pwSettingsRiverpod,
         ..._everyModule,
       ],
     );
@@ -3155,6 +3210,8 @@ void main() {
         'sign_in (riverpod)',
         _rcAuthSettings,
         _rcSettings,
+        _pwSettings,
+        _pwSettingsRiverpod,
       ],
     );
     for (final app in withoutRole) {
@@ -3215,6 +3272,8 @@ void main() {
           ..._localizedSignIn,
           _rcAll,
           _rcSettingsL10n,
+          _pwAll,
+          _pwAllRiverpod,
           ..._everyModule,
         ],
         reason: languages,
@@ -3363,7 +3422,11 @@ void main() {
         for (final app in _localizedSignIn) app: (2, false),
         'sign_in (bloc)': (1, false),
         'sign_in (riverpod)': (1, false),
-        for (final app in _everyModule) app: (5, true),
+        // The entry of the subscription, the entry that restores purchases,
+        // and the setting of the language.
+        for (final app in [_pwAll, _pwAllRiverpod]) app: (3, false),
+        for (final app in [_pwSettings, _pwSettingsRiverpod]) app: (2, false),
+        for (final app in _everyModule) app: (6, true),
       },
     );
     for (final app in apps.where(settings.appliesTo)) {
@@ -4387,6 +4450,186 @@ void main() {
     );
   });
 
+  test(
+      'the test of the paywall applies to the apps with the module, whatever '
+      'else they have, gives the keys of the module addresses in .env, '
+      'declares the mocks that buy a plan through the purchases of the app '
+      'for the tests of every module of those apps, has no probe, and '
+      'expects the screen that the app starts on, the settings screen with '
+      'the entry of the module where the app has one, and the texts of the '
+      'module in each language of the app', () {
+    final test = named('paywall');
+    final applies = apps.where(test.appliesTo).toList();
+
+    expect(
+      [for (final app in applies) app.name],
+      [
+        for (final app in apps)
+          if (app.modules.contains(PaywallModule.id)) app.name,
+      ],
+    );
+    expect(
+      [for (final app in applies) app.name],
+      [..._paywall, ..._everyModule],
+    );
+    // The router shows the paywall and closes it, whichever module
+    // provides it.
+    expect(test.roles, {routerRole});
+    expect(test.devDependencies, ['url_launcher_platform_interface']);
+    expect(test.values, isNull);
+    // The walk of the routes shows the paywall on a device.
+    expect(test.startProbe, isNull);
+    for (final app in applies) {
+      expect(
+        test.envValues!(app),
+        {
+          'PAYWALL_TERMS_URL': 'https://example.com/terms',
+          'PAYWALL_PRIVACY_URL': 'https://example.com/privacy',
+        },
+        reason: app.name,
+      );
+    }
+    expect(test.mocks!.path, 'test/paywall_mocks.dart');
+    expect(test.mocks!.function, 'grantPremium');
+    final mocks = DartFileIndexer.index(
+      test.mocks!.path,
+      File(p.joinAll([test.directory, ...test.mocks!.path.split('/')]))
+          .readAsStringSync(),
+    );
+    final function = mocks.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.parameters, isEmpty);
+    // The purchase goes through the purchases of the app, so the mocks know
+    // no provider of the purchases role: they buy the first plan of
+    // appPurchases, and import no other file of the app than that of the
+    // role.
+    expect(
+      [
+        for (final call in mocks.invocations)
+          if (call.enclosingDeclaration == test.mocks!.function) call.name,
+      ],
+      containsAll(['plans', 'purchase', 'unawaited']),
+    );
+    final controllerFile =
+        PurchasesRole.controllerFile.substring('lib/'.length);
+    expect(
+      [
+        for (final import in mocks.imports)
+          if (import.uri.startsWith('package:')) import.uri,
+      ],
+      ['package:{{app_name}}/$controllerFile'],
+    );
+
+    final settings = <String, String>{};
+    final screens = <String, String>{};
+    final languages = <String, List<String>>{};
+    for (final app in applies) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [paywallOfAppFile], reason: app.name);
+      final text = files[paywallOfAppFile]!;
+      languages[app.name] = _languagesOf(text);
+      final (:index, :errors) = DartFileIndexer.parse(paywallOfAppFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        [
+          'startScreen',
+          'settingsLocation',
+          'settingsScreen',
+          'settingsInMainNavigation',
+          'subscriptionEntry',
+          'paywallTexts',
+        ],
+        reason: app.name,
+      );
+      settings[app.name] = [
+        for (final name in [
+          r'AppLocation\? settingsLocation',
+          r'Type\? settingsScreen',
+          'bool settingsInMainNavigation',
+          r'Type\? subscriptionEntry',
+        ])
+          RegExp('^const $name = (.+);\$', multiLine: true)
+              .firstMatch(text)![1],
+      ].join(', ');
+      final import =
+          index.imports.singleWhere((import) => import.prefix == 'screen');
+      screens[app.name] = '${import.uri}: '
+          '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
+      // The texts of the entry only in an app with a settings screen.
+      expect(
+        text.contains("'settingTitle': "),
+        app.hook!.presentRoles.contains(settingsScreenRole),
+        reason: app.name,
+      );
+    }
+    // The settings screen of the settings module, with the entry of the
+    // module, in the apps with a settings screen, a destination of the main
+    // navigation of the apps with every module, and nothing in the others.
+    const withSettings = 'SettingsSettingsLocation(), '
+        'settings.SettingsScreen, %, entry.SubscriptionSetting';
+    expect(settings, {
+      for (final name in [
+        _pwAll,
+        _pwAllRiverpod,
+        _pwSettings,
+        _pwSettingsRiverpod,
+      ])
+        name: withSettings.replaceFirst('%', 'false'),
+      for (final name in [_pwL10n, _pwL10nRiverpod, _pw, _pwRiverpod])
+        name: 'null, null, false, null',
+      for (final name in _everyModule)
+        name: withSettings.replaceFirst('%', 'true'),
+    });
+    // The fallback start screen of the app entry in the apps of the module,
+    // which no route starts, and home in the apps with every module.
+    expect(screens, {
+      for (final name in _paywall)
+        name: 'package:my_app/core/app/fallback_start_screen.dart: '
+            'screen.FallbackStartScreen',
+      for (final name in _everyModule)
+        name: 'package:my_app/features/home/home_screen.dart: '
+            'screen.HomeScreen',
+    });
+    expect(languages, {
+      for (final name in [_pwAll, _pwAllRiverpod, _pwL10n, _pwL10nRiverpod])
+        name: ['en', 'uk'],
+      for (final name in [_pwSettings, _pwSettingsRiverpod, _pw, _pwRiverpod])
+        name: ['en'],
+      for (final name in _everyModule) name: ['en', 'uk'],
+    });
+    // Each text of the module by its name, in the language of the app.
+    final text = test.generatedFiles!(
+      apps.singleWhere((app) => app.name == _pwAll),
+      'my_app',
+    )[paywallOfAppFile]!;
+    expect(
+      text,
+      allOf(
+        contains("    'planYearly': 'Yearly',"),
+        contains("    'planYearly': 'Щороку',"),
+        contains("    'settingInactive': 'Не активна',"),
+      ),
+    );
+    // An app whose settings screen gives the module no entry, or more than
+    // one, has no file of the test.
+    expect(
+      () => test.generatedFiles!(
+        apps.singleWhere((app) => app.name == 'settings'),
+        'my_app',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'The module paywall gives the settings screen of settings 0 '
+              'entries, rather than the entry of the subscription alone.',
+        ),
+      ),
+    );
+  });
+
   group('the tests of the purchases role', () {
     MatrixApp appWith(Set<Role> roles, {List<ModuleId>? everyModuleWith}) =>
         MatrixApp(
@@ -4436,6 +4679,7 @@ void main() {
           _rcSettings,
           _rcL10n,
           _rc,
+          ..._paywall,
           ..._everyModule,
         ],
       );
@@ -4553,7 +4797,7 @@ void main() {
           for (final app in apps)
             if (named('purchases_device').appliesTo(app)) app.name,
         ],
-        [_rcSettingsL10n, _rcSettings, _rcL10n, _rc],
+        [_rcSettingsL10n, _rcSettings, _rcL10n, _rc, ..._paywall],
       );
       // It imports no file of another test, which need not run in its apps.
       final files = Directory(test.directory)
@@ -4654,6 +4898,7 @@ void main() {
         _rcSettings,
         _rcL10n,
         _rc,
+        ..._paywall,
         ..._everyModule,
       ],
     );

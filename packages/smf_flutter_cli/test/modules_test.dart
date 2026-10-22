@@ -265,6 +265,10 @@ void main() {
           ModuleId('bloc'),
           ModuleId('riverpod'),
         ],
+        'paywall for the state management role': const [
+          ModuleId('bloc'),
+          ModuleId('riverpod'),
+        ],
       },
     );
   });
