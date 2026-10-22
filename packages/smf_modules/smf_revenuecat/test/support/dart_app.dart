@@ -11,11 +11,13 @@ import 'package:smf_pipeline/testing.dart';
 import 'package:yaml/yaml.dart';
 
 /// A stand-in for the part of Flutter's foundation library that the file of
-/// the module uses, with the signatures of Flutter 3.44. The app runs in
-/// debug mode, and a test sets the platform that the app runs on, which
-/// Flutter has as a getter.
+/// the module uses, with the signatures of Flutter 3.44, and the constant of
+/// a release build too. The app runs in debug mode, and a test sets the
+/// platform that the app runs on, which Flutter has as a getter.
 const _foundation = '''
 const bool kDebugMode = true;
+
+const bool kReleaseMode = false;
 
 enum TargetPlatform { android, fuchsia, iOS, linux, macOS, windows }
 
