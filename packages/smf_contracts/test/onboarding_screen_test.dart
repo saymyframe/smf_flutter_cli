@@ -55,7 +55,7 @@ final _mutedRole = TestRole<NoDsl>('muted', uses: {onboardingScreenRole});
 /// [textNames] if it is set, and read
 /// `<name> title` and so on in English, and with [translated] also
 /// `uk <name> title` and so on in Ukrainian; with the button `later` unless
-/// [later] is `false`.
+/// [later] is `false`, and of the stage [stage].
 OnboardingStep _step(
   String name, {
   String? textNames,
@@ -64,6 +64,7 @@ OnboardingStep _step(
   bool later = true,
   bool translated = false,
   Fragment icon = _bell,
+  OnboardingStage stage = OnboardingStage.permission,
 }) {
   LocalizedText text(String suffix, String en) => LocalizedText(
         '${textNames ?? name}$suffix',
@@ -72,7 +73,7 @@ OnboardingStep _step(
       );
   return OnboardingStep(
     name: name,
-    stage: OnboardingStage.permission,
+    stage: stage,
     icon: icon,
     title: text('Title', 'title'),
     text: text('Text', 'text'),
@@ -557,8 +558,11 @@ void main() {
     expect('$route', 'onboarding screen route "onboarding"');
   });
 
-  test('the stages of the steps begin with the permissions', () {
-    expect(OnboardingStage.values, [OnboardingStage.permission]);
+  test('the stages of the steps are the permissions and then the offers', () {
+    expect(
+      OnboardingStage.values,
+      [OnboardingStage.permission, OnboardingStage.offer],
+    );
   });
 
   group('the onboarding screen role', () {
@@ -671,6 +675,29 @@ void main() {
       );
       expect(steps.first.step.name, 'ask');
       expect('${steps.last}', 'onboarding step alerts.alert');
+    });
+
+    test(
+        'lists the steps of an offer after those of a permission, whatever '
+        'the order of their contributors', () {
+      final steps = onboardingScreenRole.stepsIn(
+        _input([
+          _stepOf(_step('paywall', stage: OnboardingStage.offer)),
+          _stepOf(_step('ask'), module: 'tips'),
+          _stepOfRole(_step('trial', stage: OnboardingStage.offer), _hintsRole),
+          _stepOfRole(_step('alert'), _alertsRole),
+        ]),
+      );
+
+      expect(
+        [for (final step in steps) step.fullName],
+        [
+          'tips.ask',
+          'alerts.alert',
+          'permissions.paywall',
+          'hints.trial',
+        ],
+      );
     });
 
     test('gives the step of a variant of a module to the module', () {

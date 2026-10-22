@@ -248,6 +248,10 @@ enum OnboardingStage {
   /// A permission that the app asks for, such as the one to show
   /// notifications.
   permission,
+
+  /// An offer of the app, such as a paywall that sells access: after the
+  /// permissions, once the app is set up for the user.
+  offer,
 }
 
 /// A step of the onboarding: a page in the look of the onboarding with an
