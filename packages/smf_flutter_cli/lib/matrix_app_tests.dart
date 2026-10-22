@@ -1250,6 +1250,81 @@ Future<MatrixAppTest> pushRoleAppTest({
 /// shows a message, which is the id of the role.
 Map<String, String> _pushValuesOf(MatrixApp app) => {'push_owner': pushRole.id};
 
+/// The test of the purchases role that the CLI keeps in its
+/// `app_tests/purchases_role`, for the apps with the role, whichever module
+/// provides it, that [among] accepts, or all of them:
+/// - `appPurchases`, over a service of purchases of the test that scripts
+///   what a provider answers, and with a controller of its own: a call made
+///   before the first start waits for it, and the start completes after it
+///   and after the purchase that its completion makes; the start waits for
+///   the access at most `startWait`, and a later access still becomes the
+///   value; the controller asks again when the user comes back to the app,
+///   and takes each change that the service tells of; a change of the user
+///   waits for the purchase on its way, which belongs to the user who made
+///   it; a provider without what it needs leaves the app without purchases,
+///   prints its hint once and stops nothing; and a call fails only with a
+///   `PurchasesFailure`, a cancel completes with `false`, and an answer that
+///   gives no premium access fails with `notConfigured`;
+/// - `appPurchases` over the service of the provider, with users of the
+///   test: the offer has at least one plan, each with an id of its own, a
+///   title, a price in a currency and periods of one unit or more; a fresh
+///   user who buys a plan has premium access as the plan gives it, which the
+///   listeners hear of once and a restore gives; and the purchases of each
+///   user stay apart;
+/// - the next start, `initPurchases()` again, gives a user the premium
+///   access that the user bought.
+///
+/// The test knows only the role. It relies on the convention that the mocks
+/// of every provider keep to, as the role says, and identifies a throwaway
+/// user before its fresh users, so that none of them takes over what the
+/// user of the device bought. Its probe, `probePurchases()` of
+/// `integration_test/purchases_role/probe.dart`, only reads, for the start
+/// check on a device: the access of the app is the one that the service of
+/// the provider gives, and a provider that is not set up, or a store that
+/// does not answer, is no problem while the app shows no premium access.
+/// The test runs the probe too.
+Future<MatrixAppTest> purchasesRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(purchasesRole) &&
+          (among?.call(app) ?? true),
+      roles: {purchasesRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/purchases_role/probe.dart',
+        'probePurchases',
+      ),
+    );
+
+/// The test of the purchases of the users of the session that the CLI keeps
+/// in its `app_tests/purchases_session`, for the apps with the purchases
+/// role and the auth role, whichever modules provide them, that [among]
+/// accepts, or all of them, in each mode of the auth role: a user without
+/// an account who buys a plan keeps the premium access after a sign-up, and
+/// after a sign-out the next user of the device has none of the purchases
+/// of the user who signed out, whose account has them again after a
+/// sign-in.
+///
+/// It is a test of the purchases role, whose template makes `appPurchases`
+/// follow the session of the app, and whose contract says whose purchases
+/// they are. It reads the mode of the app from `authMode` of the app, so
+/// the matrix fills in nothing. It uses the helpers of the test of the
+/// purchases role ([purchasesRoleAppTest]), which every such app among
+/// those that [among] accepts has. It has no probe for the start check:
+/// nobody can sign in on a device.
+Future<MatrixAppTest> purchasesSessionAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_session',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.containsAll(const [purchasesRole, authRole]) &&
+          (among?.call(app) ?? true),
+      roles: {purchasesRole},
+    );
+
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them. Once the app started

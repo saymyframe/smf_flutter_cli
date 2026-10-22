@@ -4272,6 +4272,128 @@ void main() {
     );
   });
 
+  group('the tests of the purchases role', () {
+    MatrixApp appWith(Set<Role> roles, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'purchases',
+          const [ModuleId('purchases')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    test(
+        'the test of the role applies to the apps with the role, whichever '
+        'module provides it, or to those of them that it is given, and has '
+        'a probe for the start check', () async {
+      final test = await purchasesRoleAppTest();
+
+      expect(p.basename(test.directory), 'purchases_role');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      expect(test.roles, {purchasesRole});
+      expect(test.appliesTo(appWith({purchasesRole})), isTrue);
+      expect(test.appliesTo(appWith({authRole})), isFalse);
+      // The matrix fills in nothing, writes no file for the test, and the
+      // test has no mocks.
+      expect(test.values, isNull);
+      expect(test.generatedFiles, isNull);
+      expect(test.mocks, isNull);
+      // No module of the CLI provides the role yet, so the matrix of the
+      // CLI does not run it.
+      expect(
+        appTests.tests.map((test) => p.basename(test.directory)),
+        isNot(contains('purchases_role')),
+      );
+
+      // As the fixtures take it, only in the apps with every module.
+      final everyModule = await purchasesRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      );
+      expect(everyModule.appliesTo(appWith({purchasesRole})), isFalse);
+      expect(
+        everyModule.appliesTo(
+          appWith({purchasesRole}, everyModuleWith: const []),
+        ),
+        isTrue,
+      );
+      expect(
+        everyModule.appliesTo(appWith({authRole}, everyModuleWith: const [])),
+        isFalse,
+      );
+
+      // Its probe is a function of a file of the test that takes the one
+      // that waits until the screen settles, as the start check calls it.
+      final probe = test.startProbe!;
+      expect(probe.path, 'integration_test/purchases_role/probe.dart');
+      final file = File(p.joinAll([test.directory, ...probe.path.split('/')]));
+      final (:index, :errors) =
+          DartFileIndexer.parse(probe.path, file.readAsStringSync());
+      expect(errors, isEmpty);
+      final function = index.declarations
+          .singleWhere((declaration) => declaration.name == probe.function);
+      expect(function.name, 'probePurchases');
+      expect(function.kind, DeclarationKind.function);
+      expect(function.type, 'Future<List<String>>');
+      expect(
+        [
+          for (final parameter in function.parameters)
+            '${parameter.kind.name} ${parameter.type}',
+        ],
+        ['requiredPositional Future<void> Function()'],
+      );
+    });
+
+    test(
+        'the test of the purchases of the users of the session applies to '
+        'the apps with the purchases role and the auth role, whichever '
+        'modules provide them, or to those of them that it is given, and '
+        'uses the helpers of the test of the role, which applies to each of '
+        'them', () async {
+      final test = await purchasesSessionAppTest();
+      final ofRole = await purchasesRoleAppTest();
+
+      expect(p.basename(test.directory), 'purchases_session');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      // A test of the purchases role, whose template follows the session.
+      expect(test.roles, {purchasesRole});
+      final withBoth = appWith({purchasesRole, authRole});
+      expect(test.appliesTo(withBoth), isTrue);
+      expect(ofRole.appliesTo(withBoth), isTrue);
+      expect(test.appliesTo(appWith({purchasesRole})), isFalse);
+      expect(test.appliesTo(appWith({authRole})), isFalse);
+      // It reads the mode of the app from the app, has no mocks, and no
+      // probe: nobody can sign in on a device.
+      expect(test.values, isNull);
+      expect(test.generatedFiles, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      expect(
+        appTests.tests.map((test) => p.basename(test.directory)),
+        isNot(contains('purchases_session')),
+      );
+
+      final everyModule = await purchasesSessionAppTest(
+        among: (app) => app.everyModuleWith != null,
+      );
+      expect(everyModule.appliesTo(withBoth), isFalse);
+      expect(
+        everyModule.appliesTo(
+          appWith({purchasesRole, authRole}, everyModuleWith: const []),
+        ),
+        isTrue,
+      );
+      expect(
+        everyModule.appliesTo(
+          appWith({purchasesRole}, everyModuleWith: const []),
+        ),
+        isFalse,
+      );
+    });
+  });
+
   test(
       'the test of local_notifications applies to the apps with the module, '
       'whatever else they have, declares the mocks of its platform side for '
