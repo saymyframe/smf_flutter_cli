@@ -933,8 +933,10 @@ jobs:
     needs: plan
     if: inputs.macos_and_windows
     runs-on: macos-26
-    # About 10 minutes: the app and its build.
-    timeout-minutes: 25
+    # About 10 minutes: the app and its build. The job that writes the cache
+    # of Swift packages clones every package when it builds from an empty
+    # cache, which took 8 minutes for an app with every module on a Mac.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 2
