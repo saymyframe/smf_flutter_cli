@@ -23,12 +23,18 @@ void main() {
       [
         AppEnv.fakeEnvUserFirst,
         AppEnv.fakeEnvUserSecond,
-        AppEnv.fakeEnvUserThird
+        AppEnv.fakeEnvUserThird,
       ],
       reason: 'The variable of each key of the module reads the getter of '
           'AppEnv of that key.',
     );
-    // The value that its tests give the first key reaches the module.
-    expect(FixtureValues.first, isNotNull);
+    // Without a value of the first key, the first expectation would hold
+    // with nothing read, and the test of the role would read no value.
+    expect(
+      FixtureValues.first,
+      isNotNull,
+      reason: 'The tests of the module give its first key a value in .env, '
+          'which reaches the module.',
+    );
   });
 }

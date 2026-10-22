@@ -954,8 +954,9 @@ void main() {
       'the test of the env role applies to the apps with every module, where '
       'the fixture values of .env provide the role and the module that reads '
       'values of .env gives it keys, and not to the apps of the two alone, '
-      'which the matrix only analyzes; the test of that module gives its keys '
-      'a value in each form there, and the test of the role gives none', () {
+      'which the matrix only analyzes; there the test of that module gives '
+      'its keys a value in double quotes, an empty value and none, and the '
+      'test of the role gives no value', () {
     final roleTest = named('env_role');
     final valuesTest = named('env_variables');
     final everyModule = [
