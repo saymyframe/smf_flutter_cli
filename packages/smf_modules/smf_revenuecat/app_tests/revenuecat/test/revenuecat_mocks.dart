@@ -223,6 +223,7 @@ final class MockRevenueCat {
 
   final Map<String, PlatformException> _failures = {};
   final Map<String, Completer<void>> _held = {};
+  final Map<String, Object?> _answers = {};
 
   /// Answers the next call of [method], such as `purchasePackage`, with the
   /// error [code] of RevenueCat and [message], as the platform sends it:
@@ -258,6 +259,10 @@ final class MockRevenueCat {
   /// returns completes, as a platform that takes a while.
   Completer<void> holdNext(String method) => _held[method] = Completer<void>();
 
+  /// Answers the next call of [method] with [answer] as it is, such as an
+  /// answer in a form that the plugin does not read.
+  void answerNext(String method, Object? answer) => _answers[method] = answer;
+
   /// Grants [user] premium access until [until] on the backend, as the
   /// dashboard or the API of RevenueCat does. The device sees it once it
   /// reads the customer info anew.
@@ -279,6 +284,9 @@ final class MockRevenueCat {
       calls.add(call);
       if (_held.remove(call.method) case final held?) await held.future;
       if (_failures.remove(call.method) case final failure?) throw failure;
+      if (_answers.containsKey(call.method)) {
+        return _answers.remove(call.method);
+      }
       return _answer(call);
     });
   }

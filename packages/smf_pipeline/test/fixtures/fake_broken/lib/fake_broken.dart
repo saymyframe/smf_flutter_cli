@@ -1036,6 +1036,90 @@ final class _BrokenDiProvider extends DiProvider {
   }
 }
 
+/// A provider of the env role with one known bug: the fixture values of
+/// `.env`, whose `AppEnv` returns the value of a key as the command that
+/// built the app read it, so a key that `.env` leaves empty is an empty
+/// text rather than `null`. A key that `.env` lacks is still `null`.
+///
+/// `AppEnv` still declares a static getter for every key, as the rule
+/// `env.keys_rendered` of the role wants, and the app analyzes: only a
+/// running app shows the bug.
+final class BrokenEnvModule extends SmfModule {
+  /// Creates the module.
+  const BrokenEnvModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_env_keeps_empty_values');
+
+  /// The fixture values of `.env`, whose bricks this module contributes.
+  static const _fixture = FakeEnvModule();
+
+  @override
+  ModuleDescriptor get descriptor {
+    final fixture = _fixture.descriptor;
+    return ModuleDescriptor(
+      id: id,
+      description: 'The values of .env, empty ones as empty texts (fixture)',
+      kind: fixture.kind,
+      providers: [
+        // The fixture provides only the env role.
+        _BrokenEnvProvider(
+          fixture.providers.single as RoleProvider<EnvData>,
+        ),
+      ],
+    );
+  }
+
+  @override
+  List<Contribution> contribute(ModuleContext context) =>
+      _fixture.contribute(context);
+}
+
+/// Renders the members of `AppEnv` as the fixture values of `.env` do, but
+/// with a function that returns a value as the command read it.
+final class _BrokenEnvProvider extends RoleProvider<EnvData> {
+  const _BrokenEnvProvider(this._fixture);
+
+  /// The provider of the fixture values of `.env`.
+  final RoleProvider<EnvData> _fixture;
+
+  /// What the function of the getters of the fixture returns, which keeps
+  /// an empty value from them.
+  static const _checked =
+      '    return value == null || value.isEmpty ? null : value;\n';
+
+  @override
+  Role<EnvData> get role => envRole;
+
+  /// The output of [_fixture], whose function of the getters returns the
+  /// value as it is. The output stays as it is in an app without keys,
+  /// whose `AppEnv` has no members. Throws a [StateError] when [_fixture]
+  /// renders the function otherwise, so the app would not have the bug.
+  @override
+  RoleOutput render(RoleHookInput<EnvData> input) {
+    final output = _fixture.render(input);
+    if (envRole.keysIn(input).isEmpty) return output;
+    final members = output.vars['fixture_env_members']! as Fragment;
+    if (_checked.allMatches(members.code).length != 1) {
+      throw StateError(
+        'fake_env does not render once what ${BrokenEnvModule.id} changes, '
+        'so its app would not have its bug: $_checked',
+      );
+    }
+    return RoleOutput(
+      fragments: output.fragments,
+      vars: {
+        ...output.vars,
+        'fixture_env_members': Fragment(
+          members.code.replaceFirst(_checked, '    return value;\n'),
+          imports: members.imports,
+        ),
+      },
+      files: output.files,
+    );
+  }
+}
+
 /// A provider of the settings screen role with one known bug: a feature
 /// whose screen creates the widget of every entry of the role, in a list of
 /// its file, but shows them all but the last one.

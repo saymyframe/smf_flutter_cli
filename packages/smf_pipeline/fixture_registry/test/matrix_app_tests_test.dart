@@ -163,8 +163,9 @@ void main() {
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
       'of the auth role, of the onboarding screen role, of the notifications '
-      'role, of the push role and of the purchases role with every provider '
-      'of each, which they tell apart by the roles of the app only', () {
+      'role, of the push role, of the purchases role and of the env role with '
+      'every provider of each, which they tell apart by the roles of the app '
+      'only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -181,6 +182,7 @@ void main() {
         notificationsRole,
         pushRole,
         purchasesRole,
+        envRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
@@ -198,6 +200,9 @@ void main() {
     // contract of its providers.
     expect(named('purchases_session').roles, {purchasesRole});
     expect(named('purchases_device').roles, {purchasesRole});
+    expect(named('env_role').roles, {envRole});
+    // The test of the module that reads values of .env tests a module.
+    expect(named('env_variables').roles, isEmpty);
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -943,6 +948,78 @@ void main() {
       'fake_purchases with localization',
       'fake_purchases',
     ]);
+    // The test of the entry that restores purchases is not registered for
+    // the fixtures: no app of their matrix has a settings screen next to the
+    // purchases, so it would apply to no app, which fails the run. Once an
+    // app of the matrix has both roles, such as with a fixture provider of
+    // the settings screen role, the test belongs among those of the
+    // fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'purchases_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({purchasesRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register purchasesSettingAppTest() in fixtureAppTests() for '
+          'these apps.',
+    );
+  });
+
+  test(
+      'the test of the env role applies to the apps with every module, where '
+      'the fixture values of .env provide the role and the module that reads '
+      'values of .env gives it keys, and not to the apps of the two alone, '
+      'which the matrix only analyzes; there the test of that module gives '
+      'its keys a value in double quotes, an empty value and none, and the '
+      'test of the role gives no value', () {
+    final roleTest = named('env_role');
+    final valuesTest = named('env_variables');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    // The module uses the role, so it has an app with the role and one
+    // without, and the provider has an app without keys.
+    expect(
+      [
+        for (final app in apps)
+          if (app.modules.contains(FakeEnvModule.id) ||
+              app.modules.contains(FakeEnvUserModule.id))
+            if (app.everyModuleWith == null) app.name,
+      ],
+      ['fake_env', 'fake_env_user with env', 'fake_env_user'],
+    );
+    expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
+    expect(appsOf(valuesTest), appsOf(roleTest));
+    for (final app in everyModule) {
+      final keys = envRole.keysIn(envRole.hookInput(app.hook!));
+      expect(
+        [for (final key in keys) key.name],
+        [for (final key in FakeEnvUserModule.keys) key.name],
+        reason: app.name,
+      );
+      // A value in double quotes, an empty one, and none, as of a key that
+      // the file lacks: each case of the test of the role.
+      expect(valuesTest.envValues!(app), {
+        'FAKE_ENV_USER_FIRST': 'the first value # of the fixture',
+        'FAKE_ENV_USER_SECOND': '',
+        'FAKE_ENV_USER_THIRD': null,
+      });
+      expect(roleTest.envValues, isNull);
+      expect(roleTest.generatedFiles!(app, 'fixture_app').keys, [
+        'test/env_role/keys.dart',
+      ]);
+    }
   });
 
   test(
@@ -1918,6 +1995,7 @@ void main() {
           'revenuecat',
           'purchases_role',
           'purchases_session',
+          'purchases_setting',
           'paywall',
         ]),
       );
@@ -2037,6 +2115,42 @@ void main() {
               reason: '$helper for $name in ${app.name}',
             );
           }
+        }
+      }
+    });
+
+    test(
+        'has the entry that restores purchases on the settings screen, which '
+        'the template of the purchases role gives it with the provider of '
+        'the CLI, and the test of the entry, a test of the purchases role, '
+        'applies to it with the helpers of the tests of the settings screen '
+        'and of the purchases', () {
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(purchasesRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('revenuecat')],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(everyModule.hook!)))
+            entry.file,
+        ],
+        contains(PurchasesRole.settingFile),
+      );
+      final test = ofSeveral('purchases_setting');
+      expect(test.roles, {purchasesRole});
+      expect(test.appliesTo(everyModule), isTrue);
+      for (final app in matrix.where(test.appliesTo)) {
+        for (final helper in ['settings_screen_role', 'purchases_role']) {
+          expect(
+            ofSeveral(helper).appliesTo(app),
+            isTrue,
+            reason: '$helper in ${app.name}',
+          );
         }
       }
     });

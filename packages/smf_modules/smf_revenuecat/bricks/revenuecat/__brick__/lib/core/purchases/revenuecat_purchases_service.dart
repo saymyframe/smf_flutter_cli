@@ -62,10 +62,11 @@ final class RevenueCatKey {
 /// the app takes the key of the store of the platform: [apple] on iOS and
 /// [google] on Android.
 ///
-/// It takes no key when that key is empty, when it is a secret key of
-/// RevenueCat (`sk_`), which never goes into an app, and in a profile or
-/// release build when it is a key of the Test Store (`test_`). The hint of
-/// [RevenueCatKey.none] then names the key and tells what to do.
+/// It takes no key when that key has no value in the build, when it is a
+/// secret key of RevenueCat (`sk_`), which never goes into an app, and in a
+/// profile or release build when it is a key of the Test Store (`test_`).
+/// The hint of [RevenueCatKey.none] then names the key and tells what to
+/// do.
 RevenueCatKey revenueCatKey({
   required TargetPlatform platform,
   required bool debug,
@@ -89,9 +90,10 @@ RevenueCatKey revenueCatKey({
   final (name, value, app) = chosen;
   if (value == null) {
     return RevenueCatKey.none(
-      '$name in .env is empty: fill it in with the public API key of $app '
-      'in RevenueCat${debug ? ', or fill in $_testKey with the public API '
-          'key of the Test Store' : ''}.',
+      '$name has no value in this build. In .env, give it the public API key '
+      'of $app in RevenueCat${debug ? ', or give $_testKey the public API key '
+          'of the Test Store' : ''}. Then build the app as the section '
+      '"{{values_heading}}" of its README says.',
     );
   }
   if (value.startsWith('sk_')) {
@@ -124,6 +126,12 @@ bool _listening = false;
 /// info of the customer does not.
 final Map<String, BillingPeriod> _periods = {};
 bool _periodsRead = false;
+
+/// How long an access waits for the offerings. RevenueCat gives them from
+/// what the device keeps at once, and the wait ends a read that would wait
+/// for the network, so that the access comes well within the time that the
+/// start of the purchases waits for it.
+const _offeringsWait = Duration(seconds: 1);
 
 /// The purchases of the app on [RevenueCat](https://www.revenuecat.com),
 /// with purchases_flutter.
@@ -166,12 +174,22 @@ final class RevenueCatPurchasesService implements PurchasesService {
   /// identifiers, which a purchase needs.
   final Map<String, Package> _packages = {};
 
+  /// Configures RevenueCat with [value], and completes with whether it did.
+  /// It never fails, since nothing may wait for it.
   Future<bool> _configure(String value) async {
     try {
       await Purchases.configure(PurchasesConfiguration(value));
     } on PlatformException catch (error) {
       _configureHint =
           'RevenueCat refused to start with ${key.name}: ${error.message}';
+      return false;
+    } on MissingPluginException catch (error) {
+      _configureHint = 'RevenueCat did not start with ${key.name}: the app '
+          'has no platform side of purchases_flutter, as in a test without '
+          'mocks of the method channel purchases_flutter (${error.message}).';
+      return false;
+    } on Object catch (error) {
+      _configureHint = 'RevenueCat did not start with ${key.name}: $error';
       return false;
     }
     if (!_listening) {
@@ -181,8 +199,10 @@ final class RevenueCatPurchasesService implements PurchasesService {
     return true;
   }
 
-  /// Runs [call] once RevenueCat is configured, and turns what RevenueCat
-  /// fails with into a [PurchasesFailure].
+  /// Runs [call] once RevenueCat is configured, and turns what it fails
+  /// with into a [PurchasesFailure]: an error of RevenueCat into the reason
+  /// of its code, and any other error into the reason
+  /// [PurchasesFailureReason.unknown].
   Future<T> _call<T>(Future<T> Function() call) async {
     if (!await _configured) {
       throw PurchasesFailure(
@@ -192,8 +212,18 @@ final class RevenueCatPurchasesService implements PurchasesService {
     }
     try {
       return await call();
-    } on PlatformException catch (error) {
-      throw _failureOf(error, key.name);
+    } on PurchasesFailure {
+      rethrow;
+    } on PlatformException catch (error, stackTrace) {
+      Error.throwWithStackTrace(_failureOf(error, key.name), stackTrace);
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PurchasesFailure(
+          PurchasesFailureReason.unknown,
+          developerHint: '$error',
+        ),
+        stackTrace,
+      );
     }
   }
 
@@ -298,15 +328,20 @@ final class RevenueCatPurchasesService implements PurchasesService {
   }
 
   /// The access of [info], once the app read the offerings that tell the
-  /// period of a plan that renews, if it has not yet.
+  /// period of a plan that renews, if it has not yet. It waits for them at
+  /// most [_offeringsWait]: the access then has no period, and the periods
+  /// come with offerings that RevenueCat gives later.
   Future<AppAccess> _accessAfter(CustomerInfo info) async {
     final premium = info.entitlements.active[_entitlement];
     if (premium?.expirationDate != null && !_periodsRead) {
+      final read = Purchases.getOfferings().then(_read);
       try {
-        _read(await Purchases.getOfferings());
-      } on PlatformException {
+        await read.timeout(_offeringsWait);
+      } on Object {
         // The access then has no period, as when the offerings do not have
-        // its product.
+        // its product. A read that ends later keeps the periods, or fails
+        // with nobody to tell.
+        unawaited(read.then((_) {}, onError: (Object _) {}));
       }
     }
     return _accessOf(info);
@@ -524,8 +559,7 @@ String _hintOf(
     PurchasesErrorCode.receiptAlreadyInUseError ||
     PurchasesErrorCode.receiptInUseByOtherSubscriberError ||
     PurchasesErrorCode.purchaseBelongsToOtherUser =>
-      'The store account owns the product already, and a restore gives the '
-          'user its access ($said).',
+      'The store account owns the product already ($said).',
     PurchasesErrorCode.testStoreSimulatedPurchaseError =>
       'The Test Store of RevenueCat failed the purchase, as its dialog was '
           'told to ($said).',

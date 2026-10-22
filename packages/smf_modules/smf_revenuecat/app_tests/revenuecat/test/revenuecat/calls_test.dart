@@ -219,8 +219,8 @@ void main() {
     );
     expect(
       await hintOf('6'),
-      'The store account owns the product already, and a restore gives the '
-      'user its access (productAlreadyPurchasedError: RevenueCat failed.).',
+      'The store account owns the product already '
+      '(productAlreadyPurchasedError: RevenueCat failed.).',
     );
     expect(
       await hintOf('42'),
@@ -335,6 +335,57 @@ void main() {
       ),
     );
     expect(revenueCat.methods, ['setupPurchases']);
+  });
+
+  test(
+      'without the platform side of purchases_flutter, as in a test without '
+      'its mocks, is not configured, and fails every call with notConfigured '
+      'and a hint that says so', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel('purchases_flutter'), null);
+    final service = serviceOfTests();
+
+    expect(
+      await service.configured,
+      isFalse,
+      reason: 'A service that nothing calls leaves no error behind.',
+    );
+    expect(
+      await errorOf(service.access),
+      failsWith(
+        PurchasesFailureReason.notConfigured,
+        startsWith(
+          'RevenueCat did not start with REVENUECAT_GOOGLE_KEY: the app has '
+          'no platform side of purchases_flutter, as in a test without mocks '
+          'of the method channel purchases_flutter',
+        ),
+      ),
+    );
+  });
+
+  test(
+      'leaves no error behind when nothing calls it, also without the '
+      'platform side of purchases_flutter', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel('purchases_flutter'), null);
+
+    serviceOfTests();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  });
+
+  test(
+      'turns an error of another kind than of RevenueCat into the reason '
+      'unknown, with the error as its hint', () async {
+    final service = serviceOfTests();
+    await service.identify(null);
+    revenueCat.answerNext('getCustomerInfo', {'entitlements': 'none'});
+
+    expect(
+      await errorOf(service.access),
+      failsWith(PurchasesFailureReason.unknown, contains('String')),
+    );
   });
 
   test('throws nothing of the plugin', () async {

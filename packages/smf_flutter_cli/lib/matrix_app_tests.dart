@@ -463,6 +463,12 @@ Future<MatrixAppTests> smfAppTests() async {
       // The preferences of the apps with the preferences role, whichever
       // module provides it.
       await preferencesRoleAppTest(),
+      // The values of the apps with the env role whose modules give it
+      // keys, whichever module provides it: each getter of AppEnv returns
+      // the value that .env gives its key, and null for a key that .env
+      // leaves empty. The values are those that the tests of the modules of
+      // the app give their keys, such as those of the test of revenuecat.
+      await envRoleAppTest(),
       // The sign-in of the apps with the auth role, whichever module
       // provides it, in the mode that the role chose for each: the service
       // of the provider keeps its contract, and the session of the app
@@ -512,6 +518,12 @@ Future<MatrixAppTests> smfAppTests() async {
       // The purchases of the user of the device at the next start, in the
       // apps with the purchases role and without the auth role.
       await purchasesDeviceAppTest(),
+      // The entry that restores purchases on the settings screen of the
+      // apps with the purchases role and the settings screen role,
+      // whichever modules provide them: a tap restores once and shows what
+      // the restore found in the language of the app, and the entry takes
+      // no second tap while a restore is on its way.
+      await purchasesSettingAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -564,16 +576,17 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the auth role, of the notifications role, of the push role,
-    // of the purchases role, of the settings screen role, of the theme role
-    // and of the localization role gets the tests of its role. Each provider
-    // of the app entry role gets the test of the theme role, which checks
-    // that its root rebuilds.
+    // role, of the env role, of the auth role, of the notifications role,
+    // of the push role, of the purchases role, of the settings screen role,
+    // of the theme role and of the localization role gets the tests of its
+    // role. Each provider of the app entry role gets the test of the theme
+    // role, which checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
       eventsRole,
       preferencesRole,
+      envRole,
       authRole,
       notificationsRole,
       pushRole,
@@ -1448,6 +1461,208 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
       },
       roles: {purchasesRole},
     );
+
+/// The test of the env role that the CLI keeps in its `app_tests/env_role`,
+/// for the apps with the role whose modules give it keys, whichever module
+/// provides the role, that [among] accepts, or all of them: for each key of
+/// the app, the getter of `AppEnv` returns the value that `.env` gives the
+/// key, and `null` when `.env` leaves the value empty or lacks the key.
+///
+/// The test only reads: it parses the file of the values of the app
+/// ([EnvRole.dotEnvFile]), in the forms of a value that the role names, as
+/// the matrix wrote it with the values that the tests of the modules of the
+/// app give their keys (`MatrixAppTest.envValues`), and it gives no value
+/// itself. The matrix writes the keys of the app for it into [envKeysFile],
+/// from the data of the role. It has no probe for the start check: the
+/// values of an app on a device are those of its developer.
+///
+/// Only the apps of the fixtures have a key that `.env` lacks, whose line
+/// the test of a fixture module removes. In an app of the CLI, the template
+/// of the role writes a line for every key and no test of a module removes
+/// one, so the test of the missing keys is skipped there, and only the
+/// fixture provider of the role is checked for them.
+Future<MatrixAppTest> envRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/env_role',
+      appliesTo: (app) =>
+          _envKeysOf(app).isNotEmpty && (among?.call(app) ?? true),
+      generatedFiles: _envKeysFileOf,
+      roles: {envRole},
+    );
+
+/// The keys of the env role of [app], an app of the matrix, in the order of
+/// the role ([EnvRole.keysIn]), or none in an app without the role.
+List<AppEnvKey> _envKeysOf(MatrixApp app) {
+  final hook = app.hook!;
+  return hook.presentRoles.contains(envRole)
+      ? envRole.keysIn(envRole.hookInput(hook))
+      : const [];
+}
+
+/// The path in an app of what the matrix writes for the test of the env
+/// role: `dotEnvFile`, the path of the file of the values of the app from
+/// its root ([EnvRole.dotEnvFile]), and `appKeys`, the keys of the app in
+/// the order of the role ([EnvRole.keysIn]), each an `AppKey` with its
+/// name, the name of its getter of `AppEnv` and a function that reads the
+/// getter.
+const envKeysFile = 'test/env_role/keys.dart';
+
+/// The file at [envKeysFile] of [app], an app of the matrix with the env
+/// role, whose package is [packageName].
+Map<String, String> _envKeysFileOf(MatrixApp app, String packageName) {
+  final keys = StringBuffer();
+  for (final key in _envKeysOf(app)) {
+    keys
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString(key.name)},')
+      ..writeln('    getter: ${SmfNames.dartString(key.getter)},')
+      ..writeln('    read: () => AppEnv.${key.getter},')
+      ..writeln('  ),');
+  }
+  return {
+    envKeysFile: '''
+// The keys of the values of the app, which the matrix of SMF writes from the
+// data of the env role of the app for the test of the env role.
+import '${EnvRole.appEnv.importRef.resolveUri(packageName)}';
+
+/// The path of the file of the values of the app, from its root.
+const String dotEnvFile = ${SmfNames.dartString(EnvRole.dotEnvFile)};
+
+/// A key of the app: its name, the name of its getter of `AppEnv`, and a
+/// function that reads the getter.
+typedef AppKey = ({String name, String getter, String? Function() read});
+
+/// The keys of the app, in the order of the env role.
+final List<AppKey> appKeys = [
+$keys];
+''',
+  };
+}
+
+/// The test of the entry that restores purchases on the settings screen,
+/// which the template of the purchases role contributes, that the CLI keeps
+/// in its `app_tests/purchases_setting`, for the apps with the purchases
+/// role and the settings screen role, whichever modules provide them. Over
+/// a service of purchases of the test that scripts what a provider answers:
+/// - the settings screen shows the entry once, with its title and no result
+///   before a restore, in each language of the app;
+/// - a tap restores once, and the entry shows what the restore found: that
+///   the premium access is back, that there was nothing to restore, or that
+///   the restore failed, for every reason of a failure and for an error of
+///   another kind, with the words of the provider below it in debug mode;
+///   a screen reader reads the result as it comes;
+/// - while a restore is on its way, the entry shows a spinner and no result
+///   of an earlier restore, and a second tap restores nothing more;
+/// - on a small phone with a large text size, the title and a long failure
+///   stay in the row of the entry, in full.
+///
+/// The test knows only the two roles. The matrix writes the type of the
+/// widget of the entry for it into [purchasesSettingFile], from the entries
+/// of the settings screen role of the app, with the texts of the entry in
+/// each language of the app, from the localization role. It opens the
+/// settings screen with the helper of the tests of the settings screen
+/// role, and takes the service of the test from the files of the test of
+/// the purchases role ([purchasesRoleAppTest]), which runs in every app that
+/// this test runs in. It has no probe for the start check: a restore could
+/// ask for the store account on a device, and the walk of the routes goes
+/// to the settings screen there.
+Future<MatrixAppTest> purchasesSettingAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_setting',
+      appliesTo: (app) => app.hook!.presentRoles
+          .containsAll(const [purchasesRole, settingsScreenRole]),
+      generatedFiles: _purchasesSettingOf,
+      roles: {purchasesRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the entry
+/// that restores purchases on the settings screen:
+/// `restorePurchasesSetting`, the type of the widget of the entry that the
+/// template of the purchases role gives the settings screen role, and
+/// `restoreTexts`, the texts of the entry in each language of the app, by
+/// the code of the language: its title ([PurchasesRole.restoreTitle]) and
+/// what it shows when a restore found premium access, when it found
+/// nothing and when it failed ([PurchasesRole.restoreActive],
+/// [PurchasesRole.restoreNone] and [PurchasesRole.restoreFailed]). The
+/// languages are those of the localization role of the app
+/// ([LocalizationRole.localesIn]), in its order, and English alone in an
+/// app without the role, whose entry has the English texts.
+const purchasesSettingFile = 'test/purchases_setting/setting.dart';
+
+/// The file at [purchasesSettingFile] of [app], an app of the matrix with
+/// the purchases role and the settings screen role, whose package is
+/// [packageName].
+///
+/// It imports the file of the entry with the prefix `entry`. A text without
+/// a translation into a language of the app is the English one there, as
+/// the localization role says of the texts of an app. Throws a
+/// [StateError] if the template of the purchases role gives the settings
+/// screen no entry or more than one: the test taps one entry.
+Map<String, String> _purchasesSettingOf(MatrixApp app, String packageName) {
+  final hook = app.hook!;
+  final entries = [
+    for (final RoleData(:value, :origin)
+        in settingsScreenRole.hookInput(hook).data)
+      if (value is SettingsEntry &&
+          origin == const RoleTemplateOrigin(purchasesRole))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The template of the $purchasesRole gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry that '
+      'restores purchases alone.',
+    );
+  }
+  final widget = entries.single.widget;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final texts = StringBuffer();
+  for (final language in languages) {
+    texts.writeln('  ${SmfNames.dartString(language)}: (');
+    for (final (field, text) in const [
+      ('title', PurchasesRole.restoreTitle),
+      ('active', PurchasesRole.restoreActive),
+      ('none', PurchasesRole.restoreNone),
+      ('failed', PurchasesRole.restoreFailed),
+    ]) {
+      final value = SmfNames.dartString(text.textIn(language) ?? text.en);
+      texts.writeln('    $field: $value,');
+    }
+    texts.writeln('  ),');
+  }
+  return {
+    purchasesSettingFile: '''
+// The entry that restores purchases on the settings screen and its texts,
+// which the matrix of SMF writes from the data of the settings screen role
+// and of the localization role of the app for the test of the entry, in
+// test/purchases_setting.
+import '${widget.import!.resolveUri(packageName)}' as entry;
+
+/// The type of the widget of the entry that restores purchases, an entry of
+/// the settings screen.
+const Type restorePurchasesSetting = ${widget.codeWith('entry')};
+
+/// The texts of the entry in one language: its title, and what it shows
+/// when a restore found premium access, when it found nothing and when it
+/// failed.
+typedef RestoreTexts = ({
+  String title,
+  String active,
+  String none,
+  String failed,
+});
+
+/// The texts of the entry by the code of each language of the app, the first
+/// of which the app uses when the device asks for none of them. An app
+/// without the localization role has the English texts alone.
+const Map<String, RestoreTexts> restoreTexts = {
+$texts};
+''',
+  };
+}
 
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module

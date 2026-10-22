@@ -18,7 +18,7 @@ REVENUECAT_APPLE_KEY=
 # The public API key of the Play Store app in RevenueCat, which starts with goog_
 REVENUECAT_GOOGLE_KEY=
 
-# The public API key of the Test Store in RevenueCat (test_), which only a debug build uses
+# The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 REVENUECAT_TEST_KEY=
 === .env.example (role:env) ===
 # This file lists the keys of the values that the app reads, each under a
@@ -41,7 +41,7 @@ REVENUECAT_APPLE_KEY=
 # The public API key of the Play Store app in RevenueCat, which starts with goog_
 REVENUECAT_GOOGLE_KEY=
 
-# The public API key of the Test Store in RevenueCat (test_), which only a debug build uses
+# The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 REVENUECAT_TEST_KEY=
 === .gitignore (flutter_core) ===
 # Miscellaneous
@@ -152,7 +152,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - No screen of the paywall closes itself or navigates after a purchase or a restore. The access changes, and the router closes the paywall and shows the route that was asked for. To sell from a button, navigate to a route that needs premium access, such as `context.nav.paywall.subscription().push<void>()`. For a user without the access, the router opens the paywall over the page first. A route of your own needs the access when a module lists `PurchasesRole.premium` in its `conditions`, or when its full name is among the `routes` of `paywall.hasPremium` in `routeGuards`.
 - Never push `/paywall` for a user with premium access: the flow of the guard is over, so the router shows the screen that the app starts on.
 - The look and the state are in different files. The look is `PaywallView` of `lib/features/paywall/paywall_view.dart` and `SubscriptionView` of `lib/features/paywall/subscription_view.dart`, with the widgets of `lib/features/paywall/paywall_widgets.dart` and the card of `lib/features/paywall/paywall_card.dart`. They are plain Flutter widgets: a view gets the state and callbacks, and imports nothing that manages state. Its state is a `PaywallState` of `lib/features/paywall/paywall_state.dart`, which stays busy after a purchase or a restore for as long as the user has premium access.
-- The benefits on the paywall are texts of the module, `benefitAll`, `benefitNew` and `benefitSupport`: change them to what your premium access gives.
+- The benefits on the paywall are texts of the module, `benefitAll`, `benefitNew` and `benefitSupport`: change them to what your premium access gives. With localization, `lib/features/paywall/paywall_view.dart` reads them as `context.l10n.paywallBenefitAll` and so on, and they change where the provider of the localization keeps the texts of the app, in each language. Without it, they are English texts in that file.
 - A plan gets its name, the suffix of its price and the length of its intro offer in `lib/features/paywall/paywall_texts.dart`, from the `period` of the plan and of its `introOffer`. A text has no parameters, so the file has a text for each period that the stores have, and the price is the one that the store gives. A failure gets its text in `failureTextOf()` there, which has a text for every `PurchasesFailureReason`, and `PaywallMessage` shows the `developerHint` of a failure in debug mode only.
 - `lib/features/paywall/paywall_links.dart` reads the addresses of the terms of use and of the privacy policy from `PAYWALL_TERMS_URL` and `PAYWALL_PRIVACY_URL` of `.env`, and opens a link with `url_launcher`. While a value is empty, the paywall leaves its link out, but for the terms of use on iOS, which lead to the standard license agreement of Apple, and a debug build names the key in a note for the developer.
 - In an app with sign-in, a user may buy before signing in. A sign-up keeps the purchase in the new account, while a sign-in to an account that exists already leaves it with the user of the device until a restore.
@@ -296,7 +296,7 @@ The keys of the app:
 - `PAYWALL_PRIVACY_URL`, read as `AppEnv.paywallPrivacyUrl`, from the module `paywall`: The address of the privacy policy that the paywall links to
 - `REVENUECAT_APPLE_KEY`, read as `AppEnv.revenuecatAppleKey`, from the module `revenuecat`: The public API key of the App Store app in RevenueCat, which starts with appl_
 - `REVENUECAT_GOOGLE_KEY`, read as `AppEnv.revenuecatGoogleKey`, from the module `revenuecat`: The public API key of the Play Store app in RevenueCat, which starts with goog_
-- `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat (test_), which only a debug build uses
+- `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
 
@@ -310,13 +310,13 @@ To buy a plan right after generating the app, with no account in a store:
 2. Create an entitlement with the identifier `premium` and attach the products to it.
 3. Add the packages of those products to an offering, and make that offering the current one.
 4. Copy the public API key of the Test Store, which starts with `test_`, into `REVENUECAT_TEST_KEY` in `.env`.
-5. Run a debug build and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
+5. Run a debug build as the section Values in .env says, and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
 
 For a release, add the App Store app and the Play Store app to the project in RevenueCat. Give RevenueCat the In-App Purchase key of App Store Connect and a service account of Google Play, so that it checks the purchases in the stores. Create the products in the stores, attach them to `premium` and add their packages to the offering. Then copy the public API keys of the two apps into `REVENUECAT_APPLE_KEY` (`appl_`) and `REVENUECAT_GOOGLE_KEY` (`goog_`). The section Finish the setup lists these steps.
 
 A debug build takes `REVENUECAT_TEST_KEY` when it is filled in, and the key of the store of the platform otherwise. A profile or release build never takes it: RevenueCat stops such a build that is configured with a key of the Test Store, on purpose. So to try the sandbox of a store in a debug build, leave `REVENUECAT_TEST_KEY` empty.
 
-These keys are the public API keys of RevenueCat, which go into the app, where anyone can read them. A secret API key of RevenueCat, which starts with `sk_`, never goes into `.env`, and the app refuses one. While the key that a build takes is empty, the app runs without purchases: it never calls RevenueCat, every call of `appPurchases` fails with the reason `notConfigured`, and a debug build prints which key to fill in.
+These keys are the public API keys of RevenueCat, which go into the app, where anyone can read them. A secret API key of RevenueCat, which starts with `sk_`, never goes into `.env`, and the app refuses one. While the key that a build takes has no value, the app runs without purchases: it never calls RevenueCat, every call of `appPurchases` fails with the reason `notConfigured`, and a debug build prints which key to fill in.
 
 ## Purchases
 
@@ -351,7 +351,7 @@ The paywall shows what the App Store and Google Play ask of a screen that sells 
 
 A text of the app has no parameters, so the paywall names the periods and the lengths of intro offers that the stores have: a plan that renews every week, every 1, 2, 3 or 6 months, or every year, and an intro offer of 3 days, 1 or 2 weeks, 1, 2, 3 or 6 months, or 1 year. A plan of another period shows the title of its product in the store, and an intro offer of another length is a free trial or an introductory price without its length. `lib/features/paywall/paywall_texts.dart` puts these texts together.
 
-The benefits on the paywall are texts of the module, `benefitAll`, `benefitNew` and `benefitSupport`. Change them to what premium access gives in your app.
+The benefits on the paywall are texts of the module, `benefitAll`, `benefitNew` and `benefitSupport`. Change them to what premium access gives in your app. In an app with localization, they are texts of the app, which `lib/features/paywall/paywall_view.dart` reads as `context.l10n.paywallBenefitAll`, `paywallBenefitNew` and `paywallBenefitSupport`: change them where the provider of the localization keeps the texts of the app, in each language. In an app without it, they are the English texts in that file.
 
 Put the addresses of your terms of use and of your privacy policy into `PAYWALL_TERMS_URL` and `PAYWALL_PRIVACY_URL` in `.env` (see the section Values in .env). The App Store asks a paywall to link to both. While a value is empty or is no web address, the paywall leaves its link out, but on iOS the terms of use then lead to the standard license agreement of Apple. A debug build shows a note for you at the bottom of the paywall, which names the keys that are empty and what the provider of purchases says is missing, such as its key.
 
@@ -919,8 +919,8 @@ abstract final class AppEnv {
     return value.isEmpty ? null : value;
   }
 
-  /// The public API key of the Test Store in RevenueCat (test_), which only a
-  /// debug build uses.
+  /// The public API key of the Test Store in RevenueCat, which starts with
+  /// test_, for debug builds only.
   static String? get revenuecatTestKey {
     const value = String.fromEnvironment('REVENUECAT_TEST_KEY');
     return value.isEmpty ? null : value;
@@ -1864,10 +1864,11 @@ final class RevenueCatKey {
 /// the app takes the key of the store of the platform: [apple] on iOS and
 /// [google] on Android.
 ///
-/// It takes no key when that key is empty, when it is a secret key of
-/// RevenueCat (`sk_`), which never goes into an app, and in a profile or
-/// release build when it is a key of the Test Store (`test_`). The hint of
-/// [RevenueCatKey.none] then names the key and tells what to do.
+/// It takes no key when that key has no value in the build, when it is a
+/// secret key of RevenueCat (`sk_`), which never goes into an app, and in a
+/// profile or release build when it is a key of the Test Store (`test_`).
+/// The hint of [RevenueCatKey.none] then names the key and tells what to
+/// do.
 RevenueCatKey revenueCatKey({
   required TargetPlatform platform,
   required bool debug,
@@ -1891,9 +1892,10 @@ RevenueCatKey revenueCatKey({
   final (name, value, app) = chosen;
   if (value == null) {
     return RevenueCatKey.none(
-      '$name in .env is empty: fill it in with the public API key of $app '
-      'in RevenueCat${debug ? ', or fill in $_testKey with the public API '
-                'key of the Test Store' : ''}.',
+      '$name has no value in this build. In .env, give it the public API key '
+      'of $app in RevenueCat${debug ? ', or give $_testKey the public API key '
+                'of the Test Store' : ''}. Then build the app as the section '
+      '"Values in .env" of its README says.',
     );
   }
   if (value.startsWith('sk_')) {
@@ -1926,6 +1928,12 @@ bool _listening = false;
 /// info of the customer does not.
 final Map<String, BillingPeriod> _periods = {};
 bool _periodsRead = false;
+
+/// How long an access waits for the offerings. RevenueCat gives them from
+/// what the device keeps at once, and the wait ends a read that would wait
+/// for the network, so that the access comes well within the time that the
+/// start of the purchases waits for it.
+const _offeringsWait = Duration(seconds: 1);
 
 /// The purchases of the app on [RevenueCat](https://www.revenuecat.com),
 /// with purchases_flutter.
@@ -1968,12 +1976,23 @@ final class RevenueCatPurchasesService implements PurchasesService {
   /// identifiers, which a purchase needs.
   final Map<String, Package> _packages = {};
 
+  /// Configures RevenueCat with [value], and completes with whether it did.
+  /// It never fails, since nothing may wait for it.
   Future<bool> _configure(String value) async {
     try {
       await Purchases.configure(PurchasesConfiguration(value));
     } on PlatformException catch (error) {
       _configureHint =
           'RevenueCat refused to start with ${key.name}: ${error.message}';
+      return false;
+    } on MissingPluginException catch (error) {
+      _configureHint =
+          'RevenueCat did not start with ${key.name}: the app '
+          'has no platform side of purchases_flutter, as in a test without '
+          'mocks of the method channel purchases_flutter (${error.message}).';
+      return false;
+    } on Object catch (error) {
+      _configureHint = 'RevenueCat did not start with ${key.name}: $error';
       return false;
     }
     if (!_listening) {
@@ -1983,8 +2002,10 @@ final class RevenueCatPurchasesService implements PurchasesService {
     return true;
   }
 
-  /// Runs [call] once RevenueCat is configured, and turns what RevenueCat
-  /// fails with into a [PurchasesFailure].
+  /// Runs [call] once RevenueCat is configured, and turns what it fails
+  /// with into a [PurchasesFailure]: an error of RevenueCat into the reason
+  /// of its code, and any other error into the reason
+  /// [PurchasesFailureReason.unknown].
   Future<T> _call<T>(Future<T> Function() call) async {
     if (!await _configured) {
       throw PurchasesFailure(
@@ -1994,8 +2015,18 @@ final class RevenueCatPurchasesService implements PurchasesService {
     }
     try {
       return await call();
-    } on PlatformException catch (error) {
-      throw _failureOf(error, key.name);
+    } on PurchasesFailure {
+      rethrow;
+    } on PlatformException catch (error, stackTrace) {
+      Error.throwWithStackTrace(_failureOf(error, key.name), stackTrace);
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PurchasesFailure(
+          PurchasesFailureReason.unknown,
+          developerHint: '$error',
+        ),
+        stackTrace,
+      );
     }
   }
 
@@ -2101,15 +2132,20 @@ final class RevenueCatPurchasesService implements PurchasesService {
   }
 
   /// The access of [info], once the app read the offerings that tell the
-  /// period of a plan that renews, if it has not yet.
+  /// period of a plan that renews, if it has not yet. It waits for them at
+  /// most [_offeringsWait]: the access then has no period, and the periods
+  /// come with offerings that RevenueCat gives later.
   Future<AppAccess> _accessAfter(CustomerInfo info) async {
     final premium = info.entitlements.active[_entitlement];
     if (premium?.expirationDate != null && !_periodsRead) {
+      final read = Purchases.getOfferings().then(_read);
       try {
-        _read(await Purchases.getOfferings());
-      } on PlatformException {
+        await read.timeout(_offeringsWait);
+      } on Object {
         // The access then has no period, as when the offerings do not have
-        // its product.
+        // its product. A read that ends later keeps the periods, or fails
+        // with nobody to tell.
+        unawaited(read.then((_) {}, onError: (Object _) {}));
       }
     }
     return _accessOf(info);
@@ -2325,8 +2361,7 @@ String _hintOf(
     PurchasesErrorCode.receiptAlreadyInUseError ||
     PurchasesErrorCode.receiptInUseByOtherSubscriberError ||
     PurchasesErrorCode.purchaseBelongsToOtherUser =>
-      'The store account owns the product already, and a restore gives the '
-          'user its access ($said).',
+      'The store account owns the product already ($said).',
     PurchasesErrorCode.testStoreSimulatedPurchaseError =>
       'The Test Store of RevenueCat failed the purchase, as its dialog was '
           'told to ($said).',
@@ -4037,16 +4072,16 @@ class PaywallCubit extends Cubit<PaywallState> {
   /// Opens [url], a link of the paywall.
   Future<void> openLink(Uri url) => _openLink(url);
 
-  /// Makes [call], the call of [action], unless a call is on its way.
-  /// [call] returns whether the user has premium access then, and the state
-  /// stays busy if so. Otherwise it is idle again, with the notice
-  /// [otherwise], if any.
+  /// Makes [call], the call of [action], unless a call is on its way or the
+  /// plans load. [call] returns whether the user has premium access then,
+  /// and the state stays busy if so. Otherwise it is idle again, with the
+  /// notice [otherwise], if any.
   Future<void> _run(
     PaywallAction action,
     Future<bool> Function() call, {
     PaywallNotice? otherwise,
   }) async {
-    if (state.busy != null) return;
+    if (state.busy != null || state.loading) return;
     _calling = true;
     emit(state.busyWith(action));
     final bool premium;
@@ -4244,6 +4279,9 @@ final class PaywallState {
   /// router, which closes the paywall. The paywall neither closes itself
   /// nor navigates. When the access ends before the router took the
   /// paywall away, the paywall is idle again.
+  ///
+  /// While the plans load, the paywall takes no call, so that no plan comes
+  /// in to be bought while a restore is on its way.
   final PaywallAction? busy;
 
   /// Why the last call failed, or `null` if it did not.
@@ -4258,17 +4296,24 @@ final class PaywallState {
   /// The state with [plan] selected, with nothing on its way and nothing to
   /// tell.
   PaywallState selecting(Plan plan) =>
-      PaywallState(plans: plans, selected: plan);
+      PaywallState(plans: plans, loadFailure: loadFailure, selected: plan);
 
-  /// The state while [action] is on its way.
-  PaywallState busyWith(PaywallAction action) =>
-      PaywallState(plans: plans, selected: selected, busy: action);
+  /// The state while [action] is on its way. The plans, or why they did not
+  /// load, stay as they are.
+  PaywallState busyWith(PaywallAction action) => PaywallState(
+    plans: plans,
+    loadFailure: loadFailure,
+    selected: selected,
+    busy: action,
+  );
 
   /// The state with nothing on its way, which tells of [failure] or
-  /// [notice], if any.
+  /// [notice], if any. The plans, or why they did not load, stay as they
+  /// are.
   PaywallState idle({PurchasesFailure? failure, PaywallNotice? notice}) =>
       PaywallState(
         plans: plans,
+        loadFailure: loadFailure,
         selected: selected,
         failure: failure,
         notice: notice,
@@ -4454,9 +4499,15 @@ String? priceSuffixOf(BuildContext context, BillingPeriod? period) =>
       },
     };
 
-/// The price of [plan] with what follows it, such as `$4.99 / month`.
-String priceOf(BuildContext context, Plan plan) =>
-    [plan.price, ?priceSuffixOf(context, plan.period)].join(' ');
+/// The price of [plan] with what follows it, such as `$4.99 / month`, with
+/// no-break spaces, so that a line never breaks inside it.
+String priceOf(BuildContext context, Plan plan) => [
+  plan.price,
+  ?priceSuffixOf(context, plan.period),
+].join(' ').replaceAll(' ', _noBreakSpace);
+
+/// The no-break space, which keeps the words on each side of it on one line.
+const String _noBreakSpace = '\u00A0';
 
 /// How long an intro offer of [length] lasts, such as `1 week`.
 String lengthTextOf(BuildContext context, OfferLength length) =>
@@ -4703,23 +4754,25 @@ class _PaywallViewState extends State<PaywallView>
     final pinned =
         MediaQuery.sizeOf(context).height >= 640 &&
         MediaQuery.textScalerOf(context).scale(16) <= 24;
-    // What buys: the message of the last call, the button and what the
-    // selected plan costs after its intro offer. While the plans did not
-    // load, there is nothing to buy.
+    // What the last call ended with, such as a restore that found nothing.
+    final message = PaywallMessage(
+      text: failure != null
+          ? failureTextOf(context, failure.reason)
+          : notice != null
+          ? noticeTextOf(context, notice)
+          : null,
+      failed: failure != null,
+      hint: failure?.developerHint,
+    );
+    // What buys: the message, the button and what the selected plan costs
+    // after its intro offer. While the plans did not load, there is nothing
+    // to buy, and the message is above the links.
     final purchase = state.loadFailure != null
         ? null
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              PaywallMessage(
-                text: failure != null
-                    ? failureTextOf(context, failure.reason)
-                    : notice != null
-                    ? noticeTextOf(context, notice)
-                    : null,
-                failed: failure != null,
-                hint: failure?.developerHint,
-              ),
+              message,
               PurchaseButton(
                 label: purchaseLabelOf(context, selected),
                 busy: state.busy == PaywallAction.purchase,
@@ -4742,6 +4795,7 @@ class _PaywallViewState extends State<PaywallView>
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (purchase == null) message,
         if (selected != null && state.loadFailure == null) ...[
           WholeWords(
             termsTextOf(context, selected),
@@ -4754,10 +4808,12 @@ class _PaywallViewState extends State<PaywallView>
         ],
         _Links(
           links: [
+            // While the plans load, there is no restore either, so that no
+            // plan comes in to be bought while one is on its way.
             PaywallLink(
               label: 'Restore purchases',
               busy: state.busy == PaywallAction.restore,
-              onPressed: idle ? widget.onRestore : null,
+              onPressed: idle && !state.loading ? widget.onRestore : null,
             ),
             if (terms != null)
               PaywallLink(
@@ -5451,9 +5507,12 @@ class PlanCard extends StatelessWidget {
                           runSpacing: 6,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            // No larger than the price, which grows only by
+                            // half too.
                             WholeWords(
                               name,
                               style: theme.textTheme.titleMedium,
+                              maxScaleFactor: 1.5,
                             ),
                             ?switch (badge) {
                               final badge? => Pill(badge, strong: true),
@@ -5479,9 +5538,13 @@ class PlanCard extends StatelessWidget {
                                         ],
                                       ),
                                 ),
+                                // The price and what follows it stay on
+                                // one line.
                                 if (suffix case final suffix?)
                                   TextSpan(
-                                    text: ' $suffix',
+                                    text:
+                                        '\u00A0'
+                                        '${suffix.replaceAll(' ', '\u00A0')}',
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: colors.onSurfaceVariant,
                                     ),

@@ -195,8 +195,51 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
   result['reasons'] = reasons;
 
+  failNext['getCustomerInfo'] = StateError('not a failure of RevenueCat');
+  result['another error'] = await step(service.access);
+
+  failNext['setupPurchases'] = MissingPluginException('No implementation');
+  final unmocked = RevenueCatPurchasesService(
+    const RevenueCatKey('REVENUECAT_GOOGLE_KEY', 'goog_tests'),
+  );
+  result['without a platform side'] = [
+    await unmocked.configured,
+    ...await step(unmocked.access),
+  ];
+  failNext['setupPurchases'] = StateError('broken');
+  final broken = RevenueCatPurchasesService(
+    const RevenueCatKey('REVENUECAT_GOOGLE_KEY', 'goog_tests'),
+  );
+  result['configuration that fails otherwise'] = [
+    await broken.configured,
+    ...await step(broken.access),
+  ];
+
+  customerInfo = const CustomerInfo(
+    EntitlementInfos({
+      'premium': EntitlementInfo(
+        'premium_annual',
+        willRenew: true,
+        expirationDate: '2099-01-01T00:00:00.000Z',
+      ),
+    }),
+  );
+  final heldOfferings = holdNext['getOfferings'] = Completer<void>();
+  final took = Stopwatch()..start();
+  final first = await service.access() as PremiumAccess;
+  took.stop();
   offerings = const Offerings({'default': Offering('default', [package])},
       current: Offering('default', [package]));
+  heldOfferings.complete();
+  await Future<void>.delayed(const Duration(milliseconds: 10));
+  final later = await service.access() as PremiumAccess;
+  result['offerings that come late'] = [
+    '${first.period}',
+    took.elapsed < const Duration(seconds: 3),
+    '${later.period}',
+  ];
+  customerInfo = const CustomerInfo(EntitlementInfos({}));
+
   final plan = (await service.plans()).single;
   failNext['purchasePackage'] = failure('1');
   result['cancel by code'] = await step(() => service.purchase(plan));
@@ -251,7 +294,9 @@ void main() {
         'env_revenuecat_google_key',
         'env_revenuecat_test_key',
         'entitlement',
+        'values_heading',
       ]);
+      expect(brick.vars['values_heading'], EnvRole.readmeHeading);
       expect(brick.vars['entitlement'], 'premium');
       for (final key in RevenueCatModule.keys) {
         final variable = brick.vars['env_${key.name.toLowerCase()}']!;
@@ -319,7 +364,8 @@ void main() {
           'REVENUECAT_GOOGLE_KEY': 'revenuecatGoogleKey: The public API key '
               'of the Play Store app in RevenueCat, which starts with goog_',
           'REVENUECAT_TEST_KEY': 'revenuecatTestKey: The public API key of the '
-              'Test Store in RevenueCat (test_), which only a debug build uses',
+              'Test Store in RevenueCat, which starts with test_, for debug '
+              'builds only',
         },
       );
       for (final key in RevenueCatModule.keys) {
@@ -509,10 +555,11 @@ void main() {
       expect(run['keys'], {
         'debug with the test key': 'REVENUECAT_TEST_KEY=test_t',
         'release with the test key': 'REVENUECAT_APPLE_KEY=appl_a',
-        'empty': 'none: REVENUECAT_GOOGLE_KEY in .env is empty: fill it in '
-            'with the public API key of the Play Store app in RevenueCat, or '
-            'fill in REVENUECAT_TEST_KEY with the public API key of the Test '
-            'Store.',
+        'empty': 'none: REVENUECAT_GOOGLE_KEY has no value in this build. '
+            'In .env, give it the public API key of the Play Store app in '
+            'RevenueCat, or give REVENUECAT_TEST_KEY the public API key of the '
+            'Test Store. Then build the app as the section "Values in .env" '
+            'of its README says.',
         'secret': 'none: REVENUECAT_GOOGLE_KEY in .env is a secret key of '
             'RevenueCat, which never goes into an app: use the public API key '
             'of the Play Store app.',
@@ -579,6 +626,35 @@ void main() {
         '99': 'unknown',
         'error': 'unknown',
       });
+    });
+
+    test(
+        'turns an error of another kind than of RevenueCat into the reason '
+        'unknown, and a configuration that fails in any way into a service '
+        'that is not configured, whose calls fail with notConfigured', () {
+      expect(run['another error'], [
+        'getCustomerInfo',
+        'failed: unknown (Bad state: not a failure of RevenueCat)',
+      ]);
+      const withoutPlatformSide = 'failed: notConfigured (RevenueCat did '
+          'not start with REVENUECAT_GOOGLE_KEY: the app has no platform side '
+          'of purchases_flutter, as in a test without mocks of the method '
+          'channel purchases_flutter (No implementation).)';
+      expect(run['without a platform side'], [false, withoutPlatformSide]);
+      const broken = 'failed: notConfigured (RevenueCat did not start with '
+          'REVENUECAT_GOOGLE_KEY: Bad state: broken)';
+      expect(run['configuration that fails otherwise'], [false, broken]);
+    });
+
+    test(
+        'waits only a moment for offerings that RevenueCat does not give, '
+        'with an access without a period then, and has the period once they '
+        'come', () {
+      expect(run['offerings that come late'], [
+        'null',
+        true,
+        'BillingPeriod(1 year)',
+      ]);
     });
 
     test(

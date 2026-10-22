@@ -42,14 +42,13 @@ const envRole = EnvRole._();
 /// coding agents. A provider tells in a section of its own how the values
 /// get into the app.
 ///
-/// A provider generates [readerFile] with [appEnv], the class `AppEnv`,
-/// whose static getters return the values. How the values of [dotEnvFile]
-/// get there is up to the provider, as long as they are there from the
-/// start of `main()`, and as long as a command of the `flutter` tool that
-/// builds, runs or tests the app gives `AppEnv` the values that
-/// [dotEnvFile] has when the command runs (see [appEnv]). A provider that
-/// needs arguments for
-/// the commands of the `flutter` tool that build, run or test the app, so
+/// A provider generates [readerFile] with [appEnv], the class `AppEnv`, whose
+/// static getters return the values. How the values of [dotEnvFile] get there
+/// is up to the provider, as long as they are there before any code of the app
+/// runs, `main()` included, and as long as a command of the `flutter` tool that
+/// builds, runs or tests the app gives `AppEnv` the values that [dotEnvFile]
+/// has when the command runs (see [appEnv]). A provider that needs arguments
+/// for the commands of the `flutter` tool that build, run or test the app, so
 /// that the values reach `AppEnv`, gives them to the role as
 /// [EnvToolArguments], and code that runs those commands, such as an IDE
 /// configuration or a test tool, takes them from [toolArgumentsIn] without
@@ -102,13 +101,15 @@ final class EnvRole extends Role<EnvData> {
   ///
   /// A getter returns the value that its key has in [dotEnvFile], or `null`
   /// when the value is empty or the file lacks the key, so `KEY=` counts as
-  /// missing. It returns it at once, from the start of `main()` on, so code
-  /// reads a value anywhere without waiting for it: a provider that loads
-  /// [dotEnvFile] as the app runs, which takes a `Future`, does not keep
-  /// this contract. The app builds whichever keys [dotEnvFile] has and
-  /// whatever their values are: a value that the developer has not filled
-  /// in yet is `null`, not an error. Code handles `null`, and may tell the
-  /// developer in a debug build which key is missing.
+  /// missing. It returns it at once, before any code of the app runs,
+  /// `main()` included, so code reads a value anywhere without waiting for
+  /// it, also code that runs without `main()`, such as a test: a provider
+  /// that loads [dotEnvFile] as the app runs, which takes a `Future`, or
+  /// that sets the values in `main()`, does not keep this contract. The app
+  /// builds whichever keys [dotEnvFile] has and whatever their values are: a
+  /// value that the developer has not filled in yet is `null`, not an error.
+  /// Code handles `null`, and may tell the developer in a debug build which
+  /// key is missing.
   ///
   /// `AppEnv` gets the values from the command that builds the app: a
   /// command of the `flutter` tool that builds, runs or tests the app, with

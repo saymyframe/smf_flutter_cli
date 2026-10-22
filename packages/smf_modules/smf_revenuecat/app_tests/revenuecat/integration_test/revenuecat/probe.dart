@@ -6,7 +6,8 @@
 // app are those that RevenueCat gives.
 //
 // It uses no test framework. It only reads, each read for at most 10
-// seconds: it buys nothing, restores nothing and identifies no user. An
+// seconds: it buys nothing and restores nothing, and the only user that it
+// identifies is the user of the app, as appPurchases.plans() does. An
 // app without a key, as on a device of CI with an empty .env, has
 // RevenueCat not configured, which is no problem. A read that RevenueCat
 // fails, as without a network, leaves the app nothing to show: the app
@@ -56,18 +57,22 @@ Future<List<String>> problemsOf(PurchasesService service) async {
 /// Whether the access of the app is premium exactly when the entitlement
 /// premium of RevenueCat is active.
 Future<List<String>> _accessProblems() async {
-  final shown = appPurchases.value is PremiumAccess;
   final bool active;
   try {
     final info = await Purchases.getCustomerInfo().timeout(_wait);
     active = info.entitlements.active.containsKey(_premium);
   } on PlatformException catch (error) {
     return [
-      if (shown)
+      if (appPurchases.value is PremiumAccess)
         'The app shows premium access, but RevenueCat fails to give the '
             'customer info: ${error.code} ${error.message}',
     ];
   }
+  // The access of the app once RevenueCat has told it of the info that it
+  // read, as a read that fetched the info does, also of an access that came
+  // while the probe waited for the read.
+  await Future<void>.delayed(const Duration(milliseconds: 100));
+  final shown = appPurchases.value is PremiumAccess;
   return [
     if (shown != active)
       'The app shows ${shown ? '' : 'no '}premium access, but the entitlement '

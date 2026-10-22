@@ -1,3 +1,36 @@
+=== .env (role:env) ===
+# The values that the app reads, each under a comment that says what goes
+# there. This file stays out of git; .env.example has the same keys without
+# values. Every value ends up in the app, where anyone can read it, so never
+# put a secret here. An empty value counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The first value of the fixture
+FAKE_ENV_USER_FIRST=
+
+# The second value of the fixture
+FAKE_ENV_USER_SECOND=
+
+# The third value of the fixture
+FAKE_ENV_USER_THIRD=
+=== .env.example (role:env) ===
+# This file lists the keys of the values that the app reads, each under a
+# comment that says what goes there. After a clone, copy it to .env and fill
+# in the values there; .env stays out of git. Every value ends up in the app,
+# where anyone can read it, so never put a secret into one. An empty value
+# counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The first value of the fixture
+FAKE_ENV_USER_FIRST=
+
+# The second value of the fixture
+FAKE_ENV_USER_SECOND=
+
+# The third value of the fixture
+FAKE_ENV_USER_THIRD=
 === .gitignore (flutter_core) ===
 # Miscellaneous
 *.class
@@ -47,6 +80,9 @@ app.*.map.json
 
 # The logs of the fixture
 *.fixture.log
+
+# The values of the app, which each developer fills in from .env.example
+.env
 
 # The values of the fixture that each developer keeps
 # What the fixture keeps on one machine
@@ -202,6 +238,12 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - `createLightTheme(context)` and `createDarkTheme(context)` in `lib/core/theme/app_theme.dart` return the light and the dark theme of the app. Change the look there. Keep both functions and their `BuildContext` parameter, because the root of the app calls them each time it builds, for the `theme` and the `darkTheme` of the root `MaterialApp`. Leave those two arguments and its `themeMode` as they are.
 - The theme mode is in `lib/core/theme/theme_mode.dart`. Change it only with `appThemeMode.choose(mode)`, which also saves it in the preferences, and write nothing under the key `theme.mode` yourself. A widget reads the mode with `AppThemeModeScope.of(context)` and rebuilds when it changes.
 - Take the colours and the text styles of a screen from `Theme.of(context)`, not from constants, so that the screen follows the mode.
+
+## Values in .env
+
+- Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
+- Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
+- `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -242,6 +284,20 @@ Besides an email address and a password, the app signs in with these identity pr
 - Continue with the fixture, on Android and iOS. Deleting an account that signs in this way asks the identity provider for a credential again first, so that the provider of sign-in can revoke the tokens that it gave the app. If the user closes its sheet, nothing is deleted.
 
 A screen of sign-in shows the button of a way to sign in only on the platforms that it works on. When an anonymous user signs in this way and no account has the identity yet, the user gets the identity and keeps the id. Otherwise the user signs in to that account, as with a password, and `takeGuestData()` moves what the anonymous user had. The sign-in may also fail, because the address of the identity has an account that signs in in another way: the provider of sign-in decides which.
+
+## Values in .env
+
+`.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+`.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
+
+The keys of the app:
+
+- `FAKE_ENV_USER_FIRST`, read as `AppEnv.fakeEnvUserFirst`, from the module `fake_env_user`: The first value of the fixture
+- `FAKE_ENV_USER_SECOND`, read as `AppEnv.fakeEnvUserSecond`, from the module `fake_env_user`: The second value of the fixture
+- `FAKE_ENV_USER_THIRD`, read as `AppEnv.fakeEnvUserThird`, from the module `fake_env_user`: The third value of the fixture
+
+To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
 
 ## Languages
 
@@ -2234,6 +2290,41 @@ abstract interface class ServiceLocator {
   /// Returns the service of type [T], or the one named [instanceName].
   T resolve<T extends Object>({String? instanceName});
 }
+=== lib/core/env/app_env.dart (fake_env) ===
+/// The values of `.env` (fixture): a command of the `flutter` tool that
+/// builds, runs or tests the app reads `.env` when it starts, given
+/// `--dart-define-from-file .env`, and the class keeps what it read in a
+/// constant map, behind a static getter for each key, which returns the
+/// value, or `null` while it is empty or missing.
+abstract final class AppEnv {
+  /// The value of `FAKE_ENV_USER_FIRST`.
+  static String? get fakeEnvUserFirst => _valueOf('FAKE_ENV_USER_FIRST');
+
+  /// The value of `FAKE_ENV_USER_SECOND`.
+  static String? get fakeEnvUserSecond => _valueOf('FAKE_ENV_USER_SECOND');
+
+  /// The value of `FAKE_ENV_USER_THIRD`.
+  static String? get fakeEnvUserThird => _valueOf('FAKE_ENV_USER_THIRD');
+
+  /// What the command that built the app read from `.env`, by the keys of
+  /// the app: an empty value as an empty text, and no entry for a key that
+  /// `.env` lacks.
+  static const Map<String, String> _values = {
+    if (bool.hasEnvironment('FAKE_ENV_USER_FIRST'))
+      'FAKE_ENV_USER_FIRST': String.fromEnvironment('FAKE_ENV_USER_FIRST'),
+    if (bool.hasEnvironment('FAKE_ENV_USER_SECOND'))
+      'FAKE_ENV_USER_SECOND': String.fromEnvironment('FAKE_ENV_USER_SECOND'),
+    if (bool.hasEnvironment('FAKE_ENV_USER_THIRD'))
+      'FAKE_ENV_USER_THIRD': String.fromEnvironment('FAKE_ENV_USER_THIRD'),
+  };
+
+  /// The value of [key], or `null` while `.env` leaves it empty or lacks
+  /// it.
+  static String? _valueOf(String key) {
+    final value = _values[key];
+    return value == null || value.isEmpty ? null : value;
+  }
+}
 === lib/core/events/communication_service.dart (role:events) ===
 import 'package:fixture_app/core/fixture_events/fixture_events.dart' as impl0;
 
@@ -3776,6 +3867,22 @@ class FixtureAskScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Scaffold(appBar: AppBar(leading: const CloseButton()));
+}
+=== lib/core/fixture_values/fixture_values.dart (fake_env_user) ===
+import 'package:fixture_app/core/env/app_env.dart';
+
+/// The values of `.env` that the fixture reads (fixture), each through the
+/// variable of its key: what `AppEnv` returns for the key in an app with
+/// the values in .env, and `null` in an app without them.
+abstract final class FixtureValues {
+  /// The first value of the fixture.
+  static String? get first => AppEnv.fakeEnvUserFirst;
+
+  /// The second value of the fixture.
+  static String? get second => AppEnv.fakeEnvUserSecond;
+
+  /// The third value of the fixture.
+  static String? get third => AppEnv.fakeEnvUserThird;
 }
 === lib/core/l10n/app_locale.dart (role:localization) ===
 import 'package:flutter/widgets.dart';
