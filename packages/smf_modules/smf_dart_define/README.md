@@ -4,7 +4,7 @@ The SMF module that gives an app the values of its `.env` file through `--dart-d
 
 The modules of an app declare the values that a developer fills in after generating the app, such as the public key of a service, as keys of the env role. The role writes `.env`, which stays out of git, and `.env.example`, which has the same keys without values. This module adds `lib/core/env/app_env.dart` with `AppEnv`, which has a static getter for each key. A getter reads its value with `const String.fromEnvironment` and returns `null` while the value is empty or missing.
 
-The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Nothing runs after you edit `.env`, and the analyzer sees the empty values, so a fresh clone of the app analyzes and builds. The module also adds run configurations that pass the argument: `.vscode/launch.json` for VS Code and `.run/main.run.xml` for Android Studio. The README of the app lists the commands.
+The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. No code is generated after you edit `.env`, and the analyzer sees the empty values, so a fresh clone of the app analyzes and builds. The module also adds run configurations that pass the argument: `.vscode/launch.json` for VS Code and `.run/main.run.xml` for Android Studio. The README of the app lists the commands.
 
 Every value ends up in the app, where anyone who has the app can read it. So `.env` holds only values that may be public, never a secret.
 
