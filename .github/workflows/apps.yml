@@ -54,7 +54,7 @@ on:
         type: boolean
         default: false
       save_native_caches:
-        description: Whether the job of the first app of the plan in the jobs Android and iOS writes the cache of what Gradle, or Swift Package Manager, downloads for its build, when the cache has no entry under the key of its app, its version of Flutter and the week yet. It then builds from an empty cache and saves what the build downloaded. Every other job only restores the newest entry. Only the runs of build.yml on main pass it, and its job Native caches then deletes the entries that the new one replaced; tools/workflow_apps_test.dart checks this.
+        description: Whether each job of the matrices of the jobs Android and iOS writes an entry of the cache of what Gradle, or Swift Package Manager, downloads for its build, when the cache has no entry under its key yet. The key is the family of the entry, which is the hash of what the app of the job builds with and, for Gradle only, the version of Flutter, and the week. The job then builds from an empty cache and saves what the build downloaded. Every other job only restores. Only the runs of build.yml on main pass it, and its job Native caches then deletes every entry of a family but the newest; tools/workflow_apps_test.dart checks this.
         type: boolean
         default: false
       published_cli:
@@ -333,7 +333,9 @@ jobs:
     name: Android (${{ matrix.app }})
     needs: plan
     runs-on: ubuntu-latest
-    # About 10 minutes: the app and its first build with Gradle.
+    # About 10 minutes: the app and its first build with Gradle. When the job
+    # writes an entry of the cache of Gradle from an empty cache, it also
+    # downloads about 1.8 GB and builds a release app, a few minutes more.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -346,10 +348,13 @@ jobs:
       - *setup_flutter_linux
       - *check_flutter_linux
 
+      # The week of the entries of the native caches, such as 2026W43,
+      # without a hyphen: the job Native caches of build.yml takes the part
+      # of a key before its last hyphen as the family of the entry.
       - &gradle_week
         name: Find the week of the cache of Gradle
         id: gradle_week
-        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+        run: echo "week=$(date -u +%GW%V)" >> "$GITHUB_OUTPUT"
 
       - *pub_get
 
@@ -364,37 +369,39 @@ jobs:
       # of the plugins and the engine of Flutter for each build, about 1.8 GB
       # for an app with every module, 0.4 GB of it the engine of the version
       # of Flutter of the build. So what Gradle downloaded, and Gradle
-      # itself, go into one cache of the repository for the jobs that build
-      # for Android. One job writes it: the job of the first app of the
-      # plan, an app with every module, in the runs of build.yml on main
-      # (the input save_native_caches), whose entries the runs of every
-      # branch find. tools/native_build.dart writes what the app builds
+      # itself, go into a cache of the repository for the jobs that build
+      # for Android. tools/native_build.dart writes what the app builds
       # with, once it is generated, and configured in the jobs that
       # configure it: its plugins with Android code, with their versions,
       # and its Gradle files without its ids, which name the versions of
-      # Gradle and of its plugins. The key of an entry has the hash of that
-      # file, the version of Flutter, whose engine Gradle downloads too, and
-      # the week. When the cache has no entry under the key of its app, the
-      # writer builds from an empty cache and saves what its build
-      # downloaded: an entry holds only what one build needs, and a new one
-      # comes at least each week, with what the key leaves out, such as a
-      # newer version of a library that a plugin takes as a range. The job
-      # Native caches of build.yml then deletes the entries that the new one
-      # replaced. Two runs on main that save the same key at once save it
-      # once: the other save cannot reserve the key and only warns. Every
-      # other job, and the writer in the other runs, restores the entry of
-      # the key of its own app, or else the newest one, and saves nothing.
+      # Gradle and of its plugins. The key of an entry is its family, the
+      # hash of that file and the version of Flutter, whose engine Gradle
+      # downloads too, and the week. Each job of this matrix writes the
+      # entries of its family, in the runs of build.yml on main (the input
+      # save_native_caches), whose entries the runs of every branch find:
+      # when the cache has no entry under its key, the job builds from an
+      # empty cache and saves what its build downloaded. So an entry holds
+      # only what one build needs, and in each week with a run of build.yml
+      # on main a new one comes, with what the key leaves out, such as a
+      # newer version of a library that a plugin takes as a range. The apps
+      # of the jobs that build with the same share a family, and a second
+      # save of the same key cannot reserve it and only warns. An app with
+      # another native stack, such as that of a second provider of the app
+      # entry or of a role with native code, gets a family of its own. The
+      # job Native caches of build.yml then deletes every entry of a family
+      # but the newest. Every other job, and the jobs of this matrix in the
+      # other runs, restores the entry of its own key, or else the newest of
+      # its family, or else the newest of the platform, and saves nothing.
       # The apps of the other jobs build with what an app with every module
       # builds with, or with less, but for the Gradle plugins that
-      # flutterfire adds, the test runner of the start check, the release
-      # build of the first app that starts, the apps of the CLI from pub.dev
-      # and the engine of another version of Flutter in the nightly run: a
-      # job downloads these in each run. The tool writes no file for apps
-      # that download nothing, and the job then has no cache.
+      # flutterfire adds, the apps of the CLI from pub.dev and the engine of
+      # another version of Flutter in the nightly run: a job downloads these
+      # in each run. The tool writes no file for apps that download nothing,
+      # and the job then has no cache.
       - name: Find what the app builds with for Android
         run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/android" build/native_build/android.txt
 
-      # A job still downloads what the cache that it restored lacks, and the
+      # A job still downloads what the cache that it restored lacks, and a
       # writer downloads everything when it builds from an empty cache. So
       # every build of Gradle in the job takes what it would download from
       # Maven Central, which answers 403 to a runner that downloads too
@@ -407,10 +414,11 @@ jobs:
           mkdir -p ~/.gradle/init.d
           cp .github/gradle/maven_central_mirror.gradle ~/.gradle/init.d/
 
-      # Only in the writer: whether the cache has the key of its app yet.
+      # Only in the runs that write the native caches: whether the cache has
+      # the key of the app yet.
       - name: Look up the cache of Gradle that the job writes
         id: gradle_lookup
-        if: inputs.save_native_caches && strategy.job-index == 0 && hashFiles('build/native_build/android.txt') != ''
+        if: inputs.save_native_caches && hashFiles('build/native_build/android.txt') != ''
         uses: actions/cache/restore@v6
         with:
           path: &gradle_paths |
@@ -419,19 +427,34 @@ jobs:
           key: &gradle_key ${{ runner.os }}-gradle-${{ inputs.flutter_version }}-${{ hashFiles('build/native_build/android.txt') }}-${{ steps.gradle_week.outputs.week }}
           lookup-only: true
 
-      # In every job but the writer that did not find its key, which builds
-      # from an empty cache.
-      - &restore_gradle
-        name: Restore the cache of Gradle
+      # But when the job writes the entry of its key from an empty cache.
+      - name: Restore the cache of Gradle
         if: hashFiles('build/native_build/android.txt') != '' && (steps.gradle_lookup.outcome != 'success' || steps.gradle_lookup.outputs.cache-hit == 'true')
         uses: actions/cache/restore@v6
         with:
           path: *gradle_paths
           key: *gradle_key
-          restore-keys: ${{ runner.os }}-gradle-
+          restore-keys: &gradle_restore_keys |
+            ${{ runner.os }}-gradle-${{ inputs.flutter_version }}-${{ hashFiles('build/native_build/android.txt') }}-
+            ${{ runner.os }}-gradle-
 
       - name: Build the app with every module for Android
         run: .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/android" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --debug
+
+      # Only when the job writes the entry from an empty cache: what the jobs
+      # Android start build on top of what this build needs, so that the
+      # entry has it too. The first of them starts the app as a release app
+      # for the ABI of the emulator, x86_64, with the engine of a release
+      # build for it, 43 MB, and the release build of an app with every
+      # module took about a minute on a Mac. The start check adds nothing
+      # that Gradle downloads. It only fills the cache: when it fails, the
+      # job Android start downloads the rest, and this job goes on.
+      - name: Build the app with every module as a release app for the emulator, for the cache of Gradle
+        if: steps.gradle_lookup.outcome == 'success' && steps.gradle_lookup.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/android" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" \
+            --release --target-platform android-x64
 
       # Only after a build that succeeded: a build that failed may have
       # downloaded part of what the app needs, and the key would then stay
@@ -528,14 +551,24 @@ jobs:
           done
 
       # The cache of Gradle, as in the job Android, restored while the
-      # emulator boots. Beyond it, the build of the app downloads the test
-      # runner of the start check, and the release build of the first app
-      # what R8 and the release need.
+      # emulator boots. The app has fewer modules than an app with every
+      # module, so its key is its own, and it restores the newest entry of
+      # the platform, which the jobs Android write with the release build
+      # for the emulator too.
       - name: Find what the app builds with for Android
         run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/start" build/native_build/android.txt
 
       - *maven_central_mirror
-      - *restore_gradle
+
+      # As in the job Android, in a job that writes no entry.
+      - &restore_gradle
+        name: Restore the cache of Gradle
+        if: hashFiles('build/native_build/android.txt') != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: *gradle_paths
+          key: *gradle_key
+          restore-keys: *gradle_restore_keys
 
       - &wait_for_emulator
         name: Wait for the Android emulator
@@ -708,10 +741,9 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
 
-      # The cache of Gradle, as in the job Android. Beyond it, the build of
-      # the app downloads the Gradle plugins of Google services and
-      # Crashlytics that flutterfire added, and the test runner of the start
-      # check.
+      # The cache of Gradle, as in the job Android start. Beyond it, the
+      # build of the app downloads the Gradle plugins of Google services and
+      # Crashlytics that flutterfire added.
       - name: Find what the app builds with for Android
         run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/firebase" build/native_build/android.txt
 
@@ -933,9 +965,9 @@ jobs:
     needs: plan
     if: inputs.macos_and_windows
     runs-on: macos-26
-    # About 10 minutes: the app and its build. The job that writes the cache
-    # of Swift packages clones every package when it builds from an empty
-    # cache, which took 8 minutes for an app with every module on a Mac.
+    # About 10 minutes: the app and its build. When the job writes an entry
+    # of the cache of Swift packages from an empty cache, it clones every
+    # package, which took 8 minutes for an app with every module on a Mac.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -949,10 +981,11 @@ jobs:
       - *setup_flutter_macos
       - *check_tools_macos
 
+      # The week of the entries, as for Gradle.
       - &swiftpm_week
         name: Find the week of the cache of Swift packages
         id: swiftpm_week
-        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+        run: echo "week=$(date -u +%GW%V)" >> "$GITHUB_OUTPUT"
 
       - *pub_get
 
@@ -967,43 +1000,47 @@ jobs:
       # keeps the clones in its cache of the repositories of packages,
       # ~/Library/Caches/org.swift.swiftpm, from which it checks out the
       # packages of each app. A package that is not in that cache takes a
-      # minute or more to clone. So that cache goes into one cache of the
+      # minute or more to clone. So that cache goes into a cache of the
       # repository for the jobs that build for iOS, written and restored as
       # the cache of Gradle is for Android: tools/native_build.dart writes
       # the plugins of the app with iOS code, with their versions, and the
-      # Swift packages that its Xcode project refers to itself, and the key
-      # of an entry has the hash of that file and the week. The packages do
-      # not depend on the version of Flutter, which the key leaves out. The
-      # ids of the app and the build phase that flutterfire adds to its
-      # Xcode project download nothing, so the apps that the other jobs
-      # archive and configure with Firebase need nothing beyond the entry,
-      # and the apps that CI starts without Firebase have plugins with iOS
-      # code but none whose Swift package names a remote package. The tool
-      # writes no file for an app without plugins with iOS code, which then
-      # has no cache.
+      # Swift packages that its Xcode project refers to itself. The key of
+      # an entry is its family, the hash of that file, and the week. The
+      # packages do not depend on the version of Flutter, which the key
+      # leaves out. Each job of this matrix writes the entries of its family
+      # in the runs of build.yml on main, and the job Native caches of
+      # build.yml deletes every entry of a family but the newest. The ids of
+      # the app and the build phase that flutterfire adds to its Xcode
+      # project download nothing, so the apps that the other jobs archive
+      # and configure with Firebase need nothing beyond the entry of their
+      # stack, and the apps that CI starts without Firebase have plugins
+      # with iOS code but none whose Swift package names a remote package.
+      # The tool writes no file for an app without plugins with iOS code,
+      # which then has no cache.
       - name: Find what the app builds with for iOS
         run: dart tools/native_build.dart ios "$RUNNER_TEMP/SMF apps застосунки é/ios" build/native_build/ios.txt
 
-      # Only in the writer: whether the cache has the key of its app yet.
+      # Only in the runs that write the native caches: whether the cache has
+      # the key of the app yet.
       - name: Look up the cache of Swift packages that the job writes
         id: swiftpm_lookup
-        if: inputs.save_native_caches && strategy.job-index == 0 && hashFiles('build/native_build/ios.txt') != ''
+        if: inputs.save_native_caches && hashFiles('build/native_build/ios.txt') != ''
         uses: actions/cache/restore@v6
         with:
           path: &swiftpm_path ~/Library/Caches/org.swift.swiftpm
           key: &swiftpm_key ${{ runner.os }}-swiftpm-${{ hashFiles('build/native_build/ios.txt') }}-${{ steps.swiftpm_week.outputs.week }}
           lookup-only: true
 
-      # In every job but the writer that did not find its key, which builds
-      # from an empty cache.
-      - &restore_swiftpm
-        name: Restore the cache of Swift packages
+      # But when the job writes the entry of its key from an empty cache.
+      - name: Restore the cache of Swift packages
         if: hashFiles('build/native_build/ios.txt') != '' && (steps.swiftpm_lookup.outcome != 'success' || steps.swiftpm_lookup.outputs.cache-hit == 'true')
         uses: actions/cache/restore@v6
         with:
           path: *swiftpm_path
           key: *swiftpm_key
-          restore-keys: ${{ runner.os }}-swiftpm-
+          restore-keys: &swiftpm_restore_keys |
+            ${{ runner.os }}-swiftpm-${{ hashFiles('build/native_build/ios.txt') }}-
+            ${{ runner.os }}-swiftpm-
 
       - name: Build the app with every module for the iOS simulator
         run: |
@@ -1061,7 +1098,15 @@ jobs:
       - name: Find what the app builds with for iOS
         run: dart tools/native_build.dart ios "$RUNNER_TEMP/SMF apps застосунки é/start" build/native_build/ios.txt
 
-      - *restore_swiftpm
+      # As in the job iOS, in a job that writes no entry.
+      - &restore_swiftpm
+        name: Restore the cache of Swift packages
+        if: hashFiles('build/native_build/ios.txt') != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: *swiftpm_path
+          key: *swiftpm_key
+          restore-keys: *swiftpm_restore_keys
 
       # A new iPhone of the newest iOS runtime of the image that the SDK of
       # the Xcode of the job runs apps on; the image has several of each.
