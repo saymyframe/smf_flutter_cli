@@ -1479,6 +1479,47 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.purchasesKeptByService,
+        role: purchasesRole,
+        bug: 'Its service keeps the purchases in a field of its own, for '
+            'every user together: a user of the app has what any other user '
+            'bought through that service, and a service that its function '
+            'creates again has nothing.',
+        // The fixture sign-in, so that the test of the purchases of the
+        // users of the session applies to the app too.
+        app: [FakeAuthModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/purchases_role/provider_test.dart',
+            'the purchases of each user stay apart: a fresh user has nothing, '
+                'a purchase gives that user premium access, another fresh '
+                'user has nothing, and the first user has the access again',
+            'A provider keeps the purchases of each user apart: a user that '
+                'no identification named before, identified after another '
+                'user of the app, has nothing bought, whatever the users of '
+                'the app before bought.',
+          ),
+          MatrixExpectedFailure(
+            'test/purchases_role/next_start_test.dart',
+            'the store keeps what a user bought, so the next start has the '
+                'premium access of that user',
+            'The store keeps what a user bought, so the next start has it: a '
+                'service that the function of the provider creates again '
+                'gives the user the same premium access.',
+          ),
+          MatrixExpectedFailure(
+            'test/purchases_session/purchases_session_test.dart',
+            'after a sign-out, the next user of the device has none of the '
+                'purchases of the user who signed out, and a sign-in to the '
+                'account gives them back',
+            'Without a restore, the next user of the device never gets the '
+                'purchases of the one who signed out: after a sign-out the '
+                'user of the device is a new one, with nothing bought, and in '
+                'the mode anonymous so is the next anonymous user.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '
