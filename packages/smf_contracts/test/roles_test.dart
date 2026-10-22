@@ -19,6 +19,7 @@ const List<Role> _roles = [
   authRole,
   notificationsRole,
   pushRole,
+  purchasesRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -55,6 +56,7 @@ void main() {
       'authentication role',
       'notifications role',
       'push messages role',
+      'purchases role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -137,6 +139,15 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'notifications'},
       'uses': <String>{},
+    });
+    // The purchases belong to the user of the auth role, and the template
+    // gives the settings screen an entry that restores them, with texts in
+    // the language of the app. The role does not work with the router: a
+    // module that asks for premium access on a route brings the guard.
+    expect(shape(purchasesRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'auth', 'settings_screen', 'localization'},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -252,6 +263,7 @@ void main() {
           'auth',
           'notifications',
           'push',
+          'purchases',
           'settings_screen',
           'onboarding_screen',
           'theme',
@@ -454,6 +466,9 @@ void main() {
         'text_off',
         'push_owner',
         'message_key',
+        'text_active',
+        'text_none',
+        'text_failed',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
