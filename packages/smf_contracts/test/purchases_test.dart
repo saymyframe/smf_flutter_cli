@@ -855,6 +855,12 @@ Future<void> main(List<String> arguments, SendPort port) async {
       result['an object that is no error'] =
           await failureOf(controller.plans);
       failures.clear();
+      purchaseAnswer = const NoAccess();
+      result['a purchase whose answer gives no premium access'] = {
+        'failure': await failureOf(() => controller.purchase(monthly)),
+        'access': show(controller.value),
+      };
+      purchaseAnswer = null;
       result['a failure as text'] = [
         '${const PurchasesFailure(PurchasesFailureReason.network)}',
         '$notSetUp',
@@ -1815,10 +1821,12 @@ void main() {
       });
 
       test(
-          'fails only with a PurchasesFailure, keeps the stack trace of the '
-          'provider, starts and runs when the provider is not set up, prints '
-          'each hint of that once, and leaves the other failures that no '
-          'caller sees to the handler of the uncaught errors', () async {
+          'fails only with a PurchasesFailure, also for a purchase whose '
+          'answer gives no premium access, keeps the stack trace of the '
+          'provider, starts and runs when the provider is not set up or the '
+          'store does not answer, prints each hint of that once, and leaves '
+          'the other errors that no caller sees to the handler of the '
+          'uncaught errors', () async {
         const thrown = ', thrown in fake_purchases.dart';
         const printed = 'Purchases are not set up, so the app runs without '
             'them:';
@@ -1848,14 +1856,22 @@ void main() {
               'unknown (Bad state: The plugin broke.)$thrown',
           'an object that is no error':
               'unknown (A text that was thrown.)$thrown',
+          // The provider took the payment, but the answer gives no premium
+          // access, which every plan gives.
+          'a purchase whose answer gives no premium access': {
+            'failure': 'notConfigured (The plan was bought, but it gives no '
+                'premium access: check the setup of the provider.)',
+            'access': 'none',
+          },
           'a failure as text': [
             'PurchasesFailure: network',
             'PurchasesFailure: notConfigured (Fill in the key.)',
           ],
           // The hint that was printed before is not printed again.
           'printed': ['$printed Fill in another key.'],
+          // A store that does not answer, a network that fails and a store
+          // that is not there pass, so they reach no handler.
           'uncaught': [
-            'PurchasesFailure: storeProblem (The store broke.)',
             'Bad state: The access broke.',
             'Bad state: The changes broke.',
           ],

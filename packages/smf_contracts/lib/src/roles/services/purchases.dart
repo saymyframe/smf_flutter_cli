@@ -67,7 +67,9 @@ const purchasesRole = PurchasesRole._();
 /// store account bought. Each fails only with a `PurchasesFailure`: the
 /// provider maps its errors to the reasons, and the controller turns any
 /// other error into the reason `unknown`, with the error as the
-/// `developerHint`.
+/// `developerHint`. A purchase whose answer gives no premium access fails
+/// with `notConfigured`, whichever provider gave it, since every plan gives
+/// that access.
 ///
 /// The calls run one after another, in the order they were made, and so
 /// does what the controller does itself. Before each, the controller
@@ -89,10 +91,11 @@ const purchasesRole = PurchasesRole._();
 ///
 /// An error that no caller sees, of the start, of a change of the user, of
 /// a return to the app or of the changes that the service tells of, changes
-/// nothing. A failure `notConfigured` prints its hint once in debug mode,
-/// `network` and `unavailable` say nothing, and any other error reaches the
-/// handlers of the uncaught errors of the app. So an app whose provider
-/// lacks a key starts and runs without purchases.
+/// nothing. A failure `notConfigured` prints its hint once in debug mode.
+/// `network`, `unavailable` and `storeProblem`, which pass, say nothing, so
+/// a store that does not answer reaches no crash report and fails no test.
+/// Any other error reaches the handlers of the uncaught errors of the app.
+/// So an app whose provider lacks a key starts and runs without purchases.
 ///
 /// ## Whose purchases they are
 ///
@@ -132,7 +135,9 @@ const purchasesRole = PurchasesRole._();
 /// - `plans` gives at least one plan, in the order of the provider. A
 ///   backend with nothing to offer fails with `notConfigured` and a hint;
 /// - `purchase` completes with the premium access once the store took the
-///   payment, and with `null` when the user cancelled. It fails with
+///   payment, and with `null` when the user cancelled. An answer that gives
+///   no premium access fails the call of `appPurchases` with
+///   `notConfigured`. It fails with
 ///   `pending` while the payment waits for an approval, whose access
 ///   `accessChanges` tells of later, and with `alreadyOwned` for a plan that
 ///   the store account owns;

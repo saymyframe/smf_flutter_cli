@@ -34,10 +34,12 @@ final appPurchases = AppPurchasesController();
 /// An error that no caller sees, of the start, of a change of the user, of
 /// the return of the user to the app or of the changes that the service
 /// tells of, changes nothing. A failure [PurchasesFailureReason.notConfigured]
-/// prints its hint once in debug mode, [PurchasesFailureReason.network] and
-/// [PurchasesFailureReason.unavailable] say nothing, and any other error
-/// reaches the handlers of the uncaught errors of the app. So the app starts
-/// and runs without purchases when the provider is not set up.
+/// prints its hint once in debug mode. [PurchasesFailureReason.network],
+/// [PurchasesFailureReason.unavailable] and
+/// [PurchasesFailureReason.storeProblem], which pass, say nothing. Any other
+/// error reaches the handlers of the uncaught errors of the app. So the app
+/// starts and runs without purchases when the provider is not set up or the
+/// store does not answer.
 final class AppPurchasesController extends ChangeNotifier
     implements ValueListenable<AppAccess> {
   /// Creates a controller. The app creates [appPurchases] and no other. A
@@ -142,21 +144,32 @@ final class AppPurchasesController extends ChangeNotifier
 
   /// Buys [plan] through the sheet of the store, and completes with `true`
   /// once the user has bought it, or with `false` when the user cancelled,
-  /// which is no failure. [value] is then the access that the purchase gave.
+  /// which is no failure. The access that the purchase gave becomes [value],
+  /// unless the user of the app changed meanwhile.
   ///
   /// A payment that waits for an approval fails with
   /// [PurchasesFailureReason.pending]: the access comes once the store took
-  /// the payment.
+  /// the payment. A purchase whose answer gives no premium access, as with a
+  /// plan that the backend of the provider does not tie to the access, fails
+  /// with [PurchasesFailureReason.notConfigured]: the user paid, and a
+  /// restore gives the access once the provider is set up.
   Future<bool> purchase(Plan plan) => _call((service, identity) async {
         final access = await service.purchase(plan);
         if (access == null) return false;
+        if (access is! PremiumAccess) {
+          throw const PurchasesFailure(
+            PurchasesFailureReason.notConfigured,
+            developerHint: 'The plan was bought, but it gives no premium '
+                'access: check the setup of the provider.',
+          );
+        }
         _take(identity, access);
         return true;
       });
 
   /// Gives the user what the store account of the user bought, such as on a
-  /// new device, and completes with the access of the user then, which is
-  /// [value] from then on.
+  /// new device, and completes with the access of the user then. That access
+  /// becomes [value], unless the user of the app changed meanwhile.
   Future<AppAccess> restore() => _call((service, identity) async {
         final access = await service.restore();
         _take(identity, access);
@@ -381,7 +394,8 @@ final class AppPurchasesController extends ChangeNotifier
         }
       case PurchasesFailure(
           reason: PurchasesFailureReason.network ||
-              PurchasesFailureReason.unavailable,
+              PurchasesFailureReason.unavailable ||
+              PurchasesFailureReason.storeProblem,
         ):
         break;
       default:
