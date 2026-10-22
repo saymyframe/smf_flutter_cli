@@ -703,38 +703,48 @@ String _labelPrefixOf(AppOnboardingStep placed, Set<String> names) {
 ///
 /// The template of the role checks the steps of the templates of roles.
 List<SmfIssue> _checkSteps(ModuleRuleInput<OnboardingData> input) {
-  final module = input.module;
-  final origin = ModuleOrigin(module.id);
   final generated = textTemplatesOf(input.contributions);
   final names = <String>{};
-  final issues = <SmfIssue>[];
-  for (final data in input.data) {
-    if (data.value case final OnboardingStep step) {
-      issues.addAll([
-        for (final problem in [
-          ...step.problems(),
-          for (final text in step.shownTexts)
-            ...localizationRole.dataTextProblems(module, text),
-          if (!names.add(step.name))
-            'The module gives two onboarding steps named "${step.name}".',
-        ])
-          SmfIssue(problem, origin: origin),
-        for (final function in step.functions)
-          if (_fileOf(function) case final path?
-              when !generated.containsKey(path))
-            SmfIssue(
-              'The function ${function.name} of the onboarding step '
-              '"${step.name}" is in $path, which the bricks of the module '
-              'do not generate.',
-              hint: 'Generate the file of the function in a brick of the '
-                  'module.',
-              origin: origin,
-              path: path,
-            ),
-      ]);
-    }
-  }
-  return issues;
+  return [
+    for (final data in input.data)
+      if (data.value case final OnboardingStep step)
+        ..._stepIssues(input.module, step, generated, names),
+  ];
+}
+
+/// The problems of [step], a step of [module], for the module rule
+/// `onboarding_screen.steps`: those of the step on its own, those of its
+/// texts for [module], a name that [names], the names of the steps of
+/// [module] before it, has already, and a function in a file that
+/// [generated], the files of the bricks of [module], does not have. The
+/// name of [step] goes into [names].
+List<SmfIssue> _stepIssues(
+  ModuleDescriptor module,
+  OnboardingStep step,
+  Map<String, String> generated,
+  Set<String> names,
+) {
+  final origin = ModuleOrigin(module.id);
+  return [
+    for (final problem in [
+      ...step.problems(),
+      for (final text in step.shownTexts)
+        ...localizationRole.dataTextProblems(module, text),
+      if (!names.add(step.name))
+        'The module gives two onboarding steps named "${step.name}".',
+    ])
+      SmfIssue(problem, origin: origin),
+    for (final function in step.functions)
+      if (_fileOf(function) case final path? when !generated.containsKey(path))
+        SmfIssue(
+          'The function ${function.name} of the onboarding step '
+          '"${step.name}" is in $path, which the bricks of the module do '
+          'not generate.',
+          hint: 'Generate the file of the function in a brick of the module.',
+          origin: origin,
+          path: path,
+        ),
+  ];
 }
 
 /// The problems of the routes that the module of [input] names as the
@@ -772,63 +782,92 @@ bool _isFuture(String? type) {
 ///
 /// The template of the role and the module rule `onboarding_screen.steps`
 /// report a function outside the app.
-List<SmfIssue> _checkStepFunctions(StructuralRuleInput<OnboardingData> input) {
-  final issues = <SmfIssue>[];
-  for (final data in input.roleInput.data) {
-    final origin = data.origin;
-    if (data.value case final OnboardingStep step) {
-      for (final (function, isRun) in [
-        (step.run, true),
-        if (step.showIf case final showIf?) (showIf, false),
-      ]) {
-        final path = _fileOf(function);
-        if (path == null) continue;
-        final owner = input.owners[path];
-        if (owner != null && !isContributor(owner, origin)) {
-          issues.add(
-            SmfIssue(
-              'The function ${function.name} of the onboarding step '
-              '"${step.name}" of $origin is in $path, a file of $owner; a '
-              'step calls functions of its own contributor.',
-              origin: origin,
-              path: path,
+List<SmfIssue> _checkStepFunctions(
+  StructuralRuleInput<OnboardingData> input,
+) =>
+    [
+      for (final data in input.roleInput.data)
+        if (data.value case final OnboardingStep step)
+          for (final (function, isRun) in _functionsOf(step))
+            ..._stepFunctionIssues(
+              input,
+              data.origin,
+              step,
+              function,
+              isRun: isRun,
             ),
-          );
-          continue;
-        }
-        final symbol = RequiredFunction(
-          function.name,
-          path: path,
-          returnType: isRun ? null : 'bool',
-          positionalArguments: isRun ? 1 : 0,
-        );
-        final hint = isRun
-            ? 'The button of the action of a step calls run with the '
-                'BuildContext of the onboarding screen and awaits the future '
-                'that it returns.'
-            : 'The onboarding asks showIf without arguments whether it '
-                'shows the step, and takes the answer at once.';
-        final problems = [
-          for (final issue in symbol.checkIn(input.files)) issue.message,
-        ];
-        final declaration = input.files[path]?.declaration(function.name);
-        if (isRun &&
-            declaration?.kind == DeclarationKind.function &&
-            !_isFuture(declaration!.type)) {
-          problems.add(
-            '$symbol in $path must return a Future, not '
-            '${declaration.type ?? 'an undeclared type'}.',
-          );
-        }
-        for (final problem in problems) {
-          issues.add(
-            SmfIssue(problem, hint: hint, origin: origin, path: path),
-          );
-        }
-      }
-    }
+    ];
+
+/// The functions of [step], each with whether it is `run`: `run` and the
+/// `showIf` that the step may have.
+List<(FunctionRef, bool)> _functionsOf(OnboardingStep step) => [
+      (step.run, true),
+      if (step.showIf case final showIf?) (showIf, false),
+    ];
+
+/// The problems of [function] of [step], which [origin] contributed: `run`
+/// when [isRun], and `showIf` otherwise. A function in a file of another
+/// contributor has that problem alone; a function outside the app has
+/// none, since the template of the role and the module rule report it.
+List<SmfIssue> _stepFunctionIssues(
+  StructuralRuleInput<OnboardingData> input,
+  ContributionOrigin? origin,
+  OnboardingStep step,
+  FunctionRef function, {
+  required bool isRun,
+}) {
+  final path = _fileOf(function);
+  if (path == null) return const [];
+  final owner = input.owners[path];
+  if (owner != null && !isContributor(owner, origin)) {
+    return [
+      SmfIssue(
+        'The function ${function.name} of the onboarding step '
+        '"${step.name}" of $origin is in $path, a file of $owner; a step '
+        'calls functions of its own contributor.',
+        origin: origin,
+        path: path,
+      ),
+    ];
   }
-  return issues;
+  final hint = isRun
+      ? 'The button of the action of a step calls run with the BuildContext '
+          'of the onboarding screen and awaits the future that it returns.'
+      : 'The onboarding asks showIf without arguments whether it shows the '
+          'step, and takes the answer at once.';
+  return [
+    for (final problem
+        in _functionProblems(input.files, function, path, isRun: isRun))
+      SmfIssue(problem, hint: hint, origin: origin, path: path),
+  ];
+}
+
+/// What is wrong with [function] in [path] of [files]: a function that is
+/// missing, does not take what the onboarding calls it with (the context of
+/// the screen for `run` when [isRun], nothing for `showIf`), or does not
+/// return what the list of the steps takes (a `Future` for `run`, a `bool`
+/// for `showIf`).
+List<String> _functionProblems(
+  Map<String, DartFileIndex> files,
+  FunctionRef function,
+  String path, {
+  required bool isRun,
+}) {
+  final symbol = RequiredFunction(
+    function.name,
+    path: path,
+    returnType: isRun ? null : 'bool',
+    positionalArguments: isRun ? 1 : 0,
+  );
+  final declaration = files[path]?.declaration(function.name);
+  final returnsNoFuture = isRun &&
+      declaration?.kind == DeclarationKind.function &&
+      !_isFuture(declaration!.type);
+  final type = declaration?.type ?? 'an undeclared type';
+  return [
+    for (final issue in symbol.checkIn(files)) issue.message,
+    if (returnsNoFuture) '$symbol in $path must return a Future, not $type.',
+  ];
 }
 
 /// The problem of an app with onboarding steps whose provider does not
