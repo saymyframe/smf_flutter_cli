@@ -21,9 +21,12 @@ import 'support/keys.dart';
 const _terms = 'The <terms> of the shop, at `https://shop.example/<terms>`, '
     'which `the app shows` in a web view';
 
-/// A module that requires the role, with three keys: one whose description
-/// ends without a period, [_terms], and one whose description has a
-/// backtick that opens no code span.
+/// A module that requires the role, with four keys: one whose description
+/// ends without a period, [_terms], one whose description has a backtick
+/// that opens no code span, and one whose description has a code span
+/// between two backticks, with a single backtick and a `<` in it, then a
+/// `<` outside it and a backtick that opens no span, and ends with a
+/// colon.
 const _shop = KeysModule('shop', [
   EnvKey(
     'SHOP_APPLE_KEY',
@@ -33,6 +36,10 @@ const _shop = KeysModule('shop', [
   EnvKey(
     'SHOP_BANNER_TEXT',
     description: 'A text with a ` that opens no code span, before a <b>',
+  ),
+  EnvKey(
+    'SHOP_CODE_TEXT',
+    description: 'A text of ``a `<b>`` and <c>`, as in:',
   ),
 ]);
 
@@ -274,12 +281,19 @@ void main() {
       );
       expect(
         [for (final key in keys) key.name],
-        ['SHOP_APPLE_KEY', 'SHOP_TERMS_URL', 'SHOP_BANNER_TEXT', 'FEED_URL'],
+        [
+          'SHOP_APPLE_KEY',
+          'SHOP_TERMS_URL',
+          'SHOP_BANNER_TEXT',
+          'SHOP_CODE_TEXT',
+          'FEED_URL',
+        ],
       );
-      // A period ends a description that has none, a `<` outside a code
-      // span is escaped, so that Markdown takes it for no HTML tag, and the
-      // doc wraps at 80 columns between words outside its code spans, with
-      // one space between two words.
+      // A period ends a description that ends with no mark of its own, a
+      // `<` outside a code span is escaped, so that Markdown takes it for
+      // no HTML tag, a code span ends at a run of as many backticks as it
+      // starts with, and the doc wraps at 80 columns between words outside
+      // its code spans, with one space between two words.
       expect(
         text,
         contains(
@@ -302,6 +316,13 @@ void main() {
           '\n'
           '  static String? get shopBannerText {\n'
           "    const value = String.fromEnvironment('SHOP_BANNER_TEXT');\n"
+          '    return value.isEmpty ? null : value;\n'
+          '  }\n'
+          '\n'
+          r'  /// A text of ``a `<b>`` and \<c>`, as in:'
+          '\n'
+          '  static String? get shopCodeText {\n'
+          "    const value = String.fromEnvironment('SHOP_CODE_TEXT');\n"
           '    return value.isEmpty ? null : value;\n'
           '  }\n'
           '\n'
@@ -363,7 +384,9 @@ void main() => print(
 
     test(
         'of VS Code launch the entry of the app under the name of the app, '
-        'with the tool arguments of the role', () {
+        'with the tool arguments of the role, and are the template of every '
+        'launch of a file of the app, as the links above main() and the '
+        'tests', () {
       expect(app.files[_launch]!.owner, _module);
       expect(jsonDecode(app.files[_launch]!.text), {
         'version': '0.2.0',
@@ -374,6 +397,10 @@ void main() => print(
             'type': 'dart',
             'program': _entryOf(app),
             'toolArgs': _toolArgumentsOf(result),
+            // Dart-Code takes the configuration as the template of the
+            // launches of every file of the app, and puts the file in place
+            // of the program.
+            'templateFor': '',
           },
         ],
       });
@@ -396,7 +423,10 @@ void main() => print(
       expect(configuration.getAttribute('type'), 'FlutterRunConfigurationType');
       expect(configuration.getAttribute('factoryName'), 'Flutter');
       expect(configuration.getAttribute('default'), 'false');
-      expect(configuration.getAttribute('name'), 'main.dart');
+      expect(
+        configuration.getAttribute('name'),
+        ContractHarness.defaultContext.appName,
+      );
       expect(
         {
           for (final option in configuration.findElements('option'))
@@ -484,7 +514,13 @@ void main() => print(
       ];
 
       expect(commands, [
-        for (final command in ['run', 'test', 'build apk', 'build ipa'])
+        for (final command in [
+          'run',
+          'test',
+          'build apk',
+          'build appbundle',
+          'build ipa',
+        ])
           ['flutter', command, ..._toolArgumentsOf(result)].join(' '),
       ]);
     });
@@ -573,6 +609,8 @@ void main() => print(
         'flutter test',
         'flutter build',
         EnvRole.appEnv.name,
+        'main()',
+        'templateFor',
         'null',
         _launch,
         _runConfiguration,

@@ -26,9 +26,14 @@ const _toolArgument = '--dart-define-from-file=${EnvRole.dotEnvFile}';
 ///   such a command for the app takes from [EnvRole.toolArgumentsIn], such
 ///   as the tests of the apps of SMF;
 /// - `.vscode/launch.json` and `.run/main.run.xml`, the run configurations
-///   of VS Code and of Android Studio, which pass the argument to
-///   `flutter run`. Android Studio shares a configuration from `.run/`,
-///   since the `.idea/` of a project belongs to one machine;
+///   of VS Code and of Android Studio, each named after the app, which pass
+///   the argument to `flutter run`. Dart-Code takes the configuration of
+///   VS Code as the template of every launch of a file of the app
+///   (`templateFor`), with that file as its program, so the links above
+///   `main()` and above a test and the Testing view pass the argument too.
+///   Android Studio shares a configuration from `.run/`, since the `.idea/`
+///   of a project belongs to one machine, and passes the argument only to
+///   that configuration;
 /// - the section [readmeHeading] of the README of the app, which gives the
 ///   commands with the argument, tells that the values are read when a
 ///   command starts, so `flutter run` starts again after an edit of `.env`,
@@ -82,10 +87,13 @@ const _readmeSection = '''
 flutter run $_toolArgument
 flutter test $_toolArgument
 flutter build apk $_toolArgument
+flutter build appbundle $_toolArgument
 flutter build ipa $_toolArgument
 ```
 
-The Run buttons of VS Code and Android Studio pass it too, with `.vscode/launch.json` and `.run/main.run.xml`. A command reads the values only when it starts: after you change `${EnvRole.dotEnvFile}`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
+In VS Code, `.vscode/launch.json` passes the argument to Run and Debug (F5), to the Run and Debug links above `main()`, and to the tests that you run from the links above them or from the Testing view: its configuration is the template of every launch of the app (`templateFor`). In Android Studio, `.run/main.run.xml` passes it to the run configuration named after the app, and a test that you run there gets no argument.
+
+A command reads the values only when it starts: after you change `${EnvRole.dotEnvFile}`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
 To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
 
@@ -139,29 +147,35 @@ const _width = 80;
 
 /// The lines of the doc of a getter of `AppEnv` with [description], each
 /// without the start of a line of a doc: the description as a sentence,
-/// wrapped at [_width] between its words and outside its code spans.
+/// wrapped at [_width] between its words and outside its code spans. A word
+/// longer than a line, such as a long code span, stays on a line of its
+/// own.
 ///
 /// A `<` outside a code span is escaped, since Markdown would take it for
 /// the start of an HTML tag, which the analyzer of the app reports
-/// (`unintended_html_in_doc_comment`) and `flutter analyze` fails on.
+/// (`unintended_html_in_doc_comment`) and `flutter analyze` fails on. As in
+/// Markdown, a code span starts at a run of backticks and ends at the next
+/// run of as many, and a run that no such run follows is text.
 List<String> _docOf(String description) {
   final text = _sentenceOf(description);
-  final ticks = [
-    for (var index = 0; index < text.length; index++)
-      if (text[index] == '`') index,
-  ];
-  // A backtick that none closes opens no code span.
-  if (ticks.length.isOdd) ticks.removeLast();
   final words = <String>[''];
-  var inCode = false;
-  for (var index = 0; index < text.length; index++) {
+  var index = 0;
+  while (index < text.length) {
     final char = text[index];
-    if (char == ' ' && !inCode) {
-      words.add('');
+    if (char == '`') {
+      final run = _backticksAt(text, index);
+      final close = _closingRun(text, index + run, run);
+      final end = close == null ? index + run : close + run;
+      words.last += text.substring(index, end);
+      index = end;
       continue;
     }
-    if (ticks.contains(index)) inCode = !inCode;
-    words.last += char == '<' && !inCode ? r'\<' : char;
+    if (char == ' ') {
+      words.add('');
+    } else {
+      words.last += char == '<' ? r'\<' : char;
+    }
+    index++;
   }
   final lines = <String>[];
   var line = '';
@@ -179,7 +193,32 @@ List<String> _docOf(String description) {
   return [...lines, line];
 }
 
+/// The number of the backticks in [text] from [index] on.
+int _backticksAt(String text, int index) {
+  var end = index;
+  while (end < text.length && text[end] == '`') {
+    end++;
+  }
+  return end - index;
+}
+
+/// Where the first run of exactly [length] backticks in [text] from [from]
+/// on starts, which closes a code span that such a run opened, or `null`.
+int? _closingRun(String text, int from, int length) {
+  var index = from;
+  while (index < text.length) {
+    if (text[index] != '`') {
+      index++;
+      continue;
+    }
+    final run = _backticksAt(text, index);
+    if (run == length) return index;
+    index += run;
+  }
+  return null;
+}
+
 /// [description] as a sentence: with a period at its end unless it ends
-/// with a mark that ends a sentence.
+/// with a mark that ends a sentence or opens what follows, such as a colon.
 String _sentenceOf(String description) =>
-    RegExp(r'[.!?…]$').hasMatch(description) ? description : '$description.';
+    RegExp(r'[.!?…:;]$').hasMatch(description) ? description : '$description.';

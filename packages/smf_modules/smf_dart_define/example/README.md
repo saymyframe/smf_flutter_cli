@@ -25,7 +25,7 @@ A getter is `null` while its value in `.env` is empty or missing, so the app bui
 flutter run --dart-define-from-file=.env
 ```
 
-`flutter test` and `flutter build` take the same argument. The Run buttons of VS Code and Android Studio pass it too, with `.vscode/launch.json` and `.run/main.run.xml`. The `flutter` tool reads `.env` only when a command starts, so after you edit it, stop `flutter run` and start it again: hot reload and hot restart keep the old values.
+`flutter test` and `flutter build` take the same argument. In VS Code, `.vscode/launch.json` passes it to Run and Debug, to the links above `main()` and to the tests. In Android Studio, `.run/main.run.xml` passes it to the run configuration named after the app, but not to tests. The `flutter` tool reads `.env` only when a command starts, so after you edit it, stop `flutter run` and start it again: hot reload and hot restart keep the old values.
 
 Every value ends up in the app, where anyone who has the app can read it. Never put a secret into `.env`.
 
