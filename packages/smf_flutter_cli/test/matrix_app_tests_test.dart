@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
+import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -327,6 +328,21 @@ void main() {
       matrixEnv.toolArguments(const MatrixApp('outside', [])),
       isEmpty,
     );
+    expect(matrixEnv.keys(const MatrixApp('outside', [])), isEmpty);
+    // The keys of an app are those of the role, each with the module that
+    // gives it; no module of the CLI gives the role a key yet.
+    for (final app in apps) {
+      expect(
+        matrixEnv.keys(app),
+        app.hook!.presentRoles.contains(envRole)
+            ? {
+                for (final key in envRole.keysIn(envRole.hookInput(app.hook!)))
+                  key.name: (key.owner as ModuleOrigin).module,
+              }
+            : isEmpty,
+        reason: app.name,
+      );
+    }
   });
 
   test(

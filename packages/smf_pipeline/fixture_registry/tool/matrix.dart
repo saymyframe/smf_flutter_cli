@@ -6,7 +6,7 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/matrix.dart';
-import 'package:smf_flutter_cli/matrix_app_tests.dart' show matrixEnv;
+import 'package:smf_flutter_cli/matrix_env.dart';
 
 /// Generates the apps of the matrix of the fixture modules in the directory
 /// given as the first argument, analyzes each with Flutter, so that every
@@ -65,6 +65,7 @@ Future<void> main(List<String> given) async {
       modules: fixtureModules(),
       packages: _packagesOf(fixtureModules()),
       apps: () async => (await matrixOf(fixtureModules())).apps,
+      env: matrixEnv,
     );
     stdout.writeln(jsonEncode(report));
     return;

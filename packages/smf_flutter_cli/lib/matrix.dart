@@ -511,7 +511,13 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   directory and the function (`use`), such as `test/a_test.dart:
 ///   createCrashReporter() of lib/core/crash_reporting/crash_reporter.dart`,
 ///   and the id of the role of the function (`role`), such as
-///   `crash_reporting`.
+///   `crash_reporting`;
+/// - `envKeys`, the keys that it gives the apps of the matrix values of
+///   ([MatrixAppTest.envValues]), each with the module that gives the app
+///   the key (`module`) and its package (`package`), as [env] tells them
+///   (see [MatrixEnv.keys]), both `null` where no module of the app gives
+///   the key, and the names of those apps (`apps`), in the order of the
+///   apps and of the keys.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
@@ -544,6 +550,7 @@ Future<List<Map<String, Object>>> appTestsReport(
   required List<SmfModule> modules,
   required Map<ModuleId, String> packages,
   required Future<List<MatrixApp>> Function() apps,
+  MatrixEnv? env,
   FileSystem fileSystem = const LocalFileSystem(),
 }) async {
   final path = const LocalFileSystem().path;
@@ -576,6 +583,7 @@ Future<List<Map<String, Object>>> appTestsReport(
         functions,
         fileSystem,
       ),
+      'envKeys': _envKeysGivenBy(test, matrix, env, packages),
     });
   }
   return report;
@@ -602,6 +610,37 @@ List<Map<String, String>> _roleFunctionUses(
           functions,
         ))
           {'use': '$path: $use', 'role': role.id},
+  ];
+}
+
+/// The keys that [test] gives the apps of [apps] values of, each with the
+/// module that gives the app the key, as [env] tells it, and its package of
+/// [packages], `null` where no module of the app gives the key, and the
+/// names of the apps; see [appTestsReport].
+List<Map<String, Object?>> _envKeysGivenBy(
+  MatrixAppTest test,
+  List<MatrixApp> apps,
+  MatrixEnv? env,
+  Map<ModuleId, String> packages,
+) {
+  final given = <(String, ModuleId?), List<String>>{};
+  for (final app in apps) {
+    if (!test.appliesTo(app)) continue;
+    final values = test.envValues?.call(app) ?? const <String, String?>{};
+    if (values.isEmpty) continue;
+    final owners = env?.keys(app) ?? const <String, ModuleId>{};
+    for (final key in values.keys) {
+      (given[(key, owners[key])] ??= []).add(app.name);
+    }
+  }
+  return [
+    for (final MapEntry(key: (key, module), value: names) in given.entries)
+      {
+        'key': key,
+        'module': module?.value,
+        'package': packages[module],
+        'apps': names,
+      },
   ];
 }
 
@@ -1163,8 +1202,12 @@ final class MatrixMocks {
 /// [toolArguments] of the app.
 final class MatrixEnv {
   /// Creates how the apps get their values: from [file], with the
-  /// [toolArguments] of each app.
-  const MatrixEnv({required this.file, required this.toolArguments});
+  /// [toolArguments] of each app, whose [keys] its modules give.
+  const MatrixEnv({
+    required this.file,
+    required this.toolArguments,
+    required this.keys,
+  });
 
   /// The path in an app of the file with the values, such as `.env`.
   final String file;
@@ -1175,6 +1218,16 @@ final class MatrixEnv {
   /// `flutter test <arguments>`; none for an app that needs none, such as
   /// an app whose modules read no values.
   final List<String> Function(MatrixApp app) toolArguments;
+
+  /// The keys of the values of an app of the matrix, each with the module
+  /// that gives the app the key; none for an app whose modules read no
+  /// values.
+  ///
+  /// The report of the tests of a matrix tool ([appTestsReport]) names, for
+  /// each key that a test gives an app a value of, its module, so that the
+  /// checks of the repository find a test that gives values for the keys of
+  /// a module that it does not know.
+  final Map<String, ModuleId> Function(MatrixApp app) keys;
 }
 
 /// The tests that a matrix adds to its apps, and the roles whose contract

@@ -1175,6 +1175,7 @@ void main() {
         'uses': <Object>[],
         'roles': <String>[],
         'roleFunctionUses': <Object>[],
+        'envKeys': <Object>[],
       },
       {
         'directory': '$home/with_home',
@@ -1189,6 +1190,7 @@ void main() {
         ],
         'roles': <String>[],
         'roleFunctionUses': <Object>[],
+        'envKeys': <Object>[],
       },
       {
         'directory': '$home/start',
@@ -1197,6 +1199,7 @@ void main() {
         'uses': <Object>[],
         'roles': <String>[],
         'roleFunctionUses': <Object>[],
+        'envKeys': <Object>[],
       },
       {
         'directory': '$home/every_module',
@@ -1205,6 +1208,7 @@ void main() {
         'uses': <Object>[],
         'roles': <String>[],
         'roleFunctionUses': <Object>[],
+        'envKeys': <Object>[],
       },
       {
         'directory': '$home/every_module_with_home',
@@ -1219,6 +1223,7 @@ void main() {
         ],
         'roles': <String>[],
         'roleFunctionUses': <Object>[],
+        'envKeys': <Object>[],
       },
       {
         'directory': '$cli/start',
@@ -1227,6 +1232,7 @@ void main() {
         'uses': <Object>[],
         'roles': <String>[],
         'roleFunctionUses': <Object>[],
+        'envKeys': <Object>[],
       },
       {
         'directory': '$cli/of_roles',
@@ -1235,6 +1241,7 @@ void main() {
         'uses': <Object>[],
         'roles': ['router', 'layout'],
         'roleFunctionUses': <Object>[],
+        'envKeys': <Object>[],
       },
     ]);
     // It builds the apps once for all the tests, and not without tests.
@@ -1514,6 +1521,91 @@ Type type() => Types;
     ]);
   });
 
+  test(
+      'the report of the app tests names each key that a test gives the apps '
+      'a value of, with the module that gives the app the key and its '
+      'package, and none where no module of the app gives it', () async {
+    final home = await _appTestsOf('smf_home_flutter');
+    const withHome = MatrixApp('with home', [
+      FlutterCoreModule.id,
+      HomeModule.id,
+    ]);
+    const withoutHome = MatrixApp('without home', [FlutterCoreModule.id]);
+    // The apps with home have its key, as the values of the env role do.
+    final env = MatrixEnv(
+      file: '.env',
+      toolArguments: (app) => const [],
+      keys: (app) => {
+        if (app.modules.contains(HomeModule.id)) 'HOME_URL': HomeModule.id,
+      },
+    );
+    final tests = [
+      MatrixAppTest(
+        '$home/values',
+        appliesTo: (_) => true,
+        envValues: (app) => {'HOME_URL': 'https://home.example', 'X_KEY': null},
+      ),
+      MatrixAppTest('$home/none', appliesTo: (_) => true),
+    ];
+
+    Future<List<Map<String, Object>>> report({MatrixEnv? env}) =>
+        appTestsReport(
+          tests,
+          modules: const [FlutterCoreModule(), HomeModule()],
+          packages: const {
+            FlutterCoreModule.id: 'smf_flutter_core',
+            HomeModule.id: 'smf_home_flutter',
+          },
+          apps: () async => const [withHome, withoutHome],
+          env: env,
+        );
+
+    final keys = [
+      for (final test in await report(env: env)) test['envKeys'],
+    ];
+    expect(keys, [
+      [
+        {
+          'key': 'HOME_URL',
+          'module': 'home',
+          'package': 'smf_home_flutter',
+          'apps': ['with home'],
+        },
+        {
+          'key': 'X_KEY',
+          'module': null,
+          'package': null,
+          'apps': ['with home', 'without home'],
+        },
+        {
+          'key': 'HOME_URL',
+          'module': null,
+          'package': null,
+          'apps': ['without home'],
+        },
+      ],
+      <Object>[],
+    ]);
+    // Without the keys of the apps, no module gives a key.
+    expect(
+      (await report()).first['envKeys'],
+      [
+        {
+          'key': 'HOME_URL',
+          'module': null,
+          'package': null,
+          'apps': ['with home', 'without home'],
+        },
+        {
+          'key': 'X_KEY',
+          'module': null,
+          'package': null,
+          'apps': ['with home', 'without home'],
+        },
+      ],
+    );
+  });
+
   group('runMatrix', () {
     late List<String> log;
     late List<List<String>> created;
@@ -1679,7 +1771,11 @@ Type type() => Types;
         'gives the tests of each app the values of the apps of the run, for '
         'the file of the values and the arguments of flutter test', () async {
       final core = MatrixAppTest('/tests/core', appliesTo: (app) => true);
-      final env = MatrixEnv(file: '.values', toolArguments: (app) => []);
+      final env = MatrixEnv(
+        file: '.values',
+        toolArguments: (app) => [],
+        keys: (app) => const {},
+      );
 
       expect(await run(appTests: [core], env: env), 0);
       expect(await run(appTests: [core]), 0);
@@ -3259,6 +3355,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       final env = MatrixEnv(
         file: '.values',
         toolArguments: (app) => ['--values=.values', '--of=${app.name}'],
+        keys: (app) => const {},
       );
 
       /// The tests of the shop, which give the values of [shop] to every

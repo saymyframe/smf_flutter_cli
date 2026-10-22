@@ -38,6 +38,7 @@ final class ListedAppTest {
     this.uses = const [],
     this.roles = const [],
     this.roleFunctionUses,
+    this.envKeys = const [],
   });
 
   /// Reads the report of a MatrixAppTest.
@@ -61,6 +62,13 @@ final class ListedAppTest {
                 RoleFunctionUse.fromJson(use! as Map<String, Object?>),
             ],
           _ => null,
+        },
+        envKeys: switch (json['envKeys']) {
+          final List<Object?> keys => [
+              for (final key in keys)
+                GivenEnvKey.fromJson(key! as Map<String, Object?>),
+            ],
+          _ => const [],
         },
       );
 
@@ -88,6 +96,45 @@ final class ListedAppTest {
   /// of the matrix that an app can have several providers of, or `null` if
   /// the tool does not report them.
   final List<RoleFunctionUse>? roleFunctionUses;
+
+  /// The keys of the values of the apps that the test gives values of
+  /// (`MatrixAppTest.envValues`), each with the module that gives the apps
+  /// the key.
+  final List<GivenEnvKey> envKeys;
+}
+
+/// A key of the values of an app that a MatrixAppTest gives a value of,
+/// which a matrix tool reports.
+final class GivenEnvKey {
+  /// Describes the key [key], which the module [module] of the package
+  /// [package] gives the apps [apps], or no module when they are `null`.
+  const GivenEnvKey(
+    this.key, {
+    required this.module,
+    required this.package,
+    required this.apps,
+  });
+
+  /// Reads the report of a key.
+  factory GivenEnvKey.fromJson(Map<String, Object?> json) => GivenEnvKey(
+        json['key']! as String,
+        module: json['module'] as String?,
+        package: json['package'] as String?,
+        apps: [...(json['apps']! as List<Object?>).cast<String>()],
+      );
+
+  /// The name of the key, such as `REVENUECAT_APPLE_KEY`.
+  final String key;
+
+  /// The id of the module that gives the apps the key, or `null` if no
+  /// module of the apps gives it.
+  final String? module;
+
+  /// The package that declares [module].
+  final String? package;
+
+  /// The names of the apps of the matrix that the test gives the value.
+  final List<String> apps;
 }
 
 /// A use of a function of a role that an app can have several providers

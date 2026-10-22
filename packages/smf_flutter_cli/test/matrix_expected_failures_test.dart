@@ -734,6 +734,7 @@ void main() {
         final env = MatrixEnv(
           file: '.values',
           toolArguments: (app) => ['--values=.values'],
+          keys: (app) => const {},
         );
 
         final (problems, output) = await runFailingAppTests(
@@ -906,6 +907,7 @@ void main() {
           env: MatrixEnv(
             file: '.values',
             toolArguments: (app) => ['--values=.values'],
+            keys: (app) => const {},
           ),
           commands: MatrixCommands(
             log: log.add,

@@ -6,7 +6,7 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/matrix.dart';
-import 'package:smf_flutter_cli/matrix_app_tests.dart' show matrixEnv;
+import 'package:smf_flutter_cli/matrix_env.dart';
 
 /// Generates the app with every module of the registry of several
 /// providers (`severalProvidersModules`) in the directory given as the only
@@ -42,6 +42,7 @@ Future<void> main(List<String> arguments) async {
       modules: severalProvidersModules(),
       packages: _packagesOf(severalProvidersModules()),
       apps: () async => (await matrixOf(severalProvidersModules())).apps,
+      env: matrixEnv,
     );
     stdout.writeln(jsonEncode(report));
     return;

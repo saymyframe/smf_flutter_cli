@@ -498,30 +498,6 @@ Future<MatrixAppTests> smfAppTests() async {
   );
 }
 
-/// How the apps of the matrices of SMF get the values that their modules
-/// read, which a developer fills in after generating an app: the file of
-/// the values of the env role, `.env`, into which the matrix writes the
-/// values that the tests of an app give it (`MatrixAppTest.envValues`),
-/// and the arguments of `flutter test` that the provider of the role in an
-/// app gives the role, none in an app without the role.
-///
-/// The tools of the matrices of the CLI, of the fixtures, of the app of
-/// several providers and of the apps whose tests must fail give it to the
-/// runs, which know no role themselves.
-const matrixEnv = MatrixEnv(
-  file: EnvRole.dotEnvFile,
-  toolArguments: _envToolArgumentsOf,
-);
-
-/// The arguments of the commands of the `flutter` tool that the provider of
-/// the env role of [app] gives the role, from the data of the roles of the
-/// app; none for an app that the contract harness did not build, which has
-/// no such data.
-List<String> _envToolArgumentsOf(MatrixApp app) => switch (app.hook) {
-      final hook? => envRole.toolArgumentsIn(envRole.hookInput(hook)),
-      null => const [],
-    };
-
 /// The test of the events role that the CLI keeps in its
 /// `app_tests/events_role`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them: once the start-up of

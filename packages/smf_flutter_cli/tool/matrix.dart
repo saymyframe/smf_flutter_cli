@@ -9,6 +9,7 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_contracts/smf_contracts.dart' show appEntryRole;
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
+import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:yaml/yaml.dart';
@@ -106,6 +107,7 @@ Future<void> main(List<String> given) async {
       modules: smfModules,
       packages: _packagesOf(smfModules),
       apps: () async => (await matrixOf(smfModules)).apps,
+      env: matrixEnv,
     );
     stdout.writeln(jsonEncode(report));
     return;

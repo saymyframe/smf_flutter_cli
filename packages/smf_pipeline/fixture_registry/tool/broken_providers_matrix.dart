@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:fixture_registry/broken_providers.dart';
 import 'package:smf_flutter_cli/matrix.dart';
-import 'package:smf_flutter_cli/matrix_app_tests.dart' show matrixEnv;
+import 'package:smf_flutter_cli/matrix_env.dart';
 
 /// Generates in the directory given as the only argument the app of each
 /// provider of a role with one known bug (`brokenProviders` of
