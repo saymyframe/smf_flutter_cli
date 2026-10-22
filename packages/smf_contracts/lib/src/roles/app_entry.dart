@@ -82,15 +82,15 @@ const appEntryRole = AppEntryRole._();
 /// [androidManifestApplicationComponents], [iosAppDelegateLaunch] and both
 /// places of [androidCoreLibraryDesugaring] render complete lines, so their
 /// tags stand alone at the start of a line of their file, like the tags of
-/// [PipelineSockets]. The tag of
-/// [iosDeploymentTarget] stands where the version goes, as in
-/// `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module rules of the role
-/// check these tags in the templates of its provider, the element of the
-/// Android manifest that holds each tag of the manifest, and the place of
-/// the tag of [iosAppDelegateLaunch] in its method, and
-/// its structural rules check that the native files name every key once,
-/// that the app target signs with [iosEntitlementsFile], and that an app
-/// with an entitlement of [paidTeamEntitlements] lists [iosAppIdStep].
+/// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
+/// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The
+/// module rules of the role check these tags in the templates of its
+/// provider, the element of the Android manifest that holds each tag of the
+/// manifest, and the place of the tag of [iosAppDelegateLaunch] in its
+/// method, and its structural rules check that the native files name every
+/// key once, that the app target signs with [iosEntitlementsFile], and that
+/// an app with an entitlement of [paidTeamEntitlements] lists
+/// [iosAppIdStep].
 ///
 /// Unlike other roles, its sockets and symbols are open to every module
 /// (see [openToAllModules]), so any module can take part in start-up.
@@ -609,11 +609,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// it. Two different comments for one pattern conflict. Without patterns,
   /// the file is that of the provider's template.
   ///
-  /// The tag of the socket stands alone on the last line of the provider's
-  /// `.gitignore`, and every provider of the role has it. A provider
-  /// without it takes no patterns: `smf create` stops on a pattern that a
-  /// module contributes then, and the contract harness reports the
-  /// provider in every app.
+  /// Every provider of the role has the tag of the socket alone on a line
+  /// of its `.gitignore`, after its own lines. A provider without the tag
+  /// takes no patterns: `smf create` stops on a pattern that a module
+  /// contributes then, and the contract harness reports the provider in
+  /// every app.
   static const gitignore = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'gitignore',
