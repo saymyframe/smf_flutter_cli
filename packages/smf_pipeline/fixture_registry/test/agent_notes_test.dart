@@ -108,6 +108,9 @@ void main() {
     final hasFixturePush = modules.any(
       (module) => module.descriptor.id == const ModuleId('fake_push'),
     );
+    final hasFixturePurchases = modules.any(
+      (module) => module.descriptor.id == const ModuleId('fake_purchases'),
+    );
     group('in the apps of the registry $name, the note of a role', () {
       late List<ContractResult> results;
 
@@ -284,6 +287,41 @@ void main() {
               '`lib/core/fixture_push/fixture_push.dart`',
               '`FixturePush`',
               'fake_push',
+            ],
+          );
+        });
+      }
+
+      // What only a registry with the fixture purchases can tell: there the
+      // purchases role has a provider, so the check holds its note against
+      // one.
+      if (hasFixturePurchases) {
+        test(
+            'of the purchases role may name Dart, and may not name the '
+            'fixture purchases, its file or what it declares', () {
+          expect(
+            _namedWith(
+              results,
+              purchasesRole,
+              '- Follow the changes of the access with a '
+              '`StreamSubscription`, and wait for a purchase with a '
+              '`Completer`.',
+            ),
+            isEmpty,
+          );
+          expect(
+            _namedWith(
+              results,
+              purchasesRole,
+              '- `openFixturePurchases()` of '
+              '`lib/core/fixture_purchases/fixture_purchases.dart` returns '
+              'the `FixturePurchases`, as fake_purchases wants.',
+            ),
+            [
+              '`openFixturePurchases`',
+              '`lib/core/fixture_purchases/fixture_purchases.dart`',
+              '`FixturePurchases`',
+              'fake_purchases',
             ],
           );
         });
