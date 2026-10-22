@@ -976,29 +976,62 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
-/// Disposes of a controller with a purchase on its way, and changes the
-/// user and the access after that.
+/// Disposes of a controller with a purchase on its way, and a start and a
+/// look at the access that wait for their turn behind it, and changes the
+/// user and the access after that. The users count their listeners.
 const _dispose = '''
+final class CountingNotifier extends ValueNotifier<String?> {
+  CountingNotifier(super.value);
+
+  int listeners = 0;
+
+  @override
+  void addListener(VoidCallback listener) {
+    listeners++;
+    super.addListener(listener);
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    listeners--;
+    super.removeListener(listener);
+  }
+}
+
 Future<void> main(List<String> arguments, SendPort port) async {
-  final user = ValueNotifier<String?>('a');
+  final user = CountingNotifier('a');
   final controller = AppPurchasesController();
-  final service = FakePurchases();
+  final first = FakePurchases('first');
   await controller.start(
-    service,
+    first,
     userId: () => user.value,
     userChanges: user,
   );
   final observers = WidgetsBinding.instance.observers.length;
+  final listeners = user.listeners;
   takeCalls();
-  final hold = holds['purchase monthly'] = Completer<void>();
+  final hold = holds['first: purchase monthly'] = Completer<void>();
   final bought = controller.purchase(monthly);
+  await pump();
+  final second = FakePurchases('second');
+  final secondUser = CountingNotifier('b');
+  unawaited(
+    controller.start(
+      second,
+      userId: () => secondUser.value,
+      userChanges: secondUser,
+    ),
+  );
+  user.value = 'c';
   await pump();
   controller.dispose();
   holds.clear();
   hold.complete();
   result['the purchase on its way'] = await bought;
-  user.value = 'b';
-  service.tell(const PremiumAccess());
+  await pump();
+  await pump();
+  user.value = 'd';
+  first.tell(const PremiumAccess());
   resumeApp();
   await pump();
   result['after the dispose'] = {
@@ -1008,7 +1041,12 @@ Future<void> main(List<String> arguments, SendPort port) async {
       observers,
       WidgetsBinding.instance.observers.length,
     ],
-    'the service is followed': service.hasListener,
+    'the services that are followed': [first.hasListener, second.hasListener],
+    'the listeners of the users': [
+      listeners,
+      user.listeners,
+      secondUser.listeners,
+    ],
   };
   port.send(result);
 }
@@ -1910,15 +1948,18 @@ void main() {
 
       test(
           'stops following the service, the user and the lifecycle of the '
-          'app once it is disposed of, and lets a call on its way end',
-          () async {
+          'app once it is disposed of, lets a call on its way end, and does '
+          'nothing for a start or a look that waited for its turn', () async {
         expect(await app.run('$_notes$_dispose'), {
           'the purchase on its way': true,
+          // Neither the second start nor the look at the user c reach a
+          // service, follow it or listen to a user.
           'after the dispose': {
             'access': 'none',
-            'calls': ['purchase monthly'],
+            'calls': ['first: purchase monthly'],
             'observers of the lifecycle': [1, 0],
-            'the service is followed': false,
+            'the services that are followed': [false, false],
+            'the listeners of the users': [1, 0, 0],
           },
         });
       });

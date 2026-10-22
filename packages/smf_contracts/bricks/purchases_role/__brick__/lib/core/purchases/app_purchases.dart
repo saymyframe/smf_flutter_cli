@@ -178,7 +178,8 @@ final class AppPurchasesController extends ChangeNotifier
 
   /// Stops following the service, the user and the lifecycle of the app. A
   /// call that is on its way still ends as it would have, but tells no
-  /// listener.
+  /// listener. A start or a look at the access that waits for its turn does
+  /// nothing then.
   @override
   void dispose() {
     _disposed = true;
@@ -206,12 +207,14 @@ final class AppPurchasesController extends ChangeNotifier
   }
 
   /// Takes [service] as the service of the controller, with the user of
-  /// [userId], and looks at the user and at the access.
+  /// [userId], and looks at the user and at the access, unless the
+  /// controller was disposed of while the start waited for its turn.
   Future<void> _use(
     PurchasesService service,
     String? Function()? userId,
     Listenable? userChanges,
   ) async {
+    if (_disposed) return;
     unawaited(_accessChanges?.cancel());
     _userChanges?.removeListener(_onUserChange);
     _service = service;
@@ -309,8 +312,10 @@ final class AppPurchasesController extends ChangeNotifier
     return identity;
   }
 
-  /// Identifies the user, and takes the access of that user.
+  /// Identifies the user, and takes the access of that user, unless the
+  /// controller was disposed of while the look waited for its turn.
   Future<void> _look() async {
+    if (_disposed) return;
     final service = _service!;
     final identity = await _identify(service);
     _take(identity, await service.access());
