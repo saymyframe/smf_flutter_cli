@@ -800,14 +800,17 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
-/// Reads `appNotifications` first in a zone that runs no microtask any
-/// more, as the fake time of a widget test that is over does, and then, in
-/// the root zone, shows a notification and starts the notifications, as a
-/// later test does in real time. The start fails if [startFails].
+/// Shows a notification first in a zone that runs no microtask any more, as
+/// the fake time of a widget test that is over does, a call that never goes
+/// on, and then, in the root zone, shows another one and starts the
+/// notifications, as a later test does in real time. The start fails if
+/// [startFails].
 String _createdElsewhere({required bool startFails}) => '''
 Future<void> main(List<String> arguments, SendPort port) async {
   runZoned(
-    () => appNotifications.permission,
+    () => unawaited(
+      appNotifications.show(const AppNotification(id: 7, title: 'Dead')),
+    ),
     zoneSpecification: ZoneSpecification(
       scheduleMicrotask: (self, parent, zone, microtask) {},
     ),
@@ -1626,9 +1629,9 @@ void main() {
 
       test(
           'completes or fails a call made before the first start in its own '
-          'zone, wherever the controller was first read: a widget test in '
-          'fake time may read it before a later test starts the app in real '
-          'time', () async {
+          'zone, wherever the controller was first read or called: a widget '
+          'test in fake time may call it before a later test starts the app '
+          'in real time', () async {
         expect(
           await app.run('$_notes${_createdElsewhere(startFails: false)}'),
           {
