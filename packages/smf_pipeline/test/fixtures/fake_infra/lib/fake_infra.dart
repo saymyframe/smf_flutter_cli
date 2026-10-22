@@ -232,12 +232,13 @@ final class FakeSocketsModule extends SmfModule {
 /// and values that [FakeSocketsModule] does, so an app with both merges
 /// them: equal permissions, meta-data, plist strings, entitlements,
 /// patterns of `.gitignore` and README sections agree, the plist arrays of
-/// Info.plist and of the entitlements are united, the highest versions win,
-/// those of Gradle and of the library of core library desugaring too, the
-/// delegate of the localizations appears once, and so do the note for
-/// coding agents and the step by hand that both have. It puts nothing into
-/// the sockets of code of the native files, such as the components of the
-/// Android application, which would have the same code twice.
+/// Info.plist and of the entitlements and the comments of a pattern of
+/// `.gitignore` are united, the highest versions win, those of Gradle and of
+/// the library of core library desugaring too, the delegate of the
+/// localizations appears once, and so do the note for coding agents and the
+/// step by hand that both have. It puts nothing into the sockets of code of
+/// the native files, such as the components of the Android application,
+/// which would have the same code twice.
 final class FakeOverlapModule extends SmfModule {
   /// Creates the module.
   const FakeOverlapModule();
@@ -296,6 +297,11 @@ final class FakeOverlapModule extends SmfModule {
         ),
         AppEntryRole.androidCoreLibraryDesugaring.value('2.1.3'),
         AppEntryRole.gitignore.entry('*.fixture.log', _logsComment),
+        // The pattern of fake_sockets in other words: .gitignore has both.
+        AppEntryRole.gitignore.entry(
+          '/fixture.local',
+          'What the fixture keeps on one machine',
+        ),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
       ];

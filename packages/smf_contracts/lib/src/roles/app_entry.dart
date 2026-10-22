@@ -606,14 +606,19 @@ final class AppEntryRole extends Role<NoDsl> {
   /// around it and without a backslash, and starts with neither `#`, which
   /// makes its line a comment, nor `!`, which brings back what a line
   /// before it ignores. A comment is one line of text without spaces around
-  /// it. Two different comments for one pattern conflict. Without patterns,
-  /// the file is that of the provider's template.
+  /// it. Modules that do not know each other may keep the same files out
+  /// of git, each in its own words, so a pattern with different comments
+  /// has each of them once, in their order, on a line `# <comment>` of its
+  /// own above it. Without patterns, the file is that of the provider's
+  /// template.
   ///
-  /// Every provider of the role has the tag of the socket alone on a line
-  /// of its `.gitignore`, after its own lines. A provider without the tag
-  /// takes no patterns: `smf create` stops on a pattern that a module
-  /// contributes then, and the contract harness reports the provider in
-  /// every app.
+  /// Every provider of the role has the tag of the socket alone on the last
+  /// line of its `.gitignore` that has text, after its own lines, so no
+  /// line of the provider takes back what a pattern of a module ignores;
+  /// the module rule `app_entry.tag_lines` checks both. A provider without
+  /// the tag takes no patterns: `smf create` stops on a pattern that a
+  /// module contributes then, and the contract harness reports the provider
+  /// in every app.
   static const gitignore = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'gitignore',

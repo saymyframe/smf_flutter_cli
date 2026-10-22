@@ -1447,16 +1447,38 @@ void main() {
               '\n# The reports of the coverage of the tests\n/coverage/',
         },
       );
-      expect(
-        () => _render(socket, const [
-          ('.env', 'The values of the app'),
-          ('.env', 'The keys of the app'),
-        ]),
-        throwsA(isA<MergeConflict>()),
-      );
       // A tag that gets nothing renders nothing, and the pipeline removes
       // its line.
       expect(socket.render(const []), {socket.tag: ''});
+    });
+
+    test(
+        'a pattern of .gitignore that modules give with different comments '
+        'has each comment once, in their order, so that any modules fit in '
+        'one app', () {
+      const socket = AppEntryRole.gitignore;
+      const values = 'The values of the app';
+      const keys = 'The keys of the app';
+      const local = 'What stays on one machine';
+
+      // Whatever the order of the contributions.
+      for (final comments in [
+        [values, keys, values, local],
+        [local, values, keys],
+      ]) {
+        expect(
+          _render(socket, [
+            for (final comment in comments) ('.env', comment),
+            ('/build/', 'The output of the build'),
+          ]),
+          {
+            socket.tag: '\n# The keys of the app\n# The values of the app\n'
+                '# What stays on one machine\n.env\n'
+                '\n# The output of the build\n/build/',
+          },
+          reason: '$comments',
+        );
+      }
     });
 
     test(

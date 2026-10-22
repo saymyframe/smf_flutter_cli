@@ -216,9 +216,13 @@ final class _ReadmeSectionPolicy extends MergePolicy<String> {
       const ConflictPolicy<String>().merge(key, existing, incoming);
 }
 
-/// Keeps one comment for each pattern of `.gitignore`, and checks that a
+/// Unites the comments of a pattern of `.gitignore`, and checks that a
 /// pattern is one line that neither comments nor brings back what another
 /// line ignores, without a backslash, under a comment of one line.
+///
+/// The merged value of a pattern is its comments, each once, in their
+/// order, one on each line: two modules that do not know each other may
+/// keep the same files out of git, each with its own words.
 final class _GitignorePolicy extends MergePolicy<String> {
   const _GitignorePolicy();
 
@@ -256,7 +260,7 @@ final class _GitignorePolicy extends MergePolicy<String> {
 
   @override
   String merge(String key, String existing, String incoming) =>
-      const ConflictPolicy<String>().merge(key, existing, incoming);
+      ({...existing.split('\n'), incoming}.toList()..sort()).join('\n');
 }
 
 /// Whether [text] is one line of text without spaces around it.
@@ -266,12 +270,15 @@ bool _isOneLine(String text) =>
     !text.contains('\n') &&
     !text.contains('\r');
 
-/// Each pattern of `.gitignore` under its comment, after an empty line, in
-/// the order of the patterns.
+/// Each pattern of `.gitignore` under its comments, each on a line of its
+/// own, after an empty line, in the order of the patterns.
 String _renderGitignore(List<MapEntry<String, String>> entries) =>
-    ([...entries]..sort((a, b) => a.key.compareTo(b.key)))
-        .map((entry) => '\n# ${entry.value}\n${entry.key}')
-        .join('\n');
+    ([...entries]..sort((a, b) => a.key.compareTo(b.key))).map((entry) {
+      final comments = [
+        for (final comment in entry.value.split('\n')) '# $comment',
+      ];
+      return '\n${comments.join('\n')}\n${entry.key}';
+    }).join('\n');
 
 String _renderString(String value) => value;
 

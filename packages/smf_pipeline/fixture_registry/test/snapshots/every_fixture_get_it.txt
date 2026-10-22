@@ -49,6 +49,7 @@ app.*.map.json
 *.fixture.log
 
 # The values of the fixture that each developer keeps
+# What the fixture keeps on one machine
 /fixture.local
 === AGENTS.md (role:app_entry) ===
 # AGENTS.md
