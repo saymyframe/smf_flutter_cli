@@ -2215,7 +2215,7 @@ void main() {
         allOf(
           contains('keeps the purchase in the new account'),
           contains('leaves the purchases with the user of this device until '
-              'restoring them'),
+              'the user restores them'),
           contains('never gets the purchases of a user who signed out'),
         ),
       );

@@ -383,7 +383,7 @@ A screen that sells a plan shows what the App Store and Google Play ask of it:
 /// app, with the [AuthRole] or without it.
 String _whosePurchases({required bool auth}) => auth
     ? '''
-The purchases belong to the user of `appSession`, by the id of the user: the user of an account, or an anonymous user. While nobody is signed in, they belong to the user of this device. A user who buys before signing up keeps the purchase in the new account, and an anonymous user keeps it when the account takes the id of that user. A user who signs in to an account that exists already leaves the purchases with the user of this device until restoring them. The next user of the device never gets the purchases of a user who signed out.'''
+The purchases belong to the user of `appSession`, by the id of the user: the user of an account, or an anonymous user. While nobody is signed in, they belong to the user of this device. A user who buys before signing up keeps the purchase in the new account, and an anonymous user keeps it when the account takes the id of that user. A user who signs in to an account that exists already leaves the purchases with the user of this device until the user restores them. The next user of the device never gets the purchases of a user who signed out.'''
     : '''
 The purchases belong to this installation of the app. On another device, or after the app was installed again, the user restores them.''';
 
@@ -417,7 +417,7 @@ Until the provider of purchases has what it needs, such as its keys, the app run
 /// What the role adds to its note in an app with sign-in: whose the
 /// purchases are.
 const String _whoseAgentNote = '''
-- The purchases belong to the user of `appSession`, by `appSession.value.uid`, and to the user of this device while nobody is signed in. A user who buys before signing up keeps the purchase in the new account. A user who signs in to an account that exists already leaves the purchases with the user of this device until `appPurchases.restore()`, which the app never calls on its own.
+- The purchases belong to the user of `appSession`, by `appSession.value.uid`, and to the user of this device while nobody is signed in. A user who buys before signing up keeps the purchase in the new account. A user who signs in to an account that exists already leaves the purchases with the user of this device until a restore. The app does not restore on its own: call `appPurchases.restore()` where the user asks for it.
 ''';
 
 /// What the role adds to its note in an app with a settings screen: the
@@ -467,7 +467,7 @@ final class _PurchasesTemplate extends _ServiceTemplate<RoleImplementation> {
   @override
   String get agentNote => '''
 - `appPurchases` in `$file` tells whether the user has premium access, and knows it before the first frame. Its `value` is `NoAccess` or `PremiumAccess`, and `appPurchases.hasPremium` is the `ValueListenable<bool>` that widgets and guards of the routes read. Every plan gives the same premium access. The app has one controller, so create no other `AppPurchasesController`.
-- `appPurchases.plans()` gives the plans to sell, each a `Plan` with its `price`, its `period` (`null` for a plan paid once) and its `introOffer`. `appPurchases.purchase(plan)` returns `false` when the user cancels, which is no failure, and `appPurchases.restore()` gives the user what the store account bought. A call fails only with a `PurchasesFailure`: show a text of the app for its `reason`, and its `developerHint` in debug mode only. After `pending`, the access comes later by itself.
+- `appPurchases.plans()` gives the plans to sell, each a `Plan` with its `price`, its `period` (`null` for a plan paid once) and its `introOffer`. `appPurchases.purchase(plan)` returns `false` when the user cancels, which is no failure, and `appPurchases.restore()` gives the user what the store account bought. A call fails only with a `PurchasesFailure`: show a text of the app for its `reason`, and its `developerHint` in debug mode only. After `pending`, the access arrives later without another call.
 - A screen that sells shows the full price of each period most clearly, the length of a free trial and the price after it, that the plan renews until the user cancels, a way to restore purchases, links to the terms of use and the privacy policy, and a visible way to close it, as the App Store and Google Play ask.
 - `PremiumAccess.manageUrl` is the page of the store where the user manages or cancels the plan. A screen only for users with premium access stands behind a guard of the routes that reads `appPurchases.hasPremium`. A screen does not redirect itself.
 - While the provider lacks what it needs, such as a key, `value` stays `NoAccess` and every call fails with the reason `notConfigured`, whose `developerHint` names what is missing.
