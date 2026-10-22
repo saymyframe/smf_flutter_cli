@@ -1944,15 +1944,16 @@ void main() {
       ];
       // The apps of the fixture alone, without a router and with each of
       // the two, with the texts of the app and without them, the apps of
-      // the fixture way to sign in, with the texts and without them, and
-      // each app with every module, with a clock of 24 hours and with one
-      // of 12.
+      // the fixture way to sign in, with the texts and without them, the
+      // apps of the fixture purchases with the fixture sign-in, with the
+      // texts and without them, and each app with every module, with a
+      // clock of 24 hours and with one of 12.
       expect(withoutMode, contains(named('fake_auth')));
       expect(
         named('fake_auth').hook!.presentRoles,
         isNot(contains(routerRole)),
       );
-      expect(withoutMode, hasLength(24));
+      expect(withoutMode, hasLength(26));
       for (final app in withoutMode) {
         expect(
           app.createArguments('app_1', '/apps'),
@@ -2497,6 +2498,14 @@ const _cases = [
   // push role requires, and the fixture preferences, which those require.
   // The push role uses no role, so its provider has one case.
   'fake_push',
+  // The fixture purchases with the fixture sign-in and without it, and with
+  // the texts of the app and without them: the purchases role uses the auth
+  // role and the localization role, and the settings screen role too, which
+  // no fixture provides.
+  'fake_purchases with auth, localization',
+  'fake_purchases with auth',
+  'fake_purchases with localization',
+  'fake_purchases',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',

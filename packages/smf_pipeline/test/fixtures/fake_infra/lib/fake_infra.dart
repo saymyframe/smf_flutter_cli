@@ -12,6 +12,7 @@ import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
+import 'package:fake_infra/bundles/fake_purchases_bundle.dart';
 import 'package:fake_infra/bundles/fake_push_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
@@ -1083,6 +1084,57 @@ final class FakePushModule extends SmfModule {
           const RoleImplementation.async(
             type: TypeRef('FixturePush', import: _file),
             init: FactoryRef('openFixturePush', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the purchases role, which has at most one provider, whose
+/// service opens asynchronously, as one does that asks the store for what
+/// it keeps, and each of whose calls takes a turn of the event loop. Its
+/// offer has three plans: one that renews each month, with a free week for
+/// a user who never bought it, one that renews each year, and one that the
+/// user pays for once. A purchase completes at once and succeeds.
+///
+/// It keeps in memory what each user of the app bought, and the user whom
+/// the device has, where they stand for the backend of a provider and the
+/// storage of the device, which each start of the app finds as the last
+/// one left them. It keeps the purchases of each user as the role says,
+/// with the user of the device: `identify(null)` after another user starts
+/// a new user of the device with nothing bought, a user that no
+/// identification named before takes over the purchases of the user of the
+/// device, and a restore gives the user who is identified what was bought
+/// on the device.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appPurchases`, which follows the session of
+/// an app with sign-in.
+final class FakePurchasesModule extends SmfModule {
+  /// Creates the module.
+  const FakePurchasesModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_purchases');
+
+  static const _file = ImportRef.app(
+    'core/fixture_purchases/fixture_purchases.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Purchases in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(purchasesRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakePurchasesBundle),
+        purchasesRole.data(
+          const RoleImplementation.async(
+            type: TypeRef('FixturePurchases', import: _file),
+            init: FactoryRef('openFixturePurchases', import: _file),
           ),
         ),
       ];
