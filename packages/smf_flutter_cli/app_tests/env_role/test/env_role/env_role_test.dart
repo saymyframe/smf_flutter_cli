@@ -5,7 +5,7 @@
 //
 // It only reads. The matrix writes into .env the values that the tests of
 // the modules of the app give their keys, and removes the line of a key that
-// a test gives none, before it runs flutter test with the arguments that the
+// a test gives null, before it runs flutter test with the arguments that the
 // provider of the role gives the role. The test parses .env in the two forms
 // of a value that the role names: a plain value, without white space, # or
 // quotes, and any other value in double quotes, each after KEY= and before a
@@ -19,8 +19,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'keys.dart';
 
-/// A line `KEY=value` of .env: the key, and the rest of the line, from which
-/// a value of one of the forms of the role takes the start.
+/// A line `KEY=value` of .env: the key, and the rest of the line, which
+/// starts with the value.
 final _keyLine = RegExp(r'^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$');
 
 /// A value in double quotes, with a comment after it or none.
