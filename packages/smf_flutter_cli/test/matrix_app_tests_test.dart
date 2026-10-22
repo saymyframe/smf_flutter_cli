@@ -364,11 +364,11 @@ void main() {
 
   test(
       'the app tests check the contract of the router role, of the DI role, '
-      'of the events role, of the preferences role, of the auth role, of '
-      'the notifications role, of the push role, of the purchases role, of '
-      'the settings screen role, of the theme role, of the localization role '
-      'and of the app entry role with every provider of each, which they '
-      'tell apart by the roles of the app only', () {
+      'of the events role, of the preferences role, of the env role, of the '
+      'auth role, of the notifications role, of the push role, of the '
+      'purchases role, of the settings screen role, of the theme role, of '
+      'the localization role and of the app entry role with every provider '
+      'of each, which they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -376,6 +376,7 @@ void main() {
         diRole,
         eventsRole,
         preferencesRole,
+        envRole,
         authRole,
         notificationsRole,
         pushRole,
@@ -392,6 +393,7 @@ void main() {
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('preferences_role').roles, {preferencesRole});
+    expect(named('env_role').roles, {envRole});
     expect(named('auth_role').roles, {authRole});
     // The test of the provider of the role checks what only it does.
     expect(named('firebase_auth').roles, isEmpty);
@@ -4635,11 +4637,25 @@ void main() {
       expect(test.values, isNull);
       expect(test.mocks, isNull);
       expect(test.startProbe, isNull);
-      // No module of the CLI gives the role keys yet, so the matrix of the
-      // CLI does not run it.
+      // The matrix of the CLI runs it in the apps whose modules give the
+      // role keys: those of revenuecat, whose test gives the keys values in
+      // .env, and those with every module.
       expect(
-        appTests.tests.map((test) => p.basename(test.directory)),
-        isNot(contains('env_role')),
+        [
+          for (final app in apps)
+            if (named('env_role').appliesTo(app)) app.name,
+        ],
+        [
+          _rcAll,
+          _rcAuthSettings,
+          _rcAuthL10n,
+          _rcSettingsL10n,
+          _rcAuth,
+          _rcSettings,
+          _rcL10n,
+          _rc,
+          ..._everyModule,
+        ],
       );
 
       // As the fixtures take it, only in the apps with every module.

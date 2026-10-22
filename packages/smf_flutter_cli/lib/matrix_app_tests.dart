@@ -422,6 +422,12 @@ Future<MatrixAppTests> smfAppTests() async {
       // The preferences of the apps with the preferences role, whichever
       // module provides it.
       await preferencesRoleAppTest(),
+      // The values of the apps with the env role whose modules give it
+      // keys, whichever module provides it: each getter of AppEnv returns
+      // the value that .env gives its key, and null for a key that .env
+      // leaves empty. The values are those that the tests of the modules of
+      // the app give their keys, such as those of the test of revenuecat.
+      await envRoleAppTest(),
       // The sign-in of the apps with the auth role, whichever module
       // provides it, in the mode that the role chose for each: the service
       // of the provider keeps its contract, and the session of the app
@@ -523,16 +529,17 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the auth role, of the notifications role, of the push role,
-    // of the purchases role, of the settings screen role, of the theme role
-    // and of the localization role gets the tests of its role. Each provider
-    // of the app entry role gets the test of the theme role, which checks
-    // that its root rebuilds.
+    // role, of the env role, of the auth role, of the notifications role,
+    // of the push role, of the purchases role, of the settings screen role,
+    // of the theme role and of the localization role gets the tests of its
+    // role. Each provider of the app entry role gets the test of the theme
+    // role, which checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
       eventsRole,
       preferencesRole,
+      envRole,
       authRole,
       notificationsRole,
       pushRole,
