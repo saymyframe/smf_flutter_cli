@@ -15,6 +15,7 @@ import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
@@ -42,6 +43,7 @@ Future<MatrixAppTests> smfAppTests() async {
     'smf_local_notifications',
   );
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
+  final revenueCat = await appTestsDirectoryOf('smf_revenuecat');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
     'smf_shared_preferences',
@@ -215,6 +217,38 @@ Future<MatrixAppTests> smfAppTests() async {
         startProbe: const MatrixStartProbe(
           'integration_test/firebase_messaging/probe.dart',
           'probeFirebaseMessaging',
+        ),
+      ),
+      // The purchases service of the module on RevenueCat: the key of .env
+      // that a build takes, the key of the Test Store only in a debug build,
+      // and no call of RevenueCat without a key or before RevenueCat is
+      // configured; what each call sends to RevenueCat, on Android and on
+      // iOS, and the reason that each code of RevenueCat gets, also a code
+      // that is no number, and a cancel, which is no failure; the plans from
+      // the current offering, with the intro offers that the user may take,
+      // and the access from the entitlement premium; and a grant of the
+      // backend, which reaches appPurchases once the cache of the customer
+      // info is emptied. The tests use the service of the module, and leave
+      // what every provider of the purchases role does to the tests of the
+      // role. The mocks are RevenueCat, its backend and the store account of
+      // a device in memory, which the matrix sets up for the tests of every
+      // module of the app, since the start-up of the app starts the
+      // purchases, and the matrix writes the keys of the tests into .env for
+      // the platforms, with that of the Test Store empty, so that the
+      // service is configured in every test of the app (see
+      // _revenueCatKeysOf). Its probe compares, on a device, the access and
+      // the plans of the app with what the RevenueCat SDK gives there.
+      MatrixAppTest(
+        '$revenueCat/revenuecat',
+        appliesTo: _has(RevenueCatModule.id),
+        envValues: _revenueCatKeysOf,
+        mocks: const MatrixMocks(
+          'test/revenuecat_mocks.dart',
+          'mockRevenueCat',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/revenuecat/probe.dart',
+          'probeRevenueCat',
         ),
       ),
       // The onboarding of the module: on its first launch, the app shows
@@ -425,6 +459,18 @@ Future<MatrixAppTests> smfAppTests() async {
       // message in the foreground where the platform does not, gives each
       // tap once, and the next start has the same address.
       await pushRoleAppTest(),
+      // The purchases of the apps with the purchases role, whichever module
+      // provides it: appPurchases over a scripted service and over the
+      // service of the provider, the purchases of each user apart, and the
+      // next start with what a user bought.
+      await purchasesRoleAppTest(),
+      // The purchases of the users of the session, in the apps with the
+      // purchases role and the auth role, whichever modules provide them,
+      // in each mode of the auth role.
+      await purchasesSessionAppTest(),
+      // The purchases of the user of the device at the next start, in the
+      // apps with the purchases role and without the auth role.
+      await purchasesDeviceAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -478,10 +524,10 @@ Future<MatrixAppTests> smfAppTests() async {
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
     // role, of the auth role, of the notifications role, of the push role,
-    // of the settings screen role, of the theme role and of the
-    // localization role gets the tests of its role. Each provider of the
-    // app entry role gets the test of the theme role, which checks that its
-    // root rebuilds.
+    // of the purchases role, of the settings screen role, of the theme role
+    // and of the localization role gets the tests of its role. Each provider
+    // of the app entry role gets the test of the theme role, which checks
+    // that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -490,6 +536,7 @@ Future<MatrixAppTests> smfAppTests() async {
       authRole,
       notificationsRole,
       pushRole,
+      purchasesRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,
@@ -1244,6 +1291,16 @@ Future<MatrixAppTest> pushRoleAppTest({
         'probePush',
       ),
     );
+
+/// The values that the test of the revenuecat module gives the keys of the
+/// module in .env, the same in every app: keys of the tests for the stores
+/// of the platforms, which only the mocks take, and none for the Test
+/// Store, which a debug build would take in their place.
+Map<String, String?> _revenueCatKeysOf(MatrixApp app) => {
+      RevenueCatModule.appleKey.name: 'appl_tests',
+      RevenueCatModule.googleKey.name: 'goog_tests',
+      RevenueCatModule.testKey.name: '',
+    };
 
 /// The values of the files of the test of the push role, the same in every
 /// app: `push_owner`, the owner of the notifications through which the app
