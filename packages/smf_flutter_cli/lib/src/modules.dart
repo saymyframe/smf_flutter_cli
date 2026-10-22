@@ -18,6 +18,7 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -62,4 +63,5 @@ const List<SmfModule> smfModules = [
   GoogleSignInModule(),
   AppleSignInModule(),
   SignInModule(),
+  RevenueCatModule(),
 ];

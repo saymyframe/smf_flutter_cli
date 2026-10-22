@@ -49,6 +49,7 @@ dependencies:
   smf_material_theme: ^0.4.2
   smf_onboarding: ^0.5.1
   smf_pipeline: ^0.6.0
+  smf_revenuecat: ^0.6.0
   smf_riverpod: ^0.3.3
   smf_settings: ^0.4.2
   smf_shared_preferences: ^0.4.3

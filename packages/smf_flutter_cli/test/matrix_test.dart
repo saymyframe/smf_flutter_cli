@@ -227,8 +227,9 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// needs: such an app has no route to start on, since only home has one,
 /// and the destination of its feature has no main navigation to lead to it,
 /// since the app has no layout. The apps of a module with the settings
-/// screen, such as those of the theme and of the notifications, get the
-/// settings feature for it, and the apps of the notifications with the
+/// screen, such as those of the theme, of RevenueCat and of the
+/// notifications, get the settings feature for it, and the apps of the
+/// notifications with the
 /// onboarding screen get the onboarding feature, which has no route to
 /// start on either. An app of Google sign-in has no way to sign in
 /// that the App Store takes as its equivalent on iOS, which the apps with
@@ -244,6 +245,22 @@ const _warningApps = <String, List<String>>{
     'router.no_start',
   ],
   'material_theme with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'revenuecat with auth, settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'revenuecat with auth, settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'revenuecat with settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'revenuecat with settings_screen': [
     'router.no_main_navigation',
     'router.no_start',
   ],
@@ -293,7 +310,9 @@ void main() {
       'without each, which all get the preferences, the app of the DI '
       'container, the apps of the events and of the preferences with the '
       'DI container and without, the app of the values of .env, the apps '
-      'of the onboarding with the '
+      'of RevenueCat with the sign-in, the settings screen and the '
+      'localization and without each, which all get the values of .env, the '
+      'apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
       'onboarding screen and the localization and without each, which all '
@@ -322,9 +341,9 @@ void main() {
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, dart_define, onboarding, local_notifications, '
-        'firebase_core, '
-        'firebase_crashlytics, firebase_analytics, firebase_messaging, '
-        'firebase_auth, google_sign_in, apple_sign_in, sign_in)';
+        'firebase_core, firebase_crashlytics, firebase_analytics, '
+        'firebase_messaging, firebase_auth, google_sign_in, apple_sign_in, '
+        'sign_in, revenuecat)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -487,6 +506,40 @@ void main() {
       signIn('riverpod', localized: true),
       signIn('bloc'),
       signIn('riverpod'),
+      // RevenueCat with each subset of the roles that the purchases role
+      // uses, with Firebase Authentication and its Firebase for the auth.
+      equals(
+        'revenuecat with auth, settings_screen, localization (revenuecat, '
+        'firebase_auth, settings, gen_l10n, firebase_core, flutter_core, '
+        'dart_define, go_router, shared_preferences)',
+      ),
+      equals(
+        'revenuecat with auth, settings_screen (revenuecat, firebase_auth, '
+        'settings, firebase_core, flutter_core, dart_define, go_router)',
+      ),
+      equals(
+        'revenuecat with auth, localization (revenuecat, firebase_auth, '
+        'gen_l10n, firebase_core, flutter_core, dart_define, '
+        'shared_preferences)',
+      ),
+      equals(
+        'revenuecat with settings_screen, localization (revenuecat, '
+        'settings, gen_l10n, flutter_core, dart_define, go_router, '
+        'shared_preferences)',
+      ),
+      equals(
+        'revenuecat with auth (revenuecat, firebase_auth, firebase_core, '
+        'flutter_core, dart_define)',
+      ),
+      equals(
+        'revenuecat with settings_screen (revenuecat, settings, flutter_core, '
+        'dart_define, go_router)',
+      ),
+      equals(
+        'revenuecat with localization (revenuecat, gen_l10n, flutter_core, '
+        'dart_define, shared_preferences)',
+      ),
+      'revenuecat (revenuecat, flutter_core, dart_define)',
       inMode('guest'),
       inMode('anonymous'),
       everyModule('bloc'),
@@ -717,7 +770,7 @@ void main() {
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
         'shared_preferences, dart_define, onboarding, local_notifications, '
-        'local)';
+        'revenuecat, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2473,6 +2526,7 @@ Type type() => Types;
               'dart_define',
               'onboarding',
               'local_notifications',
+              'revenuecat',
             ].join(','),
             '-o',
             '/apps',
