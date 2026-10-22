@@ -714,240 +714,178 @@ List<String> planProblemsOf(String workflow, {required String file}) {
 /// `dart tools/native_build.dart <platform> <directory of apps> <file>`.
 const nativeBuildTool = 'tools/native_build.dart';
 
-/// The variable of the environment of a workflow, in its `env`, with how
-/// many MB a build must add to the cache of its native build that its job
-/// restored for the job to save the cache: the one place that gives it,
-/// with its reason.
-const nativeCacheThreshold = 'NATIVE_CACHE_SAVE_ABOVE_MB';
+/// The input of a reusable workflow that lets the job that writes each
+/// cache of the native builds save it.
+const nativeCacheSaveInput = 'save_native_caches';
 
-/// The inputs of a reusable workflow that let its jobs save the caches of
-/// the native builds.
-const nativeCacheSaveInputs = ['save_gradle_cache', 'save_swiftpm_cache'];
-
-/// The condition of a value of an input of [nativeCacheSaveInputs] that
-/// keeps the saves to the runs on main.
+/// The condition of a value of [nativeCacheSaveInput] that keeps the writes
+/// to the runs on main.
 const _onMain = "github.ref == 'refs/heads/main'";
 
-/// The problems of the caches of the native builds in [workflow], the text
-/// of the workflow [file] of GitHub Actions: of what the package manager of
-/// the platform of a job downloads for the native build, Gradle on Linux,
-/// for Android, and Swift Package Manager on macOS, for iOS, whose cache of
-/// the repositories of packages xcodebuild keeps in
-/// ~/Library/Caches/org.swift.swiftpm.
+/// The problems of the caches of the native builds in the jobs of
+/// [workflow], the text of the workflow [file] of GitHub Actions: of what
+/// the package manager of the platform of a job downloads for the native
+/// build, Gradle on Linux, for Android, and Swift Package Manager on macOS,
+/// for iOS, whose cache of the repositories of packages xcodebuild keeps in
+/// ~/Library/Caches/org.swift.swiftpm. Each platform has one cache: every
+/// job restores its newest entry, and one job, the writer, saves a new one
+/// when the cache has no entry under the key of its app yet (see
+/// [nativeCacheWriterProblemsOf] for what the workflows share).
 /// - A job on Linux or macOS that generates an app with --create, to build,
 ///   archive or start it, and restores no such cache. Without it each such
 ///   job downloads the same plugins again, such as the Firebase SDK, and
 ///   Maven Central answers 403 to a runner that downloads too much.
-/// - A job that restores the cache but never saves it, and a step that
-///   saves it only in some jobs of its matrix, by a condition on the
-///   strategy or the matrix of the job, such as `strategy.job-index == 0`.
-///   What the app of another job needs beyond the cache that the job
-///   restores, such as the native side of a plugin that the app that saves
-///   the cache does not have, would never get into a cache, and each run
-///   would download it again.
-/// - A step that saves the cache under a key that does not depend on the
-///   app that its job builds: a key without the hash of the file that
-///   [nativeBuildTool] writes for the platform of the job, after the step
-///   that generates the apps with --create, if the job has one. A step that
-///   saves the cache with the key of the step that restored it,
-///   `steps.<id>.outputs.cache-primary-key`, takes the key of that step.
-///   The jobs whose apps build with the same then share one cache, and the
-///   app of a job that builds with something else, such as another plugin
-///   or other versions of Gradle and its plugins, gets a cache of its own.
-/// - A step that saves the cache whenever its job did not find the key of
-///   its app, rather than only when the build added more than
-///   [nativeCacheThreshold] MB to the cache that the job restored: its
-///   condition must take an output of a step between the step of its key
-///   and it that compares the size of the cache with the threshold, and
-///   with the size that a step after the step of its key measured. A cache
-///   is saved whole, over 1 GB for Gradle, so a job whose app needs a few
-///   MB more than the cache of another app would store a near copy of it
-///   in the 10 GB of caches of the repository. And a workflow that compares
-///   with the threshold without setting it in its `env`.
+/// - A step that saves the cache other than as the writer does:
+///   - under a key that no step before it only looked up
+///     (`lookup-only: true`), as a step that saves the cache with the key
+///     of that step, `steps.<id>.outputs.cache-primary-key`, takes it, so
+///     that the job knows whether the cache has the key before its build;
+///   - whenever the job gets to it, rather than only when that step ran,
+///     `steps.<id>.outcome == 'success'`, and found no entry,
+///     `steps.<id>.outputs.cache-hit != 'true'`;
+///   - when that step runs in every run, rather than only in those that
+///     [nativeCacheSaveInput] lets save, or in every job of the matrix of
+///     its job, rather than only in its first, `strategy.job-index == 0`;
+///   - under a key that does not hash the file that [nativeBuildTool]
+///     writes for the platform of the job after the step that generates the
+///     apps with --create, if the job has one, and for Gradle under a key
+///     without the version of Flutter, `inputs.flutter_version`, whose
+///     engine Gradle downloads too, hundreds of MB;
+///   - after another step of the job that restores an entry of the cache
+///     also when the key was not found, rather than only if
+///     `steps.<id>.outputs.cache-hit == 'true'`: the writer builds from an
+///     empty cache then, so that a new entry holds only what one build
+///     downloads, and none of what the builds of the entries before it
+///     needed and no build needs any more.
 List<String> nativeCacheProblemsOf(String workflow, {required String file}) {
   final problems = <String>[];
-  final root = loadYaml(workflow) as YamlMap;
-  final jobs = root['jobs'] as YamlMap;
-  if (!_map(root['env']).containsKey(nativeCacheThreshold) &&
-      workflow.contains(RegExp(r'\$\{?' + nativeCacheThreshold))) {
-    problems.add(_noThreshold(file));
-  }
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
   for (final MapEntry(key: job, :value) in jobs.entries) {
     final definition = value as YamlMap;
     final native = _nativeCacheOf('${definition['runs-on']}');
     if (native == null) continue;
-    final (:manager, :path, :platform) = native;
-    final steps = [
-      for (final step in definition['steps'] as YamlList? ?? YamlList())
-        step as YamlMap,
-    ];
-    final uses = [for (final step in steps) _cacheUseOf(step, path)];
-    final restores = uses.any((use) => use?.restores ?? false);
-    if (_generatesApps(definition) && !restores) {
-      problems.add(_uncached(file, job, manager, path));
-    } else if (restores && !uses.any((use) => use?.saves ?? false)) {
-      problems.add(_neverSaved(file, job, manager, path));
+    final steps = _stepsOf(definition);
+    final uses = [for (final step in steps) _cacheUseOf(step, native.path)];
+    if (_generatesApps(definition) &&
+        !uses.any((use) => use?.restores ?? false)) {
+      problems.add(_uncached(file, job, native.manager, native.path));
     }
-    for (final (index, step) in steps.indexed) {
-      if (!(uses[index]?.saves ?? false)) continue;
-      final where = '$file, job $job, step "${_nameOf(step)}"';
-      if (step['if'] case final Object condition
-          when RegExp(r'\b(?:strategy|matrix)\.').hasMatch('$condition')) {
-        problems.add(_someJobs(where, manager, '$condition'));
-      }
-      final (key, keyed) = _keyOf(steps, index);
-      if (!_byApp(key, steps, keyed, platform)) {
-        problems.add(_notByApp(where, manager, key, platform));
-      }
-      if (!_byGrowth(steps, index, keyed)) {
-        problems.add(_notByGrowth(where, manager));
+    for (final (index, use) in uses.indexed) {
+      if (use?.saves ?? false) {
+        problems.addAll(
+          _writerProblemsOf(
+            '$file, job $job, step "${_nameOf(steps[index])}"',
+            definition,
+            steps,
+            uses,
+            index,
+            native,
+          ),
+        );
       }
     }
   }
   return problems;
 }
 
-/// The problem that the workflow [file] compares what builds add to the
-/// caches of their native builds with [nativeCacheThreshold] without setting
-/// it.
-String _noThreshold(String file) =>
-    '$file compares what the builds add to the caches of their native builds '
-    'with $nativeCacheThreshold, but does not set it in its env, the one '
-    'place that gives it with its reason.';
-
-/// The problem that [where] saves the cache of [manager] whenever its job
-/// did not find the key of its app.
-String _notByGrowth(String where, String manager) =>
-    '$where saves the cache of $manager whenever the job did not find the '
-    'key of its app, rather than only when its build added more than '
-    '\$$nativeCacheThreshold MB to the cache that the job restored. A cache '
-    'is saved whole, over 1 GB for Gradle, so a job whose app needs a few MB '
-    'more than the cache of another app would store a near copy of that '
-    'cache in the 10 GB of caches of the repository. Measure the cache after '
-    'the step that restores it, and save it only when a step after the '
-    'build finds that the build added more than that.';
-
-/// Whether the step [index] of [steps], which saves a cache under the key
-/// of the step [keyed], saves it only when the build added more than
-/// [nativeCacheThreshold] MB to it: whether its condition takes an output of
-/// a step between them that compares with the threshold, and that takes
-/// an output of a step between the step [keyed] and it, which measured the
-/// cache that the job restored.
-bool _byGrowth(List<YamlMap> steps, int index, int keyed) {
-  Iterable<int> outputsIn(Iterable<Object?> texts) => [
-        for (final text in texts)
-          for (final match in RegExp(r'steps\.([\w-]+)\.outputs\.')
-              .allMatches('${text ?? ''}'))
-            steps.indexWhere((step) => step['id'] == match[1]),
-      ];
-  return outputsIn([steps[index]['if']]).any(
-    (growth) =>
-        growth > keyed &&
-        growth < index &&
-        '${steps[growth]['run'] ?? ''}'.contains(nativeCacheThreshold) &&
-        outputsIn([steps[growth]['run'], ..._map(steps[growth]['env']).values])
-            .any((restored) => restored > keyed && restored < growth),
-  );
+/// The problems of the step [index] of [steps], the steps of the job
+/// [definition], which saves the cache of [native], as the writer of the
+/// cache (see [nativeCacheProblemsOf]); [uses] are what each step does
+/// with the cache, and [where] names the step.
+List<String> _writerProblemsOf(
+  String where,
+  YamlMap definition,
+  List<YamlMap> steps,
+  List<_CacheUse?> uses,
+  int index,
+  _NativeCache native,
+) {
+  final (:manager, :platform, path: _, os: _) = native;
+  final lookup = _lookupOf(steps, uses, index);
+  if (lookup < 0) return [_notLookedUp(where, manager)];
+  final id = '${steps[lookup]['id']}';
+  final lookupIf = '${steps[lookup]['if'] ?? ''}';
+  final key = _keyOf(steps[lookup]);
+  bool requires(int step, String part) => _mentions(steps[step]['if'], part);
+  return [
+    if (!requires(index, "steps.$id.outcome == 'success'") ||
+        !requires(index, "steps.$id.outputs.cache-hit != 'true'"))
+      _savesWhenFound(where, manager, id),
+    if (!lookupIf.contains('inputs.$nativeCacheSaveInput'))
+      _savesInEveryRun(where, manager, id),
+    if (definition['strategy'] is YamlMap &&
+        !_mentions(lookupIf, 'strategy.job-index == 0'))
+      _savesInEveryJob(where, manager, id),
+    if (!_byApp(key, steps, lookup, platform))
+      _notByApp(where, manager, key, platform),
+    if (platform == 'android' && !key.contains('inputs.flutter_version'))
+      _notByFlutter(where, manager, key),
+    for (final (other, use) in uses.indexed)
+      if (other != lookup &&
+          (use?.restores ?? false) &&
+          !requires(other, "steps.$id.outputs.cache-hit == 'true'"))
+        _restoresWhenNotFound(where, manager, _nameOf(steps[other]), id),
+  ];
 }
 
-/// The problems of the saves of the caches of the native builds in
-/// [workflows], the texts of the workflows of GitHub Actions by the names of
-/// their files: a reusable workflow whose input of [nativeCacheSaveInputs]
-/// is true by default, and a job that calls one with such an input that is
-/// neither false nor kept to the runs on main, `github.ref ==
-/// 'refs/heads/main'`. A run of a pull request, or a run by hand on another
-/// branch, saves its caches for its own ref, where only its own later runs
-/// find them, so they only duplicate those of main in the 10 GB of caches of
-/// the repository.
-List<String> nativeCacheSaveProblemsOf(Map<String, String> workflows) {
-  final problems = <String>[];
-  final roots = {
-    for (final MapEntry(:key, :value) in workflows.entries)
-      key: loadYaml(value) as YamlMap,
-  };
-  // The reusable workflows with such inputs.
-  final saving = <String>{};
-  for (final MapEntry(key: file, value: root) in roots.entries) {
-    final inputs = switch (root['on']) {
-      {'workflow_call': {'inputs': final YamlMap inputs}} => inputs,
-      _ => YamlMap(),
-    };
-    for (final input in nativeCacheSaveInputs) {
-      if (inputs[input] case final YamlMap definition) {
-        saving.add(file);
-        if (definition['default'] == true) {
-          problems.add(_savesByDefault(file, input));
-        }
-      }
-    }
-  }
-  for (final MapEntry(key: file, value: root) in roots.entries) {
-    for (final MapEntry(key: job, :value)
-        in (root['jobs'] as YamlMap? ?? YamlMap()).entries) {
-      final called = '${(value as YamlMap)['uses'] ?? ''}'.split('/').last;
-      if (!saving.contains(called)) continue;
-      for (final input in nativeCacheSaveInputs) {
-        if ((value['with'] as YamlMap?)?[input] case final Object given
-            when given != false && !'$given'.contains(_onMain)) {
-          problems.add(_savesOutsideMain(file, job, called, input, given));
-        }
-      }
-    }
-  }
-  return problems;
+/// The index of the step before the step [index] of [steps] that only
+/// looks up the key under which the step [index] saves a cache,
+/// `${{ steps.<id>.outputs.cache-primary-key }}`, or -1 if there is none;
+/// [uses] are what each step does with the cache.
+int _lookupOf(List<YamlMap> steps, List<_CacheUse?> uses, int index) {
+  final id = RegExp(
+    r'^\$\{\{\s*steps\.([\w-]+)\.outputs\.cache-primary-key\s*\}\}$',
+  ).firstMatch(_keyOf(steps[index]).trim())?[1];
+  final lookup = steps.indexWhere((step) => id != null && step['id'] == id);
+  return lookup >= 0 && lookup < index && (uses[lookup]?.looksUp ?? false)
+      ? lookup
+      : -1;
 }
 
-/// The problem that the reusable workflow [file] saves the caches of the
-/// native builds by default, by its input [input].
-String _savesByDefault(String file, String input) =>
-    '$file lets its jobs save the caches of the native builds by default '
-    '($input: true), so a workflow that calls it without the input saves '
-    'them in any run, such as that of a pull request: make it false by '
-    'default, and let the workflows that call it pass it for the runs on '
-    'main.';
+/// Whether [condition], the `if` of a step, has [part], whatever the
+/// spaces of either.
+bool _mentions(Object? condition, String part) {
+  String squeezed(String text) => text.replaceAll(RegExp(r'\s'), '');
+  return squeezed('${condition ?? ''}').contains(squeezed(part));
+}
 
-/// The problem that the job [job] of the workflow [file] calls the workflow
-/// [called] with the input [input] [given], which lets it save the caches
-/// of the native builds outside the runs on main.
-String _savesOutsideMain(
-  String file,
-  Object? job,
-  String called,
-  String input,
-  Object given,
-) =>
-    '$file, job $job calls $called with $input: $given, which lets it save '
-    'the caches of the native builds in other runs than those on main. A run '
-    'of a pull request, or a run by hand on another branch, saves them for '
-    'its own ref, where only its own later runs find them, so they only '
-    'duplicate those of main in the 10 GB of caches of the repository: keep '
-    'the input to \${{ $_onMain }}, with any other condition of the '
-    'workflow.';
+/// The problem that [where] saves the cache of [manager] under a key that
+/// no step before it only looked up.
+String _notLookedUp(String where, String manager) =>
+    '$where saves the cache of $manager under a key that no step before it '
+    'only looked up. Look the key of the app of the job up before its build '
+    'with actions/cache/restore and lookup-only: true, build from an empty '
+    'cache when that step finds no entry, and save the cache only then, '
+    r'with the key ${{ steps.<id>.outputs.cache-primary-key }} of that step: '
+    'one job writes the cache, and every other job only restores its newest '
+    'entry.';
 
-/// The problem that the job [job] of the workflow [file] generates an app
-/// to build and restores no cache of [manager], whose path has [path].
-String _uncached(String file, Object? job, String manager, String path) =>
-    '$file, job $job generates an app with --create to build it for its '
-    'platform, but restores no cache of $manager ($path): each job would '
-    'download the same packages again.';
+/// The problem that [where] saves the cache of [manager] also when the
+/// step [id] did not run or found the key.
+String _savesWhenFound(String where, String manager, String id) =>
+    '$where saves the cache of $manager also when the step $id, which looks '
+    'its key up, did not run or found it: save it only if: '
+    "steps.$id.outcome == 'success' && steps.$id.outputs.cache-hit != "
+    "'true'. An entry is never replaced under its key, and a job that does "
+    'not write the cache saves nothing.';
 
-/// The problem that the job [job] of the workflow [file] restores the cache
-/// of [manager], whose path has [path], and never saves it.
-String _neverSaved(String file, Object? job, String manager, String path) =>
-    '$file, job $job restores the cache of $manager ($path) but never saves '
-    'it, so what its app needs beyond the cache that it restores, such as '
-    'the native side of a plugin that the apps of the jobs that save the '
-    'cache do not have, is downloaded again in every run: save the cache of '
-    'its app, under the key of the app, when the workflow lets it.';
+/// The problem that [where] saves the cache of [manager] in every run, as
+/// the step [id] that looks its key up does.
+String _savesInEveryRun(String where, String manager, String id) =>
+    '$where saves the cache of $manager in every run: keep the step $id, '
+    'which looks its key up, to the runs that the input '
+    '$nativeCacheSaveInput lets save the native caches, which the workflows '
+    'pass only for the runs on main, whose entries the runs of every branch '
+    'find.';
 
-/// The problem that [where] saves the cache of [manager] only in the jobs
-/// of its matrix that [condition] lets through.
-String _someJobs(String where, String manager, String condition) =>
-    '$where saves the cache of $manager only in some jobs of its matrix '
-    '(if: $condition), so what the apps of the other jobs need beyond the '
-    'cache that they restore is downloaded again in every run: let every '
-    'job save the cache of its app, under the key of the app, when the '
-    'workflow lets it.';
+/// The problem that [where] saves the cache of [manager] in every job of
+/// its matrix, as the step [id] that looks its key up does.
+String _savesInEveryJob(String where, String manager, String id) =>
+    '$where saves the cache of $manager in every job of its matrix: keep '
+    'the step $id, which looks its key up, to the job of the first app, '
+    'strategy.job-index == 0. One job writes the cache, and the others '
+    'would save a near copy of it, or entries of other keys, which take the '
+    'place of the entry of the writer as the newest.';
 
 /// The problem that [where] saves the cache of [manager] under [key], which
 /// does not depend on the app for [platform] that its job builds.
@@ -961,9 +899,366 @@ String _notByApp(
     'depend on the app that the job builds. Take the key from the hash of '
     'the file that `dart $nativeBuildTool $platform <directory of apps> '
     '<file>` writes once the apps of the job are generated, so that the '
-    'jobs whose apps build with the same share one cache, and a job whose '
-    'app builds with another plugin or another native project saves a '
-    'cache of its own.';
+    'writer saves a new entry when its app builds with another plugin or '
+    'another native project.';
+
+/// The problem that [where] saves the cache of [manager] under [key], which
+/// does not name the version of Flutter.
+String _notByFlutter(String where, String manager, String key) =>
+    '$where saves the cache of $manager under the key $key, which does not '
+    r'name the version of Flutter, ${{ inputs.flutter_version }}. Gradle '
+    'downloads the engine of Flutter too, hundreds of MB for each version, '
+    'so a new version of Flutter needs a new entry.';
+
+/// The problem that [where] saves the cache of [manager] after the step
+/// [step] restored an entry when the step [id] found no entry under the
+/// key of the app.
+String _restoresWhenNotFound(
+  String where,
+  String manager,
+  String step,
+  String id,
+) =>
+    '$where saves the cache of $manager after the step "$step", which '
+    'restores an entry of it also when the step $id found no entry under '
+    'the key of the app: restore it only if: steps.$id.outputs.cache-hit '
+    "== 'true', or when the step $id did not run. The new entry would also "
+    'hold what the builds of the entries before it downloaded, which no '
+    'build may need any more, and grow with each one.';
+
+/// The problems of the caches of the native builds that the workflows
+/// share, in [workflows], the texts of the workflows of GitHub Actions by
+/// the names of their files:
+/// - A cache of a platform that jobs restore and no step saves, or that
+///   several steps save. One job writes each cache, and every other job
+///   restores its newest entry: other writers would replace the entry of
+///   the writer as the newest with entries of their own apps.
+/// - A step that restores the cache without the prefix of the key of the
+///   writer, the text before its first expression, as a restore key. Only
+///   the app of the writer has its key, and the job of another app
+///   restores the newest entry under that prefix.
+/// - A reusable workflow whose input [nativeCacheSaveInput] is true by
+///   default, a job that calls one with that input neither false nor kept
+///   to the runs on main, `github.ref == 'refs/heads/main'`, and a second
+///   workflow that lets it save, whose writer would replace the entries of
+///   the first, such as the nightly run with another version of Flutter. A
+///   run of a pull request, or a run by hand on another branch, saves its
+///   caches for its own ref, where only its own later runs find them.
+/// - A workflow that lets the writers save without a job that deletes the
+///   entries that a newer one replaced, with `gh api --method DELETE` of
+///   `repos/<repository>/actions/caches/<id>`, for each prefix of the keys
+///   of the writers.
+/// - A job, or a workflow, with the permission `actions: write`, which
+///   such a deletion needs, but for the jobs that delete the entries, and
+///   such a job with any other permission. The jobs that build the apps
+///   run the code of their dependencies, which must not get a token that
+///   can delete caches or start and cancel runs.
+List<String> nativeCacheWriterProblemsOf(Map<String, String> workflows) {
+  final roots = {
+    for (final MapEntry(:key, :value) in workflows.entries)
+      key: loadYaml(value) as YamlMap,
+  };
+  final writers = <String, List<String>>{};
+  final prefixes = <String, String>{};
+  final restores = <({String where, String manager, List<String> keys})>[];
+  final problems = <String>[];
+  for (final MapEntry(key: file, value: root) in roots.entries) {
+    for (final MapEntry(key: job, :value) in _jobsOf(root).entries) {
+      final definition = value as YamlMap;
+      final native = _nativeCacheOf('${definition['runs-on']}');
+      if (native == null) continue;
+      final steps = _stepsOf(definition);
+      final uses = [for (final step in steps) _cacheUseOf(step, native.path)];
+      for (final (index, use) in uses.indexed) {
+        final where = '$file, job $job, step "${_nameOf(steps[index])}"';
+        if (use?.restores ?? false) {
+          final keys = (steps[index]['with'] as YamlMap?)?['restore-keys'];
+          restores.add(
+            (
+              where: where,
+              manager: native.manager,
+              keys: [
+                for (final line in '${keys ?? ''}'.split('\n'))
+                  if (line.trim().isNotEmpty) _resolved(line.trim(), native.os),
+              ],
+            ),
+          );
+        }
+        if (!(use?.saves ?? false)) continue;
+        (writers[native.manager] ??= []).add(where);
+        // A step that saves under a key that no step looked up has a
+        // problem of its own (see nativeCacheProblemsOf).
+        final lookup = _lookupOf(steps, uses, index);
+        if (lookup < 0) continue;
+        final key = _resolved(_keyOf(steps[lookup]), native.os);
+        final prefix = key.split(r'${{').first;
+        if (prefix.isEmpty) {
+          problems.add(_noPrefix(where, native.manager, key));
+        } else {
+          prefixes[native.manager] = prefix;
+        }
+      }
+    }
+  }
+  for (final manager in {
+    for (final restore in restores) restore.manager,
+    ...writers.keys,
+  }) {
+    switch (writers[manager] ?? const <String>[]) {
+      case []:
+        problems.add(_unwritten(manager));
+      case [_, _, ...] && final steps:
+        problems.add(_writtenTwice(manager, steps));
+    }
+  }
+  for (final (:where, :manager, :keys) in restores) {
+    if (prefixes[manager] case final prefix? when !keys.contains(prefix)) {
+      problems.add(_notNewest(where, manager, prefix));
+    }
+  }
+  return [
+    ...problems,
+    ..._saveInputProblemsOf(roots, {...prefixes.values}),
+    ..._actionsWriteProblemsOf(roots),
+  ];
+}
+
+/// The text of [key], a key of a cache of a job on the runner whose
+/// `runner.os` is [os], with `${{ runner.os }}` as GitHub Actions replaces
+/// it.
+String _resolved(String key, String os) =>
+    key.replaceAll(RegExp(r'\$\{\{\s*runner\.os\s*\}\}'), os);
+
+/// The problems of the input [nativeCacheSaveInput] in [roots], the
+/// workflows by the names of their files, whose writers save under keys
+/// with [prefixes] (see [nativeCacheWriterProblemsOf]).
+List<String> _saveInputProblemsOf(
+  Map<String, YamlMap> roots,
+  Set<String> prefixes,
+) {
+  final problems = <String>[];
+  // The reusable workflows with the input.
+  final saving = <String>{};
+  for (final MapEntry(key: file, value: root) in roots.entries) {
+    final inputs = switch (root['on']) {
+      {'workflow_call': {'inputs': final YamlMap inputs}} => inputs,
+      _ => null,
+    };
+    final input = inputs?[nativeCacheSaveInput];
+    if (input is! YamlMap) continue;
+    saving.add(file);
+    if (input['default'] == true) problems.add(_savesByDefault(file));
+  }
+  // The jobs that let one save, by the files of their workflows.
+  final callers = <String, List<(Object?, String)>>{};
+  for (final MapEntry(key: file, value: root) in roots.entries) {
+    for (final MapEntry(key: job, :value) in _jobsOf(root).entries) {
+      final called = '${(value as YamlMap)['uses'] ?? ''}'.split('/').last;
+      final Object? given = (value['with'] as YamlMap?)?[nativeCacheSaveInput];
+      if (!saving.contains(called) || given == null || given == false) {
+        continue;
+      }
+      if (!'$given'.contains(_onMain)) {
+        problems.add(_savesOutsideMain(file, job, called, given));
+      }
+      (callers[file] ??= []).add((job, called));
+    }
+  }
+  if (callers.length > 1) {
+    for (final MapEntry(key: file, value: jobs) in callers.entries) {
+      for (final (job, called) in jobs) {
+        problems.add(
+          _savedByTwo(file, job, called, {...callers.keys}..remove(file)),
+        );
+      }
+    }
+  }
+  for (final MapEntry(key: file, value: jobs) in callers.entries) {
+    final deleting = _deletingJobsOf(roots[file]!);
+    final deleted = [
+      for (final job in deleting.values)
+        for (final step in _stepsOf(job)) '${step['run'] ?? ''}',
+    ].join('\n');
+    final missing = [
+      for (final prefix in prefixes.toList()..sort())
+        if (!deleted.contains(prefix)) prefix,
+    ];
+    if (deleting.isEmpty || missing.isNotEmpty) {
+      final (job, called) = jobs.first;
+      problems.add(_notDeleted(file, job, called, missing));
+    }
+  }
+  return problems;
+}
+
+/// The jobs of [root], a workflow, that delete entries of the caches of the
+/// repository, with `gh api --method DELETE` of
+/// `repos/<repository>/actions/caches/<id>`, by their ids.
+Map<Object?, YamlMap> _deletingJobsOf(YamlMap root) => {
+      for (final MapEntry(key: job, :value) in _jobsOf(root).entries)
+        if (_stepsOf(value as YamlMap).any((step) {
+          final run = '${step['run'] ?? ''}';
+          return run.contains('/actions/caches') &&
+              RegExp(r'(--method|-X)\s+DELETE\b').hasMatch(run);
+        }))
+          job: value,
+    };
+
+/// The problems of the permission `actions: write` in [roots], the
+/// workflows by the names of their files (see
+/// [nativeCacheWriterProblemsOf]).
+List<String> _actionsWriteProblemsOf(Map<String, YamlMap> roots) {
+  bool writesActions(Object? permissions) =>
+      permissions == 'write-all' ||
+      (permissions is YamlMap && permissions['actions'] == 'write');
+  final problems = <String>[];
+  for (final MapEntry(key: file, value: root) in roots.entries) {
+    if (writesActions(root['permissions'])) {
+      problems.add(_writesActions(file));
+    }
+    final deleting = _deletingJobsOf(root);
+    for (final MapEntry(key: job, :value) in _jobsOf(root).entries) {
+      final permissions = (value as YamlMap)['permissions'];
+      if (!deleting.containsKey(job)) {
+        if (writesActions(permissions)) {
+          problems.add(_writesActions('$file, job $job'));
+        }
+      } else if (permissions is! YamlMap ||
+          permissions.length != 1 ||
+          permissions['actions'] != 'write') {
+        problems.add(_deletesWithOtherPermissions(file, job, permissions));
+      }
+    }
+  }
+  return problems;
+}
+
+/// The jobs of [root], a workflow.
+YamlMap _jobsOf(YamlMap root) => root['jobs'] as YamlMap? ?? YamlMap();
+
+/// The steps of [job], a job of a workflow.
+List<YamlMap> _stepsOf(YamlMap job) => [
+      for (final step in job['steps'] as YamlList? ?? YamlList())
+        step as YamlMap,
+    ];
+
+/// The problem that [where] saves the cache of [manager] under [key], whose
+/// text starts with an expression.
+String _noPrefix(String where, String manager, String key) =>
+    '$where saves the cache of $manager under the key $key, which starts '
+    'with an expression: start it with a text that names the cache, such as '
+    r'${{ runner.os }}-gradle-, under which the other jobs restore the '
+    'newest entry and the job that deletes the replaced entries finds them.';
+
+/// The problem that no step saves the cache of [manager], which jobs
+/// restore.
+String _unwritten(String manager) =>
+    'Jobs restore the cache of $manager, but no step saves it: let the job '
+    'of the first app with every module of the plan write it, in the runs '
+    'on main, so that the jobs do not download the same packages in every '
+    'run.';
+
+/// The problem that the [steps] save the cache of [manager].
+String _writtenTwice(String manager, List<String> steps) =>
+    'Several steps save the cache of $manager: ${steps.join('; ')}. One job '
+    'writes it, and every other job restores its newest entry: other '
+    'writers would replace the entry of the writer as the newest with '
+    'entries of their own apps, and the job that deletes the replaced '
+    'entries keeps only the newest.';
+
+/// The problem that [where] restores the cache of [manager] without
+/// [prefix], the prefix of the key of the writer, as a restore key.
+String _notNewest(String where, String manager, String prefix) =>
+    '$where restores the cache of $manager without the restore key '
+    '$prefix, the prefix of the key of the job that writes it. Only the app '
+    'of the writer has its key, so the jobs of the other apps restore the '
+    'newest entry under that prefix.';
+
+/// The problem that the reusable workflow [file] lets its jobs save the
+/// caches of the native builds by default.
+String _savesByDefault(String file) =>
+    '$file lets its jobs save the caches of the native builds by default '
+    '($nativeCacheSaveInput: true), so a workflow that calls it without the '
+    'input saves them in any run, such as that of a pull request: make it '
+    'false by default, and let the workflow that calls it pass it for the '
+    'runs on main.';
+
+/// The problem that the job [job] of the workflow [file] calls the workflow
+/// [called] with [nativeCacheSaveInput] [given], which lets it save the
+/// caches of the native builds outside the runs on main.
+String _savesOutsideMain(
+  String file,
+  Object? job,
+  String called,
+  Object given,
+) =>
+    '$file, job $job calls $called with $nativeCacheSaveInput: $given, which '
+    'lets it save the caches of the native builds in other runs than those '
+    'on main. A run of a pull request, or a run by hand on another branch, '
+    'saves them for its own ref, where only its own later runs find them: '
+    'keep the input to \${{ $_onMain }}, with any other condition of the '
+    'workflow.';
+
+/// The problem that the job [job] of the workflow [file] lets [called]
+/// save the caches of the native builds, as jobs of the workflows [others]
+/// do.
+String _savedByTwo(
+  String file,
+  Object? job,
+  String called,
+  Set<String> others,
+) =>
+    '$file, job $job lets $called save the caches of the native builds, and '
+    'so does ${others.join(', ')}. The writers of two workflows, such as '
+    'the runs of two versions of Flutter, would replace the entries of each '
+    'other, since the job that deletes the replaced entries keeps only the '
+    'newest: let one workflow write them.';
+
+/// The problem that the workflow [file], whose job [job] lets [called] save
+/// the caches of the native builds, has no job that deletes the entries
+/// that a newer one replaced, of [missing] prefixes, or none at all.
+String _notDeleted(
+  String file,
+  Object? job,
+  String called,
+  List<String> missing,
+) {
+  final keys = missing.isEmpty
+      ? ''
+      : ', of the keys that start with ${missing.join(' and ')}';
+  return '$file, job $job lets $called save the caches of the native '
+      'builds, but no job of $file deletes the entries that a newer one '
+      'replaced$keys. Each new entry would stay next to those before it, '
+      'over 1 GB for Gradle, in the 10 GB of caches of the repository: '
+      'delete each entry but the newest with gh api --method DELETE '
+      'repos/<repository>/actions/caches/<id>.';
+}
+
+/// The problem that [where], a workflow or a job of one, has the permission
+/// `actions: write` without deleting the entries of the caches.
+String _writesActions(String where) =>
+    '$where has the permission actions: write, but deletes no entry of the '
+    'caches, the only job that needs it. The jobs that build the apps run '
+    'the code of their dependencies, which must not get a token that can '
+    'delete caches or start and cancel runs.';
+
+/// The problem that the job [job] of the workflow [file] deletes entries of
+/// the caches with [permissions] other than `actions: write` alone.
+String _deletesWithOtherPermissions(
+  String file,
+  Object? job,
+  Object? permissions,
+) =>
+    '$file, job $job deletes entries of the caches with the permissions '
+    '${permissions ?? 'of the workflow'}: give it actions: write, and '
+    'nothing else.';
+
+/// The problem that the job [job] of the workflow [file] generates an app
+/// to build and restores no cache of [manager], whose path has [path].
+String _uncached(String file, Object? job, String manager, String path) =>
+    '$file, job $job generates an app with --create to build it for its '
+    'platform, but restores no cache of $manager ($path): each job would '
+    'download the same packages again.';
 
 /// The init script of Gradle that every job that builds for Android puts
 /// into ~/.gradle/init.d, which takes what Gradle would download from Maven
@@ -1085,22 +1380,34 @@ String _unmirrored(String file, Object? job, String step) =>
     'restored lacks, such as what its app needs beyond the cache of another '
     'app, and Maven Central answers 403 to a runner that downloads too much.';
 
-/// The package manager of the native builds on the runner [runsOn], a part
-/// of the path of its cache, and the platform of the builds as
-/// [nativeBuildTool] takes it, or `null` for a runner that builds none.
-({String manager, String path, String platform})? _nativeCacheOf(
-  String runsOn,
-) =>
-    switch (runsOn) {
+/// The package manager of the native builds of a platform, a part of the
+/// path of its cache, the platform of the builds as [nativeBuildTool] takes
+/// it, and the `runner.os` of the runners that build for it.
+typedef _NativeCache = ({
+  String manager,
+  String path,
+  String platform,
+  String os,
+});
+
+/// What a step does with a cache: restores an entry of it, saves one, or
+/// only looks a key up (`lookup-only: true`).
+typedef _CacheUse = ({bool restores, bool saves, bool looksUp});
+
+/// The cache of the native builds on the runner [runsOn], or `null` for a
+/// runner that builds none.
+_NativeCache? _nativeCacheOf(String runsOn) => switch (runsOn) {
       final label when label.startsWith('ubuntu') => (
           manager: 'Gradle',
           path: '.gradle/',
           platform: 'android',
+          os: 'Linux',
         ),
       final label when label.startsWith('macos') => (
           manager: 'Swift Package Manager',
           path: 'org.swift.swiftpm',
           platform: 'ios',
+          os: 'macOS',
         ),
       _ => null,
     };
@@ -1111,48 +1418,37 @@ bool _generatesApps(YamlMap job) => [
         '${(step as YamlMap)['run'] ?? ''}',
     ].any((run) => run.contains('--create'));
 
-/// Whether [step] restores and whether it saves a cache whose path has
-/// [path], or `null` for a step that does neither: actions/cache restores
-/// the cache and saves it at the end of the job, actions/cache/restore only
-/// restores it, and actions/cache/save only saves it.
-({bool restores, bool saves})? _cacheUseOf(YamlMap step, String path) {
-  if (!'${(step['with'] as YamlMap?)?['path'] ?? ''}'.contains(path)) {
-    return null;
-  }
+/// What [step] does with a cache whose path has [path], or `null` for a
+/// step that does nothing with it: actions/cache restores the cache and
+/// saves it at the end of the job, actions/cache/restore only restores it,
+/// or only looks its key up with `lookup-only: true`, and
+/// actions/cache/save only saves it.
+_CacheUse? _cacheUseOf(YamlMap step, String path) {
+  final inputs = step['with'] as YamlMap?;
+  if (!'${inputs?['path'] ?? ''}'.contains(path)) return null;
+  final looksUp = '${inputs?['lookup-only']}' == 'true';
   return switch ('${step['uses'] ?? ''}') {
     final uses when uses.startsWith('actions/cache/restore@') => (
-        restores: true,
+        restores: !looksUp,
         saves: false,
+        looksUp: looksUp,
       ),
     final uses when uses.startsWith('actions/cache/save@') => (
         restores: false,
         saves: true,
+        looksUp: false,
       ),
     final uses when uses.startsWith('actions/cache@') => (
         restores: true,
         saves: true,
+        looksUp: false,
       ),
     _ => null,
   };
 }
 
-/// The key of the cache of the step [index] of [steps], and the index of
-/// the step whose key it is: that of the step that restored the cache for
-/// a key `${{ steps.<id>.outputs.cache-primary-key }}`, as a step that only
-/// saves the cache takes it, and its own otherwise.
-(String, int) _keyOf(List<YamlMap> steps, int index) {
-  String keyOf(YamlMap step) => '${(step['with'] as YamlMap?)?['key'] ?? ''}';
-  final key = keyOf(steps[index]);
-  final restored = RegExp(
-    r'^\$\{\{\s*steps\.([\w-]+)\.outputs\.cache-primary-key\s*\}\}$',
-  ).firstMatch(key.trim());
-  final source = restored == null
-      ? -1
-      : steps.indexWhere((step) => step['id'] == restored[1]);
-  return source < 0 || source >= index
-      ? (key, index)
-      : (keyOf(steps[source]), source);
-}
+/// The key of the cache of [step].
+String _keyOf(YamlMap step) => '${(step['with'] as YamlMap?)?['key'] ?? ''}';
 
 /// Whether [key], the key of the step [index] of [steps], depends on the
 /// apps for [platform] of the job: whether it hashes with hashFiles a file
@@ -2322,464 +2618,23 @@ dart run "$tool" --every-module --shard "$3" "$1"
   });
 
   group('the caches of the native builds', () {
-    /// The steps of a job that builds the apps in `$RUNNER_TEMP/apps` for
-    /// [platform] with the cache of its package manager as the workflows of
-    /// the repository do, indented as the steps of a job: they find what the
-    /// apps build with, restore the cache of that unless they download
-    /// nothing, measure the cache, build the apps, and save the cache when
-    /// the build added more than NATIVE_CACHE_SAVE_ABOVE_MB to it.
-    String cachedBuild(String platform) {
-      final (id, path) = platform == 'android'
-          ? ('gradle', '~/.gradle/caches/modules-2')
-          : ('swiftpm', '~/Library/Caches/org.swift.swiftpm');
-      final file = 'build/native_build/$platform.txt';
-      return '''
-      - run: dart tools/native_build.dart $platform "\$RUNNER_TEMP/apps" $file
-      - id: $id
-        if: hashFiles('$file') != ''
-        uses: actions/cache/restore@v6
-        with:
-          path: $path
-          key: $id-\${{ hashFiles('$file') }}
-      - id: ${id}_restored
-        if: steps.$id.outcome == 'success' && steps.$id.outputs.cache-hit != 'true'
-        run: echo "megabytes=\$(du -sm $path | cut -f 1)" >> "\$GITHUB_OUTPUT"
-      - run: .github/scripts/each_app.sh "\$RUNNER_TEMP/apps" flutter build
-      - id: ${id}_added
-        if: steps.${id}_restored.outcome == 'success'
-        env:
-          RESTORED: \${{ steps.${id}_restored.outputs.megabytes }}
-        run: |
-          added=\$((\$(du -sm $path | cut -f 1) - RESTORED))
-          if [ "\$added" -gt "\$NATIVE_CACHE_SAVE_ABOVE_MB" ]; then echo save=true >> "\$GITHUB_OUTPUT"; fi
-      - if: steps.${id}_added.outputs.save == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: $path
-          key: \${{ steps.$id.outputs.cache-primary-key }}
-''';
-    }
-
-    test(
-        'finds a job on Linux or macOS that generates an app to build and '
-        'restores no cache of the package manager of its platform', () {
-      final workflow = r'''
-env:
-  NATIVE_CACHE_SAVE_ABOVE_MB: 100
-jobs:
-  android:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-''' +
-          cachedBuild('android') +
-          r'''
-  ios:
-    runs-on: macos-26
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
-  ios-cached:
-    runs-on: macos-26
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
-''' +
-          cachedBuild('ios') +
-          r'''
-  macos:
-    runs-on: macos-26
-    steps:
-      - run: dart test
-  windows:
-    runs-on: windows-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" windows_app
-''';
-      expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
-        equals(
-          'apps.yml, job ios generates an app with --create to build it for '
-          'its platform, but restores no cache of Swift Package Manager '
-          '(org.swift.swiftpm): each job would download the same packages '
-          'again.',
-        ),
-      ]);
-    });
-
-    test(
-        'finds a job that saves the cache only for the first job of its '
-        'matrix, under a key that does not depend on its app, whatever its '
-        'build added, and a job that only restores it', () {
-      // The caches as the workflow had them: the first job of the matrix of
-      // the apps saved the cache of its platform, by the Android files of
-      // the bricks or by the week alone, and every other job, of that
-      // matrix or of another, restored it.
-      const workflow = r'''
-jobs:
-  android:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        app: ${{ fromJSON(needs.plan.outputs.apps) }}
-    steps:
-      - name: Find the week of the cache of Gradle
-        id: gradle_week
-        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
-      - name: Cache Gradle
-        if: inputs.save_gradle_cache && strategy.job-index == 0
-        uses: actions/cache@v6
-        with: &gradle_cache
-          path: |
-            ~/.gradle/caches/modules-2
-            ~/.gradle/wrapper/dists
-          key: ${{ runner.os }}-gradle-${{ hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') }}-${{ steps.gradle_week.outputs.week }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      - name: Restore the cache of Gradle
-        if: ${{ !(inputs.save_gradle_cache && strategy.job-index == 0) }}
-        uses: actions/cache/restore@v6
-        with: *gradle_cache
-      - name: Build the app with every module for Android
-        run: |
-          apps="$RUNNER_TEMP/SMF apps/android"
-          dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$apps" android_app
-          .github/scripts/each_app.sh "$apps" flutter build apk --debug
-  android-start:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Restore the cache of Gradle
-        uses: actions/cache/restore@v6
-        with: *gradle_cache
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$RUNNER_TEMP/SMF apps/start" start_app
-  ios:
-    runs-on: macos-26
-    steps:
-      - name: Cache Swift packages
-        if: inputs.save_swiftpm_cache && strategy.job-index == 0
-        uses: actions/cache@v6
-        with: &swiftpm_cache
-          path: ~/Library/Caches/org.swift.swiftpm
-          key: ${{ runner.os }}-swiftpm-${{ steps.swiftpm_week.outputs.week }}
-      - name: Restore the cache of Swift packages
-        if: ${{ !(inputs.save_swiftpm_cache && strategy.job-index == 0) }}
-        uses: actions/cache/restore@v6
-        with: *swiftpm_cache
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/SMF apps/ios" ios_app
-''';
-      expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
-        equals(
-          'apps.yml, job android, step "Cache Gradle" saves the cache of '
-          'Gradle only in some jobs of its matrix (if: '
-          'inputs.save_gradle_cache && strategy.job-index == 0), so what the '
-          'apps of the other jobs need beyond the cache that they restore is '
-          'downloaded again in every run: let every job save the cache of its '
-          'app, under the key of the app, when the workflow lets it.',
-        ),
-        equals(
-          'apps.yml, job android, step "Cache Gradle" saves the cache of '
-          r'Gradle under the key ${{ runner.os }}-gradle-${{ '
-          "hashFiles('packages/smf_modules/*/bricks/*/__brick__/android/**') "
-          r'}}-${{ steps.gradle_week.outputs.week }}, which does not depend '
-          'on the app that the job builds. Take the key from the hash of the '
-          'file that `dart tools/native_build.dart android <directory of '
-          'apps> <file>` writes once the apps of the job are generated, so '
-          'that the jobs whose apps build with the same share one cache, and '
-          'a job whose app builds with another plugin or another native '
-          'project saves a cache of its own.',
-        ),
-        equals(
-          'apps.yml, job android, step "Cache Gradle" saves the cache of '
-          'Gradle whenever the job did not find the key of its app, rather '
-          'than only when its build added more than '
-          r'$NATIVE_CACHE_SAVE_ABOVE_MB MB to the cache that the job '
-          'restored. A cache is saved whole, '
-          'over 1 GB for Gradle, so a job whose app needs a few MB more than '
-          'the cache of another app would store a near copy of that cache in '
-          'the 10 GB of caches of the repository. Measure the cache after the '
-          'step that restores it, and save it only when a step after the '
-          'build finds that the build added more than that.',
-        ),
-        equals(
-          'apps.yml, job android-start restores the cache of Gradle '
-          '(.gradle/) but never saves it, so what its app needs beyond the '
-          'cache that it restores, such as the native side of a plugin that '
-          'the apps of the jobs that save the cache do not have, is '
-          'downloaded again in every run: save the cache of its app, under '
-          'the key of the app, when the workflow lets it.',
-        ),
-        startsWith(
-          'apps.yml, job ios, step "Cache Swift packages" saves the cache of '
-          'Swift Package Manager only in some jobs of its matrix (if: '
-          'inputs.save_swiftpm_cache && strategy.job-index == 0),',
-        ),
-        startsWith(
-          'apps.yml, job ios, step "Cache Swift packages" saves the cache of '
-          r'Swift Package Manager under the key ${{ runner.os }}-swiftpm-${{ '
-          'steps.swiftpm_week.outputs.week }}, which does not depend on the '
-          'app that the job builds. Take the key from the hash of the file '
-          'that `dart tools/native_build.dart ios <directory of apps> <file>` '
-          'writes',
-        ),
-        startsWith(
-          'apps.yml, job ios, step "Cache Swift packages" saves the cache of '
-          'Swift Package Manager whenever the job did not find the key of its '
-          'app,',
-        ),
-      ]);
-    });
-
-    test(
-        'finds a step that saves the cache for the jobs of some values of '
-        'the matrix, or under the key of a file that does not describe the '
-        'app of the job for its platform when the cache is saved', () {
-      const workflow = r'''
-env:
-  NATIVE_CACHE_SAVE_ABOVE_MB: 100
-jobs:
-  registry:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-      - run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
-      - &restore
-        id: gradle
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.gradle/caches/modules-2
-          key: gradle-${{ hashFiles('build/native_build/android.txt') }}
-      - &restored
-        id: gradle_restored
-        run: echo "megabytes=$(du -sm ~/.gradle/caches/modules-2 | cut -f 1)" >> "$GITHUB_OUTPUT"
-      - &build
-        run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build apk --debug
-      - &added
-        id: gradle_added
-        env:
-          RESTORED: ${{ steps.gradle_restored.outputs.megabytes }}
-        run: |
-          added=$(($(du -sm ~/.gradle/caches/modules-2 | cut -f 1) - RESTORED))
-          if [ "$added" -gt "$NATIVE_CACHE_SAVE_ABOVE_MB" ]; then echo save=true >> "$GITHUB_OUTPUT"; fi
-      - name: Save the cache of Gradle
-        if: matrix.registry == 'real' && steps.gradle_added.outputs.save == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ~/.gradle/caches/modules-2
-          key: ${{ steps.gradle.outputs.cache-primary-key }}
-  early:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-      - *restore
-      - *restored
-      - *build
-      - *added
-      - &save
-        name: Save the cache of Gradle
-        if: steps.gradle_added.outputs.save == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ~/.gradle/caches/modules-2
-          key: ${{ steps.gradle.outputs.cache-primary-key }}
-  late:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-      - *restore
-      - run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
-      - *restored
-      - *build
-      - *added
-      - *save
-  other-platform:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-      - run: dart tools/native_build.dart ios "$RUNNER_TEMP/apps" build/native_build/android.txt
-      - *restore
-      - *restored
-      - *build
-      - *added
-      - *save
-  other-file:
-    runs-on: macos-26
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
-      - run: dart tools/native_build.dart ios "$RUNNER_TEMP/apps" build/native_build/ios.txt
-      - id: swiftpm
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/Library/Caches/org.swift.swiftpm
-          key: swiftpm-${{ hashFiles('ios/Podfile.lock') }}
-      - id: swiftpm_restored
-        run: echo "megabytes=$(du -sm ~/Library/Caches/org.swift.swiftpm | cut -f 1)" >> "$GITHUB_OUTPUT"
-      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build ios --simulator
-      - id: swiftpm_added
-        env:
-          RESTORED: ${{ steps.swiftpm_restored.outputs.megabytes }}
-        run: |
-          added=$(($(du -sm ~/Library/Caches/org.swift.swiftpm | cut -f 1) - RESTORED))
-          if [ "$added" -gt "$NATIVE_CACHE_SAVE_ABOVE_MB" ]; then echo save=true >> "$GITHUB_OUTPUT"; fi
-      - name: Save the cache of Swift packages
-        if: steps.swiftpm_added.outputs.save == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ~/Library/Caches/org.swift.swiftpm
-          key: ${{ steps.swiftpm.outputs.cache-primary-key }}
-''';
-      expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
-        startsWith(
-          'apps.yml, job registry, step "Save the cache of Gradle" saves the '
-          'cache of Gradle only in some jobs of its matrix (if: '
-          "matrix.registry == 'real' && steps.gradle_added.outputs.save == "
-          "'true'),",
-        ),
-        startsWith(
-          'apps.yml, job early, step "Save the cache of Gradle" saves the '
-          r'cache of Gradle under the key gradle-${{ '
-          "hashFiles('build/native_build/android.txt') }}, which does not "
-          'depend on the app that the job builds.',
-        ),
-        startsWith(
-          'apps.yml, job late, step "Save the cache of Gradle" saves the cache '
-          r'of Gradle under the key gradle-${{ '
-          "hashFiles('build/native_build/android.txt') }}, which does not "
-          'depend on the app that the job builds.',
-        ),
-        startsWith(
-          'apps.yml, job other-platform, step "Save the cache of Gradle" '
-          'saves the cache of Gradle under the key',
-        ),
-        startsWith(
-          'apps.yml, job other-file, step "Save the cache of Swift packages" '
-          'saves the cache of Swift Package Manager under the key '
-          r"swiftpm-${{ hashFiles('ios/Podfile.lock') }}, which does not "
-          'depend on the app that the job builds.',
-        ),
-      ]);
-    });
-
-    test(
-        'finds a step that saves the cache whatever the build added to the '
-        'cache that the job restored, and a workflow without the threshold',
-        () {
-      const workflow = r'''
-env:
-  NATIVE_CACHE_SAVE_ABOVE_MB: 100
-jobs:
-  every-miss:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-      - run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
-      - &restore
-        id: gradle
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.gradle/caches/modules-2
-          key: gradle-${{ hashFiles('build/native_build/android.txt') }}
-      - &build
-        run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build apk --debug
-      - name: Save the cache of Gradle
-        if: inputs.save_gradle_cache && steps.gradle.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ~/.gradle/caches/modules-2
-          key: ${{ steps.gradle.outputs.cache-primary-key }}
-  at-the-end:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-      - run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
-      - name: Cache Gradle
-        uses: actions/cache@v6
-        with:
-          path: ~/.gradle/caches/modules-2
-          key: gradle-${{ hashFiles('build/native_build/android.txt') }}
-      - *build
-  whole-cache:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-      - run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
-      - *restore
-      - *build
-      - id: gradle_size
-        run: |
-          size=$(du -sm ~/.gradle/caches/modules-2 | cut -f 1)
-          if [ "$size" -gt "$NATIVE_CACHE_SAVE_ABOVE_MB" ]; then echo save=true >> "$GITHUB_OUTPUT"; fi
-      - name: Save the cache of Gradle
-        if: steps.gradle_size.outputs.save == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ~/.gradle/caches/modules-2
-          key: ${{ steps.gradle.outputs.cache-primary-key }}
-  before-the-restore:
-    runs-on: ubuntu-latest
-    steps:
-      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
-      - run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
-      - id: gradle_restored
-        run: echo "megabytes=$(du -sm ~/.gradle/caches/modules-2 | cut -f 1)" >> "$GITHUB_OUTPUT"
-      - *restore
-      - *build
-      - id: gradle_added
-        env:
-          RESTORED: ${{ steps.gradle_restored.outputs.megabytes }}
-        run: |
-          added=$(($(du -sm ~/.gradle/caches/modules-2 | cut -f 1) - RESTORED))
-          if [ "$added" -gt "$NATIVE_CACHE_SAVE_ABOVE_MB" ]; then echo save=true >> "$GITHUB_OUTPUT"; fi
-      - name: Save the cache of Gradle
-        if: steps.gradle_added.outputs.save == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ~/.gradle/caches/modules-2
-          key: ${{ steps.gradle.outputs.cache-primary-key }}
-''';
-      expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
-        startsWith(
-          'apps.yml, job every-miss, step "Save the cache of Gradle" saves the '
-          'cache of Gradle whenever the job did not find the key of its app,',
-        ),
-        startsWith(
-          'apps.yml, job at-the-end, step "Cache Gradle" saves the cache of '
-          'Gradle whenever the job did not find the key of its app,',
-        ),
-        startsWith(
-          'apps.yml, job whole-cache, step "Save the cache of Gradle" saves '
-          'the cache of Gradle whenever the job did not find the key of its '
-          'app,',
-        ),
-        startsWith(
-          'apps.yml, job before-the-restore, step "Save the cache of Gradle" '
-          'saves the cache of Gradle whenever the job did not find the key of '
-          'its app,',
-        ),
-      ]);
-
-      expect(
-        nativeCacheProblemsOf(
-          'jobs:\n'
-          '  android:\n'
-          '    runs-on: ubuntu-latest\n'
-          '    steps:\n${cachedBuild('android')}',
-          file: 'apps.yml',
-        ),
-        [
-          equals(
-            'apps.yml compares what the builds add to the caches of their '
-            'native builds with NATIVE_CACHE_SAVE_ABOVE_MB, but does not set '
-            'it in its env, the one place that gives it with its reason.',
-          ),
-        ],
-      );
-    });
-
-    test(
-        'passes the jobs that key the cache by the apps they build and save '
-        'it when their build added more than the threshold to it, whatever '
-        'job of their matrix they are', () {
-      const workflow = r'''
-env:
-  NATIVE_CACHE_SAVE_ABOVE_MB: 100
+    /// A reusable workflow as apps.yml of the repository has its jobs that
+    /// build for Android and iOS: the first job of the matrix of each
+    /// platform writes its cache in the runs that save the native caches,
+    /// and the other jobs restore the newest entry. The job ios-start has
+    /// the old restore keys of the key of its app and of the platform.
+    const apps = r'''
+on:
+  workflow_call:
+    inputs:
+      flutter_version:
+        type: string
+        required: true
+      save_native_caches:
+        type: boolean
+        default: false
+permissions:
+  contents: read
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -2791,95 +2646,101 @@ jobs:
         id: gradle_week
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
       - name: Generate the app with every module
-        run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/SMF apps/android" android_app
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
       - name: Find what the app builds with for Android
-        run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps/android" build/native_build/android.txt
-      - &restore_gradle
-        name: Restore the cache of Gradle
-        id: gradle
-        if: hashFiles('build/native_build/android.txt') != ''
+        run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
+      - name: Look up the cache of Gradle that the job writes
+        id: gradle_lookup
+        if: inputs.save_native_caches && strategy.job-index == 0 && hashFiles('build/native_build/android.txt') != ''
         uses: actions/cache/restore@v6
         with:
           path: &gradle_paths |
             ~/.gradle/caches/modules-2
             ~/.gradle/wrapper/dists
-          key: ${{ runner.os }}-gradle-${{ hashFiles('build/native_build/android.txt') }}-${{ steps.gradle_week.outputs.week }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-${{ hashFiles('build/native_build/android.txt') }}-
-            ${{ runner.os }}-gradle-
-      - &gradle_restored
-        name: Measure the cache of Gradle that the job restored
-        id: gradle_restored
-        if: inputs.save_gradle_cache && steps.gradle.outcome == 'success' && steps.gradle.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/.gradle/caches/modules-2 ~/.gradle/wrapper/dists
-          echo "megabytes=$(du -smc ~/.gradle/caches/modules-2 ~/.gradle/wrapper/dists | tail -n 1 | cut -f 1)" >> "$GITHUB_OUTPUT"
+          key: &gradle_key ${{ runner.os }}-gradle-${{ inputs.flutter_version }}-${{ hashFiles('build/native_build/android.txt') }}-${{ steps.gradle_week.outputs.week }}
+          lookup-only: true
+      - &restore_gradle
+        name: Restore the cache of Gradle
+        if: hashFiles('build/native_build/android.txt') != '' && (steps.gradle_lookup.outcome != 'success' || steps.gradle_lookup.outputs.cache-hit == 'true')
+        uses: actions/cache/restore@v6
+        with:
+          path: *gradle_paths
+          key: *gradle_key
+          restore-keys: ${{ runner.os }}-gradle-
       - name: Build the app with every module for Android
-        run: .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/android" flutter build apk --debug
-      - &gradle_added
-        name: Measure what the build added to the cache of Gradle
-        id: gradle_added
-        if: steps.gradle_restored.outcome == 'success'
-        env:
-          RESTORED: ${{ steps.gradle_restored.outputs.megabytes }}
-        run: |
-          size="$(du -smc ~/.gradle/caches/modules-2 ~/.gradle/wrapper/dists | tail -n 1 | cut -f 1)"
-          if [ $((size - RESTORED)) -gt "$NATIVE_CACHE_SAVE_ABOVE_MB" ]; then
-            echo "save=true" >> "$GITHUB_OUTPUT"
-          fi
-      - &save_gradle
-        name: Save the cache of Gradle
-        if: steps.gradle_added.outputs.save == 'true'
+        run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --debug
+      - name: Save the cache of Gradle
+        if: steps.gradle_lookup.outcome == 'success' && steps.gradle_lookup.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: *gradle_paths
-          key: ${{ steps.gradle.outputs.cache-primary-key }}
+          key: ${{ steps.gradle_lookup.outputs.cache-primary-key }}
+  android-start:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.start) }}
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$RUNNER_TEMP/start" start_app
+      - run: dart tools/native_build.dart android "$RUNNER_TEMP/start" build/native_build/android.txt
+      - *restore_gradle
+      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/start" "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
   published:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate the apps with the CLI from pub.dev
-        run: smf "${arguments[@]}"
-      - name: Find what the apps build with for Android
-        run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps from pub.dev" build/native_build/android.txt
+      - run: smf "${arguments[@]}"
+      - run: dart tools/native_build.dart android "$RUNNER_TEMP/SMF apps from pub.dev" build/native_build/android.txt
       - *restore_gradle
-      - *gradle_restored
-      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps from pub.dev" flutter build apk --debug
-      - *gradle_added
-      - *save_gradle
   ios:
     runs-on: macos-26
+    strategy:
+      max-parallel: 2
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
     steps:
+      - id: swiftpm_week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
       - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
       - run: |
           dart tools/native_build.dart ios "$RUNNER_TEMP/apps" \
             build/native_build/ios.txt
-      - name: Restore the cache of Swift packages
-        id: swiftpm
-        if: hashFiles("build/native_build/ios.txt") != ''
+      - name: Look up the cache of Swift packages that the job writes
+        id: swiftpm_lookup
+        if: ${{ inputs.save_native_caches && strategy.job-index==0 }}
         uses: actions/cache/restore@v6
         with:
           path: ~/Library/Caches/org.swift.swiftpm
-          key: ${{ runner.os }}-swiftpm-${{ hashFiles("build/native_build/ios.txt") }}
-      - name: Measure the cache of Swift packages that the job restored
-        id: swiftpm_restored
-        if: inputs.save_swiftpm_cache && steps.swiftpm.outcome == 'success' && steps.swiftpm.outputs.cache-hit != 'true'
-        run: echo "megabytes=$(du -sm ~/Library/Caches/org.swift.swiftpm | cut -f 1)" >> "$GITHUB_OUTPUT"
+          key: ${{ runner.os }}-swiftpm-${{ hashFiles("build/native_build/ios.txt") }}-${{ steps.swiftpm_week.outputs.week }}
+          lookup-only: true
+      - name: Restore the cache of Swift packages
+        if: steps.swiftpm_lookup.outcome != 'success' || steps.swiftpm_lookup.outputs.cache-hit == 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-swiftpm-${{ hashFiles("build/native_build/ios.txt") }}-${{ steps.swiftpm_week.outputs.week }}
+          restore-keys: macOS-swiftpm-
       - run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build ios --simulator --no-codesign
-      - name: Measure what the build added to the cache of Swift packages
-        id: swiftpm_added
-        if: steps.swiftpm_restored.outcome == 'success'
-        run: |
-          size="$(du -sm ~/Library/Caches/org.swift.swiftpm | cut -f 1)"
-          restored=${{ steps.swiftpm_restored.outputs.megabytes }}
-          if [ $((size - restored)) -gt "${NATIVE_CACHE_SAVE_ABOVE_MB}" ]; then
-            echo "save=true" >> "$GITHUB_OUTPUT"
-          fi
       - name: Save the cache of Swift packages
-        if: steps.swiftpm_added.outputs.save == 'true'
+        if: >-
+          steps.swiftpm_lookup.outcome == 'success' &&
+          steps.swiftpm_lookup.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/Library/Caches/org.swift.swiftpm
-          key: ${{ steps.swiftpm.outputs.cache-primary-key }}
+          key: ${{ steps.swiftpm_lookup.outputs.cache-primary-key }}
+  ios-start:
+    runs-on: macos-26
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$RUNNER_TEMP/start" start_app
+      - run: dart tools/native_build.dart ios "$RUNNER_TEMP/start" build/native_build/ios.txt
+      - name: Restore the cache of Swift packages
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-swiftpm-${{ hashFiles('build/native_build/ios.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-${{ hashFiles('build/native_build/ios.txt') }}-
+            ${{ runner.os }}-swiftpm-
   shards:
     runs-on: ubuntu-latest
     steps:
@@ -2894,109 +2755,540 @@ jobs:
     steps:
       - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" windows_app
 ''';
-      expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), isEmpty);
+
+    /// A workflow as build.yml of the repository: it lets the jobs of
+    /// [apps] save the native caches in the runs on main, and deletes the
+    /// entries that a newer one replaced in a job of its own.
+    const build = r'''
+jobs:
+  apps:
+    uses: ./.github/workflows/apps.yml
+    with:
+      flutter_version: "3.44.2"
+      save_native_caches: ${{ github.ref == 'refs/heads/main' }}
+  native-caches:
+    needs: apps
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete the entries of the native caches that a newer one replaced
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for prefix in Linux-gradle- macOS-swiftpm-; do
+            for id in $(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/caches" -f key="$prefix" --jq '.actions_caches[1:][].id'); do
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/caches/$id"
+            done
+          done
+  ci:
+    needs: [apps, native-caches]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - run: echo
+''';
+
+    /// A workflow as nightly.yml of the repository, which lets the jobs of
+    /// [apps] save nothing.
+    const nightly = r'''
+jobs:
+  apps:
+    uses: ./.github/workflows/apps.yml
+    with:
+      flutter_version: ${{ matrix.flutter }}
+''';
+
+    test(
+        'passes the jobs that restore the newest entry of the cache of their '
+        'platform, the one job of each that writes it when its key is not '
+        'there yet, from an empty cache, and the job that deletes the '
+        'entries that a newer one replaced', () {
+      for (final (file, workflow) in [
+        ('apps.yml', apps),
+        ('build.yml', build),
+        ('nightly.yml', nightly),
+      ]) {
+        expect(
+          nativeCacheProblemsOf(workflow, file: file),
+          isEmpty,
+          reason: file,
+        );
+      }
+      expect(
+        nativeCacheWriterProblemsOf({
+          'apps.yml': apps,
+          'build.yml': build,
+          'nightly.yml': nightly,
+        }),
+        isEmpty,
+      );
     });
 
     test(
-        'finds a reusable workflow that saves the caches by default, and a '
-        'workflow that lets it save them in other runs than those on main', () {
-      String reusable({required bool saves}) => '''
-on:
-  workflow_call:
-    inputs:
-      save_gradle_cache:
-        type: boolean
-        default: $saves
-      save_swiftpm_cache:
-        type: boolean
-        default: false
+        'finds a job on Linux or macOS that generates an app to build and '
+        'restores no cache of the package manager of its platform, also when '
+        'it only looks a key up', () {
+      const workflow = r'''
 jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - run: echo
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
+      - uses: actions/cache/restore@v6
+        with:
+          path: ~/.gradle/caches/modules-2
+          key: gradle-${{ hashFiles('build/native_build/android.txt') }}
+          lookup-only: true
+  ios:
+    runs-on: macos-26
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" ios_app
+  macos:
+    runs-on: macos-26
+    steps:
+      - run: dart test
 ''';
-      const build = r'''
+      expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
+        equals(
+          'apps.yml, job android generates an app with --create to build it '
+          'for its platform, but restores no cache of Gradle (.gradle/): each '
+          'job would download the same packages again.',
+        ),
+        startsWith(
+          'apps.yml, job ios generates an app with --create to build it for '
+          'its platform, but restores no cache of Swift Package Manager '
+          '(org.swift.swiftpm):',
+        ),
+      ]);
+    });
+
+    test(
+        'finds a step that saves the cache under a key that no step before it '
+        'only looked up, as the jobs saved it before one job wrote each cache',
+        () {
+      // Every job of the matrix saved the cache under the key of its app
+      // when its build added more than a threshold to what it restored, and
+      // a job may save it at the end, under its own key.
+      const workflow = r'''
+env:
+  NATIVE_CACHE_SAVE_ABOVE_MB: 100
 jobs:
-  apps:
-    uses: ./.github/workflows/apps.yml
-    with:
-      save_gradle_cache: true
-      save_swiftpm_cache: ${{ github.event_name == 'push' }}
-''';
-      const nightly = r'''
-jobs:
-  versions:
+  android:
     runs-on: ubuntu-latest
     steps:
-      - run: echo
-  apps:
-    uses: ./.github/workflows/apps.yml
-    with:
-      save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest }}
-      save_swiftpm_cache: false
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "$APP" "$RUNNER_TEMP/apps" android_app
+      - run: dart tools/native_build.dart android "$RUNNER_TEMP/apps" build/native_build/android.txt
+      - id: gradle
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.gradle/caches/modules-2
+          key: ${{ runner.os }}-gradle-${{ hashFiles('build/native_build/android.txt') }}
+          restore-keys: ${{ runner.os }}-gradle-
+      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build apk --debug
+      - id: gradle_added
+        run: echo save=true >> "$GITHUB_OUTPUT"
+      - name: Save the cache of Gradle
+        if: steps.gradle_added.outputs.save == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.gradle/caches/modules-2
+          key: ${{ steps.gradle.outputs.cache-primary-key }}
+  at-the-end:
+    runs-on: macos-26
+    steps:
+      - name: Cache Swift packages
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm-${{ hashFiles('build/native_build/ios.txt') }}
+  own-key:
+    runs-on: macos-26
+    steps:
+      - name: Save the cache of Swift packages
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm-${{ hashFiles('build/native_build/ios.txt') }}
 ''';
+      expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
+        equals(
+          'apps.yml, job android, step "Save the cache of Gradle" saves the '
+          'cache of Gradle under a key that no step before it only looked up. '
+          'Look the key of the app of the job up before its build with '
+          'actions/cache/restore and lookup-only: true, build from an empty '
+          'cache when that step finds no entry, and save the cache only then, '
+          r'with the key ${{ steps.<id>.outputs.cache-primary-key }} of that '
+          'step: one job writes the cache, and every other job only restores '
+          'its newest entry.',
+        ),
+        startsWith(
+          'apps.yml, job at-the-end, step "Cache Swift packages" saves the '
+          'cache of Swift Package Manager under a key that no step before it '
+          'only looked up.',
+        ),
+        startsWith(
+          'apps.yml, job own-key, step "Save the cache of Swift packages" '
+          'saves the cache of Swift Package Manager under a key that no step '
+          'before it only looked up.',
+        ),
+      ]);
+    });
+
+    test(
+        'finds a writer that saves when it found its key, in every run or '
+        'every job of its matrix, under a key without its app or the version '
+        'of Flutter, and after it restored an older entry', () {
+      const flutter = r'${{ inputs.flutter_version }}';
+      const android = r"${{ hashFiles('build/native_build/android.txt') }}";
+      const ios = r"${{ hashFiles('build/native_build/ios.txt') }}";
+      const bricks = r"${{ hashFiles('packages/*/bricks/**/android/**') }}";
+      String writer(
+        String job, {
+        String runsOn = 'ubuntu-latest',
+        String lookupIf =
+            'inputs.save_native_caches && strategy.job-index == 0',
+        String key = '\${{ runner.os }}-gradle-$flutter-$android',
+        String restoreIf = "steps.lookup.outputs.cache-hit == 'true'",
+        String saveIf = "steps.lookup.outcome == 'success' && "
+            "steps.lookup.outputs.cache-hit != 'true'",
+      }) {
+        final path = runsOn.startsWith('macos')
+            ? '~/Library/Caches/org.swift.swiftpm'
+            : '~/.gradle/caches/modules-2';
+        final platform = runsOn.startsWith('macos') ? 'ios' : 'android';
+        return '''
+  $job:
+    runs-on: $runsOn
+    strategy:
+      matrix:
+        app: \${{ fromJSON(needs.plan.outputs.apps) }}
+    steps:
+      - run: dart run packages/smf_flutter_cli/tool/matrix.dart --create --app "\$APP" "\$RUNNER_TEMP/apps" app
+      - run: dart tools/native_build.dart $platform "\$RUNNER_TEMP/apps" build/native_build/$platform.txt
+      - id: lookup
+        if: $lookupIf
+        uses: actions/cache/restore@v6
+        with:
+          path: $path
+          key: $key
+          lookup-only: true
+      - name: Restore the cache
+        if: $restoreIf
+        uses: actions/cache/restore@v6
+        with:
+          path: $path
+          key: $key
+          restore-keys: \${{ runner.os }}-
+      - name: Save the cache
+        if: $saveIf
+        uses: actions/cache/save@v6
+        with:
+          path: $path
+          key: \${{ steps.lookup.outputs.cache-primary-key }}
+''';
+      }
+
+      final workflow = 'jobs:\n${[
+        writer(
+          'when-found',
+          saveIf: "steps.lookup.outputs.cache-hit != 'true'",
+        ),
+        writer('when-not-run', saveIf: "steps.lookup.outcome == 'success'"),
+        writer('every-run', lookupIf: 'strategy.job-index == 0'),
+        writer('every-job', lookupIf: 'inputs.save_native_caches'),
+        writer('not-by-app', key: '\${{ runner.os }}-gradle-$flutter-$bricks'),
+        writer('not-by-flutter', key: '\${{ runner.os }}-gradle-$android'),
+        writer(
+          'ios-not-by-flutter',
+          runsOn: 'macos-26',
+          key: '\${{ runner.os }}-swiftpm-$ios',
+        ),
+        writer('restores-older', restoreIf: "hashFiles('a') != ''"),
+      ].join()}';
+      expect(nativeCacheProblemsOf(workflow, file: 'apps.yml'), [
+        equals(
+          'apps.yml, job when-found, step "Save the cache" saves the cache of '
+          'Gradle also when the step lookup, which looks its key up, did not '
+          "run or found it: save it only if: steps.lookup.outcome == 'success' "
+          "&& steps.lookup.outputs.cache-hit != 'true'. An entry is never "
+          'replaced under its key, and a job that does not write the cache '
+          'saves nothing.',
+        ),
+        startsWith(
+          'apps.yml, job when-not-run, step "Save the cache" saves the cache '
+          'of Gradle also when the step lookup, which looks its key up, did '
+          'not run or found it:',
+        ),
+        equals(
+          'apps.yml, job every-run, step "Save the cache" saves the cache of '
+          'Gradle in every run: keep the step lookup, which looks its key up, '
+          'to the runs that the input save_native_caches lets save the native '
+          'caches, which the workflows pass only for the runs on main, whose '
+          'entries the runs of every branch find.',
+        ),
+        equals(
+          'apps.yml, job every-job, step "Save the cache" saves the cache of '
+          'Gradle in every job of its matrix: keep the step lookup, which '
+          'looks its key up, to the job of the first app, strategy.job-index '
+          '== 0. One job writes the cache, and the others would save a near '
+          'copy of it, or entries of other keys, which take the place of the '
+          'entry of the writer as the newest.',
+        ),
+        equals(
+          'apps.yml, job not-by-app, step "Save the cache" saves the cache of '
+          r'Gradle under the key ${{ runner.os }}-gradle-${{ '
+          r'inputs.flutter_version }}-${{ '
+          "hashFiles('packages/*/bricks/**/android/**') }}, which does not "
+          'depend on the app that the job builds. Take the key from the hash '
+          'of the file that `dart tools/native_build.dart android <directory '
+          'of apps> <file>` writes once the apps of the job are generated, so '
+          'that the writer saves a new entry when its app builds with another '
+          'plugin or another native project.',
+        ),
+        equals(
+          'apps.yml, job not-by-flutter, step "Save the cache" saves the '
+          r'cache of Gradle under the key ${{ runner.os }}-gradle-${{ '
+          "hashFiles('build/native_build/android.txt') }}, which does not name "
+          r'the version of Flutter, ${{ inputs.flutter_version }}. Gradle '
+          'downloads the engine of Flutter too, hundreds of MB for each '
+          'version, so a new version of Flutter needs a new entry.',
+        ),
+        equals(
+          'apps.yml, job restores-older, step "Save the cache" saves the cache '
+          'of Gradle after the step "Restore the cache", which restores an '
+          'entry of it also when the step lookup found no entry under the key '
+          'of the app: restore it only if: steps.lookup.outputs.cache-hit == '
+          "'true', or when the step lookup did not run. The new entry would "
+          'also hold what the builds of the entries before it downloaded, '
+          'which no build may need any more, and grow with each one.',
+        ),
+      ]);
+    });
+
+    test(
+        'finds a cache that jobs restore and no step saves, a cache that '
+        'several steps save, a key without a text before its first '
+        'expression, and a step that restores without the prefix of the key '
+        'of the writer', () {
+      // The Gradle cache as the workflow had it: every job restored the
+      // entry of the key of its app, or the newest of that app, or the
+      // newest of any app, and saved the cache of its app.
+      final workflow = apps.replaceFirst(
+        r'''
+      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/start" "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
+''',
+        r'''
+      - run: .github/scripts/each_app.sh "$RUNNER_TEMP/start" "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
+      - name: Save the cache of the started app
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.gradle/caches/modules-2
+          key: ${{ steps.gradle.outputs.cache-primary-key }}
+''',
+      ).replaceFirst(
+        r'''
+      - name: Save the cache of Swift packages
+        if: >-
+          steps.swiftpm_lookup.outcome == 'success' &&
+          steps.swiftpm_lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: ${{ steps.swiftpm_lookup.outputs.cache-primary-key }}
+''',
+        '',
+      );
       expect(
-        nativeCacheSaveProblemsOf({
-          'apps.yml': reusable(saves: true),
-          'build.yml': build,
-          'nightly.yml': nightly,
-        }),
+        nativeCacheWriterProblemsOf({'apps.yml': workflow, 'build.yml': build}),
         [
           equals(
-            'apps.yml lets its jobs save the caches of the native builds by '
-            'default (save_gradle_cache: true), so a workflow that calls it '
-            'without the input saves them in any run, such as that of a pull '
-            'request: make it false by default, and let the workflows that '
-            'call it pass it for the runs on main.',
+            'Several steps save the cache of Gradle: apps.yml, job android, '
+            'step "Save the cache of Gradle"; apps.yml, job android-start, '
+            'step "Save the cache of the started app". One job writes it, and '
+            'every other job restores its newest entry: other writers would '
+            'replace the entry of the writer as the newest with entries of '
+            'their own apps, and the job that deletes the replaced entries '
+            'keeps only the newest.',
           ),
           equals(
-            'build.yml, job apps calls apps.yml with save_gradle_cache: true, '
-            'which lets it save the caches of the native builds in other runs '
-            'than those on main. A run of a pull request, or a run by hand on '
-            'another branch, saves them for its own ref, where only its own '
-            'later runs find them, so they only duplicate those of main in '
-            r'the 10 GB of caches of the repository: keep the input to ${{ '
-            "github.ref == 'refs/heads/main' }}, with any other condition of "
-            'the workflow.',
-          ),
-          startsWith(
-            'build.yml, job apps calls apps.yml with save_swiftpm_cache: '
-            r"${{ github.event_name == 'push' }}, which lets it save",
-          ),
-          startsWith(
-            'nightly.yml, job apps calls apps.yml with save_gradle_cache: '
-            r'${{ matrix.flutter == needs.versions.outputs.latest }}, which '
-            'lets it save',
+            'Jobs restore the cache of Swift Package Manager, but no step '
+            'saves it: let the job of the first app with every module of the '
+            'plan write it, in the runs on main, so that the jobs do not '
+            'download the same packages in every run.',
           ),
         ],
       );
 
+      final unprefixed = apps.replaceFirst(
+        r'key: &gradle_key ${{ runner.os }}-gradle-',
+        r"key: &gradle_key ${{ format('{0}-gradle-', runner.os) }}",
+      );
       expect(
-        nativeCacheSaveProblemsOf({
-          'apps.yml': reusable(saves: false),
-          'build.yml': r'''
-jobs:
-  apps:
-    uses: ./.github/workflows/apps.yml
-    with:
-      save_gradle_cache: ${{ github.ref == 'refs/heads/main' }}
-      save_swiftpm_cache: ${{ github.ref == 'refs/heads/main' }}
-  other:
-    uses: ./.github/workflows/other.yml
-    with:
-      save_gradle_cache: true
-''',
-          'nightly.yml': r'''
-jobs:
-  apps:
-    uses: ./.github/workflows/apps.yml
-    with:
-      save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest && github.ref == 'refs/heads/main' }}
-''',
-          'other.yml': 'jobs:\n  a:\n    steps:\n      - run: echo\n',
+        nativeCacheWriterProblemsOf({
+          'apps.yml': unprefixed,
+          'build.yml': build,
         }),
-        isEmpty,
+        [
+          startsWith(
+            'apps.yml, job android, step "Save the cache of Gradle" saves the '
+            r"cache of Gradle under the key ${{ format('{0}-gradle-', "
+            r'runner.os) }}${{ inputs.flutter_version }}-',
+          ),
+        ],
+      );
+
+      final newest = apps.replaceFirst(
+        'restore-keys: macOS-swiftpm-',
+        r"restore-keys: ${{ runner.os }}-swiftpm-${{ hashFiles('build/native_build/ios.txt') }}-",
+      );
+      expect(
+        nativeCacheWriterProblemsOf({'apps.yml': newest, 'build.yml': build}),
+        [
+          equals(
+            'apps.yml, job ios, step "Restore the cache of Swift packages" '
+            'restores the cache of Swift Package Manager without the restore '
+            'key macOS-swiftpm-, the prefix of the key of the job that writes '
+            'it. Only the app of the writer has its key, so the jobs of the '
+            'other apps restore the newest entry under that prefix.',
+          ),
+        ],
+      );
+    });
+
+    test(
+        'finds a reusable workflow that saves the caches by default, a '
+        'workflow that lets it save them in other runs than those on main, '
+        'two workflows that let it save them, and a workflow that lets it '
+        'save them without deleting the entries that a newer one replaced', () {
+      final savingByDefault = apps.replaceFirst(
+        'save_native_caches:\n        type: boolean\n        default: false',
+        'save_native_caches:\n        type: boolean\n        default: true',
+      );
+      const pushes = r'''
+jobs:
+  apps:
+    uses: ./.github/workflows/apps.yml
+    with:
+      save_native_caches: ${{ github.event_name == 'push' }}
+''';
+      const latest = r'''
+jobs:
+  apps:
+    uses: ./.github/workflows/apps.yml
+    with:
+      save_native_caches: ${{ matrix.flutter == needs.versions.outputs.latest && github.ref == 'refs/heads/main' }}
+''';
+      expect(
+        nativeCacheWriterProblemsOf({
+          'apps.yml': savingByDefault,
+          'build.yml': pushes,
+          'nightly.yml': latest,
+        }),
+        [
+          equals(
+            'apps.yml lets its jobs save the caches of the native builds by '
+            'default (save_native_caches: true), so a workflow that calls it '
+            'without the input saves them in any run, such as that of a pull '
+            'request: make it false by default, and let the workflow that '
+            'calls it pass it for the runs on main.',
+          ),
+          equals(
+            'build.yml, job apps calls apps.yml with save_native_caches: '
+            r"${{ github.event_name == 'push' }}, which lets it save the "
+            'caches of the native builds in other runs than those on main. A '
+            'run of a pull request, or a run by hand on another branch, saves '
+            'them for its own ref, where only its own later runs find them: '
+            r"keep the input to ${{ github.ref == 'refs/heads/main' }}, with "
+            'any other condition of the workflow.',
+          ),
+          equals(
+            'build.yml, job apps lets apps.yml save the caches of the native '
+            'builds, and so does nightly.yml. The writers of two workflows, '
+            'such as the runs of two versions of Flutter, would replace the '
+            'entries of each other, since the job that deletes the replaced '
+            'entries keeps only the newest: let one workflow write them.',
+          ),
+          startsWith(
+            'nightly.yml, job apps lets apps.yml save the caches of the native '
+            'builds, and so does build.yml.',
+          ),
+          equals(
+            'build.yml, job apps lets apps.yml save the caches of the native '
+            'builds, but no job of build.yml deletes the entries that a newer '
+            'one replaced, of the keys that start with Linux-gradle- and '
+            'macOS-swiftpm-. Each new entry would stay next to those before '
+            'it, over 1 GB for Gradle, in the 10 GB of caches of the '
+            'repository: delete each entry but the newest with gh api --method '
+            'DELETE repos/<repository>/actions/caches/<id>.',
+          ),
+          startsWith(
+            'nightly.yml, job apps lets apps.yml save the caches of the native '
+            'builds, but no job of nightly.yml deletes the entries that a '
+            'newer one replaced, of the keys that start with Linux-gradle- and '
+            'macOS-swiftpm-.',
+          ),
+        ],
+      );
+
+      final gradleOnly = build.replaceFirst(
+        'for prefix in Linux-gradle- macOS-swiftpm-; do',
+        'for prefix in Linux-gradle-; do',
+      );
+      expect(
+        nativeCacheWriterProblemsOf({
+          'apps.yml': apps,
+          'build.yml': gradleOnly,
+        }),
+        [
+          startsWith(
+            'build.yml, job apps lets apps.yml save the caches of the native '
+            'builds, but no job of build.yml deletes the entries that a newer '
+            'one replaced, of the keys that start with macOS-swiftpm-. Each '
+            'new entry',
+          ),
+        ],
+      );
+    });
+
+    test(
+        'finds the permission actions: write outside the job that deletes the '
+        'entries of the caches, and such a job with more permissions', () {
+      final writing = apps
+          .replaceFirst(
+            'permissions:\n  contents: read',
+            'permissions: write-all',
+          )
+          .replaceFirst(
+            '  android-start:\n    runs-on: ubuntu-latest\n',
+            '  android-start:\n    runs-on: ubuntu-latest\n'
+                '    permissions:\n      actions: write\n',
+          );
+      final more = build.replaceFirst(
+        '    permissions:\n      actions: write\n',
+        '    permissions:\n      actions: write\n      contents: read\n',
+      );
+      expect(
+        nativeCacheWriterProblemsOf({'apps.yml': writing, 'build.yml': more}),
+        [
+          equals(
+            'apps.yml has the permission actions: write, but deletes no entry '
+            'of the caches, the only job that needs it. The jobs that build '
+            'the apps run the code of their dependencies, which must not get a '
+            'token that can delete caches or start and cancel runs.',
+          ),
+          startsWith(
+            'apps.yml, job android-start has the permission actions: write, '
+            'but deletes no entry of the caches,',
+          ),
+          equals(
+            'build.yml, job native-caches deletes entries of the caches with '
+            'the permissions {actions: write, contents: read}: give it '
+            'actions: write, and nothing else.',
+          ),
+        ],
       );
     });
   });
@@ -3187,7 +3479,7 @@ jobs:
     expect(File('$root/$mavenCentralMirror').existsSync(), isTrue);
     expect(File('$root/$buildApk').existsSync(), isTrue);
     expect(
-      nativeCacheSaveProblemsOf({
+      nativeCacheWriterProblemsOf({
         for (final file in workflows)
           file.uri.pathSegments.last: file.readAsStringSync(),
       }),

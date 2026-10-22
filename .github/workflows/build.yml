@@ -136,14 +136,15 @@ jobs:
       # Firebase project, such as those of a new provider in the run of its
       # pull request into main; the nightly run finds them.
       register_firebase_apps: true
-      # Only the runs on main, of pushes and by hand, save the caches of
-      # Gradle and of Swift packages. A run of a pull request, or a run by
-      # hand on another branch, would save them for its own ref, where only
-      # its own later runs find them, so they would only duplicate those of
-      # main in the 10 GB of caches of the repository; it restores those of
-      # main. tools/workflow_apps_test.dart checks this.
-      save_gradle_cache: ${{ github.ref == 'refs/heads/main' }}
-      save_swiftpm_cache: ${{ github.ref == 'refs/heads/main' }}
+      # Only the runs on main, of pushes and by hand, write the caches of
+      # what Gradle and Swift Package Manager download, and the job Native
+      # caches below deletes the entries that they replaced. A run of a pull
+      # request, or a run by hand on another branch, would save them for its
+      # own ref, where only its own later runs find them; it restores those
+      # of main. The nightly run writes none: the entry of Gradle holds the
+      # engine of the pinned Flutter, which the runs of pull requests build
+      # with. tools/workflow_apps_test.dart checks this.
+      save_native_caches: ${{ github.ref == 'refs/heads/main' }}
       # The tests of the roles fail on the providers with a known bug, so a
       # change that makes a test of a role pass whatever the provider does
       # fails here.
@@ -182,6 +183,60 @@ jobs:
         if: ${{ always() && steps.dart.outcome == 'success' }}
         run: dart tools/test_annotations.dart
 
+  # Each run on main writes an entry of the cache of what Gradle downloads
+  # and of the cache of what Swift Package Manager downloads when it has
+  # none under the key of its app yet (the input save_native_caches above),
+  # and every job restores the newest entry of its platform. So this job
+  # deletes the other entries of each, which nothing needs any more: an
+  # entry of Gradle takes about 1.5 GB of the 10 GB of caches of the
+  # repository. It keeps the newest entry, whichever run saved it, so two
+  # runs on main at once leave the newer entry, and a run whose deletion
+  # failed leaves the entries to the next one. It runs after the jobs with
+  # Flutter, also when one of them failed, and its step only on main; in
+  # the other runs it does nothing, so that CI, which needs it, does not
+  # find it skipped. The permission to delete caches is the only one it
+  # has, and no other job has it: the jobs that build the apps run the code
+  # of their dependencies. A job of apps.yml could not ask for it either,
+  # since every workflow that calls apps.yml would then have to grant it.
+  native-caches:
+    name: Native caches
+    needs: apps
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+
+    steps:
+      - name: Delete the entries of the native caches that a newer one replaced
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The keys of the entries start with these, as the jobs of
+          # apps.yml save them, on Linux for Android and on macOS for iOS.
+          for prefix in Linux-gradle- macOS-swiftpm-; do
+            if ! entries="$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/actions/caches" \
+                -f key="$prefix" -f ref="$GITHUB_REF" -f sort=created_at -f direction=desc \
+                --jq '.actions_caches[] | "\(.id) \(.key)"')"; then
+              echo "::warning::The caches $prefix* could not be listed; the next run on main deletes those that a newer one replaced."
+              continue
+            fi
+            kept=""
+            while read -r id key; do
+              if [ -z "$id" ]; then
+                continue
+              elif [ -z "$kept" ]; then
+                kept="$key"
+                echo "Keeps $key, the newest entry."
+              elif gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/caches/$id" > /dev/null; then
+                echo "Deleted $key, which $kept replaced."
+              else
+                echo "::warning::The cache $key, which $kept replaced, could not be deleted; the next run on main tries again."
+              fi
+            done <<< "$entries"
+          done
+
   # One check for the ruleset of main to require, whose name stays the same
   # when jobs come and go. It needs every other job of this workflow, which
   # tools/build_workflow_test.dart checks, and fails when one of them failed
@@ -196,6 +251,7 @@ jobs:
       - checks
       - apps
       - windows-install
+      - native-caches
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2

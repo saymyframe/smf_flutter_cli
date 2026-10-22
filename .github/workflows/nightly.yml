@@ -57,13 +57,11 @@ jobs:
       macos_sha256: ${{ matrix.macos_sha256 }}
       windows_sha256: ${{ matrix.windows_sha256 }}
       macos_and_windows: ${{ matrix.macos_and_windows }}
-      # Only the job with the latest Flutter saves the caches of Gradle and
-      # of Swift packages, and only in a run on main, whose caches the runs
-      # of every branch find, not in a run by hand on another branch; the
-      # others restore them. tools/workflow_apps_test.dart checks that the
-      # workflows save them only on main.
-      save_gradle_cache: ${{ matrix.flutter == needs.versions.outputs.latest && github.ref == 'refs/heads/main' }}
-      save_swiftpm_cache: ${{ matrix.flutter == needs.versions.outputs.latest && github.ref == 'refs/heads/main' }}
+      # No save_native_caches: the jobs only restore the caches of what
+      # Gradle and Swift Package Manager download, which the runs of
+      # build.yml on main write with the pinned Flutter. A version of
+      # Flutter downloads the engine of its own on top of the entry of
+      # Gradle.
       # The jobs of the matrices with the latest Flutter check the apps with
       # every module of every combination of the providers of the roles that
       # take one, or of a 3-wise covering of more than 100, rather than of a
