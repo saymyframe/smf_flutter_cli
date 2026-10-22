@@ -92,6 +92,16 @@ List<(String, String)> _putInto(ContractResult result, SocketRef socket) => [
           ('${collected.origin}', contribution.entryKey!),
     ];
 
+/// The entry of [app]: the Dart file of `lib/` that declares the function
+/// `main`, which the provider of the app entry renders.
+String _entryOf(RenderedApp app) => [
+      for (final file in app.files.values)
+        if (file.path.startsWith('lib/') && file.path.endsWith('.dart'))
+          if (DartFileIndexer.index(file.path, file.text).declaration('main')
+              case IndexedDeclaration(kind: DeclarationKind.function))
+            file.path,
+    ].single;
+
 /// The section of the module in the README of the app.
 String _readmeSection() => const DartDefineModule()
     .contribute(ContractHarness.defaultContext)
@@ -362,7 +372,7 @@ void main() => print(
             'name': ContractHarness.defaultContext.appName,
             'request': 'launch',
             'type': 'dart',
-            'program': AppEntryRole.mainFile,
+            'program': _entryOf(app),
             'toolArgs': _toolArgumentsOf(result),
           },
         ],
@@ -394,7 +404,7 @@ void main() => print(
         },
         {
           'additionalArgs': _toolArgumentsOf(result).join(' '),
-          'filePath': '\$PROJECT_DIR\$/${AppEntryRole.mainFile}',
+          'filePath': '\$PROJECT_DIR\$/${_entryOf(app)}',
         },
       );
     });
