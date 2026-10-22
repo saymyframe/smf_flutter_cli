@@ -8,11 +8,11 @@
 // access is back, that there was nothing to restore, or that the restore
 // failed, for every reason of a failure and for an error of another kind,
 // with the words of the provider below it in debug mode, which the tests
-// run in. A screen reader reads the result as it comes. While a restore is
-// on its way, the entry shows a spinner and no result of an earlier
-// restore, and a second tap restores nothing more. On a small phone with a
-// large text size, the title and a long failure stay in the row of the
-// entry, in full.
+// run in. A screen reader reads each result as it comes. While a restore
+// is on its way, the entry shows a spinner and no result of an earlier
+// restore, a second tap restores nothing more, and once the restore ends
+// the spinner is gone. On a small phone with a large text size, the title
+// and a long failure stay in the row of the entry, in full.
 //
 // It knows only the two roles, and starts the app once, since the start-up
 // of an app may not run twice. The matrix writes setting.dart next to it,
@@ -22,7 +22,10 @@
 // the settings screen role do, and takes the service of the tests, which
 // scripts what a provider answers, from the files of the test of the
 // purchases role. Both of those tests run in every app that this one runs
-// in. Each expectation gives its reason.
+// in. Each expectation gives its reason. Where a spinner may show, the test
+// shows frames for a while rather than wait for the screen to settle, so
+// that a spinner that never stops fails the expectation about it rather
+// than time out.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -86,13 +89,13 @@ void main() {
     'language of the app, takes no second tap while a restore is on its '
     'way, and keeps its texts in its row on a small phone',
     (tester) async {
-      await openSettings(tester);
+      await openSettings(tester, settle: false);
       // The device asks for the first language of the app, which the app is
       // in then.
       final first = restoreTexts.keys.first;
       tester.platformDispatcher.localesTestValue = [Locale(first)];
       addTearDown(tester.platformDispatcher.clearLocalesTestValue);
-      await tester.pumpAndSettle();
+      await showFrames(tester);
 
       final entry = find.byType(restorePurchasesSetting);
       // The texts of the entry in that language.
@@ -159,6 +162,12 @@ void main() {
         reason: 'The settings screen shows the entry that restores purchases '
             'once.',
       );
+      expect(
+        spinner,
+        findsNothing,
+        reason: 'The entry restores nothing before a tap, so it shows no '
+            'spinner.',
+      );
       await inEachLanguage(
         (texts) => [texts.title],
         'its title and no result, since nothing was restored yet,',
@@ -174,7 +183,8 @@ void main() {
       // Taps the entry, as the user does, and returns the calls that the
       // tap made to the service. It waits in real time until the tap
       // reached the service, for three seconds at most, and a moment more
-      // for the restore to end, then lets the entry show what it found.
+      // for the restore to end, then shows frames while the entry shows
+      // what it found, and checks that the spinner is gone.
       Future<List<String>> tap() async {
         final before = scripted.calls.length;
         await inRealTime(tester, 'a tap on the entry', () async {
@@ -182,7 +192,12 @@ void main() {
           await _until(() => scripted.calls.length > before);
           await Future<void>.delayed(const Duration(milliseconds: 100));
         });
-        await tester.pumpAndSettle();
+        await showFrames(tester);
+        expect(
+          spinner,
+          findsNothing,
+          reason: 'Once the restore ends, the entry shows no spinner.',
+        );
         return scripted.calls.sublist(before);
       }
 
@@ -268,7 +283,7 @@ void main() {
         held.complete();
         await Future<void>.delayed(const Duration(milliseconds: 100));
       });
-      await tester.pumpAndSettle();
+      await showFrames(tester);
       expect(
         scripted.calls.sublist(beforeHeld),
         ['restore'],
