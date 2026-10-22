@@ -23,6 +23,7 @@ const List<Role> _roles = [
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
+  envRole,
 ];
 
 final RegExp _mustache = RegExp(r'\{\{\{?\s*([^}]*?)\s*\}?\}\}');
@@ -60,6 +61,7 @@ void main() {
       'settings screen role',
       'onboarding screen role',
       'theme role',
+      'env role',
     ]);
   });
 
@@ -166,6 +168,14 @@ void main() {
       'requires': {'preferences'},
       'uses': {'settings_screen', 'localization'},
     });
+    // The values of an app are the same whichever roles the app has: the
+    // template writes them into files of its own and the README, and code
+    // reads them from the class of the provider.
+    expect(shape(envRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': <String>{},
+    });
   });
 
   test('only the app entry is open to all modules', () {
@@ -213,6 +223,9 @@ void main() {
     final androidResource = RegExp(
       r'^android/app/src/main/res/[a-z]+/[a-z][a-z0-9_]*\.xml$',
     );
+    // The file of the values of the app, and the file of their keys, at
+    // its root, where the tools that read such a file look for it.
+    final valuesFile = RegExp(r'^\.env(?:\.example)?$');
     for (final role in _roles) {
       final interface = role.interface;
       for (final file in interface.files) {
@@ -223,6 +236,7 @@ void main() {
             matches(testFile),
             matches(rootFile),
             matches(androidResource),
+            matches(valuesFile),
           ),
           reason: file,
         );
@@ -267,6 +281,7 @@ void main() {
           'settings_screen',
           'onboarding_screen',
           'theme',
+          'env',
         ],
       );
     });
@@ -469,6 +484,7 @@ void main() {
         'text_active',
         'text_none',
         'text_failed',
+        'env_keys',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};

@@ -1,0 +1,204 @@
+part of '../env.dart';
+
+/// The code of a variable of a brick that reads a value of the app, with
+/// the getter of the key.
+final RegExp _readsKey = RegExp('^$_appEnv\\.([A-Za-z0-9_\$]+)\$');
+
+/// The problems of the data of the module of [input], which the module rule
+/// `env.keys` reports: those of its keys, a variable of its bricks that
+/// reads a key of another owner, and tool arguments from a module that does
+/// not provide the role, more than once, or with an argument that is not
+/// one line.
+///
+/// The template of the role checks the keys of the templates of roles.
+List<SmfIssue> _checkKeys(ModuleRuleInput<EnvData> input) {
+  final module = input.module;
+  final origin = ModuleOrigin(module.id);
+  final keys = [
+    for (final data in input.data)
+      if (data.value case final EnvKey key) key,
+  ];
+  final arguments = [
+    for (final data in input.data)
+      if (data.value case final EnvToolArguments given) given,
+  ];
+  final provides = module.provides.contains(envRole);
+  return [
+    for (final problem in _keyProblems(keys, module.id.value))
+      SmfIssue(problem, origin: origin),
+    ..._variableIssues(input, keys, origin),
+    if (arguments.isNotEmpty && !provides)
+      SmfIssue(
+        'The module gives the $envRole tool arguments, which only a provider '
+        'of the role gives.',
+        hint: 'Give the role the keys that your code reads instead.',
+        origin: origin,
+      ),
+    if (provides && arguments.length > 1)
+      SmfIssue(
+        'A provider of the $envRole gives it tool arguments at most once, but '
+        'the module gives them ${arguments.length} times.',
+        hint: 'Give all of them in one EnvToolArguments, in their order.',
+        origin: origin,
+      ),
+    for (final given in arguments)
+      for (final problem in given.problems()) SmfIssue(problem, origin: origin),
+  ];
+}
+
+/// The code of [value], a value of a [RoleVar]: a fragment or a string of
+/// code.
+String _codeOf(Object value) => value is Fragment ? value.code : '$value';
+
+/// The problems of the variables of the bricks of the module of [input]
+/// that read a value of the app, as those of [EnvRole.varsOf] do: one that
+/// reads a getter that none of [keys], the keys of the module, has.
+List<SmfIssue> _variableIssues(
+  ModuleRuleInput<EnvData> input,
+  List<EnvKey> keys,
+  ModuleOrigin origin,
+) {
+  final getters = {for (final key in keys) key.getter};
+  return [
+    for (final brick in input.contributions.whereType<BrickContribution>())
+      for (final MapEntry(key: name, value: variable) in brick.vars.entries)
+        if (variable case RoleVar(:final role, :final present)
+            when identical(role, envRole))
+          if (_readsKey.firstMatch(_codeOf(present))?[1] case final getter?
+              when !getters.contains(getter))
+            SmfIssue(
+              'The variable $name of the brick ${brick.bundle.name} reads '
+              '$_appEnv.$getter, but no key of the module has the getter '
+              '$getter.',
+              hint: 'Give the role the keys of the variables as data too, '
+                  'and make the variables with envRole.varsOf() from them.',
+              origin: origin,
+            ),
+  ];
+}
+
+/// The keys of the app that the provider of the role does not render: those
+/// for which the `AppEnv` of the provider declares no static getter of the
+/// name of their getter.
+///
+/// So no provider leaves out a key that a module gives the role, and the
+/// tests of the modules need not look into the files of any provider.
+/// Without the descriptor of a provider in [input], or without its
+/// `AppEnv`, which the check of the interface of the role reports, there is
+/// nothing to check.
+List<SmfIssue> _checkKeysRendered(StructuralRuleInput<EnvData> input) {
+  if (!input.modules.any((module) => module.provides.contains(envRole))) {
+    return const [];
+  }
+  const path = EnvRole.readerFile;
+  final declaration = input.files[path]?.declaration(_appEnv);
+  if (declaration == null) return const [];
+  bool declares(String getter) => declaration.members.any(
+        (member) =>
+            member.name == getter &&
+            member.isStatic &&
+            member.kind == MemberKind.getter,
+      );
+  return [
+    for (final key in envRole.keysIn(input.roleInput))
+      if (!declares(key.getter))
+        SmfIssue(
+          'The provider of the $envRole does not render the $key: $_appEnv '
+          'in $path declares no static getter ${key.getter}.',
+          hint: 'Declare a static String? getter for every key of '
+              'EnvRole.keysIn(), named by EnvKey.getter.',
+          origin: input.owners[path],
+          path: path,
+        ),
+  ];
+}
+
+/// Whether [target], the expression before a dot, is the class `AppEnv`, as
+/// code names it: on its own, or after the prefix of an import.
+bool _isAppEnv(String? target) =>
+    target != null && (target == _appEnv || target.endsWith('.$_appEnv'));
+
+/// Whether the code of [owner], whose descriptor is [module] if it is a
+/// module of the app, may read values of the app, so that the rule
+/// `env.key_access` looks at its files.
+///
+/// A module without the role among its roles, and the template of a role
+/// that neither requires nor uses the role, read none: the harness reports
+/// their import of [EnvRole.readerFile]. The provider of the role declares
+/// `AppEnv`. A module whose descriptor the app lacks has no roles to tell
+/// by.
+bool _readsKeys(ContributionOrigin owner, ModuleDescriptor? module) =>
+    switch (owner) {
+      ModuleOrigin() => module != null &&
+          module.roles.contains(envRole) &&
+          !module.provides.contains(envRole),
+      RoleTemplateOrigin(:final role) =>
+        identical(role, envRole) || role.visibleRoles.contains(envRole),
+      PipelineOrigin() => true,
+    };
+
+List<SmfIssue> _checkKeyAccess(StructuralRuleInput<EnvData> input) {
+  final byGetter = {
+    for (final key in envRole.keysIn(input.roleInput)) key.getter: key,
+  };
+  final issues = <SmfIssue>[];
+  for (final MapEntry(key: path, value: file) in input.files.entries) {
+    final generatedBy = input.owners[path];
+    if (generatedBy == null) continue;
+    final owner = _ownerOf(generatedBy);
+    final module = switch (owner) {
+      ModuleOrigin(:final module) => input.module(module),
+      _ => null,
+    };
+    if (!_readsKeys(owner, module)) continue;
+    final readable = {
+      owner,
+      for (final dependency in module?.dependsOn ?? const <ModuleId>{})
+        ModuleOrigin(dependency),
+    };
+    final own = module == null
+        ? 'its own keys'
+        : 'its own keys and those of the modules it depends on';
+    for (final access in file.memberAccesses) {
+      if (!_isAppEnv(access.target)) continue;
+      final read = '${access.target}.${access.name}';
+      final key = byGetter[access.name];
+      if (key == null) {
+        issues.add(
+          SmfIssue(
+            '$path reads $read, but no key of the app has the getter '
+            '${access.name}.',
+            hint: 'Give the role the key as data of its owner: the key '
+                'REVENUECAT_APPLE_KEY of the module revenuecat is read as '
+                '$_appEnv.revenuecatAppleKey.',
+            origin: owner,
+            path: path,
+          ),
+        );
+      } else if (!readable.contains(key.owner)) {
+        issues.add(
+          SmfIssue(
+            '$path reads $read, the $key, but ${_named(owner)} may only read '
+            '$own.',
+            hint: 'Give the role a key of your own.',
+            origin: owner,
+            path: path,
+          ),
+        );
+      }
+    }
+    for (final call in file.invocations) {
+      if (!_isAppEnv(call.target)) continue;
+      issues.add(
+        SmfIssue(
+          '$path calls ${call.target}.${call.name}(), but the values of the '
+          'app are getters, each named by the role.',
+          hint: 'Read a value as the getter of its key, without arguments.',
+          origin: owner,
+          path: path,
+        ),
+      );
+    }
+  }
+  return issues;
+}
