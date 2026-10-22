@@ -368,7 +368,10 @@ final class _PushTemplate extends _ServiceTemplate<RoleImplementation> {
   ///
   /// It may run again, so the variable is not final.
   @override
-  String _single(List<_Prefixed> all) {
+  String _single(
+    List<_Prefixed> all,
+    RoleHookInput<RoleImplementation> input,
+  ) {
     final (:implementation, :prefix) = all.single;
     final factory = implementation.factory.codeWith(prefix);
     final create = implementation.isAsync ? 'await $factory()' : '$factory()';

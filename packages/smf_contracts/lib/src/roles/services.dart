@@ -456,11 +456,11 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
         SocketContribution.code(
           implementations,
           Fragment(
-            single ? _single(all) : _many(all),
+            single ? _single(all, input) : _many(all),
             imports: [
               for (final entry in all)
                 entry.implementation.factory.import.withPrefix(entry.prefix),
-              if (!single) _foundation,
+              if (single) ..._singleImports(input) else _foundation,
             ],
           ),
         ),
@@ -468,6 +468,7 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
           SocketContribution.code(
             AppEntryRole.bootstrapPlatform,
             Fragment(code, imports: [import]),
+            when: _bootstrapWhen(input),
           ),
       ],
     );
@@ -478,10 +479,22 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
   String? bootstrap({required bool hasAsync}) =>
       hasAsync ? 'await $initFunction();' : null;
 
-  /// The code of the only implementation in [all]; see [render]. A role
-  /// that does more with its implementation than create it, such as the
-  /// preferences, renders it otherwise.
-  String _single(List<_Prefixed> all) {
+  /// The roles in the condition of the code of [bootstrap] in the app of
+  /// [input], each one that the app has: none, unless the start of the role
+  /// needs the start of a role that it only uses before it. The order of the
+  /// code of a socket follows the conditions of that code, so the code then
+  /// comes after the providers and the templates of those roles.
+  Set<Role> _bootstrapWhen(RoleHookInput<D> input) => const {};
+
+  /// The files that the code of [_single] in the app of [input] uses beyond
+  /// the file of the implementation, such as the file of a role that the
+  /// role uses: none, unless the role renders its implementation otherwise.
+  List<ImportRef> _singleImports(RoleHookInput<D> input) => const [];
+
+  /// The code of the only implementation in [all] in the app of [input];
+  /// see [render]. A role that does more with its implementation than
+  /// create it, such as the preferences, renders it otherwise.
+  String _single(List<_Prefixed> all, RoleHookInput<D> input) {
     final (:implementation, :prefix) = all.single;
     final factory = implementation.factory.codeWith(prefix);
     if (!implementation.isAsync) {
