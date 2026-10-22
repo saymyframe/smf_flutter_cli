@@ -325,10 +325,13 @@ enum AuthMode {
 /// `setUpAll`: a call made in the body of a widget test waits in the fake
 /// time of that body, and a start that runs in real time then never
 /// completes. The tests of a module whose guard asks for an account open
-/// the guard for the tests of the other modules this way. A test gives
-/// `appSession.start()` a service of its own to script what a provider
-/// answers, and creates an `AppSessionController` of its own to see
-/// another mode. A test that brings the user back to the app may go
+/// the guard for the tests of the other modules this way. Code may have
+/// read `appSession` first anywhere, even in the body of an earlier widget
+/// test: the first call made before the start waits for it in the zone the
+/// call was made in, and each later one waits for the call before it. A
+/// test gives `appSession.start()` a service of its own to script what a
+/// provider answers, and creates an `AppSessionController` of its own to
+/// see another mode. A test that brings the user back to the app may go
 /// through any state of the lifecycle: the session looks only at
 /// `AppLifecycleState.resumed`.
 final class AuthRole extends Role<AuthData> {

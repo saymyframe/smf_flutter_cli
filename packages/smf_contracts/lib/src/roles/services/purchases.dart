@@ -175,9 +175,12 @@ const purchasesRole = PurchasesRole._();
 /// `bootstrap()`, such as `plans().then(...)` that buys a plan, runs within
 /// the first start, so the app starts with premium access. A test makes
 /// such a call outside the body of a test, as in a `setUpAll`, as with the
-/// session of the [AuthRole]. A test that brings the user back to the app
-/// may go through any state of the lifecycle: the controller looks only at
-/// `AppLifecycleState.resumed`.
+/// session of the [AuthRole]. Code may have read `appPurchases` first
+/// anywhere, even in the body of an earlier widget test: the first call made
+/// before the start waits for it in the zone the call was made in, and each
+/// later one waits for the call before it. A test that brings the user back
+/// to the app may go through any state of the lifecycle: the controller
+/// looks only at `AppLifecycleState.resumed`.
 ///
 /// The mocks of the platform side of every provider, with which the tests
 /// of the apps run, keep to one convention, so that the tests of the role
