@@ -1,0 +1,10 @@
+name: paywall_bloc
+description: "The state of the paywall of an SMF app with BLoC: a Cubit for each screen, the screens that give their views its state, the Cubit with the access of the user for the widgets of the app, and the file that creates the Cubits with the purchases of the app."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags and the rendered sockets of its tags.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

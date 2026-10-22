@@ -1,0 +1,12 @@
+name: paywall_setting
+description: "The row of the entry of the subscription on the settings screen of an SMF app with a paywall."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: text_<name> for each text of the entry, the code that reads
+# it.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1
