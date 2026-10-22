@@ -959,12 +959,14 @@ ${condition == null ? '' : '        if: $condition\n'}        uses: SonarSource/
   });
 
   group('the job Native caches of build.yml', () {
-    /// The text of build.yml.
+    /// The text of build.yml, with the line breaks of the texts that the
+    /// tests replace in it: git checks it out with CRLF on Windows.
     String build() {
       final top = Process.runSync('git', ['rev-parse', '--show-toplevel']);
       expect(top.exitCode, 0, reason: '${top.stderr}');
       return File('${'${top.stdout}'.trim()}/.github/workflows/build.yml')
-          .readAsStringSync();
+          .readAsStringSync()
+          .replaceAll('\r\n', '\n');
     }
 
     /// [text] with [from] replaced by [to], which it must have.
