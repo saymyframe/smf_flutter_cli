@@ -16,9 +16,10 @@
 // While a purchase is on its way, the button spins, or is disabled with its
 // label in an app that asks for less motion, and nothing else takes a tap.
 // Plans that do not load show that they are not available, with Try again
-// and a note for the developer with the hint of the provider. The links to
-// the terms of use and to the privacy policy open the addresses of .env
-// outside the app.
+// and a note for the developer with the hint of the provider, also after a
+// restore there. The link to the terms of use opens its address of .env
+// outside the app; the privacy policy, whose key the matrix leaves empty, has
+// no link, and the note names its key.
 //
 // The test starts the app once, since the start-up of an app may not run
 // twice, and each expectation gives its reason.
@@ -62,6 +63,16 @@ bool _spins() => find
     )
     .evaluate()
     .isNotEmpty;
+
+/// Whether the link of the paywall that restores purchases takes a tap.
+bool _restoreTakesTap(WidgetTester tester) =>
+    tester
+        .widget<TextButton>(
+          find.descendant(
+              of: link('restore'), matching: find.byType(TextButton)),
+        )
+        .onPressed !=
+    null;
 
 /// Whether the button of the paywall takes a tap.
 bool _takesTap(WidgetTester tester) =>
@@ -109,9 +120,11 @@ void main() {
             'place.',
       );
       expect(
-        _takesTap(tester),
-        isFalse,
-        reason: 'While the plans load, there is nothing to buy.',
+        (_takesTap(tester), _restoreTakesTap(tester)),
+        (false, false),
+        reason: 'While the plans load, there is nothing to buy, and nothing '
+            'to restore, so that no plan comes in to be bought while a '
+            'restore is on its way.',
       );
       await inRealTime(tester, 'the plans', () async => plans.complete());
       await tester.pumpAndSettle();
@@ -170,7 +183,7 @@ void main() {
           find.text(
             '${texts['oneWeek']} ${texts['free']}, ${texts['then']} '
             r'$29.99'
-            ' ${texts['perYear']}',
+            '\u00A0${texts['perYear']!.replaceAll(' ', '\u00A0')}',
           ),
           findsOneWidget,
           reason: '$when, below the button the paywall tells what the plan '
@@ -201,24 +214,44 @@ void main() {
         reason: 'A plan paid once is bought, and is no subscription.',
       );
 
-      // The links open the addresses of .env outside the app.
-      for (final (name, address) in [
-        ('terms', AppEnv.paywallTermsUrl),
-        ('privacy', AppEnv.paywallPrivacyUrl),
-      ]) {
-        expect(
-          address,
-          isNotNull,
-          reason: 'The matrix gives the keys of the paywall addresses.',
-        );
-        await tester.tap(link(name));
-        await tester.pumpAndSettle();
-        expect(
-          links.opened.last,
-          '$address externalApplication',
-          reason: 'The link $name opens its address of .env outside the app.',
-        );
-      }
+      // The link to the terms of use opens its address of .env outside the
+      // app. The privacy policy has no address there, so the paywall has no
+      // link to it, and the note for the developer names its key.
+      final terms = AppEnv.paywallTermsUrl;
+      expect(
+        (terms != null, AppEnv.paywallPrivacyUrl),
+        (true, null),
+        reason: 'The matrix gives the terms of use an address of the tests, '
+            'and the privacy policy none.',
+      );
+      await tester.tap(link('terms'));
+      await tester.pumpAndSettle();
+      expect(
+        links.opened.last,
+        '$terms externalApplication',
+        reason: 'The link to the terms of use opens its address of .env '
+            'outside the app.',
+      );
+      expect(
+        link('privacy'),
+        findsNothing,
+        reason: 'A link whose address is empty in .env is left out.',
+      );
+      expect(
+        [
+          for (final key in ['PAYWALL_TERMS_URL', 'PAYWALL_PRIVACY_URL'])
+            find
+                .descendant(
+                  of: find.byType(DeveloperNote),
+                  matching: find.text(key),
+                )
+                .evaluate()
+                .length,
+        ],
+        [0, 1],
+        reason: 'In debug mode, the note for the developer names the key of '
+            '.env that is empty, and no other.',
+      );
 
       // A failed purchase.
       await tester.tap(planCards.at(0));
@@ -321,6 +354,24 @@ void main() {
         (1, 1),
         reason: 'In debug mode, a note for the developer shows the hint of '
             'the provider.',
+      );
+
+      // A restore there still tells why the plans did not load.
+      await tester.tap(link('restore'));
+      await tester.pumpAndSettle();
+      expect(
+        (
+          text('nothingToRestore').evaluate().length,
+          text('plansUnavailable').evaluate().length,
+          text('tryAgain').evaluate().length,
+          find.byType(PlanSkeleton).evaluate().length,
+          find.text('A key of the provider is missing.').evaluate().length,
+        ),
+        (1, 1, 1, 0, 1),
+        reason: 'A restore that finds nothing while the plans are not '
+            'available says so, and the paywall still shows that the plans '
+            'are not available, with Try again and the hint of the provider, '
+            'rather than grey cards as while the plans load.',
       );
       unset.plansFailure = null;
       await tester.tap(text('tryAgain'));

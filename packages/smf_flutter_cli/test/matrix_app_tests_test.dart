@@ -4452,7 +4452,8 @@ void main() {
 
   test(
       'the test of the paywall applies to the apps with the module, whatever '
-      'else they have, gives the keys of the module addresses in .env, '
+      'else they have, gives the terms of use an address in .env and the '
+      'privacy policy none, '
       'declares the mocks that buy a plan through the purchases of the app '
       'for the tests of every module of those apps, has no probe, and '
       'expects the screen that the app starts on, the settings screen with '
@@ -4484,7 +4485,7 @@ void main() {
         test.envValues!(app),
         {
           'PAYWALL_TERMS_URL': 'https://example.com/terms',
-          'PAYWALL_PRIVACY_URL': 'https://example.com/privacy',
+          'PAYWALL_PRIVACY_URL': '',
         },
         reason: app.name,
       );

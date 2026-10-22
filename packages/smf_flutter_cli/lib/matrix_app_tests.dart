@@ -427,7 +427,8 @@ Future<MatrixAppTests> smfAppTests() async {
       // intro offer, the button, what the plan costs after its trial and
       // the terms of the selected plan, the text of each failure, a busy
       // button, plans that are not available with a note for the developer,
-      // and the links to the addresses of .env (see _paywallLinksOf); the
+      // also after a restore there, the link to the address of .env and the
+      // key that has none (see _paywallLinksOf); the
       // screen of the subscription tells the plan and when it renews or
       // ends, opens the page of the store and closes once the access ends;
       // and the paywall fits a small phone with a large text size. For them
@@ -2395,11 +2396,12 @@ $texts};
 }
 
 /// The values that the test of the paywall module gives the keys of the
-/// module in .env, the same in every app: addresses of the terms of use and
-/// of the privacy policy, which the links of the paywall open.
+/// module in .env, the same in every app: an address of the terms of use,
+/// which its link opens, and none of the privacy policy, whose link the
+/// paywall then leaves out and whose key its note for the developer names.
 Map<String, String?> _paywallLinksOf(MatrixApp app) => {
       PaywallModule.termsKey.name: 'https://example.com/terms',
-      PaywallModule.privacyKey.name: 'https://example.com/privacy',
+      PaywallModule.privacyKey.name: '',
     };
 
 /// The path in an app of what the matrix writes for the tests of the

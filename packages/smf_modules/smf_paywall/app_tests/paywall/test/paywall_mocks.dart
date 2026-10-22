@@ -27,9 +27,13 @@ bool paywallIsUnderTest = false;
 /// file is one of the paywall itself.
 ///
 /// The purchases of the app have not started yet, so the calls wait for the
-/// start-up of the app, which is over once the plan is bought: the first
-/// frame of the app has premium access. A test file that never starts the
-/// app leaves the calls waiting, which harms nothing.
+/// first start of `appPurchases`, which is over once the plan is bought.
+/// That start is the one of the start-up of the app in every test of the
+/// app, so the first frame of the app has premium access. A test file that
+/// starts no purchases leaves the calls waiting, which harms nothing. One
+/// that starts `appPurchases` with a service of its own before any start-up
+/// would get the calls on that service, so such a file sets
+/// [paywallIsUnderTest] too.
 void grantPremium() {
   if (paywallIsUnderTest) return;
   unawaited(

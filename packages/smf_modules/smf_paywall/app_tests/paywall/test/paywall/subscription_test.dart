@@ -140,6 +140,12 @@ void main() {
           }
         }
         if (access.manageUrl != null) {
+          expect(
+            text('manageHint'),
+            findsOneWidget,
+            reason: 'With $name, the screen tells where the user cancels the '
+                'plan.',
+          );
           await tester.tap(text('manage'));
           await tester.pumpAndSettle();
           expect(
@@ -150,8 +156,11 @@ void main() {
           );
         } else {
           expect(
-            text('manage'),
-            findsNothing,
+            (
+              text('manage').evaluate().length,
+              text('manageHint').evaluate().length
+            ),
+            (0, 0),
             reason: 'A plan paid once has no page to manage in the store.',
           );
         }

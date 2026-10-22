@@ -4,14 +4,16 @@
 // the dark theme of the device, with a service of purchases of the test
 // (ScriptedPurchases).
 //
-// Nothing overflows. The close button is in sight without a scroll, and the
-// paywall scrolls to its links, which end above the inset at the bottom.
-// The letters of the cell of the app keep their size, since the cell is a
-// picture, and a price grows only by half. A screen reader reads the name
-// of the app with Premium as a header, each plan as one button of a group
-// of which one is selected, and a failure as a live region. In an app that
-// asks for less motion, the first frame of the paywall shows every part in
-// its place.
+// Nothing overflows. The close button is in sight without a scroll and once
+// the paywall scrolled to its links, which end above the inset at the
+// bottom. The letters of the cell of the app keep their size, since the cell
+// is a picture, a price grows only by half and is the largest text of its
+// plan, and a price stays on one line with what follows it. A screen reader
+// reads the name of the app with Premium as a header, each plan as one
+// button of a group of which one is selected, with its name, its price, its
+// intro offer and its badge, and a failure as a live region. In an app that
+// asks for less motion, the first frames of the paywall show every part in
+// its place, the plans too.
 //
 // The phone is that small only while the paywall is the only screen that
 // the app has built, so the test shows it in place of the stack, as the
@@ -48,6 +50,26 @@ void _useSmallPhone(WidgetTester tester) {
 /// The texts of the paywall on top, the last one that the app built.
 Finder _inPaywall(Finder matching) =>
     find.descendant(of: find.byType(PaywallScreen).last, matching: matching);
+
+/// The largest size at which [paragraph] draws a text, with the text size of
+/// the device.
+double _largestSizeOf(RenderParagraph paragraph) {
+  var largest = 0.0;
+  void visit(InlineSpan span, double? inherited) {
+    if (span is! TextSpan) return;
+    final size = span.style?.fontSize ?? inherited;
+    if (span.text != null && size != null) {
+      final shown = paragraph.textScaler.scale(size);
+      if (shown > largest) largest = shown;
+    }
+    for (final child in span.children ?? const <InlineSpan>[]) {
+      visit(child, size);
+    }
+  }
+
+  visit(paragraph.text, null);
+  return largest;
+}
 
 /// Checks that [shown], a text of the paywall on top with the text [text],
 /// keeps its words whole on the small phone: each word is on one line.
@@ -136,10 +158,17 @@ void main() {
             reason: '$when, the paywall scrolls to its links, which end '
                 'above the inset at the bottom.',
           );
+          expect(
+            _inPaywall(find.byTooltip(texts['close']!)).hitTestable(),
+            findsOneWidget,
+            reason: '$when, the close button stays in sight once the paywall '
+                'scrolled to its end.',
+          );
+          // The price and what follows it stay on one line.
           final afterOffer =
               '${texts['oneWeek']} ${texts['free']}, ${texts['then']} '
               r'$29.99'
-              ' ${texts['perYear']}';
+              '\u00A0${texts['perYear']!.replaceAll(' ', '\u00A0')}';
           await tester.scrollUntilVisible(
             _inPaywall(find.text(afterOffer)),
             100,
@@ -158,6 +187,48 @@ void main() {
               when: when,
             );
           }
+          await tester.scrollUntilVisible(
+            _inPaywall(planCards).first,
+            100,
+            scrollable: scrollable,
+          );
+          final card = _inPaywall(planCards).first;
+          final nameText = tester.renderObject<RenderParagraph>(
+            find.descendant(
+              of: find.descendant(
+                of: card,
+                matching: find.text(texts['planYearly']!),
+              ),
+              matching: find.byType(RichText),
+              matchRoot: true,
+            ),
+          );
+          expect(
+            nameText.textScaler.scale(10),
+            lessThanOrEqualTo(15),
+            reason: '$when, the name of a plan grows only by half, as its '
+                'price does, so that it is never larger than the price.',
+          );
+          final name = _largestSizeOf(nameText);
+          final price = _largestSizeOf(
+            tester.renderObject<RenderParagraph>(
+              find
+                  .descendant(
+                    of: card,
+                    matching: find.textContaining(
+                      r'$29.99',
+                      findRichText: true,
+                    ),
+                  )
+                  .first,
+            ),
+          );
+          expect(
+            name,
+            lessThanOrEqualTo(price),
+            reason: '$when, the price of a plan is its largest text: the name '
+                'is $name, the price $price.',
+          );
           final scale = MediaQuery.textScalerOf(
             tester.element(
               _inPaywall(
@@ -210,6 +281,10 @@ void main() {
       expect(
         tester.getSemantics(_inPaywall(planCards).first),
         isSemantics(
+          label: '${texts['planYearly']}, '
+              r'$29.99'
+              ' ${texts['perYear']}, ${texts['oneWeek']} ${texts['free']}, '
+              '${texts['bestValue']}',
           isButton: true,
           hasSelectedState: true,
           isSelected: true,
@@ -249,18 +324,26 @@ void main() {
       unawaited(
         root.push<void>(
           PageRouteBuilder<void>(
+            transitionDuration: Duration.zero,
             pageBuilder: (context, _, _) => const PaywallScreen(),
           ),
         ),
       );
-      await tester.pump();
-      await tester.pump();
+      // The first frames, in which the plans come in.
+      for (var frame = 0; frame < 3; frame++) {
+        await tester.pump();
+      }
+      expect(_inPaywall(planCards), findsNWidgets(3));
       expect(
         [
           for (final opacity in tester.widgetList<Opacity>(
             _inPaywall(find.byType(Opacity)),
           ))
             opacity.opacity,
+          for (final fade in tester.widgetList<FadeTransition>(
+            _inPaywall(find.byType(FadeTransition)),
+          ))
+            fade.opacity.value,
         ].where((opacity) => opacity < 1),
         isEmpty,
         reason: 'In an app that asks for less motion, the first frame of the '
