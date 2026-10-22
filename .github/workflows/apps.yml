@@ -910,8 +910,9 @@ jobs:
     name: macOS
     if: inputs.macos_and_windows
     runs-on: macos-26
-    # About 15 minutes.
-    timeout-minutes: 30
+    # About 20 minutes, and up to twice that on a slow runner: the same tests
+    # on the same image have taken 18 minutes and 29.
+    timeout-minutes: 45
     env: &macos_env
       FLUTTER_SHA256: ${{ inputs.macos_sha256 }}
       # The Xcode of the image that builds the apps.

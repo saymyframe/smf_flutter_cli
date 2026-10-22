@@ -62,9 +62,21 @@ String _pem(String label, String body) =>
 /// bits that googleapis_auth asks for, and its other numbers are made up, so
 /// the signatures made with it prove nothing. The token endpoint of the
 /// tests does not check them.
+///
+/// googleapis_auth signs with the Chinese remainder theorem and refuses a
+/// signature of 0, which is the signature of every block that both p and q
+/// divide. The block has a hash of the token, and the token the second in
+/// which it was made, so with small primes for both a run failed now and
+/// then. q is the prime 2^1279 - 1, above every block of a modulus of 1024
+/// bits, so the part of a signature for q is never 0, and nor is the
+/// signature.
 String _keyThatParses() {
-  // The lengths of DER, all below 256 here.
-  List<int> length(int count) => count < 128 ? [count] : [0x81, count];
+  // The lengths of DER, all below 65536 here.
+  List<int> length(int count) => switch (count) {
+        < 128 => [count],
+        < 256 => [0x81, count],
+        _ => [0x82, count >> 8, count & 0xff],
+      };
   List<int> integer(BigInt value) {
     final hex = value.toRadixString(16);
     final even = hex.length.isOdd ? '0$hex' : hex;
@@ -81,7 +93,10 @@ String _keyThatParses() {
     BigInt.zero,
     (BigInt.one << 1023) + BigInt.one,
     BigInt.from(65537),
-    for (final number in [3, 5, 7, 3, 3, 1]) BigInt.from(number),
+    BigInt.from(3),
+    BigInt.from(5),
+    (BigInt.one << 1279) - BigInt.one,
+    for (final number in [3, 3, 1]) BigInt.from(number),
   ];
   final body = [for (final number in numbers) ...integer(number)];
   return _pem(
