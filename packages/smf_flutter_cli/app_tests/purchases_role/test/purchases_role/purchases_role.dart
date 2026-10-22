@@ -241,11 +241,11 @@ final class ScriptedPurchases implements PurchasesService {
 
   String? _user;
 
-  /// Holds the next call [name], `access` or `purchase`, back until the
-  /// completer that it returns completes. A test holds a call in real time,
-  /// where it completes the completer too: the future of a completer
-  /// completes in the zone that created it, and the fake time of a widget
-  /// test runs nothing while the test waits for real time.
+  /// Holds the next call [name], such as `access`, `purchase` or `restore`,
+  /// back until the completer that it returns completes. A test holds a call
+  /// in real time, where it completes the completer too: the future of a
+  /// completer completes in the zone that created it, and the fake time of a
+  /// widget test runs nothing while the test waits for real time.
   Completer<void> hold(String name) => _held[name] = Completer<void>();
 
   /// Tells of [access], a change of the access of the user that the

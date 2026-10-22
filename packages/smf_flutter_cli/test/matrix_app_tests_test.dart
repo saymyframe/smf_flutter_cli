@@ -411,6 +411,9 @@ void main() {
     expect(named('purchases_role').roles, {purchasesRole});
     expect(named('purchases_session').roles, {purchasesRole});
     expect(named('purchases_device').roles, {purchasesRole});
+    // So is the test of the entry of the settings screen that the template
+    // of the role contributes, the same with every provider.
+    expect(named('purchases_setting').roles, {purchasesRole});
     // And the test of the provider of the purchases role.
     expect(named('revenuecat').roles, isEmpty);
     expect(named('router_walk').roles, {routerRole});
@@ -4568,6 +4571,231 @@ void main() {
           file.readAsStringSync(),
           isNot(contains("import '../")),
           reason: file.path,
+        );
+      }
+    });
+
+    test(
+        'the test of the entry that restores purchases applies to the apps '
+        'with the purchases role and the settings screen role, whichever '
+        'modules provide them, and gets the widget of the entry and its '
+        'texts in each language of the app from the data of the roles',
+        () async {
+      const settingFile = ImportRef.app(
+        'core/purchases/restore_purchases_setting.dart',
+      );
+      RoleData<Object> entry(TypeRef widget, ContributionOrigin origin) =>
+          settingsScreenRole
+              .data(SettingsEntry(widget: widget))
+              .withOrigin(origin);
+      final ofRole = entry(
+        const TypeRef('RestorePurchasesSetting', import: settingFile),
+        const RoleTemplateOrigin(purchasesRole),
+      );
+      // An entry of a module, whose widget has the same name, and one of
+      // the template of another role.
+      final others = [
+        entry(
+          const TypeRef(
+            'RestorePurchasesSetting',
+            import:
+                ImportRef.app('features/shop/restore_purchases_setting.dart'),
+          ),
+          const ModuleOrigin(ModuleId('shop')),
+        ),
+        entry(
+          const TypeRef(
+            'ThemeModeSetting',
+            import: ImportRef.app('core/theme/theme_mode_setting.dart'),
+          ),
+          const RoleTemplateOrigin(themeRole),
+        ),
+      ];
+      MatrixApp withEntries(
+        Set<Role> roles, {
+        List<RoleData<Object>>? entries,
+        List<String>? languages,
+      }) =>
+          MatrixApp(
+            'purchases',
+            const [ModuleId('purchases'), ModuleId('screen')],
+            hook: RoleHookRequest(
+              data: entries ?? [others.first, ofRole, others.last],
+              presentRoles: roles,
+              context: ContractHarness.defaultContext,
+              choices: {
+                if (languages != null)
+                  localizationRole: LocalizationChoice(languages),
+              },
+            ),
+          );
+      final test = await purchasesSettingAppTest();
+
+      expect(p.basename(test.directory), 'purchases_setting');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      // A test of the purchases role, whose template gives the entry.
+      expect(test.roles, {purchasesRole});
+      // A restore could ask for the store account on a device.
+      expect(test.startProbe, isNull);
+      expect(test.mocks, isNull);
+      expect(test.values, isNull);
+      expect(
+        test.appliesTo(withEntries({purchasesRole, settingsScreenRole})),
+        isTrue,
+      );
+      expect(test.appliesTo(withEntries({purchasesRole})), isFalse);
+      expect(test.appliesTo(withEntries({settingsScreenRole})), isFalse);
+      // The apps of the matrix of the CLI with both roles: the apps of
+      // revenuecat with a settings screen, and the apps with every module.
+      final registered = named('purchases_setting');
+      expect(registered.roles, test.roles);
+      final applies = [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ];
+      expect(applies, [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({purchasesRole, settingsScreenRole}))
+            app.name,
+      ]);
+      expect(applies, [
+        _rcAll,
+        _rcAuthSettings,
+        _rcSettingsL10n,
+        _rcSettings,
+        ..._everyModule,
+      ]);
+      for (final app in apps.where(registered.appliesTo)) {
+        // It opens the settings screen with the helper of the tests of the
+        // settings screen role, and takes the service of the test from the
+        // files of the test of the purchases role, which apply to each of
+        // its apps.
+        for (final helper in ['settings_screen_role', 'purchases_role']) {
+          expect(
+            named(helper).appliesTo(app),
+            isTrue,
+            reason: '$helper in ${app.name}',
+          );
+        }
+        final text =
+            registered.generatedFiles!(app, 'my_app')[purchasesSettingFile]!;
+        final (:index, :errors) =
+            DartFileIndexer.parse(purchasesSettingFile, text);
+        expect(errors, isEmpty, reason: app.name);
+        expect(
+          [
+            for (final import in index.imports)
+              '${import.uri} as ${import.prefix}',
+          ],
+          [
+            'package:my_app/core/purchases/restore_purchases_setting.dart as entry',
+          ],
+          reason: app.name,
+        );
+      }
+      expect('lib/${settingFile.uri}', PurchasesRole.settingFile);
+
+      final files = test.generatedFiles!(
+        withEntries(
+          {purchasesRole, settingsScreenRole, localizationRole},
+          languages: ['uk', 'en', 'de'],
+        ),
+        'my_app',
+      );
+      expect(files.keys, [purchasesSettingFile]);
+      final text = files[purchasesSettingFile]!;
+      final (:index, :errors) =
+          DartFileIndexer.parse(purchasesSettingFile, text);
+      expect(errors, isEmpty);
+      // The entry of the template of the role, not that of the module,
+      // whose widget has the same name.
+      expect(
+        [
+          for (final import in index.imports)
+            '${import.uri} as ${import.prefix}',
+        ],
+        [
+          'package:my_app/core/purchases/restore_purchases_setting.dart as entry',
+        ],
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['restorePurchasesSetting', 'RestoreTexts', 'restoreTexts'],
+      );
+      expect(
+        text,
+        contains(
+          'const Type restorePurchasesSetting = '
+          'entry.RestorePurchasesSetting;',
+        ),
+      );
+      // Each language of the app in its order, in English where the texts
+      // have no translation.
+      const english = r'''
+    title: 'Restore purchases',
+    active: 'Your premium access is back.',
+    none: 'No purchases to restore.',
+    failed: 'Couldn\'t restore purchases. Try again.',
+''';
+      expect(
+        text,
+        contains(
+          'const Map<String, RestoreTexts> restoreTexts = {\n'
+          "  'uk': (\n"
+          "    title: 'Відновити покупки',\n"
+          "    active: 'Преміум-доступ відновлено.',\n"
+          "    none: 'Немає покупок для відновлення.',\n"
+          "    failed: 'Не вдалося відновити покупки. Спробуйте ще раз.',\n"
+          '  ),\n'
+          "  'en': (\n"
+          '$english'
+          '  ),\n'
+          "  'de': (\n"
+          '$english'
+          '  ),\n'
+          '};\n',
+        ),
+      );
+      // An app without the localization role is in English alone.
+      expect(
+        test.generatedFiles!(
+          withEntries({purchasesRole, settingsScreenRole}),
+          'my_app',
+        )[purchasesSettingFile],
+        contains(
+          'const Map<String, RestoreTexts> restoreTexts = {\n'
+          "  'en': (\n"
+          '$english'
+          '  ),\n'
+          '};\n',
+        ),
+      );
+
+      // The test taps one entry: an app in which the template of the role
+      // gives the settings screen none, or two, is no app of the matrix.
+      for (final (entries, count) in [
+        (others, 0),
+        ([ofRole, ofRole], 2),
+      ]) {
+        expect(
+          () => test.generatedFiles!(
+            withEntries(
+              {purchasesRole, settingsScreenRole},
+              entries: entries,
+            ),
+            'my_app',
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'The template of the purchases role gives the settings screen '
+                  'of purchases $count entries, rather than the entry that '
+                  'restores purchases alone.',
+            ),
+          ),
+          reason: '$count',
         );
       }
     });

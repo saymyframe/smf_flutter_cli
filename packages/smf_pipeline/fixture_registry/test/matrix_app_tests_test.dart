@@ -948,6 +948,30 @@ void main() {
       'fake_purchases with localization',
       'fake_purchases',
     ]);
+    // The test of the entry that restores purchases is not registered for
+    // the fixtures: no app of their matrix has a settings screen next to the
+    // purchases, so it would apply to no app, which fails the run. Once an
+    // app of the matrix has both roles, such as with a fixture provider of
+    // the settings screen role, the test belongs among those of the
+    // fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'purchases_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({purchasesRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register purchasesSettingAppTest() in fixtureAppTests() for '
+          'these apps.',
+    );
   });
 
   test(
@@ -1970,6 +1994,7 @@ void main() {
           'revenuecat',
           'purchases_role',
           'purchases_session',
+          'purchases_setting',
         ]),
       );
       // The test of the purchases of the user of the device is for an app
@@ -2088,6 +2113,42 @@ void main() {
               reason: '$helper for $name in ${app.name}',
             );
           }
+        }
+      }
+    });
+
+    test(
+        'has the entry that restores purchases on the settings screen, which '
+        'the template of the purchases role gives it with the provider of '
+        'the CLI, and the test of the entry, a test of the purchases role, '
+        'applies to it with the helpers of the tests of the settings screen '
+        'and of the purchases', () {
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(purchasesRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('revenuecat')],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(everyModule.hook!)))
+            entry.file,
+        ],
+        contains(PurchasesRole.settingFile),
+      );
+      final test = ofSeveral('purchases_setting');
+      expect(test.roles, {purchasesRole});
+      expect(test.appliesTo(everyModule), isTrue);
+      for (final app in matrix.where(test.appliesTo)) {
+        for (final helper in ['settings_screen_role', 'purchases_role']) {
+          expect(
+            ofSeveral(helper).appliesTo(app),
+            isTrue,
+            reason: '$helper in ${app.name}',
+          );
         }
       }
     });
