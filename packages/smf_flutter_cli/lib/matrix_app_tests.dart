@@ -1269,8 +1269,9 @@ Map<String, String> _pushValuesOf(MatrixApp app) => {'push_owner': pushRole.id};
 ///   test: the offer has at least one plan, each with an id of its own, a
 ///   title, a price in a currency and periods of one unit or more; a fresh
 ///   user who buys a plan has premium access as the plan gives it, which the
-///   listeners hear of once and a restore gives; and the purchases of each
-///   user stay apart;
+///   listeners hear of once, with no other change right after it, and a
+///   restore gives; a fresh user who restores gets what the device bought;
+///   and the purchases of each user stay apart;
 /// - the next start, `initPurchases()` again, gives a user the premium
 ///   access that the user bought.
 ///
@@ -1302,10 +1303,13 @@ Future<MatrixAppTest> purchasesRoleAppTest({
 /// in its `app_tests/purchases_session`, for the apps with the purchases
 /// role and the auth role, whichever modules provide them, that [among]
 /// accepts, or all of them, in each mode of the auth role: a user without
-/// an account who buys a plan keeps the premium access after a sign-up, and
+/// an account who buys a plan keeps the premium access after a sign-up;
 /// after a sign-out the next user of the device has none of the purchases
 /// of the user who signed out, whose account has them again after a
-/// sign-in.
+/// sign-in; the user without an account keeps what it bought at the next
+/// start; and a sign-in to an account that exists already leaves the
+/// purchases with the user of the device, while the next user of the device
+/// after that account signs out has none of them.
 ///
 /// It is a test of the purchases role, whose template makes `appPurchases`
 /// follow the session of the app, and whose contract says whose purchases
@@ -1322,6 +1326,28 @@ Future<MatrixAppTest> purchasesSessionAppTest({
       appliesTo: (app) =>
           app.hook!.presentRoles.containsAll(const [purchasesRole, authRole]) &&
           (among?.call(app) ?? true),
+      roles: {purchasesRole},
+    );
+
+/// The test of the purchases of the user of the device that the CLI keeps in
+/// its `app_tests/purchases_device`, for the apps with the purchases role and
+/// without the auth role, whichever module provides the purchases: the next
+/// start of the app, `initPurchases()` again, gives the user of the device
+/// the premium access that it bought, which the device keeps with its user
+/// from one launch to the next.
+///
+/// It is a test of the purchases role, for the apps whose purchases belong
+/// to the user of the device alone; the test of the purchases of the users
+/// of the session ([purchasesSessionAppTest]) checks the user of the device
+/// in the apps with sign-in. It has helpers of its own, since the test of
+/// the role need not run in its apps, and no probe for the start check: a
+/// purchase would show the sheet of the store on a device.
+Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_device',
+      appliesTo: (app) {
+        final roles = app.hook!.presentRoles;
+        return roles.contains(purchasesRole) && !roles.contains(authRole);
+      },
       roles: {purchasesRole},
     );
 

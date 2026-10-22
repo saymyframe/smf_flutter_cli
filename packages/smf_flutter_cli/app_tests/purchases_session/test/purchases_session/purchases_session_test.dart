@@ -5,9 +5,14 @@
 // an account who buys a plan keeps the premium access after a sign-up: in
 // the modes required and guest the new account takes over the purchases of
 // the user of the device, and in the mode anonymous it keeps the id of the
-// anonymous user who bought. And after a sign-out, the next user of the
+// anonymous user who bought. After a sign-out, the next user of the
 // device has none of the purchases of the user who signed out, whose
-// account has them again after a sign-in.
+// account has them again after a sign-in. The user without an account keeps
+// what it bought at the next start of the app: the user of the device in
+// the modes required and guest, and the anonymous user in the mode
+// anonymous. And a sign-in to an account that exists already leaves the
+// purchases with the user of the device, while the next user of the device
+// after that account signs out is a new one, with nothing bought.
 //
 // It knows only the two roles, and reads the mode of the app from authMode.
 // The start-up of the app runs first, as on a device, since it starts the
@@ -80,6 +85,9 @@ Future<Object?> _buy(WidgetTester tester) async {
   await inRealTime(tester, 'buying a plan', () async {
     final plans = await appPurchases.plans();
     failure = await errorOf(() => appPurchases.purchase(plans.first));
+    // A change of the access that the provider tells of a moment later
+    // shows too.
+    await aMoment();
   });
   return failure;
 }
@@ -188,6 +196,87 @@ void main() {
         (true, bought),
         reason: 'The purchases of an account stay with it: a sign-in to the '
             'account gives its premium access back.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'the user without an account keeps what it bought at the next start of '
+    'the app, in every mode',
+    (tester) async {
+      await startUp(tester);
+      await _newUserOfDevice(tester);
+      final failure = await _buy(tester);
+      final bought = describe(appPurchases.value);
+      await inRealTime(tester, 'initPurchases()', initPurchases);
+      final next = describe(appPurchases.value);
+
+      expect(
+        next,
+        bought,
+        reason: 'The store keeps what the user without an account bought, and '
+            'the device keeps that user from one launch of the app to the '
+            'next, so the next start has its premium access: the user of the '
+            'device in the modes required and guest, and the anonymous user '
+            'in the mode anonymous.',
+      );
+      expect(
+        (failure, bought.startsWith('premium access')),
+        (null, true),
+        reason: 'A purchase by a user without premium access succeeds, and '
+            'gives that user premium access.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'a sign-in to an account that exists already leaves the purchases with '
+    'the user of the device, and the next user of the device after a '
+    'sign-out of that account has none of them',
+    (tester) async {
+      await startUp(tester);
+      await _newUserOfDevice(tester);
+      final email = _addressOf('existing');
+      await _step(
+        tester,
+        'a sign-up',
+        () => appSession.signUp(email: email, password: _password),
+      );
+      await _step(tester, 'a sign-out', appSession.signOut);
+      final failure = await _buy(tester);
+      final bought = describe(appPurchases.value);
+      final signIn = await _step(
+        tester,
+        'a sign-in',
+        () => appSession.signIn(email: email, password: _password),
+      );
+      final ofAccount = describe(appPurchases.value);
+      await _step(tester, 'the sign-out of the account', appSession.signOut);
+      final ofNextUser = describe(appPurchases.value);
+
+      expect(
+        ofNextUser,
+        'no access',
+        reason: 'After the sign-out of an account, the next user of the device '
+            'is a new one, with nothing bought, and not the user of the '
+            'device who bought before the sign-in, whose purchases come back '
+            'only through a restore. In the mode anonymous, so is the next '
+            'anonymous user.',
+      );
+      expect(
+        ofAccount,
+        'no access',
+        reason: 'A sign-in to an account that exists already leaves the '
+            'purchases with the user of the device, or in the mode anonymous '
+            'with the anonymous user who bought.',
+      );
+      expect(
+        (failure, signIn, bought.startsWith('premium access')),
+        (null, null, true),
+        reason: 'A purchase by a user without premium access succeeds, and so '
+            'does a sign-in.',
       );
     },
     timeout: timeout,

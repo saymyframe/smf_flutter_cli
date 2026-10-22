@@ -4392,6 +4392,40 @@ void main() {
         isFalse,
       );
     });
+
+    test(
+        'the test of the purchases of the user of the device applies to the '
+        'apps with the purchases role and without the auth role, whichever '
+        'module provides the purchases, with helpers of its own', () async {
+      final test = await purchasesDeviceAppTest();
+
+      expect(p.basename(test.directory), 'purchases_device');
+      expect(test.roles, {purchasesRole});
+      expect(test.appliesTo(appWith({purchasesRole})), isTrue);
+      expect(test.appliesTo(appWith({purchasesRole, authRole})), isFalse);
+      expect(test.appliesTo(appWith({authRole})), isFalse);
+      expect(test.values, isNull);
+      expect(test.generatedFiles, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      expect(
+        appTests.tests.map((test) => p.basename(test.directory)),
+        isNot(contains('purchases_device')),
+      );
+      // It imports no file of another test, which need not run in its apps.
+      final files = Directory(test.directory)
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'));
+      expect(files, isNotEmpty);
+      for (final file in files) {
+        expect(
+          file.readAsStringSync(),
+          isNot(contains("import '../")),
+          reason: file.path,
+        );
+      }
+    });
   });
 
   test(
