@@ -3,6 +3,9 @@ library;
 
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
@@ -62,6 +65,26 @@ Set<String> _codeOf(String markdown) => {
       ))
         match[1]!,
     };
+
+/// The calls of the function [name] in [node].
+List<MethodInvocation> _callsOf(String name, AstNode node) {
+  final calls = <MethodInvocation>[];
+  node.accept(_Calls(name, calls));
+  return calls;
+}
+
+final class _Calls extends RecursiveAstVisitor<void> {
+  _Calls(this._name, this._calls);
+
+  final String _name;
+  final List<MethodInvocation> _calls;
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.methodName.name == _name) _calls.add(node);
+    super.visitMethodInvocation(node);
+  }
+}
 
 /// Runs the service of the module on the stand-in for purchases_flutter
 /// and sends back, for each step, what reached RevenueCat and what the
@@ -446,6 +469,36 @@ void main() {
               file.path,
         ],
         [serviceFile],
+      );
+    });
+
+    test(
+        'creates the service with the key that revenueCatKey chooses for the '
+        'platform of the app, in a debug build only while kDebugMode is true: '
+        'iOS compiles a profile build without DEBUG, and RevenueCat stops '
+        'such a build that is configured with the key of the Test Store', () {
+      final unit = parseString(content: app.files[serviceFile]!.text).unit;
+      final factory = unit.declarations
+          .whereType<FunctionDeclaration>()
+          .singleWhere(
+            (declaration) =>
+                declaration.name.lexeme == 'createRevenueCatPurchasesService',
+          );
+      final call = _callsOf('revenueCatKey', factory).single;
+
+      expect(
+        {
+          for (final argument
+              in call.argumentList.arguments.whereType<NamedArgument>())
+            argument.name.lexeme: argument.argumentExpression.toSource(),
+        },
+        {
+          'platform': 'defaultTargetPlatform',
+          'debug': 'kDebugMode',
+          'apple': 'AppEnv.revenuecatAppleKey',
+          'google': 'AppEnv.revenuecatGoogleKey',
+          'test': 'AppEnv.revenuecatTestKey',
+        },
       );
     });
 
