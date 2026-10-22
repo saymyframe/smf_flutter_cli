@@ -477,6 +477,12 @@ Future<MatrixAppTests> smfAppTests() async {
       // The purchases of the user of the device at the next start, in the
       // apps with the purchases role and without the auth role.
       await purchasesDeviceAppTest(),
+      // The entry that restores purchases on the settings screen of the
+      // apps with the purchases role and the settings screen role,
+      // whichever modules provide them: a tap restores once and shows what
+      // the restore found in the language of the app, and the entry takes
+      // no second tap while a restore is on its way.
+      await purchasesSettingAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -1490,6 +1496,129 @@ typedef AppKey = ({String name, String getter, String? Function() read});
 /// The keys of the app, in the order of the env role.
 final List<AppKey> appKeys = [
 $keys];
+''',
+  };
+}
+
+/// The test of the entry that restores purchases on the settings screen,
+/// which the template of the purchases role contributes, that the CLI keeps
+/// in its `app_tests/purchases_setting`, for the apps with the purchases
+/// role and the settings screen role, whichever modules provide them. Over
+/// a service of purchases of the test that scripts what a provider answers:
+/// - the settings screen shows the entry once, with its title and no result
+///   before a restore, in each language of the app;
+/// - a tap restores once, and the entry shows what the restore found: that
+///   the premium access is back, that there was nothing to restore, or that
+///   the restore failed, for every reason of a failure and for an error of
+///   another kind, with the words of the provider below it in debug mode;
+///   a screen reader reads the result as it comes;
+/// - while a restore is on its way, the entry shows a spinner and no result
+///   of an earlier restore, and a second tap restores nothing more;
+/// - on a small phone with a large text size, the title and a long failure
+///   stay in the row of the entry, in full.
+///
+/// The test knows only the two roles. The matrix writes the type of the
+/// widget of the entry for it into [purchasesSettingFile], from the entries
+/// of the settings screen role of the app, with the texts of the entry in
+/// each language of the app, from the localization role. It opens the
+/// settings screen with the helper of the tests of the settings screen
+/// role, and takes the service of the test from the files of the test of
+/// the purchases role ([purchasesRoleAppTest]), which runs in every app that
+/// this test runs in. It has no probe for the start check: a restore could
+/// ask for the store account on a device, and the walk of the routes goes
+/// to the settings screen there.
+Future<MatrixAppTest> purchasesSettingAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_setting',
+      appliesTo: (app) => app.hook!.presentRoles
+          .containsAll(const [purchasesRole, settingsScreenRole]),
+      generatedFiles: _purchasesSettingOf,
+      roles: {purchasesRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the entry
+/// that restores purchases on the settings screen:
+/// `restorePurchasesSetting`, the type of the widget of the entry that the
+/// template of the purchases role gives the settings screen role, and
+/// `restoreTexts`, the texts of the entry in each language of the app, by
+/// the code of the language: its title ([PurchasesRole.restoreTitle]) and
+/// what it shows when a restore found premium access, when it found
+/// nothing and when it failed ([PurchasesRole.restoreActive],
+/// [PurchasesRole.restoreNone] and [PurchasesRole.restoreFailed]). The
+/// languages are those of the localization role of the app
+/// ([LocalizationRole.localesIn]), in its order, and English alone in an
+/// app without the role, whose entry has the English texts.
+const purchasesSettingFile = 'test/purchases_setting/setting.dart';
+
+/// The file at [purchasesSettingFile] of [app], an app of the matrix with
+/// the purchases role and the settings screen role, whose package is
+/// [packageName].
+///
+/// It imports the file of the entry with the prefix `entry`. A text without
+/// a translation into a language of the app is the English one there, as
+/// the localization role says of the texts of an app. Throws a
+/// [StateError] if the template of the purchases role gives the settings
+/// screen no entry or more than one: the test taps one entry.
+Map<String, String> _purchasesSettingOf(MatrixApp app, String packageName) {
+  final hook = app.hook!;
+  final entries = [
+    for (final RoleData(:value, :origin)
+        in settingsScreenRole.hookInput(hook).data)
+      if (value is SettingsEntry &&
+          origin == const RoleTemplateOrigin(purchasesRole))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The template of the $purchasesRole gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry that '
+      'restores purchases alone.',
+    );
+  }
+  final widget = entries.single.widget;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final texts = StringBuffer();
+  for (final language in languages) {
+    texts.writeln('  ${SmfNames.dartString(language)}: (');
+    for (final (field, text) in const [
+      ('title', PurchasesRole.restoreTitle),
+      ('active', PurchasesRole.restoreActive),
+      ('none', PurchasesRole.restoreNone),
+      ('failed', PurchasesRole.restoreFailed),
+    ]) {
+      final value = SmfNames.dartString(text.textIn(language) ?? text.en);
+      texts.writeln('    $field: $value,');
+    }
+    texts.writeln('  ),');
+  }
+  return {
+    purchasesSettingFile: '''
+// The entry that restores purchases on the settings screen and its texts,
+// which the matrix of SMF writes from the data of the settings screen role
+// and of the localization role of the app for the test of the entry, in
+// test/purchases_setting.
+import '${widget.import!.resolveUri(packageName)}' as entry;
+
+/// The type of the widget of the entry that restores purchases, an entry of
+/// the settings screen.
+const Type restorePurchasesSetting = ${widget.codeWith('entry')};
+
+/// The texts of the entry in one language: its title, and what it shows
+/// when a restore found premium access, when it found nothing and when it
+/// failed.
+typedef RestoreTexts = ({
+  String title,
+  String active,
+  String none,
+  String failed,
+});
+
+/// The texts of the entry by the code of each language of the app, the first
+/// of which the app uses when the device asks for none of them. An app
+/// without the localization role has the English texts alone.
+const Map<String, RestoreTexts> restoreTexts = {
+$texts};
 ''',
   };
 }
