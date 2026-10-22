@@ -67,10 +67,10 @@ const onboardingScreenRole = OnboardingScreenRole._();
 /// `Navigator.of(context, rootNavigator: true)`, and its future completes
 /// once that route is popped. Such a route stays over the onboarding while
 /// the guards of the routes notify, also when one of them starts or stops
-/// allowing, as long as the router keeps the page below it, so neither the
+/// allowing, as long as the router keeps the page below it: neither the
 /// router nor the onboarding takes it away for a notification. A guard
 /// that keeps the user from the page below it, such as a gate that stops
-/// allowing, takes it away with that page.
+/// allowing, takes the route away with that page.
 ///
 /// The contract harness checks the functions of the steps (the rule
 /// `onboarding_screen.step_functions`) and that the provider reads the
