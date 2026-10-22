@@ -3760,7 +3760,14 @@ const String _logo = 'lib/core/google_sign_in/assets/google_logo.png';
 
 /// The start of google_sign_in, which [googleCredential] waits for: the
 /// package is started once, before its first sign-in.
-Future<void>? _started;
+Future<void>? _start;
+
+/// Whether [_start] completed. A call after that does not wait for it
+/// again: a future that completed lets each call that awaits it go on in a
+/// microtask of the zone that started it, which may run none any more, as
+/// the fake time of a widget test that is over before a later test signs in
+/// in real time.
+bool _started = false;
 
 /// Asks Google for a credential with the sheet of Google sign-in, and
 /// returns it, or `null` when the user closed the sheet.
@@ -3780,7 +3787,10 @@ Future<void>? _started;
 Future<SignInCredential?> googleCredential() async {
   final GoogleSignInAccount account;
   try {
-    await (_started ??= GoogleSignIn.instance.initialize());
+    if (!_started) {
+      await (_start ??= GoogleSignIn.instance.initialize());
+      _started = true;
+    }
     account = await GoogleSignIn.instance.authenticate();
   } on GoogleSignInException catch (error) {
     switch (error.code) {
