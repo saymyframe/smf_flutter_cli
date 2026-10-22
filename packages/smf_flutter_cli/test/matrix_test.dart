@@ -1518,11 +1518,13 @@ Type type() => Types;
     late List<String> log;
     late List<List<String>> created;
     late List<String> tested;
+    late List<MatrixEnv?> testedWith;
 
     setUp(() {
       log = [];
       created = [];
       tested = [];
+      testedWith = [];
     });
 
     Future<int> run({
@@ -1537,6 +1539,7 @@ Type type() => Types;
       Set<String>? only,
       bool everyModule = false,
       EveryModuleSelection everyModuleApps = EveryModuleCombinations.all,
+      MatrixEnv? env,
     }) =>
         runMatrix(
           modules,
@@ -1547,6 +1550,7 @@ Type type() => Types;
             everyModule: everyModule,
             everyModuleApps: everyModuleApps,
           ),
+          env: env,
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {
@@ -1564,11 +1568,12 @@ Type type() => Types;
               return createCode;
             },
             analyze: (directory) async => (analyzeCode, 'Analyzed $directory'),
-            test: (generated, app, tests) async {
+            test: (generated, app, tests, {env}) async {
               tested.add(
                 '${generated.name} (${app.name}): '
                 '${[for (final test in tests) test.directory].join(', ')}',
               );
+              testedWith.add(env);
               return (testCode, 'Tested ${generated.path}');
             },
           ),
@@ -1668,6 +1673,17 @@ Type type() => Types;
         'app_1 (flutter_core (flutter_core)): its tests failed with the exit '
         'code 2.',
       );
+    });
+
+    test(
+        'gives the tests of each app the values of the apps of the run, for '
+        'the file of the values and the arguments of flutter test', () async {
+      final core = MatrixAppTest('/tests/core', appliesTo: (app) => true);
+      final env = MatrixEnv(file: '.values', toolArguments: (app) => []);
+
+      expect(await run(appTests: [core], env: env), 0);
+      expect(await run(appTests: [core]), 0);
+      expect(testedWith, [same(env), isNull]);
     });
 
     test('checks only the apps it is given, which keep their numbers',
@@ -1990,6 +2006,12 @@ Type type() => Types;
             'kind': const {'flutter_core': 'the app entry alone'}[app.name]!,
           },
         );
+        // The values that the tests give an app, by its name.
+        final envValues = MatrixAppTest(
+          '/tests/env',
+          appliesTo: hasDoors,
+          envValues: (app) => {'DOORS_OF': app.name},
+        );
         // The value of the option, or else the mode: neither alone changes
         // what the test gets, since an app of a mode has both.
         final either = MatrixAppTest(
@@ -2004,7 +2026,7 @@ Type type() => Types;
         expect(
           await run(
             modules: doorsOfWood,
-            appTests: [values, files, comment, lookup, either],
+            appTests: [values, files, comment, lookup, envValues, either],
           ),
           1,
         );
@@ -2035,6 +2057,18 @@ Type type() => Types;
             byCase('/tests/comment', theModes, 'apply otherwise', ofModes),
           ),
           equals(byCase('/tests/lookup', theName, 'fail', 'flutter_core')),
+          equals(
+            byCase(
+              '/tests/env',
+              theName,
+              'give the app other values',
+              'lock, doors by lock --access=guests, doors by lock '
+                  '--access=anyone, every module (oak), every module (pine), '
+                  'every module (oak) --access=guests, every module (oak) '
+                  '--access=anyone, every module (pine) --access=guests, every '
+                  'module (pine) --access=anyone',
+            ),
+          ),
           equals(
             byCase(
               '/tests/either',
@@ -2068,10 +2102,11 @@ Type type() => Types;
       /// provider [id] apart by its id in the apps [names].
       String byId(String id, String names) =>
           'The tests of /tests/state check the state management role, but '
-          'select their apps, take the values of their files or generate '
-          'files by the id of $id, which provides it: with another module in '
-          'its place, they would apply otherwise, or get other values or '
-          'files, in these apps of the matrix: $names. A test of a role takes '
+          'select their apps, take the values of their files, generate files '
+          'or give the app values by the id of $id, which provides it: with '
+          'another module in its place, they would apply otherwise, or get '
+          'or give other values or files, in these apps of the matrix: '
+          '$names. A test of a role takes '
           'what it needs of the providers of the role from the roles of the '
           'app (MatrixApp.hook), such as whether the app has the role '
           '(presentRoles), so that a new provider of the role gets the test '
@@ -2186,6 +2221,21 @@ Type type() => Types;
         );
         expect(await run(modules: modules, appTests: [files]), 1);
         expect(problems(), [equals(byId('riverpod', 'riverpod'))]);
+        log.clear();
+
+        // Values that the tests give the app by the id of a provider.
+        final valuesOfApp = MatrixAppTest(
+          '/tests/state',
+          appliesTo: (app) =>
+              app.hook!.presentRoles.contains(stateManagementRole),
+          envValues: (app) => {
+            'STATE_MANAGER':
+                app.modules.contains(BlocModule.id) ? 'bloc' : null,
+          },
+          roles: {stateManagementRole},
+        );
+        expect(await run(modules: modules, appTests: [valuesOfApp]), 1);
+        expect(problems(), [equals(byId('bloc', 'bloc'))]);
       });
 
       test(
@@ -3181,6 +3231,307 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       expect(output, contains('keep {{name}} in test/core_test.dart'));
       expect(commands, isEmpty);
     });
+
+    group('with values of the apps', () {
+      /// The file of the values of the app.
+      const path = '/apps/app_1/.values';
+
+      /// The file of the values as the role writes it: a comment at the
+      /// top, and each key under a comment, without a value.
+      const written = '# The values of the app.\n'
+          '#\n'
+          '# Write a value as it is, or in double quotes.\n'
+          '\n'
+          '# The key of the shop.\n'
+          'SHOP_KEY=\n'
+          '\n'
+          '# The page of the terms.\n'
+          'SHOP_TERMS=\n'
+          '\n'
+          '# A text of the shop.\n'
+          'SHOP_TEXT=\n'
+          '\n'
+          '# The address of the feed.\n'
+          'FEED_URL=\n';
+
+      /// How the app gets its values: from [path], with two arguments of
+      /// `flutter test` that name the app.
+      final env = MatrixEnv(
+        file: '.values',
+        toolArguments: (app) => ['--values=.values', '--of=${app.name}'],
+      );
+
+      /// The tests of the shop, which give the values of [shop] to every
+      /// app.
+      MatrixAppTest shopTests(Map<String, String?> shop) => MatrixAppTest(
+            '/tests/core',
+            appliesTo: (app) => true,
+            envValues: (app) => shop,
+          );
+
+      /// The tests of the feed, without files, which give the values of
+      /// [feed] to every app.
+      MatrixAppTest feedTests(Map<String, String?> feed) => MatrixAppTest(
+            '/tests/feed',
+            appliesTo: (app) => true,
+            envValues: (app) => feed,
+          );
+
+      Future<(int, String)> runWith(
+        List<MatrixAppTest> tests, {
+        MatrixEnv? withEnv,
+      }) =>
+          runAppTests(
+            generated,
+            app,
+            tests,
+            env: withEnv,
+            fileSystem: fileSystem,
+            flutter: (arguments, directory) async {
+              final command = arguments.join(' ');
+              commands.add('$directory: $command');
+              return (0, '[$command]');
+            },
+          );
+
+      setUp(() {
+        fileSystem.file(path)
+          ..createSync(recursive: true)
+          ..writeAsStringSync(written);
+        fileSystem.directory('/tests/feed').createSync(recursive: true);
+      });
+
+      test(
+          'writes the values of the tests into the lines of their keys, as '
+          'they are or in double quotes, removes the line of a key whose '
+          'value is null, keeps every other line, and runs flutter test '
+          'with the tool arguments of the app', () async {
+        final (code, output) = await runWith(
+          [
+            shopTests({
+              'SHOP_KEY': 'appl_tests',
+              'SHOP_TERMS': 'https://shop.example/terms#refunds',
+              'SHOP_TEXT': null,
+            }),
+            // The same value of a key that another test gives too.
+            feedTests({'FEED_URL': 'Ціни і умови', 'SHOP_KEY': 'appl_tests'}),
+          ],
+          withEnv: env,
+        );
+
+        expect(code, 0, reason: output);
+        expect(
+          fileSystem.file(path).readAsStringSync(),
+          '# The values of the app.\n'
+          '#\n'
+          '# Write a value as it is, or in double quotes.\n'
+          '\n'
+          '# The key of the shop.\n'
+          'SHOP_KEY=appl_tests\n'
+          '\n'
+          '# The page of the terms.\n'
+          'SHOP_TERMS="https://shop.example/terms#refunds"\n'
+          '\n'
+          '# A text of the shop.\n'
+          '\n'
+          '# The address of the feed.\n'
+          'FEED_URL="Ціни і умови"\n',
+        );
+        expect(commands, [
+          '/apps/app_1: analyze',
+          '/apps/app_1: test --values=.values --of=home',
+        ]);
+        // The output names the keys and no value.
+        expect(
+          output,
+          'Added the tests test/core_test.dart.\n'
+          '.values: wrote the values of SHOP_KEY, SHOP_TERMS, FEED_URL, and '
+          'removed the lines of SHOP_TEXT.\n'
+          '[analyze][test --values=.values --of=home]',
+        );
+      });
+
+      test(
+          'writes a value with a quote other than a double quote, or with '
+          'white space, in double quotes, and one without in its line as it '
+          'is', () async {
+        final (code, _) = await runWith(
+          [
+            shopTests({
+              'SHOP_KEY': "it's",
+              'SHOP_TERMS': 'a`b',
+              'SHOP_TEXT': 'a\tb',
+              'FEED_URL': r'https://feed.example/?a=1&b=\2',
+            }),
+          ],
+          withEnv: env,
+        );
+
+        expect(code, 0);
+        expect(
+          fileSystem.file(path).readAsLinesSync().where(
+                (line) => line.contains('='),
+              ),
+          [
+            'SHOP_KEY="it\'s"',
+            'SHOP_TERMS="a`b"',
+            'SHOP_TEXT="a\tb"',
+            r'FEED_URL=https://feed.example/?a=1&b=\2',
+          ],
+        );
+      });
+
+      test(
+          'leaves the file as it is, and runs flutter test with the tool '
+          'arguments of the app, when no test gives values', () async {
+        final (code, output) = await runWith(
+          [
+            MatrixAppTest('/tests/core', appliesTo: (app) => true),
+            feedTests({}),
+          ],
+          withEnv: env,
+        );
+
+        expect(code, 0);
+        expect(fileSystem.file(path).readAsStringSync(), written);
+        expect(output, isNot(contains('.values:')));
+        expect(commands.last, '/apps/app_1: test --values=.values --of=home');
+      });
+
+      test(
+          'fails, before it adds a file, when two tests give a key different '
+          'values, a value and null too, and names no value', () async {
+        for (final (shop, feed) in [
+          ('appl_one', 'appl_two'),
+          ('appl_one', null),
+          (null, 'appl_two'),
+        ]) {
+          final (code, output) = await runWith(
+            [
+              shopTests({'SHOP_KEY': shop}),
+              feedTests({'SHOP_KEY': feed}),
+            ],
+            withEnv: env,
+          );
+
+          expect(code, 1);
+          expect(
+            output,
+            'The tests of /tests/core and /tests/feed give SHOP_KEY '
+            'different values.',
+          );
+        }
+        expect(commands, isEmpty);
+        expect(fileSystem.file(path).readAsStringSync(), written);
+        expect(
+          fileSystem.file('/apps/app_1/test/core_test.dart').existsSync(),
+          isFalse,
+        );
+      });
+
+      test(
+          'fails when a value has a line break or a double quote, which the '
+          'file cannot hold, and names no value', () async {
+        for (final value in ['a\nb', 'a\rb', 'say "hi"']) {
+          final (code, output) = await runWith(
+            [
+              shopTests({'SHOP_TEXT': value}),
+            ],
+            withEnv: env,
+          );
+
+          expect(code, 1);
+          expect(
+            output,
+            'The tests of /tests/core give SHOP_TEXT a value with a line '
+            'break or a double quote, which the file of the values of the '
+            'app cannot hold.',
+          );
+        }
+        expect(commands, isEmpty);
+        expect(fileSystem.file(path).readAsStringSync(), written);
+      });
+
+      test(
+          'fails when the app has no file of values, or the file has no line '
+          'of a key, removed or not', () async {
+        for (final value in ['appl_tests', null]) {
+          final (code, output) = await runWith(
+            [
+              shopTests({'SHOP_KEY': 'appl_tests', 'SHOP_OTHER': value}),
+            ],
+            withEnv: env,
+          );
+
+          expect(code, 1);
+          expect(
+            output,
+            'The tests of /tests/core give the app a value of SHOP_OTHER, '
+            'but its .values has no line of that key.',
+          );
+        }
+        expect(fileSystem.file(path).readAsStringSync(), written);
+
+        fileSystem.file(path).deleteSync();
+        final (code, output) = await runWith(
+          [
+            shopTests({'SHOP_KEY': 'appl_tests'}),
+          ],
+          withEnv: env,
+        );
+
+        expect(code, 1);
+        expect(
+          output,
+          'The tests of /tests/core give the app a value of SHOP_KEY, but '
+          'the app has no .values.',
+        );
+        expect(commands, isEmpty);
+      });
+
+      test(
+          'fails when the tests give values and the run has no file of '
+          'values for the apps, and gives flutter test no argument without '
+          'one', () async {
+        final (code, output) = await runWith([
+          shopTests({'SHOP_KEY': 'appl_tests'}),
+        ]);
+
+        expect(code, 1);
+        expect(
+          output,
+          'The tests of /tests/core give the app a value of SHOP_KEY, but the '
+          'matrix has no file of values for the apps (MatrixEnv).',
+        );
+        expect(commands, isEmpty);
+
+        expect(
+          await runWith([shopTests({})]),
+          (0, 'Added the tests test/core_test.dart.\n[analyze][test]'),
+        );
+      });
+
+      test(
+          'fails when a test generates the file of the values, whose values '
+          'the tests give through their values of the app', () async {
+        final generating = MatrixAppTest(
+          '/tests/feed',
+          appliesTo: (app) => true,
+          generatedFiles: (app, packageName) => {'.values': 'SHOP_KEY=x\n'},
+        );
+
+        final (code, output) = await runWith([generating], withEnv: env);
+
+        expect(code, 1);
+        expect(
+          output,
+          'The tests of /tests/feed have .values, whose values the matrix '
+          'writes from those that the tests give (MatrixAppTest.envValues).',
+        );
+        expect(commands, isEmpty);
+        expect(fileSystem.file(path).readAsStringSync(), written);
+      });
+    });
   });
 
   group('addAppTestsTo', () {
@@ -3268,6 +3619,33 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
             .readAsStringSync(),
         contains('    mocks0.mockCore();\n'),
       );
+    });
+
+    test(
+        'writes no value that the tests give into an app outside the matrix, '
+        'also not into one that it adds them to as an app of the matrix',
+        () async {
+      final values = fileSystem.file('/apps/start_app/.env')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('SHOP_KEY=\n');
+      final tests = [
+        MatrixAppTest(
+          '/tests/start',
+          appliesTo: (app) => true,
+          envValues: (app) => {'SHOP_KEY': 'appl_tests', 'SHOP_URL': null},
+        ),
+      ];
+
+      for (final app in [
+        null,
+        const MatrixApp('every module', [ModuleId('home')]),
+      ]) {
+        final (code, output) = await add(tests, app: app);
+
+        expect(code, 0);
+        expect(output, 'Added the tests integration_test/start_test.dart.\n');
+        expect(values.readAsStringSync(), 'SHOP_KEY=\n');
+      }
     });
 
     test('runs no command for tests without dev dependencies', () async {

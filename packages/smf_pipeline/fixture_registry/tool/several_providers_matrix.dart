@@ -6,13 +6,16 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/matrix_app_tests.dart' show matrixEnv;
 
 /// Generates the app with every module of the registry of several
 /// providers (`severalProvidersModules`) in the directory given as the only
 /// argument, analyzes it with Flutter and runs there the tests that the
 /// modules of the CLI keep for the apps they are in, those of
 /// `severalProvidersAppTests` in `lib/matrix_app_tests.dart`; see
-/// `runMatrix`.
+/// `runMatrix`. It writes the values that the tests give the app into its
+/// `.env`, and runs `flutter test` with the arguments that the provider of
+/// the env role of the app needs; see `matrixEnv`.
 ///
 /// The app has the modules of the CLI that provide a role an app can have
 /// several providers of, next to fixture providers of the same roles, whose
@@ -52,6 +55,7 @@ Future<void> main(List<String> arguments) async {
       // their modules in the other combinations.
       selection: severalProvidersApps,
       appTests: await severalProvidersAppTests(),
+      env: matrixEnv,
     );
     await Future.wait<void>([stdout.flush(), stderr.flush()]);
     exit(code);

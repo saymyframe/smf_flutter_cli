@@ -2270,8 +2270,8 @@ void main() {
     // that the localization, the theme, the onboarding and the
     // notifications require, the DI container, the state manager, the
     // events and the values of .env; and last the services of crash
-    // reporting, analytics and authentication. The choices of the roles come once the modules are
-    // known.
+    // reporting, analytics and authentication. The choices of the roles
+    // come once the modules are known.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
       'Infrastructure: which do you want?',

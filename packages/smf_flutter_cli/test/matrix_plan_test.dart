@@ -900,7 +900,7 @@ void main() {
               return 0;
             },
             analyze: (directory) async => (0, 'Analyzed $directory'),
-            test: (generated, app, tests) async => (0, ''),
+            test: (generated, app, tests, {env}) async => (0, ''),
           ),
         );
 

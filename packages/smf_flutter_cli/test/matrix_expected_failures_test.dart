@@ -725,6 +725,78 @@ void main() {
       });
 
       test(
+          'writes the values that the tests give the app into its file of '
+          'values, and runs flutter test with the tool arguments of the app '
+          'before the reporter', () async {
+        fileSystem.file('$_app/.values')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('# The key.\nCORE_KEY=\n');
+        final env = MatrixEnv(
+          file: '.values',
+          toolArguments: (app) => ['--values=.values'],
+        );
+
+        final (problems, output) = await runFailingAppTests(
+          generated,
+          app,
+          [
+            MatrixAppTest(
+              '/tests/core',
+              appliesTo: (_) => true,
+              envValues: (_) => {'CORE_KEY': 'core_tests'},
+            ),
+          ],
+          [expected],
+          env: env,
+          flutter: (arguments, directory) async {
+            final command = arguments.join(' ');
+            commands.add('$directory: $command');
+            return (
+              0,
+              command.startsWith('test ') ? failingWith(_reason) : '[$command]',
+            );
+          },
+          fileSystem: fileSystem,
+        );
+
+        expect(problems, isEmpty);
+        expect(commands, [
+          '$_app: analyze',
+          '$_app: test --values=.values --reporter json',
+        ]);
+        expect(output, contains('.values: wrote the values of CORE_KEY.'));
+        expect(
+          fileSystem.file('$_app/.values').readAsStringSync(),
+          '# The key.\nCORE_KEY=core_tests\n',
+        );
+
+        // Values without a file of values for them fail before the tests
+        // run.
+        final (unwritten, _) = await runFailingAppTests(
+          generated,
+          app,
+          [
+            MatrixAppTest(
+              '/tests/core',
+              appliesTo: (_) => true,
+              envValues: (_) => {'CORE_KEY': 'core_tests'},
+            ),
+          ],
+          [expected],
+          flutter: flutter(report: ''),
+          fileSystem: fileSystem,
+        );
+
+        expect(unwritten, [
+          equals(
+            'The tests of /tests/core give the app a value of CORE_KEY, but '
+            'the matrix has no file of values for the apps (MatrixEnv).',
+          ),
+        ]);
+        expect(commands, hasLength(2));
+      });
+
+      test(
           'runs no test when the app with the tests has issues, or the files '
           'of the tests have a problem', () async {
         final (problems, output) = await runFailingAppTests(
@@ -814,6 +886,53 @@ void main() {
         ]);
         expect(log.first, '\n=== app_1: core with a bug (flutter_core)');
         expect(log.last, '\n1 apps generated in /apps.');
+      });
+
+      test('gives the tests of each app the values of the apps of the run',
+          () async {
+        final values = MatrixAppTest(
+          '/tests/core',
+          appliesTo: (_) => true,
+          envValues: (_) => {'CORE_KEY': 'core_tests'},
+        );
+        fileSystem.file('$_app/.values')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('CORE_KEY=\n');
+
+        final code = await runFailingApps(
+          [failing],
+          directory: '/apps',
+          appTests: MatrixAppTests([values]),
+          env: MatrixEnv(
+            file: '.values',
+            toolArguments: (app) => ['--values=.values'],
+          ),
+          commands: MatrixCommands(
+            log: log.add,
+            create: (arguments, onCreated) async {
+              onCreated(
+                GeneratedApp(name: arguments[1], path: '/apps/${arguments[1]}'),
+              );
+              return 0;
+            },
+          ),
+          flutter: (arguments, directory) async {
+            final command = arguments.join(' ');
+            commands.add(command);
+            return (
+              0,
+              command.startsWith('test ') ? failingWith(_reason) : '[$command]',
+            );
+          },
+          fileSystem: fileSystem,
+        );
+
+        expect(code, 0, reason: log.join('\n'));
+        expect(commands, ['analyze', 'test --values=.values --reporter json']);
+        expect(
+          fileSystem.file('$_app/.values').readAsStringSync(),
+          'CORE_KEY=core_tests\n',
+        );
       });
 
       test('fails when the tests of an app do not fail as expected', () async {

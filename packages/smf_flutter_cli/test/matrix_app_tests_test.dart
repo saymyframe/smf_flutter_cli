@@ -300,6 +300,36 @@ void main() {
   });
 
   test(
+      'the apps of the matrices get their values from the file of the env '
+      'role, and flutter test gets the tool arguments that the provider of '
+      'the role in an app gives the role, none in an app without the role', () {
+    MatrixApp app(String name) => apps.singleWhere((app) => app.name == name);
+
+    expect(matrixEnv.file, EnvRole.dotEnvFile);
+    expect(matrixEnv.toolArguments(app('dart_define')), [
+      '--dart-define-from-file=${EnvRole.dotEnvFile}',
+    ]);
+    expect(matrixEnv.toolArguments(app('flutter_core')), isEmpty);
+    // Every app with the role has the arguments of its provider, and no
+    // other app has any.
+    for (final app in apps) {
+      expect(
+        matrixEnv.toolArguments(app),
+        app.hook!.presentRoles.contains(envRole)
+            ? envRole.toolArgumentsIn(envRole.hookInput(app.hook!))
+            : isEmpty,
+        reason: app.name,
+      );
+    }
+    // An app that the contract harness did not build has no data of the
+    // role.
+    expect(
+      matrixEnv.toolArguments(const MatrixApp('outside', [])),
+      isEmpty,
+    );
+  });
+
+  test(
       'the app tests check the contract of the router role, of the DI role, '
       'of the events role, of the preferences role, of the auth role, of '
       'the notifications role, of the push role, of the settings screen '
