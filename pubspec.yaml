@@ -26,6 +26,7 @@ workspace:
   - packages/smf_modules/smf_bloc
   - packages/smf_modules/smf_bottom_tabs
   - packages/smf_modules/smf_contribution_engine
+  - packages/smf_modules/smf_dart_define
   - packages/smf_modules/smf_event_bus
   - packages/smf_modules/smf_firebase_analytics
   - packages/smf_modules/smf_firebase_auth
