@@ -183,14 +183,30 @@ const purchasesRole = PurchasesRole._();
 /// of the apps run, keep to one convention, so that the tests of the role
 /// and of the modules hold with each:
 /// - a first launch finds nothing bought, and the offer has at least one
-///   plan;
+///   plan, each with an id of its own, a title and a price that are not
+///   empty, an amount of 0 or more and a `currencyCode` of three upper-case
+///   letters;
+/// - any text is the id of a user of the app;
 /// - a purchase by a user without premium access completes at once and
-///   succeeds;
+///   succeeds. Its answer, like that of a restore, is the access that
+///   `access()` gives right after it, field by field, and the service tells
+///   of no other change of the access while the purchase is on its way or
+///   right after it;
+/// - a plan with a free intro offer that the user may take gives an access
+///   in trial, and any other plan gives an access that is not in trial. A
+///   plan with a period renews, and its access ends after the time of the
+///   device at the purchase;
 /// - the purchases are kept by the user of the app, with the rules of the
-///   user of the device above, also from one launch of the app to the next;
+///   user of the device above, also from one launch of the app to the next,
+///   where the user has the same access as before, not one computed anew
+///   from the time of the start;
 /// - a restore gives the user who is identified what was bought on the
 ///   device. Whether it takes them away from another user is up to the
 ///   backend of each provider, so no test relies on it.
+///
+/// In an app with the [AuthRole], the tests also rely on `appSession`, which
+/// tells `appPurchases` of a change of its user before the call of the
+/// session that made the change completes.
 final class PurchasesRole extends Role<RoleImplementation> {
   const PurchasesRole._();
 
