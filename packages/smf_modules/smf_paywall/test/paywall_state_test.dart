@@ -596,7 +596,6 @@ void main() {
           await analysisProblemsOf(app, [
             PurchasesRole.serviceFile,
             PurchasesRole.controllerFile,
-            EnvRole.readerFile,
             'lib/${MemoryPurchasesModule.file}',
             _state,
             _texts,
