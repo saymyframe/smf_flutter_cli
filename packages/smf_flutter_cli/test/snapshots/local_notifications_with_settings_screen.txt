@@ -760,10 +760,17 @@ final class NotificationsController {
   StreamSubscription<NotificationTap>? _serviceTaps;
   NotificationTap? _launchTap;
 
-  /// Completes when the app has started for the first time, with the error
-  /// of that start if it failed. Nothing but a call that waits for the start
-  /// reports that error, which the start throws itself.
-  final Completer<void> _started = Completer<void>()..future.ignore();
+  /// Whether the app has started for the first time, also when that start
+  /// failed.
+  bool _started = false;
+
+  /// What the calls made before the first start wait for, each created by
+  /// its call. The first start completes them, with its error if it failed,
+  /// each in the zone of its call: created with the controller, they would
+  /// complete in a microtask of the zone that read [appNotifications]
+  /// first, which may run none any more, as the fake time of a widget test
+  /// that is over before a later test starts the app in real time.
+  final List<Completer<void>> _untilStarted = [];
 
   /// The preferences that remember that the app asked, once the app opened
   /// them.
@@ -848,10 +855,10 @@ final class NotificationsController {
     try {
       await _refresh();
     } on Object catch (error, stackTrace) {
-      if (!_started.isCompleted) _started.completeError(error, stackTrace);
+      _firstStarted(error, stackTrace);
       rethrow;
     }
-    if (!_started.isCompleted) _started.complete();
+    _firstStarted();
   }
 
   /// Asks the user for the permission to show notifications, unless the app
@@ -912,8 +919,29 @@ final class NotificationsController {
 
   /// The service, once the app has started for the first time.
   Future<NotificationsService> _ready() async {
-    if (!_started.isCompleted) await _started.future;
+    if (!_started) {
+      final untilStarted = Completer<void>();
+      _untilStarted.add(untilStarted);
+      await untilStarted.future;
+    }
     return _service!;
+  }
+
+  /// Takes it that the app has started for the first time, unless it had,
+  /// and lets the calls that waited for that go on, or fail with [error] of
+  /// the start. Nothing but these calls reports that error, which the start
+  /// throws itself.
+  void _firstStarted([Object? error, StackTrace? stackTrace]) {
+    if (_started) return;
+    _started = true;
+    for (final untilStarted in _untilStarted) {
+      if (error == null) {
+        untilStarted.complete();
+      } else {
+        untilStarted.completeError(error, stackTrace);
+      }
+    }
+    _untilStarted.clear();
   }
 
   Future<NotificationPermission> _ask() async {

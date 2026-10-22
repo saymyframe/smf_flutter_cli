@@ -800,6 +800,39 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Shows a notification first in a zone that runs no microtask any more, as
+/// the fake time of a widget test that is over does, a call that never goes
+/// on, and then, in the root zone, shows another one and starts the
+/// notifications, as a later test does in real time. The start fails if
+/// [startFails].
+String _createdElsewhere({required bool startFails}) => '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  runZoned(
+    () => unawaited(
+      appNotifications.show(const AppNotification(id: 7, title: 'Dead')),
+    ),
+    zoneSpecification: ZoneSpecification(
+      scheduleMicrotask: (self, parent, zone, microtask) {},
+    ),
+  );
+  final early = appNotifications
+      .show(const AppNotification(id: 1, title: 'Early'))
+      .then((_) => 'completed', onError: (Object error) => 'failed: \$error');
+  if ($startFails) failures['areEnabled'] = StateError('The platform broke.');
+  try {
+    await initNotifications();
+  } on StateError {
+    // The call made before the start fails with the same error.
+  }
+  result['the call made before the start'] = await Future.any([
+    early,
+    Future<String>.delayed(const Duration(seconds: 1), () => 'still waiting'),
+  ]);
+  result['the calls'] = takeCalls();
+  port.send(result);
+}
+''';
+
 /// Errors of the service on the taps and when the user comes back to the
 /// app, which go to the handler of the uncaught errors of the zone of the
 /// app.
@@ -1592,6 +1625,28 @@ void main() {
           'the permission': 'notAsked',
           'the calls': ['areEnabled', 'show 2'],
         });
+      });
+
+      test(
+          'completes or fails a call made before the first start in its own '
+          'zone, wherever the controller was first read or called: a widget '
+          'test in fake time may call it before a later test starts the app '
+          'in real time', () async {
+        expect(
+          await app.run('$_notes${_createdElsewhere(startFails: false)}'),
+          {
+            'the call made before the start': 'completed',
+            'the calls': ['areEnabled', 'show 1'],
+          },
+        );
+        expect(
+          await app.run('$_notes${_createdElsewhere(startFails: true)}'),
+          {
+            'the call made before the start':
+                'failed: Bad state: The platform broke.',
+            'the calls': ['areEnabled'],
+          },
+        );
       });
 
       test(
