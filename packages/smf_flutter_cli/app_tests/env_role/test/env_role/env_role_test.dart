@@ -12,7 +12,7 @@
 // comment, if the line has one. The matrix writes the keys of the app, from
 // the data of the role, into keys.dart next to the test. It reads AppEnv
 // without starting the app, since the role says that the getters return the
-// values from the start of main() on.
+// values before any code of the app runs, main() included.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
