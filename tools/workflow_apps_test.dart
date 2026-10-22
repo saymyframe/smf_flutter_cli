@@ -1347,7 +1347,8 @@ String _uncached(String file, Object? job, String manager, String path) =>
 
 /// The init script of Gradle that every job that builds for Android puts
 /// into ~/.gradle/init.d, which takes what Gradle would download from Maven
-/// Central from the mirror of Maven Central that Google keeps.
+/// Central from the mirror of Maven Central that Google keeps, and from
+/// Maven Central only what the mirror does not have yet.
 const mavenCentralMirror = '.github/gradle/maven_central_mirror.gradle';
 
 /// The problems of the downloads from Maven Central in [workflow], the text
