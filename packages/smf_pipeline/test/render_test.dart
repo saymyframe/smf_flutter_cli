@@ -553,6 +553,70 @@ flutter:
     expect(open.inputs.single.manualSetup, same(ManualSetup.none));
   });
 
+  test(
+      'the purchases start after the session of an app with sign-in, '
+      'whatever the names of the modules', () {
+    // The purchases role only uses the auth role, which gives no edge of
+    // the order by itself, and the order of a socket follows the
+    // conditions of the code in that socket alone. The provider of sign-in
+    // here starts its SDK in the platform phase too, and its name comes
+    // after role:purchases, so only the condition of the line of
+    // initPurchases() puts that line after initAuth().
+    const signInFile = ImportRef.app('core/auth/zz_auth.dart');
+    const storeFile = ImportRef.app('core/purchases/store.dart');
+    final app = _render(
+      [
+        entry,
+        TestModule(
+          'zz_sign_in',
+          providers: [const RoleProvider.plain(authRole)],
+          contributions: [
+            authRole.data(
+              const AuthImplementation.async(
+                type: TypeRef('ZzAuth', import: signInFile),
+                init: FactoryRef('openZzAuth', import: signInFile),
+              ),
+            ),
+            const SocketContribution.code(
+              AppEntryRole.bootstrapPlatform,
+              Fragment('await startSignInSdk();'),
+            ),
+          ],
+        ),
+        TestModule(
+          'store',
+          providers: [const RoleProvider.plain(purchasesRole)],
+          contributions: [
+            purchasesRole.data(
+              const RoleImplementation.async(
+                type: TypeRef('StorePurchases', import: storeFile),
+                init: FactoryRef('openStorePurchases', import: storeFile),
+              ),
+            ),
+          ],
+        ),
+      ],
+      choices: {authRole: AuthMode.required},
+    );
+
+    expect(
+      [
+        for (final collected
+            in app.socketOrders[AppEntryRole.bootstrapPlatform]!.contributions)
+          '${collected.origin}',
+      ],
+      ['zz_sign_in', 'role:auth', 'role:purchases'],
+    );
+    expect(
+      app.files['lib/bootstrap.dart']!.text,
+      contains(
+        'await startSignInSdk();\n'
+        'await initAuth();\n'
+        'await initPurchases();',
+      ),
+    );
+  });
+
   test('render hooks follow the rules of their owners', () {
     final other = TestRole<NoDsl>('other');
     final rendering = _Rendering(
