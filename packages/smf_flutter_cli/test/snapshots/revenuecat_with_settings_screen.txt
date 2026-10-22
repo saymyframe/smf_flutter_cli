@@ -12,7 +12,7 @@ REVENUECAT_APPLE_KEY=
 # The public API key of the Play Store app in RevenueCat, which starts with goog_
 REVENUECAT_GOOGLE_KEY=
 
-# The public API key of the Test Store in RevenueCat (test_), which only a debug build uses
+# The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 REVENUECAT_TEST_KEY=
 === .env.example (role:env) ===
 # This file lists the keys of the values that the app reads, each under a
@@ -29,7 +29,7 @@ REVENUECAT_APPLE_KEY=
 # The public API key of the Play Store app in RevenueCat, which starts with goog_
 REVENUECAT_GOOGLE_KEY=
 
-# The public API key of the Test Store in RevenueCat (test_), which only a debug build uses
+# The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 REVENUECAT_TEST_KEY=
 === .gitignore (flutter_core) ===
 # Miscellaneous
@@ -249,7 +249,7 @@ The keys of the app:
 
 - `REVENUECAT_APPLE_KEY`, read as `AppEnv.revenuecatAppleKey`, from the module `revenuecat`: The public API key of the App Store app in RevenueCat, which starts with appl_
 - `REVENUECAT_GOOGLE_KEY`, read as `AppEnv.revenuecatGoogleKey`, from the module `revenuecat`: The public API key of the Play Store app in RevenueCat, which starts with goog_
-- `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat (test_), which only a debug build uses
+- `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
 
@@ -842,8 +842,8 @@ abstract final class AppEnv {
     return value.isEmpty ? null : value;
   }
 
-  /// The public API key of the Test Store in RevenueCat (test_), which only a
-  /// debug build uses.
+  /// The public API key of the Test Store in RevenueCat, which starts with
+  /// test_, for debug builds only.
   static String? get revenuecatTestKey {
     const value = String.fromEnvironment('REVENUECAT_TEST_KEY');
     return value.isEmpty ? null : value;
@@ -2284,8 +2284,7 @@ String _hintOf(
     PurchasesErrorCode.receiptAlreadyInUseError ||
     PurchasesErrorCode.receiptInUseByOtherSubscriberError ||
     PurchasesErrorCode.purchaseBelongsToOtherUser =>
-      'The store account owns the product already, and a restore gives the '
-          'user its access ($said).',
+      'The store account owns the product already ($said).',
     PurchasesErrorCode.testStoreSimulatedPurchaseError =>
       'The Test Store of RevenueCat failed the purchase, as its dialog was '
           'told to ($said).',

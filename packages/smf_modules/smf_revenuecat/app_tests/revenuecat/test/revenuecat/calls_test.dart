@@ -219,8 +219,8 @@ void main() {
     );
     expect(
       await hintOf('6'),
-      'The store account owns the product already, and a restore gives the '
-      'user its access (productAlreadyPurchasedError: RevenueCat failed.).',
+      'The store account owns the product already '
+      '(productAlreadyPurchasedError: RevenueCat failed.).',
     );
     expect(
       await hintOf('42'),

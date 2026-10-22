@@ -559,8 +559,7 @@ String _hintOf(
     PurchasesErrorCode.receiptAlreadyInUseError ||
     PurchasesErrorCode.receiptInUseByOtherSubscriberError ||
     PurchasesErrorCode.purchaseBelongsToOtherUser =>
-      'The store account owns the product already, and a restore gives the '
-          'user its access ($said).',
+      'The store account owns the product already ($said).',
     PurchasesErrorCode.testStoreSimulatedPurchaseError =>
       'The Test Store of RevenueCat failed the purchase, as its dialog was '
           'told to ($said).',

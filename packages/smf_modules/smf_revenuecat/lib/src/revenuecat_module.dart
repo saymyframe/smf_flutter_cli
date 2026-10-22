@@ -76,8 +76,8 @@ final class RevenueCatModule extends SmfModule {
   /// only a debug build takes.
   static const testKey = EnvKey(
     'REVENUECAT_TEST_KEY',
-    description: 'The public API key of the Test Store in RevenueCat '
-        '(test_), which only a debug build uses',
+    description: 'The public API key of the Test Store in RevenueCat, '
+        'which starts with test_, for debug builds only',
   );
 
   /// The keys of the module, in the order of `.env`.

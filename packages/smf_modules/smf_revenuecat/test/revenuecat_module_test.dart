@@ -364,7 +364,8 @@ void main() {
           'REVENUECAT_GOOGLE_KEY': 'revenuecatGoogleKey: The public API key '
               'of the Play Store app in RevenueCat, which starts with goog_',
           'REVENUECAT_TEST_KEY': 'revenuecatTestKey: The public API key of the '
-              'Test Store in RevenueCat (test_), which only a debug build uses',
+              'Test Store in RevenueCat, which starts with test_, for debug '
+              'builds only',
         },
       );
       for (final key in RevenueCatModule.keys) {
