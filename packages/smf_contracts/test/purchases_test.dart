@@ -1587,8 +1587,8 @@ void main() {
       );
       expect(authRole.interface.files, contains(AuthRole.sessionFile));
       // The order of the code of the platform phase follows the conditions
-      // of that code, and the role only uses the auth role, which gives no
-      // edge by itself.
+      // of that code, and a role that the role uses gives no edge of the
+      // order.
       final start = rendered.elsewhere.singleWhere(
         (entry) => entry.socket == AppEntryRole.bootstrapPlatform,
       );

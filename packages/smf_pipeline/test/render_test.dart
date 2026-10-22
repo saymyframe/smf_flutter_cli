@@ -556,8 +556,8 @@ flutter:
   test(
       'the purchases start after the session of an app with sign-in, '
       'whatever the names of the modules', () {
-    // The purchases role only uses the auth role, which gives no edge of
-    // the order by itself, and the order of a socket follows the
+    // A role that the purchases role uses, as it uses the auth role, gives
+    // no edge of the order, and the order of a socket follows the
     // conditions of the code in that socket alone. The provider of sign-in
     // here starts its SDK in the platform phase too, and its name comes
     // after role:purchases, so only the condition of the line of
