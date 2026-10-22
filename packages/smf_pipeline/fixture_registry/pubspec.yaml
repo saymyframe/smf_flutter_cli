@@ -26,6 +26,9 @@ dependencies:
   smf_bloc: ^0.3.3
   smf_bottom_tabs: ^0.4.2
   smf_contracts: ^0.6.0
+  # The provider of the env role in the registry of several providers, whose
+  # values RevenueCat reads.
+  smf_dart_define: ^0.6.0
   # The providers of the roles that an app can have several providers of,
   # in the registry of several providers.
   smf_firebase_analytics: ^0.4.2
@@ -58,6 +61,10 @@ dependencies:
   # The onboarding of the CLI, for its app test in the app of several
   # providers, whose other tests its mocks open its guard for.
   smf_onboarding: ^0.5.1
+  # The provider of the purchases role in the registry of several providers,
+  # for the app test that it keeps and the tests of the role that the CLI
+  # keeps.
+  smf_revenuecat: ^0.6.0
   smf_riverpod: ^0.3.3
   # The settings screen of the CLI, for its app tests in the app of several
   # providers.
