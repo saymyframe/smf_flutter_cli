@@ -54,6 +54,13 @@
 // for their ids and the directories of their app tests, and the packages
 // that it needs besides, which declare no module (_needed).
 //
+// A test that needs values in the .env of an app, such as a key that the
+// mocks of a service take, gives them for the keys of the modules that it
+// knows (`MatrixAppTest.envValues`), the same modules whose ids it may use:
+// what the values of another module mean, only the tests of that module
+// know. Each tool reports the keys that each of its tests gives, with the
+// module that gives the apps each key, from the role of the values.
+//
 // An app test of a module runs in every app with its module, whatever else
 // the app has. A role that an app can have several providers of, such as
 // crash reporting, generates functions that reach all of them, such as
@@ -457,6 +464,52 @@ List<String> usesProblemsOf(
     ...problems,
     for (final (directory, id) in unused) _unusedException(directory, id),
   ];
+}
+
+/// The problems of the keys of the values of the apps that the app tests of
+/// the matrix tools, [listed] by the path of each tool, give values of
+/// (`MatrixAppTest.envValues`), among the [packages] of the workspace at
+/// [root]: one line for each key of a module that a test does not know
+/// (knownModules), and one for each key that no module of the apps gives.
+List<String> envKeyProblemsOf(
+  String root,
+  List<WorkspacePackage> packages,
+  Map<String, List<ListedAppTest>> listed,
+) {
+  final byName = {for (final package in packages) package.name: package};
+  final problems = <String>[];
+  for (final MapEntry(key: tool, value: tests) in listed.entries) {
+    for (final test in tests) {
+      final package = _keeperOf(root, packages, test.directory);
+      if (package == null) continue;
+      final name = test.directory.replaceAll(r'\', '/').split('/').last;
+      final directory = '${package.path}/app_tests/$name';
+      final known = [
+        for (final module in knownModules(package, byName)) module.name,
+      ];
+      for (final given in test.envKeys) {
+        final apps = given.apps.join(', ');
+        if (given.module == null) {
+          problems.add(
+            '$tool gives the apps of $directory a value of ${given.key}, but '
+            'no module of these apps of the matrix gives them that key: '
+            '$apps.',
+          );
+        } else if (!test.modules.contains(given.module) &&
+            !known.contains(given.package)) {
+          problems.add(
+            '$tool gives the apps of $directory a value of ${given.key}, a key '
+            'of ${given.module} of ${given.package} that its tests do not '
+            'know, in these apps of the matrix: $apps. A test gives values for '
+            'the keys of the modules that its package keeps; the tests of '
+            '${package.name} know the modules of '
+            '${known.isEmpty ? 'no package' : known.join(', ')}.',
+          );
+        }
+      }
+    }
+  }
+  return problems;
 }
 
 /// The problem that [_ofOneProvider] lets the tool of the app tests in
@@ -953,6 +1006,114 @@ void main() {
   });
 
   test(
+      'finds the keys that an app test gives values of which belong to a '
+      'module that the test does not know, or to no module of the apps', () {
+    final temp = Directory.systemTemp.createTempSync('smf_app_test_keys_');
+    addTearDown(() => temp.deleteSync(recursive: true));
+    final root = temp.path;
+    for (final path in [
+      'shop/app_tests/shop',
+      'paywall/app_tests/paywall',
+      'cli/app_tests/start',
+      'registry/app_tests/env',
+    ]) {
+      Directory('$root/$path').createSync(recursive: true);
+    }
+    WorkspacePackage package(
+      String name, {
+      Set<String> dependencies = const {},
+      bool published = true,
+      bool declaresModules = true,
+    }) =>
+        WorkspacePackage(
+          name,
+          name: name,
+          dependencies: dependencies,
+          published: published,
+          declaresModules: declaresModules,
+        );
+    final packages = [
+      package('core'),
+      package('shop', dependencies: {'core'}),
+      package('paywall'),
+      package('cli', dependencies: {'shop'}, declaresModules: false),
+      package('fixture', published: false),
+      package(
+        'registry',
+        dependencies: {'fixture', 'shop'},
+        published: false,
+        declaresModules: false,
+      ),
+    ];
+    GivenEnvKey key(String key, String? module) => GivenEnvKey(
+          key,
+          module: module,
+          package: module,
+          apps: const ['every module'],
+        );
+    final listed = {
+      'tool/matrix.dart': [
+        // Its own key, and a key of a module that it depends on.
+        ListedAppTest(
+          '$root/shop/app_tests/shop',
+          modules: ['shop'],
+          envKeys: [key('SHOP_KEY', 'shop'), key('CORE_KEY', 'core')],
+        ),
+        // A key of a module that it does not know, and a key that no
+        // module of the apps gives.
+        ListedAppTest(
+          '$root/paywall/app_tests/paywall',
+          modules: ['paywall'],
+          envKeys: [
+            key('PAYWALL_URL', 'paywall'),
+            key('SHOP_KEY', 'shop'),
+            key('PAYWALL_TYPO', null),
+          ],
+        ),
+        // A package of no module knows no published module.
+        ListedAppTest(
+          '$root/cli/app_tests/start',
+          envKeys: [key('SHOP_KEY', 'shop')],
+        ),
+        // The fixture registry knows its fixture modules.
+        ListedAppTest(
+          '$root/registry/app_tests/env',
+          envKeys: [key('FIXTURE_KEY', 'fixture'), key('SHOP_KEY', 'shop')],
+        ),
+      ],
+    };
+
+    expect(envKeyProblemsOf(root, packages, listed), [
+      equals(
+        'tool/matrix.dart gives the apps of paywall/app_tests/paywall a value '
+        'of SHOP_KEY, a key of shop of shop that its tests do not know, in '
+        'these apps of the matrix: every module. A test gives values for '
+        'the keys of the modules that its package keeps; the tests of '
+        'paywall know the modules of paywall.',
+      ),
+      equals(
+        'tool/matrix.dart gives the apps of paywall/app_tests/paywall a value '
+        'of PAYWALL_TYPO, but no module of these apps of the matrix gives '
+        'them that key: every module.',
+      ),
+      equals(
+        'tool/matrix.dart gives the apps of cli/app_tests/start a value of '
+        'SHOP_KEY, a key of shop of shop that its tests do not know, in '
+        'these apps of the matrix: every module. A test gives values for '
+        'the keys of the modules that its package keeps; the tests of cli '
+        'know the modules of no package.',
+      ),
+      equals(
+        'tool/matrix.dart gives the apps of registry/app_tests/env a value of '
+        'SHOP_KEY, a key of shop of shop that its tests do not know, in '
+        'these apps of the matrix: every module. A test gives values for '
+        'the keys of the modules that its package keeps; the tests of '
+        'registry know the modules of fixture.',
+      ),
+    ]);
+  });
+
+  test(
     'every directory of app tests in the packages of the workspace is the '
     'directory of a MatrixAppTest of a matrix tool, and every directory '
     'that a tool lists is one',
@@ -1040,6 +1201,20 @@ void main() {
 
       expect(
         roleFunctionProblemsOf(root, workspacePackages(root), await _listed),
+        isEmpty,
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 5)),
+  );
+
+  test(
+    'the app tests of every matrix tool give values only for the keys of the '
+    'modules that they know',
+    () async {
+      final root = repositoryRoot();
+
+      expect(
+        envKeyProblemsOf(root, workspacePackages(root), await _listed),
         isEmpty,
       );
     },

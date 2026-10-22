@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
+import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -296,6 +297,51 @@ void main() {
     expect(appTests.tests, isNotEmpty);
     for (final test in appTests.tests) {
       expect(apps.where(test.appliesTo), isNotEmpty, reason: test.directory);
+    }
+  });
+
+  test(
+      'the apps of the matrices get their values from the file of the env '
+      'role, and flutter test gets the tool arguments that the provider of '
+      'the role in an app gives the role, none in an app without the role', () {
+    MatrixApp app(String name) => apps.singleWhere((app) => app.name == name);
+
+    expect(matrixEnv.file, EnvRole.dotEnvFile);
+    expect(matrixEnv.toolArguments(app('dart_define')), [
+      '--dart-define-from-file=${EnvRole.dotEnvFile}',
+    ]);
+    expect(matrixEnv.toolArguments(app('flutter_core')), isEmpty);
+    // Every app with the role has the arguments of its provider, and no
+    // other app has any.
+    for (final app in apps) {
+      expect(
+        matrixEnv.toolArguments(app),
+        app.hook!.presentRoles.contains(envRole)
+            ? envRole.toolArgumentsIn(envRole.hookInput(app.hook!))
+            : isEmpty,
+        reason: app.name,
+      );
+    }
+    // An app that the contract harness did not build has no data of the
+    // role.
+    expect(
+      matrixEnv.toolArguments(const MatrixApp('outside', [])),
+      isEmpty,
+    );
+    expect(matrixEnv.keys(const MatrixApp('outside', [])), isEmpty);
+    // The keys of an app are those of the role, each with the module that
+    // gives it; no module of the CLI gives the role a key yet.
+    for (final app in apps) {
+      expect(
+        matrixEnv.keys(app),
+        app.hook!.presentRoles.contains(envRole)
+            ? {
+                for (final key in envRole.keysIn(envRole.hookInput(app.hook!)))
+                  key.name: (key.owner as ModuleOrigin).module,
+              }
+            : isEmpty,
+        reason: app.name,
+      );
     }
   });
 

@@ -9,6 +9,7 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_contracts/smf_contracts.dart' show appEntryRole;
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
+import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:yaml/yaml.dart';
@@ -19,7 +20,10 @@ import 'package:yaml/yaml.dart';
 /// `runMatrix`. The tests, and the roles whose contract they check with
 /// every provider, are those of `smfAppTests` in
 /// `lib/matrix_app_tests.dart`, which the tests of the package check too. Any further argument names an app of the matrix, such as
-/// `go_router with layout`, and only the apps named are checked.
+/// `go_router with layout`, and only the apps named are checked. The matrix
+/// writes the values that the tests give an app into its `.env`, and runs
+/// `flutter test` with the arguments that the provider of the env role of
+/// the app needs; see `matrixEnv`.
 ///
 /// With `--every-module` before the directory, it checks only the apps with
 /// every module, one for each combination of the providers of the roles
@@ -103,6 +107,7 @@ Future<void> main(List<String> given) async {
       modules: smfModules,
       packages: _packagesOf(smfModules),
       apps: () async => (await matrixOf(smfModules)).apps,
+      env: matrixEnv,
     );
     stdout.writeln(jsonEncode(report));
     return;
@@ -169,6 +174,7 @@ Future<void> main(List<String> given) async {
     smfModules,
     directory: rest.first,
     appTests: await smfAppTests(),
+    env: matrixEnv,
     selection: MatrixSelection(
       only: rest.length > 1 ? rest.skip(1).toSet() : null,
       everyModule: everyModule,

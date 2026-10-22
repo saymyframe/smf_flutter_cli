@@ -2,6 +2,7 @@ import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/core.dart';
+import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_event_bus/smf_event_bus.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
@@ -50,6 +51,7 @@ const List<SmfModule> smfModules = [
   GetItModule(),
   EventBusModule(),
   SharedPreferencesModule(),
+  DartDefineModule(),
   OnboardingModule(),
   LocalNotificationsModule(),
   FirebaseCoreModule(),

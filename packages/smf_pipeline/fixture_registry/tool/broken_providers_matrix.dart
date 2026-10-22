@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:fixture_registry/broken_providers.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/matrix_env.dart';
 
 /// Generates in the directory given as the only argument the app of each
 /// provider of a role with one known bug (`brokenProviders` of
@@ -15,7 +16,9 @@ import 'package:smf_flutter_cli/matrix.dart';
 /// So each test of a role shows that it fails when a provider breaks the
 /// contract that it checks. It does the same with the apps of the modules
 /// that break what the app tests expect of every module (`brokenModuleApps`),
-/// such as a guard of the routes that nothing opens for the tests.
+/// such as a guard of the routes that nothing opens for the tests. The
+/// tests of an app give it values through its `.env`, as in the other
+/// matrices; see `matrixEnv`.
 Future<void> main(List<String> arguments) async {
   if (arguments case [final directory] when !directory.startsWith('-')) {
     final providers = brokenProviders();
@@ -34,6 +37,7 @@ Future<void> main(List<String> arguments) async {
       [for (final provider in providers) provider.failingApp, ...ofModules],
       directory: directory,
       appTests: MatrixAppTests(await brokenProviderAppTests()),
+      env: matrixEnv,
     );
     await Future.wait<void>([stdout.flush(), stderr.flush()]);
     exit(code);
