@@ -1850,6 +1850,12 @@ bool _listening = false;
 final Map<String, BillingPeriod> _periods = {};
 bool _periodsRead = false;
 
+/// How long an access waits for the offerings. RevenueCat gives them from
+/// what the device keeps at once, and the wait ends a read that would wait
+/// for the network, so that the access comes well within the time that the
+/// start of the purchases waits for it.
+const _offeringsWait = Duration(seconds: 1);
+
 /// The purchases of the app on [RevenueCat](https://www.revenuecat.com),
 /// with purchases_flutter.
 ///
@@ -2047,15 +2053,20 @@ final class RevenueCatPurchasesService implements PurchasesService {
   }
 
   /// The access of [info], once the app read the offerings that tell the
-  /// period of a plan that renews, if it has not yet.
+  /// period of a plan that renews, if it has not yet. It waits for them at
+  /// most [_offeringsWait]: the access then has no period, and the periods
+  /// come with offerings that RevenueCat gives later.
   Future<AppAccess> _accessAfter(CustomerInfo info) async {
     final premium = info.entitlements.active[_entitlement];
     if (premium?.expirationDate != null && !_periodsRead) {
+      final read = Purchases.getOfferings().then(_read);
       try {
-        _read(await Purchases.getOfferings());
-      } on PlatformException {
+        await read.timeout(_offeringsWait);
+      } on Object {
         // The access then has no period, as when the offerings do not have
-        // its product.
+        // its product. A read that ends later keeps the periods, or fails
+        // with nobody to tell.
+        unawaited(read.then((_) {}, onError: (Object _) {}));
       }
     }
     return _accessOf(info);

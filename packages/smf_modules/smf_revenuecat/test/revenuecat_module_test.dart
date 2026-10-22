@@ -215,8 +215,31 @@ Future<void> main(List<String> arguments, SendPort port) async {
     ...await step(broken.access),
   ];
 
+  customerInfo = const CustomerInfo(
+    EntitlementInfos({
+      'premium': EntitlementInfo(
+        'premium_annual',
+        willRenew: true,
+        expirationDate: '2099-01-01T00:00:00.000Z',
+      ),
+    }),
+  );
+  final heldOfferings = holdNext['getOfferings'] = Completer<void>();
+  final took = Stopwatch()..start();
+  final first = await service.access() as PremiumAccess;
+  took.stop();
   offerings = const Offerings({'default': Offering('default', [package])},
       current: Offering('default', [package]));
+  heldOfferings.complete();
+  await Future<void>.delayed(const Duration(milliseconds: 10));
+  final later = await service.access() as PremiumAccess;
+  result['offerings that come late'] = [
+    '${first.period}',
+    took.elapsed < const Duration(seconds: 3),
+    '${later.period}',
+  ];
+  customerInfo = const CustomerInfo(EntitlementInfos({}));
+
   final plan = (await service.plans()).single;
   failNext['purchasePackage'] = failure('1');
   result['cancel by code'] = await step(() => service.purchase(plan));
@@ -617,6 +640,17 @@ void main() {
       const broken = 'failed: notConfigured (RevenueCat did not start with '
           'REVENUECAT_GOOGLE_KEY: Bad state: broken)';
       expect(run['configuration that fails otherwise'], [false, broken]);
+    });
+
+    test(
+        'waits only a moment for offerings that RevenueCat does not give, '
+        'with an access without a period then, and has the period once they '
+        'come', () {
+      expect(run['offerings that come late'], [
+        'null',
+        true,
+        'BillingPeriod(1 year)',
+      ]);
     });
 
     test(
