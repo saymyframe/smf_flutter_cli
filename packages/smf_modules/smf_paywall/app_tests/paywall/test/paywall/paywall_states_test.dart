@@ -67,7 +67,8 @@ bool _spins() => find
 bool _takesTap(WidgetTester tester) =>
     tester
         .widget<FilledButton>(
-          find.descendant(of: purchaseButton, matching: find.byType(FilledButton)),
+          find.descendant(
+              of: purchaseButton, matching: find.byType(FilledButton)),
         )
         .onPressed !=
     null;
@@ -133,7 +134,8 @@ void main() {
         }
         expect(
           [
-            for (final (index, price) in [r'$29.99', r'$4.99', r'$79.99'].indexed)
+            for (final (index, price)
+                in [r'$29.99', r'$4.99', r'$79.99'].indexed)
               _onCard(
                 index,
                 find.textContaining(price, findRichText: true),
@@ -157,7 +159,9 @@ void main() {
               'week.',
         );
         expect(
-          [for (final index in [0, 1, 2]) _selected(tester, index)],
+          [
+            for (final index in [0, 1, 2]) _selected(tester, index)
+          ],
           [true, false, false],
           reason: '$when, the yearly plan is selected.',
         );
@@ -256,12 +260,14 @@ void main() {
       expect(
         (
           _selected(tester, 0),
-          tester.widget<TextButton>(
-            find.descendant(
-              of: link('restore'),
-              matching: find.byType(TextButton),
-            ),
-          ).onPressed,
+          tester
+              .widget<TextButton>(
+                find.descendant(
+                  of: link('restore'),
+                  matching: find.byType(TextButton),
+                ),
+              )
+              .onPressed,
         ),
         (true, null),
         reason: 'While a purchase is on its way, no plan is selected and '

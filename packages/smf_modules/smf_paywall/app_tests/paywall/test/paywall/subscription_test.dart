@@ -86,7 +86,10 @@ void main() {
         ).push<Object?>(const PaywallSubscriptionLocation());
         await tester.pumpAndSettle();
         expect(
-          (subscriptionScreen.evaluate().length, builtPaywall.evaluate().length),
+          (
+            subscriptionScreen.evaluate().length,
+            builtPaywall.evaluate().length
+          ),
           (1, 0),
           reason: 'With $name, the user has premium access, and the router '
               'shows the screen of the subscription.',
@@ -110,7 +113,10 @@ void main() {
           };
           if (plan != null) {
             expect(
-              (text('planLabel').evaluate().length, text(plan).evaluate().length),
+              (
+                text('planLabel').evaluate().length,
+                text(plan).evaluate().length
+              ),
               (1, 1),
               reason: '$when, the screen names the plan.',
             );
@@ -166,7 +172,10 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
       expect(
-        (builtSubscription.evaluate().length, startScreenShown.evaluate().length),
+        (
+          builtSubscription.evaluate().length,
+          startScreenShown.evaluate().length
+        ),
         (0, 1),
         reason: 'When the access ends, the router closes the screen of the '
             'subscription, and the user is on the page below it.',

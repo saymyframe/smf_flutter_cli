@@ -69,8 +69,7 @@ Map<String, String> texts = paywallTexts.values.first;
 Finder text(String name) => find.text(texts[name]!);
 
 /// The link of the paywall with the text [name] of the module.
-Finder link(String name) =>
-    find.widgetWithText(PaywallLink, texts[name]!);
+Finder link(String name) => find.widgetWithText(PaywallLink, texts[name]!);
 
 /// The name among the texts of the module of the text that the paywall
 /// shows for [reason], the reason of a failure. A reason that the role gets

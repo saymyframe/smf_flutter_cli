@@ -180,7 +180,8 @@ void main() {
           _inPaywall(
             find.byWidgetPredicate(
               (widget) =>
-                  widget is Semantics && (widget.properties.liveRegion ?? false),
+                  widget is Semantics &&
+                  (widget.properties.liveRegion ?? false),
               description: 'the live region of the message',
             ),
           ),
