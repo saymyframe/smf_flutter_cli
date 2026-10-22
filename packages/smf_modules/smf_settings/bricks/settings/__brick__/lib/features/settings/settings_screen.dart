@@ -53,20 +53,30 @@ class SettingsScreen extends StatelessWidget {
 {{#with_entries}}              ],
             ),
           ],
-        ),{{/with_entries}}{{^with_entries}}        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              sliver: SliverToBoxAdapter(child: title),
+        ),{{/with_entries}}{{^with_entries}}        child: LayoutBuilder(
+          // The note in the middle of the rest of the screen, and below
+          // the title on a screen too small for both, where the two
+          // scroll. The column is at least as tall as the screen, and as
+          // tall as the layout of the note needs, whose texts wrap within
+          // a width of their own.
+          builder: (context, screen) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: screen.maxHeight),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                    child: title,
+                  ),
+                  const _NoSettings(),
+                  // As much room below the note as above it.
+                  const SizedBox.shrink(),
+                ],
+              ),
             ),
-            // The note in the middle of the rest of the screen, and
-            // below the title on a screen too small for both, where the
-            // two scroll.
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: _NoSettings(),
-            ),
-          ],
+          ),
         ),{{/with_entries}}
       ),
     );
