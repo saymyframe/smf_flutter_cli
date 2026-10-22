@@ -729,7 +729,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
 /// the fake time of a widget test that is over does, and then, in the root
 /// zone, buys a plan with `plans().then(...)` and starts the purchases, as
 /// the mocks of a later test do in real time.
-const _createdElsewhere = '''
+const _createdElsewhere = r'''
 Future<void> main(List<String> arguments, SendPort port) async {
   runZoned(
     () => appPurchases.value,
@@ -742,7 +742,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
     appPurchases
         .plans()
         .then((plans) => appPurchases.purchase(plans.last))
-        .then((bought) => done.add('purchase: \$bought')),
+        .then((bought) => done.add('purchase: $bought')),
   );
   final watch = Stopwatch()..start();
   await initPurchases();
