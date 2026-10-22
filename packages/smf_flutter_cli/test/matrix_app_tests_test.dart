@@ -4063,7 +4063,7 @@ void main() {
             'step0.notificationsStepShows;\n',
           ),
           contains(
-            'const Future<void> Function() stepAction = '
+            'const Future<void> Function(BuildContext context) stepAction = '
             'step0.allowNotifications;\n',
           ),
         ),
@@ -4100,7 +4100,10 @@ void main() {
     expect(errors, isEmpty);
     expect(
       [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
-      ['package:my_app/core/notifications/notifications_step.dart as step0'],
+      [
+        'package:flutter/widgets.dart as null',
+        'package:my_app/core/notifications/notifications_step.dart as step0',
+      ],
     );
     expect(
       index.declarations.map((declaration) => declaration.name),
@@ -4137,7 +4140,7 @@ void main() {
           'const bool Function() stepShows = step0.notificationsStepShows;\n',
         ),
         contains(
-          'const Future<void> Function() stepAction = '
+          'const Future<void> Function(BuildContext context) stepAction = '
           'step1.allowNotifications;\n',
         ),
       ),

@@ -197,7 +197,7 @@ With `flutter_local_notifications`:
 ## Onboarding screen
 
 - The onboarding shows the steps of `appOnboardingSteps` in `lib/core/onboarding/onboarding_steps.dart`, each on a page of its own, in the order of the list. A step is an `OnboardingStep`: an `icon`, a `title`, a `text`, the label of its `action` and the function `run` that the action calls. Its `later` is the label of a button that goes on without calling `run`, and the onboarding leaves the step out when its `showIf` returns `false` as the onboarding opens.
-- To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` returns a `Future`, and `showIf` returns a `bool` at once. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
+- To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` takes the `BuildContext` of the onboarding screen and returns a `Future`, and `showIf` returns a `bool` at once. The onboarding goes on once the future of `run` completes. A `run` that shows a screen of its own over the onboarding pushes it with `Navigator.of(context, rootNavigator: true)` and completes once that screen is closed. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
 - Skipping the onboarding skips its steps. So the app does not rely on `run` alone for what a step does, such as asking for a permission: the code that needs it calls the same function too.
 
 ## Preferences
@@ -3671,6 +3671,8 @@ Future<void> startFixture() async {
 === lib/core/fixture_steps/fixture_steps.dart (fake_steps) ===
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+
 /// The steps of the onboarding of the fixture whose action ran, in the
 /// order of the calls: `ask` or `confirm` for each call of the action of
 /// the step of that name.
@@ -3680,20 +3682,39 @@ final List<String> fixtureStepCalls = [];
 /// onboarding asks [showsFixtureAsk] once each time it opens.
 bool fixtureAskShows = true;
 
-/// What the action of the step `ask` waits for once it noted its call, as
-/// a test sets it to hold the action back, or `null` for nothing.
+/// What the action of the step `ask` waits for once its screen is closed,
+/// as a test sets it to hold the action back, or `null` for nothing.
 Completer<void>? fixtureAskHold;
 
 /// Whether the action of the step `ask` fails once it noted its call, as a
 /// test sets it.
 bool fixtureAskFails = false;
 
+/// The route of the screen that the action of the step `ask` shows while
+/// the screen is open, or `null` while it shows none.
+Route<void>? fixtureAskRoute;
+
 /// The action of the step `ask`: notes its call in [fixtureStepCalls],
-/// fails if [fixtureAskFails], and then waits for [fixtureAskHold].
-Future<void> askFixture() async {
+/// fails if [fixtureAskFails], shows [FixtureAskScreen] over the app until
+/// that screen is closed, and then waits for [fixtureAskHold].
+///
+/// It shows the screen as a step shows a screen of its own over the
+/// onboarding: with a route without a page on the navigator at the root of
+/// the app, which it finds from [context], the context of the onboarding
+/// screen.
+Future<void> askFixture(BuildContext context) async {
   fixtureStepCalls.add('ask');
   if (fixtureAskFails) {
     throw StateError('The action of the fixture step ask fails.');
+  }
+  final route = fixtureAskRoute = MaterialPageRoute<void>(
+    fullscreenDialog: true,
+    builder: (context) => const FixtureAskScreen(),
+  );
+  try {
+    await Navigator.of(context, rootNavigator: true).push(route);
+  } finally {
+    if (fixtureAskRoute == route) fixtureAskRoute = null;
   }
   await fixtureAskHold?.future;
 }
@@ -3702,8 +3723,20 @@ Future<void> askFixture() async {
 bool showsFixtureAsk() => fixtureAskShows;
 
 /// The action of the step `confirm`: notes its call in [fixtureStepCalls].
-Future<void> confirmFixture() async {
+/// It needs nothing of the context of the onboarding screen.
+Future<void> confirmFixture(BuildContext _) async {
   fixtureStepCalls.add('confirm');
+}
+
+/// The screen that the action of the step `ask` shows over the app, with a
+/// button that closes it.
+class FixtureAskScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FixtureAskScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(appBar: AppBar(leading: const CloseButton()));
 }
 === lib/core/google_sign_in/assets/2.0x/google_logo.png (google_sign_in) ===
 <1680 bytes>
@@ -5445,6 +5478,8 @@ class NotificationsSetting extends StatelessWidget {
   }
 }
 === lib/core/notifications/notifications_step.dart (role:notifications) ===
+import 'package:flutter/widgets.dart';
+
 import 'app_notifications.dart';
 
 /// Whether the onboarding shows its step that asks for the permission to
@@ -5453,8 +5488,9 @@ bool notificationsStepShows() =>
     appNotifications.permission.value == NotificationPermission.notAsked;
 
 /// Asks for the permission to show notifications: the action of the step of
-/// the onboarding.
-Future<void> allowNotifications() => appNotifications.request();
+/// the onboarding, which needs nothing of the context of the onboarding
+/// screen.
+Future<void> allowNotifications(BuildContext _) => appNotifications.request();
 === lib/core/onboarding/onboarding_steps.dart (role:onboarding_screen) ===
 import 'package:fixture_app/core/fixture_steps/fixture_steps.dart' as step0;
 import 'package:fixture_app/core/l10n/l10n.dart';
@@ -5496,10 +5532,15 @@ final class OnboardingStep {
   /// Returns the label of the button that calls [run], as [title] does.
   final String Function(BuildContext context) action;
 
-  /// What the button [action] does, such as asking for a permission. The
-  /// onboarding goes on to its next page once the future completes, also
-  /// when it fails.
-  final Future<void> Function() run;
+  /// What the button [action] does, such as asking for a permission, for
+  /// the context of the onboarding screen. The onboarding goes on to its
+  /// next page once the future completes, also when it fails.
+  ///
+  /// To show a screen of its own over the onboarding, it pushes a route on
+  /// the navigator at the root of the app, with
+  /// `Navigator.of(context, rootNavigator: true)`, and completes once that
+  /// route is popped.
+  final Future<void> Function(BuildContext context) run;
 
   /// Returns the label of the button that goes on to the next page without
   /// calling [run], as [title] does, or is `null` for a step without that
@@ -6786,7 +6827,10 @@ final class GuardedNavigation<L> {
   }
 
   /// What the router does now that a guard started or stopped allowing, or
-  /// `null` to leave its pages as they are.
+  /// `null` to leave its pages as they are. With `null` the router changes
+  /// nothing: its pages stay, and so do the routes without a page that code
+  /// pushed over them, such as a dialog or the screen that the action of an
+  /// onboarding step shows.
   ///
   /// [pages] are the pages that the user can get back to, the one on top
   /// first: those of the root navigator and of the selected branch of the
@@ -9662,13 +9706,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  /// Calls the action of [step], and shows the next page once its future
-  /// completes, also when it fails: the error goes on to the handlers of
-  /// the errors of the app that nothing caught.
+  /// Calls the action of [step] with the context of the screen, and shows
+  /// the next page once its future completes, also when it fails: the error
+  /// goes on to the handlers of the errors of the app that nothing caught.
   Future<void> _run(OnboardingStep step) async {
     setState(() => _running = true);
     try {
-      await step.run();
+      await step.run(context);
     } finally {
       if (mounted) {
         setState(() => _running = false);

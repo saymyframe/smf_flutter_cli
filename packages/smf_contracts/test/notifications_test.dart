@@ -136,12 +136,15 @@ class ValueNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
 ''';
 
 /// A stand-in for the part of Flutter's widgets library that the files of
-/// the role use: what that library exports of the foundation library, and
-/// the binding with the observers of the lifecycle of the app.
-/// `lifecycle()` puts the app into a state, and `resumeApp()` stands for
-/// the user who comes back to the app.
+/// the role use: what that library exports of the foundation library, the
+/// binding with the observers of the lifecycle of the app, and the context
+/// that the action of the step of the onboarding takes. `lifecycle()` puts
+/// the app into a state, and `resumeApp()` stands for the user who comes
+/// back to the app.
 const _widgets = '''
 export 'foundation.dart' show ChangeNotifier, Listenable, ValueNotifier, VoidCallback;
+
+abstract class BuildContext {}
 
 enum AppLifecycleState { detached, resumed, inactive, hidden, paused }
 
@@ -1809,7 +1812,8 @@ void main() {
       );
 
       // The functions of the file of the step, which the rule of the role
-      // reads: what each returns, and that neither takes an argument.
+      // reads: what each returns, and that the condition takes no argument
+      // and the action the context of the onboarding screen.
       final rendered = await _rendered(present: {onboardingScreenRole});
       final functions = _functionsOf(
         parseString(content: rendered.files[NotificationsRole.stepFile]!).unit,
@@ -1822,7 +1826,7 @@ void main() {
         },
         {
           'notificationsStepShows': 'bool ()',
-          'allowNotifications': 'Future<void> ()',
+          'allowNotifications': 'Future<void> (BuildContext _)',
         },
       );
       final index = DartFileIndex(
@@ -1833,6 +1837,16 @@ void main() {
               name: name,
               kind: DeclarationKind.function,
               type: '${function.returnType}',
+              parameters: [
+                for (final parameter
+                    in function.functionExpression.parameters!.parameters)
+                  IndexedParameter(
+                    parameter.name!.lexeme,
+                    kind: parameter.isRequiredPositional
+                        ? ParameterKind.requiredPositional
+                        : ParameterKind.optionalNamed,
+                  ),
+              ],
             ),
         ],
       );

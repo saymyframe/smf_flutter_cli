@@ -353,14 +353,19 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // that its showIf keeps when the screen opens, on a page of its own,
       // in the order of the role, with its icon, its title as a header and
       // its labels in the language of the app; the button of the action
-      // calls the action once, takes no tap until its future completes and
-      // then shows the next page, also when the action fails; and that of
-      // later shows it without the action. The matrix writes the screen
-      // and the texts of the steps for the tests, from the data of the role
-      // and of the localization role, and the tests take the two steps of
-      // the fixture steps, whose actions note their calls. Only in the apps
-      // with every module whose modules give the role steps, which run
-      // flutter test for other tests already.
+      // calls the action once with the context of the screen, takes no tap
+      // until its future completes and then shows the next page, also when
+      // the action fails; and that of later shows it without the action. A
+      // screen that the action shows over the onboarding, on the navigator
+      // at the root of the app, stays there, also while the guards of the
+      // routes notify in an app with the fixture gates, so the test is one
+      // of the router role too. The matrix writes the screen and the texts
+      // of the steps for the tests, from the data of the role and of the
+      // localization role, and the guards of the routes that the tests
+      // change, and the tests take the two steps of the fixture steps, whose
+      // actions note their calls. Only in the apps with every module whose
+      // modules give the role steps, which run flutter test for other tests
+      // already.
       _onboardingScreenRoleTest(appTests),
       // Sign-in in the apps with the auth role, whichever module provides
       // it, the test that the CLI keeps: in every app with the role, since
@@ -440,12 +445,16 @@ Future<MatrixAppTests> fixtureAppTests() async {
 /// The test of the onboarding screen role, in [appTests], the directory of
 /// the app tests of the fixture registry: in the apps with every module
 /// whose modules give the role steps, whichever module provides the role.
+/// It is a test of the router role too, whichever module provides it: a
+/// screen that the action of a step pushes on the root navigator stays,
+/// also while the guards of the routes notify in an app with the fixture
+/// gates.
 MatrixAppTest _onboardingScreenRoleTest(String appTests) => MatrixAppTest(
       '$appTests/onboarding_screen_role',
       appliesTo: (app) =>
           app.everyModuleWith != null && _stepsOf(app).isNotEmpty,
       generatedFiles: _onboardingOf,
-      roles: {onboardingScreenRole},
+      roles: {onboardingScreenRole, routerRole},
     );
 
 /// The steps of the onboarding of [app], an app of the matrix, in the order
@@ -481,6 +490,8 @@ const onboardingOfAppFile = 'test/onboarding_screen_role/of_app.dart';
 /// owner that does not list that role. Throws a [StateError] if no module
 /// names a route of its own as the onboarding screen, which the rules of the
 /// role report in an app of the matrix.
+///
+/// It also writes the file at [onboardingGuardsFile] of [app].
 Map<String, String> _onboardingOf(MatrixApp app, String packageName) {
   final hook = app.hook!;
   final input = onboardingScreenRole.hookInput(hook);
@@ -540,6 +551,7 @@ Map<String, String> _onboardingOf(MatrixApp app, String packageName) {
     "import '${screen.import.resolveUri(packageName)}' as screen;",
   ]..sort();
   return {
+    onboardingGuardsFile: _onboardingGuardsOf(app, packageName),
     onboardingOfAppFile: '''
 // The onboarding screen of the app and the texts of its steps, which the
 // matrix of SMF writes from the data of the onboarding screen role and of
@@ -576,6 +588,65 @@ const List<({String name, Map<String, StepTexts> texts})> appSteps = [
 $steps];
 ${localized ? _withStepLanguages : _withoutStepLanguages}''',
   };
+}
+
+/// The path in an app of the guards of the routes that the tests of the
+/// onboarding screen role change, which the matrix writes for them:
+/// `keepOnGate()`, which keeps the user on the target of a gate or lets the
+/// user in again, as an onboarding keeps a new user on it with a guard of
+/// the routes, and `notifyGuards()`, which has the guards notify though
+/// they keep the user from no page that the app shows. In an app with the
+/// fixture gates, they change the guards of that module, and in any other
+/// app, whose guards the tests cannot change, they do nothing.
+const onboardingGuardsFile = 'test/onboarding_screen_role/guards_of_app.dart';
+
+/// The file at [onboardingGuardsFile] of [app], an app of the matrix whose
+/// package is [packageName].
+String _onboardingGuardsOf(MatrixApp app, String packageName) {
+  const intro = '''
+// The guards of the routes that the tests of the onboarding screen role
+// change, which the matrix of SMF writes for them.''';
+  if (!app.modules.contains(const ModuleId('fake_gate'))) {
+    return '''
+$intro The app has none of the
+// guards that the tests change.
+
+/// Does nothing: the app has no gate that the tests close.
+void keepOnGate({required bool keep}) {}
+
+/// Does nothing: the app has no guard that the tests have notify.
+Future<void> notifyGuards(Future<void> Function() settle) async {}
+''';
+  }
+  final gates = const ImportRef.app('features/fake_gate/fixture_gates.dart')
+      .resolveUri(packageName);
+  return '''
+$intro They are the guards of the
+// fixture gates.
+import '$gates';
+
+/// Keeps the user on the target of the first guard of the fixture gates
+/// while [keep] is `true`, as an onboarding keeps a new user on it with a
+/// guard of the routes, and lets the user into the app again once it is
+/// `false`.
+void keepOnGate({required bool keep}) => fixtureGate.value = !keep;
+
+/// Has the guards of the fixture gates notify, though they keep the user
+/// from no page that the app shows: the first gate and the second notify
+/// without a change, and the guard of the badge of the fixture stops
+/// allowing and allows again while no page asks for the badge. [settle]
+/// shows the frames after each notification.
+Future<void> notifyGuards(Future<void> Function() settle) async {
+  fixtureGate.poke();
+  await settle();
+  fixtureSecondGate.poke();
+  await settle();
+  fixtureHolder.value = false;
+  await settle();
+  fixtureHolder.value = true;
+  await settle();
+}
+''';
 }
 
 /// What [onboardingOfAppFile] has in an app with the localization role, to

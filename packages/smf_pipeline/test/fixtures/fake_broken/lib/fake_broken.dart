@@ -483,6 +483,31 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that pops the routes without a page from its root
+  /// navigator whenever the guards of the routes answer nothing to a
+  /// notification, rather than leaving them as they are: a dialog, or the
+  /// screen that the action of an onboarding step shows over the
+  /// onboarding, goes away when a guard notifies, though no page changed.
+  static const routerDroppingRoutesWithoutPage = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_drops_routes_without_page'),
+    'A plain navigator that drops the routes without a page when a guard '
+    'notifies (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    switch (_guards.changed(_pages)) {\n'
+            '      case null:\n'
+            '        break;\n',
+        '    switch (_guards.changed(_pages)) {\n'
+            '      case null:\n'
+            '        _navigatorKey.currentState?.popUntil(\n'
+            '          (route) => route.settings is Page<Object?>,\n'
+            '        );\n',
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.

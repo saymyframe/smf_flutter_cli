@@ -33,10 +33,15 @@ final class OnboardingStep {
   /// Returns the label of the button that calls [run], as [title] does.
   final String Function(BuildContext context) action;
 
-  /// What the button [action] does, such as asking for a permission. The
-  /// onboarding goes on to its next page once the future completes, also
-  /// when it fails.
-  final Future<void> Function() run;
+  /// What the button [action] does, such as asking for a permission, for
+  /// the context of the onboarding screen. The onboarding goes on to its
+  /// next page once the future completes, also when it fails.
+  ///
+  /// To show a screen of its own over the onboarding, it pushes a route on
+  /// the navigator at the root of the app, with
+  /// `Navigator.of(context, rootNavigator: true)`, and completes once that
+  /// route is popped.
+  final Future<void> Function(BuildContext context) run;
 
   /// Returns the label of the button that goes on to the next page without
   /// calling [run], as [title] does, or is `null` for a step without that

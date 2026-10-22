@@ -223,8 +223,10 @@ final class StepsModule extends SmfModule {
         BrickContribution(
           _bundle('steps', {
             'lib/$file': [
+              "import 'package:flutter/widgets.dart';",
+              '',
               '/// Asks for something, as the action of the step does.',
-              'Future<void> askSomething() async {}',
+              'Future<void> askSomething(BuildContext context) async {}',
               '',
               '/// Whether the onboarding shows the step.',
               'bool somethingUnasked() => true;',

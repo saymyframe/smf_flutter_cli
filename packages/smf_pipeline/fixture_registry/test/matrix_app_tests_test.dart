@@ -5,8 +5,11 @@
 // job with Flutter, which checks that they apply to some app and that they
 // check the contract of their roles with every provider only at its end;
 // these tests check the same without Flutter.
+import 'dart:convert';
+
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:fake_feature/bundles/fake_gate_bundle.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
@@ -181,7 +184,10 @@ void main() {
     );
     expect(named('auth_role').roles, {authRole});
     expect(named('auth_methods').roles, {authRole});
-    expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
+    expect(
+      named('onboarding_screen_role').roles,
+      {onboardingScreenRole, routerRole},
+    );
     expect(named('notifications_role').roles, {notificationsRole});
     expect(named('notifications_step').roles, {notificationsRole});
     expect(named('push_role').roles, {pushRole});
@@ -481,7 +487,7 @@ void main() {
         apps.singleWhere((app) => app.name == name),
         'my_app',
       );
-      expect(files.keys, [onboardingOfAppFile]);
+      expect(files.keys, [onboardingGuardsFile, onboardingOfAppFile]);
       return parseString(content: files[onboardingOfAppFile]!).unit;
     }
 
@@ -663,6 +669,107 @@ void main() {
               'screen.',
         ),
       ),
+    );
+  });
+
+  test(
+      'the tests of the onboarding screen role get the guards of the fixture '
+      'gates in an app with them, to keep the user on a gate and to have the '
+      'guards notify, and nothing to change in any other app', () {
+    final onboarding = named('onboarding_screen_role');
+
+    /// The file of the guards that the matrix writes for [app], whose
+    /// package is `my_app`, parsed.
+    CompilationUnit guardsOf(MatrixApp app) => parseString(
+          content:
+              onboarding.generatedFiles!(app, 'my_app')[onboardingGuardsFile]!,
+        ).unit;
+
+    /// The bodies of the top-level functions of [unit], by name.
+    Map<String, String> bodiesOf(CompilationUnit unit) => {
+          for (final function
+              in unit.declarations.whereType<FunctionDeclaration>())
+            function.name.lexeme: function.functionExpression.body.toSource(),
+        };
+
+    List<String?> importsOf(CompilationUnit unit) => [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ];
+
+    const gatesFile = 'lib/features/fake_gate/fixture_gates.dart';
+    final applies = apps.where(onboarding.appliesTo).toList();
+    final withGates = [
+      for (final app in applies)
+        if (app.modules.contains(FakeGateModule.id)) app,
+    ];
+    // The apps with every module of the state manager of the fixture gates
+    // have them, and those of the other state manager have no guard.
+    expect(withGates, isNotEmpty);
+    expect(withGates.length, lessThan(applies.length));
+    for (final app in applies) {
+      final unit = guardsOf(app);
+      final bodies = bodiesOf(unit);
+      expect(bodies.keys, ['keepOnGate', 'notifyGuards'], reason: app.name);
+      if (withGates.contains(app)) {
+        expect(
+          importsOf(unit),
+          ['package:my_app/${gatesFile.substring('lib/'.length)}'],
+          reason: app.name,
+        );
+        expect(
+          bodies,
+          {
+            'keepOnGate': '=> fixtureGate.value = !keep;',
+            'notifyGuards': 'async {fixtureGate.poke(); await settle(); '
+                'fixtureSecondGate.poke(); await settle(); '
+                'fixtureHolder.value = false; await settle(); '
+                'fixtureHolder.value = true; await settle();}',
+          },
+          reason: app.name,
+        );
+      } else {
+        expect(importsOf(unit), isEmpty, reason: app.name);
+        expect(
+          bodies,
+          {'keepOnGate': '{}', 'notifyGuards': 'async {}'},
+          reason: app.name,
+        );
+      }
+    }
+
+    // What the file names is in the file of the fixture gates: the three
+    // gates, of which the guard of the badge reads the last, and poke() of
+    // a gate, which notifies without a change.
+    final gates = parseString(
+      content: utf8
+          .decode(
+            base64.decode(
+              fakeGateBundle.files
+                  .singleWhere((file) => file.path == gatesFile)
+                  .data,
+            ),
+          )
+          .replaceAll('{{{open}}}', 'true'),
+    ).unit;
+    expect(
+      [
+        for (final declaration
+            in gates.declarations.whereType<TopLevelVariableDeclaration>())
+          for (final variable in declaration.variables.variables)
+            variable.name.lexeme,
+      ],
+      containsAll(['fixtureGate', 'fixtureSecondGate', 'fixtureHolder']),
+    );
+    final gate = gates.declarations.whereType<ClassDeclaration>().singleWhere(
+          (type) => type.namePart.typeName.lexeme == 'FixtureGate',
+        );
+    expect(
+      [
+        for (final member in gate.body.members.whereType<MethodDeclaration>())
+          member.name.lexeme,
+      ],
+      contains('poke'),
     );
   });
 
@@ -1902,7 +2009,7 @@ void main() {
       final hook = everyModule.hook!;
       final input = onboardingScreenRole.hookInput(hook);
 
-      expect(test.roles, {onboardingScreenRole});
+      expect(test.roles, {onboardingScreenRole, routerRole});
       expect(
         [
           for (final module in severalProvidersModules())

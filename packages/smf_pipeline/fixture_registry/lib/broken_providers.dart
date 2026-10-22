@@ -885,6 +885,40 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.routerDroppingRoutesWithoutPage,
+        role: routerRole,
+        bug: 'It pops the routes without a page from its root navigator '
+            'whenever the guards of the routes answer nothing to a '
+            'notification, so the screen that the action of an onboarding '
+            'step shows over the onboarding goes away when a guard notifies, '
+            'though no page changed.',
+        // The fixture gates with their badge, whose guards the test of the
+        // onboarding screen role has notify, the fixture onboarding, which
+        // provides that role, and the fixture steps, whose step ask shows
+        // the screen.
+        app: [
+          FakeGateModule.id,
+          FakeClockBadgeModule.id,
+          FakeBlocModule.id,
+          FakeOnboardingModule.id,
+          FakeStepsModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/onboarding_screen_role/step_actions_test.dart',
+            'the action of a step runs once, with the context of the screen, '
+                'takes no tap until its future completes and then shows the '
+                'next page, also when it fails, a screen that it shows stays '
+                'while the guards notify, and later shows the next page '
+                'without it',
+            'A route without a page that the action of a step pushes on the '
+                'navigator at the root of the app stays on top while the '
+                'guards of the routes notify, also when a guard of a condition '
+                'stops and starts allowing.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         _goRouterAskingWithinItsCalls,
         role: routerRole,
         bug: 'Its redirect asks the guards of the routes about the locations '

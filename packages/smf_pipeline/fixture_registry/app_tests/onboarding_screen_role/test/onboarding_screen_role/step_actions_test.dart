@@ -1,25 +1,38 @@
 // A test that continuous integration runs in the apps of the fixture
 // modules whose modules give the onboarding screen role steps, whichever
 // module provides the role: the button of the action of a step calls the
-// action once, takes no tap on the buttons of the step until the future of
-// the action completes, and then shows the next page, also when the action
-// fails. The error of such an action reaches the handlers of the errors of
-// the app: the provider leaves it uncaught or reports it with
-// FlutterError.reportError. The button of later shows the next page
-// without the action (OnboardingScreenRole).
+// action once, with the context of the onboarding screen, takes no tap on
+// the buttons of the step until the future of the action completes, and
+// then shows the next page, also when the action fails. The error of such
+// an action reaches the handlers of the errors of the app: the provider
+// leaves it uncaught or reports it with FlutterError.reportError. The
+// button of later shows the next page without the action. A screen that the
+// action shows over the onboarding, with a route without a page on the
+// navigator at the root of the app, stays there across frames, and, in an
+// app with the fixture gates, while the guards of the routes notify, also
+// when a guard of a condition stops and starts allowing (OnboardingScreenRole
+// and RouterRole.guardedNavigation).
 //
 // It uses the step `ask` of the fixture steps, whose action notes each call
-// in fixtureStepCalls, waits for fixtureAskHold and fails when
-// fixtureAskFails, and the step `confirm`, which comes after it. The app
-// starts once, since the start-up of an app runs once in a test file. Each
-// expectation gives its reason, which a provider of the role with a known
-// bug fails the test with (brokenProviders of the fixture registry).
+// in fixtureStepCalls, fails when fixtureAskFails, and otherwise shows
+// FixtureAskScreen over the app until the screen is closed and then waits
+// for fixtureAskHold, and the step `confirm`, which comes after it. The
+// matrix writes guards_of_app.dart next to this file: in an app with the
+// fixture gates, keepOnGate() keeps the user on the target of a gate, as an
+// onboarding keeps a new user on it, and notifyGuards() has the guards
+// notify. In another app both do nothing, so the test only checks there
+// that the screen stays across frames. The app starts once, since the
+// start-up of an app runs once in a test file. Each expectation gives its
+// reason, which a provider of the role with a known bug fails the test with
+// (brokenProviders of the fixture registry).
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show CloseButton;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/fixture_steps/fixture_steps.dart';
 
+import 'guards_of_app.dart';
 import 'of_app.dart';
 import 'steps.dart';
 
@@ -29,9 +42,10 @@ void main() {
   // A widget test fails after ten minutes by default; a test that hangs
   // fails sooner.
   testWidgets(
-    'the action of a step runs once, takes no tap until its future '
-    'completes and then shows the next page, also when it fails, and later '
-    'shows the next page without it',
+    'the action of a step runs once, with the context of the screen, takes '
+    'no tap until its future completes and then shows the next page, also '
+    'when it fails, a screen that it shows stays while the guards notify, '
+    'and later shows the next page without it',
     (tester) async {
       final language = stepLanguages.first;
       final texts = textsOf(ask, language);
@@ -39,10 +53,17 @@ void main() {
         fixtureAskHold = null;
         fixtureAskFails = false;
         fixtureStepCalls.clear();
+        keepOnGate(keep: false);
       });
       await startApp(tester);
+      // In an app with the fixture gates, the onboarding over the target of
+      // a gate that does not allow, as an onboarding that keeps a new user
+      // on it with a guard of the routes.
+      keepOnGate(keep: true);
+      await tester.pumpAndSettle();
 
-      // The action waits for what the test holds it back with.
+      // The action shows a screen of its own, and once that screen is
+      // closed, waits for what the test holds it back with.
       final hold = fixtureAskHold = Completer<void>();
       await showNewScreen(tester);
       await swipeToStep(tester, ask, language);
@@ -50,18 +71,58 @@ void main() {
       final later = tester.getCenter(shown(find.text(texts.later!)));
       fixtureStepCalls.clear();
       await tester.tapAt(action);
-      await pumpFor(tester, const Duration(seconds: 1));
+      await pumpFor(tester, const Duration(seconds: 2));
       expect(
         fixtureStepCalls,
         ['ask'],
         reason: 'A tap on the button of the action of a step calls the '
             'action once.',
       );
+      final askScreen = find.byType(FixtureAskScreen);
+      expect(
+        askScreen,
+        findsOneWidget,
+        reason: 'The action of a step gets the context of the onboarding '
+            'screen, with which it shows a screen of its own over the '
+            'onboarding, on the navigator at the root of the app.',
+      );
+
+      // In an app with the fixture gates, the guards of the routes notify
+      // while that screen shows. Frames go by in every app.
+      await notifyGuards(
+        () => pumpFor(tester, const Duration(milliseconds: 500)),
+      );
+      await pumpFor(tester, const Duration(milliseconds: 500));
+      expect(
+        fixtureAskRoute?.isCurrent,
+        isTrue,
+        reason: 'A route without a page that the action of a step pushes on '
+            'the navigator at the root of the app stays on top while the '
+            'guards of the routes notify, also when a guard of a condition '
+            'stops and starts allowing.',
+      );
+      expect(
+        askScreen,
+        findsOneWidget,
+        reason: 'The screen that the action of a step shows over the '
+            'onboarding stays while the guards of the routes notify.',
+      );
+      await tester.tap(
+        find.descendant(of: askScreen, matching: find.byType(CloseButton)),
+      );
+      await pumpFor(tester, const Duration(seconds: 2));
+      expect(
+        askScreen,
+        findsNothing,
+        reason: 'The screen that the action of a step showed closes.',
+      );
       expect(
         stepShown(tester, language),
         ask,
-        reason: 'While the future of the action of a step does not complete, '
-            'the step stays.',
+        reason: 'Below the screen that the action of a step showed, the '
+            'onboarding stays on the step, also once the guards of the routes '
+            'notified, and the step stays while the future of the action does '
+            'not complete.',
       );
       await tester.tapAt(action);
       await tester.tapAt(later);
@@ -95,6 +156,8 @@ void main() {
         reason: 'The onboarding calls no action of the next step for it.',
       );
       await closeScreen(tester);
+      keepOnGate(keep: false);
+      await tester.pumpAndSettle();
 
       // Later goes on without the action.
       fixtureAskHold = null;
