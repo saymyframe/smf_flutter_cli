@@ -4474,6 +4474,166 @@ void main() {
     });
   });
 
+  group('the test of the env role', () {
+    const shopKey = EnvKey(
+      'SHOP_PUBLIC_KEY',
+      description: 'The public key of the shop',
+    );
+    const shopUrl = EnvKey('SHOP_TERMS_URL', description: 'The terms');
+    const feedUrl = EnvKey('FEED_URL', description: 'The address of the feed');
+
+    /// An app with [roles] whose modules give the env role [keys], each
+    /// with its module.
+    MatrixApp appWith(
+      Set<Role> roles, {
+      List<(ModuleId, EnvKey)> keys = const [],
+      List<ModuleId>? everyModuleWith,
+    }) =>
+        MatrixApp(
+          'env',
+          const [ModuleId('shop')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: [
+              for (final (module, key) in keys)
+                envRole.data(key).withOrigin(ModuleOrigin(module)),
+              envRole
+                  .data(const EnvToolArguments(['--values=.env']))
+                  .withOrigin(const ModuleOrigin(ModuleId('values'))),
+            ],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    const shop = ModuleId('shop');
+    const feed = ModuleId('feed');
+    final withKeys = appWith(
+      {envRole},
+      keys: [(shop, shopKey), (shop, shopUrl), (feed, feedUrl)],
+    );
+
+    test(
+        'applies to the apps with the role whose modules give it keys, '
+        'whichever module provides the role, or to those of them that it is '
+        'given, and only reads', () async {
+      final test = await envRoleAppTest();
+
+      expect(p.basename(test.directory), 'env_role');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      expect(test.roles, {envRole});
+      expect(test.appliesTo(withKeys), isTrue);
+      // An app with the role and no key has no getter to read, and an app
+      // without the role has no AppEnv.
+      expect(test.appliesTo(appWith({envRole})), isFalse);
+      expect(
+        test.appliesTo(
+          appWith(const {}, keys: [(shop, shopKey)]),
+        ),
+        isFalse,
+      );
+      // It gives no value, has no mocks, and no probe: the values of an app
+      // on a device are those of its developer.
+      expect(test.envValues, isNull);
+      expect(test.values, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      // No module of the CLI gives the role keys yet, so the matrix of the
+      // CLI does not run it.
+      expect(
+        appTests.tests.map((test) => p.basename(test.directory)),
+        isNot(contains('env_role')),
+      );
+
+      // As the fixtures take it, only in the apps with every module.
+      final everyModule = await envRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      );
+      expect(everyModule.appliesTo(withKeys), isFalse);
+      expect(
+        everyModule.appliesTo(
+          appWith(
+            {envRole},
+            keys: [(shop, shopKey)],
+            everyModuleWith: const [],
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        everyModule.appliesTo(appWith({envRole}, everyModuleWith: const [])),
+        isFalse,
+      );
+    });
+
+    test(
+        'gets the file of the values of the app and its keys, each with its '
+        'getter of AppEnv, in the order of the role, from the data of the '
+        'role', () async {
+      final test = await envRoleAppTest();
+
+      final files = test.generatedFiles!(withKeys, 'my_app');
+
+      expect(files.keys, [envKeysFile]);
+      final text = files[envKeysFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(envKeysFile, text);
+      expect(errors, isEmpty);
+      expect(
+        [for (final import in index.imports) import.uri],
+        ['package:my_app/core/env/app_env.dart'],
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['dotEnvFile', 'AppKey', 'appKeys'],
+      );
+      expect(text, contains("const String dotEnvFile = '.env';"));
+      expect(
+        text,
+        contains(
+          'final List<AppKey> appKeys = [\n'
+          '  (\n'
+          "    name: 'SHOP_PUBLIC_KEY',\n"
+          "    getter: 'shopPublicKey',\n"
+          '    read: () => AppEnv.shopPublicKey,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'SHOP_TERMS_URL',\n"
+          "    getter: 'shopTermsUrl',\n"
+          '    read: () => AppEnv.shopTermsUrl,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'FEED_URL',\n"
+          "    getter: 'feedUrl',\n"
+          '    read: () => AppEnv.feedUrl,\n'
+          '  ),\n'
+          '];\n',
+        ),
+      );
+      // The test of the role reads the file of the values from the path of
+      // the role, which the matrix writes the values into.
+      expect(EnvRole.dotEnvFile, matrixEnv.file);
+      // It imports the file that the matrix writes next to it, and no file
+      // of the app.
+      final testFile = File(
+        p.join(test.directory, 'test', 'env_role', 'env_role_test.dart'),
+      );
+      final parsed = DartFileIndexer.parse(
+        'test/env_role/env_role_test.dart',
+        testFile.readAsStringSync(),
+      );
+      expect(parsed.errors, isEmpty);
+      expect(
+        [for (final import in parsed.index.imports) import.uri],
+        ['dart:io', 'package:flutter_test/flutter_test.dart', 'keys.dart'],
+      );
+      expect(p.posix.basename(envKeysFile), 'keys.dart');
+      expect(
+        p.posix.dirname(envKeysFile),
+        p.posix.dirname('test/env_role/env_role_test.dart'),
+      );
+    });
+  });
+
   test(
       'the test of local_notifications applies to the apps with the module, '
       'whatever else they have, declares the mocks of its platform side for '

@@ -6,6 +6,8 @@ import 'package:fake_infra/bundles/fake_analytics_bundle.dart';
 import 'package:fake_infra/bundles/fake_auth_bundle.dart';
 import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
+import 'package:fake_infra/bundles/fake_env_bundle.dart';
+import 'package:fake_infra/bundles/fake_env_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
 import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
@@ -1138,6 +1140,153 @@ final class FakePurchasesModule extends SmfModule {
             init: FactoryRef('openFixturePurchases', import: _file),
           ),
         ),
+      ];
+}
+
+/// A provider of the env role with code of its own: `AppEnv` keeps in a
+/// constant map what a command of the `flutter` tool read from `.env`,
+/// given `--dart-define-from-file .env` (the flag and the path as two
+/// arguments, which it gives the role), and a static getter of each key
+/// returns its value from the map, or `null` while it is empty or missing.
+///
+/// Its render hook writes the getters and the map for the keys of the app,
+/// and an app without keys has the class without members. The template of
+/// the role does the rest, whichever module provides it: `.env`,
+/// `.env.example` and the entry of `.env` in `.gitignore`.
+final class FakeEnvModule extends SmfModule {
+  /// Creates the module.
+  const FakeEnvModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_env');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'The values of .env in a constant map (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [_FakeEnvProvider()],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeEnvBundle),
+        envRole.data(
+          const EnvToolArguments([
+            '--dart-define-from-file',
+            EnvRole.dotEnvFile,
+          ]),
+        ),
+      ];
+}
+
+/// Renders the members of `AppEnv` of [FakeEnvModule] for the keys of the
+/// app.
+final class _FakeEnvProvider extends RoleProvider<EnvData> {
+  const _FakeEnvProvider();
+
+  @override
+  Role<EnvData> get role => envRole;
+
+  @override
+  RoleOutput render(RoleHookInput<EnvData> input) {
+    final keys = envRole.keysIn(input);
+    return RoleOutput(
+      vars: {
+        'fixture_env_members': Fragment(
+          keys.isEmpty
+              ? ''
+              : [
+                  for (final key in keys) _getterOf(key),
+                  _valuesOf(keys),
+                  _valueOf,
+                ].join('\n\n'),
+        ),
+      },
+    );
+  }
+
+  /// The getter of [key], which reads its value from the map.
+  static String _getterOf(AppEnvKey key) {
+    final name = SmfNames.dartString(key.name);
+    return '  /// The value of `${key.name}`.\n'
+        '  static String? get ${key.getter} => _valueOf($name);';
+  }
+
+  /// The map of what the command that built the app read from `.env` for
+  /// [keys]: an empty value as an empty text, and no entry for a key that
+  /// `.env` lacks, which the command did not define.
+  static String _valuesOf(List<AppEnvKey> keys) => [
+        _valuesDoc,
+        '  static const Map<String, String> _values = {',
+        for (final name in [
+          for (final key in keys) SmfNames.dartString(key.name),
+        ]) ...[
+          '    if (bool.hasEnvironment($name))',
+          '      $name: String.fromEnvironment($name),',
+        ],
+        '  };',
+      ].join('\n');
+
+  /// The doc of the map of the values.
+  static const _valuesDoc = '''
+  /// What the command that built the app read from `.env`, by the keys of
+  /// the app: an empty value as an empty text, and no entry for a key that
+  /// `.env` lacks.''';
+
+  /// The function that the getters read their values with.
+  static const _valueOf = '''
+  /// The value of [key], or `null` while `.env` leaves it empty or lacks
+  /// it.
+  static String? _valueOf(String key) {
+    final value = _values[key];
+    return value == null || value.isEmpty ? null : value;
+  }''';
+}
+
+/// A module that reads three values of `.env`, which it gives the env role
+/// as keys in an app with that role: `FAKE_ENV_USER_FIRST`,
+/// `FAKE_ENV_USER_SECOND` and `FAKE_ENV_USER_THIRD`. Its brick reads each
+/// through the variable of its key ([EnvRole.varsOf]), so it reads `null`
+/// in an app without the role.
+final class FakeEnvUserModule extends SmfModule {
+  /// Creates the module.
+  const FakeEnvUserModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_env_user');
+
+  /// The keys of the module, in their order.
+  static const keys = [
+    EnvKey(
+      'FAKE_ENV_USER_FIRST',
+      description: 'The first value of the fixture',
+    ),
+    EnvKey(
+      'FAKE_ENV_USER_SECOND',
+      description: 'The second value of the fixture',
+    ),
+    EnvKey(
+      'FAKE_ENV_USER_THIRD',
+      description: 'The third value of the fixture',
+    ),
+  ];
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Three values of .env (fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {envRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          fakeEnvUserBundle,
+          vars: envRole.varsOf(id, keys),
+        ),
+        for (final key in keys) envRole.data(key),
       ];
 }
 

@@ -488,11 +488,15 @@ void main() {
         '    application.applicationSupportsShakeToEdit = true',
       );
       // The patterns of .gitignore in their order: the one that both modules
-      // give in the same words once, and the one that they give in other
-      // words under both comments.
+      // give in the same words once, the one of the template of the env
+      // role, and the one that they give in other words under both
+      // comments.
       expect(
         rendered(result, AppEntryRole.gitignore).values.single,
         '\n# The logs of the fixture\n*.fixture.log\n'
+        '\n# The values of the app, which each developer fills in from '
+        '.env.example\n'
+        '.env\n'
         '\n# The values of the fixture that each developer keeps\n'
         '# What the fixture keeps on one machine\n'
         '/fixture.local',
@@ -2506,6 +2510,9 @@ const _cases = [
   'fake_purchases with auth',
   'fake_purchases with localization',
   'fake_purchases',
+  'fake_env',
+  'fake_env_user with env',
+  'fake_env_user',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',
