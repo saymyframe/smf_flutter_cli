@@ -1052,6 +1052,91 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Starts a controller again while a purchase is on its way, and twice at
+/// once.
+const _laterStarts = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final controller = AppPurchasesController();
+  final heard = <String>[];
+  controller.addListener(() => heard.add(show(controller.value)));
+  final first = FakePurchases('first');
+  await controller.start(first);
+  takeCalls();
+
+  final hold = holds['first: purchase monthly'] = Completer<void>();
+  final bought = controller.purchase(monthly);
+  await pump();
+  final second = FakePurchases('second');
+  var started = false;
+  final start = controller.start(second).then((_) => started = true);
+  await pump();
+  result['a start while a purchase is on its way'] = {
+    'calls': takeCalls(),
+    'the start is done': started,
+    'the services that are followed': [first.hasListener, second.hasListener],
+  };
+  holds.clear();
+  hold.complete();
+  result['the purchase'] = await bought;
+  await start;
+  result['once the purchase ended'] = {
+    'calls': takeCalls(),
+    'heard': [...heard],
+    'the services that are followed': [first.hasListener, second.hasListener],
+  };
+
+  heard.clear();
+  final third = FakePurchases('third');
+  final fourth = FakePurchases('fourth');
+  await Future.wait([controller.start(third), controller.start(fourth)]);
+  result['two starts at once'] = {
+    'calls': takeCalls(),
+    'heard': heard,
+    'the services that are followed': [
+      second.hasListener,
+      third.hasListener,
+      fourth.hasListener,
+    ],
+  };
+  controller.dispose();
+  port.send(result);
+}
+''';
+
+/// Starts a controller with a user that changes without telling, and makes
+/// a call while the service identifies the new user.
+const _silentUser = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  var user = 'a';
+  accessOf['a'] = const PremiumAccess();
+  final controller = AppPurchasesController();
+  final heard = <String>[];
+  controller.addListener(() => heard.add(show(controller.value)));
+  await controller.start(FakePurchases(), userId: () => user);
+  takeCalls();
+  user = 'b';
+  final hold = holds['identify b'] = Completer<void>();
+  final plans = controller.plans();
+  await pump();
+  result['while the service identifies the new user'] = {
+    'access': show(controller.value),
+    'calls': takeCalls(),
+    'heard': [...heard],
+  };
+  holds.clear();
+  hold.complete();
+  await plans;
+  await pump();
+  result['after the call'] = {
+    'access': show(controller.value),
+    'calls': takeCalls(),
+    'heard': heard,
+  };
+  controller.dispose();
+  port.send(result);
+}
+''';
+
 /// Starts an app with sign-in as `bootstrap()` does, buys a plan as the
 /// user of the device, signs up, out and in again.
 const _withAuth = '''
@@ -1960,6 +2045,55 @@ void main() {
             'observers of the lifecycle': [1, 0],
             'the services that are followed': [false, false],
             'the listeners of the users': [1, 0, 0],
+          },
+        });
+      });
+
+      test(
+          'lets a start take its turn after a purchase on its way, and two '
+          'starts at once one after the other', () async {
+        const premium = 'premium until 2030 renews in trial';
+        expect(await app.run('$_notes$_laterStarts'), {
+          'a start while a purchase is on its way': {
+            'calls': ['first: purchase monthly'],
+            'the start is done': false,
+            'the services that are followed': [true, false],
+          },
+          'the purchase': true,
+          // The purchase counts on the first service, then the second one
+          // starts, with what the server kept.
+          'once the purchase ended': {
+            'calls': ['second: identify null', 'second: access'],
+            'heard': [premium, 'none', premium],
+            'the services that are followed': [false, true],
+          },
+          'two starts at once': {
+            'calls': [
+              'third: identify null',
+              'third: access',
+              'fourth: identify null',
+              'fourth: access',
+            ],
+            'heard': ['none', premium, 'none', premium],
+            'the services that are followed': [false, false, true],
+          },
+        });
+      });
+
+      test(
+          'has no access while it identifies a user that changed without '
+          'telling, and looks at the access of that user after the call',
+          () async {
+        expect(await app.run('$_notes$_silentUser'), {
+          'while the service identifies the new user': {
+            'access': 'none',
+            'calls': ['identify b'],
+            'heard': ['premium', 'none'],
+          },
+          'after the call': {
+            'access': 'none',
+            'calls': ['plans', 'access'],
+            'heard': ['premium', 'none'],
           },
         });
       });
