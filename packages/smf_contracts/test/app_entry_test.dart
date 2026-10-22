@@ -3716,6 +3716,41 @@ Future<void> main() async {
     });
 
     test(
+        'the tag of the patterns of .gitignore is on the last line of the '
+        'provider with text, so the patterns follow its own lines', () {
+      const tag = '{{{smf_app_entry__gitignore}}}';
+      const path = AppEntryRole.gitignoreFile;
+      List<String> problems(String template) => [
+            for (final issue in checkModule({path: template})) issue.message,
+          ];
+      const notLast = 'The tag $tag is not on the last line of $path that has '
+          'text: the patterns of the modules follow every line of the '
+          'provider, so no line of the provider can take back what they '
+          'ignore.';
+
+      expect(problems('/build/\n$tag\n'), isEmpty);
+      // Empty lines after it are no lines of the provider.
+      expect(problems('/build/\n$tag\n\n  \n'), isEmpty);
+      for (final template in [
+        '$tag\n/build/\n',
+        '/build/\n$tag\n\n# Keep the keys\n!/keys/\n',
+      ]) {
+        final issues = checkModule({path: template});
+        expect(
+          [for (final issue in issues) issue.message],
+          [notLast],
+          reason: template,
+        );
+        expect(issues.single.origin, const ModuleOrigin(ModuleId('scaffold')));
+        expect(issues.single.path, path);
+      }
+      // A tag that is not alone on its line has the problem of that only.
+      const notAlone = 'The tag $tag must stand alone at the start of a line '
+          'of $path, because its contributions render as complete lines.';
+      expect(problems('$tag /build/\n'), [notAlone]);
+    });
+
+    test(
         'the code at the launch of the iOS app runs in '
         'application(_:didFinishLaunchingWithOptions:), before Flutter takes '
         'the launch', () {

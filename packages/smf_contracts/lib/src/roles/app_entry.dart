@@ -797,7 +797,9 @@ final class AppEntryRole extends Role<NoDsl> {
           id: 'app_entry.tag_lines',
           description: 'The tags of the sockets that render lines of a file, '
               'such as a native file or the README, stand alone at the start '
-              'of a line of that file.',
+              'of a line of that file, and the tag of the patterns of '
+              '.gitignore is on its last line with text, after the lines of '
+              'the provider.',
           check: _checkTagLines,
         ),
       ];

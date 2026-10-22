@@ -415,7 +415,32 @@ List<SmfIssue> _checkTagLines(ModuleRuleInput<NoDsl> input) {
     for (final (socket, path) in _lineSockets)
       for (final name in socket.tags)
         ..._tagLineIssues('{{{$name}}}', path, templates, origin),
+    ..._gitignoreTagIssues(templates, origin),
   ];
+}
+
+/// The problem of the tag of [AppEntryRole.gitignore] in the `.gitignore`
+/// among the [templates] of a module of [origin]: it stands alone on a
+/// line, but a line with text follows it, which would come after the
+/// patterns of the modules.
+Iterable<SmfIssue> _gitignoreTagIssues(
+  Map<String, String> templates,
+  ContributionOrigin origin,
+) sync* {
+  const path = AppEntryRole.gitignoreFile;
+  final tag = '{{{${AppEntryRole.gitignore.tag}}}}';
+  final lines = (templates[path] ?? '').split('\n');
+  final at = lines.indexWhere((line) => line.trimRight() == tag);
+  if (at < 0 || lines.skip(at + 1).every((line) => line.trim().isEmpty)) {
+    return;
+  }
+  yield SmfIssue(
+    'The tag $tag is not on the last line of $path that has text: the '
+    'patterns of the modules follow every line of the provider, so no line '
+    'of the provider can take back what they ignore.',
+    origin: origin,
+    path: path,
+  );
 }
 
 /// The problems of [tag], the tag of a socket whose lines belong in the
