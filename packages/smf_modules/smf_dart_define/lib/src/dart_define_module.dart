@@ -156,16 +156,19 @@ const _width = 80;
 /// (`unintended_html_in_doc_comment`) and `flutter analyze` fails on. As in
 /// Markdown, a code span starts at a run of backticks and ends at the next
 /// run of as many, and a run that no such run follows is text.
-List<String> _docOf(String description) {
-  final text = _sentenceOf(description);
+List<String> _docOf(String description) =>
+    _linesOf(_wordsOf(_sentenceOf(description)));
+
+/// The words of [text], separated by its spaces outside its code spans,
+/// each code span in its word, and with each `<` outside a code span
+/// escaped; see [_docOf].
+List<String> _wordsOf(String text) {
   final words = <String>[''];
   var index = 0;
   while (index < text.length) {
     final char = text[index];
     if (char == '`') {
-      final run = _backticksAt(text, index);
-      final close = _closingRun(text, index + run, run);
-      final end = close == null ? index + run : close + run;
+      final end = _backtickEnd(text, index);
       words.last += text.substring(index, end);
       index = end;
       continue;
@@ -177,6 +180,13 @@ List<String> _docOf(String description) {
     }
     index++;
   }
+  return words;
+}
+
+/// [words] wrapped at [_width]: on lines of a doc of a member of a class,
+/// with one space between two words, and a word longer than a line on a
+/// line of its own; see [_docOf].
+List<String> _linesOf(List<String> words) {
   final lines = <String>[];
   var line = '';
   for (final word in words) {
@@ -191,6 +201,15 @@ List<String> _docOf(String description) {
     }
   }
   return [...lines, line];
+}
+
+/// Where what starts with the run of backticks at [index] of [text] ends:
+/// the code span that the run opens, up to the next run of as many
+/// backticks, or the run alone, which is text, when no such run follows.
+int _backtickEnd(String text, int index) {
+  final run = _backticksAt(text, index);
+  final close = _closingRun(text, index + run, run);
+  return close == null ? index + run : close + run;
 }
 
 /// The number of the backticks in [text] from [index] on.

@@ -1854,8 +1854,7 @@ Future<(int, String)> runAppTests(
         tests,
         toolArguments: env?.toolArguments(app) ?? const [],
       ),
-      env: env,
-      writesEnvValues: true,
+      ofRun: (env: env),
       flutter: flutter,
       fileSystem: fileSystem,
     );
@@ -1931,10 +1930,10 @@ Future<(int, String)> addAppTestsTo(
 /// one, and runs [commands] with [flutter] until one fails; returns its
 /// exit code and the output up to it, or 0 and the output of all.
 ///
-/// If it [writesEnvValues], as a run of the matrix does for [app], an app
-/// of the matrix, it also writes the values that the tests give the app
-/// into the file of [env]: a run without [env] has no file to write them
-/// into, which is a problem when the tests give values.
+/// With [ofRun], as a run of the matrix gives it for [app], an app of the
+/// matrix, it also writes the values that the tests give the app into the
+/// file of the env of the run: a run without an env has no file to write
+/// them into, which is a problem when the tests give values.
 Future<(int, String)> _addAndRun(
   GeneratedApp generated,
   MatrixApp? app,
@@ -1942,21 +1941,20 @@ Future<(int, String)> _addAndRun(
   List<List<String>> commands, {
   required MatrixFlutter flutter,
   required FileSystem fileSystem,
-  MatrixEnv? env,
-  bool writesEnvValues = false,
+  _EnvOfRun? ofRun,
 }) async {
   final List<String> added;
   final _EnvValues? values;
   try {
-    values = writesEnvValues
-        ? _envValuesOf(tests, app!, env, generated.path, fileSystem)
-        : null;
+    values = ofRun == null
+        ? null
+        : _envValuesOf(tests, app!, ofRun.env, generated.path, fileSystem);
     added = addAppTests(
       tests,
       app: app,
       directory: generated.path,
       packageName: generated.name,
-      envFile: env?.file,
+      envFile: ofRun?.env?.file,
       fileSystem: fileSystem,
     );
   } on MatrixAppTestException catch (error) {
@@ -1978,10 +1976,22 @@ Future<(int, String)> _addAndRun(
   return (0, '$output');
 }
 
+/// What a run of the matrix gives the tests of an app of the matrix: the
+/// `env` of the run, if it has one, into whose file it writes the values
+/// that the tests give the app.
+typedef _EnvOfRun = ({MatrixEnv? env});
+
 /// The file of the values of an app with the values that its tests give
 /// it: the `path` of the file in the file system, its new `text`, and a
 /// `summary` of what changed, which names the keys and no value.
 typedef _EnvValues = ({String path, String text, String summary});
+
+/// The values that the tests of an app give it, by their keys, and the
+/// directory of the first test that gives each key (`givers`).
+typedef _GivenValues = ({
+  Map<String, String?> values,
+  Map<String, String> givers,
+});
 
 /// A line `KEY=value` of the file of the values of an app, whose first
 /// group is the key, as the `flutter` tool reads a key.
@@ -2004,33 +2014,9 @@ _EnvValues? _envValuesOf(
   String directory,
   FileSystem fileSystem,
 ) {
-  final values = <String, String?>{};
-  final givers = <String, String>{};
-  for (final test in tests) {
-    final given = test.envValues?.call(app) ?? const <String, String?>{};
-    for (final MapEntry(:key, :value) in given.entries) {
-      if (givers[key] case final other?) {
-        if (values[key] != value) {
-          throw MatrixAppTestException(
-            'The tests of $other and ${test.directory} give $key different '
-            'values.',
-          );
-        }
-        continue;
-      }
-      if (value != null && value.contains(RegExp('["\n\r]'))) {
-        throw MatrixAppTestException(
-          'The tests of ${test.directory} give $key a value with a line '
-          'break or a double quote, which the file of the values of the app '
-          'cannot hold.',
-        );
-      }
-      givers[key] = test.directory;
-      values[key] = value;
-    }
-  }
-  if (values.isEmpty) return null;
-  final MapEntry(:key, value: giver) = givers.entries.first;
+  final given = _envValuesGivenTo(tests, app);
+  if (given.values.isEmpty) return null;
+  final MapEntry(:key, value: giver) = given.givers.entries.first;
   if (env == null) {
     throw MatrixAppTestException(
       'The tests of $giver give the app a value of $key, but the matrix has '
@@ -2047,9 +2033,62 @@ _EnvValues? _envValuesOf(
       '${env.file}.',
     );
   }
+  return (
+    path: file.path,
+    text: _withEnvValues(file.readAsStringSync(), given, env.file),
+    summary: _envSummaryOf(given.values, env.file),
+  );
+}
+
+/// The values that [tests] give [app], each once; see [_envValuesOf].
+///
+/// Throws a [MatrixAppTestException] if two of [tests] give a key different
+/// values, or if a value has a line break or a double quote.
+_GivenValues _envValuesGivenTo(List<MatrixAppTest> tests, MatrixApp app) {
+  final values = <String, String?>{};
+  final givers = <String, String>{};
+  for (final test in tests) {
+    final given = test.envValues?.call(app) ?? const <String, String?>{};
+    for (final MapEntry(:key, :value) in given.entries) {
+      if (givers[key] case final other?) {
+        if (values[key] != value) {
+          throw MatrixAppTestException(
+            'The tests of $other and ${test.directory} give $key different '
+            'values.',
+          );
+        }
+        continue;
+      }
+      _checkEnvValue(test, key, value);
+      givers[key] = test.directory;
+      values[key] = value;
+    }
+  }
+  return (values: values, givers: givers);
+}
+
+/// Throws a [MatrixAppTestException] if [value], which [test] gives the key
+/// [key], has a line break or a double quote, which the file of the values
+/// of an app cannot hold.
+void _checkEnvValue(MatrixAppTest test, String key, String? value) {
+  if (value != null && value.contains(RegExp('["\n\r]'))) {
+    throw MatrixAppTestException(
+      'The tests of ${test.directory} give $key a value with a line break or '
+      'a double quote, which the file of the values of the app cannot hold.',
+    );
+  }
+}
+
+/// [text], the file of the values of an app at [path] in it, with the
+/// values that its tests have [given] it: the line of each key with its
+/// value, and no line of a key whose value is `null`.
+///
+/// Throws a [MatrixAppTestException] if the file has no line of a key.
+String _withEnvValues(String text, _GivenValues given, String path) {
+  final (:values, :givers) = given;
   final unseen = {...values.keys};
   final lines = <String>[];
-  for (final line in file.readAsStringSync().split('\n')) {
+  for (final line in text.split('\n')) {
     final key = _envLine.firstMatch(line)?[1];
     if (key == null || !values.containsKey(key)) {
       lines.add(line);
@@ -2061,9 +2100,15 @@ _EnvValues? _envValuesOf(
   if (unseen.isNotEmpty) {
     throw MatrixAppTestException(
       'The tests of ${givers[unseen.first]} give the app a value of '
-      '${unseen.first}, but its ${env.file} has no line of that key.',
+      '${unseen.first}, but its $path has no line of that key.',
     );
   }
+  return lines.join('\n');
+}
+
+/// What [values] change in the file of the values at [path], which names
+/// the keys and no value.
+String _envSummaryOf(Map<String, String?> values, String path) {
   final written = [
     for (final MapEntry(:key, :value) in values.entries)
       if (value != null) key,
@@ -2072,18 +2117,11 @@ _EnvValues? _envValuesOf(
     for (final MapEntry(:key, :value) in values.entries)
       if (value == null) key,
   ];
-  return (
-    path: file.path,
-    text: lines.join('\n'),
-    summary: [
-      '${env.file}: ',
-      [
-        if (written.isNotEmpty) 'wrote the values of ${written.join(', ')}',
-        if (removed.isNotEmpty) 'removed the lines of ${removed.join(', ')}',
-      ].join(', and '),
-      '.',
-    ].join(),
-  );
+  final changes = [
+    if (written.isNotEmpty) 'wrote the values of ${written.join(', ')}',
+    if (removed.isNotEmpty) 'removed the lines of ${removed.join(', ')}',
+  ];
+  return '$path: ${changes.join(', and ')}.';
 }
 
 /// [value] as it goes into a line of the file of the values of an app: as
@@ -2408,8 +2446,7 @@ Future<(List<String>, String)> runFailingAppTests(
       ..._pubAdd(tests),
       const ['analyze'],
     ],
-    env: env,
-    writesEnvValues: true,
+    ofRun: (env: env),
     flutter: flutter,
     fileSystem: fileSystem,
   );
