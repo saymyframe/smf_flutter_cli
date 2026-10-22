@@ -120,6 +120,16 @@
       "neededBy": [
         "revenuecat"
       ]
+    },
+    {
+      "id": "paywall.legal_pages",
+      "title": "Publish your terms of use and privacy policy and put their links into .env",
+      "owner": "paywall",
+      "ownerKind": "module",
+      "ownerName": "paywall",
+      "neededBy": [
+        "paywall"
+      ]
     }
   ],
   "retired": []
