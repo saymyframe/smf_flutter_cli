@@ -487,6 +487,14 @@ void main() {
         rendered(result, AppEntryRole.iosAppDelegateLaunch).values.single,
         '    application.applicationSupportsShakeToEdit = true',
       );
+      // The patterns of .gitignore in their order, the one that both modules
+      // have once.
+      expect(
+        rendered(result, AppEntryRole.gitignore).values.single,
+        '\n# The logs of the fixture\n*.fixture.log\n'
+        '\n# The values of the fixture that each developer keeps\n'
+        '/fixture.local',
+      );
       // fake_overlap asks for 2.1.3: the highest version of the library
       // wins, and the switch comes with it.
       const library = 'com.android.tools:desugar_jdk_libs:2.1.4';
