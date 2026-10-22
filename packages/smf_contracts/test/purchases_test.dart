@@ -243,18 +243,39 @@ void resumeApp() {
 /// of `PurchasesService` unless a test says otherwise.
 ///
 /// The access of each user is on a map that stands for the server of the
-/// provider, which each new service reads, as a service does at the next
-/// launch of an app. An answer has the access that the user had when it was
-/// asked for. The services note their calls, and a test holds a call until
-/// it lets it go, or makes it fail.
+/// provider, and the user of the device, with the user that the device
+/// identified last, on variables that stand for the device: each new
+/// service reads them, as a service does at the next launch of an app. The
+/// users keep to the rules of the contract: `identify(null)` after another
+/// user starts a new user of the device, and the user of the device
+/// identified as a user that no `identify` named before takes over its
+/// purchases. An answer has the access that the user had when it was asked
+/// for. The services note their calls, each after the name of its service
+/// if it has one, and a test holds a call until it lets it go, or makes it
+/// fail.
 const _fakePurchases = r'''
 import 'dart:async';
 
 import '../core/purchases/purchases_service.dart';
 
-/// The access of each user on the server, by the id of the user, `null`
-/// for the user of the device.
-final Map<String?, AppAccess> accessOf = {};
+/// The access of each user on the server, by the id of the user. The id of
+/// a user of a device is `device-<n>`.
+final Map<String, AppAccess> accessOf = {};
+
+/// The users that an identify named, on any device.
+final Set<String> named = {};
+
+/// The id of the user of this device.
+String deviceUser = 'device-1';
+
+/// The user that this device identified last, or `null` for the user of
+/// the device.
+String? identified;
+
+int _deviceUsers = 1;
+
+/// The id of the user whose purchases count on this device.
+String get currentUser => identified ?? deviceUser;
 
 /// The calls that reached the services, in order, each with its argument.
 final List<String> calls = [];
@@ -274,6 +295,10 @@ final Map<String, Object> failures = {};
 
 /// Whether the user cancels the sheet of the store.
 bool cancels = false;
+
+/// What a purchase answers in place of the access of its plan, if
+/// anything.
+AppAccess? purchaseAnswer;
 
 /// What a restore finds for the user.
 AppAccess restorable = const NoAccess();
@@ -325,13 +350,14 @@ Future<PurchasesService> openFakePurchases() async {
 }
 
 final class FakePurchases implements PurchasesService {
-  FakePurchases() {
+  FakePurchases([this.name]) {
     created++;
   }
 
-  final StreamController<AppAccess> _changes = StreamController.broadcast();
+  /// The name of the service in the calls, if it has one.
+  final String? name;
 
-  String? _user;
+  final StreamController<AppAccess> _changes = StreamController.broadcast();
 
   /// Whether something follows the changes of the access.
   bool get hasListener => _changes.hasListener;
@@ -344,20 +370,32 @@ final class FakePurchases implements PurchasesService {
   void fail(Object error) => _changes.addError(error);
 
   Future<void> _enter(String call) async {
-    calls.add(call);
-    await holds[call]?.future;
-    if (failures[call] case final failure?) throw failure;
+    final entry = name == null ? call : '$name: $call';
+    calls.add(entry);
+    await holds[entry]?.future;
+    if (failures[entry] case final failure?) throw failure;
   }
 
   @override
   Future<void> identify(String? userId) async {
     await _enter('identify $userId');
-    _user = userId;
+    if (userId == null) {
+      // After another user, the device has a new user, with nothing bought.
+      if (identified != null) deviceUser = 'device-${++_deviceUsers}';
+    } else if (identified == null && !named.contains(userId)) {
+      // A user that no identify named takes over what the user of the
+      // device bought.
+      if (accessOf.remove(deviceUser) case final access?) {
+        accessOf[userId] = access;
+      }
+    }
+    if (userId != null) named.add(userId);
+    identified = userId;
   }
 
   @override
   Future<AppAccess> access() async {
-    final user = _user;
+    final user = currentUser;
     await _enter('access');
     return accessOf[user] ?? const NoAccess();
   }
@@ -373,15 +411,15 @@ final class FakePurchases implements PurchasesService {
 
   @override
   Future<AppAccess?> purchase(Plan plan) async {
-    final user = _user;
+    final user = currentUser;
     await _enter('purchase ${plan.id}');
     if (cancels) return null;
-    return accessOf[user] = premiumOf[plan.id]!;
+    return purchaseAnswer ?? (accessOf[user] = premiumOf[plan.id]!);
   }
 
   @override
   Future<AppAccess> restore() async {
-    final user = _user;
+    final user = currentUser;
     await _enter('restore');
     return accessOf[user] = restorable;
   }
@@ -389,7 +427,8 @@ final class FakePurchases implements PurchasesService {
 ''';
 
 /// A provider of sign-in for the test app with the calls that the session
-/// of an app in the mode `required` makes for a sign-up and a sign-out.
+/// of an app in the mode `required` makes for a sign-up, a sign-out and a
+/// sign-in.
 const _fakeAuth = '''
 import 'dart:async';
 
@@ -408,6 +447,12 @@ final class FakeAuth implements AuthService {
 
   @override
   Future<void> signUp({required String email, required String password}) async {
+    currentUser = AuthUser(uid: 'user-1', isAnonymous: false, email: email);
+    _changes.add(currentUser);
+  }
+
+  @override
+  Future<void> signIn({required String email, required String password}) async {
     currentUser = AuthUser(uid: 'user-1', isAnonymous: false, email: email);
     _changes.add(currentUser);
   }
@@ -508,7 +553,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   service.tell(PremiumAccess(expiresAt: DateTime.utc(2030)));
   await pump();
   note('a renewal that the user cancelled elsewhere');
-  accessOf[null] = const NoAccess();
+  accessOf[deviceUser] = const NoAccess();
   resumeApp();
   await pump();
   note('a return to the app after the access ended');
@@ -649,7 +694,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   final controller =
       AppPurchasesController(startWait: const Duration(milliseconds: 20));
   final slow = FakePurchases();
-  accessOf[null] = const PremiumAccess();
+  accessOf[deviceUser] = const PremiumAccess();
   final hold = holds['access'] = Completer<void>();
   var started = false;
   final start = controller.start(slow).then((_) => started = true);
@@ -963,20 +1008,33 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
-/// Starts an app with sign-in as `bootstrap()` does, and signs up and out.
+/// Starts an app with sign-in as `bootstrap()` does, buys a plan as the
+/// user of the device, signs up, out and in again.
 const _withAuth = '''
 import 'package:my_app/core/auth/app_session.dart';
 
 Future<void> main(List<String> arguments, SendPort port) async {
+  Map<String, Object?> note() => {
+        'calls': takeCalls(),
+        'access': show(appPurchases.value),
+        'the user of the device': deviceUser,
+        'what it has': show(accessOf[deviceUser] ?? const NoAccess()),
+      };
+
   await initAuth();
   await initPurchases();
-  result['a first launch'] = takeCalls();
+  result['a first launch'] = note();
+  await appPurchases.purchase(lifetime);
+  result['a purchase before the sign-up'] = note();
   await appSession.signUp(email: 'ada@example.com', password: 'secret');
   await pump();
-  result['a sign-up'] = takeCalls();
+  result['a sign-up'] = note();
   await appSession.signOut();
   await pump();
-  result['a sign-out'] = takeCalls();
+  result['a sign-out'] = note();
+  await appSession.signIn(email: 'ada@example.com', password: 'secret');
+  await pump();
+  result['a sign-in again'] = note();
   port.send(result);
 }
 ''';
@@ -1862,15 +1920,46 @@ void main() {
 
     test(
         'type-checks in an app with sign-in, and identifies the user of the '
-        'session when it starts, signs up and signs out', () async {
+        'session when it starts, signs up, signs out and signs in, as the '
+        'contract of the user of the device says', () async {
       final app = await _app(auth: true);
       addTearDown(app.delete);
 
       expect(await app.analysisProblems(), isEmpty);
       expect(await app.run(_withImports(_withAuth)), {
-        'a first launch': ['identify null', 'access'],
-        'a sign-up': ['identify user-1', 'access'],
-        'a sign-out': ['identify null', 'access'],
+        'a first launch': {
+          'calls': ['identify null', 'access'],
+          'access': 'none',
+          'the user of the device': 'device-1',
+          'what it has': 'none',
+        },
+        'a purchase before the sign-up': {
+          'calls': ['purchase lifetime'],
+          'access': 'premium',
+          'the user of the device': 'device-1',
+          'what it has': 'premium',
+        },
+        // The new account takes the purchase over from the user of the
+        // device.
+        'a sign-up': {
+          'calls': ['identify user-1', 'access'],
+          'access': 'premium',
+          'the user of the device': 'device-1',
+          'what it has': 'none',
+        },
+        // The next user of the device is a new one, with nothing bought.
+        'a sign-out': {
+          'calls': ['identify null', 'access'],
+          'access': 'none',
+          'the user of the device': 'device-2',
+          'what it has': 'none',
+        },
+        'a sign-in again': {
+          'calls': ['identify user-1', 'access'],
+          'access': 'premium',
+          'the user of the device': 'device-2',
+          'what it has': 'none',
+        },
       });
     });
   });
@@ -2213,10 +2302,15 @@ void main() {
       expect(
         withAuth,
         allOf(
-          contains('keeps the purchase in the new account'),
-          contains('leaves the purchases with the user of this device until '
-              'the user restores them'),
-          contains('never gets the purchases of a user who signed out'),
+          contains('keeps the purchase in the new account, which takes it '
+              'over from the user of this device'),
+          contains('leaves the purchases with the user of this device.'),
+          contains('After a sign-out, the user of this device is a new one, '
+              'with nothing bought.'),
+          contains('which may also move purchases from another user, as the '
+              'backend of the provider decides'),
+          contains('Without a restore, the next user of the device never '
+              'gets the purchases of a user who signed out.'),
         ),
       );
       expect(withAuth, isNot(contains(toInstallation)));

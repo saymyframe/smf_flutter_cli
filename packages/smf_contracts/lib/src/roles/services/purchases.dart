@@ -99,17 +99,23 @@ const purchasesRole = PurchasesRole._();
 /// `identify(userId)` of the service says whose purchases count: the id of
 /// a user of the app, or `null` for the user of this device, who has no
 /// account of the app. Every provider keeps to this:
-/// - when the user of the device is identified as a user that the provider
-///   has not seen, that user takes over the purchases of the user of the
-///   device. So a purchase before a sign-up stays with the new account, and
-///   an anonymous user of the [AuthRole], whose id the account keeps, keeps
-///   them too;
+/// - `identify(null)` that follows another user, also one of an earlier
+///   launch of the app, starts a new user of this device, with nothing
+///   bought. What a user of the device had before comes back only through a
+///   restore;
+/// - when the user of this device is identified as a user that no
+///   `identify` named before, on any device, that user takes over the
+///   purchases of the user of this device, who no longer has them. So a
+///   purchase before a sign-up stays with the new account, and an anonymous
+///   user of the [AuthRole], whose id the account keeps, keeps them too;
 /// - any other identification keeps the purchases of each user apart. A
 ///   sign-in to an account that exists already leaves the purchases with the
-///   user of the device, until a restore, and the next user of the device
+///   user of the device, and without a restore the next user of the device
 ///   never gets the purchases of the one who signed out;
 /// - a restore gives the user who is identified what the store account
-///   bought.
+///   bought, and may move purchases from another user to this one, as the
+///   backend of the provider decides. So no test relies on a restore that
+///   moves them, or on one that leaves them.
 ///
 /// ## What a provider keeps to
 ///
@@ -175,10 +181,11 @@ const purchasesRole = PurchasesRole._();
 ///   plan;
 /// - a purchase by a user without premium access completes at once and
 ///   succeeds;
-/// - the purchases are kept by the user of the app, with the rule of the
+/// - the purchases are kept by the user of the app, with the rules of the
 ///   user of the device above, also from one launch of the app to the next;
 /// - a restore gives the user who is identified what was bought on the
-///   device.
+///   device. Whether it takes them away from another user is up to the
+///   backend of each provider, so no test relies on it.
 final class PurchasesRole extends Role<RoleImplementation> {
   const PurchasesRole._();
 
@@ -383,7 +390,7 @@ A screen that sells a plan shows what the App Store and Google Play ask of it:
 /// app, with the [AuthRole] or without it.
 String _whosePurchases({required bool auth}) => auth
     ? '''
-The purchases belong to the user of `appSession`, by the id of the user: the user of an account, or an anonymous user. While nobody is signed in, they belong to the user of this device. A user who buys before signing up keeps the purchase in the new account, and an anonymous user keeps it when the account takes the id of that user. A user who signs in to an account that exists already leaves the purchases with the user of this device until the user restores them. The next user of the device never gets the purchases of a user who signed out.'''
+The purchases belong to the user of `appSession`, by the id of the user: the user of an account, or an anonymous user. While nobody is signed in, they belong to the user of this device. A user who buys before signing up keeps the purchase in the new account, which takes it over from the user of this device, and an anonymous user keeps it when the account takes the id of that user. A user who signs in to an account that exists already leaves the purchases with the user of this device. After a sign-out, the user of this device is a new one, with nothing bought. In both cases a purchase comes back only through a restore, which may also move purchases from another user, as the backend of the provider decides. Without a restore, the next user of the device never gets the purchases of a user who signed out.'''
     : '''
 The purchases belong to this installation of the app. On another device, or after the app was installed again, the user restores them.''';
 
@@ -417,7 +424,7 @@ Until the provider of purchases has what it needs, such as its keys, the app run
 /// What the role adds to its note in an app with sign-in: whose the
 /// purchases are.
 const String _whoseAgentNote = '''
-- The purchases belong to the user of `appSession`, by `appSession.value.uid`, and to the user of this device while nobody is signed in. A user who buys before signing up keeps the purchase in the new account. A user who signs in to an account that exists already leaves the purchases with the user of this device until a restore. The app does not restore on its own: call `appPurchases.restore()` where the user asks for it.
+- The purchases belong to the user of `appSession`, by `appSession.value.uid`, and to the user of this device while nobody is signed in. A user who buys before signing up keeps the purchase in the new account, which takes it over from the user of this device. A user who signs in to an account that exists already leaves the purchases with the user of this device, and after a sign-out the user of this device is a new one, with nothing bought. A purchase then comes back only through a restore, which may also move purchases from another user, as the backend of the provider decides. The app does not restore on its own: call `appPurchases.restore()` where the user asks for it.
 ''';
 
 /// What the role adds to its note in an app with a settings screen: the

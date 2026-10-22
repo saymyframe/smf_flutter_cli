@@ -244,12 +244,20 @@ final class PurchasesFailure implements Exception {
 ///   service that it returns then has what the store and the provider kept.
 /// - [identify] comes before any other call, so a provider can set itself up
 ///   with the user. Each call is for the user that [identify] last gave.
-/// - The purchases of each user of the app stay apart, with one exception.
-///   When the user of the device, `identify(null)`, is identified as a user
-///   that the provider has not seen, that user takes over the purchases of
-///   the user of the device: a purchase before a sign-up stays with the new
-///   account. Any other [identify] keeps the purchases of each user apart,
-///   and a user gets those of another only through [restore].
+/// - `identify(null)` makes the user of this device the user whose
+///   purchases count. When it follows another user, also one of an earlier
+///   launch of the app, it starts a new user of this device, with nothing
+///   bought: what a user of the device had before comes back only through
+///   [restore].
+/// - When the user of this device is identified as a user that no
+///   [identify] named before, on any device, that user takes over the
+///   purchases of the user of this device, who no longer has them. So a
+///   purchase before a sign-up stays with the new account.
+/// - Any other [identify] keeps the purchases of each user apart.
+/// - [restore] gives the user what the store account bought, and may move
+///   purchases from another user to this one, as the backend of the
+///   provider decides. So no test relies on a restore that moves them, or on
+///   one that leaves them.
 /// - [access] completes from what the device keeps, without the network
 ///   when it keeps anything.
 /// - A call fails only with a [PurchasesFailure]. Without what it needs,
@@ -262,8 +270,11 @@ abstract interface class PurchasesService {
   /// app, or `null` for the user of this device, who has no account of the
   /// app.
   ///
-  /// Identifying the user who is identified already does nothing and does
-  /// not fail, `null` too.
+  /// `null` that follows another user starts a new user of this device,
+  /// with nothing bought. The user of this device identified as a user that
+  /// no call named before, on any device, takes over the purchases of the
+  /// user of this device. Identifying the user who is identified already
+  /// does nothing and does not fail, `null` too.
   Future<void> identify(String? userId);
 
   /// The access of the user, from what the device keeps, without the
@@ -292,6 +303,8 @@ abstract interface class PurchasesService {
   Future<AppAccess?> purchase(Plan plan);
 
   /// Gives the user what the store account of the user bought, such as on a
-  /// new device, and completes with the access of the user then.
+  /// new device, and completes with the access of the user then. It may
+  /// move purchases from another user to this one, as the backend of the
+  /// provider decides.
   Future<AppAccess> restore();
 }
