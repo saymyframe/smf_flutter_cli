@@ -1351,6 +1351,79 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
       roles: {purchasesRole},
     );
 
+/// The test of the env role that the CLI keeps in its `app_tests/env_role`,
+/// for the apps with the role whose modules give it keys, whichever module
+/// provides the role, that [among] accepts, or all of them: for each key of
+/// the app, the getter of `AppEnv` returns the value that `.env` gives the
+/// key, and `null` when `.env` leaves the value empty or lacks the key.
+///
+/// The test only reads: it parses the file of the values of the app
+/// ([EnvRole.dotEnvFile]), in the forms of a value that the role names, as
+/// the matrix wrote it with the values that the tests of the modules of the
+/// app give their keys (`MatrixAppTest.envValues`), and it gives no value
+/// itself. The matrix writes the keys of the app for it into [envKeysFile],
+/// from the data of the role. It has no probe for the start check: the
+/// values of an app on a device are those of its developer.
+Future<MatrixAppTest> envRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/env_role',
+      appliesTo: (app) =>
+          _envKeysOf(app).isNotEmpty && (among?.call(app) ?? true),
+      generatedFiles: _envKeysFileOf,
+      roles: {envRole},
+    );
+
+/// The keys of the env role of [app], an app of the matrix, in the order of
+/// the role ([EnvRole.keysIn]), or none in an app without the role.
+List<AppEnvKey> _envKeysOf(MatrixApp app) {
+  final hook = app.hook!;
+  return hook.presentRoles.contains(envRole)
+      ? envRole.keysIn(envRole.hookInput(hook))
+      : const [];
+}
+
+/// The path in an app of what the matrix writes for the test of the env
+/// role: `dotEnvFile`, the path of the file of the values of the app from
+/// its root ([EnvRole.dotEnvFile]), and `appKeys`, the keys of the app in
+/// the order of the role ([EnvRole.keysIn]), each an `AppKey` with its
+/// name, the name of its getter of `AppEnv` and a function that reads the
+/// getter.
+const envKeysFile = 'test/env_role/keys.dart';
+
+/// The file at [envKeysFile] of [app], an app of the matrix with the env
+/// role, whose package is [packageName].
+Map<String, String> _envKeysFileOf(MatrixApp app, String packageName) {
+  final keys = StringBuffer();
+  for (final key in _envKeysOf(app)) {
+    keys
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString(key.name)},')
+      ..writeln('    getter: ${SmfNames.dartString(key.getter)},')
+      ..writeln('    read: () => AppEnv.${key.getter},')
+      ..writeln('  ),');
+  }
+  return {
+    envKeysFile: '''
+// The keys of the values of the app, which the matrix of SMF writes from the
+// data of the env role of the app for the test of the env role.
+import '${EnvRole.appEnv.importRef.resolveUri(packageName)}';
+
+/// The path of the file of the values of the app, from its root.
+const String dotEnvFile = ${SmfNames.dartString(EnvRole.dotEnvFile)};
+
+/// A key of the app: its name, the name of its getter of `AppEnv`, and a
+/// function that reads the getter.
+typedef AppKey = ({String name, String getter, String? Function() read});
+
+/// The keys of the app, in the order of the env role.
+final List<AppKey> appKeys = [
+$keys];
+''',
+  };
+}
+
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module
 /// provides it, that [among] accepts, or all of them. Once the app started
