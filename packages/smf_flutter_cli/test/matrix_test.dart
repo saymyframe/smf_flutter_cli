@@ -292,7 +292,8 @@ void main() {
       'apps of the theme with the settings screen and the localization and '
       'without each, which all get the preferences, the app of the DI '
       'container, the apps of the events and of the preferences with the '
-      'DI container and without, the apps of the onboarding with the '
+      'DI container and without, the app of the values of .env, the apps '
+      'of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
       'onboarding screen and the localization and without each, which all '
@@ -320,7 +321,8 @@ void main() {
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, onboarding, local_notifications, firebase_core, '
+        'shared_preferences, dart_define, onboarding, local_notifications, '
+        'firebase_core, '
         'firebase_crashlytics, firebase_analytics, firebase_messaging, '
         'firebase_auth, google_sign_in, apple_sign_in, sign_in)';
     // The app of the sign-in with a state manager, which gets the provider
@@ -382,6 +384,7 @@ void main() {
       'event_bus (event_bus, flutter_core)',
       'shared_preferences with di (shared_preferences, get_it, flutter_core)',
       'shared_preferences (shared_preferences, flutter_core)',
+      'dart_define (dart_define, flutter_core)',
       equals(
         'onboarding with localization (onboarding, gen_l10n, flutter_core, '
         'shared_preferences, go_router)',
@@ -713,7 +716,8 @@ void main() {
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, onboarding, local_notifications, local)';
+        'shared_preferences, dart_define, onboarding, local_notifications, '
+        'local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2320,6 +2324,7 @@ Type type() => Types;
               'get_it',
               'event_bus',
               'shared_preferences',
+              'dart_define',
               'onboarding',
               'local_notifications',
             ].join(','),

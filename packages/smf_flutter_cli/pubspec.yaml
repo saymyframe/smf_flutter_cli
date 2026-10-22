@@ -32,6 +32,7 @@ dependencies:
   smf_bloc: ^0.3.3
   smf_bottom_tabs: ^0.4.2
   smf_contracts: ^0.6.0
+  smf_dart_define: ^0.6.0
   smf_event_bus: ^0.3.3
   smf_firebase_analytics: ^0.4.2
   smf_firebase_auth: ^0.6.0

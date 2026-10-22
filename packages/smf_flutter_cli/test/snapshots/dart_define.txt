@@ -1,0 +1,888 @@
+=== .env (role:env) ===
+# The values that the app reads, each under a comment that says what goes
+# there. This file stays out of git; .env.example has the same keys without
+# values. Every value ends up in the app, where anyone can read it, so never
+# put a secret here. An empty value counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+=== .env.example (role:env) ===
+# This file lists the keys of the values that the app reads, each under a
+# comment that says what goes there. After a clone, copy it to .env and fill
+# in the values there; .env stays out of git. Every value ends up in the app,
+# where anyone can read it, so never put a secret into one. An empty value
+# counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+=== .gitignore (flutter_core) ===
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# The values of the app, which each developer fills in from .env.example
+.env
+=== .run/main.run.xml (dart_define) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="main.dart" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .vscode/launch.json (dart_define) ===
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "my_app",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define-from-file=.env"]
+    }
+  ]
+}
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+- The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+
+## Values in .env
+
+- Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
+- Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
+- `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+
+With `--dart-define-from-file`:
+
+- Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`. `.vscode/launch.json` and `.run/main.run.xml` pass it to the Run buttons of VS Code and Android Studio.
+- A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
+- The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+
+Generated with [Say My Frame](https://doc.saymyframe.com).
+
+## Run, test and build with .env
+
+`AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
+
+```bash
+flutter run --dart-define-from-file=.env
+flutter test --dart-define-from-file=.env
+flutter build apk --dart-define-from-file=.env
+flutter build ipa --dart-define-from-file=.env
+```
+
+The Run buttons of VS Code and Android Studio pass it too, with `.vscode/launch.json` and `.run/main.run.xml`. A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
+
+To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
+
+```dart
+static String? get myServiceKey {
+  const value = String.fromEnvironment('MY_SERVICE_KEY');
+  return value.isEmpty ? null : value;
+}
+```
+
+The section "Values in .env" tells what goes into `.env` and lists the keys of the app.
+
+## Values in .env
+
+`.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+`.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
+
+No module of the app reads a value yet.
+
+To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="My App"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.0.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/AppDelegate.swift (flutter_core) ===
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>My App</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
+=== ios/Runner/Runner.entitlements (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+</dict>
+</plist>
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+import 'core/app/fallback_start_screen.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'My App',
+    home: const FallbackStartScreen(),
+    builder: (context, child) => StatusBarIcons(child: child!),
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const FallbackStartView(
+    hint:
+        'No start screen yet. Add a feature with a route, or replace this screen.',
+    copied: 'Copied',
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '5',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Ma',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'My App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/app/status_bar_icons.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Asks the system for the icons of the status bar that suit the theme,
+/// around [child]: dark icons on a light theme, light ones on a dark theme.
+///
+/// The root of the app puts it around the content of every route, below
+/// the `MaterialApp` whose theme it reads. It leaves the navigation bar of
+/// the system as the platform has it. A screen with an `AppBar` gets the
+/// icons that suit its bar, since the bar tells them for the top of the
+/// screen itself.
+class StatusBarIcons extends StatelessWidget {
+  /// Creates the widget around [child].
+  const StatusBarIcons({required this.child, super.key});
+
+  /// What the icons suit: the content of a route.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // iOS takes the brightness of the bar, and Android that of its icons.
+      value: SystemUiOverlayStyle(
+        statusBarBrightness: brightness,
+        statusBarIconBrightness: brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+      child: child,
+    );
+  }
+}
+=== lib/core/env/app_env.dart (dart_define) ===
+/// The values of `.env`, each through a static getter that returns the
+/// value, or `null` while it is empty or missing.
+///
+/// A command of the `flutter` tool that builds, runs or tests the app reads
+/// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
+/// each value into the app, where `String.fromEnvironment` reads it as a
+/// constant. Without that argument every value is empty, and so every
+/// getter is `null`.
+abstract final class AppEnv {}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await bootstrap();
+  runApp(const App());
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  uses-material-design: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
+void main() {
+  testWidgets('names the app, and tells where its first screen goes', (
+    tester,
+  ) async {
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
+
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('5'), findsNothing);
+    final name = find.bySemanticsLabel('My App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Ma').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
+  });
+}
+=== test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+/// What the widget asks the system for on a screen in [theme].
+Future<SystemUiOverlayStyle> _styleIn(
+  WidgetTester tester,
+  ThemeData theme,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: theme,
+      home: const StatusBarIcons(child: Text('A screen')),
+    ),
+  );
+  return tester
+      .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.descendant(
+          of: find.byType(StatusBarIcons),
+          matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        ),
+      )
+      .value;
+}
+
+void main() {
+  testWidgets('asks for dark icons on a light theme', (tester) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.statusBarIconBrightness, Brightness.dark);
+    expect(style.statusBarBrightness, Brightness.light);
+    expect(find.text('A screen'), findsOneWidget);
+  });
+
+  testWidgets('asks for light icons on a dark theme', (tester) async {
+    final style = await _styleIn(
+      tester,
+      ThemeData(brightness: Brightness.dark),
+    );
+
+    expect(style.statusBarIconBrightness, Brightness.light);
+    expect(style.statusBarBrightness, Brightness.dark);
+  });
+
+  testWidgets('leaves the navigation bar of the system as it is', (
+    tester,
+  ) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.systemNavigationBarColor, isNull);
+    expect(style.systemNavigationBarIconBrightness, isNull);
+  });
+}

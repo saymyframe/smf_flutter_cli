@@ -1,3 +1,88 @@
+=== .env (role:env) ===
+# The values that the app reads, each under a comment that says what goes
+# there. This file stays out of git; .env.example has the same keys without
+# values. Every value ends up in the app, where anyone can read it, so never
+# put a secret here. An empty value counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+=== .env.example (role:env) ===
+# This file lists the keys of the values that the app reads, each under a
+# comment that says what goes there. After a clone, copy it to .env and fill
+# in the values there; .env stays out of git. Every value ends up in the app,
+# where anyone can read it, so never put a secret into one. An empty value
+# counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+=== .gitignore (flutter_core) ===
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# The values of the app, which each developer fills in from .env.example
+.env
+=== .run/main.run.xml (dart_define) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="main.dart" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .vscode/launch.json (dart_define) ===
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "my_app",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define-from-file=.env"]
+    }
+  ]
+}
 === AGENTS.md (role:app_entry) ===
 # AGENTS.md
 
@@ -295,6 +380,18 @@ With `flutter_riverpod`:
 - `_schemeOf` has the colours of each theme. It sets most of them itself, and `ColorScheme.fromSeed` derives the others from `seedColor`. For another look, change the colours there. Keep the colour of what stands on a colour readable on it, such as `onPrimary` on `primary`.
 - The font of the themes is the family `_fontFamily`, which `pubspec.yaml` declares with the files in `assets/fonts/geist/`, in the weights 400, 500 and 600. For another font, add its files, declare its family in `pubspec.yaml` and name it in `_fontFamily`. `assets/fonts/geist/OFL.txt` is the licence of the font, which the app bundles as an asset: keep it while the app has the font.
 - Keep `brightness: brightness` in the colour scheme: `createLightTheme(context)` must return a light theme and `createDarkTheme(context)` a dark one.
+
+## Values in .env
+
+- Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
+- Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
+- `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+
+With `--dart-define-from-file`:
+
+- Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`. `.vscode/launch.json` and `.run/main.run.xml` pass it to the Run buttons of VS Code and Android Studio.
+- A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
+- The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -314,6 +411,30 @@ Once any commands of the sections below have run, the setup still needs these st
 4. Give Firebase your Sign in with Apple key, so that deleting an account works
 5. Before releasing on Google Play, give Firebase the SHA of your release keys
 6. Give Firebase your Apple push key (APNs key)
+
+## Run, test and build with .env
+
+`AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
+
+```bash
+flutter run --dart-define-from-file=.env
+flutter test --dart-define-from-file=.env
+flutter build apk --dart-define-from-file=.env
+flutter build ipa --dart-define-from-file=.env
+```
+
+The Run buttons of VS Code and Android Studio pass it too, with `.vscode/launch.json` and `.run/main.run.xml`. A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
+
+To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
+
+```dart
+static String? get myServiceKey {
+  const value = String.fromEnvironment('MY_SERVICE_KEY');
+  return value.isEmpty ? null : value;
+}
+```
+
+The section "Values in .env" tells what goes into `.env` and lists the keys of the app.
 
 ## Firebase
 
@@ -462,6 +583,16 @@ On iOS, the Google Sign-In SDK stops the app instead when the app has no iOS cli
 If the button of Google does nothing on Android, check that the SHA-1 of the key that signs the app is registered with Google: Credential Manager may answer a key that Google does not know as if the user had closed the sheet.
 
 The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_sign_in.dart`, shows the "G" of Google from `lib/core/google_sign_in/assets/google_logo.png`, the logo of the Google Sign-In SDK (Apache License 2.0). The [branding guidelines of Sign in with Google](https://developers.google.com/identity/branding-guidelines) ask a custom button to show that logo in its own colours, on a light background, without a change: keep the image as it is.
+
+## Values in .env
+
+`.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+`.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
+
+No module of the app reads a value yet.
+
+To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
 
 ## Languages
 
@@ -3190,6 +3321,16 @@ abstract interface class ServiceLocator {
   /// Returns the service of type [T], or the one named [instanceName].
   T resolve<T extends Object>({String? instanceName});
 }
+=== lib/core/env/app_env.dart (dart_define) ===
+/// The values of `.env`, each through a static getter that returns the
+/// value, or `null` while it is empty or missing.
+///
+/// A command of the `flutter` tool that builds, runs or tests the app reads
+/// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
+/// each value into the app, where `String.fromEnvironment` reads it as a
+/// constant. Without that argument every value is empty, and so every
+/// getter is `null`.
+abstract final class AppEnv {}
 === lib/core/events/communication_service.dart (role:events) ===
 import 'package:my_app/core/events/event_bus_communication_service.dart'
     as impl0;
