@@ -163,8 +163,8 @@ void main() {
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
       'of the auth role, of the onboarding screen role, of the notifications '
-      'role and of the push role with every provider of each, which they tell '
-      'apart by the roles of the app only', () {
+      'role, of the push role and of the purchases role with every provider '
+      'of each, which they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -180,6 +180,7 @@ void main() {
         onboardingScreenRole,
         notificationsRole,
         pushRole,
+        purchasesRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
@@ -191,6 +192,11 @@ void main() {
     expect(named('notifications_role').roles, {notificationsRole});
     expect(named('notifications_step').roles, {notificationsRole});
     expect(named('push_role').roles, {pushRole});
+    expect(named('purchases_role').roles, {purchasesRole});
+    // The test of the purchases of the users of the session checks the
+    // template of the purchases role, which follows the session, and the
+    // contract of its providers.
+    expect(named('purchases_session').roles, {purchasesRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -279,9 +285,9 @@ void main() {
   test(
       'the tests of the events role, of the preferences role, of the '
       'localization role, of the theme role, of the notifications role, of '
-      'the push role and of the walk of the routes apply only to the apps '
-      'with every module, which have the roles and run flutter test for '
-      'other tests already', () {
+      'the push role, of the purchases role and of the walk of the routes '
+      'apply only to the apps with every module, which have the roles and '
+      'run flutter test for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -307,6 +313,10 @@ void main() {
       // The test of the push messages that the CLI keeps, for the fixture
       // push messages, which every such app has.
       'push_role',
+      // The tests of the purchases that the CLI keeps, for the fixture
+      // purchases, which every such app has, with the fixture sign-in.
+      'purchases_role',
+      'purchases_session',
     ]) {
       expect(
         appsOf(named(name)),
@@ -350,6 +360,8 @@ void main() {
           themeRole,
           notificationsRole,
           pushRole,
+          purchasesRole,
+          authRole,
         ]),
         reason: app.name,
       );
@@ -360,6 +372,7 @@ void main() {
           FakeThemeModule.id,
           FakeNotificationsModule.id,
           FakePushModule.id,
+          FakePurchasesModule.id,
         ]),
         reason: app.name,
       );
@@ -882,6 +895,49 @@ void main() {
   });
 
   test(
+      'the tests of the purchases role apply to the apps with every module, '
+      'where the fixture purchases provide the role next to the fixture '
+      'sign-in, and not to the apps of the fixture alone, which the matrix '
+      'only analyzes; the test of the session runs where the test of the '
+      'role, whose helpers it uses, runs', () {
+    final roleTest = named('purchases_role');
+    final sessionTest = named('purchases_session');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(purchasesRole)) app.name,
+    ];
+
+    // The purchases role uses the auth role and the localization role, so
+    // its provider has an app with the fixture sign-in and one without,
+    // each with the texts of the app and without them.
+    expect(
+      withRole,
+      containsAll([
+        'fake_purchases with auth, localization',
+        'fake_purchases with auth',
+        'fake_purchases with localization',
+        'fake_purchases',
+      ]),
+    );
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ];
+    expect(appsOf(roleTest), everyModule);
+    expect(appsOf(sessionTest), everyModule);
+    // In each mode of the auth role, whose apps with every module the
+    // matrix has once more for each other mode.
+    expect(
+      {
+        for (final app in apps.where(sessionTest.appliesTo))
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+      },
+      AuthMode.values.toSet(),
+    );
+    expect(roleTest.startProbe!.function, 'probePurchases');
+  });
+
+  test(
       'the test of the auth role applies to every app with the role, the '
       'apps of the fixture sign-in alone, with a router and without one, '
       'and the apps with every module, in each mode of the role, and gets '
@@ -911,6 +967,9 @@ void main() {
         // The fixture way to sign in requires the role.
         'fake_sign_in_method with localization',
         'fake_sign_in_method',
+        // The fixture purchases use the role.
+        'fake_purchases with auth, localization',
+        'fake_purchases with auth',
         for (final mode in ['guest', 'anonymous']) '$ofModes --auth-mode=$mode',
         for (final app in apps)
           if (app.everyModuleWith != null) app.name,
@@ -931,8 +990,9 @@ void main() {
     );
     // The apps of each mode: those of the fixture alone, six in the
     // default mode and one in each other mode, the two of the fixture way
-    // to sign in in the default mode, and each app with every module with
-    // a clock of 24 hours and with one of 12.
+    // to sign in and the two of the fixture purchases with the role in the
+    // default mode, and each app with every module with a clock of 24 hours
+    // and with one of 12.
     expect(
       {
         for (final mode in AuthMode.values)
@@ -940,7 +1000,7 @@ void main() {
               .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
               .length,
       },
-      {'required': 24, 'guest': 17, 'anonymous': 17},
+      {'required': 26, 'guest': 17, 'anonymous': 17},
     );
     // The mode comes from the choice of the role, which an app has without
     // the option too.

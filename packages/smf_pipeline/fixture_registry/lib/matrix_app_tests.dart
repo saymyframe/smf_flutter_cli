@@ -16,7 +16,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// events role, the preferences role, the localization role, the theme
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode, the auth role, the onboarding screen role, the
-/// notifications role and the push role.
+/// notifications role, the push role and the purchases role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -410,6 +410,19 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // notifications the notifications role, which the push role
       // requires.
       await pushRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The purchases of the apps with the purchases role, whichever module
+      // provides it, the test that the CLI keeps: only in the apps with
+      // every module, which run flutter test for other tests already. There
+      // the fixture purchases provide the role, with the fixture sign-in,
+      // which the role uses.
+      await purchasesRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The purchases of the users of the session in the apps with the
+      // purchases role and the auth role, whichever modules provide them,
+      // the test that the CLI keeps: only in the apps with every module,
+      // which the matrix has once more for each other mode of the auth role.
+      await purchasesSessionAppTest(
+        among: (app) => app.everyModuleWith != null,
+      ),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -438,6 +451,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       onboardingScreenRole,
       notificationsRole,
       pushRole,
+      purchasesRole,
     },
   );
 }
