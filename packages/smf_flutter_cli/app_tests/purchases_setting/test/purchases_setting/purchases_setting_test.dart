@@ -97,13 +97,23 @@ void main() {
       final entry = find.byType(restorePurchasesSetting);
       // The texts of the entry in that language.
       final texts = restoreTexts[first]!;
-      // The texts that the entry shows, each of its lines on its own.
-      List<String> lines() => [
-            for (final text in tester.widgetList<Text>(
-              find.descendant(of: entry, matching: find.byType(Text)),
-            ))
-              ...(text.data ?? text.textSpan!.toPlainText()).split('\n'),
-          ];
+      // The texts that the entry shows, each of its lines on its own, from
+      // the top of the entry to its bottom.
+      List<String> lines() {
+        double topOf(Element text) =>
+            (text.renderObject! as RenderBox).localToGlobal(Offset.zero).dy;
+        final texts = find
+            .descendant(of: entry, matching: find.byType(Text))
+            .evaluate()
+            .toList()
+          ..sort((a, b) => topOf(a).compareTo(topOf(b)));
+        return [
+          for (final Element(:widget) in texts)
+            if (widget is Text)
+              ...(widget.data ?? widget.textSpan!.toPlainText()).split('\n'),
+        ];
+      }
+
       // The spinner of the entry.
       final spinner = find.descendant(
         of: entry,
@@ -134,8 +144,9 @@ void main() {
           );
           expect(
             lines(),
-            unorderedEquals(shown(texts)),
-            reason: 'The entry shows $what in the language of the app, $code.',
+            shown(texts),
+            reason: 'The entry shows $what in the language of the app, $code, '
+                'each line below the one before.',
           );
         }
         tester.platformDispatcher.localesTestValue = [Locale(first)];
@@ -262,8 +273,9 @@ void main() {
       );
       expect(
         lines(),
-        unorderedEquals([texts.title, texts.active]),
-        reason: 'Once the restore ends, the entry shows what it found.',
+        [texts.title, texts.active],
+        reason: 'Once the restore ends, the entry shows what it found below '
+            'its title.',
       );
 
       // A restore that fails, for each reason of a failure: the entry shows
@@ -278,10 +290,11 @@ void main() {
         );
         expect(
           lines(),
-          unorderedEquals([texts.title, texts.failed, hint]),
-          reason: 'A restore that fails with ${reason.name} shows that it '
-              'failed, and in debug mode, which the tests run in, the words '
-              'of the provider for the developer of the app.',
+          [texts.title, texts.failed, hint],
+          reason: 'A restore that fails with ${reason.name} shows below the '
+              'title that it failed, and below that, in debug mode, which the '
+              'tests run in, the words of the provider for the developer of '
+              'the app.',
         );
       }
       service.restoreError = const PurchasesFailure(
@@ -290,16 +303,16 @@ void main() {
       await tap();
       expect(
         lines(),
-        unorderedEquals([texts.title, texts.failed]),
+        [texts.title, texts.failed],
         reason: 'A failure without the words of the provider shows only that '
-            'the restore failed.',
+            'the restore failed, below the title.',
       );
       final error = StateError('The store went away.');
       service.restoreError = error;
       await tap();
       expect(
         lines(),
-        unorderedEquals([texts.title, texts.failed, '$error']),
+        [texts.title, texts.failed, '$error'],
         reason: 'appPurchases turns an error of another kind into a failure '
             'with the error as the words of the provider, which the entry '
             'shows as any failure.',
@@ -353,7 +366,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(
           lines(),
-          unorderedEquals([texts.title, texts.failed, longHint]),
+          [texts.title, texts.failed, longHint],
           reason: 'The entry shows its title and the failure on a small phone '
               'with a large text size, in $code.',
         );
