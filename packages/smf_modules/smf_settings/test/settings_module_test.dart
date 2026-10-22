@@ -521,17 +521,40 @@ void main() {
       expect(_titleOf(app), "'Settings'");
       final built = _builtBy(app);
       expect(built.byName.keys, isNot(contains('ListView')));
+      // The title and the note in a column that scrolls, at least as tall
+      // as the screen, with as much room below the note as above it. The
+      // layout of the column gives the note its height: no intrinsic
+      // height, which takes the texts of the note at the width of the
+      // screen rather than at their own, sizes it.
+      const title = 'Padding(padding: const EdgeInsets.fromLTRB(16, 20, 16, '
+          '0), child: title)';
       expect(
-        _argument(built.only('SliverFillRemaining'), 'child').toSource(),
-        '_NoSettings()',
+        [
+          for (final child
+              in (_argument(built.only('Column'), 'children') as ListLiteral)
+                  .elements)
+            child.toSource(),
+        ],
+        [title, 'const _NoSettings()', 'const SizedBox.shrink()'],
       );
+      expect(
+        _argument(built.only('Column'), 'mainAxisAlignment').toSource(),
+        'MainAxisAlignment.spaceBetween',
+      );
+      expect(
+        _argument(built.only('ConstrainedBox'), 'constraints').toSource(),
+        'BoxConstraints(minHeight: screen.maxHeight)',
+      );
+      for (final intrinsic in ['SliverFillRemaining', 'IntrinsicHeight']) {
+        expect(built.byName.keys, isNot(contains(intrinsic)));
+      }
       // No blank line where the code of the other screen would be.
       expect(text, isNot(contains('\n\n\n')));
       expect(
         text,
         contains(
           '        bottom: false,\n'
-          '        child: CustomScrollView(\n',
+          '        child: LayoutBuilder(\n',
         ),
       );
     });
