@@ -1881,7 +1881,8 @@ void main() {
         'gets the app tests of the modules of the CLI, the tests of the DI '
         'role, of the events role, of the preferences role, of the auth '
         'role, of the purchases role, of the settings screen role and of the '
-        'theme role, the mocks of the fixture providers, the tests of the '
+        'theme role, the test of the paywall, the mocks of the fixture '
+        'providers, the tests of the '
         'roles of several providers and the test of the onboarding screen '
         'role, which all apply to it', () {
       expect(
@@ -1917,6 +1918,7 @@ void main() {
           'revenuecat',
           'purchases_role',
           'purchases_session',
+          'paywall',
         ]),
       );
       // The test of the purchases of the user of the device is for an app

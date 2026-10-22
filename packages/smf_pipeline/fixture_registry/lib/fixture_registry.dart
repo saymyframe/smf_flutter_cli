@@ -41,6 +41,7 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_settings/smf_settings.dart';
@@ -199,7 +200,10 @@ List<ModuleId> everyFixture({
 /// which reads its keys from the values of .env, for the app test that it
 /// keeps and for the tests of that role that the CLI keeps, which run
 /// there with the users of the session of Firebase Authentication and
-/// whose entry that restores purchases the settings screen shows too.
+/// whose entry that restores purchases the settings screen shows too, and
+/// the paywall of the CLI, for the app test that it keeps, which buys over
+/// the purchases of RevenueCat, and whose entry of the subscription the
+/// settings screen shows below the entries of the other features.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -244,4 +248,5 @@ List<SmfModule> severalProvidersModules() => const [
       FirebaseMessagingModule(),
       DartDefineModule(),
       RevenueCatModule(),
+      PaywallModule(),
     ];
