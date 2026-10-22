@@ -2258,9 +2258,9 @@ void main() {
     });
 
     test(
-        'restores on a tap, takes no other tap while a restore is on its way '
-        'and shows a spinner then, and tells what it found as a live '
-        'region, with the hint of a failure in debug mode only', () {
+        'has in its code a row whose tap calls _restore, which returns while '
+        'a restore is on its way, a spinner while _restoring, the result in '
+        'a live region, and the hint of a failure behind kDebugMode', () {
       final row = created('ListTile').single;
       expect(row['leading'], 'const Icon(Icons.restore)');
       expect(row['onTap'], '_restore');

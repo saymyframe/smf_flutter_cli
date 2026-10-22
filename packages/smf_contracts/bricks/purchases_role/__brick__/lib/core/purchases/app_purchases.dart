@@ -123,7 +123,8 @@ final class AppPurchasesController extends ChangeNotifier
   /// made before `bootstrap()`, gives the app premium access before its first
   /// frame. A test makes such a call outside the body of a test, as in a
   /// `setUpAll`: made in the body of a widget test, it waits in the fake time
-  /// of that body, and a start that runs in real time never completes.
+  /// of that body, and a start that runs in real time completes after
+  /// [startWait] without it.
   ///
   /// It may be called again, with the service that the controller has from
   /// then on: `initPurchases()` does so in a test of the next launch of the
