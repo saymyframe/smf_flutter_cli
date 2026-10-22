@@ -357,13 +357,15 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // until its future completes and then shows the next page, also when
       // the action fails; and that of later shows it without the action. A
       // screen that the action shows over the onboarding, on the navigator
-      // at the root of the app, stays there while the guards of the routes
-      // notify. The matrix writes the screen and the texts of the steps for
-      // the tests, from the data of the role and of the localization role,
-      // and the guards of the routes that the tests change, and the tests
-      // take the two steps of the fixture steps, whose actions note their
-      // calls. Only in the apps with every module whose modules give the
-      // role steps, which run flutter test for other tests already.
+      // at the root of the app, stays there, also while the guards of the
+      // routes notify in an app with the fixture gates, so the test is one
+      // of the router role too. The matrix writes the screen and the texts
+      // of the steps for the tests, from the data of the role and of the
+      // localization role, and the guards of the routes that the tests
+      // change, and the tests take the two steps of the fixture steps, whose
+      // actions note their calls. Only in the apps with every module whose
+      // modules give the role steps, which run flutter test for other tests
+      // already.
       _onboardingScreenRoleTest(appTests),
       // Sign-in in the apps with the auth role, whichever module provides
       // it, the test that the CLI keeps: in every app with the role, since
@@ -443,12 +445,16 @@ Future<MatrixAppTests> fixtureAppTests() async {
 /// The test of the onboarding screen role, in [appTests], the directory of
 /// the app tests of the fixture registry: in the apps with every module
 /// whose modules give the role steps, whichever module provides the role.
+/// It is a test of the router role too, whichever module provides it: a
+/// screen that the action of a step pushes on the root navigator stays,
+/// also while the guards of the routes notify in an app with the fixture
+/// gates.
 MatrixAppTest _onboardingScreenRoleTest(String appTests) => MatrixAppTest(
       '$appTests/onboarding_screen_role',
       appliesTo: (app) =>
           app.everyModuleWith != null && _stepsOf(app).isNotEmpty,
       generatedFiles: _onboardingOf,
-      roles: {onboardingScreenRole},
+      roles: {onboardingScreenRole, routerRole},
     );
 
 /// The steps of the onboarding of [app], an app of the matrix, in the order

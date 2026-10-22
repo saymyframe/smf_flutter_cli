@@ -299,6 +299,7 @@ const _warningApps = <String, List<String>>{
   ],
   'broken_router_asks_about_top_level_route': ['router.no_main_navigation'],
   'broken_router_forgets_waiting_request': ['router.no_main_navigation'],
+  'broken_router_drops_routes_without_page': ['router.no_start'],
   'broken_go_router_asks_within_its_calls': ['router.no_main_navigation'],
   'broken_layout_keeps_labels': [
     'localization.unsupported_language',

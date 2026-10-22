@@ -184,7 +184,10 @@ void main() {
     );
     expect(named('auth_role').roles, {authRole});
     expect(named('auth_methods').roles, {authRole});
-    expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
+    expect(
+      named('onboarding_screen_role').roles,
+      {onboardingScreenRole, routerRole},
+    );
     expect(named('notifications_role').roles, {notificationsRole});
     expect(named('notifications_step').roles, {notificationsRole});
     expect(named('push_role').roles, {pushRole});
@@ -2006,7 +2009,7 @@ void main() {
       final hook = everyModule.hook!;
       final input = onboardingScreenRole.hookInput(hook);
 
-      expect(test.roles, {onboardingScreenRole});
+      expect(test.roles, {onboardingScreenRole, routerRole});
       expect(
         [
           for (final module in severalProvidersModules())

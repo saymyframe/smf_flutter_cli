@@ -8,9 +8,10 @@
 // leaves it uncaught or reports it with FlutterError.reportError. The
 // button of later shows the next page without the action. A screen that the
 // action shows over the onboarding, with a route without a page on the
-// navigator at the root of the app, stays there while the guards of the
-// routes notify, also when a guard of a condition stops and starts allowing
-// (OnboardingScreenRole).
+// navigator at the root of the app, stays there across frames, and, in an
+// app with the fixture gates, while the guards of the routes notify, also
+// when a guard of a condition stops and starts allowing (OnboardingScreenRole
+// and RouterRole.guardedNavigation).
 //
 // It uses the step `ask` of the fixture steps, whose action notes each call
 // in fixtureStepCalls, fails when fixtureAskFails, and otherwise shows
@@ -19,10 +20,11 @@
 // matrix writes guards_of_app.dart next to this file: in an app with the
 // fixture gates, keepOnGate() keeps the user on the target of a gate, as an
 // onboarding keeps a new user on it, and notifyGuards() has the guards
-// notify, and in another app both do nothing. The app starts once, since
-// the start-up of an app runs once in a test file. Each expectation gives
-// its reason, which a provider of the role with a known bug fails the test
-// with (brokenProviders of the fixture registry).
+// notify. In another app both do nothing, so the test only checks there
+// that the screen stays across frames. The app starts once, since the
+// start-up of an app runs once in a test file. Each expectation gives its
+// reason, which a provider of the role with a known bug fails the test with
+// (brokenProviders of the fixture registry).
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -54,8 +56,9 @@ void main() {
         keepOnGate(keep: false);
       });
       await startApp(tester);
-      // The onboarding over the target of a gate that does not allow, as an
-      // onboarding that keeps a new user on it with a guard of the routes.
+      // In an app with the fixture gates, the onboarding over the target of
+      // a gate that does not allow, as an onboarding that keeps a new user
+      // on it with a guard of the routes.
       keepOnGate(keep: true);
       await tester.pumpAndSettle();
 
@@ -84,10 +87,12 @@ void main() {
             'onboarding, on the navigator at the root of the app.',
       );
 
-      // The guards of the routes notify while that screen shows.
+      // In an app with the fixture gates, the guards of the routes notify
+      // while that screen shows. Frames go by in every app.
       await notifyGuards(
         () => pumpFor(tester, const Duration(milliseconds: 500)),
       );
+      await pumpFor(tester, const Duration(milliseconds: 500));
       expect(
         fixtureAskRoute?.isCurrent,
         isTrue,
