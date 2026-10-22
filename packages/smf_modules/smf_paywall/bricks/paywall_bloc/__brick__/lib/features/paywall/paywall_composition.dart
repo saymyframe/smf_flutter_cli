@@ -10,11 +10,11 @@ import 'subscription_cubit.dart';
 /// other file of the screens names them: a test creates a cubit with an
 /// `AppPurchasesController` of its own.
 PaywallCubit createPaywallCubit() =>
-    PaywallCubit(appPurchases, openLink: openPaywallLink);
+    PaywallCubit(appPurchases, openPaywallLink);
 
 /// Creates the cubit of the screen of the subscription.
 SubscriptionCubit createSubscriptionCubit() =>
-    SubscriptionCubit(appPurchases, openLink: openPaywallLink);
+    SubscriptionCubit(appPurchases, openPaywallLink);
 
 /// Creates the cubit with the access of the user, which the root of the
 /// app provides to every widget.

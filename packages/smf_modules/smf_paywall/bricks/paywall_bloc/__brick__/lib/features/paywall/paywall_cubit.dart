@@ -11,12 +11,8 @@ import 'paywall_state.dart';
 /// with.
 class PaywallCubit extends Cubit<PaywallState> {
   /// Creates the cubit that buys through [_purchases] and opens a link with
-  /// [openLink], and loads the plans.
-  PaywallCubit(
-    this._purchases, {
-    required Future<void> Function(Uri url) openLink,
-  }) : _openLink = openLink,
-       super(const PaywallState()) {
+  /// [_openLink], and loads the plans.
+  PaywallCubit(this._purchases, this._openLink) : super(const PaywallState()) {
     _purchases.hasPremium.addListener(_follow);
     unawaited(load());
   }

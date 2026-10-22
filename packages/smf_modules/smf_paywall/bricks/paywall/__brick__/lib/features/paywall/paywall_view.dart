@@ -94,7 +94,12 @@ class _PaywallViewState extends State<PaywallView>
   void didUpdateWidget(PaywallView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.state.plans == null && widget.state.plans != null) {
-      _plansIn.forward(from: 0);
+      // An app that asks for less motion shows the plans at once.
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _plansIn.value = 1;
+      } else {
+        _plansIn.forward(from: 0);
+      }
     }
   }
 

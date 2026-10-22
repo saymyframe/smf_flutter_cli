@@ -7,12 +7,8 @@ import '../../core/purchases/app_purchases.dart';
 /// where the user manages the plan.
 class SubscriptionCubit extends Cubit<AppAccess> {
   /// Creates the cubit that follows [_purchases] and opens a page with
-  /// [openLink].
-  SubscriptionCubit(
-    this._purchases, {
-    required Future<void> Function(Uri url) openLink,
-  }) : _openLink = openLink,
-       super(_purchases.value) {
+  /// [_openLink].
+  SubscriptionCubit(this._purchases, this._openLink) : super(_purchases.value) {
     _purchases.addListener(_follow);
   }
 

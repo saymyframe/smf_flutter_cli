@@ -417,10 +417,7 @@ const _scenarios = r'''
 /// bloc.
 const _bloc = r'''
 Paywall paywallOf(AppPurchasesController purchases, List<String> opened) {
-  final cubit = PaywallCubit(
-    purchases,
-    openLink: (url) async => opened.add('$url'),
-  );
+  final cubit = PaywallCubit(purchases, (url) async => opened.add('$url'));
   final states = <String>[];
   cubit.stream.listen((state) => states.add(show(state)));
   return Paywall(
@@ -447,7 +444,7 @@ Future<void> manage(
 ) async {
   final cubit = SubscriptionCubit(
     purchases,
-    openLink: (url) async => opened.add('$url'),
+    (url) async => opened.add('$url'),
   );
   await cubit.manage(url);
   await cubit.close();
