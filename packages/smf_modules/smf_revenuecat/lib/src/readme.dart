@@ -35,11 +35,11 @@ To buy a plan right after generating the app, with no account in a store:
 2. Create an entitlement with the identifier `$_entitlement` and attach the products to it.
 3. Add the packages of those products to an offering, and make that offering the current one.
 4. Copy the public API key of the Test Store, which starts with `test_`, into `$_test` in `$_env`.
-5. Run a debug build and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
+5. Run a debug build as the section ${EnvRole.readmeHeading} says, and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
 
 For a release, add the App Store app and the Play Store app to the project in RevenueCat. Give RevenueCat the In-App Purchase key of App Store Connect and a service account of Google Play, so that it checks the purchases in the stores. Create the products in the stores, attach them to `$_entitlement` and add their packages to the offering. Then copy the public API keys of the two apps into `$_apple` (`appl_`) and `$_google` (`goog_`). The section ${AppEntryRole.setupHeading} lists these steps.
 
 A debug build takes `$_test` when it is filled in, and the key of the store of the platform otherwise. A profile or release build never takes it: RevenueCat stops such a build that is configured with a key of the Test Store, on purpose. So to try the sandbox of a store in a debug build, leave `$_test` empty.
 
-These keys are the public API keys of RevenueCat, which go into the app, where anyone can read them. A secret API key of RevenueCat, which starts with `sk_`, never goes into `$_env`, and the app refuses one. While the key that a build takes is empty, the app runs without purchases: it never calls RevenueCat, every call of `appPurchases` fails with the reason `notConfigured`, and a debug build prints which key to fill in.
+These keys are the public API keys of RevenueCat, which go into the app, where anyone can read them. A secret API key of RevenueCat, which starts with `sk_`, never goes into `$_env`, and the app refuses one. While the key that a build takes has no value, the app runs without purchases: it never calls RevenueCat, every call of `appPurchases` fails with the reason `notConfigured`, and a debug build prints which key to fill in.
 ''';

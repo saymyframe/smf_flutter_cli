@@ -294,7 +294,9 @@ void main() {
         'env_revenuecat_google_key',
         'env_revenuecat_test_key',
         'entitlement',
+        'values_heading',
       ]);
+      expect(brick.vars['values_heading'], EnvRole.readmeHeading);
       expect(brick.vars['entitlement'], 'premium');
       for (final key in RevenueCatModule.keys) {
         final variable = brick.vars['env_${key.name.toLowerCase()}']!;
@@ -552,10 +554,11 @@ void main() {
       expect(run['keys'], {
         'debug with the test key': 'REVENUECAT_TEST_KEY=test_t',
         'release with the test key': 'REVENUECAT_APPLE_KEY=appl_a',
-        'empty': 'none: REVENUECAT_GOOGLE_KEY in .env is empty: fill it in '
-            'with the public API key of the Play Store app in RevenueCat, or '
-            'fill in REVENUECAT_TEST_KEY with the public API key of the Test '
-            'Store.',
+        'empty': 'none: REVENUECAT_GOOGLE_KEY has no value in this build. '
+            'In .env, give it the public API key of the Play Store app in '
+            'RevenueCat, or give REVENUECAT_TEST_KEY the public API key of the '
+            'Test Store. Then build the app as the section "Values in .env" '
+            'of its README says.',
         'secret': 'none: REVENUECAT_GOOGLE_KEY in .env is a secret key of '
             'RevenueCat, which never goes into an app: use the public API key '
             'of the Play Store app.',

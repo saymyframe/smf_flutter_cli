@@ -76,14 +76,16 @@ void main() {
         'build the key of the Test Store too', () {
       expect(
         _chosen(google: null),
-        'none: REVENUECAT_GOOGLE_KEY in .env is empty: fill it in with the '
-        'public API key of the Play Store app in RevenueCat, or fill in '
-        'REVENUECAT_TEST_KEY with the public API key of the Test Store.',
+        'none: REVENUECAT_GOOGLE_KEY has no value in this build. In .env, '
+        'give it the public API key of the Play Store app in RevenueCat, or '
+        'give REVENUECAT_TEST_KEY the public API key of the Test Store. Then '
+        'build the app as the section "Values in .env" of its README says.',
       );
       expect(
         _chosen(platform: TargetPlatform.iOS, debug: false, apple: null),
-        'none: REVENUECAT_APPLE_KEY in .env is empty: fill it in with the '
-        'public API key of the App Store app in RevenueCat.',
+        'none: REVENUECAT_APPLE_KEY has no value in this build. In .env, '
+        'give it the public API key of the App Store app in RevenueCat. Then '
+        'build the app as the section "Values in .env" of its README says.',
       );
     });
 
@@ -154,7 +156,8 @@ void main() {
       'key', () async {
     final revenueCat = mockRevenueCat();
     final service = RevenueCatPurchasesService(
-      const RevenueCatKey.none('REVENUECAT_GOOGLE_KEY in .env is empty.'),
+      const RevenueCatKey.none(
+          'REVENUECAT_GOOGLE_KEY has no value in this build.'),
     );
     const plan = Plan(
       id: r'$rc_monthly',
@@ -178,7 +181,7 @@ void main() {
       everyElement(
         failsWith(
           PurchasesFailureReason.notConfigured,
-          'REVENUECAT_GOOGLE_KEY in .env is empty.',
+          'REVENUECAT_GOOGLE_KEY has no value in this build.',
         ),
       ),
     );

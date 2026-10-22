@@ -62,9 +62,10 @@ final class RevenueCatKey {
 /// the app takes the key of the store of the platform: [apple] on iOS and
 /// [google] on Android.
 ///
-/// It takes no key when that key is empty, when it is a secret key of
-/// RevenueCat (`sk_`), which never goes into an app, and in a profile or
-/// release build when it is a key of the Test Store (`test_`). The hint of
+/// It takes no key when that key has no value in the build, when it is a
+/// secret key of RevenueCat (`sk_`), which never goes into an app, and in a
+/// profile or release build when it is a key of the Test Store (`test_`).
+/// The hint of
 /// [RevenueCatKey.none] then names the key and tells what to do.
 RevenueCatKey revenueCatKey({
   required TargetPlatform platform,
@@ -89,9 +90,10 @@ RevenueCatKey revenueCatKey({
   final (name, value, app) = chosen;
   if (value == null) {
     return RevenueCatKey.none(
-      '$name in .env is empty: fill it in with the public API key of $app '
-      'in RevenueCat${debug ? ', or fill in $_testKey with the public API '
-          'key of the Test Store' : ''}.',
+      '$name has no value in this build. In .env, give it the public API key '
+      'of $app in RevenueCat${debug ? ', or give $_testKey the public API key '
+          'of the Test Store' : ''}. Then build the app as the section '
+      '"{{values_heading}}" of its README says.',
     );
   }
   if (value.startsWith('sk_')) {

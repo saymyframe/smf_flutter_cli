@@ -657,13 +657,13 @@ To buy a plan right after generating the app, with no account in a store:
 2. Create an entitlement with the identifier `premium` and attach the products to it.
 3. Add the packages of those products to an offering, and make that offering the current one.
 4. Copy the public API key of the Test Store, which starts with `test_`, into `REVENUECAT_TEST_KEY` in `.env`.
-5. Run a debug build and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
+5. Run a debug build as the section Values in .env says, and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
 
 For a release, add the App Store app and the Play Store app to the project in RevenueCat. Give RevenueCat the In-App Purchase key of App Store Connect and a service account of Google Play, so that it checks the purchases in the stores. Create the products in the stores, attach them to `premium` and add their packages to the offering. Then copy the public API keys of the two apps into `REVENUECAT_APPLE_KEY` (`appl_`) and `REVENUECAT_GOOGLE_KEY` (`goog_`). The section Finish the setup lists these steps.
 
 A debug build takes `REVENUECAT_TEST_KEY` when it is filled in, and the key of the store of the platform otherwise. A profile or release build never takes it: RevenueCat stops such a build that is configured with a key of the Test Store, on purpose. So to try the sandbox of a store in a debug build, leave `REVENUECAT_TEST_KEY` empty.
 
-These keys are the public API keys of RevenueCat, which go into the app, where anyone can read them. A secret API key of RevenueCat, which starts with `sk_`, never goes into `.env`, and the app refuses one. While the key that a build takes is empty, the app runs without purchases: it never calls RevenueCat, every call of `appPurchases` fails with the reason `notConfigured`, and a debug build prints which key to fill in.
+These keys are the public API keys of RevenueCat, which go into the app, where anyone can read them. A secret API key of RevenueCat, which starts with `sk_`, never goes into `.env`, and the app refuses one. While the key that a build takes has no value, the app runs without purchases: it never calls RevenueCat, every call of `appPurchases` fails with the reason `notConfigured`, and a debug build prints which key to fill in.
 
 ## Languages
 
@@ -6216,9 +6216,10 @@ final class RevenueCatKey {
 /// the app takes the key of the store of the platform: [apple] on iOS and
 /// [google] on Android.
 ///
-/// It takes no key when that key is empty, when it is a secret key of
-/// RevenueCat (`sk_`), which never goes into an app, and in a profile or
-/// release build when it is a key of the Test Store (`test_`). The hint of
+/// It takes no key when that key has no value in the build, when it is a
+/// secret key of RevenueCat (`sk_`), which never goes into an app, and in a
+/// profile or release build when it is a key of the Test Store (`test_`).
+/// The hint of
 /// [RevenueCatKey.none] then names the key and tells what to do.
 RevenueCatKey revenueCatKey({
   required TargetPlatform platform,
@@ -6243,9 +6244,10 @@ RevenueCatKey revenueCatKey({
   final (name, value, app) = chosen;
   if (value == null) {
     return RevenueCatKey.none(
-      '$name in .env is empty: fill it in with the public API key of $app '
-      'in RevenueCat${debug ? ', or fill in $_testKey with the public API '
-                'key of the Test Store' : ''}.',
+      '$name has no value in this build. In .env, give it the public API key '
+      'of $app in RevenueCat${debug ? ', or give $_testKey the public API key '
+                'of the Test Store' : ''}. Then build the app as the section '
+      '"Values in .env" of its README says.',
     );
   }
   if (value.startsWith('sk_')) {

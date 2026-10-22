@@ -131,6 +131,7 @@ final class RevenueCatModule extends SmfModule {
           vars: {
             ...envRole.varsOf(id, keys),
             'entitlement': entitlement,
+            'values_heading': EnvRole.readmeHeading,
           },
         ),
         const PubspecContribution.hosted('purchases_flutter', '^10.18.0'),
