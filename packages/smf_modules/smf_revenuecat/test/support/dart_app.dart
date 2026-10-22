@@ -25,8 +25,15 @@ TargetPlatform defaultTargetPlatform = TargetPlatform.android;
 ''';
 
 /// A stand-in for the part of Flutter's services library that the file of
-/// the module uses: what a plugin fails with.
+/// the module uses: what a plugin fails with, and what a channel without a
+/// platform side fails with.
 const _services = r'''
+class MissingPluginException implements Exception {
+  MissingPluginException([this.message]);
+
+  final String? message;
+}
+
 class PlatformException implements Exception {
   PlatformException({required this.code, this.message, this.details});
 
@@ -55,7 +62,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 final List<String> revenueCatCalls = [];
-final Map<String, PlatformException> failNext = {};
+final Map<String, Object> failNext = {};
 final Map<String, Completer<void>> holdNext = {};
 bool anonymous = true;
 CustomerInfo customerInfo = const CustomerInfo(EntitlementInfos({}));

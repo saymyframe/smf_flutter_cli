@@ -195,6 +195,26 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
   result['reasons'] = reasons;
 
+  failNext['getCustomerInfo'] = StateError('not a failure of RevenueCat');
+  result['another error'] = await step(service.access);
+
+  failNext['setupPurchases'] = MissingPluginException('No implementation');
+  final unmocked = RevenueCatPurchasesService(
+    const RevenueCatKey('REVENUECAT_GOOGLE_KEY', 'goog_tests'),
+  );
+  result['without a platform side'] = [
+    await unmocked.configured,
+    ...await step(unmocked.access),
+  ];
+  failNext['setupPurchases'] = StateError('broken');
+  final broken = RevenueCatPurchasesService(
+    const RevenueCatKey('REVENUECAT_GOOGLE_KEY', 'goog_tests'),
+  );
+  result['configuration that fails otherwise'] = [
+    await broken.configured,
+    ...await step(broken.access),
+  ];
+
   offerings = const Offerings({'default': Offering('default', [package])},
       current: Offering('default', [package]));
   final plan = (await service.plans()).single;
@@ -579,6 +599,24 @@ void main() {
         '99': 'unknown',
         'error': 'unknown',
       });
+    });
+
+    test(
+        'turns an error of another kind than of RevenueCat into the reason '
+        'unknown, and a configuration that fails in any way into a service '
+        'that is not configured, whose calls fail with notConfigured', () {
+      expect(run['another error'], [
+        'getCustomerInfo',
+        'failed: unknown (Bad state: not a failure of RevenueCat)',
+      ]);
+      const withoutPlatformSide = 'failed: notConfigured (RevenueCat did '
+          'not start with REVENUECAT_GOOGLE_KEY: the app has no platform side '
+          'of purchases_flutter, as in a test without mocks of the method '
+          'channel purchases_flutter (No implementation).)';
+      expect(run['without a platform side'], [false, withoutPlatformSide]);
+      const broken = 'failed: notConfigured (RevenueCat did not start with '
+          'REVENUECAT_GOOGLE_KEY: Bad state: broken)';
+      expect(run['configuration that fails otherwise'], [false, broken]);
     });
 
     test(

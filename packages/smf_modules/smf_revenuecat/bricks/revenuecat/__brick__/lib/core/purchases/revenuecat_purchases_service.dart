@@ -166,12 +166,22 @@ final class RevenueCatPurchasesService implements PurchasesService {
   /// identifiers, which a purchase needs.
   final Map<String, Package> _packages = {};
 
+  /// Configures RevenueCat with [value], and completes with whether it did.
+  /// It never fails, since nothing may wait for it.
   Future<bool> _configure(String value) async {
     try {
       await Purchases.configure(PurchasesConfiguration(value));
     } on PlatformException catch (error) {
       _configureHint =
           'RevenueCat refused to start with ${key.name}: ${error.message}';
+      return false;
+    } on MissingPluginException catch (error) {
+      _configureHint = 'RevenueCat did not start with ${key.name}: the app '
+          'has no platform side of purchases_flutter, as in a test without '
+          'mocks of the method channel purchases_flutter (${error.message}).';
+      return false;
+    } on Object catch (error) {
+      _configureHint = 'RevenueCat did not start with ${key.name}: $error';
       return false;
     }
     if (!_listening) {
@@ -181,8 +191,10 @@ final class RevenueCatPurchasesService implements PurchasesService {
     return true;
   }
 
-  /// Runs [call] once RevenueCat is configured, and turns what RevenueCat
-  /// fails with into a [PurchasesFailure].
+  /// Runs [call] once RevenueCat is configured, and turns what it fails
+  /// with into a [PurchasesFailure]: an error of RevenueCat into the reason
+  /// of its code, and any other error into the reason
+  /// [PurchasesFailureReason.unknown].
   Future<T> _call<T>(Future<T> Function() call) async {
     if (!await _configured) {
       throw PurchasesFailure(
@@ -192,8 +204,18 @@ final class RevenueCatPurchasesService implements PurchasesService {
     }
     try {
       return await call();
-    } on PlatformException catch (error) {
-      throw _failureOf(error, key.name);
+    } on PurchasesFailure {
+      rethrow;
+    } on PlatformException catch (error, stackTrace) {
+      Error.throwWithStackTrace(_failureOf(error, key.name), stackTrace);
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PurchasesFailure(
+          PurchasesFailureReason.unknown,
+          developerHint: '$error',
+        ),
+        stackTrace,
+      );
     }
   }
 
