@@ -19,9 +19,9 @@ import 'package:smf_shared_preferences/src/agents.dart';
 /// a password, an API key or an encryption key in the preferences.
 ///
 /// The module also keeps `shared_preferences_android`, the Android side of
-/// the package, below 2.5.0: the release build of an app with 2.5.0 fails
-/// to open the preferences, because R8 renames Kotlin classes that it looks
-/// up by name.
+/// the package, at 2.5.2 or later: the release build of an app with 2.5.0
+/// or 2.5.1 fails to open the preferences, because R8 renames Kotlin
+/// classes that those versions look up by name.
 ///
 /// The implementation keeps what the role promises and the package does
 /// not: a read of a key with a value of another type returns `null` rather
@@ -66,14 +66,15 @@ final class SharedPreferencesModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(sharedPreferencesBundle),
         const PubspecContribution.hosted('shared_preferences', '^2.5.5'),
-        // 2.5.0 of the Android side calls its Kotlin code through JNI by
-        // the names of Kotlin classes that R8 renames in a release build,
-        // and ships no keep rules for them, so the release build of the app
-        // fails to open the preferences. Raise the constraint once a
-        // version keeps them.
+        // 2.5.0 and 2.5.1 of the Android side call their Kotlin code
+        // through JNI by the names of Kotlin classes that R8 renames in a
+        // release build, and ship no keep rules for them, so the release
+        // build of the app fails to open the preferences. 2.5.2 ships the
+        // rules, and shared_preferences alone would still allow the two
+        // versions before it.
         const PubspecContribution.hosted(
           'shared_preferences_android',
-          '>=2.4.28 <2.5.0',
+          '^2.5.2',
         ),
         preferencesRole.data(
           const RoleImplementation.async(
