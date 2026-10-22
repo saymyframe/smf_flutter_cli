@@ -48,11 +48,15 @@ String? priceSuffixOf(BuildContext context, BillingPeriod? period) =>
       },
     };
 
-/// The price of [plan] with what follows it, such as `$4.99 / month`.
+/// The price of [plan] with what follows it, such as `$4.99 / month`, with
+/// no-break spaces, so that a line never breaks inside it.
 String priceOf(BuildContext context, Plan plan) => [
   plan.price,
   ?priceSuffixOf(context, plan.period),
-].join(' ');
+].join(' ').replaceAll(' ', _noBreakSpace);
+
+/// The no-break space, which keeps the words on each side of it on one line.
+const String _noBreakSpace = '\u00A0';
 
 /// How long an intro offer of [length] lasts, such as `1 week`.
 String lengthTextOf(BuildContext context, OfferLength length) =>

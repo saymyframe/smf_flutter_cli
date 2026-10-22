@@ -133,23 +133,25 @@ class _PaywallViewState extends State<PaywallView>
     final pinned =
         MediaQuery.sizeOf(context).height >= 640 &&
         MediaQuery.textScalerOf(context).scale(16) <= 24;
-    // What buys: the message of the last call, the button and what the
-    // selected plan costs after its intro offer. While the plans did not
-    // load, there is nothing to buy.
+    // What the last call ended with, such as a restore that found nothing.
+    final message = PaywallMessage(
+      text: failure != null
+          ? failureTextOf(context, failure.reason)
+          : notice != null
+          ? noticeTextOf(context, notice)
+          : null,
+      failed: failure != null,
+      hint: failure?.developerHint,
+    );
+    // What buys: the message, the button and what the selected plan costs
+    // after its intro offer. While the plans did not load, there is nothing
+    // to buy, and the message is above the links.
     final purchase = state.loadFailure != null
         ? null
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              PaywallMessage(
-                text: failure != null
-                    ? failureTextOf(context, failure.reason)
-                    : notice != null
-                    ? noticeTextOf(context, notice)
-                    : null,
-                failed: failure != null,
-                hint: failure?.developerHint,
-              ),
+              message,
               PurchaseButton(
                 label: purchaseLabelOf(context, selected),
                 busy: state.busy == PaywallAction.purchase,
@@ -172,6 +174,7 @@ class _PaywallViewState extends State<PaywallView>
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (purchase == null) message,
         if (selected != null && state.loadFailure == null) ...[
           WholeWords(
             termsTextOf(context, selected),
@@ -184,10 +187,12 @@ class _PaywallViewState extends State<PaywallView>
         ],
         _Links(
           links: [
+            // While the plans load, there is no restore either, so that no
+            // plan comes in to be bought while one is on its way.
             PaywallLink(
               label: {{{text_restore}}},
               busy: state.busy == PaywallAction.restore,
-              onPressed: idle ? widget.onRestore : null,
+              onPressed: idle && !state.loading ? widget.onRestore : null,
             ),
             if (terms != null)
               PaywallLink(

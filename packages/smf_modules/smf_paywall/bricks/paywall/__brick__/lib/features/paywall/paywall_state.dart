@@ -57,6 +57,9 @@ final class PaywallState {
   /// router, which closes the paywall. The paywall neither closes itself
   /// nor navigates. When the access ends before the router took the
   /// paywall away, the paywall is idle again.
+  ///
+  /// While the plans load, the paywall takes no call, so that no plan comes
+  /// in to be bought while a restore is on its way.
   final PaywallAction? busy;
 
   /// Why the last call failed, or `null` if it did not.
@@ -71,17 +74,24 @@ final class PaywallState {
   /// The state with [plan] selected, with nothing on its way and nothing to
   /// tell.
   PaywallState selecting(Plan plan) =>
-      PaywallState(plans: plans, selected: plan);
+      PaywallState(plans: plans, loadFailure: loadFailure, selected: plan);
 
-  /// The state while [action] is on its way.
-  PaywallState busyWith(PaywallAction action) =>
-      PaywallState(plans: plans, selected: selected, busy: action);
+  /// The state while [action] is on its way. The plans, or why they did not
+  /// load, stay as they are.
+  PaywallState busyWith(PaywallAction action) => PaywallState(
+    plans: plans,
+    loadFailure: loadFailure,
+    selected: selected,
+    busy: action,
+  );
 
   /// The state with nothing on its way, which tells of [failure] or
-  /// [notice], if any.
+  /// [notice], if any. The plans, or why they did not load, stay as they
+  /// are.
   PaywallState idle({PurchasesFailure? failure, PaywallNotice? notice}) =>
       PaywallState(
         plans: plans,
+        loadFailure: loadFailure,
         selected: selected,
         failure: failure,
         notice: notice,

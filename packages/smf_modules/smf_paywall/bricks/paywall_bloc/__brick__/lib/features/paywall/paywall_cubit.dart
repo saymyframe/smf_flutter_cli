@@ -70,16 +70,16 @@ class PaywallCubit extends Cubit<PaywallState> {
   /// Opens [url], a link of the paywall.
   Future<void> openLink(Uri url) => _openLink(url);
 
-  /// Makes [call], the call of [action], unless a call is on its way.
-  /// [call] returns whether the user has premium access then, and the state
-  /// stays busy if so. Otherwise it is idle again, with the notice
-  /// [otherwise], if any.
+  /// Makes [call], the call of [action], unless a call is on its way or the
+  /// plans load. [call] returns whether the user has premium access then,
+  /// and the state stays busy if so. Otherwise it is idle again, with the
+  /// notice [otherwise], if any.
   Future<void> _run(
     PaywallAction action,
     Future<bool> Function() call, {
     PaywallNotice? otherwise,
   }) async {
-    if (state.busy != null) return;
+    if (state.busy != null || state.loading) return;
     _calling = true;
     emit(state.busyWith(action));
     final bool premium;

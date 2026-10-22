@@ -376,9 +376,12 @@ class PlanCard extends StatelessWidget {
                           runSpacing: 6,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            // No larger than the price, which grows only by
+                            // half too.
                             WholeWords(
                               name,
                               style: theme.textTheme.titleMedium,
+                              maxScaleFactor: 1.5,
                             ),
                             ?switch (badge) {
                               final badge? => Pill(badge, strong: true),
@@ -404,9 +407,12 @@ class PlanCard extends StatelessWidget {
                                         ],
                                       ),
                                 ),
+                                // The price and what follows it stay on
+                                // one line.
                                 if (suffix case final suffix?)
                                   TextSpan(
-                                    text: ' $suffix',
+                                    text: '\u00A0'
+                                        '${suffix.replaceAll(' ', '\u00A0')}',
                                     style: theme.textTheme.bodyMedium
                                         ?.copyWith(
                                           color: colors.onSurfaceVariant,

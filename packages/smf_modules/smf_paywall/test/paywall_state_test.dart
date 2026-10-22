@@ -95,6 +95,9 @@ Future<RenderedApp> _rendered(ModuleId variant) async {
   return result.app!;
 }
 
+/// [text] with a no-break space in place of each space.
+String _noBreak(String text) => text.replaceAll(' ', '\u00A0');
+
 /// The import of the file of the app at [path].
 String _import(String path) =>
     'package:contract_app/${path.substring('lib/'.length)}';
@@ -130,6 +133,7 @@ final class Scripted implements PurchasesService {
   PurchasesFailure? failure;
   AppAccess? purchaseAnswer = premium;
   Completer<void>? hold;
+  Completer<void>? holdPlans;
   final List<String> calls = [];
 
   /// The access changes without a call of the app, as when it ends.
@@ -156,6 +160,7 @@ final class Scripted implements PurchasesService {
   @override
   Future<List<Plan>> plans() async {
     calls.add('plans');
+    await holdPlans?.future;
     if (plansFailure case final failure?) throw failure;
     return offer;
   }
@@ -379,6 +384,54 @@ const _scenarios = r'''
       result['$name: error'] = '$error';
     }
     result['$name: states told since'] = paywall.states.length - told;
+  }
+
+  // A restore while the plans did not load: the paywall still tells why
+  // they did not, with what the restore found, and loads them on the next
+  // try.
+  {
+    final service = Scripted()
+      ..plansFailure = const PurchasesFailure(
+        PurchasesFailureReason.notConfigured,
+        developerHint: 'A key is missing.',
+      );
+    final purchases = await purchasesOf(service);
+    final paywall = paywallOf(purchases, []);
+    await turn();
+    await turn();
+    service.hold = Completer<void>();
+    final restore = paywall.restore();
+    await turn();
+    result['unavailable, restoring'] = show(paywall.state());
+    service.hold!.complete();
+    await restore;
+    await turn();
+    result['unavailable, restored nothing'] = show(paywall.state());
+    result['unavailable, restored: hint'] =
+        paywall.state().loadFailure?.developerHint;
+    service.plansFailure = null;
+    await paywall.load();
+    result['unavailable, loaded again'] = show(paywall.state());
+    await paywall.leave();
+  }
+
+  // A restore while the plans load does nothing, so that no plan comes in
+  // to be bought while a restore is on its way.
+  {
+    final service = Scripted()..holdPlans = Completer<void>();
+    final purchases = await purchasesOf(service);
+    final paywall = paywallOf(purchases, []);
+    await turn();
+    final restore = paywall.restore();
+    await turn();
+    result['loading, restore'] = show(paywall.state());
+    service.holdPlans!.complete();
+    await restore;
+    await turn();
+    await turn();
+    result['loading, then loaded'] = show(paywall.state());
+    result['loading: calls'] = [...service.calls];
+    await paywall.leave();
   }
 
   // A link opens with what the app gives the state.
@@ -644,6 +697,35 @@ void main() {
         }
       });
 
+      test(
+          'keeps why the plans did not load through a restore, which tells '
+          'what it found, and loads them on the next try', () {
+        expect(
+          result['unavailable, restoring'],
+          'load failed notConfigured, busy restore',
+        );
+        expect(
+          result['unavailable, restored nothing'],
+          'load failed notConfigured, notice nothingToRestore',
+        );
+        expect(result['unavailable, restored: hint'], 'A key is missing.');
+        expect(
+          result['unavailable, loaded again'],
+          'plans monthly yearly, selected yearly',
+        );
+      });
+
+      test(
+          'takes no restore while the plans load, so that no plan is bought '
+          'while a restore is on its way', () {
+        expect(result['loading, restore'], 'loading');
+        expect(
+          result['loading, then loaded'],
+          'plans monthly yearly, selected yearly',
+        );
+        expect(result['loading: calls'], ['plans']);
+      });
+
       test('opens a link with what the app gives it', () {
         expect(result['opened'], ['https://example.com/terms']);
       });
@@ -757,15 +839,19 @@ void main() {
         'Lifetime',
         'Store title',
       ]);
+      // With no-break spaces, so that a line never breaks inside a price.
       expect(result['prices'], [
-        r'$1.99 / week',
-        r'$4.99 / month',
-        r'$8.99 / 2 months',
-        r'$12.99 / 3 months',
-        r'$19.99 / 6 months',
-        r'$29.99 / year',
-        r'$79.99 once',
-        r'$3.99',
+        for (final price in [
+          r'$1.99 / week',
+          r'$4.99 / month',
+          r'$8.99 / 2 months',
+          r'$12.99 / 3 months',
+          r'$19.99 / 6 months',
+          r'$29.99 / year',
+          r'$79.99 once',
+          r'$3.99',
+        ])
+          _noBreak(price),
       ]);
       expect(result['labels'], [
         'Start free trial',
@@ -789,8 +875,8 @@ void main() {
         'Introductory price',
       ]);
       expect(result['after offers'], [
-        r'1 week free, then $29.99 / year',
-        r'$0.99 / month for 3 months, then $4.99 / month',
+        '1 week free, then ${_noBreak(r'$29.99 / year')}',
+        '\$0.99 / month for 3 months, then ${_noBreak(r'$4.99 / month')}',
         null,
       ]);
     });
