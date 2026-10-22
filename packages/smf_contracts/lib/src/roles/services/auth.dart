@@ -324,7 +324,9 @@ enum AuthMode {
 /// account. It makes the call outside the body of a test, as in a
 /// `setUpAll`: a call made in the body of a widget test waits in the fake
 /// time of that body, and a start that runs in real time then never
-/// completes. The tests of a module whose guard asks for an account open
+/// completes. Code may have read `appSession` first anywhere, even in the
+/// body of an earlier widget test: the call waits in the zone it was made
+/// in. The tests of a module whose guard asks for an account open
 /// the guard for the tests of the other modules this way. A test gives
 /// `appSession.start()` a service of its own to script what a provider
 /// answers, and creates an `AppSessionController` of its own to see

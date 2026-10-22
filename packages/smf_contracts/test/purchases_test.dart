@@ -725,6 +725,36 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Reads `appPurchases` first in a zone that runs no microtask any more, as
+/// the fake time of a widget test that is over does, and then, in the root
+/// zone, buys a plan with `plans().then(...)` and starts the purchases, as
+/// the mocks of a later test do in real time.
+const _createdElsewhere = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  runZoned(
+    () => appPurchases.value,
+    zoneSpecification: ZoneSpecification(
+      scheduleMicrotask: (self, parent, zone, microtask) {},
+    ),
+  );
+  final done = <String>[];
+  unawaited(
+    appPurchases
+        .plans()
+        .then((plans) => appPurchases.purchase(plans.last))
+        .then((bought) => done.add('purchase: \$bought')),
+  );
+  final watch = Stopwatch()..start();
+  await initPurchases();
+  result['the start completes before its wait is over'] =
+      watch.elapsed < appPurchases.startWait;
+  result['the calls when the start completes'] = takeCalls();
+  result['the calls that are done'] = [...done];
+  result['premium'] = appPurchases.hasPremium.value;
+  port.send(result);
+}
+''';
+
 /// Starts a controller whose user a test changes, as the session of an app
 /// with sign-in tells: a change, the same user again, changes while a
 /// purchase is on its way, an identification that fails, and a call after
@@ -1875,6 +1905,24 @@ void main() {
             'access': 'premium',
             'calls': ['plans'],
           },
+        });
+      });
+
+      test(
+          'runs a call made before the first start in its own zone, '
+          'wherever the controller was first read: a widget test in fake '
+          'time may read it before a later test starts the app in real '
+          'time', () async {
+        expect(await app.run('$_notes$_createdElsewhere'), {
+          'the start completes before its wait is over': true,
+          'the calls when the start completes': [
+            'identify null',
+            'access',
+            'plans',
+            'purchase lifetime',
+          ],
+          'the calls that are done': ['purchase: true'],
+          'premium': true,
         });
       });
 

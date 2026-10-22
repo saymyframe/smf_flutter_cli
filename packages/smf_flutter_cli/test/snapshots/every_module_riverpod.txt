@@ -1477,8 +1477,17 @@ final class AppSessionController extends ChangeNotifier
   AppSession _session = const SignedOutSession();
   bool _disposed = false;
 
-  /// Completes when the app has started for the first time.
-  final Completer<void> _started = Completer<void>();
+  /// Whether the app has started for the first time.
+  bool _started = false;
+
+  /// Completes at the first start. Only the first call made before it waits
+  /// for it, and each later call waits for the call before it. That call
+  /// creates it, so the start completes it in the zone of the call: created
+  /// with the controller, it would complete in a microtask of the zone that
+  /// read [appSession] first, which may run none any more, as the fake time
+  /// of a widget test that is over before a later test starts the app in
+  /// real time.
+  Completer<void>? _untilStarted;
 
   /// The call that was made last, while a call is on its way: the next one
   /// waits for it. It is `null` when none is, and a call then awaits
@@ -1551,7 +1560,7 @@ final class AppSessionController extends ChangeNotifier
     // The calls that were made before this start. The first start lets
     // them run once it has the user, and a later one waits for them.
     final earlier = _lastCall;
-    final first = !_started.isCompleted;
+    final first = !_started;
     if (!first) await earlier;
     unawaited(_userChanges?.cancel());
     _service = service;
@@ -1571,7 +1580,10 @@ final class AppSessionController extends ChangeNotifier
       }
       await _signInAnonymously();
     }
-    if (!_started.isCompleted) _started.complete();
+    if (!_started) {
+      _started = true;
+      _untilStarted?.complete();
+    }
     if (first) await earlier;
   }
 
@@ -1705,7 +1717,8 @@ final class AppSessionController extends ChangeNotifier
     bool waitsForAnonymousUser = false,
   }) async {
     final earlier =
-        _lastCall ?? (_started.isCompleted ? null : _started.future);
+        _lastCall ??
+        (_started ? null : (_untilStarted ??= Completer<void>()).future);
     final done = Completer<void>();
     final own = _lastCall = done.future;
     if (earlier != null) await earlier;
@@ -3951,10 +3964,17 @@ final class NotificationsController {
   StreamSubscription<NotificationTap>? _serviceTaps;
   NotificationTap? _launchTap;
 
-  /// Completes when the app has started for the first time, with the error
-  /// of that start if it failed. Nothing but a call that waits for the start
-  /// reports that error, which the start throws itself.
-  final Completer<void> _started = Completer<void>()..future.ignore();
+  /// Whether the app has started for the first time, also when that start
+  /// failed.
+  bool _started = false;
+
+  /// What the calls made before the first start wait for, each created by
+  /// its call. The first start completes them, with its error if it failed,
+  /// each in the zone of its call: created with the controller, they would
+  /// complete in a microtask of the zone that read [appNotifications]
+  /// first, which may run none any more, as the fake time of a widget test
+  /// that is over before a later test starts the app in real time.
+  final List<Completer<void>> _untilStarted = [];
 
   /// The preferences that remember that the app asked, once the app opened
   /// them.
@@ -4039,10 +4059,10 @@ final class NotificationsController {
     try {
       await _refresh();
     } on Object catch (error, stackTrace) {
-      if (!_started.isCompleted) _started.completeError(error, stackTrace);
+      _firstStarted(error, stackTrace);
       rethrow;
     }
-    if (!_started.isCompleted) _started.complete();
+    _firstStarted();
   }
 
   /// Asks the user for the permission to show notifications, unless the app
@@ -4103,8 +4123,29 @@ final class NotificationsController {
 
   /// The service, once the app has started for the first time.
   Future<NotificationsService> _ready() async {
-    if (!_started.isCompleted) await _started.future;
+    if (!_started) {
+      final untilStarted = Completer<void>();
+      _untilStarted.add(untilStarted);
+      await untilStarted.future;
+    }
     return _service!;
+  }
+
+  /// Takes it that the app has started for the first time, unless it had,
+  /// and lets the calls that waited for that go on, or fail with [error] of
+  /// the start. Nothing but these calls reports that error, which the start
+  /// throws itself.
+  void _firstStarted([Object? error, StackTrace? stackTrace]) {
+    if (_started) return;
+    _started = true;
+    for (final untilStarted in _untilStarted) {
+      if (error == null) {
+        untilStarted.complete();
+      } else {
+        untilStarted.completeError(error, stackTrace);
+      }
+    }
+    _untilStarted.clear();
   }
 
   Future<NotificationPermission> _ask() async {
