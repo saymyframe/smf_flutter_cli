@@ -231,6 +231,37 @@ void main() {
   });
 
   test(
+      'finds the file of AppEnv of the provider of the env role in the tests '
+      'of modules, but as the keys of maps and in the tests of the provider',
+      () {
+    const paywall = 'packages/smf_modules/smf_paywall/test/paywall_test.dart';
+    const values = 'packages/smf_modules/smf_dart_define/test/values_test.dart';
+    expect(
+      _names({
+        paywall: 'final env = app.files[EnvRole.readerFile]!;\n'
+            "import 'package:contract_app/core/env/app_env.dart';\n"
+            "final path = 'lib/core/env/app_env.dart';\n"
+            '  EnvRole.readerFile: [\n'
+            "  'lib/core/env/app_env.dart': '',\n"
+            // The files of the template of the role, which every provider
+            // has, and the class through which a module reads its values.
+            'const example = EnvRole.exampleFile;\n'
+            'final import = EnvRole.appEnv.importRef;\n',
+        values: 'final env = app.files[EnvRole.readerFile]!;\n'
+            "import 'package:contract_app/core/env/app_env.dart';\n",
+        // The tests of other packages.
+        'packages/smf_pipeline/test/testing/harness_test.dart':
+            'final env = app.files[EnvRole.readerFile]!;\n',
+      }),
+      [
+        '$paywall:1: EnvRole.readerFile',
+        '$paywall:2: EnvRole.readerFile',
+        '$paywall:3: EnvRole.readerFile',
+      ],
+    );
+  });
+
+  test(
       'finds the files that the provider of the app entry renders in the '
       'tests of modules, but as the keys of maps and in the tests of the '
       'provider', () {
