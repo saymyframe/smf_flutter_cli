@@ -1536,6 +1536,25 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenEnvModule(),
+        role: envRole,
+        bug: 'Its AppEnv returns the value of a key as the command that built '
+            'the app read it from .env, so a key that .env leaves empty is an '
+            'empty text rather than null.',
+        // The module that reads values of .env, whose keys the test of the
+        // role checks, and whose test gives one of them an empty value.
+        app: [FakeEnvUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/env_role/env_role_test.dart',
+            'AppEnv returns null for each key that .env leaves empty',
+            'FAKE_ENV_USER_SECOND is empty in .env, so '
+                'AppEnv.fakeEnvUserSecond is null: an empty value counts as '
+                'missing.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '

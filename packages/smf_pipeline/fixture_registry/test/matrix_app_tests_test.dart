@@ -163,8 +163,9 @@ void main() {
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
       'of the auth role, of the onboarding screen role, of the notifications '
-      'role, of the push role and of the purchases role with every provider '
-      'of each, which they tell apart by the roles of the app only', () {
+      'role, of the push role, of the purchases role and of the env role with '
+      'every provider of each, which they tell apart by the roles of the app '
+      'only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -181,6 +182,7 @@ void main() {
         notificationsRole,
         pushRole,
         purchasesRole,
+        envRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
@@ -198,6 +200,9 @@ void main() {
     // contract of its providers.
     expect(named('purchases_session').roles, {purchasesRole});
     expect(named('purchases_device').roles, {purchasesRole});
+    expect(named('env_role').roles, {envRole});
+    // The test of the module that reads values of .env tests a module.
+    expect(named('env_variables').roles, isEmpty);
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -943,6 +948,54 @@ void main() {
       'fake_purchases with localization',
       'fake_purchases',
     ]);
+  });
+
+  test(
+      'the test of the env role applies to the apps with every module, where '
+      'the fixture values of .env provide the role and the module that reads '
+      'values of .env gives it keys, and not to the apps of the two alone, '
+      'which the matrix only analyzes; there the test of that module gives '
+      'its keys a value in double quotes, an empty value and none, and the '
+      'test of the role gives no value', () {
+    final roleTest = named('env_role');
+    final valuesTest = named('env_variables');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    // The module uses the role, so it has an app with the role and one
+    // without, and the provider has an app without keys.
+    expect(
+      [
+        for (final app in apps)
+          if (app.modules.contains(FakeEnvModule.id) ||
+              app.modules.contains(FakeEnvUserModule.id))
+            if (app.everyModuleWith == null) app.name,
+      ],
+      ['fake_env', 'fake_env_user with env', 'fake_env_user'],
+    );
+    expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
+    expect(appsOf(valuesTest), appsOf(roleTest));
+    for (final app in everyModule) {
+      final keys = envRole.keysIn(envRole.hookInput(app.hook!));
+      expect(
+        [for (final key in keys) key.name],
+        [for (final key in FakeEnvUserModule.keys) key.name],
+        reason: app.name,
+      );
+      // A value in double quotes, an empty one, and none, as of a key that
+      // the file lacks: each case of the test of the role.
+      expect(valuesTest.envValues!(app), {
+        'FAKE_ENV_USER_FIRST': 'the first value # of the fixture',
+        'FAKE_ENV_USER_SECOND': '',
+        'FAKE_ENV_USER_THIRD': null,
+      });
+      expect(roleTest.envValues, isNull);
+      expect(roleTest.generatedFiles!(app, 'fixture_app').keys, [
+        'test/env_role/keys.dart',
+      ]);
+    }
   });
 
   test(

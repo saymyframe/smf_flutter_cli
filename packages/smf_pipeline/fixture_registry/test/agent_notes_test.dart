@@ -111,6 +111,9 @@ void main() {
     final hasFixturePurchases = modules.any(
       (module) => module.descriptor.id == const ModuleId('fake_purchases'),
     );
+    final hasFixtureEnv = modules.any(
+      (module) => module.descriptor.id == const ModuleId('fake_env'),
+    );
     group('in the apps of the registry $name, the note of a role', () {
       late List<ContractResult> results;
 
@@ -323,6 +326,33 @@ void main() {
               '`FixturePurchases`',
               'fake_purchases',
             ],
+          );
+        });
+      }
+
+      // What only a registry with the fixture values of .env can tell: there
+      // the env role has a provider, so the check holds its note against
+      // one.
+      if (hasFixtureEnv) {
+        test(
+            'of the env role may name Dart and the file of the role, and may '
+            'not name the fixture that provides the values', () {
+          expect(
+            _namedWith(
+              results,
+              envRole,
+              '- `AppEnv` in `lib/core/env/app_env.dart` reads a value with '
+              '`String.fromEnvironment`, and may keep the values in a `Map`.',
+            ),
+            isEmpty,
+          );
+          expect(
+            _namedWith(
+              results,
+              envRole,
+              '- `AppEnv` keeps the values in a map, as fake_env wants.',
+            ),
+            ['fake_env'],
           );
         });
       }

@@ -16,7 +16,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// events role, the preferences role, the localization role, the theme
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode, the auth role, the onboarding screen role, the
-/// notifications role, the push role and the purchases role.
+/// notifications role, the push role, the purchases role and the env role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -27,7 +27,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// hear, the fixture setting, whose restorers note what they read, the
 /// fixture theme, whose colour a test changes, the module that uses the
 /// fixture clock, which shows an hour on a clock of 24 hours or of 12, and
-/// the fixture steps of the onboarding, whose actions note their calls.
+/// the fixture steps of the onboarding, whose actions note their calls, and
+/// the module that reads values of .env, whose keys a test gives values.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -429,6 +430,27 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // purchases alone, with the texts of the app and without them, since
       // every app with every module has the fixture sign-in.
       await purchasesDeviceAppTest(),
+      // The values of .env in the apps with the env role whose modules give
+      // the role keys, whichever module provides it, the test that the CLI
+      // keeps: only in the apps with every module, which run flutter test
+      // for other tests already. There the fixture values of .env provide
+      // the role, and the module that reads values of .env gives it three
+      // keys, whose values the test of that module gives the app.
+      await envRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The module that reads values of .env, fake_env_user: it reads the
+      // value of each of its keys from AppEnv, whichever module provides the
+      // env role. Its tests give its keys the values that the test of the
+      // env role checks: one in double quotes, one empty, and one that .env
+      // lacks. Only in the apps with every module, which run flutter test
+      // for other tests already. It tests a module, so it names no role.
+      MatrixAppTest(
+        '$appTests/env_variables',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            app.hook!.presentRoles.contains(envRole) &&
+            app.modules.contains(FakeEnvUserModule.id),
+        envValues: (app) => _fixtureValues,
+      ),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -458,9 +480,21 @@ Future<MatrixAppTests> fixtureAppTests() async {
       notificationsRole,
       pushRole,
       purchasesRole,
+      envRole,
     },
   );
 }
+
+/// The values that the test of the module that reads values of .env gives
+/// its keys in the file of the values of an app: a value that goes into the
+/// file in double quotes, since it has white space and a `#`, an empty
+/// value, and none, which removes the line of the key, as of a key that the
+/// file lacks.
+final Map<String, String?> _fixtureValues = {
+  FakeEnvUserModule.keys[0].name: 'the first value # of the fixture',
+  FakeEnvUserModule.keys[1].name: '',
+  FakeEnvUserModule.keys[2].name: null,
+};
 
 /// The test of the onboarding screen role, in [appTests], the directory of
 /// the app tests of the fixture registry: in the apps with every module
