@@ -61,7 +61,7 @@ void main() {
       'settings screen role',
       'onboarding screen role',
       'theme role',
-      'env role',
+      'values in .env role',
     ]);
   });
 

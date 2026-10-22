@@ -17,15 +17,20 @@ const envRole = EnvRole._();
 /// A module that requires or uses the role gives it an [EnvKey] for each
 /// value that its code reads: a name in UPPER_SNAKE_CASE that starts with
 /// the id of the module, such as `REVENUECAT_APPLE_KEY` of the module
-/// `revenuecat`, and a description of one line. The template of a role that
-/// requires or uses this role may give keys too, which start with the id of
-/// its role. [keysIn] has the keys of an app.
+/// `revenuecat`, and a description of one line. Only modules give keys: the
+/// template of a role gives none and reads none. [keysIn] has the keys of an
+/// app.
 ///
 /// The role's template generates, whichever provider is selected:
 /// - [dotEnvFile], with a comment line `# <description>` and a line `KEY=`
 ///   for each key, in the order of [keysIn]. The developer fills in the
 ///   values there: a line `KEY=value` gives the key its value, and a line
-///   that starts with `#` is a comment;
+///   that starts with `#` is a comment. Every provider reads two forms of a
+///   value alike: a plain value, without `#`, spaces or quotes, such as
+///   `KEY=appl_123`, and any other value in double quotes, such as
+///   `KEY="https://example.com/terms#refunds"`. After a plain value, `# …`
+///   is a comment, so a link with an anchor needs the quotes. The comment at
+///   the top of both files says so;
 /// - [exampleFile], with the same keys and no values. It stays in git, while
 ///   [dotEnvFile] does not: the template keeps [dotEnvFile] out of git with
 ///   the `.gitignore` of the app ([AppEntryRole.gitignore]), so a clone of
@@ -40,7 +45,10 @@ const envRole = EnvRole._();
 /// A provider generates [readerFile] with [appEnv], the class `AppEnv`,
 /// whose static getters return the values. How the values of [dotEnvFile]
 /// get there is up to the provider, as long as they are there from the
-/// start of `main()` (see [appEnv]). A provider that needs arguments for
+/// start of `main()`, and as long as a command of the `flutter` tool that
+/// builds, runs or tests the app gives `AppEnv` the values that
+/// [dotEnvFile] has when the command runs (see [appEnv]). A provider that
+/// needs arguments for
 /// the commands of the `flutter` tool that build, run or test the app, so
 /// that the values reach `AppEnv`, gives them to the role as
 /// [EnvToolArguments], and code that runs those commands, such as an IDE
@@ -57,8 +65,9 @@ const envRole = EnvRole._();
 /// app without it, where no developer fills in anything. Code of a module
 /// that is only in an app with the role, such as code of a module that
 /// requires it, may also read `AppEnv.<getter>` itself, with [appEnv]
-/// imported. Either way, code reads only the keys of its owner and of the
-/// modules it depends on, which the rule `env.key_access` checks.
+/// imported. Either way, the code of a module reads only its own keys and
+/// those of the modules it depends on, which the rule `env.key_access`
+/// checks.
 final class EnvRole extends Role<EnvData> {
   const EnvRole._();
 
@@ -101,6 +110,13 @@ final class EnvRole extends Role<EnvData> {
   /// in yet is `null`, not an error. Code handles `null`, and may tell the
   /// developer in a debug build which key is missing.
   ///
+  /// `AppEnv` gets the values from the command that builds the app: a
+  /// command of the `flutter` tool that builds, runs or tests the app, with
+  /// the arguments of [toolArgumentsIn], gives `AppEnv` the values that
+  /// [dotEnvFile] has when the command runs, and nothing else runs after
+  /// [dotEnvFile] changes. So a provider whose values need code generation
+  /// after an edit of [dotEnvFile] does not keep this contract either.
+  ///
   /// The rule `env.keys_rendered` checks that `AppEnv` has the getter of
   /// every key; a test of the role in a running app shows that each returns
   /// its value. Import the class with [RequiredSymbol.importRef].
@@ -110,7 +126,7 @@ final class EnvRole extends Role<EnvData> {
   String get id => 'env';
 
   @override
-  String get description => 'Env';
+  String get description => 'Values in .env';
 
   @override
   RoleCardinality get cardinality => RoleCardinality.atMostOne;
@@ -134,9 +150,9 @@ final class EnvRole extends Role<EnvData> {
               'and each with a getter of its own, and a description of one '
               'line of at most 100 characters without a backslash. A '
               'variable of a brick of the module that reads a value of the '
-              'role reads one of the keys of the module. Only a provider of '
-              'the role gives it tool arguments, at most once, each '
-              'argument one line that is not empty.',
+              'role reads a key of the module or of a module that it depends '
+              'on. Only a provider of the role gives it tool arguments, at '
+              'most once, each argument one line that is not empty.',
           check: _checkKeys,
         ),
       ];
@@ -151,11 +167,11 @@ final class EnvRole extends Role<EnvData> {
         ),
         StructuralRule(
           id: 'env.key_access',
-          description: 'Code of a module with the role among its roles '
-              'reads from AppEnv only the getters of its own keys and of '
-              'the keys of the modules it depends on, and code of the '
-              'template of a role only the getters of its own keys. The '
-              'rule sees what code reads from AppEnv, with or without the '
+          description: 'The files of a module with the role among its roles '
+              'read from AppEnv only the getters of its own keys and of the '
+              'keys of the modules it depends on, and the files of the '
+              'template of a role, and of the pipeline, read none. The rule '
+              'sees what a file reads from AppEnv, with or without the '
               'prefix of an import, and no value that it reads through '
               'another expression.',
           check: _checkKeyAccess,
@@ -164,8 +180,9 @@ final class EnvRole extends Role<EnvData> {
 
   /// The keys of the app in [input], the input of a hook of this role, of
   /// its provider, or of a role that requires or uses this role: those of
-  /// the modules, in the order the modules were selected, and then those of
-  /// the templates of roles. The keys of one owner keep its order.
+  /// the modules, in the order the modules were selected. The keys of one
+  /// module keep its order. The template of a role gives no key, which the
+  /// template of this role reports.
   ///
   /// The files of the template list the keys in this order, and a provider
   /// declares the getter of each in [appEnv].
@@ -185,7 +202,9 @@ final class EnvRole extends Role<EnvData> {
   /// The role says nothing of what they mean. Code that runs such a
   /// command for the app, such as a test tool or the run configuration of
   /// an IDE, passes them as they are, in their order, after the name of
-  /// the command: `flutter test <arguments>`.
+  /// the command: `flutter test <arguments>`. Such a command gives `AppEnv`
+  /// the values that [dotEnvFile] has when it runs, and nothing else runs
+  /// after [dotEnvFile] changes: the next command has the new values.
   List<String> toolArgumentsIn(RoleHookInput<Object> input) => [
         for (final data in dataIn(input))
           if (data.value case EnvToolArguments(:final arguments)) ...arguments,
@@ -201,8 +220,11 @@ final class EnvRole extends Role<EnvData> {
   /// it. So a template reads `{{{env_revenuecat_apple_key}}}` where its
   /// code takes a `String?`, outside mustache sections and not inside a
   /// `const` expression, since a getter is no constant. The module lists
-  /// this role among its roles and gives it the same [keys] as data: the
-  /// rule `env.keys` reports a variable that reads a key of another owner.
+  /// this role among its roles and gives it the same [keys] as data. A
+  /// module that reads a key of a module that it depends on makes the
+  /// variable with the id of that module: the rule `env.keys` reports a
+  /// variable that reads a key that neither the module nor a module that it
+  /// depends on gives the role.
   ///
   /// Throws an [ArgumentError] with the problems of [keys], if they have
   /// any, as the rule `env.keys` reports them, so that the module fails to

@@ -9,8 +9,8 @@ import 'dart_files.dart';
 import 'role_support.dart';
 import 'support.dart';
 
-/// A role whose template reads values of the app, as the template of a role
-/// that uses the env role does.
+/// A role whose template would read values of the app, as the template of a
+/// role that uses the env role could.
 final _boardRole = TestRole<NoDsl>('board', uses: {envRole});
 
 /// A role that neither requires nor uses the env role.
@@ -35,14 +35,13 @@ RoleData<Object> _ofTemplate(Role role, EnvData value) =>
     envRole.data(value).withOrigin(RoleTemplateOrigin(role));
 
 /// The keys of an app with the modules `shop` and `feed`, whose variant
-/// gives a key of the module, and with the template of [_boardRole].
+/// gives a key of the module.
 final List<RoleData<Object>> _appKeys = [
   dataOf<EnvData>(envRole, _shopApple, module: 'shop'),
   envRole
       .data(_shopGoogle)
       .withOrigin(const ModuleOrigin(ModuleId('shop'), variant: ModuleId('x'))),
   dataOf<EnvData>(envRole, _feedUrl, module: 'feed'),
-  _ofTemplate(_boardRole, _boardToken),
 ];
 
 /// The texts of the issues: each message after the origin of the issue.
@@ -70,8 +69,10 @@ void main() {
         'has the id env and at most one provider, and needs no other role, '
         'since its values are the same whatever else the app has', () {
       expect(envRole.id, 'env');
-      expect(envRole.description, 'Env');
-      expect('$envRole', 'env role');
+      // The heading of the role in the guide for coding agents of the app,
+      // and its line in the explanation of smf create.
+      expect(envRole.description, 'Values in .env');
+      expect('$envRole', 'values in .env role');
       expect(envRole.presenceFlag, 'has_env');
       expect(envRole.cardinality, RoleCardinality.atMostOne);
       expect(envRole.requires, isEmpty);
@@ -245,24 +246,32 @@ void main() {
       expect(given.problems(), isEmpty);
       expect(const EnvToolArguments([]).problems(), isEmpty);
       expect('$given', 'tool arguments --values=.env --debug');
-      expect(const EnvToolArguments(['--a', '']).problems(), [
-        'An argument of the tool arguments of the env role is empty.',
-      ]);
-      expect(const EnvToolArguments(['--a\n--b', '--c\r']).problems(), [
-        'An argument of the tool arguments of the env role is not one line.',
-      ]);
+      const empty = 'An argument of the tool arguments of the values in .env '
+          'role is empty.';
+      const notOneLine = 'An argument of the tool arguments of the values in '
+          '.env role is not one line.';
+      expect(const EnvToolArguments(['--a', '']).problems(), [empty]);
+      for (final arguments in [
+        ['--a\n--b'],
+        ['--c\r'],
+        ['--a\n--b', '--c\r'],
+      ]) {
+        expect(
+          EnvToolArguments(arguments).problems(),
+          [notOneLine],
+          reason: '$arguments',
+        );
+      }
     });
   });
 
   group('the keys and the tool arguments of an app', () {
-    test(
-        'are the keys of the modules in their order, then those of the '
-        'templates, each with its owner', () {
+    test('are the keys of the modules in their order, each with its owner', () {
       final keys = envRole.keysIn(inputOf(envRole, data: _appKeys));
 
       expect(
         [for (final key in keys) key.name],
-        ['SHOP_APPLE_KEY', 'SHOP_GOOGLE_KEY', 'FEED_URL', 'BOARD_TOKEN'],
+        ['SHOP_APPLE_KEY', 'SHOP_GOOGLE_KEY', 'FEED_URL'],
       );
       final owners = [for (final key in keys) key.owner];
       expect(owners, [
@@ -270,22 +279,17 @@ void main() {
         // A variant gives the keys of its module.
         const ModuleOrigin(ModuleId('shop')),
         const ModuleOrigin(ModuleId('feed')),
-        RoleTemplateOrigin(_boardRole),
       ]);
       expect(keys.first.key, same(_shopApple));
       expect(keys.first.description, _shopApple.description);
       expect(keys.first.getter, 'shopAppleKey');
       expect('${keys.first}', 'key SHOP_APPLE_KEY of the module shop');
-      expect(
-        '${keys.last}',
-        'key BOARD_TOKEN of the template of the board role',
-      );
     });
 
     test('are what a role that uses the env role reads too', () {
       final input = inputOf(_boardRole, data: _appKeys, present: {envRole});
 
-      expect(envRole.keysIn(input), hasLength(4));
+      expect(envRole.keysIn(input), hasLength(3));
       expect(envRole.toolArgumentsIn(input), isEmpty);
       expect(
         () => envRole.keysIn(inputOf(_otherRole, data: _appKeys)),
@@ -309,7 +313,7 @@ void main() {
         envRole.toolArgumentsIn(inputOf(envRole, data: data)),
         ['--values=.env', '--debug'],
       );
-      expect(envRole.keysIn(inputOf(envRole, data: data)), hasLength(4));
+      expect(envRole.keysIn(inputOf(envRole, data: data)), hasLength(3));
       expect(envRole.toolArgumentsIn(inputOf(envRole)), isEmpty);
     });
   });
@@ -399,9 +403,18 @@ final described = describe(${vars['env_feed_url']!.absent});
       kind: plainKind,
       providers: [RoleProvider.plain(envRole)],
     );
+    // A module that depends on the module shop.
+    const paywall = ModuleDescriptor(
+      id: ModuleId('paywall'),
+      description: 'Paywall',
+      kind: plainKind,
+      dependsOn: {ModuleId('shop')},
+      uses: {envRole},
+    );
 
     /// The issues of [module] in an app with the [data] of the role, whose
-    /// contributions are its data and [more].
+    /// contributions are its data and [more]. The modules `shop` and `feed`
+    /// of the app give the role a key each.
     List<SmfIssue> check(
       ModuleDescriptor module,
       List<EnvData> data, {
@@ -416,6 +429,8 @@ final described = describe(${vars['env_feed_url']!.absent});
           hook: RoleHookRequest(
             data: [
               ...given,
+              if (module != shop)
+                dataOf<EnvData>(envRole, _shopApple, module: 'shop'),
               dataOf<EnvData>(envRole, _feedUrl, module: 'feed'),
             ],
             presentRoles: {envRole},
@@ -485,22 +500,50 @@ final described = describe(${vars['env_feed_url']!.absent});
       );
     });
 
-    test('reports a variable of a brick that reads a key of another owner', () {
-      final issue = check(
-        shop,
-        const [_shopApple],
-        more: [
-          brick(envRole.varsOf(const ModuleId('feed'), const [_feedUrl])),
-        ],
-      ).single;
-
+    test(
+        'passes a variable of a brick that reads a key of a module that the '
+        'module depends on', () {
       expect(
-        issue.message,
-        'The variable env_feed_url of the brick env_role reads '
-        'AppEnv.feedUrl, but no key of the module has the getter feedUrl.',
+        check(
+          paywall,
+          const [],
+          more: [
+            brick(envRole.varsOf(const ModuleId('shop'), const [_shopApple])),
+          ],
+        ),
+        isEmpty,
       );
-      expect(issue.hint, contains('envRole.varsOf()'));
-      expect(issue.origin, const ModuleOrigin(ModuleId('shop')));
+    });
+
+    test(
+        'reports a variable of a brick that reads a key of a module that the '
+        'module does not depend on, or that the app lacks', () {
+      final issues = check(
+        paywall,
+        const [],
+        more: [
+          brick({
+            ...envRole.varsOf(const ModuleId('feed'), const [_feedUrl]),
+            ...envRole.varsOf(const ModuleId('shop'), const [
+              EnvKey('SHOP_TOKEN', description: 'A token'),
+            ]),
+          }),
+        ],
+      );
+
+      expect(_messages(issues), [
+        equals(
+          'paywall: The variable env_feed_url of the brick env_role reads '
+          'AppEnv.feedUrl, but neither the module nor a module that it '
+          'depends on has a key with the getter feedUrl.',
+        ),
+        equals(
+          'paywall: The variable env_shop_token of the brick env_role reads '
+          'AppEnv.shopToken, but neither the module nor a module that it '
+          'depends on has a key with the getter shopToken.',
+        ),
+      ]);
+      expect(issues.first.hint, contains('envRole.varsOf()'));
     });
 
     test(
@@ -511,8 +554,8 @@ final described = describe(${vars['env_feed_url']!.absent});
       ]).single;
       expect(
         issue.message,
-        'The module gives the env role tool arguments, which only a provider '
-        'of the role gives.',
+        'The module gives the values in .env role tool arguments, which only '
+        'a provider of the role gives.',
       );
       expect(issue.hint, contains('keys'));
       expect(issue.origin, const ModuleOrigin(ModuleId('shop')));
@@ -526,12 +569,12 @@ final described = describe(${vars['env_feed_url']!.absent});
         ),
         [
           equals(
-            'reader: A provider of the env role gives it tool arguments at '
-            'most once, but the module gives them 2 times.',
+            'reader: A provider of the values in .env role gives it tool '
+            'arguments at most once, but the module gives them 2 times.',
           ),
           equals(
-            'reader: An argument of the tool arguments of the env role is '
-            'empty.',
+            'reader: An argument of the tool arguments of the values in .env '
+            'role is empty.',
           ),
         ],
       );
@@ -589,7 +632,6 @@ final described = describe(${vars['env_feed_url']!.absent});
           getter('shopAppleKey'),
           getter('shopGoogleKey'),
           getter('feedUrl'),
-          getter('boardToken'),
           // What else the class has is the provider's.
           const IndexedMember('_value', kind: MemberKind.method),
         ]),
@@ -614,12 +656,11 @@ final described = describe(${vars['env_feed_url']!.absent});
         for (final (key, owner, getter) in [
           ('SHOP_GOOGLE_KEY', 'the module shop', 'shopGoogleKey'),
           ('FEED_URL', 'the module feed', 'feedUrl'),
-          ('BOARD_TOKEN', 'the template of the board role', 'boardToken'),
         ])
           equals(
-            'reader: The provider of the env role does not render the key '
-            '$key of $owner: AppEnv in lib/core/env/app_env.dart declares no '
-            'static getter $getter.',
+            'reader: The provider of the values in .env role does not render '
+            'the key $key of $owner: AppEnv in lib/core/env/app_env.dart '
+            'declares no static getter $getter.',
           ),
       ]);
       expect(issues.first.path, EnvRole.readerFile);
@@ -675,11 +716,12 @@ final described = describe(${vars['env_feed_url']!.absent});
       ContributionOrigin? owner, {
       List<IndexedMemberAccess> accesses = const [],
       List<IndexedInvocation> invocations = const [],
+      List<RoleData<Object>> more = const [],
     }) =>
         envRole.checkStructure(
           StructuralRuleRequest(
             hook: RoleHookRequest(
-              data: _appKeys,
+              data: [..._appKeys, ...more],
               presentRoles: {envRole, _boardRole},
               context: testContext,
             ),
@@ -763,63 +805,61 @@ final described = describe(${vars['env_feed_url']!.absent});
 
       expect(_messages(issues), [
         equals(
-            'shop: lib/file.dart reads AppEnv.shopAppelKey, but no key of the app '
-            'has the getter shopAppelKey.'),
+          'shop: lib/file.dart reads AppEnv.shopAppelKey, but no key of the '
+          'app has the getter shopAppelKey.',
+        ),
         equals(
-            'shop: lib/file.dart calls env.AppEnv.read(), but the values of the '
-            'app are getters, each named by the role.'),
+          'shop: lib/file.dart calls env.AppEnv.read(), but the values of the '
+          'app are getters, each named by the role.',
+        ),
       ]);
       expect(issues.first.hint, contains('AppEnv.revenuecatAppleKey'));
       expect(issues.last.hint, contains('without arguments'));
     });
 
     test(
-        'lets the template of a role that uses the env role read its own '
-        'keys only', () {
-      expect(
-        check(
-          RoleTemplateOrigin(_boardRole),
-          accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
-        ),
-        isEmpty,
-      );
+        'reports what the template of a role, its own too, and the pipeline '
+        'read, since only the code of a module reads values', () {
+      // Not even a key that the template gave, which validation refuses.
       expect(
         _messages(
           check(
             RoleTemplateOrigin(_boardRole),
-            accesses: const [IndexedMemberAccess('AppEnv', 'feedUrl')],
+            accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
+            more: [_ofTemplate(_boardRole, _boardToken)],
           ),
         ),
         [
           equals(
-              'role:board: lib/file.dart reads AppEnv.feedUrl, the key FEED_URL '
-              'of the module feed, but the template of the board role may '
-              'only read its own keys.'),
+            'role:board: lib/file.dart reads AppEnv.boardToken, the key '
+            'BOARD_TOKEN of the template of the board role, but only the code '
+            'of a module reads the values of the app, not that of the '
+            'template of the board role.',
+          ),
         ],
       );
-    });
 
-    test(
-        'reports what the template of the role and the pipeline read, since '
-        'they have no keys', () {
       const read = [IndexedMemberAccess('AppEnv', 'shopAppleKey')];
 
-      expect(
-        _messages(check(const RoleTemplateOrigin(envRole), accesses: read)),
-        [
-          equals('role:env: lib/file.dart reads AppEnv.shopAppleKey, the key '
-              'SHOP_APPLE_KEY of the module shop, but the template of the env '
-              'role may only read its own keys.'),
-        ],
-      );
-      expect(
-        _messages(check(const PipelineOrigin(), accesses: read)),
-        [
-          equals('pipeline: lib/file.dart reads AppEnv.shopAppleKey, the key '
-              'SHOP_APPLE_KEY of the module shop, but the pipeline may only '
-              'read its own keys.'),
-        ],
-      );
+      for (final (owner, named) in [
+        (RoleTemplateOrigin(_boardRole), 'the template of the board role'),
+        (
+          const RoleTemplateOrigin(envRole),
+          'the template of the values in .env role',
+        ),
+        (const PipelineOrigin(), 'the pipeline'),
+      ]) {
+        final issue = check(owner, accesses: read).single;
+        expect(
+          issue.message,
+          'lib/file.dart reads AppEnv.shopAppleKey, the key SHOP_APPLE_KEY of '
+          'the module shop, but only the code of a module reads the values of '
+          'the app, not that of $named.',
+          reason: '$owner',
+        );
+        expect(issue.origin, owner);
+        expect(issue.hint, contains('module'));
+      }
     });
 
     test(
@@ -884,10 +924,11 @@ final described = describe(${vars['env_feed_url']!.absent});
           'SHOP_GOOGLE_KEY=\n'
           '\n'
           '# The address of the feed\n'
-          'FEED_URL=\n'
-          '\n'
-          '# The public token of the board\n'
-          'BOARD_TOKEN=\n';
+          'FEED_URL=\n';
+      // Every provider reads a value of these two forms alike.
+      const forms = '#\n'
+          '# Write a value as it is, or in double quotes if it has a space, '
+          'a # or a quote.\n';
       expect(rendered.files.keys.toSet(), {
         EnvRole.dotEnvFile,
         EnvRole.exampleFile,
@@ -903,6 +944,7 @@ final described = describe(${vars['env_feed_url']!.absent});
         '# where anyone can read it, so never put a secret into one. An '
         'empty value\n'
         '# counts as missing.\n'
+        '$forms'
         '$keys',
       );
       expect(
@@ -914,6 +956,7 @@ final described = describe(${vars['env_feed_url']!.absent});
         '# values. Every value ends up in the app, where anyone can read it, '
         'so never\n'
         '# put a secret here. An empty value counts as missing.\n'
+        '$forms'
         '$keys',
       );
       // Every line is a comment, empty, or a key without a value.
@@ -921,7 +964,12 @@ final described = describe(${vars['env_feed_url']!.absent});
         for (final line in file.split('\n')) {
           expect(
             line,
-            anyOf(isEmpty, startsWith('# '), matches(RegExp(r'^[A-Z_]+=$'))),
+            anyOf(
+              isEmpty,
+              '#',
+              startsWith('# '),
+              matches(RegExp(r'^[A-Z_]+=$')),
+            ),
           );
         }
       }
@@ -958,7 +1006,6 @@ The keys of the app:
 - `SHOP_APPLE_KEY`, read as `AppEnv.shopAppleKey`, from the module `shop`: The public key of the shop on iOS
 - `SHOP_GOOGLE_KEY`, read as `AppEnv.shopGoogleKey`, from the module `shop`: The public key of the shop on Android
 - `FEED_URL`, read as `AppEnv.feedUrl`, from the module `feed`: The address of the feed
-- `BOARD_TOKEN`, read as `AppEnv.boardToken`, from the board role: The public token of the board
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
 ''');
@@ -1018,32 +1065,30 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
       });
 
       test(
-          'the keys of the templates of roles, which no module rule checks, '
-          'but not those of the modules, which their rule checks', () {
-        expect(
-          validate([
-            dataOf<EnvData>(envRole, _feedUrl, module: 'shop'),
-            _ofTemplate(_boardRole, _boardToken),
-            _ofTemplate(_boardRole, _boardToken),
-            _ofTemplate(_boardRole, _feedUrl),
-            _ofTemplate(
-              _otherRole,
-              const EnvKey('OTHER_KEY', description: ''),
-            ),
-          ]),
-          [
-            'role:board: Two keys are named "BOARD_TOKEN".',
-            equals(
-              'role:board: The key "FEED_URL" does not start with BOARD_, the '
-              'id of its owner in upper case and an underscore.',
-            ),
-            'role:other: The key "OTHER_KEY" has no description.',
-            equals(
-              'role:board: Both the module shop and the template of the board '
-              'role give the env role the key FEED_URL.',
-            ),
-          ],
+          'a key from the template of a role, which only modules give, and '
+          'not the keys of the modules, which their rule checks', () {
+        final issues = envRole.template.validate(
+          inputOf(
+            envRole,
+            data: [
+              dataOf<EnvData>(
+                envRole,
+                const EnvKey('feed_url', description: ''),
+                module: 'feed',
+              ),
+              _ofTemplate(_boardRole, _boardToken),
+            ],
+          ),
         );
+
+        expect(_messages(issues), [
+          equals(
+            'role:board: The template of the board role gives the values in '
+            '.env role the key BOARD_TOKEN, but only modules give the role '
+            'keys.',
+          ),
+        ]);
+        expect(issues.single.hint, contains('module'));
       });
 
       test('the tool arguments of a template, which only a provider gives', () {
@@ -1060,8 +1105,8 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
 
         expect(
           issue.message,
-          'The template of the board role gives the env role tool arguments, '
-          'which only a provider of the role gives.',
+          'The template of the board role gives the values in .env role tool '
+          'arguments, which only a provider of the role gives.',
         );
         expect(issue.origin, RoleTemplateOrigin(_boardRole));
       });
@@ -1100,7 +1145,7 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
         expect(_messages(issues), [
           equals(
             'shop_cart: Both the module shop and the module shop_cart give '
-            'the env role the key SHOP_CART_KEY.',
+            'the values in .env role the key SHOP_CART_KEY.',
           ),
           equals(
             'shop: The key SHOP1_KEY of the module shop1 and the key '

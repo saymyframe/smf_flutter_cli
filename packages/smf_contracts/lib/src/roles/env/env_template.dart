@@ -45,11 +45,10 @@ String _readmeSection(List<AppEnvKey> keys) {
   return '$buffer';
 }
 
-/// How the README of the app names [owner], who gave the app a key.
-String _readmeOwnerOf(ContributionOrigin owner) => switch (owner) {
-      ModuleOrigin(:final module) => 'the module `$module`',
-      _ => 'the ${(owner as RoleTemplateOrigin).role}',
-    };
+/// How the README of the app names [owner], the module that gave the app a
+/// key: an app that the pipeline renders has no key of another owner.
+String _readmeOwnerOf(ContributionOrigin owner) =>
+    'the module `${(owner as ModuleOrigin).module}`';
 
 /// The lines of [keys] in [EnvRole.dotEnvFile] and [EnvRole.exampleFile],
 /// after the comment at the top of each: for each key, after an empty line,
@@ -75,42 +74,42 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
         ),
       ];
 
-  /// Checks what the module rule `env.keys` cannot see from one module: the
-  /// keys and the tool arguments of the templates of roles, and the keys of
-  /// two owners with one name or one getter.
+  /// Checks what the module rule `env.keys` cannot see from one module:
+  /// keys and tool arguments from the templates of roles, which only modules
+  /// and the provider give, and the keys of two modules with one name or one
+  /// getter.
   @override
   List<SmfIssue> validate(RoleHookInput<EnvData> input) {
     final issues = <SmfIssue>[];
-    final ofTemplates = <RoleTemplateOrigin, List<EnvKey>>{};
     for (final data in input.data) {
       // Every data that a hook gets has an origin.
       if (data.origin case final RoleTemplateOrigin template) {
-        switch (data.value) {
-          case final EnvKey key:
-            ofTemplates.putIfAbsent(template, () => []).add(key);
-          case EnvToolArguments():
-            issues.add(
-              SmfIssue(
-                'The template of the ${template.role} gives the $envRole '
-                'tool arguments, which only a provider of the role gives.',
+        issues.add(
+          switch (data.value) {
+            EnvKey(:final name) => SmfIssue(
+                'The template of the ${template.role} gives the $envRole the '
+                'key $name, but only modules give the role keys.',
+                hint: 'Give the key from the module whose code reads the '
+                    'value.',
                 origin: template,
               ),
-            );
-        }
-      }
-    }
-    for (final MapEntry(key: template, value: keys) in ofTemplates.entries) {
-      for (final problem in _keyProblems(keys, template.role.id)) {
-        issues.add(SmfIssue(problem, origin: template));
+            EnvToolArguments() => SmfIssue(
+                'The template of the ${template.role} gives the $envRole tool '
+                'arguments, which only a provider of the role gives.',
+                origin: template,
+              ),
+          },
+        );
       }
     }
 
-    // A key starts with the id of its owner, but the id of one owner can
+    // A key starts with the id of its module, but the id of one module can
     // start another, as `shop` starts `shop_cart`, and keys whose words are
     // cut differently can have one getter.
     final byName = <String, AppEnvKey>{};
     final byGetter = <String, AppEnvKey>{};
     for (final key in envRole.keysIn(input)) {
+      if (key.owner is RoleTemplateOrigin) continue;
       final named = byName.putIfAbsent(key.name, () => key);
       final other = byGetter.putIfAbsent(key.getter, () => key);
       if (named.owner != key.owner) {

@@ -6,11 +6,12 @@ final RegExp _readsKey = RegExp('^$_appEnv\\.([A-Za-z0-9_\$]+)\$');
 
 /// The problems of the data of the module of [input], which the module rule
 /// `env.keys` reports: those of its keys, a variable of its bricks that
-/// reads a key of another owner, and tool arguments from a module that does
-/// not provide the role, more than once, or with an argument that is not
-/// one line.
+/// reads a key that neither the module nor a module that it depends on
+/// gives, and tool arguments from a module that does not provide the role,
+/// more than once, or with an argument that is not one line.
 ///
-/// The template of the role checks the keys of the templates of roles.
+/// The template of the role refuses keys and tool arguments from the
+/// templates of roles.
 List<SmfIssue> _checkKeys(ModuleRuleInput<EnvData> input) {
   final module = input.module;
   final origin = ModuleOrigin(module.id);
@@ -26,7 +27,7 @@ List<SmfIssue> _checkKeys(ModuleRuleInput<EnvData> input) {
   return [
     for (final problem in _keyProblems(keys, module.id.value))
       SmfIssue(problem, origin: origin),
-    ..._variableIssues(input, keys, origin),
+    ..._variableIssues(input, origin),
     if (arguments.isNotEmpty && !provides)
       SmfIssue(
         'The module gives the $envRole tool arguments, which only a provider '
@@ -52,13 +53,20 @@ String _codeOf(Object value) => value is Fragment ? value.code : '$value';
 
 /// The problems of the variables of the bricks of the module of [input]
 /// that read a value of the app, as those of [EnvRole.varsOf] do: one that
-/// reads a getter that none of [keys], the keys of the module, has.
+/// reads a getter that no key of the module, or of a module that it depends
+/// on, has.
 List<SmfIssue> _variableIssues(
   ModuleRuleInput<EnvData> input,
-  List<EnvKey> keys,
   ModuleOrigin origin,
 ) {
-  final getters = {for (final key in keys) key.getter};
+  final readable = {
+    origin,
+    for (final dependency in input.module.dependsOn) ModuleOrigin(dependency),
+  };
+  final getters = {
+    for (final key in envRole.keysIn(input.roleInput))
+      if (readable.contains(key.owner)) key.getter,
+  };
   return [
     for (final brick in input.contributions.whereType<BrickContribution>())
       for (final MapEntry(key: name, value: variable) in brick.vars.entries)
@@ -68,8 +76,8 @@ List<SmfIssue> _variableIssues(
               when !getters.contains(getter))
             SmfIssue(
               'The variable $name of the brick ${brick.bundle.name} reads '
-              '$_appEnv.$getter, but no key of the module has the getter '
-              '$getter.',
+              '$_appEnv.$getter, but neither the module nor a module that it '
+              'depends on has a key with the getter $getter.',
               hint: 'Give the role the keys of the variables as data too, '
                   'and make the variables with envRole.varsOf() from them.',
               origin: origin,
@@ -118,15 +126,17 @@ List<SmfIssue> _checkKeysRendered(StructuralRuleInput<EnvData> input) {
 bool _isAppEnv(String? target) =>
     target != null && (target == _appEnv || target.endsWith('.$_appEnv'));
 
-/// Whether the code of [owner], whose descriptor is [module] if it is a
-/// module of the app, may read values of the app, so that the rule
-/// `env.key_access` looks at its files.
+/// Whether the rule `env.key_access` looks at the files of [owner], whose
+/// descriptor is [module] if it is a module of the app.
 ///
-/// A module without the role among its roles, and the template of a role
-/// that neither requires nor uses the role, read none: the harness reports
-/// their import of [EnvRole.readerFile]. The provider of the role declares
-/// `AppEnv`. A module whose descriptor the app lacks has no roles to tell
-/// by.
+/// It looks at the files of a module with the role among its roles, which
+/// may read its own keys and those of the modules it depends on, and at the
+/// files of the template of a role that requires or uses the role, and of
+/// the pipeline, which may read none. The harness reports the import of
+/// [EnvRole.readerFile] by a module without the role among its roles and by
+/// the template of a role that neither requires nor uses it. The provider
+/// of the role declares `AppEnv`. A module whose descriptor the app lacks
+/// has no roles to tell by.
 bool _readsKeys(ContributionOrigin owner, ModuleDescriptor? module) =>
     switch (owner) {
       ModuleOrigin() => module != null &&
@@ -156,9 +166,6 @@ List<SmfIssue> _checkKeyAccess(StructuralRuleInput<EnvData> input) {
       for (final dependency in module?.dependsOn ?? const <ModuleId>{})
         ModuleOrigin(dependency),
     };
-    final own = module == null
-        ? 'its own keys'
-        : 'its own keys and those of the modules it depends on';
     for (final access in file.memberAccesses) {
       if (!_isAppEnv(access.target)) continue;
       final read = '${access.target}.${access.name}';
@@ -175,11 +182,23 @@ List<SmfIssue> _checkKeyAccess(StructuralRuleInput<EnvData> input) {
             path: path,
           ),
         );
+      } else if (module == null) {
+        // Only the code of a module reads values.
+        issues.add(
+          SmfIssue(
+            '$path reads $read, the $key, but only the code of a module reads '
+            'the values of the app, not that of ${_named(owner)}.',
+            hint: 'Read the value in the code of a module that gives the role '
+                'its key.',
+            origin: owner,
+            path: path,
+          ),
+        );
       } else if (!readable.contains(key.owner)) {
         issues.add(
           SmfIssue(
             '$path reads $read, the $key, but ${_named(owner)} may only read '
-            '$own.',
+            'its own keys and those of the modules it depends on.',
             hint: 'Give the role a key of your own.',
             origin: owner,
             path: path,

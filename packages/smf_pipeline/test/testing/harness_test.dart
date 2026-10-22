@@ -3740,10 +3740,16 @@ final apple = env.AppEnv.shopAppleKey;
               '\n'
               '# The address of the feed\n'
               'FEED_URL=\n';
-          expect(files[EnvRole.dotEnvFile]!.text, endsWith('missing.\n$keys'));
+          const forms = '#\n'
+              '# Write a value as it is, or in double quotes if it has a '
+              'space, a # or a quote.\n';
+          expect(
+            files[EnvRole.dotEnvFile]!.text,
+            endsWith('missing.\n$forms$keys'),
+          );
           expect(
             files[EnvRole.exampleFile]!.text,
-            endsWith('counts as missing.\n$keys'),
+            endsWith('counts as missing.\n$forms$keys'),
           );
           expect(
             files['lib/shop/shop.dart']!.text,
@@ -3843,11 +3849,17 @@ final apple = env.AppEnv.shopAppleKey;
             'keys without\n'
             '# values. Every value ends up in the app, where anyone can read '
             'it, so never\n'
-            '# put a secret here. An empty value counts as missing.\n',
+            '# put a secret here. An empty value counts as missing.\n'
+            '#\n'
+            '# Write a value as it is, or in double quotes if it has a space, '
+            'a # or a quote.\n',
           );
           expect(
             files[EnvRole.exampleFile]!.text,
-            endsWith('An empty value\n# counts as missing.\n'),
+            endsWith(
+              '# counts as missing.\n#\n# Write a value as it is, or in '
+              'double quotes if it has a space, a # or a quote.\n',
+            ),
           );
           expect(
             files['README.md']!.text,
