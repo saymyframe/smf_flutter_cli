@@ -420,7 +420,7 @@ void main() {
       expect(dependency.dev, isFalse);
       final android = contributions[2] as PubspecDependency;
       expect(android.package, 'shared_preferences_android');
-      expect(android.constraint, '>=2.4.28 <2.5.0');
+      expect(android.constraint, '^2.5.2');
       expect(android.dev, isFalse);
       final data = contributions[3] as RoleData<Object>;
       expect(data.role, preferencesRole);
@@ -515,14 +515,15 @@ void main() {
         {
           'flutter': {'sdk': 'flutter'},
           'shared_preferences': '^2.5.5',
-          'shared_preferences_android': '>=2.4.28 <2.5.0',
+          'shared_preferences_android': '^2.5.2',
         },
       );
     });
 
     test(
-        'keeps shared_preferences_android below 2.5.0, whose release builds '
-        'crash on Android when the app opens the preferences', () {
+        'keeps shared_preferences_android at 2.5.2 or later, since the '
+        'release builds of 2.5.0 and 2.5.1 crash on Android when the app '
+        'opens the preferences', () {
       final dependencies =
           _yamlOf(withPreferences.files['pubspec.yaml']!.text)['dependencies']!
               as Map<String, Object?>;
@@ -540,10 +541,12 @@ void main() {
       // classes, such as kotlin.coroutines.Continuation, which R8 renames in
       // a release build: SharedPreferencesWithCache.create() then fails
       // with a NoSuchMethodError, and the app never shows its first frame.
+      // 2.5.1 only updated a dependency and has the same bug.
       expect(constraint.allows(Version(2, 5, 0)), isFalse);
-      // The last version before it, whose release build opens the
-      // preferences.
-      expect(constraint.allows(Version(2, 4, 28)), isTrue);
+      expect(constraint.allows(Version(2, 5, 1)), isFalse);
+      // The first version with keep rules for those classes, whose release
+      // build opens the preferences.
+      expect(constraint.allows(Version(2, 5, 2)), isTrue);
     });
 
     test(
@@ -871,7 +874,7 @@ void main() {
 
       test(
           'tells why the pubspec of the app keeps the Android side of the '
-          'package below 2.5.0', () {
+          'package at 2.5.2 or later', () {
         final dependencies = _yamlOf(
           withPreferences.files['pubspec.yaml']!.text,
         )['dependencies']! as Map<String, Object?>;
@@ -882,14 +885,15 @@ void main() {
         );
         expect(
           agentNote,
-          contains('`shared_preferences_android` below 2.5.0'),
+          contains('`shared_preferences_android` at 2.5.2 or later'),
         );
         // What the pubspec of the app has, as the note tells.
         final constraint = VersionConstraint.parse(
           dependencies['shared_preferences_android']! as String,
         );
         expect(constraint.allows(Version(2, 5, 0)), isFalse);
-        expect(constraint.allows(Version(2, 4, 28)), isTrue);
+        expect(constraint.allows(Version(2, 5, 1)), isFalse);
+        expect(constraint.allows(Version(2, 5, 2)), isTrue);
       });
 
       test(
