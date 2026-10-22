@@ -757,6 +757,28 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture purchases whose service keeps the purchases in a field of
+  /// its own, for every user together, rather than for each user in what
+  /// stands for the backend of the provider, as a provider does that keeps
+  /// them only in memory and gives every user of the app what any of them
+  /// bought: the next user of the device has the purchases of the one who
+  /// signed out, and the next start of the app has none.
+  static const purchasesKeptByService = BrokenModule._(
+    FakePurchasesModule(),
+    ModuleId('broken_purchases_kept_by_service'),
+    'Purchases that the service keeps for every user together (fixture)',
+    'lib/core/fixture_purchases/fixture_purchases.dart',
+    [
+      (
+        '  Map<String, _Purchase> _of(String user) =>\n'
+            '      _bought.putIfAbsent(user, () => {});\n',
+        '  Map<String, _Purchase> _of(String user) => _kept;\n'
+            '\n'
+            '  final Map<String, _Purchase> _kept = {};\n',
+      ),
+    ],
+  );
+
   /// The module with the bug.
   final SmfModule of;
 
