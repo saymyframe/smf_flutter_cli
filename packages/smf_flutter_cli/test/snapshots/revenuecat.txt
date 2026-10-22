@@ -1679,8 +1679,8 @@ final class RevenueCatKey {
 /// It takes no key when that key has no value in the build, when it is a
 /// secret key of RevenueCat (`sk_`), which never goes into an app, and in a
 /// profile or release build when it is a key of the Test Store (`test_`).
-/// The hint of
-/// [RevenueCatKey.none] then names the key and tells what to do.
+/// The hint of [RevenueCatKey.none] then names the key and tells what to
+/// do.
 RevenueCatKey revenueCatKey({
   required TargetPlatform platform,
   required bool debug,
