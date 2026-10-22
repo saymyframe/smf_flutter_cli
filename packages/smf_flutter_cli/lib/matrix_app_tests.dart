@@ -1364,6 +1364,12 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
 /// itself. The matrix writes the keys of the app for it into [envKeysFile],
 /// from the data of the role. It has no probe for the start check: the
 /// values of an app on a device are those of its developer.
+///
+/// Only the apps of the fixtures have a key that `.env` lacks, whose line
+/// the test of a fixture module removes. In an app of the CLI, the template
+/// of the role writes a line for every key and no test of a module removes
+/// one, so the test of the missing keys is skipped there, and only the
+/// fixture provider of the role is checked for them.
 Future<MatrixAppTest> envRoleAppTest({
   bool Function(MatrixApp app)? among,
 }) async =>
