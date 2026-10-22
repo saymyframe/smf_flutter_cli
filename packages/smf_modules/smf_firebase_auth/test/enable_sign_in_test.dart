@@ -34,10 +34,17 @@
 // it downloads again and ios/Runner/Info.plist, with the URL scheme of the
 // iOS app. Run as a service account, it leaves Google out, which is enabled
 // in the project of CI already, and sets up the rest: it registers the SHA
-// of the debug key of the runner, which the test deletes again, so that
-// the project does not collect one for each run. It deletes the hashes of
-// that key alone, which the script prints, so that two runs at the same
-// time do not delete each other's.
+// of the debug key of the machine. In a project with Google, each SHA that
+// is registered creates an OAuth client of Google, and Google limits how
+// many a project creates. So CI gives the test a debug key that stays the
+// same, `.github/android/debug.keystore` of the repository, whose path is
+// in SMF_DEBUG_KEYSTORE: the test runs the script with ANDROID_USER_HOME
+// in a directory that has a copy of it, and keeps its hashes in the
+// project, which the first run registers and the later runs find there.
+// Without SMF_DEBUG_KEYSTORE the script takes the debug key of the runner,
+// a new one in each run, and the test deletes its hashes again. It deletes
+// the hashes of that key alone, which the script prints, so that two runs
+// at the same time do not delete each other's.
 @TestOn('vm')
 library;
 
@@ -174,6 +181,7 @@ void main() {
   final project = environment['SMF_FIREBASE_PROJECT'];
   final serviceAccount = environment['SMF_FIREBASE_SERVICE_ACCOUNT'];
   final enables = environment['SMF_FIREBASE_ENABLE_SIGN_IN'] == '1';
+  final debugKeystore = environment['SMF_DEBUG_KEYSTORE'];
 
   test(
     'the Firebase project of the app has Email/Password enabled, which the '
@@ -231,12 +239,26 @@ void main() {
               app.id: await _shaHashes(app.id, project, credentials),
         };
 
+        // The debug key that stays the same, in the directory where the
+        // script looks for it first.
+        final keyHome = debugKeystore == null
+            ? null
+            : Directory.systemTemp.createTempSync('smf_debug_key_');
+        if (keyHome != null) {
+          addTearDown(() => keyHome.deleteSync(recursive: true));
+          File(debugKeystore!).copySync('${keyHome.path}/debug.keystore');
+        }
+        final scriptEnvironment = {
+          ...credentials,
+          if (keyHome != null) 'ANDROID_USER_HOME': keyHome.path,
+        };
+
         final [executable, ...arguments] = enableSignInCommand.split(' ');
         final enabled = await _run(
           executable,
           arguments,
           directory: app,
-          environment: credentials,
+          environment: scriptEnvironment,
         );
         final output = '${enabled.stdout}${enabled.stderr}';
         if (enabled.exitCode != 0) {
@@ -250,7 +272,7 @@ void main() {
                   executable,
                   [...arguments, '--debug'],
                   directory: app,
-                  environment: credentials,
+                  environment: scriptEnvironment,
                 )
               : null;
           fail(
@@ -312,9 +334,10 @@ void main() {
         if (google) {
           expect('${enabled.stdout}', contains('Google is left out'));
         }
-        // The SHA-1 and SHA-256 of the debug key of the runner, which the
-        // script prints and registered, go again. Only those: a run at the
-        // same time registers the hashes of its own runner.
+        // The SHA-1 and SHA-256 of the debug key, which the script prints
+        // and registered. Those of the key that stays the same stay in the
+        // project; those of the key of the runner go again. Only those: a
+        // run at the same time registers the hashes of its own runner.
         final ofRunner = debugKeyHashesIn('${enabled.stdout}');
         if (shasBefore.isNotEmpty) {
           expect(
@@ -322,6 +345,15 @@ void main() {
             hasLength(2),
             reason: 'The script did not print the hashes of the debug key.',
           );
+          if (keyHome != null) {
+            expect(
+              '${enabled.stdout}',
+              contains('${keyHome.path}${Platform.pathSeparator}'
+                  'debug.keystore'),
+              reason: 'The script did not take the debug key of '
+                  'SMF_DEBUG_KEYSTORE from ANDROID_USER_HOME.',
+            );
+          }
         }
         for (final MapEntry(key: appId, value: before) in shasBefore.entries) {
           final listed = await _shaHashes(appId, project, credentials);
@@ -349,7 +381,7 @@ void main() {
                   'key for $appId as it said.',
             );
           } finally {
-            for (final id in registered) {
+            for (final id in keyHome == null ? registered : const <String>{}) {
               final deleted = await _firebase(
                 ['apps:android:sha:delete', appId, id],
                 project,
