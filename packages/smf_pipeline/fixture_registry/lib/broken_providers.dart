@@ -1517,6 +1517,22 @@ List<BrokenProvider> brokenProviders() => const [
                 'user of the device is a new one, with nothing bought, and in '
                 'the mode anonymous so is the next anonymous user.',
           ),
+          MatrixExpectedFailure(
+            'test/purchases_session/purchases_session_test.dart',
+            'the user without an account keeps what it bought at the next '
+                'start of the app, in every mode',
+            'The store keeps what the user without an account bought, and the '
+                'device keeps that user from one launch of the app to the '
+                'next, so the next start has its premium access',
+          ),
+          MatrixExpectedFailure(
+            'test/purchases_session/purchases_session_test.dart',
+            'a sign-in to an account that exists already leaves the purchases '
+                'with the user of the device, and the next user of the device '
+                'after a sign-out of that account has none of them',
+            'After the sign-out of an account, the next user of the device is '
+                'a new one, with nothing bought',
+          ),
         ],
       ),
       BrokenProvider(

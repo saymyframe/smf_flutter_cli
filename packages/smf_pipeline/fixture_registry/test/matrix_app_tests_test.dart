@@ -197,6 +197,7 @@ void main() {
     // template of the purchases role, which follows the session, and the
     // contract of its providers.
     expect(named('purchases_session').roles, {purchasesRole});
+    expect(named('purchases_device').roles, {purchasesRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -935,6 +936,13 @@ void main() {
       AuthMode.values.toSet(),
     );
     expect(roleTest.startProbe!.function, 'probePurchases');
+    // The purchases of the user of the device of an app without sign-in run
+    // in the apps of the fixture alone without the fixture sign-in, which
+    // no app with every module is.
+    expect(appsOf(named('purchases_device')), [
+      'fake_purchases with localization',
+      'fake_purchases',
+    ]);
   });
 
   test(

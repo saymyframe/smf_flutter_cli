@@ -423,6 +423,12 @@ Future<MatrixAppTests> fixtureAppTests() async {
       await purchasesSessionAppTest(
         among: (app) => app.everyModuleWith != null,
       ),
+      // The purchases of the user of the device in the apps with the
+      // purchases role and without the auth role, whichever module provides
+      // the purchases, the test that the CLI keeps: the apps of the fixture
+      // purchases alone, with the texts of the app and without them, since
+      // every app with every module has the fixture sign-in.
+      await purchasesDeviceAppTest(),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock

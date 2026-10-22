@@ -1094,7 +1094,8 @@ final class FakePushModule extends SmfModule {
 /// it keeps, and each of whose calls takes a turn of the event loop. Its
 /// offer has three plans: one that renews each month, with a free week for
 /// a user who never bought it, one that renews each year, and one that the
-/// user pays for once. A purchase completes at once and succeeds.
+/// user pays for once. A purchase by a user without premium access
+/// completes at once and succeeds.
 ///
 /// It keeps in memory what each user of the app bought, and the user whom
 /// the device has, where they stand for the backend of a provider and the
