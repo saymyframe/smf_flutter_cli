@@ -3382,6 +3382,29 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       });
 
       test(
+          'removes the lines of keys whose values the tests give as null, '
+          'and says so', () async {
+        final (code, output) = await runWith(
+          [
+            shopTests({'SHOP_TEXT': null, 'FEED_URL': null}),
+          ],
+          withEnv: env,
+        );
+
+        expect(code, 0);
+        expect(
+          fileSystem.file(path).readAsStringSync(),
+          written
+              .replaceFirst('SHOP_TEXT=\n', '')
+              .replaceFirst('FEED_URL=\n', ''),
+        );
+        expect(
+          output,
+          contains('\n.values: removed the lines of SHOP_TEXT, FEED_URL.\n'),
+        );
+      });
+
+      test(
           'leaves the file as it is, and runs flutter test with the tool '
           'arguments of the app, when no test gives values', () async {
         final (code, output) = await runWith(

@@ -36,10 +36,11 @@ const _shop = KeysModule('shop', [
   ),
 ]);
 
-/// A module that uses the role, with a key whose description is a sentence.
+/// A module that uses the role, with a key whose description is a sentence
+/// with two spaces between two of its words.
 const _feed = KeysModule(
   'feed',
-  [EnvKey('FEED_URL', description: 'The address of the feed.')],
+  [EnvKey('FEED_URL', description: 'The address of  the feed.')],
   requiresEnv: false,
 );
 
@@ -267,7 +268,8 @@ void main() {
       );
       // A period ends a description that has none, a `<` outside a code
       // span is escaped, so that Markdown takes it for no HTML tag, and the
-      // doc wraps at 80 columns between words outside its code spans.
+      // doc wraps at 80 columns between words outside its code spans, with
+      // one space between two words.
       expect(
         text,
         contains(
