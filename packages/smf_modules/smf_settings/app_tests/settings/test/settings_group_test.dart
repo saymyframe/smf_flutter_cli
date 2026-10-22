@@ -7,11 +7,13 @@
 // In an app whose modules have none, it shows a note for the developer of
 // the app in place of the group. The note says that the app has no
 // settings yet and names the file of the screen, where a setting goes. A
-// tap on the path copies it, and the screen says so. On a small phone with
-// a large text size the screen scrolls, and the path is shown in full: it
-// wraps, at a text size that grows only by half, so that it breaks after a
-// slash wherever the name that follows fits a line. The note is in English
-// in every app.
+// tap on the path copies it, and the screen says so. On a phone in
+// landscape, wider than the texts of the note and too short for the note,
+// nothing overflows and the screen scrolls to the path. On a small phone
+// with a large text size the screen scrolls, and the path is shown in
+// full: it wraps, at a text size that grows only by half, so that it
+// breaks after a slash wherever the name that follows fits a line. The
+// note is in English in every app.
 //
 // The matrix writes settings_of_app.dart next to this file, from the
 // settings screen role of the app: how many entries the screen has.
@@ -173,6 +175,35 @@ Future<void> _expectNote(WidgetTester tester) async {
     reason: 'The message that the path was copied goes away.',
   );
 
+  final scrollable =
+      find.descendant(of: _screen, matching: find.byType(Scrollable)).first;
+
+  // A phone in landscape, with the insets of its notch and of its home
+  // indicator: wider than the texts of the note, which wrap within a width
+  // of their own there, and too short for the note.
+  const landscape = FakeViewPadding(left: 47, right: 47, bottom: 21);
+  tester.view
+    ..physicalSize = const Size(844, 390)
+    ..devicePixelRatio = 1
+    ..padding = landscape
+    ..viewPadding = landscape;
+  addTearDown(tester.view.reset);
+  await tester.pumpAndSettle();
+  expect(
+    tester.takeException(),
+    isNull,
+    reason: 'The screen of an app without settings fits a phone in '
+        'landscape: the note has room for its texts where they wrap.',
+  );
+  await tester.scrollUntilVisible(path, 100, scrollable: scrollable);
+  await tester.pumpAndSettle();
+  expect(
+    path.hitTestable(),
+    findsOneWidget,
+    reason: 'The screen scrolls to the path on a phone in landscape, where a '
+        'tap reaches it.',
+  );
+
   // A small phone with insets and the text at three times its size, about
   // the largest that the settings of a device have.
   const insets = FakeViewPadding(top: 40, bottom: 40);
@@ -192,12 +223,7 @@ Future<void> _expectNote(WidgetTester tester) async {
         'a large text size.',
   );
 
-  await tester.scrollUntilVisible(
-    path,
-    100,
-    scrollable:
-        find.descendant(of: _screen, matching: find.byType(Scrollable)).first,
-  );
+  await tester.scrollUntilVisible(path, 100, scrollable: scrollable);
   await tester.pumpAndSettle();
   expect(
     tester.takeException(),

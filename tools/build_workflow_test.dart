@@ -19,6 +19,13 @@
 // run in the group that is still in progress. Concurrency groups are shared
 // by the workflows of a repository.
 //
+// It runs the step of the job Native caches too, with a stand-in of gh: on
+// main it lists the entries of the native caches of each prefix of main,
+// all pages and the newest first, and deletes every entry but the newest of
+// its family, the part of its key before the week. A list or a deletion
+// that fails only warns. The job needs the job that calls apps.yml, whose
+// jobs save the entries, and runs when one of them failed.
+//
 // And it checks that only the runs of pull requests and of main scan the
 // code with SonarCloud. The scanner tells SonarCloud the pull request of the
 // run of a pull request, and SonarCloud stores the scan of a run by hand on
@@ -340,6 +347,253 @@ const _mainUnscanned = 'No step of a workflow scans the code with SonarCloud '
 const _pullRequestsUnscanned = 'No step of a workflow scans the code with '
     'SonarCloud in the run of a pull request, so nobody sees the issues of a '
     'pull request before it is merged.';
+
+/// The name of the job of build.yml that deletes the entries of the native
+/// caches that a newer entry of their family replaced.
+const nativeCachesJob = 'Native caches';
+
+/// The problems of the job [nativeCachesJob] of [workflow], the text of
+/// build.yml: there is no such job, or it does not need the job that calls
+/// apps.yml, whose jobs save the entries, or does not run when one of them
+/// failed, or its step that deletes the entries runs in other runs than
+/// those on main.
+List<String> nativeCachesProblemsOf(String workflow) {
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
+  final job = jobs.values.cast<YamlMap>().where(
+        (job) => job['name'] == nativeCachesJob,
+      );
+  if (job.length != 1) {
+    return [_notOneNativeCachesJob(job.length)];
+  }
+  final apps = [
+    for (final MapEntry(:key, :value) in jobs.entries)
+      if ('${(value as YamlMap)['uses'] ?? ''}'.endsWith('/apps.yml')) key,
+  ];
+  final needs = switch (job.single['needs']) {
+    final String job => {job},
+    final YamlList list => {...list},
+    _ => const <Object?>{},
+  };
+  final condition = '${job.single['if'] ?? ''}';
+  final step = _deletionStepOf(job.single);
+  return [
+    for (final job in apps)
+      if (!needs.contains(job)) _beforeTheWriters(job),
+    if (!condition.contains('!cancelled()') && !condition.contains('always()'))
+      _notAfterFailure,
+    if (!'${step['if'] ?? ''}'.contains("github.ref == 'refs/heads/main'"))
+      _deletesOutsideMain,
+  ];
+}
+
+/// The problem that the workflow has [count] jobs [nativeCachesJob].
+String _notOneNativeCachesJob(int count) =>
+    'The workflow has $count jobs named $nativeCachesJob rather than one.';
+
+/// The step of [job], the job [nativeCachesJob], that deletes the entries.
+YamlMap _deletionStepOf(YamlMap job) =>
+    (job['steps'] as YamlList).cast<YamlMap>().singleWhere(
+          (step) => '${step['run'] ?? ''}'.contains('/actions/caches'),
+        );
+
+/// The problem that the job [nativeCachesJob] does not need [job], which
+/// calls apps.yml.
+String _beforeTheWriters(Object? job) =>
+    'The job $nativeCachesJob does not need the job $job, so it may delete '
+    'the entries before the jobs of $job save the new ones, and keep an '
+    'entry that a new one replaces in the same run.';
+
+const _notAfterFailure = 'The job $nativeCachesJob has no if: '
+    r'${{ !cancelled() }}, so it does not run when a job with Flutter '
+    'failed, though the jobs that write the entries may have saved them.';
+
+const _deletesOutsideMain = 'The step of the job $nativeCachesJob that '
+    "deletes the entries has no if: github.ref == 'refs/heads/main': it "
+    'would list and delete the entries in the runs of pull requests too, '
+    'which save none.';
+
+/// The entries of the caches of the repository that the stand-in of gh of
+/// [runNativeCaches] has: the id, the key, the ref and the time when it was
+/// saved, of the entries of the families `aaa` and `bbb` of Gradle and
+/// `ccc` of Swift packages, of an older key without a family of these, and
+/// of an entry of a pull request, the newest of all.
+const nativeCacheEntries = [
+  (101, 'Linux-gradle-3.44.2-aaa-2026W43', 'refs/heads/main', 90),
+  (102, 'Linux-gradle-3.44.2-bbb-2026W43', 'refs/heads/main', 80),
+  (103, 'Linux-gradle-3.44.2-aaa-2026W42', 'refs/heads/main', 70),
+  (104, 'Linux-gradle-b989-2026-41', 'refs/heads/main', 30),
+  (105, 'Linux-gradle-3.44.2-bbb-2026W41', 'refs/heads/main', 20),
+  (109, 'Linux-gradle-3.44.2-aaa-2026W44', 'refs/pull/7/merge', 95),
+  (201, 'macOS-swiftpm-ccc-2026W43', 'refs/heads/main', 85),
+  (202, 'macOS-swiftpm-ccc-2026W42', 'refs/heads/main', 50),
+  (203, 'macOS-swiftpm-2026-40', 'refs/heads/main', 10),
+];
+
+/// The ids of [nativeCacheEntries] that the step deletes: those of main but
+/// the newest of each family, the part of the key before its last hyphen.
+const deletedNativeCacheEntries = {103, 105, 202};
+
+/// A stand-in of gh, which notes each call in `$GH_LOG`, the arguments
+/// apart by tabs, and answers `gh api --method GET .../actions/caches` with
+/// the entries of `$GH_ENTRIES` whose key starts with the field `key` and,
+/// with the field `ref`, of that ref, in the order of the time when they
+/// were saved, the newest first with the field `direction=desc`, each as
+/// `<id> <key>`, as the `--jq` of the step prints them; without
+/// `--paginate` only those of the first page, of two entries. A list of
+/// the key `$GH_FAIL_LIST` and a deletion of the id `$GH_FAIL_DELETE` fail.
+const _gh = r'''
+#!/usr/bin/env bash
+{ printf '%s\t' "$@"; printf '\n'; } >> "$GH_LOG"
+method=GET paginate=false path= key= ref= direction=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    api) ;;
+    --method | -X) method="$2"; shift ;;
+    --paginate) paginate=true ;;
+    -f | -F | --raw-field | --field)
+      case "$2" in
+        key=*) key="${2#key=}" ;;
+        ref=*) ref="${2#ref=}" ;;
+        direction=*) direction="${2#direction=}" ;;
+      esac
+      shift
+      ;;
+    --jq | -q) shift ;;
+    *) path="$1" ;;
+  esac
+  shift
+done
+if [ "$method" = DELETE ]; then
+  if [ "${path##*/}" = "${GH_FAIL_DELETE:-}" ]; then
+    echo 'HTTP 500: Internal Server Error' >&2
+    exit 1
+  fi
+  exit 0
+fi
+if [ "$key" = "${GH_FAIL_LIST:-}" ]; then
+  echo 'HTTP 502: Bad Gateway' >&2
+  exit 1
+fi
+order=-n
+if [ "$direction" = desc ]; then
+  order=-rn
+fi
+entries="$(awk -F '\t' -v key="$key" -v ref="$ref" \
+  'index($2, key) == 1 && (ref == "" || $3 == ref) { print $4 " " $1 " " $2 }' \
+  "$GH_ENTRIES" | sort $order | cut -d ' ' -f 2-)"
+if [ "$paginate" = false ]; then
+  entries="$(printf '%s\n' "$entries" | head -n 2)"
+fi
+printf '%s\n' "$entries" | sed '/^$/d'
+''';
+
+/// What the step of the job [nativeCachesJob] of [workflow], the text of
+/// build.yml, did when it ran as on main with a stand-in of gh that has
+/// [nativeCacheEntries]: the result of bash, and the arguments of each call
+/// of gh. The list of the entries of the prefix [failList] and the deletion
+/// of the entry [failDelete] fail.
+({ProcessResult result, List<List<String>> calls}) runNativeCaches(
+  String workflow, {
+  String? failList,
+  int? failDelete,
+}) {
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
+  final job = jobs.values
+      .cast<YamlMap>()
+      .singleWhere((job) => job['name'] == nativeCachesJob);
+  final directory = Directory.systemTemp.createTempSync('native_caches_');
+  try {
+    final gh = File('${directory.path}/bin/gh')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(_gh);
+    Process.runSync('chmod', ['+x', gh.path]);
+    final entries = File('${directory.path}/entries.tsv')
+      ..writeAsStringSync(
+        [
+          for (final (id, key, ref, saved) in nativeCacheEntries)
+            '$id\t$key\t$ref\t$saved\n',
+        ].join(),
+      );
+    final log = File('${directory.path}/gh.log')..createSync();
+    final result = Process.runSync(
+      'bash',
+      ['-e', '-o', 'pipefail', '-c', _deletionStepOf(job)['run'] as String],
+      environment: {
+        'PATH': '${gh.parent.path}:${Platform.environment['PATH']}',
+        'GH_TOKEN': 'token',
+        'GITHUB_REPOSITORY': 'saymyframe/smf_flutter_cli',
+        'GITHUB_REF': 'refs/heads/main',
+        'GH_ENTRIES': entries.path,
+        'GH_LOG': log.path,
+        'GH_FAIL_LIST': failList ?? '',
+        'GH_FAIL_DELETE': '${failDelete ?? ''}',
+      },
+    );
+    return (
+      result: result,
+      calls: [
+        for (final line in log.readAsLinesSync())
+          line.split('\t')..removeLast(),
+      ],
+    );
+  } finally {
+    directory.deleteSync(recursive: true);
+  }
+}
+
+/// The ids of the entries that [calls] of gh delete.
+List<int> deletedIn(List<List<String>> calls) => [
+      for (final call in calls)
+        if (call.contains('DELETE')) int.parse(call.last.split('/').last),
+    ];
+
+/// The problems of what the step of the job [nativeCachesJob] of
+/// [workflow], the text of build.yml, does on main (see [runNativeCaches]):
+/// it lists the entries of a prefix of the keys of the jobs of apps.yml
+/// that save them without all pages, the filter of the ref of main, or the
+/// order of the newest first, deletes other entries than those that a newer
+/// entry of their family replaced, or fails.
+List<String> nativeCachesRunProblemsOf(String workflow) {
+  final (:result, :calls) = runNativeCaches(workflow);
+  final problems = <String>[];
+  for (final prefix in ['Linux-gradle-', 'macOS-swiftpm-']) {
+    final list = calls.where((call) => call.contains('key=$prefix'));
+    final missing = [
+      for (final argument in [
+        'GET',
+        '--paginate',
+        'repos/saymyframe/smf_flutter_cli/actions/caches',
+        'ref=refs/heads/main',
+        'sort=created_at',
+        'direction=desc',
+      ])
+        if (!list.any((call) => call.contains(argument))) argument,
+    ];
+    if (list.isEmpty || missing.isNotEmpty) {
+      problems.add(
+        'The step of $nativeCachesJob lists the entries $prefix* without '
+        '${missing.join(', ')}: it would not see every entry of main, or '
+        'take an entry of another ref or an older one for the newest of its '
+        'family.',
+      );
+    }
+  }
+  final deleted = deletedIn(calls).toSet();
+  if (deleted.length != deletedNativeCacheEntries.length ||
+      !deleted.containsAll(deletedNativeCacheEntries)) {
+    problems.add(
+      'The step of $nativeCachesJob deletes the entries ${deleted.toList()} '
+      'rather than ${deletedNativeCacheEntries.toList()}, those of main but '
+      'the newest of each family.',
+    );
+  }
+  if (result.exitCode != 0) {
+    problems.add(
+      'The step of $nativeCachesJob fails: ${result.stdout}${result.stderr}',
+    );
+  }
+  return problems;
+}
 
 void main() {
   test('finds the jobs that the job CI does not need', () {
@@ -702,5 +956,178 @@ ${condition == null ? '' : '        if: $condition\n'}        uses: SonarSource/
 
       expect(sonarProblemsOf(workflows), isEmpty);
     });
+  });
+
+  group('the job Native caches of build.yml', () {
+    /// The text of build.yml, with the line breaks of the texts that the
+    /// tests replace in it: git checks it out with CRLF on Windows.
+    String build() {
+      final top = Process.runSync('git', ['rev-parse', '--show-toplevel']);
+      expect(top.exitCode, 0, reason: '${top.stderr}');
+      return File('${'${top.stdout}'.trim()}/.github/workflows/build.yml')
+          .readAsStringSync()
+          .replaceAll('\r\n', '\n');
+    }
+
+    /// [text] with [from] replaced by [to], which it must have.
+    String replaced(String text, String from, String to) {
+      expect(text, contains(from));
+      return text.replaceFirst(from, to);
+    }
+
+    test(
+        'needs the job of the jobs with Flutter, runs when one of them '
+        'failed, and deletes the entries only on main', () {
+      final workflow = build();
+      expect(nativeCachesProblemsOf(workflow), isEmpty);
+
+      expect(
+        nativeCachesProblemsOf(
+          replaced(
+            workflow,
+            '    name: Native caches\n    needs: apps\n',
+            '    name: Native caches\n',
+          ),
+        ),
+        [_beforeTheWriters('apps')],
+      );
+      expect(
+        nativeCachesProblemsOf(
+          replaced(
+            workflow,
+            '    needs: apps\n    if: \${{ !cancelled() }}\n',
+            '    needs: apps\n',
+          ),
+        ),
+        [_notAfterFailure],
+      );
+      expect(
+        nativeCachesProblemsOf(
+          replaced(
+            workflow,
+            "        if: github.ref == 'refs/heads/main'\n"
+                '        env:\n          GH_TOKEN:',
+            '        env:\n          GH_TOKEN:',
+          ),
+        ),
+        [_deletesOutsideMain],
+      );
+      expect(
+        nativeCachesProblemsOf(
+          replaced(workflow, 'name: Native caches', 'name: Caches'),
+        ),
+        [_notOneNativeCachesJob(0)],
+      );
+    });
+
+    group(
+      'runs its step on main with a stand-in of gh, which',
+      () {
+        test(
+            'lists the entries of each prefix of main, all pages and the '
+            'newest first, and deletes every entry but the newest of its '
+            'family', () {
+          final (:result, :calls) = runNativeCaches(build());
+
+          expect(
+            result.exitCode,
+            0,
+            reason: '${result.stdout}${result.stderr}',
+          );
+          expect(nativeCachesRunProblemsOf(build()), isEmpty);
+          for (final prefix in ['Linux-gradle-', 'macOS-swiftpm-']) {
+            expect(
+              calls,
+              contains(
+                containsAll([
+                  'api',
+                  'GET',
+                  '--paginate',
+                  'repos/saymyframe/smf_flutter_cli/actions/caches',
+                  'key=$prefix',
+                  'ref=refs/heads/main',
+                  'sort=created_at',
+                  'direction=desc',
+                ]),
+              ),
+            );
+          }
+          expect(deletedIn(calls), deletedNativeCacheEntries.toList());
+          expect(
+            '${result.stdout}',
+            allOf(
+              contains('Keeps Linux-gradle-3.44.2-aaa-2026W43, the newest '),
+              contains('Keeps Linux-gradle-b989-2026-41, the newest '),
+              contains('Deleted Linux-gradle-3.44.2-aaa-2026W42, which a '),
+              isNot(contains('::warning::')),
+            ),
+          );
+        });
+
+        test('only warns when a list fails, and goes on with the next one', () {
+          final (:result, :calls) =
+              runNativeCaches(build(), failList: 'Linux-gradle-');
+
+          expect(
+            result.exitCode,
+            0,
+            reason: '${result.stdout}${result.stderr}',
+          );
+          expect(
+            '${result.stdout}',
+            contains(
+              '::warning::The caches Linux-gradle-* could not be listed;',
+            ),
+          );
+          expect(deletedIn(calls), [202]);
+        });
+
+        test('only warns when a deletion fails, and goes on with the next one',
+            () {
+          final (:result, :calls) = runNativeCaches(build(), failDelete: 103);
+
+          expect(
+            result.exitCode,
+            0,
+            reason: '${result.stdout}${result.stderr}',
+          );
+          expect(
+            '${result.stdout}',
+            contains(
+              '::warning::The cache Linux-gradle-3.44.2-aaa-2026W42, which a '
+              'newer entry of its family replaced, could not be deleted;',
+            ),
+          );
+          expect(deletedIn(calls), [103, 105, 202]);
+        });
+
+        test(
+            'finds a step that lists the oldest entries first, or the entries '
+            'of every ref, or only the first page of them', () {
+          final workflow = build();
+          for (final (from, to, missing) in [
+            ('-f direction=desc', '-f direction=asc', 'direction=desc'),
+            (r' -f ref="$GITHUB_REF"', '', 'ref=refs/heads/main'),
+            (' --paginate', '', '--paginate'),
+          ]) {
+            final problems = nativeCachesRunProblemsOf(
+              replaced(workflow, from, to),
+            );
+            expect(
+              problems,
+              containsAll([
+                startsWith(
+                  'The step of Native caches lists the entries Linux-gradle-* '
+                  'without $missing:',
+                ),
+                startsWith('The step of Native caches deletes the entries '),
+              ]),
+              reason: to,
+            );
+          }
+        });
+      },
+      testOn: '!windows',
+    );
   });
 }

@@ -13,11 +13,12 @@
 // - the plugins of the app with native code for the platform, from the
 //   .flutter-plugins-dependencies that `flutter pub get` writes, with the
 //   versions that pub resolved for them in pubspec.lock. The plugins of the
-//   Flutter SDK, such as integration_test, come with the SDK, and the caches
-//   are for every version of Flutter, so they are left out, as the version
-//   of Flutter is. Flutter writes no .flutter-plugins-dependencies for an
-//   app without any plugin, such as an app of modules that bring none,
-//   which then has none.
+//   Flutter SDK, such as integration_test, come with the SDK, so they are
+//   left out, as the version of Flutter is: the key of the cache of Gradle
+//   names the version of Flutter itself, whose engine Gradle downloads,
+//   and what Swift Package Manager downloads does not depend on it.
+//   Flutter writes no .flutter-plugins-dependencies for an app without any
+//   plugin, such as an app of modules that bring none, which then has none.
 // - For Android, the Gradle files of the Android project, which name the
 //   versions of Gradle, of its plugins and of the dependencies of the app,
 //   without the lines that set the ids of the app, namespace and
@@ -25,23 +26,24 @@
 // - For iOS, the Swift packages that the Xcode project of the app refers to
 //   itself, besides those that the plugins bring.
 // Apps that build with the same have one text, which the file has once
-// whatever the number and the names of the apps. So the jobs whose apps
-// build with the same share a cache, and a job whose app builds with
-// something else, such as another plugin, another version of one, or
-// another version of Gradle, gets a cache of its own. The file must be in
-// the workspace, where hashFiles of GitHub Actions finds it, and the tool
+// whatever the number and the names of the apps. One job of CI writes each
+// cache, and saves a new entry when its app builds with something that no
+// entry has the key of yet, such as another plugin, another version of
+// one, or another version of Gradle; the other jobs restore the entry of
+// the key of their app, or else the newest one. The file must be in the
+// workspace, where hashFiles of GitHub Actions finds it, and the tool
 // prints what it wrote, for the log of the job. When the apps have nothing
 // of this for the platform, as an app without plugins with iOS code, the
 // tool writes no file and removes the one there, so hashFiles of it is
 // empty and the job has no cache to restore or save. The tool lists every
 // plugin with native code, and cannot tell one whose build downloads
 // nothing, such as a plugin for iOS whose Swift package names no remote
-// package: an app with only such plugins gets a file too, and its job a
-// key under which it never saves a cache. It fails when the
+// package: an app with only such plugins gets a file too, and its job
+// restores an entry that its build does not use. It fails when the
 // directory has no app, when pub did not resolve an app, which then has no
 // pubspec.lock or no .dart_tool/package_config.json, and when an app has
 // no project for the platform. tools/workflow_apps_test.dart checks that
-// the jobs of the workflows key the caches of their native builds with it.
+// the job that writes each cache keys it with the file.
 import 'dart:convert';
 import 'dart:io';
 
