@@ -1,30 +1,68 @@
 // An init script of Gradle for the jobs of CI that build the apps for
 // Android, which put it into ~/.gradle/init.d: Gradle takes what it would
 // download from Maven Central from the mirror of Maven Central that Google
-// keeps instead. Maven Central answers 403 to a runner that downloads too
-// much, and the cache of Gradle that a job restores lacks what its app
-// needs whenever the job found the cache of another app, such as
+// keeps first, and from Maven Central only what the mirror does not have
+// yet. Maven Central answers 403 to a runner that downloads too much, and
+// the cache of Gradle that a job restores lacks what its app needs whenever
+// the job found the cache of another app, such as
 // com.google.guava:listenablefuture:1.0 in the cache of an app with
-// Firebase, where guava replaces it.
+// Firebase, where guava replaces it. The mirror lags behind Maven Central:
+// a version published the day before, such as
+// com.revenuecat.purchases:purchases-hybrid-common:19.15.0, which
+// purchases_flutter 10.18.1 needs, may not be on it yet.
 //
 // It changes the address of every repository of Maven Central that a build
 // declares, such as with mavenCentral(), in place, so the order of the
 // repositories stays: those of the settings, of the build scripts and of
 // the projects, the included build of the Gradle plugin of Flutter and the
-// projects of the plugins of the app among them. A build that declares no
-// repository of plugins, such as that included build, takes its plugins
-// from the Gradle Plugin Portal, which sends the requests of what Maven
-// Central has, such as the Kotlin Gradle plugin, on to Maven Central. Such
-// a build gets the mirror before the portal.
+// projects of the plugins of the app among them. Each list of repositories
+// in which it did so gets Maven Central itself as its last repository, and
+// keeps it last when the build adds a repository to the list later, such
+// as the storage of Flutter. Gradle asks the repositories of a list in
+// order and goes on to the next one when a repository does not have a
+// module, so Maven Central gets only the requests for what no other
+// repository of the list has. A build that declares no repository of
+// plugins, such as that included build, takes its plugins from the Gradle
+// Plugin Portal, which sends the requests of what Maven Central has, such
+// as the Kotlin Gradle plugin, on to Maven Central. Such a build gets the
+// mirror and then Maven Central before the portal.
 
 def central = ~/^https:\/\/(repo\.maven\.apache\.org|repo1\.maven\.org)\/maven2\/?/
 def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
+// The name of the repository of Maven Central that the script adds after
+// the mirror, whose address the script leaves as it is.
+def behindMirror = 'mavenCentralBehindMirror'
+
+def addBehindMirror = { RepositoryHandler repositories ->
+    repositories.maven {
+        name = behindMirror
+        url = 'https://repo.maven.apache.org/maven2/'
+    }
+}
 
 def toMirror = { RepositoryHandler repositories ->
-    repositories.withType(MavenArtifactRepository).configureEach { repository ->
-        def url = repository.url.toString()
-        if (url =~ central) {
-            repository.url = url.replaceFirst(central, mirror)
+    def keepsBehindMirrorLast = false
+    // all rather than configureEach, whose actions may not add a repository
+    // to the list or move one.
+    repositories.all { repository ->
+        if (repository.name == behindMirror) {
+            return
+        }
+        if (repository instanceof MavenArtifactRepository) {
+            def url = repository.url.toString()
+            if (url =~ central) {
+                repository.url = url.replaceFirst(central, mirror)
+                if (!keepsBehindMirrorLast) {
+                    keepsBehindMirrorLast = true
+                    addBehindMirror(repositories)
+                    return
+                }
+            }
+        }
+        def last = repositories.findByName(behindMirror)
+        if (keepsBehindMirrorLast && !repositories.last().is(last)) {
+            repositories.remove(last)
+            repositories.add(last)
         }
     }
 }
@@ -37,8 +75,9 @@ beforeSettings { settings ->
 
 settingsEvaluated { settings ->
     if (settings.pluginManagement.repositories.isEmpty()) {
-        settings.pluginManagement.repositories {
+        settings.pluginManagement.repositories { repositories ->
             maven { url = mirror }
+            addBehindMirror(repositories)
             gradlePluginPortal()
         }
     }
