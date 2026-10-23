@@ -1947,8 +1947,9 @@ void main() {
 
   test(
       'the probe of Firebase Cloud Messaging asks the script of CI that '
-      'starts the app for the answer firebase_messaging, a push message, by '
-      'the name with which a job gives the answer, and no other probe asks '
+      'starts the app for the answer firebase_messaging, a push message, and '
+      'that of RevenueCat for the answer revenuecat, premium access, by the '
+      'names with which the jobs give the answers, and no other probe asks '
       'for one', () {
     expect(
       {
@@ -1956,7 +1957,7 @@ void main() {
           if (test.startProbe?.answer case final answer?)
             p.basename(test.directory): answer,
       },
-      {'firebase_messaging': 'firebase_messaging'},
+      {'firebase_messaging': 'firebase_messaging', 'revenuecat': 'revenuecat'},
     );
   });
 
