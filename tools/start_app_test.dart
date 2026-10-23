@@ -3,9 +3,11 @@
 // check writes, in the jobs of CI that start the apps. On Android, as a
 // debug app and as a release app, with commands in place of flutter, adb
 // and aapt2 of the Android SDK, and on macOS for an iOS simulator too, with
-// a command in place of xcrun. With answers too: the script runs a command
-// of CI for each request that the app writes once its start check passed,
-// and reads the verdict of the app on it.
+// a command in place of xcrun. The script builds the app with the arguments
+// that the matrix tool writes next to the start check. With answers too:
+// the script runs a command of CI for each request that the app writes once
+// its start check passed, of the answers that the app asks for, and reads
+// the verdict of the app on it.
 //
 // No test waits for the time to pass. The script tells the time by SECONDS
 // of bash, which the tests move on by the seconds that the build, a command
@@ -42,6 +44,9 @@ void main() {
     File('$app/integration_test/start_check.dart')
       ..createSync(recursive: true)
       ..writeAsStringSync('void main() {}\n');
+    // The arguments that build the app, none here, which the matrix tool
+    // writes next to the start check.
+    File('$app/integration_test/start_build_arguments').writeAsStringSync('');
   });
   tearDown(() => temp.deleteSync(recursive: true));
 
@@ -87,8 +92,11 @@ perl() {
   /// crashes at start-up. The app writes [files] into its temporary
   /// directory, by their names, once it is launched, where [stale] files of
   /// an earlier run are before that, and the [answers] go after the mode.
-  /// Each sleep of the script stands for [sleepSeconds], so that a test of
-  /// a wait of minutes polls the device a dozen times rather than hundreds.
+  /// The app asks for the answers [asked], those of [answers] by default, in
+  /// the list of the answers next to its start check, unless it has no such
+  /// list, [listsAnswers] `false`. Each sleep of the script stands for
+  /// [sleepSeconds], so that a test of a wait of minutes polls the device a
+  /// dozen times rather than hundreds.
   ProcessResult run({
     required int seconds,
     String platform = 'android',
@@ -104,8 +112,16 @@ perl() {
     Map<String, String> files = const {},
     Map<String, String> stale = const {},
     List<String> answers = const [],
+    List<String>? asked,
+    bool listsAnswers = true,
     int sleepSeconds = 1,
   }) {
+    if (listsAnswers) {
+      final names = asked ?? [for (final given in answers) given.split('=')[0]];
+      File('$app/integration_test/start_answers').writeAsStringSync(
+        [for (final name in names) '$name\n'].join(),
+      );
+    }
     // Notes its arguments, one build on each line.
     command('bin/flutter', '''
 echo "\$*" >> "${temp.path}/builds"
@@ -396,6 +412,72 @@ esac''');
       '${result.stdout}',
       '::error::flutter build apk failed with the exit code 3.\n',
     );
+  });
+
+  group('with the arguments of the build', () {
+    const check = 'integration_test/start_check.dart';
+    // The arguments that give the build the values of the app, as the
+    // matrix tool writes them from the provider of the values of the app.
+    const arguments = ['--dart-define-from-file=.env', '--dart-define=A=b'];
+
+    void writeArguments() =>
+        File('$app/integration_test/start_build_arguments').writeAsStringSync(
+          '${arguments.join('\n')}\n',
+        );
+
+    test(
+        'builds a debug app and a release app for Android with the '
+        'arguments that the matrix tool wrote next to the start check', () {
+      writeArguments();
+
+      final debug = run(seconds: 30, result: 'passed');
+      final release = run(seconds: 30, mode: 'release', result: 'passed');
+
+      expect(debug.exitCode, 0, reason: '${debug.stdout}${debug.stderr}');
+      expect(
+        release.exitCode,
+        0,
+        reason: '${release.stdout}${release.stderr}',
+      );
+      final given = arguments.join(' ');
+      expect(File('${temp.path}/builds').readAsLinesSync(), [
+        'build apk --debug -t $check $given',
+        'build apk --release --target-platform android-x64 -t $check $given',
+      ]);
+    });
+
+    test(
+      'builds an app for an iOS simulator with them',
+      () {
+        writeArguments();
+
+        final result = run(platform: 'ios', seconds: 30, result: 'passed');
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+        expect(
+          File('${temp.path}/builds').readAsLinesSync(),
+          ['build ios --simulator --debug -t $check ${arguments.join(' ')}'],
+        );
+      },
+      testOn: 'mac-os',
+    );
+
+    test(
+        'fails before the build when the app has no list of them, which the '
+        'matrix tool adds with the start check', () {
+      File('$app/integration_test/start_build_arguments').deleteSync();
+
+      final result = run(seconds: 30, result: 'passed');
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::$app has no integration_test/start_build_arguments: add the '
+            'start check with the --add-app-tests of '
+            'packages/smf_flutter_cli/tool/matrix.dart.\n',
+      );
+      expect(File('${temp.path}/builds').existsSync(), isFalse);
+    });
   });
 
   group('as a release app', () {
@@ -884,6 +966,84 @@ esac''');
           ),
         ),
       );
+    });
+
+    test(
+        'runs only the answers that the app asks for, and skips each other '
+        'with a notice', () {
+      final result = run(
+        seconds: 240,
+        result: 'passed',
+        files: {'smf_start_request_second': '{}'},
+        answers: [
+          answer('first', verdict('smf_start_report_first', 'passed')),
+          answer('second', verdict('smf_start_report_second', 'passed')),
+          answer('third', verdict('smf_start_report_third', 'passed')),
+        ],
+        asked: ['second', 'fourth'],
+      );
+      final none = run(
+        seconds: 240,
+        result: 'passed',
+        answers: [answer('first')],
+        asked: [],
+      );
+
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      expect(none.exitCode, 0, reason: '${none.stdout}${none.stderr}');
+      expect(linesOf('answered'), ['second']);
+      expect(
+        '${result.stdout}',
+        allOf(
+          contains(
+            '::notice::The app asks for no answer first: no probe of it lists '
+            'it in integration_test/start_answers, so the script skips it.\n',
+          ),
+          contains(
+            '::notice::The app asks for no answer third: no probe of it lists '
+            'it in integration_test/start_answers, so the script skips it.\n',
+          ),
+          contains('The check of the answer second in the app passed '),
+          isNot(contains('answer fourth')),
+        ),
+      );
+      expect(
+        '${none.stdout}',
+        allOf(
+          contains('::notice::The app asks for no answer first: '),
+          contains('The start check of the app passed '),
+        ),
+      );
+    });
+
+    test(
+        'fails before the build when the app has no list of the answers that '
+        'it asks for, which the matrix tool adds with the start check', () {
+      final result = run(
+        seconds: 240,
+        result: 'passed',
+        files: {request: asked},
+        answers: [answer('messages', verdict(report, 'passed'))],
+        listsAnswers: false,
+      );
+      final without = run(seconds: 30, result: 'passed', listsAnswers: false);
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::$app has no integration_test/start_answers, which lists the '
+            'answers that the probes of the app ask for: add the start check '
+            'with the --add-app-tests of '
+            'packages/smf_flutter_cli/tool/matrix.dart.\n',
+      );
+      expect(linesOf('answered'), isEmpty);
+      expect(
+        without.exitCode,
+        0,
+        reason: 'Without answers, the script needs no list of them: '
+            '${without.stdout}${without.stderr}',
+      );
+      expect(File('${temp.path}/builds').readAsLinesSync(), hasLength(1));
     });
 
     test(
