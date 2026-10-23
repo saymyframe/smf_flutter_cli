@@ -397,6 +397,25 @@ void main() {
     });
 
     test(
+        'asks again after a 404 only for the customer, which RevenueCat may '
+        'not know yet, and fails at once on a 404 for anything else', () async {
+      revenueCat.script('GET', '/v2/projects/proj1a2b/entitlements', [
+        _error(404, 'resource_missing', 'Project not found.'),
+      ]);
+
+      expect(
+        await failure(),
+        'RevenueCat refused the entitlements of the project SMF CI of '
+        'RevenueCat (404, resource_missing: Project not found.).',
+      );
+      expect(waits, isEmpty);
+      expect(
+        revenueCat.calls.where((call) => call.contains('/entitlements')),
+        hasLength(1),
+      );
+    });
+
+    test(
         'says what a key that RevenueCat does not take, or that lacks a '
         'permission, means, without the key, also when RevenueCat names it',
         () async {
