@@ -19,6 +19,9 @@ dependencies:
 
 dev_dependencies:
   analyzer: ^14.4.0
+  # The requests to RevenueCat of the test with which CI grants premium
+  # access to the app that it starts on a device.
+  http: ^1.6.0
   # The provider of the env role, which the module requires, in the apps of
   # the tests.
   smf_dart_define: ^0.6.0
