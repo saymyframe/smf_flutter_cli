@@ -151,64 +151,50 @@ List<SmfIssue> _checkKeyAccess(StructuralRuleInput<EnvData> input) {
   final byGetter = {
     for (final key in envRole.keysIn(input.roleInput)) key.getter: key,
   };
-  final issues = <SmfIssue>[];
-  for (final MapEntry(key: path, value: file) in input.files.entries) {
-    final generatedBy = input.owners[path];
-    if (generatedBy == null) continue;
-    final owner = _ownerOf(generatedBy);
-    final module = switch (owner) {
-      ModuleOrigin(:final module) => input.module(module),
-      _ => null,
-    };
-    if (!_readsKeys(owner, module)) continue;
-    final readable = {
-      owner,
-      for (final dependency in module?.dependsOn ?? const <ModuleId>{})
-        ModuleOrigin(dependency),
-    };
-    for (final access in file.memberAccesses) {
-      if (!_isAppEnv(access.target)) continue;
-      final read = '${access.target}.${access.name}';
-      final key = byGetter[access.name];
-      if (key == null) {
-        issues.add(
-          SmfIssue(
-            '$path reads $read, but no key of the app has the getter '
-            '${access.name}.',
-            hint: 'Give the role the key as data of its owner: the key '
-                'REVENUECAT_APPLE_KEY of the module revenuecat is read as '
-                '$_appEnv.revenuecatAppleKey.',
-            origin: owner,
-            path: path,
-          ),
-        );
-      } else if (module == null) {
-        // Only the code of a module reads values.
-        issues.add(
-          SmfIssue(
-            '$path reads $read, the $key, but only the code of a module reads '
-            'the values of the app, not that of ${_named(owner)}.',
-            hint: 'Read the value in the code of a module that gives the role '
-                'its key.',
-            origin: owner,
-            path: path,
-          ),
-        );
-      } else if (!readable.contains(key.owner)) {
-        issues.add(
-          SmfIssue(
-            '$path reads $read, the $key, but ${_named(owner)} may only read '
-            'its own keys and those of the modules it depends on.',
-            hint: 'Give the role a key of your own.',
-            origin: owner,
-            path: path,
-          ),
-        );
-      }
-    }
-    for (final call in file.invocations) {
-      if (!_isAppEnv(call.target)) continue;
-      issues.add(
+  return [
+    for (final MapEntry(key: path, value: file) in input.files.entries)
+      ..._keyAccessIssuesOf(input, path, file, byGetter),
+  ];
+}
+
+/// The issues of the rule `env.key_access` in [file], the file at [path],
+/// whose keys by the names of their getters are [byGetter]: none when the
+/// rule does not look at the files of its owner.
+List<SmfIssue> _keyAccessIssuesOf(
+  StructuralRuleInput<EnvData> input,
+  String path,
+  DartFileIndex file,
+  Map<String, AppEnvKey> byGetter,
+) {
+  final generatedBy = input.owners[path];
+  if (generatedBy == null) return const [];
+  final owner = _ownerOf(generatedBy);
+  final module = switch (owner) {
+    ModuleOrigin(:final module) => input.module(module),
+    _ => null,
+  };
+  if (!_readsKeys(owner, module)) return const [];
+  final readable = {
+    owner,
+    for (final dependency in module?.dependsOn ?? const <ModuleId>{})
+      ModuleOrigin(dependency),
+  };
+  return [
+    for (final access in file.memberAccesses)
+      if (_isAppEnv(access.target))
+        if (_readIssueOf(
+          path,
+          '${access.target}.${access.name}',
+          access.name,
+          byGetter[access.name],
+          owner: owner,
+          inModule: module != null,
+          readable: readable,
+        )
+            case final issue?)
+          issue,
+    for (final call in file.invocations)
+      if (_isAppEnv(call.target))
         SmfIssue(
           '$path calls ${call.target}.${call.name}(), but the values of the '
           'app are getters, each named by the role.',
@@ -216,8 +202,51 @@ List<SmfIssue> _checkKeyAccess(StructuralRuleInput<EnvData> input) {
           origin: owner,
           path: path,
         ),
-      );
-    }
+  ];
+}
+
+/// The issue of [read], the read of the getter [getter] of `AppEnv` at
+/// [path] by [owner], whose key is [key], or `null` when [owner] may read
+/// it: it reads a key of the app, from the code of a module ([inModule]),
+/// and the key is one of those in [readable].
+SmfIssue? _readIssueOf(
+  String path,
+  String read,
+  String getter,
+  AppEnvKey? key, {
+  required ContributionOrigin owner,
+  required bool inModule,
+  required Set<ContributionOrigin> readable,
+}) {
+  if (key == null) {
+    return SmfIssue(
+      '$path reads $read, but no key of the app has the getter $getter.',
+      hint: 'Give the role the key as data of the module that reads it, and '
+          'read it as the getter that the role names for it, such as '
+          '$_appEnv.myServiceKey for MY_SERVICE_KEY.',
+      origin: owner,
+      path: path,
+    );
   }
-  return issues;
+  if (!inModule) {
+    // Only the code of a module reads values.
+    return SmfIssue(
+      '$path reads $read, the $key, but only the code of a module reads '
+      'the values of the app, not that of ${_named(owner)}.',
+      hint: 'Read the value in the code of a module that gives the role '
+          'its key.',
+      origin: owner,
+      path: path,
+    );
+  }
+  if (!readable.contains(key.owner)) {
+    return SmfIssue(
+      '$path reads $read, the $key, but ${_named(owner)} may only read '
+      'its own keys and those of the modules it depends on.',
+      hint: 'Give the role a key of your own.',
+      origin: owner,
+      path: path,
+    );
+  }
+  return null;
 }

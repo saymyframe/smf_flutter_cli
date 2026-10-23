@@ -813,7 +813,10 @@ final described = describe(${vars['env_feed_url']!.absent});
           'app are getters, each named by the role.',
         ),
       ]);
-      expect(issues.first.hint, contains('AppEnv.revenuecatAppleKey'));
+      expect(
+        issues.first.hint,
+        contains('AppEnv.myServiceKey for MY_SERVICE_KEY'),
+      );
       expect(issues.last.hint, contains('without arguments'));
     });
 
