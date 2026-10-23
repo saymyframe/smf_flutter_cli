@@ -98,6 +98,9 @@ Future<List<String>> problemsOfAddress({
   if (address == null) return const [];
   final String? token;
   try {
+    // The address is the registration token, whose call firebase_messaging
+    // 17 deprecates in favour of the Firebase Installation ID.
+    // ignore: deprecated_member_use
     token = await FirebaseMessaging.instance.getToken().timeout(timeout);
   } on TimeoutException {
     return [

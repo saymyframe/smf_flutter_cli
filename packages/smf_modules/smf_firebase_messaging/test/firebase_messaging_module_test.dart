@@ -345,11 +345,9 @@ void main() {
       );
       expect(brick.vars, isEmpty);
       final plugin = contributions[1] as PubspecDependency;
-      // firebase_messaging 17 needs firebase_core 5, and the Firebase
-      // modules share firebase_core 4.
       expect(
         (plugin.package, plugin.constraint, plugin.dev),
-        ('firebase_messaging', '^16.7.0', false),
+        ('firebase_messaging', '^17.0.0', false),
       );
       final data = contributions[2] as RoleData<Object>;
       expect(data.role, pushRole);
@@ -537,7 +535,7 @@ void main() {
         {
           ...(_yamlOf(without.files['pubspec.yaml']!.text)['dependencies']!
               as Map<String, Object?>),
-          'firebase_messaging': '^16.7.0',
+          'firebase_messaging': '^17.0.0',
         },
       );
       expect(

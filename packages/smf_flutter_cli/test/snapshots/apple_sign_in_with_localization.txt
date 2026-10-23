@@ -2881,8 +2881,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   crypto: "^3.0.7"
-  firebase_auth: "^6.7.0"
-  firebase_core: "^4.15.0"
+  firebase_auth: "^7.0.0"
+  firebase_core: "^5.0.0"
   intl: "any"
   shared_preferences: "^2.5.5"
   shared_preferences_android: "^2.5.2"

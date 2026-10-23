@@ -1366,8 +1366,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  firebase_analytics: "^12.6.0"
-  firebase_core: "^4.15.0"
+  firebase_analytics: "^13.0.0"
+  firebase_core: "^5.0.0"
   get_it: "^9.3.0"
   go_router: "^17.5.0"
 

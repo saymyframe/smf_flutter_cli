@@ -5,7 +5,6 @@ import 'dart:isolate';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
-import 'package:analyzer/diagnostic/diagnostic.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:yaml/yaml.dart';
@@ -28,7 +27,7 @@ TargetPlatform defaultTargetPlatform = TargetPlatform.android;
 ''';
 
 /// A stand-in for the part of firebase_core that the module uses, with the
-/// signatures of firebase_core 4: what the plugins of Firebase throw.
+/// signatures of firebase_core 5: what the plugins of Firebase throw.
 const _firebaseCore = r'''
 class FirebaseException implements Exception {
   FirebaseException({required this.plugin, this.message, String? code})
@@ -44,14 +43,17 @@ class FirebaseException implements Exception {
 ''';
 
 /// A stand-in for the part of firebase_messaging that the module uses, with
-/// the signatures of firebase_messaging 16.7 and what its plugin does where
-/// the service relies on it or works around it:
+/// the signatures of firebase_messaging 17, which deprecates `getToken()`
+/// and `onTokenRefresh`, and what its plugin does where the service relies
+/// on it or works around it:
 /// - `getToken()` on iOS fails with the code `apns-token-not-set` while the
 ///   device has no token of the Apple Push Notification service, before it
 ///   asks the platform, and `getAPNSToken()` reads that token, which is
 ///   `null` on Android;
 /// - the stream of the new tokens tells of none when the device gets the
-///   token of the Apple Push Notification service, as the iOS plugin does;
+///   token of the Apple Push Notification service, as the iOS plugin does
+///   at a later start of the app, when the registration token stays the
+///   same;
 /// - `setForegroundNotificationPresentationOptions()` reaches the platform
 ///   only on iOS and macOS;
 /// - the streams of the messages, the taps and the tokens are broadcast
@@ -136,8 +138,10 @@ class FirebaseMessaging {
 
   static Stream<RemoteMessage> get onMessageOpenedApp => _openings.stream;
 
+  @Deprecated('Use onRegistered instead.')
   Stream<String> get onTokenRefresh => _tokens.stream;
 
+  @Deprecated('Use register() and onRegistered instead.')
   Future<String?> getToken({
     String? vapidKey,
     String? serviceWorkerScriptPath,
@@ -258,8 +262,9 @@ final class DartApp {
   String get _appPath =>
       Directory('${_root.path}/app').resolveSymbolicLinksSync();
 
-  /// The errors and warnings that the analyzer finds in the files of
-  /// [owners], each with the path of its file.
+  /// What the analyzer finds in the files of [owners], each with the path
+  /// of its file: an info too, such as the use of a deprecated member, on
+  /// which `flutter analyze` of a generated app fails as well.
   Future<List<String>> analysisProblems(Set<ContributionOrigin> owners) async {
     final appPath = _appPath;
     final collection = AnalysisContextCollection(includedPaths: [appPath]);
@@ -279,7 +284,6 @@ final class DartApp {
           continue;
         }
         for (final diagnostic in result.diagnostics) {
-          if (diagnostic.severity == Severity.info) continue;
           problems.add(
             '${file.path}:${result.lineInfo.getLocation(diagnostic.offset)}: '
             '${diagnostic.message}',

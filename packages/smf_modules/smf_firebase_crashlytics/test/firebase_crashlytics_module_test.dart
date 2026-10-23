@@ -401,7 +401,7 @@ void main() {
       );
       final dependency = contributions[1] as PubspecDependency;
       expect(dependency.package, 'firebase_crashlytics');
-      expect(dependency.constraint, '^5.4.0');
+      expect(dependency.constraint, '^6.0.0');
       expect(dependency.dev, isFalse);
       final data = contributions[2] as RoleData<Object>;
       expect(data.role, crashReportingRole);
@@ -586,8 +586,8 @@ void main() {
       expect(
         _yamlOf(withCrashlytics.files['pubspec.yaml']!.text)['dependencies'],
         {
-          'firebase_core': '^4.15.0',
-          'firebase_crashlytics': '^5.4.0',
+          'firebase_core': '^5.0.0',
+          'firebase_crashlytics': '^6.0.0',
           'flutter': {'sdk': 'flutter'},
         },
       );

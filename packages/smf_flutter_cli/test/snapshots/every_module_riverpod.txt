@@ -203,8 +203,8 @@ With `shared_preferences`:
 With `firebase_messaging`:
 
 - `FirebasePushService` in `lib/core/push/firebase_push_service.dart` implements `PushService` on `FirebaseMessaging`. In `lib/`, only that file imports the package: other code receives push messages through `appPush`.
-- The address of the device is its registration token of Firebase Cloud Messaging, from `getToken()`, and a new token comes on `onTokenRefresh`. On iOS there is none until the token of the Apple Push Notification service comes, and the package tells the app nothing when it comes. So while something listens to `addressChanges`, the service reads that token with `getAPNSToken()` now and then, for at most two minutes, and then tells of the registration token. Keep that wait.
-- On iOS, `createFirebasePushService()` calls `setForegroundNotificationPresentationOptions()` with an alert, a badge and a sound. Keep it: the package answers iOS for every notification in the foreground, those of `appNotifications` too, and without these options iOS shows none of them.
+- The address of the device is its registration token of Firebase Cloud Messaging, from `getToken()`, and a new token comes on `onTokenRefresh`. The package deprecates both in favour of the Firebase Installation ID, which the app does not use, so the service ignores the deprecation: keep the token. On iOS there is none until the token of the Apple Push Notification service comes, and then the package tells the app of the registration token only if it changed, which it does not at a later start of the app. So while something listens to `addressChanges`, the service reads that token with `getAPNSToken()` now and then, for at most two minutes, and then tells of the registration token. Keep that wait.
+- On iOS, `createFirebasePushService()` calls `setForegroundNotificationPresentationOptions()` with an alert, a badge and a sound. Keep it: the package answers iOS for every push message in the foreground, and for those of `appNotifications` too while it is the delegate of the notification center, and without these options iOS shows none of them.
 - Never call `requestPermission()` of the package: the permission to show notifications belongs to `appNotifications.request()`.
 - `android/app/src/main/AndroidManifest.xml` names the channel and the icon with which Android shows a message that arrives in the background, those of the notifications of the app. Change them together.
 - The section Firebase Cloud Messaging of the README tells how to upload the key of the Apple Push Notification service and how to send this device a test message.
@@ -496,7 +496,7 @@ To send this device a test message, run the app in debug mode and copy the addre
 
 `android/app/src/main/AndroidManifest.xml` names the channel `default` of the notifications of the app (`com.google.firebase.messaging.default_notification_channel_id`) and their small icon `@drawable/ic_notification` (`com.google.firebase.messaging.default_notification_icon`). Android shows a message that arrives in the background with them.
 
-On iOS, firebase_messaging answers the system for every notification that arrives while the app is in the foreground, the notifications that the app shows itself too. So the service sets its presentation options to an alert, a badge and a sound when the app starts (`setForegroundNotificationPresentationOptions()`): without them, iOS would show none of these notifications in the foreground.
+On iOS, firebase_messaging answers the system for every push message that arrives while the app is in the foreground, and for the notifications that the app shows itself too while it is the delegate of the notification center. So the service sets its presentation options to an alert, a badge and a sound when the app starts (`setForegroundNotificationPresentationOptions()`): without them, iOS would show none of these notifications in the foreground.
 
 The app runs no code for a message that arrives in the background. To handle one, register a top-level function with `FirebaseMessaging.onBackgroundMessage()` in `main()`. It runs in an isolate of its own, without what `bootstrap()` sets up.
 
@@ -5249,8 +5249,9 @@ import 'push_service.dart';
 /// Firebase is initialized first, as `bootstrap()` does. On iOS it sets the
 /// presentation options of a notification that arrives while the app is in
 /// the foreground to an alert, a badge and a sound. firebase_messaging
-/// answers iOS for every such notification, the local notifications of the
-/// app too, with those options: without them, iOS would show none of them.
+/// answers iOS with those options for every push message, and for the local
+/// notifications of the app too while it is the delegate of the
+/// notification center: without them, iOS would show none of them.
 PushService createFirebasePushService() {
   final service = FirebasePushService(FirebaseMessaging.instance);
   if (service.platformShowsInForeground) {
@@ -5292,15 +5293,21 @@ const _longestWatch = Duration(minutes: 2);
 /// `appPush` of `app_push.dart`.
 ///
 /// The address of the device is the registration token of Firebase Cloud
-/// Messaging. On iOS it needs the token of the Apple Push Notification
-/// service, which may come a while after the app started, or never, as on a
-/// build that is not signed for push messages: [address] is `null` until
-/// then. When that token comes, firebase_messaging tells the app of no
-/// registration token. So while something listens to [addressChanges], the
-/// service asks iOS for the token now and then, which needs no network,
-/// for at most two minutes, and tells of the registration token once iOS
-/// has the token. [addressChanges] also tells of each new token that
-/// Firebase gives the device.
+/// Messaging, to which the HTTP v1 API of Firebase Cloud Messaging sends.
+/// firebase_messaging 17 deprecates the calls for that token in favour of
+/// the Firebase Installation ID, which the app does not use, so the service
+/// ignores the deprecation where it makes them.
+///
+/// On iOS the registration token needs the token of the Apple Push
+/// Notification service, which may come a while after the app started, or
+/// never, as on a build that is not signed for push messages: [address] is
+/// `null` until then. When that token comes, firebase_messaging tells the
+/// app of the registration token only if it changed, which it does not at
+/// a later start of the app. So while something listens to
+/// [addressChanges], the service asks iOS for the token now and then, which
+/// needs no network, for at most two minutes, and tells of the registration
+/// token once iOS has the token. [addressChanges] also tells of each new
+/// token that Firebase gives the device.
 ///
 /// On Android, the system shows a message that arrives in the background,
 /// in the channel and with the icon that the manifest of the app names, and
@@ -5313,6 +5320,7 @@ final class FirebasePushService implements PushService {
   /// It reads the stream of the new tokens at once, which sets up the
   /// plugin, so that the messages and the taps that the platform tells of
   /// from then on reach the streams of the service.
+  // ignore: deprecated_member_use
   FirebasePushService(this._messaging) : _tokens = _messaging.onTokenRefresh;
 
   final FirebaseMessaging _messaging;
@@ -5360,6 +5368,7 @@ final class FirebasePushService implements PushService {
   @override
   Future<String?> address() async {
     try {
+      // ignore: deprecated_member_use
       return await _messaging.getToken();
     } on FirebaseException catch (error) {
       _printWithoutAddress(error);
@@ -5448,6 +5457,7 @@ final class FirebasePushService implements PushService {
     if (apnsToken == null) return _scheduleCheck();
     _awaitingApnsToken = false;
     try {
+      // ignore: deprecated_member_use
       final address = await _messaging.getToken();
       if (address != null && _addresses.hasListener) _addresses.add(address);
     } on Object catch (error) {
@@ -11932,11 +11942,11 @@ dependencies:
     sdk: flutter
   crypto: "^3.0.7"
   event_bus: "^2.0.1"
-  firebase_analytics: "^12.6.0"
-  firebase_auth: "^6.7.0"
-  firebase_core: "^4.15.0"
-  firebase_crashlytics: "^5.4.0"
-  firebase_messaging: "^16.7.0"
+  firebase_analytics: "^13.0.0"
+  firebase_auth: "^7.0.0"
+  firebase_core: "^5.0.0"
+  firebase_crashlytics: "^6.0.0"
+  firebase_messaging: "^17.0.0"
   flutter_local_notifications: "^22.3.2"
   flutter_riverpod: "^3.4.3"
   get_it: "^9.3.0"

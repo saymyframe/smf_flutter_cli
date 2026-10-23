@@ -474,7 +474,7 @@ void main() {
 
       final dependency = contributions[1] as PubspecDependency;
       expect(dependency.package, 'firebase_analytics');
-      expect(dependency.constraint, '^12.6.0');
+      expect(dependency.constraint, '^13.0.0');
       expect(dependency.dev, isFalse);
 
       final data = contributions[2] as RoleData<Object>;
@@ -585,8 +585,8 @@ void main() {
       expect(
         _yamlOf(withAnalytics.files['pubspec.yaml']!.text)['dependencies'],
         {
-          'firebase_analytics': '^12.6.0',
-          'firebase_core': '^4.15.0',
+          'firebase_analytics': '^13.0.0',
+          'firebase_core': '^5.0.0',
           'flutter': {'sdk': 'flutter'},
         },
       );

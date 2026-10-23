@@ -77,7 +77,7 @@ final class FirebaseAnalyticsModule extends SmfModule {
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(firebaseAnalyticsBundle),
-        const PubspecContribution.hosted('firebase_analytics', '^12.6.0'),
+        const PubspecContribution.hosted('firebase_analytics', '^13.0.0'),
         analyticsRole.data(
           const RoleImplementation(
             type: TypeRef('FirebaseAnalyticsService', import: _file),

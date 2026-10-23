@@ -86,7 +86,7 @@ void main() {
       );
       final dependency = contributions.whereType<PubspecDependency>().single;
       expect(dependency.package, 'firebase_core');
-      expect(dependency.constraint, '^4.15.0');
+      expect(dependency.constraint, '^5.0.0');
       expect(dependency.dev, isFalse);
 
       final sockets = contributions.whereType<SocketContribution>().toList();
@@ -304,7 +304,7 @@ void main() {
       final dependencies = {
         ...pubspec['dependencies']! as Map<String, Object?>,
       };
-      expect(dependencies.remove('firebase_core'), '^4.15.0');
+      expect(dependencies.remove('firebase_core'), '^5.0.0');
       expect(
         {...pubspec, 'dependencies': dependencies},
         _yamlOf(without.files['pubspec.yaml']!.text),

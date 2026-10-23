@@ -19,7 +19,7 @@ name: my_app
 dependencies:
   flutter:
     sdk: flutter
-  firebase_auth: "^6.7.0"
+  firebase_auth: "^7.0.0"
 dev_dependencies:
   firebase_auth_platform_interface: any
 ''');

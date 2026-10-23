@@ -9,14 +9,13 @@
 // enabled in the Firebase project is notConfigured, with a hint that has
 // the link to the project, also where Firebase tells of it only in a
 // message or, on iOS and macOS, in an internal error. The hint names what
-// Firebase answered in a line, also where the message of iOS is the
-// description of an error over many lines. A code that the service does
-// not know is unknown, with the code and the message on one line. A
-// password reset completes for an address without an account also when
-// Firebase tells so. An empty address or password fails before Firebase is
-// asked, with the same reason on every platform. A call that failed leaves
-// the user. And a call for a user whose session has ended on the server
-// signs that user out.
+// Firebase answered in a line, also where its message has several lines.
+// A code that the service does not know is unknown, with the code and the
+// message on one line. A password reset completes for an address without
+// an account also when Firebase tells so. An empty address or password
+// fails before Firebase is asked, with the same reason on every platform.
+// A call that failed leaves the user. And a call for a user whose session
+// has ended on the server signs that user out.
 //
 // A call with a credential of Google or Apple gets the reason of its own
 // call: a link that Firebase refuses because the identity, or its email
@@ -55,30 +54,12 @@ const _internal = 'An internal error has occurred, print and inspect the '
 
 /// The message with which iOS answers an anonymous sign-in for a project
 /// in which Authentication was never set up, under the code of an internal
-/// error: the description of the error, as an iPhone simulator had it, with
-/// the addresses in memory replaced by one value. A sign-in and a sign-up
-/// get such a message too. What the server answered is under one of the
-/// keys of the description, which come in another order from call to call,
-/// so the service only looks for `CONFIGURATION_NOT_FOUND` in the message.
-const _notFoundOnIos = 'Error Domain=FIRAuthErrorDomain Code=17999 '
-    '"$_internal" UserInfo={NSUnderlyingError=0x600000c00000 {Error '
-    'Domain=FIRAuthInternalErrorDomain Code=3 "(null)" '
-    'UserInfo={FIRAuthErrorUserInfoDeserializedResponseKey={\n'
-    '    code = 400;\n'
-    '    errors =     (\n'
-    '                {\n'
-    '            domain = global;\n'
-    '            message = "CONFIGURATION_NOT_FOUND";\n'
-    '            reason = invalid;\n'
-    '        }\n'
-    '    );\n'
-    '    message = "CONFIGURATION_NOT_FOUND";\n'
-    '}, NSUnderlyingError=0x600000c00000 {Error Domain=com.google.HTTPStatus '
-    'Code=400 "(null)" UserInfo={data={length = 220, bytes = 0x7b0a2020 '
-    '22657272 6f72223a 207b0a20 ... 5d0a2020 7d0a7d0a }, '
-    'data_content_type=application/json; charset=UTF-8}}}}, '
-    'NSLocalizedDescription=$_internal, '
-    'FIRAuthErrorUserInfoNameKey=ERROR_INTERNAL_ERROR}';
+/// error. A sign-in and a sign-up get such a message too. The plugin of
+/// firebase_auth 7 adds the message of what the server answered to the
+/// message of the internal error, in brackets as on Android: the server
+/// answered with `CONFIGURATION_NOT_FOUND`, which is all the service looks
+/// for in the message.
+const _notFoundOnIos = '$_internal [ CONFIGURATION_NOT_FOUND ]';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -613,8 +594,7 @@ void main() {
           'developer names the project, the code of Firebase and what the '
           'service found in the message, and has the command of the script '
           'of the app that enables the methods and the link to the sign-in '
-          'methods of the project. It has none of the message of iOS, the '
-          'description of an error over many lines.',
+          'methods of the project. It has none of the rest of the message.',
     );
   });
 
