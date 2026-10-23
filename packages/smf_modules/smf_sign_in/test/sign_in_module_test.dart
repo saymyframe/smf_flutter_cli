@@ -2281,6 +2281,38 @@ void main() {
     });
 
     test(
+        'measures the words of a text with WholeWords between every white '
+        'space but the no-break spaces, which keep the words around them '
+        'together', () {
+      final app = localized[SignInModule.blocVariant]!.app!;
+      final words = _classOf(_parsed(app, _widgets), 'WholeWords');
+      // The pattern that the text is split on into the words that it
+      // measures, as a pattern of Dart.
+      final pattern = _patternOf(
+        _invocationsOf(words, 'split').single.argumentList.arguments.single,
+      );
+      List<String> wordsOf(String text) => text.split(pattern);
+
+      expect(wordsOf('one two'), ['one', 'two']);
+      // A line may break at a line break, a tab and a second space too: a
+      // word that one of them leads to is measured on its own.
+      expect(
+        wordsOf('one\nnext\tlast  end'),
+        ['one', 'next', 'last', 'end'],
+      );
+      // No line breaks at a no-break space, so the words around it are
+      // measured as one.
+      expect(
+        wordsOf('Walk 10\u00A0kilometres'),
+        ['Walk', '10\u00A0kilometres'],
+      );
+      expect(
+        wordsOf('29,99\u202F€ 1\u2007000'),
+        ['29,99\u202F€', '1\u2007000'],
+      );
+    });
+
+    test(
         'has the keyboard and the autofill of the device fit each field: '
         'an address and the password of an account in the sign-in, new '
         'ones in the sign-up', () {
@@ -3905,6 +3937,18 @@ void main() {
     });
   });
 }
+
+/// The pattern that [argument] is: a string literal, or a `RegExp` of one.
+Pattern _patternOf(Argument argument) => switch (argument) {
+      StringLiteral(:final stringValue?) => stringValue,
+      MethodInvocation(
+        target: null,
+        methodName: SimpleIdentifier(name: 'RegExp'),
+        :final argumentList,
+      ) =>
+        RegExp((argumentList.arguments.single as StringLiteral).stringValue!),
+      _ => throw StateError('No pattern: ${argument.toSource()}'),
+    };
 
 /// The invocations of the method or the function [name] in a node.
 /// The calls of the method [name] in [node].
