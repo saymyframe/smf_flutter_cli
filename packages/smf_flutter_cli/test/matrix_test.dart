@@ -1243,6 +1243,44 @@ void main() {
   });
 
   test(
+      'the report of the app tests names the answer of CI that the probe of '
+      'each asks for, if it asks for one', () async {
+    final cli = await _appTestsOf('smf_flutter_cli');
+    const probe = 'integration_test/probe.dart';
+
+    final report = await appTestsReport(
+      [
+        MatrixAppTest(
+          '$cli/messages',
+          appliesTo: (_) => true,
+          startProbe: const MatrixStartProbe(
+            probe,
+            'probeMessages',
+            answer: 'messages',
+          ),
+        ),
+        MatrixAppTest(
+          '$cli/walk',
+          appliesTo: (_) => true,
+          startProbe: const MatrixStartProbe(probe, 'probeRoutes'),
+        ),
+        MatrixAppTest('$cli/plain', appliesTo: (_) => true),
+      ],
+      modules: const [FlutterCoreModule()],
+      packages: const {FlutterCoreModule.id: 'smf_flutter_core'},
+      apps: () async => const [
+        MatrixApp('app', [FlutterCoreModule.id]),
+      ],
+    );
+
+    expect(
+      [for (final test in report) test['answer']],
+      ['messages', null, null],
+    );
+    expect(report[1].containsKey('answer'), isFalse);
+  });
+
+  test(
       'the report of the app tests names the modules of the package that '
       'keeps each, the apps it applies to without them, and the roles whose '
       'contract it checks', () async {
@@ -4234,10 +4272,12 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
             ..writeAsStringSync(
               '# The key of the shop.\n'
               'SHOP_KEY=\n'
-              'SHOP_URL=https://kept.example\n'
+              'SHOP_URL=https://kept.example # the page\n'
               '# The text of the shop, SHOP_TEXT=\n'
               'SHOP_TEXT = \n'
-              'SHOP_NOTE=\n',
+              'SHOP_NOTE=\n'
+              'SHOP_PAGE= # the page of the shop\n'
+              'SHOP_NAME=""\n',
             );
         });
 
@@ -4248,8 +4288,9 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
         test(
             'writes each of them into the line of its key in .env that has no '
-            'value yet, as it is or in double quotes, keeps every other line, '
-            'and names the keys without a value', () async {
+            'value yet, as it is or in double quotes, reading both files in '
+            'the forms of the env role, keeps every other line, and names the '
+            'keys without a value', () async {
           writeValues(
             '# The values of CI.\n'
             '\n'
@@ -4257,7 +4298,9 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
             'SHOP_URL=https://ci.example\n'
             '  SHOP_TEXT = "Ціни # без змін"  \n'
             'OTHER_KEY=other_ci_secret\n'
-            'SHOP_NOTE=\n',
+            'SHOP_NOTE=\n'
+            'SHOP_PAGE=https://ci.example/page # the page of CI\n'
+            'SHOP_NAME="Shop of CI" # the name\n',
           );
 
           final (code, output) = await add(
@@ -4272,48 +4315,57 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
             dotEnv.readAsStringSync(),
             '# The key of the shop.\n'
             'SHOP_KEY=test_ci_secret\n'
-            'SHOP_URL=https://kept.example\n'
+            'SHOP_URL=https://kept.example # the page\n'
             '# The text of the shop, SHOP_TEXT=\n'
             'SHOP_TEXT="Ціни # без змін"\n'
-            'SHOP_NOTE=\n',
+            'SHOP_NOTE=\n'
+            'SHOP_PAGE=https://ci.example/page\n'
+            'SHOP_NAME="Shop of CI"\n',
           );
           expect(
             output,
             contains(
-              '.env: wrote the values of SHOP_KEY, SHOP_TEXT from $values. '
-              '.env has no line without a value of SHOP_URL, OTHER_KEY, so '
-              'the values of $values for them stay out of it.\n',
+              '.env: wrote the values of SHOP_KEY, SHOP_TEXT, SHOP_PAGE, '
+              'SHOP_NAME from $values. .env has no line without a value of '
+              'SHOP_URL, OTHER_KEY, so the values of $values for them stay out '
+              'of it.\n',
             ),
           );
-          for (final value in ['secret', 'ci.example', 'Ціни']) {
+          for (final value in ['secret', 'ci.example', 'Ціни', 'of CI']) {
             expect(output, isNot(contains(value)));
           }
         });
 
         test(
-            'writes them into an app outside the matrix too, and none into an '
-            'app without .env', () async {
+            'writes none into an app outside the matrix, whose build would get '
+            'no arguments that give it the values, nor into an app without '
+            '.env', () async {
           writeValues('SHOP_KEY=test_ci_secret\n');
 
-          final (code, output) = await add(
+          final (outside, problem) = await add(
             [start],
             env: env,
             envValues: values,
           );
 
-          expect(code, 0, reason: output);
+          expect(outside, 1);
           expect(
-            dotEnv.readAsStringSync(),
-            startsWith('# The key of the shop.\nSHOP_KEY=test_ci_secret\n'),
+            problem,
+            'The values of $values go only into an app of the matrix: without '
+            'it, the start check gets no arguments that build the app with its '
+            'values (integration_test/start_build_arguments), so they would '
+            'not reach the app.',
           );
+          expect(dotEnv.readAsStringSync(), contains('SHOP_KEY=\n'));
           expect(
-            output,
-            contains('.env: wrote the values of SHOP_KEY from $values.\n'),
+            fileSystem.file('/apps/start_app/$startProbesFile').existsSync(),
+            isFalse,
           );
 
           dotEnv.deleteSync();
           final (without, said) = await add(
             [start],
+            app: app,
             env: env,
             envValues: values,
           );
@@ -4334,6 +4386,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
           final (code, output) = await add(
             [start],
+            app: app,
             env: env,
             envValues: values,
           );
@@ -4345,27 +4398,35 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
         test(
             'fails before it adds anything on a file that is not there, a line '
-            'that is no line KEY=value, a key given twice, a value with a '
-            'double quote and values without a file of values of the apps, '
-            'without a value in what it says', () async {
+            'of either file in no form of the env role, a key given twice and '
+            'values without a file of values of the apps, without a value in '
+            'what it says', () async {
+          const forms = 'has a value in none of the forms of a value of the '
+              'env role: a plain value without white space, # or quotes, or a '
+              'value in double quotes, each with a comment after it or none.';
           for (final (text, withEnv, problem) in [
             (null, env, 'There is no file of values at $values.'),
             (
               'SHOP_KEY=test_ci_secret\nexport test_ci_secret\n',
               env,
-              'Line 2 of $values is no line KEY=value.',
+              'Line 2 of $values is neither KEY=value, a comment nor empty.',
             ),
             (
               'SHOP_KEY=test_ci_secret\nSHOP_KEY=test_ci_secret\n',
               env,
               '$values gives SHOP_KEY twice.',
             ),
-            (
-              'SHOP_KEY=test_ci"secret\n',
-              env,
-              'The value of SHOP_KEY in $values has a double quote, which a '
-                  'line of .env cannot hold.',
-            ),
+            for (final value in [
+              'test_ci"secret',
+              "'test_ci_secret'",
+              'test ci_secret',
+              '"test_ci_secret',
+            ])
+              (
+                '# A value in no form.\nSHOP_KEY=$value\n',
+                env,
+                'Line 2 of $values, the line of SHOP_KEY, $forms',
+              ),
             (
               'SHOP_KEY=test_ci_secret\n',
               null,
@@ -4391,6 +4452,32 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
               isFalse,
             );
             expect(dotEnv.readAsStringSync(), contains('SHOP_KEY=\n'));
+          }
+
+          // And a line of .env of the app in no form, or of a key that it
+          // has twice.
+          writeValues('SHOP_KEY=test_ci_secret\n');
+          for (final (line, problem) in [
+            (
+              'SHOP_BAD=kept value',
+              'Line 9 of .env of the app, the line of SHOP_BAD, $forms',
+            ),
+            ('SHOP_KEY=', '.env of the app gives SHOP_KEY twice.'),
+          ]) {
+            final before = dotEnv.readAsStringSync();
+            dotEnv.writeAsStringSync('$before$line\n');
+
+            final (code, output) = await add(
+              [start],
+              app: app,
+              env: env,
+              envValues: values,
+            );
+
+            expect(code, 1, reason: line);
+            expect(output, problem);
+            expect(dotEnv.readAsStringSync(), '$before$line\n');
+            dotEnv.writeAsStringSync(before);
           }
         });
       });

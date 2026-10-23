@@ -1017,6 +1017,49 @@ esac''');
     });
 
     test(
+        'tells an answer apart from one whose name is a part of its name, or '
+        'has its name as a part', () {
+      final whole = run(
+        seconds: 240,
+        result: 'passed',
+        files: {'smf_start_request_firebase_messaging': '{}'},
+        answers: [
+          answer('messaging'),
+          answer('firebase'),
+          answer(
+            'firebase_messaging',
+            verdict('smf_start_report_firebase_messaging', 'passed'),
+          ),
+        ],
+        asked: ['firebase_messaging'],
+      );
+      final part = run(
+        seconds: 240,
+        result: 'passed',
+        answers: [answer('firebase_messaging'), answer('messaging_2')],
+        asked: ['messaging'],
+      );
+
+      expect(whole.exitCode, 0, reason: '${whole.stdout}${whole.stderr}');
+      expect(part.exitCode, 0, reason: '${part.stdout}${part.stderr}');
+      expect(linesOf('answered'), ['firebase_messaging']);
+      expect(
+        '${whole.stdout}',
+        allOf(
+          contains('::notice::The app asks for no answer messaging: '),
+          contains('::notice::The app asks for no answer firebase: '),
+        ),
+      );
+      expect(
+        '${part.stdout}',
+        allOf(
+          contains('::notice::The app asks for no answer firebase_messaging: '),
+          contains('::notice::The app asks for no answer messaging_2: '),
+        ),
+      );
+    });
+
+    test(
         'fails before the build when the app has no list of the answers that '
         'it asks for, which the matrix tool adds with the start check', () {
       final result = run(

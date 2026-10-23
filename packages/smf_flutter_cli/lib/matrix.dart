@@ -517,7 +517,12 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   the key (`module`) and its package (`package`), as [env] tells them
 ///   (see [MatrixEnv.keys]), both `null` where no module of the app gives
 ///   the key, and the names of those apps (`apps`), in the order of the
-///   apps and of the keys.
+///   apps and of the keys;
+/// - `answer`, the answer of CI that its probe asks for
+///   ([MatrixStartProbe.answer]), only if it has one, so that the checks of
+///   the repository find an answer that a workflow gives the script that
+///   starts the apps and that no probe asks for, which the script would
+///   skip in every app.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
@@ -584,6 +589,7 @@ Future<List<Map<String, Object>>> appTestsReport(
         fileSystem,
       ),
       'envKeys': _envKeysGivenBy(test, matrix, env, packages),
+      if (test.startProbe?.answer case final answer?) 'answer': answer,
     });
   }
   return report;
@@ -1997,9 +2003,10 @@ List<MatrixAppTest> appTestsFor(
 /// It writes none of the values that the tests give an app of the matrix
 /// ([MatrixAppTest.envValues]). With [envValues], the path of a file of
 /// values of CI in the form of the file of [env], such as `.env`, with a
-/// line `KEY=value` for each key, it writes each of those values into the
-/// line of its key in the file of [env] of the app, where that line has no
-/// value yet, such as the public key of a service of the project of CI. It
+/// line `KEY=value` for each key, and with [app], whose build arguments
+/// give the build those values, it writes each of them into the line of
+/// its key in the file of [env] of the app, where that line has no value
+/// yet, such as the public key of a service of the project of CI. It
 /// leaves out a key that the app has no such line of, and the values of an
 /// app without the file. What it prints names the keys, and no value.
 ///
@@ -2009,7 +2016,7 @@ List<MatrixAppTest> appTestsFor(
 /// matrix fills, or files that tests generate, without [app]; and so is a
 /// problem of [envValues], such as a file that is not there, a line that is
 /// no line `KEY=value`, a key given twice, a value with a double quote, or
-/// values without [env].
+/// values without [app] or [env].
 Future<(int, String)> addAppTestsTo(
   GeneratedApp generated,
   List<MatrixAppTest> tests, {
@@ -2027,7 +2034,7 @@ Future<(int, String)> addAppTestsTo(
       env: env,
       valuesOf: () => envValues == null
           ? null
-          : _envValuesOfFile(envValues, env, generated.path, fileSystem),
+          : _envValuesOfFile(envValues, app, env, generated.path, fileSystem),
       flutter: flutter,
       fileSystem: fileSystem,
     );
@@ -2235,28 +2242,38 @@ String _envSummaryOf(Map<String, String?> values, String path) {
 String _envValue(String value) =>
     value.contains(RegExp(r'''[\s#'"`]''')) ? '"$value"' : value;
 
-/// The file of the values of the app generated in [directory] with the
+/// The file of the values of [app], generated in [directory], with the
 /// values of the file at [path], such as the values of CI for the apps
 /// that it starts on a device: the file of [env], with the value of each
-/// key of [path] in the line of that key that has no value yet; see
-/// [addAppTestsTo]. The text is `null` when the app has no such line of any
-/// of the keys, or no file of [env].
+/// key of [path] in the line of that key that has no value yet, which
+/// becomes `KEY=value`; see [addAppTestsTo]. The text is `null` when the
+/// app has no such line of any of the keys, or no file of [env].
 ///
-/// A line of [path] gives a value as it is, or in double quotes, as a line
-/// of the file of the values of an app does, and a line that starts with
-/// `#` is a comment.
+/// It reads the file at [path] and the file of [env] of the app in the
+/// forms of a value that the env role names: a plain value, without white
+/// space, `#` or quotes, or a value in double quotes, each with a comment
+/// after it or none; a line that is empty or starts with `#` gives no value
+/// (see [_envValuesIn]). An empty value is no value.
 ///
-/// Throws a [MatrixAppTestException] if there is no [env], if there is no
-/// file at [path], if a line of it that is neither empty nor a comment is
-/// no line `KEY=value`, if it gives a key twice, or if a value has a double
-/// quote, which [_envValue] cannot put into a line. No message has a value
-/// or a line of the file, which may be a key of CI.
+/// Throws a [MatrixAppTestException] if there is no [app], whose build
+/// arguments the start check would lack, if there is no [env], if there is
+/// no file at [path], if a line of either file is in none of those forms,
+/// or if a file gives a key twice. No message has a value or a line of a
+/// file, which may be a key of CI.
 _EnvValues _envValuesOfFile(
   String path,
+  MatrixApp? app,
   MatrixEnv? env,
   String directory,
   FileSystem fileSystem,
 ) {
+  if (app == null) {
+    throw MatrixAppTestException(
+      'The values of $path go only into an app of the matrix: without it, the '
+      'start check gets no arguments that build the app with its values '
+      '($startBuildArgumentsFile), so they would not reach the app.',
+    );
+  }
   if (env == null) {
     throw MatrixAppTestException(
       'The values of $path have no file of values of the apps to go into '
@@ -2267,41 +2284,14 @@ _EnvValues _envValuesOfFile(
   if (!source.existsSync()) {
     throw MatrixAppTestException('There is no file of values at $path.');
   }
-  final values = <String, String>{};
-  for (final (index, line) in source.readAsLinesSync().indexed) {
-    final text = line.trim();
-    if (text.isEmpty || text.startsWith('#')) continue;
-    final match =
-        RegExp(r'^([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$').firstMatch(text);
-    if (match == null) {
-      throw MatrixAppTestException(
-        'Line ${index + 1} of $path is no line KEY=value.',
-      );
-    }
-    final key = match[1]!;
-    final given = match[2]!.trim();
-    // A value as it is, or in double quotes, as a line of the file of the
-    // values of an app has it.
-    final value = RegExp(r'^"([^"]*)"$').firstMatch(given)?[1] ?? given;
-    if (values.containsKey(key)) {
-      throw MatrixAppTestException('$path gives $key twice.');
-    }
-    if (value.contains('"')) {
-      throw MatrixAppTestException(
-        'The value of $key in $path has a double quote, which a line of '
-        '${env.file} cannot hold.',
-      );
-    }
-    values[key] = value;
-  }
+  final values = {
+    for (final (key, value, _) in _envValuesIn(source.readAsStringSync(), path))
+      if (value.isNotEmpty) key: value,
+  };
   final context = fileSystem.path;
   final file = fileSystem.file(
     context.join(directory, context.joinAll(env.file.split('/'))),
   );
-  final given = [
-    for (final MapEntry(:key, :value) in values.entries)
-      if (value.isNotEmpty) key,
-  ];
   if (!file.existsSync()) {
     return (
       path: file.path,
@@ -2310,22 +2300,16 @@ _EnvValues _envValuesOfFile(
           '$path.',
     );
   }
+  final lines = file.readAsStringSync().split('\n');
   final written = <String>{};
-  final lines = <String>[];
-  for (final line in file.readAsStringSync().split('\n')) {
-    final match = _envLine.firstMatch(line);
-    final key = match?[1];
-    if (match == null ||
-        line.substring(match.end).trim().isNotEmpty ||
-        !given.contains(key)) {
-      lines.add(line);
-      continue;
-    }
-    written.add(key!);
-    lines.add('$key=${_envValue(values[key]!)}');
+  for (final (key, value, index)
+      in _envValuesIn(lines.join('\n'), '${env.file} of the app')) {
+    if (value.isNotEmpty || !values.containsKey(key)) continue;
+    written.add(key);
+    lines[index] = '$key=${_envValue(values[key]!)}';
   }
   final left = [
-    for (final key in given)
+    for (final key in values.keys)
       if (!written.contains(key)) key,
   ];
   final leftOut = '${env.file} has no line without a value of '
@@ -2340,6 +2324,57 @@ _EnvValues _envValuesOfFile(
     text: written.isEmpty ? null : lines.join('\n'),
     summary: summary.isEmpty ? '$path gives no value.' : summary.join(' '),
   );
+}
+
+/// A line `KEY=value` of a file of values, without the white space around
+/// it: the key, and the rest of the line, which starts with the value.
+final _envKeyLine = RegExp(r'^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$');
+
+/// A value in double quotes, with a comment after it or none.
+final _quotedEnvValue = RegExp(r'^"([^"]*)"\s*(?:#.*)?$');
+
+/// A plain value, which may be empty, with a comment after it or none.
+final _plainEnvValue = RegExp(r'''^([^\s#"'`]*)\s*(?:#.*)?$''');
+
+/// The values of [text], the text of the file of values [file], in the
+/// forms of a value that the env role names, each with its key and the
+/// index of its line, in the order of the lines. A line that is empty or
+/// starts with `#` gives no value.
+///
+/// Throws a [MatrixAppTestException] for a line that is neither `KEY=value`,
+/// a comment nor empty, for a line whose value is in none of those forms,
+/// and for a key that has two lines. None names a value.
+List<(String, String, int)> _envValuesIn(String text, String file) {
+  final values = <(String, String, int)>[];
+  final keys = <String>{};
+  for (final (index, raw) in text.split('\n').indexed) {
+    final line = raw.trim();
+    if (line.isEmpty || line.startsWith('#')) continue;
+    final match = _envKeyLine.firstMatch(line);
+    if (match == null) {
+      throw MatrixAppTestException(
+        'Line ${index + 1} of $file is neither KEY=value, a comment nor '
+        'empty.',
+      );
+    }
+    final key = match[1]!;
+    final value = (_quotedEnvValue.firstMatch(match[2]!) ??
+            _plainEnvValue.firstMatch(match[2]!))
+        ?.group(1);
+    if (value == null) {
+      throw MatrixAppTestException(
+        'Line ${index + 1} of $file, the line of $key, has a value in none of '
+        'the forms of a value of the env role: a plain value without white '
+        'space, # or quotes, or a value in double quotes, each with a comment '
+        'after it or none.',
+      );
+    }
+    if (!keys.add(key)) {
+      throw MatrixAppTestException('$file gives $key twice.');
+    }
+    values.add((key, value, index));
+  }
+  return values;
 }
 
 /// Generates the app of `smf create` with [arguments] and gives it to
