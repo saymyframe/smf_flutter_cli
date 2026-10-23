@@ -202,9 +202,9 @@ final class MockRevenueCat {
   /// The products whose free trial the store account took.
   final Set<MockProduct> _trialsTaken = {};
 
-  /// The access that the backend granted each user until a time, by the
-  /// id of the user.
-  final Map<String, DateTime> _grants = {};
+  /// The access that the backend granted each user until a time, and
+  /// whether it renews then, by the id of the user.
+  final Map<String, ({DateTime until, bool renews})> _grants = {};
 
   /// The users that a logIn named.
   final Set<String> _named = {};
@@ -265,9 +265,11 @@ final class MockRevenueCat {
 
   /// Grants [user] premium access until [until] on the backend, as the
   /// dashboard or the API of RevenueCat does. The device sees it once it
-  /// reads the customer info anew.
-  void grant(String user, {required DateTime until}) =>
-      _grants[user] = until.toUtc();
+  /// reads the customer info anew. A grant of RevenueCat does not renew; with
+  /// [renews], the access renews at [until], as one that a store gives, for
+  /// a test of what tells the two apart.
+  void grant(String user, {required DateTime until, bool renews = false}) =>
+      _grants[user] = (until: until.toUtc(), renews: renews);
 
   /// Has the SDK read the customer info of the user anew and tell the app,
   /// as it does on its own now and then, such as when the app comes back.
@@ -482,7 +484,8 @@ final class MockRevenueCat {
     final entitlements = <Map<String, Object?>>[
       for (final purchase in bought)
         if (_attached(purchase.product)) _entitlementOf(purchase),
-      if (_grants[user] case final until?) _grantOf(until),
+      if (_grants[user] case (:final until, :final renews))
+        _grantOf(until, renews: renews),
     ];
     Map<String, Object?>? premium;
     for (final entitlement in entitlements) {
@@ -562,11 +565,12 @@ final class MockRevenueCat {
     };
   }
 
-  /// The entitlement premium that a grant until [until] gives.
-  Map<String, Object?> _grantOf(DateTime until) => {
+  /// The entitlement premium that a grant until [until] gives, which
+  /// renews then with [renews].
+  Map<String, Object?> _grantOf(DateTime until, {required bool renews}) => {
         'identifier': _premium,
         'isActive': true,
-        'willRenew': false,
+        'willRenew': renews,
         'latestPurchaseDate': _iso(DateTime.utc(2026)),
         'originalPurchaseDate': _iso(DateTime.utc(2026)),
         'productIdentifier': 'rc_promo_premium_custom',

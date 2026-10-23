@@ -195,8 +195,9 @@ void main() {
   );
 
   testWidgets(
-    'the check reports access that ends at another time, no access in its '
-    'time, and access before it asked, for which it asks nothing',
+    'the check reports access that ends later or earlier than it asked for '
+    'or renews, no access in its time, and access before it asked, for '
+    'which it asks nothing',
     (tester) async {
       await startUp(tester);
       const short = Duration(milliseconds: 600);
@@ -207,23 +208,43 @@ void main() {
       String? requestBefore;
 
       await startWithNewUser(tester, 'throwaway');
-      await startWithNewUser(tester, 'other end');
-      await checking(tester, () async {
-        final check = checkAccess(
-          directory: temporary,
-          wait: const Duration(seconds: 5),
-          interval: interval,
-        );
-        final asked = jsonDecode((await written(request()))!) as Map;
-        revenueCat.grant(
-          asked['appUserId']! as String,
-          until: DateTime.fromMillisecondsSinceEpoch(
-            asked['expiresAt']! as int,
-            isUtc: true,
-          ).add(const Duration(hours: 3)),
-        );
-        otherEnd = await check;
-      });
+
+      /// The verdict of the check on access that ends [after] the end that
+      /// it asks for, or before it if [after] is negative, and renews with
+      /// [renews], for a user that no logIn named.
+      Future<String> grantedAndChecked(
+        String user,
+        Duration after, {
+        bool renews = false,
+      }) async {
+        await startWithNewUser(tester, user);
+        late String verdict;
+        await checking(tester, () async {
+          if (request().existsSync()) request().deleteSync();
+          final check = checkAccess(
+            directory: temporary,
+            wait: const Duration(seconds: 5),
+            interval: interval,
+          );
+          final asked = jsonDecode((await written(request()))!) as Map;
+          revenueCat.grant(
+            asked['appUserId']! as String,
+            until: DateTime.fromMillisecondsSinceEpoch(
+              asked['expiresAt']! as int,
+              isUtc: true,
+            ).add(after),
+            renews: renews,
+          );
+          verdict = await check;
+        });
+        return verdict;
+      }
+
+      otherEnd = await grantedAndChecked('later', const Duration(hours: 3));
+      final earlier =
+          await grantedAndChecked('earlier', const Duration(minutes: -30));
+      final renewing =
+          await grantedAndChecked('renewing', Duration.zero, renews: true);
 
       await startWithNewUser(tester, 'none');
       await checking(tester, () async {
@@ -260,6 +281,21 @@ void main() {
           ),
         ),
       );
+      for (final (verdict, what) in [
+        (earlier, 'does not renew'),
+        (renewing, 'renews'),
+      ]) {
+        expect(
+          verdict,
+          matches(
+            RegExp(
+              '^failed: the app shows premium access \\(ends at \\S+, $what\\) '
+              'rather than the access that the check asked for, which ends at '
+              r'\S+ and does not renew$',
+            ),
+          ),
+        );
+      }
       expect(
         none,
         startsWith(
