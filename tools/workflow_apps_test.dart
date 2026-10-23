@@ -286,6 +286,23 @@ List<String> answerProblemsOf(
   ];
 }
 
+/// The text of [text] from [start] up to the parenthesis that closes the
+/// one before [start], or to its end, with what is in quotes as it is.
+String _inParentheses(String text, int start) {
+  String? quote;
+  var end = start;
+  while (end < text.length && (quote != null || text[end] != ')')) {
+    final char = text[end];
+    if (quote != null) {
+      if (char == quote) quote = null;
+    } else if (char == '"' || char == "'") {
+      quote = char;
+    }
+    end++;
+  }
+  return text.substring(start, end);
+}
+
 /// The name of [step] in the problems: its name, or else the action it
 /// uses or its command.
 String _nameOf(YamlMap step) =>
@@ -379,20 +396,21 @@ final class _Script {
                 match[1]!,
   ];
 
-  /// What [word] may stand for: the values of the variable that it refers
-  /// to, of the environment or assigned in the script, the items of the
-  /// array of bash that it expands, as `"${answers[@]}"`, which the script
-  /// assigns or adds to, or else itself.
-  List<String> _valuesOf(String word) {
-    if (RegExp(r'^\$\{(\w+)\[[@*]\]\}$').firstMatch(word) case final match?) {
-      return [
-        for (final (index, words) in commands.indexed)
-          if (words case [final assignment]
-              when assignment == '${match[1]}=' ||
-                  assignment == '${match[1]}+=')
-            if (index + 1 < commands.length) ...commands[index + 1],
-      ];
-    }
+  /// What [word] may stand for: the items of the array of bash that it
+  /// expands, as `"${answers[@]}"`, which the script assigns or adds to,
+  /// each through a variable too; the values of the variable that it refers
+  /// to, of the environment or assigned in the script; or else itself.
+  List<String> _valuesOf(String word) =>
+      switch (RegExp(r'^\$\{(\w+)\[[@*]\]\}$').firstMatch(word)) {
+        final match? => [
+            for (final item in _itemsOf(match[1]!)) ..._valuesOfVariable(item),
+          ],
+        null => _valuesOfVariable(word),
+      };
+
+  /// The values of the variable that [word] refers to, of the environment
+  /// or assigned in the script, or else [word] itself.
+  List<String> _valuesOfVariable(String word) {
     final variable = _variableOf(word);
     if (variable == null) return [word];
     return [
@@ -404,6 +422,17 @@ final class _Script {
             match[2]!,
     ];
   }
+
+  /// The items that the script assigns to the array of bash [name] or adds
+  /// to it, as in `answers=("a=b")` or `answers+=("$answer")`, wherever the
+  /// assignment is in a line.
+  List<String> _itemsOf(String name) => [
+        for (final match in RegExp(
+          '(?:^|[\\s;&|])${RegExp.escape(name)}\\+?=\\(',
+        ).allMatches(text))
+          for (final words in commandsOf(_inParentheses(text, match.end)))
+            ...words,
+      ];
 
   List<String> _problemsOf(List<String> words, Set<String> created) => [
         if (_namesOfApps(words, _isTool) case final names when names.isNotEmpty)
@@ -3738,7 +3767,10 @@ jobs:
         run: |
           answer="from_script=dart test test/b_test.dart"
           answers=()
+          echo not_an_answer=1
           answers+=("from_array=cd 'a b' && dart test test/c_test.dart --file-reporter json:c.json")
+          if [ -n "$A" ]; then answers+=("$nested"); fi
+          nested="from_nested=dart test test/d_test.dart"
           .github/scripts/each_app.sh "$RUNNER_TEMP/apps" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 \
             "firebase_messaging=dart test" "$ANSWER" "$answer" "${answers[@]}"
@@ -3755,6 +3787,7 @@ jobs:
         'from_env',
         'from_script',
         'from_array',
+        'from_nested',
       ])
         ('apps.yml, job a, step "Start"', name),
     ]);
@@ -3775,7 +3808,7 @@ jobs:
         'probe that asks for it does, one of firebase_messaging, from_array.';
     expect(
       answerProblemsOf(answers, {'firebase_messaging', 'from_array'}),
-      [problem('from_env'), problem('from_script')],
+      [problem('from_env'), problem('from_script'), problem('from_nested')],
     );
   });
 
