@@ -1,0 +1,11 @@
+name: paywall_step
+description: "The functions of the step of the onboarding that shows the paywall, in an SMF app with a paywall and an onboarding."
+
+# A brick of the SMF module model, which only the apps with the onboarding
+# screen role get. Its files are relative to the root of the generated app.
+# The pipeline renders it with app_name, org_name, the has_<role> flags and
+# the rendered sockets of its tags.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

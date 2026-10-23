@@ -264,26 +264,39 @@ const _rcAuth = '$_rc with auth';
 const _rcSettings = '$_rc with settings_screen';
 const _rcL10n = '$_rc with localization';
 
-/// Those of them with the localization.
-const _pwAll = 'paywall (bloc) with localization, settings_screen';
-const _pwAllRiverpod = 'paywall (riverpod) with localization, settings_screen';
-const _pwL10n = 'paywall (bloc) with localization';
-const _pwL10nRiverpod = 'paywall (riverpod) with localization';
-const _pwSettings = 'paywall (bloc) with settings_screen';
-const _pwSettingsRiverpod = 'paywall (riverpod) with settings_screen';
-const _pw = 'paywall (bloc)';
-const _pwRiverpod = 'paywall (riverpod)';
-
+/// The apps of the paywall: one for each state manager, with and without
+/// each role that the module uses, the localization, the settings screen
+/// and the onboarding screen, in the order of the matrix.
 const List<String> _paywall = [
-  _pwAll,
-  _pwAllRiverpod,
-  _pwL10n,
-  _pwL10nRiverpod,
-  _pwSettings,
-  _pwSettingsRiverpod,
-  _pw,
-  _pwRiverpod,
+  'paywall (bloc) with localization, settings_screen, onboarding_screen',
+  'paywall (riverpod) with localization, settings_screen, onboarding_screen',
+  'paywall (bloc) with localization, settings_screen',
+  'paywall (riverpod) with localization, settings_screen',
+  'paywall (bloc) with localization, onboarding_screen',
+  'paywall (riverpod) with localization, onboarding_screen',
+  'paywall (bloc) with settings_screen, onboarding_screen',
+  'paywall (riverpod) with settings_screen, onboarding_screen',
+  'paywall (bloc) with localization',
+  'paywall (riverpod) with localization',
+  'paywall (bloc) with settings_screen',
+  'paywall (riverpod) with settings_screen',
+  'paywall (bloc) with onboarding_screen',
+  'paywall (riverpod) with onboarding_screen',
+  'paywall (bloc)',
+  'paywall (riverpod)',
 ];
+
+/// The apps of [_paywall] with each of [roles] and none of [without], each
+/// named as the names of the apps name it, such as `localization`, in the
+/// order of the matrix.
+List<String> _paywallWith(
+  Set<String> roles, {
+  Set<String> without = const {},
+}) =>
+    [
+      for (final app in _paywall)
+        if (roles.every(app.contains) && !without.any(app.contains)) app,
+    ];
 
 const _localizedSignIn = [
   'sign_in (bloc) with localization',
@@ -411,6 +424,10 @@ void main() {
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('onboarding').roles, {routerRole});
     expect(named('sign_in').roles, {routerRole});
+    // The onboarding shows the step of the paywall and goes on once the
+    // paywall that it shows closes, and the router leaves that paywall over
+    // its pages while the guard of premium access notifies.
+    expect(named('paywall_step').roles, {routerRole, onboardingScreenRole});
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('preferences_role').roles, {preferencesRole});
@@ -1139,11 +1156,10 @@ void main() {
         _rcAuthL10n,
         _rcSettingsL10n,
         _rcL10n,
-        // And the apps of the paywall with it.
-        _pwAll,
-        _pwAllRiverpod,
-        _pwL10n,
-        _pwL10nRiverpod,
+        // And the apps of the paywall with it or with the onboarding.
+        for (final app in _paywall)
+          if (app.contains('localization') || app.contains('onboarding_screen'))
+            app,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1274,10 +1290,7 @@ void main() {
         _rcSettingsL10n,
         _rcL10n,
         // The paywall, whose screens have texts.
-        _pwAll,
-        _pwAllRiverpod,
-        _pwL10n,
-        _pwL10nRiverpod,
+        ..._paywallWith({'localization'}),
         ..._authModes,
         ..._everyModule,
       ],
@@ -1317,8 +1330,7 @@ void main() {
         'apple_sign_in with localization': ['en', 'uk'],
         'sign_in (bloc) with localization': ['en', 'uk'],
         'sign_in (riverpod) with localization': ['en', 'uk'],
-        for (final app in [_pwAll, _pwAllRiverpod, _pwL10n, _pwL10nRiverpod])
-          app: ['en', 'uk'],
+        for (final app in _paywallWith({'localization'})) app: ['en', 'uk'],
         for (final app in _authModes) app: ['en', 'uk'],
         for (final app in _everyModule) app: ['en', 'uk'],
       },
@@ -1654,8 +1666,7 @@ void main() {
         ..._localizedSignIn,
         _rcAll,
         _rcSettingsL10n,
-        _pwAll,
-        _pwAllRiverpod,
+        ..._paywallWith({'localization', 'settings_screen'}),
         ..._everyModule,
       ],
     );
@@ -2147,21 +2158,22 @@ void main() {
       screens[app.name] = '${import.uri}: '
           '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
     }
-    // The apps of the notifications with the onboarding screen, which the
-    // onboarding provides.
-    const notificationsWithOnboarding = [
+    // The apps of the notifications and of the paywall with the onboarding
+    // screen, which the onboarding provides.
+    final withOnboarding = [
       _lnAll,
       _lnSettingsOnboarding,
       _lnOnboardingL10n,
       _lnOnboarding,
+      ..._paywallWith({'onboarding_screen'}),
     ];
     expect(screens, {
       // No route can start the app, since the onboarding cannot, and
-      // neither can the settings screen.
+      // neither can the settings screen or the paywall.
       for (final name in [
         'onboarding with localization',
         'onboarding',
-        ...notificationsWithOnboarding,
+        ...withOnboarding,
       ])
         name: 'package:my_app/core/app/fallback_start_screen.dart: '
             'screen.FallbackStartScreen',
@@ -2175,8 +2187,8 @@ void main() {
     expect(languages, {
       'onboarding with localization': ['en', 'uk'],
       'onboarding': ['en'],
-      for (final app in notificationsWithOnboarding)
-        app: app.endsWith('localization') ? ['en', 'uk'] : ['en'],
+      for (final app in withOnboarding)
+        app: app.contains('localization') ? ['en', 'uk'] : ['en'],
       for (final app in _everyModule) app: ['en', 'uk'],
     });
     for (final app in apps.where(test.appliesTo)) {
@@ -2662,10 +2674,7 @@ void main() {
         _rcAuthSettings,
         _rcSettingsL10n,
         _rcSettings,
-        _pwAll,
-        _pwAllRiverpod,
-        _pwSettings,
-        _pwSettingsRiverpod,
+        ..._paywallWith({'settings_screen'}),
         ..._everyModule,
       ],
     );
@@ -2716,13 +2725,16 @@ void main() {
         'sign_in (riverpod)': ['AccountSetting'],
         // The entry of the subscription, which the paywall module gives
         // the role, before the entries of the templates of the roles.
-        for (final app in [_pwAll, _pwAllRiverpod])
+        for (final app in _paywallWith({'localization', 'settings_screen'}))
           app: [
             'SubscriptionSetting',
             'LanguageSetting',
             'RestorePurchasesSetting',
           ],
-        for (final app in [_pwSettings, _pwSettingsRiverpod])
+        for (final app in _paywallWith(
+          {'settings_screen'},
+          without: {'localization'},
+        ))
           app: ['SubscriptionSetting', 'RestorePurchasesSetting'],
         for (final app in _everyModule)
           app: [
@@ -3186,10 +3198,7 @@ void main() {
         _rcAuthSettings,
         _rcSettingsL10n,
         _rcSettings,
-        _pwAll,
-        _pwAllRiverpod,
-        _pwSettings,
-        _pwSettingsRiverpod,
+        ..._paywallWith({'settings_screen'}),
         ..._everyModule,
       ],
     );
@@ -3215,8 +3224,7 @@ void main() {
         'sign_in (riverpod)',
         _rcAuthSettings,
         _rcSettings,
-        _pwSettings,
-        _pwSettingsRiverpod,
+        ..._paywallWith({'settings_screen'}, without: {'localization'}),
       ],
     );
     for (final app in withoutRole) {
@@ -3277,8 +3285,7 @@ void main() {
           ..._localizedSignIn,
           _rcAll,
           _rcSettingsL10n,
-          _pwAll,
-          _pwAllRiverpod,
+          ..._paywallWith({'localization', 'settings_screen'}),
           ..._everyModule,
         ],
         reason: languages,
@@ -3429,8 +3436,13 @@ void main() {
         'sign_in (riverpod)': (1, false),
         // The entry of the subscription, the entry that restores purchases,
         // and the setting of the language.
-        for (final app in [_pwAll, _pwAllRiverpod]) app: (3, false),
-        for (final app in [_pwSettings, _pwSettingsRiverpod]) app: (2, false),
+        for (final app in _paywallWith({'localization', 'settings_screen'}))
+          app: (3, false),
+        for (final app in _paywallWith(
+          {'settings_screen'},
+          without: {'localization'},
+        ))
+          app: (2, false),
         for (final app in _everyModule) app: (6, true),
       },
     );
@@ -4563,10 +4575,16 @@ void main() {
           index.imports.singleWhere((import) => import.prefix == 'screen');
       screens[app.name] = '${import.uri}: '
           '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
-      // The texts of the entry only in an app with a settings screen.
+      // The texts of the entry only in an app with a settings screen, and
+      // those of the step only in an app with an onboarding.
       expect(
         text.contains("'settingTitle': "),
         app.hook!.presentRoles.contains(settingsScreenRole),
+        reason: app.name,
+      );
+      expect(
+        text.contains("'stepTitle': "),
+        app.hook!.presentRoles.contains(onboardingScreenRole),
         reason: app.name,
       );
     }
@@ -4576,14 +4594,9 @@ void main() {
     const withSettings = 'SettingsSettingsLocation(), '
         'settings.SettingsScreen, %, entry.SubscriptionSetting';
     expect(settings, {
-      for (final name in [
-        _pwAll,
-        _pwAllRiverpod,
-        _pwSettings,
-        _pwSettingsRiverpod,
-      ])
+      for (final name in _paywallWith({'settings_screen'}))
         name: withSettings.replaceFirst('%', 'false'),
-      for (final name in [_pwL10n, _pwL10nRiverpod, _pw, _pwRiverpod])
+      for (final name in _paywallWith({}, without: {'settings_screen'}))
         name: 'null, null, false, null',
       for (final name in _everyModule)
         name: withSettings.replaceFirst('%', 'true'),
@@ -4599,15 +4612,14 @@ void main() {
             'screen.HomeScreen',
     });
     expect(languages, {
-      for (final name in [_pwAll, _pwAllRiverpod, _pwL10n, _pwL10nRiverpod])
-        name: ['en', 'uk'],
-      for (final name in [_pwSettings, _pwSettingsRiverpod, _pw, _pwRiverpod])
+      for (final name in _paywallWith({'localization'})) name: ['en', 'uk'],
+      for (final name in _paywallWith({}, without: {'localization'}))
         name: ['en'],
       for (final name in _everyModule) name: ['en', 'uk'],
     });
     // Each text of the module by its name, in the language of the app.
     final text = test.generatedFiles!(
-      apps.singleWhere((app) => app.name == _pwAll),
+      apps.singleWhere((app) => app.name == _paywall.first),
       'my_app',
     )[paywallOfAppFile]!;
     expect(
@@ -4616,6 +4628,7 @@ void main() {
         contains("    'planYearly': 'Yearly',"),
         contains("    'planYearly': 'Щороку',"),
         contains("    'settingInactive': 'Не активна',"),
+        contains("    'stepAction': 'Переглянути плани',"),
       ),
     );
     // An app whose settings screen gives the module no entry, or more than
@@ -4631,6 +4644,96 @@ void main() {
           'message',
           'The module paywall gives the settings screen of settings 0 '
               'entries, rather than the entry of the subscription alone.',
+        ),
+      ),
+    );
+  });
+
+  test(
+      'the test of the step of the paywall in the onboarding applies to the '
+      'apps with the module and the onboarding screen role, whichever module '
+      'provides it, where the test of the paywall runs too, has neither '
+      'mocks nor a probe, and gets the onboarding screen from the data of '
+      'the role', () {
+    final test = named('paywall_step');
+    final applies = apps.where(test.appliesTo).toList();
+
+    expect(
+      [for (final app in applies) app.name],
+      [
+        for (final app in apps)
+          if (app.modules.contains(PaywallModule.id) &&
+              app.hook!.presentRoles.contains(onboardingScreenRole))
+            app.name,
+      ],
+    );
+    expect(
+      [for (final app in applies) app.name],
+      [
+        ..._paywallWith({'onboarding_screen'}),
+        ..._everyModule,
+      ],
+    );
+    // It uses the helpers, the texts and the mocks of the test of the
+    // paywall.
+    expect(applies.where(named('paywall').appliesTo), applies);
+    expect(test.mocks, isNull);
+    expect(test.envValues, isNull);
+    expect(test.values, isNull);
+    expect(test.devDependencies, isEmpty);
+    // Nothing is bought on a device.
+    expect(test.startProbe, isNull);
+    for (final app in applies) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [paywallStepOnboardingFile], reason: app.name);
+      final text = files[paywallStepOnboardingFile]!;
+      final (:index, :errors) =
+          DartFileIndexer.parse(paywallStepOnboardingFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['onboardingScreen', 'newOnboardingScreen'],
+        reason: app.name,
+      );
+      // The screen of the route that the onboarding module names, the
+      // provider of the role in the CLI.
+      expect(
+        index.imports.singleWhere((import) => import.prefix == 'screen').uri,
+        'package:my_app/features/onboarding/onboarding_screen.dart',
+        reason: app.name,
+      );
+      expect(
+        text,
+        allOf(
+          contains('const Type onboardingScreen = screen.OnboardingScreen;'),
+          contains(
+            'Widget newOnboardingScreen() => screen.OnboardingScreen();',
+          ),
+        ),
+        reason: app.name,
+      );
+    }
+    // An app whose modules name no onboarding screen has no file of the
+    // test.
+    expect(
+      () => test.generatedFiles!(
+        const MatrixApp(
+          'nameless',
+          [PaywallModule.id],
+          hook: RoleHookRequest(
+            data: [],
+            presentRoles: {onboardingScreenRole, routerRole},
+            context: ContractHarness.defaultContext,
+          ),
+        ),
+        'my_app',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'No module of nameless names a route of its own as the onboarding '
+              'screen.',
         ),
       ),
     );
@@ -4910,10 +5013,7 @@ void main() {
         _rcAuthSettings,
         _rcSettingsL10n,
         _rcSettings,
-        _pwAll,
-        _pwAllRiverpod,
-        _pwSettings,
-        _pwSettingsRiverpod,
+        ..._paywallWith({'settings_screen'}),
         ..._everyModule,
       ]);
       for (final app in apps.where(registered.appliesTo)) {
@@ -5132,14 +5232,7 @@ void main() {
           _rcSettings,
           _rcL10n,
           _rc,
-          _pwAll,
-          _pwAllRiverpod,
-          _pwL10n,
-          _pwL10nRiverpod,
-          _pwSettings,
-          _pwSettingsRiverpod,
-          _pw,
-          _pwRiverpod,
+          ..._paywall,
           ..._everyModule,
         ],
       );

@@ -50,8 +50,8 @@ bool _selected(WidgetTester tester, int index) =>
 
 /// The label that the button of the paywall shows.
 String _label(WidgetTester tester) => tester
-    .widget<WholeWords>(
-      find.descendant(of: purchaseButton, matching: find.byType(WholeWords)),
+    .widget<PaywallWords>(
+      find.descendant(of: purchaseButton, matching: find.byType(PaywallWords)),
     )
     .text;
 

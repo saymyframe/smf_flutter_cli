@@ -454,6 +454,32 @@ Future<MatrixAppTests> smfAppTests() async {
         roles: {routerRole},
         mocks: const MatrixMocks('test/paywall_mocks.dart', 'grantPremium'),
       ),
+      // The step of the paywall module in the onboarding, in the apps with
+      // the module and the onboarding screen role, whichever module
+      // provides it: the list of the steps of the app has the step once, a
+      // new onboarding screen shows it while the user has no premium access,
+      // in each language of the app, and its button shows the paywall over
+      // the onboarding. The close button and back close the paywall, and
+      // once the user bought a plan with the mocks of the provider of
+      // purchases, the step closes the paywall itself, since the router does
+      // not know its route; each time the onboarding goes on, and the page
+      // below it stays. Then a new onboarding screen leaves the step out.
+      // For it the matrix writes the onboarding screen of the app (see
+      // _paywallStepOf), and the texts of the step among those of the test
+      // of the paywall, whose helpers it uses and which runs in every app
+      // that this test runs in. The onboarding shows the step and goes on,
+      // and the router leaves the routes without a page over its pages as
+      // they are while the guard of premium access notifies, whichever
+      // modules provide the two roles, so this is a test of both roles too.
+      // It has no probe for the start check: nothing is bought on a device.
+      MatrixAppTest(
+        '$paywall/paywall_step',
+        appliesTo: (app) =>
+            app.modules.contains(PaywallModule.id) &&
+            app.hook!.presentRoles.contains(onboardingScreenRole),
+        generatedFiles: _paywallStepOf,
+        roles: {routerRole, onboardingScreenRole},
+      ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
       await diRoleAppTest(),
@@ -2629,8 +2655,9 @@ Map<String, String?> _paywallLinksOf(MatrixApp app) => {
 /// module gives that screen, each `null` or `false` in an app without a
 /// settings screen; and `paywallTexts`, the texts of the module
 /// ([PaywallModule.texts], with [PaywallModule.settingTexts] in an app with
-/// a settings screen), each by its name, in each language of the app, by
-/// the code of the language. The languages are those of the localization
+/// a settings screen and [PaywallModule.stepTexts] in an app with an
+/// onboarding), each by its name, in each language of the app, by the code
+/// of the language. The languages are those of the localization
 /// role of the app ([LocalizationRole.localesIn]), in its order, and
 /// English alone in an app without the role.
 const paywallOfAppFile = 'test/paywall/of_app.dart';
@@ -2646,11 +2673,13 @@ const paywallOfAppFile = 'test/paywall/of_app.dart';
 Map<String, String> _paywallOfAppOf(MatrixApp app, String packageName) {
   final (import, screen) = _startScreenClassOf(app);
   final hasSettings = app.hook!.presentRoles.contains(settingsScreenRole);
+  final hasOnboarding = app.hook!.presentRoles.contains(onboardingScreenRole);
   final texts = _textsByLanguageOf(
     app,
     TextsData([
       ...PaywallModule.texts.texts,
       if (hasSettings) ...PaywallModule.settingTexts.texts,
+      if (hasOnboarding) ...PaywallModule.stepTexts.texts,
     ]),
   );
   var settingsImports = '';
@@ -2734,6 +2763,49 @@ $settings
 /// the English texts alone.
 const Map<String, Map<String, String>> paywallTexts = {
 $texts};
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the test of the step of
+/// the paywall module in the onboarding: `onboardingScreen`, the type of the
+/// screen of the route that the provider of the onboarding screen role
+/// names ([OnboardingScreenRole.screenIn]), and `newOnboardingScreen()`,
+/// which creates one as that route does.
+const paywallStepOnboardingFile = 'test/paywall_step/onboarding.dart';
+
+/// The file at [paywallStepOnboardingFile] of [app], an app of the matrix
+/// with the paywall module and the onboarding screen role, whose package is
+/// [packageName].
+///
+/// Throws a [StateError] if no module names a route of its own as the
+/// onboarding screen, which the rules of the role report in an app of the
+/// matrix.
+Map<String, String> _paywallStepOf(MatrixApp app, String packageName) {
+  final route = onboardingScreenRole.screenIn(
+    onboardingScreenRole.hookInput(app.hook!),
+  );
+  if (route == null) {
+    throw StateError(
+      'No module of ${app.name} names a route of its own as the onboarding '
+      'screen.',
+    );
+  }
+  final screen = route.route.screen;
+  return {
+    paywallStepOnboardingFile: '''
+// The onboarding screen of the app, which the matrix of SMF writes from the
+// data of the onboarding screen role of the app for the test of the step of
+// the paywall module in the onboarding.
+import 'package:flutter/widgets.dart';
+import '${screen.import.resolveUri(packageName)}' as screen;
+
+/// The type of the onboarding screen: that of the route that the provider
+/// of the onboarding screen role names.
+const Type onboardingScreen = screen.${screen.className};
+
+/// Creates an onboarding screen, as the route of the screen does.
+Widget newOnboardingScreen() => screen.${screen.className}();
 ''',
   };
 }

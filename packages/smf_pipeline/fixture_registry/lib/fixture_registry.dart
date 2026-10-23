@@ -205,9 +205,11 @@ List<ModuleId> everyFixture({
 /// keeps and for the tests of that role that the CLI keeps, which run
 /// there with the users of the session of Firebase Authentication and
 /// whose entry that restores purchases the settings screen shows too, and
-/// the paywall of the CLI, for the app test that it keeps, which buys over
-/// the purchases of RevenueCat, and whose entry of the subscription the
-/// settings screen shows below the entries of the other features.
+/// the paywall of the CLI, for the app tests that it keeps, which buy over
+/// the purchases of RevenueCat: that of the paywall, whose entry of the
+/// subscription the settings screen shows below the entries of the other
+/// features, and that of its step of the onboarding, which comes after the
+/// steps of the fixture steps and of the notifications role.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the

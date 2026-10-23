@@ -159,7 +159,7 @@ class _PaywallViewState extends State<PaywallView>
               ),
               if (afterOffer != null) ...[
                 const SizedBox(height: 10),
-                WholeWords(
+                PaywallWords(
                   afterOffer,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -176,7 +176,7 @@ class _PaywallViewState extends State<PaywallView>
       children: [
         if (purchase == null) message,
         if (selected != null && state.loadFailure == null) ...[
-          WholeWords(
+          PaywallWords(
             termsTextOf(context, selected),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
@@ -421,7 +421,7 @@ class _Benefits extends StatelessWidget {
               // With a large text size, a long word gets smaller rather
               // than break.
               Expanded(
-                child: WholeWords(benefit, style: theme.textTheme.bodyLarge),
+                child: PaywallWords(benefit, style: theme.textTheme.bodyLarge),
               ),
             ],
           ),
@@ -468,7 +468,7 @@ class _Unavailable extends StatelessWidget {
             TextButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: WholeWords(
+              label: PaywallWords(
                 {{{text_try_again}}},
                 textAlign: TextAlign.center,
               ),

@@ -43,3 +43,10 @@ const riverpodAgentNote = '''
 - The state of the paywall is `paywallProvider` of `lib/features/paywall/paywall_notifier.dart`, with its `Notifier`, which lasts as long as the paywall. It buys through `appPurchasesProvider` of `lib/features/paywall/purchases_provider.dart`, which a test overrides with an `AppPurchasesController` of its own, and opens a link with `paywallLinkOpenerProvider` there.
 - A widget reads the access of the user with `ref.watch(premiumProvider)`, an `AppAccess`. `premiumProvider` of `lib/features/paywall/purchases_provider.dart` follows `appPurchases`.
 ''';
+
+/// What the note of the module adds in an app with an onboarding: the step
+/// that offers premium access, which only such an app has, how it shows
+/// the paywall outside the router and who closes it.
+const stepAgentNote = '''
+- The onboarding offers premium access on a page of its own, the step `paywall.offer`, while the user has none: `paywallStepShows()` of `lib/features/paywall/paywall_step.dart`. Its button calls `showPaywall()` there, which pushes `PaywallScreen` on the navigator at the root of the app, over the onboarding. It does so because a guard of the routes may keep the router from showing `/paywall` while the onboarding is on. The router does not know that route, so `showPaywall()` closes it itself once the user has premium access. The onboarding goes on once the paywall is closed. The texts of the page are the texts `stepTitle`, `stepText`, `stepAction` and `stepLater` of the module.
+''';

@@ -12,12 +12,14 @@ import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/bundles/paywall_bloc_bundle.dart';
 import 'package:smf_paywall/bundles/paywall_bloc_setting_bundle.dart';
 import 'package:smf_paywall/bundles/paywall_bundle.dart';
 import 'package:smf_paywall/bundles/paywall_riverpod_bundle.dart';
 import 'package:smf_paywall/bundles/paywall_riverpod_setting_bundle.dart';
 import 'package:smf_paywall/bundles/paywall_setting_bundle.dart';
+import 'package:smf_paywall/bundles/paywall_step_bundle.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_paywall/src/agents.dart';
 import 'package:smf_paywall/src/readme.dart';
@@ -35,7 +37,7 @@ import 'support/providers.dart';
 /// modules that manage state, purchases in memory, dart_define, which
 /// provides the env role that the module requires, gen_l10n, which
 /// provides the localization role, with the preferences that it requires,
-/// the settings module, and this module.
+/// the settings module, the onboarding module, and this module.
 const List<SmfModule> _modules = [
   FlutterCoreModule(),
   GoRouterModule(),
@@ -46,6 +48,7 @@ const List<SmfModule> _modules = [
   SharedPreferencesModule(),
   GenL10nModule(),
   SettingsModule(),
+  OnboardingModule(),
   PaywallModule(),
 ];
 
@@ -82,6 +85,10 @@ const _screens = {
 /// The file of the entry of the settings screen, which each variant has at
 /// the same path in an app with a settings screen.
 const _setting = '$_folder/subscription_setting.dart';
+
+/// The file of the functions of the step of the onboarding, which only an
+/// app with an onboarding has.
+const _step = '$_folder/paywall_step.dart';
 
 /// The variants of the module, each with the id of its state manager, the
 /// package that it imports, and the files of its state.
@@ -182,17 +189,22 @@ const _textNames = [
 /// The names of the texts of the entry of the settings screen.
 const _settingTextNames = ['settingTitle', 'settingActive', 'settingInactive'];
 
+/// The names of the texts of the step of the onboarding.
+const _stepTextNames = ['stepTitle', 'stepText', 'stepAction', 'stepLater'];
+
 /// The name of the case of the module with [variant] and the roles that it
-/// uses: the localization role if [localized], and the settings screen
-/// role if [settings].
+/// uses: the localization role if [localized], the settings screen role if
+/// [settings], and the onboarding screen role if [onboarding].
 String _caseOf(
   ModuleId variant, {
   bool localized = false,
   bool settings = false,
+  bool onboarding = false,
 }) {
   final roles = [
     if (localized) 'localization',
     if (settings) 'settings_screen',
+    if (onboarding) 'onboarding_screen',
   ];
   final uses = roles.isEmpty ? '' : ' with ${roles.join(', ')}';
   return 'paywall ($variant)$uses';
@@ -271,6 +283,7 @@ final class _Navigation extends RecursiveAstVisitor<void> {
     'pop',
     'maybePop',
     'popUntil',
+    'removeRoute',
     'go',
     'push',
     'pushReplacement',
@@ -290,14 +303,47 @@ final class _Navigation extends RecursiveAstVisitor<void> {
   }
 }
 
+/// The arguments of the calls of `split` in a part of a file.
+final class _SplitArguments extends RecursiveAstVisitor<void> {
+  final List<Expression> arguments = [];
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.methodName.name == 'split') {
+      arguments.addAll(node.argumentList.arguments.whereType<Expression>());
+    }
+    super.visitMethodInvocation(node);
+  }
+}
+
+/// The pattern that [expression] is: a string literal, or a call of the
+/// constructor of `RegExp` with one.
+Pattern _patternOf(Expression expression) => switch (expression) {
+      StringLiteral(:final stringValue?) => stringValue,
+      MethodInvocation(methodName: SimpleIdentifier(name: 'RegExp')) ||
+      InstanceCreationExpression() =>
+        RegExp(
+          (_argumentsOf(expression).single as StringLiteral).stringValue!,
+        ),
+      _ => throw StateError('No pattern: ${expression.toSource()}'),
+    };
+
+/// The positional arguments of [call].
+Iterable<Expression> _argumentsOf(Expression call) => switch (call) {
+      MethodInvocation(:final argumentList) ||
+      InstanceCreationExpression(:final argumentList) =>
+        argumentList.arguments.whereType<Expression>(),
+      _ => const [],
+    };
+
 void main() {
   const module = PaywallModule();
 
   group('PaywallModule', () {
     test(
         'is a feature that requires the router, the purchases, the values '
-        'of .env and a state manager, uses the localization and the '
-        'settings screen, and needs no DI container', () {
+        'of .env and a state manager, uses the localization, the settings '
+        'screen and the onboarding screen, and needs no DI container', () {
       final descriptor = module.descriptor;
 
       expect(descriptor.id, const ModuleId('paywall'));
@@ -310,9 +356,13 @@ void main() {
         descriptor.effectiveRequires,
         {purchasesRole, envRole, routerRole, stateManagementRole},
       );
-      // The paywall works without a settings screen: through code that
-      // navigates to a route that needs premium access.
-      expect(descriptor.effectiveUses, {localizationRole, settingsScreenRole});
+      // The paywall works without a settings screen and without an
+      // onboarding: through code that navigates to a route that needs
+      // premium access.
+      expect(
+        descriptor.effectiveUses,
+        {localizationRole, settingsScreenRole, onboardingScreenRole},
+      );
       expect(descriptor.dependsOn, isEmpty);
     });
 
@@ -403,9 +453,14 @@ void main() {
         [for (final text in PaywallModule.settingTexts.texts) text.name],
         _settingTextNames,
       );
+      expect(
+        [for (final text in PaywallModule.stepTexts.texts) text.name],
+        _stepTextNames,
+      );
       for (final text in [
         ...PaywallModule.texts.texts,
         ...PaywallModule.settingTexts.texts,
+        ...PaywallModule.stepTexts.texts,
       ]) {
         expect(text.problems(), isEmpty, reason: '$text');
         expect(text.languages, ['en', 'uk'], reason: '$text');
@@ -413,6 +468,47 @@ void main() {
         // gen-l10n reads braces as placeholders.
         expect(text.en, isNot(contains('{')), reason: '$text');
       }
+    });
+
+    test(
+        'has a step of the onboarding that offers premium access after the '
+        'steps that ask for permissions, while the user has none, with a '
+        'button that shows the paywall and one that goes on without it', () {
+      const step = PaywallModule.step;
+
+      expect(step.problems(), isEmpty);
+      expect(step.name, PaywallModule.stepName);
+      expect(step.name, 'offer');
+      expect(step.stage, OnboardingStage.offer);
+      expect(
+        OnboardingStage.values.indexOf(step.stage),
+        greaterThan(OnboardingStage.values.indexOf(OnboardingStage.permission)),
+      );
+      expect(step.icon.code, 'Icons.workspace_premium_outlined');
+      expect(
+        [for (final import in step.icon.imports) import.uri],
+        ['package:flutter/material.dart'],
+      );
+      // Its texts are those that the module gives the localization role in
+      // an app with an onboarding.
+      expect(step.shownTexts, PaywallModule.stepTexts.texts);
+      expect(step.later, isNotNull);
+      expect(
+        [
+          for (final function in step.functions)
+            (function.name, function.import),
+        ],
+        [
+          (
+            'showPaywall',
+            const ImportRef.app('features/paywall/paywall_step.dart')
+          ),
+          (
+            'paywallStepShows',
+            const ImportRef.app('features/paywall/paywall_step.dart'),
+          ),
+        ],
+      );
     });
 
     test(
@@ -449,11 +545,12 @@ void main() {
         'contributes the brick of the look with the cell of the app, the '
         'keys, the texts and the values of .env, url_launcher, its routes '
         'with the guard, its keys, the entry of the settings screen with its '
-        'brick and texts, its texts, its step by hand, its section of the '
-        'README and its note for coding agents', () {
+        'brick and texts, its texts, the step of the onboarding with its '
+        'brick and texts, its step by hand, its section of the README and '
+        'its notes for coding agents', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(12));
+      expect(contributions, hasLength(16));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(paywallBundle));
       expect(brick.bundle.name, 'paywall');
@@ -543,15 +640,35 @@ void main() {
       final widget = (entry.value as SettingsEntry).widget;
       expect(widget.name, 'SubscriptionSetting');
       expect((entry.value as SettingsEntry).file, _setting);
-      expect(contributions[9], same(PaywallModule.legalPagesStep));
-      final readme = contributions[10] as SocketContribution;
+      final stepBrick = contributions[9] as BrickContribution;
+      expect(stepBrick.bundle, same(paywallStepBundle));
+      expect(stepBrick.bundle.name, 'paywall_step');
+      expect([for (final file in stepBrick.bundle.files) file.path], [_step]);
+      expect(stepBrick.vars, isEmpty);
+      expect(stepBrick.when, {onboardingScreenRole});
+      final step = contributions[10] as RoleData<OnboardingData>;
+      expect(step.role, onboardingScreenRole);
+      expect(step.value, same(PaywallModule.step));
+      // The data applies only when the role is present.
+      expect(step.when, isEmpty);
+      final stepTexts = contributions[11] as RoleData<TextsData>;
+      expect(stepTexts.role, localizationRole);
+      expect(stepTexts.value, same(PaywallModule.stepTexts));
+      expect(stepTexts.when, {onboardingScreenRole});
+      expect(contributions[12], same(PaywallModule.legalPagesStep));
+      final readme = contributions[13] as SocketContribution;
       expect(readme.socket, AppEntryRole.readmeSections);
       expect((readme.entryKey, readme.entryValue), ('Paywall', readmeSection));
-      final note = contributions[11] as SocketContribution;
+      final note = contributions[14] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, agentHeading);
       expect(note.entryValue, AgentNote(agentNote));
       expect(note.when, isEmpty);
+      final stepNote = contributions[15] as SocketContribution;
+      expect(stepNote.socket, AppEntryRole.agentSections);
+      expect(stepNote.entryKey, agentHeading);
+      expect(stepNote.entryValue, AgentNote(stepAgentNote));
+      expect(stepNote.when, {onboardingScreenRole});
     });
 
     test(
@@ -652,22 +769,32 @@ void main() {
 
     test(
         'builds the app of the module with each state manager, with each '
-        'subset of the localization and the settings screen, each with the '
-        'router, the purchases and the values of .env that it requires', () {
+        'subset of the localization, the settings screen and the onboarding '
+        'screen, each with the router, the purchases and the values of .env '
+        'that it requires', () {
       final own = [
         for (final result in results)
           if (result.contractCase.name.startsWith('paywall')) result,
       ];
 
       expect(own.map((result) => result.contractCase.name), [
-        for (final (localized, settings) in [
-          (true, true),
-          (true, false),
-          (false, true),
-          (false, false),
+        for (final (localized, settings, onboarding) in [
+          (true, true, true),
+          (true, true, false),
+          (true, false, true),
+          (false, true, true),
+          (true, false, false),
+          (false, true, false),
+          (false, false, true),
+          (false, false, false),
         ])
           for (final variant in [BlocModule.id, RiverpodModule.id])
-            _caseOf(variant, localized: localized, settings: settings),
+            _caseOf(
+              variant,
+              localized: localized,
+              settings: settings,
+              onboarding: onboarding,
+            ),
       ]);
       for (final result in own) {
         final name = result.contractCase.name;
@@ -696,6 +823,11 @@ void main() {
         expect(
           _providersOf(result, settingsScreenRole),
           name.contains('settings_screen') ? {SettingsModule.id} : isEmpty,
+          reason: name,
+        );
+        expect(
+          _providersOf(result, onboardingScreenRole),
+          name.contains('onboarding_screen') ? {OnboardingModule.id} : isEmpty,
           reason: name,
         );
         expect(result.hook!.presentRoles, isNot(contains(diRole)));
@@ -748,7 +880,11 @@ void main() {
         for (final variant in _variants)
           variant.id: await _rendered(
             variant.id,
-            others: const [GenL10nModule.id, SettingsModule.id],
+            others: const [
+              GenL10nModule.id,
+              SettingsModule.id,
+              OnboardingModule.id,
+            ],
           ),
       };
       bare = {
@@ -758,8 +894,9 @@ void main() {
     });
 
     test(
-        'has the look and the state of the variant of the app, and the '
-        'entry of the settings screen only with a settings screen', () {
+        'has the look and the state of the variant of the app, the entry of '
+        'the settings screen only with a settings screen, and the step of '
+        'the onboarding only with an onboarding', () {
       for (final variant in _variants) {
         expect(
           _ownFilesOf(full[variant.id]!.app!),
@@ -769,6 +906,7 @@ void main() {
             ...variant.stateFiles,
             _settingRow,
             _setting,
+            _step,
           ]),
           reason: '${variant.id}',
         );
@@ -812,6 +950,59 @@ void main() {
     });
 
     test(
+        'gives the onboarding its step, after the steps of the stages before '
+        'it, and the localization role the texts of the step, only in an app '
+        'with an onboarding', () async {
+      final app = full[PaywallModule.blocVariant]!;
+      final steps = onboardingScreenRole.stepsIn(
+        onboardingScreenRole.hookInput(app.hook!),
+      );
+      final own = [
+        for (final placed in steps)
+          if (_isOwn(placed.owner)) placed,
+      ];
+      expect(own, hasLength(1));
+      expect(own.single.fullName, 'paywall.offer');
+      expect(own.single.step, same(PaywallModule.step));
+      // The step of an offer comes after every step of an earlier stage.
+      expect(
+        steps.skipWhile((placed) => placed != own.single).skip(1).where(
+              (placed) => placed.step.stage.index < OnboardingStage.offer.index,
+            ),
+        isEmpty,
+      );
+      final input = localizationRole.hookInput(app.hook!);
+      expect(
+        [
+          for (final text in localizationRole.textsIn(input))
+            if (_isOwn(text.owner) && _stepTextNames.contains(text.text.name))
+              text.text,
+        ],
+        PaywallModule.stepTexts.texts,
+      );
+      // Without an onboarding, the step, its file and its texts are not
+      // there.
+      final withoutOnboarding = await _rendered(
+        PaywallModule.blocVariant,
+        others: const [GenL10nModule.id, SettingsModule.id],
+      );
+      expect(
+        withoutOnboarding.hook!.presentRoles,
+        isNot(contains(onboardingScreenRole)),
+      );
+      expect(withoutOnboarding.app!.files.keys, isNot(contains(_step)));
+      expect(
+        [
+          for (final text in localizationRole.textsIn(
+            localizationRole.hookInput(withoutOnboarding.hook!),
+          ))
+            if (_isOwn(text.owner)) text.text.name,
+        ],
+        isNot(anyElement(isIn(_stepTextNames))),
+      );
+    });
+
+    test(
         'gives the settings screen the entry of the subscription only in an '
         'app with one, and the localization role its texts, those of the '
         'entry only with a settings screen', () async {
@@ -831,7 +1022,7 @@ void main() {
         for (final text in texts)
           if (_isOwn(text.owner)) text.text.name,
       ];
-      expect(own, [..._textNames, ..._settingTextNames]);
+      expect(own, [..._textNames, ..._settingTextNames, ..._stepTextNames]);
       // Without a settings screen, the entry and its texts are not there.
       final withoutSettings = await _rendered(
         PaywallModule.blocVariant,
@@ -927,9 +1118,11 @@ void main() {
 
     test(
         'navigates from no file of the feature after a purchase or a '
-        'restore: the paywall closes only with its close button, and only '
-        'the entry of the settings screen pushes the screen of the '
-        'subscription', () {
+        'restore: the paywall closes only with its close button, only the '
+        'entry of the settings screen pushes the screen of the subscription, '
+        'and only the step of the onboarding shows the paywall outside the '
+        'router, which it closes itself once the user has premium access, '
+        'since the router does not know that route', () {
       for (final variant in _variants) {
         final app = full[variant.id]!.app!;
         final calls = [
@@ -942,6 +1135,9 @@ void main() {
           unorderedEquals([
             '$_folder/paywall_view.dart: Navigator.maybePop',
             '$_setting: context.nav.paywall.subscription().push',
+            '$_step: navigator.pop',
+            '$_step: navigator.removeRoute',
+            '$_step: navigator.push',
           ]),
           reason: '${variant.id}',
         );
@@ -978,24 +1174,108 @@ void main() {
         }
       }
     });
+    test(
+        'keeps its words whole with PaywallWords, a name of its own, which '
+        'breaks a text into words at every white space but the no-break '
+        'spaces', () {
+      for (final variant in _variants) {
+        final app = full[variant.id]!.app!;
+        const widgets = '$_folder/paywall_widgets.dart';
+        // A name that no other feature has, so that an import of the
+        // widgets of another feature into a file of the paywall is never
+        // ambiguous.
+        expect(
+          _indexOf(app, widgets).declaration('PaywallWords')?.kind,
+          DeclarationKind.classType,
+          reason: '${variant.id}',
+        );
+        expect(
+          [
+            for (final path in _ownFilesOf(app))
+              for (final declaration in _indexOf(app, path).declarations)
+                if (declaration.name == 'WholeWords') '$path: WholeWords',
+          ],
+          isEmpty,
+          reason: '${variant.id}',
+        );
+        // The words that it measures, with the pattern that it splits a
+        // text on.
+        final unit = _parsed(app, widgets);
+        final words =
+            unit.declarations.whereType<ClassDeclaration>().singleWhere(
+                  (declaration) =>
+                      declaration.namePart.typeName.lexeme == 'PaywallWords',
+                );
+        final splits = _SplitArguments();
+        words.accept(splits);
+        final argument = splits.arguments.single;
+        final pattern = switch (argument) {
+          SimpleIdentifier(:final name) => _patternOf(
+              unit.declarations
+                  .whereType<TopLevelVariableDeclaration>()
+                  .expand((declaration) => declaration.variables.variables)
+                  .singleWhere((variable) => variable.name.lexeme == name)
+                  .initializer!,
+            ),
+          _ => _patternOf(argument),
+        };
+        List<String> wordsOf(String text) => text.split(pattern);
+        expect(wordsOf('one two'), ['one', 'two'], reason: '${variant.id}');
+        // With one line for each word that it measures, a word after a line
+        // break or a tab would never be measured.
+        expect(
+          wordsOf('one\nnext\tlast  end'),
+          ['one', 'next', 'last', 'end'],
+          reason: '${variant.id}',
+        );
+        // A price stays one word, as it stays on one line.
+        expect(
+          wordsOf('then \$29.99\u00A0/\u00A0year'),
+          ['then', '\$29.99\u00A0/\u00A0year'],
+          reason: '${variant.id}',
+        );
+        expect(
+          wordsOf('29,99\u202F€ 1\u2007000'),
+          ['29,99\u202F€', '1\u2007000'],
+          reason: '${variant.id}',
+        );
+      }
+    });
   });
 
   group('the note of the module for coding agents', () {
     late Map<ModuleId, ContractResult> results;
+    late ContractResult withoutOnboarding;
 
     setUpAll(() async {
       results = {
         for (final variant in _variants)
           variant.id: await _rendered(
             variant.id,
-            others: const [GenL10nModule.id, SettingsModule.id],
+            others: const [
+              GenL10nModule.id,
+              SettingsModule.id,
+              OnboardingModule.id,
+            ],
           ),
       };
+      withoutOnboarding = await _rendered(
+        PaywallModule.blocVariant,
+        others: const [GenL10nModule.id, SettingsModule.id],
+      );
     });
+
+    /// The notes of the module in the guide of [app], each with its heading.
+    List<(String, AgentNote)> notesOf(RenderedApp app) => [
+          for (final (origin, heading, note)
+              in app.entriesOf(AppEntryRole.agentSections))
+            if (_isOwn(origin)) (heading, note),
+        ];
 
     test(
         'is a section of its own in the guide of the app, with what the '
-        'variant of the app adds after it', () {
+        'variant of the app adds after it, and what the step of the '
+        'onboarding adds in an app with an onboarding', () {
       const added = {
         PaywallModule.blocVariant: blocAgentNote,
         PaywallModule.riverpodVariant: riverpodAgentNote,
@@ -1003,20 +1283,58 @@ void main() {
 
       expect(agentHeading, 'Paywall');
       for (final variant in _variants) {
-        final app = results[variant.id]!.app!;
-
         expect(
-          [
-            for (final (origin, heading, note)
-                in app.entriesOf(AppEntryRole.agentSections))
-              if (_isOwn(origin)) (heading, note),
-          ],
+          notesOf(results[variant.id]!.app!),
           [
             (agentHeading, AgentNote(agentNote)),
+            (agentHeading, AgentNote(stepAgentNote)),
             (agentHeading, AgentNote(added[variant.id]!)),
           ],
           reason: '${variant.id}',
         );
+      }
+      expect(notesOf(withoutOnboarding.app!), [
+        (agentHeading, AgentNote(agentNote)),
+        (agentHeading, AgentNote(blocAgentNote)),
+      ]);
+    });
+
+    test(
+        'names in the part of the step of the onboarding its name, its '
+        'functions, the screen that it shows and its texts, as the app with '
+        'an onboarding has them', () {
+      final result = results[PaywallModule.blocVariant]!;
+      final app = result.app!;
+      final code = _codeOf(stepAgentNote);
+      final placed = onboardingScreenRole
+          .stepsIn(onboardingScreenRole.hookInput(result.hook!))
+          .singleWhere((placed) => _isOwn(placed.owner));
+
+      expect(
+        code,
+        containsAll([
+          placed.fullName,
+          '${PaywallModule.step.showIf!.name}()',
+          '${PaywallModule.step.run.name}()',
+          'PaywallScreen',
+          '/paywall',
+          _step,
+          ..._stepTextNames,
+        ]),
+      );
+      final declared = {
+        for (final declaration in _indexOf(app, _step).declarations)
+          declaration.name,
+      };
+      expect(
+        declared,
+        containsAll([
+          PaywallModule.step.showIf!.name,
+          PaywallModule.step.run.name,
+        ]),
+      );
+      for (final path in code.where(_isFile)) {
+        expect(app.files.keys, contains(path), reason: path);
       }
     });
 
@@ -1131,17 +1449,10 @@ void main() {
 
   group('the section of the module in the README of the app', () {
     test(
-        'tells the routes, the guard, the keys of .env and the sections of '
-        'the roles that it refers to, as the app has them', () async {
-      final result = await _rendered(
-        PaywallModule.blocVariant,
-        others: const [GenL10nModule.id, SettingsModule.id],
-      );
-      final readme = result.app!.files['README.md']!.text;
+        'tells the routes, the guard, the keys of .env, the step of the '
+        'onboarding and the sections of the roles that it refers to, and '
+        'names only files that every app with the module has', () async {
       final code = _codeOf(readmeSection);
-
-      expect(readme, contains('## $readmeHeading\n'));
-      expect(readme, contains(readmeSection.trim()));
       expect(
         code,
         containsAll([
@@ -1158,12 +1469,34 @@ void main() {
           'benefitAll',
         ]),
       );
-      for (final heading in [
-        PurchasesRole.readmeHeading,
-        EnvRole.readmeHeading,
+      // The section is the same in every app, with an onboarding and a
+      // settings screen and without them, so it names no file that only
+      // some apps have, such as the file of the step of the onboarding.
+      for (final others in [
+        const [GenL10nModule.id, SettingsModule.id, OnboardingModule.id],
+        const <ModuleId>[],
       ]) {
-        expect(readme, contains('## $heading\n'), reason: heading);
-        expect(readmeSection, contains('section $heading'), reason: heading);
+        final result = await _rendered(
+          PaywallModule.blocVariant,
+          others: others,
+        );
+        final readme = result.app!.files['README.md']!.text;
+        expect(readme, contains('## $readmeHeading\n'), reason: '$others');
+        expect(readme, contains(readmeSection.trim()), reason: '$others');
+        for (final path in code.where(_isFile)) {
+          expect(
+            result.app!.files.keys,
+            contains(path),
+            reason: '$path, in the app with $others',
+          );
+        }
+        for (final heading in [
+          PurchasesRole.readmeHeading,
+          EnvRole.readmeHeading,
+        ]) {
+          expect(readme, contains('## $heading\n'), reason: heading);
+          expect(readmeSection, contains('section $heading'), reason: heading);
+        }
       }
     });
   });

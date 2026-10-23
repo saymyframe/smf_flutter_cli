@@ -10,16 +10,24 @@ const monospace = TextStyle(
   fontFamilyFallback: ['Menlo', 'Courier'],
 );
 
+/// The white space at which a line of text may break: every white space but
+/// the no-break spaces.
+final RegExp _breaks = RegExp(r'[^\S\u00A0\u2007\u202F]+');
+
 /// A text that keeps its words whole: it breaks between its words and never
 /// inside one.
+///
+/// A word is what stands between two spaces at which a line may break, such
+/// as a space, a tab or a line break. A no-break space keeps the words on
+/// each side of it together, as in a price that the store gives.
 ///
 /// It grows with the text size of the device, by [maxScaleFactor] at most.
 /// Where its longest word would still not fit the width that the text has,
 /// as on a narrow phone with a large text size, the text is as large as
 /// that word allows.
-class WholeWords extends StatelessWidget {
+class PaywallWords extends StatelessWidget {
   /// Creates the text.
-  const WholeWords(
+  const PaywallWords(
     this.text, {
     this.style,
     this.textAlign,
@@ -63,7 +71,7 @@ class WholeWords extends StatelessWidget {
         // How wide the longest word is in a font of [size].
         double widestAt(double size) {
           var widest = 0.0;
-          for (final word in text.split(' ')) {
+          for (final word in text.split(_breaks)) {
             painter
               ..text = TextSpan(
                 text: word,
@@ -172,7 +180,7 @@ class _BusyLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = WholeWords(
+    final text = PaywallWords(
       label,
       key: ValueKey(label),
       textAlign: TextAlign.center,
@@ -378,7 +386,7 @@ class PlanCard extends StatelessWidget {
                           children: [
                             // No larger than the price, which grows only by
                             // half too.
-                            WholeWords(
+                            PaywallWords(
                               name,
                               style: theme.textTheme.titleMedium,
                               maxScaleFactor: 1.5,
