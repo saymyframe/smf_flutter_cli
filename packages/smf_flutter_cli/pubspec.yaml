@@ -48,6 +48,7 @@ dependencies:
   smf_local_notifications: ^0.6.0
   smf_material_theme: ^0.4.2
   smf_onboarding: ^0.5.1
+  smf_paywall: ^0.6.0
   smf_pipeline: ^0.6.0
   smf_revenuecat: ^0.6.0
   smf_riverpod: ^0.3.3

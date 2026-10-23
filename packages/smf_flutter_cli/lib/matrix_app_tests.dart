@@ -15,6 +15,7 @@ import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -43,6 +44,7 @@ Future<MatrixAppTests> smfAppTests() async {
     'smf_local_notifications',
   );
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
+  final paywall = await appTestsDirectoryOf('smf_paywall');
   final revenueCat = await appTestsDirectoryOf('smf_revenuecat');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
@@ -412,6 +414,45 @@ Future<MatrixAppTests> smfAppTests() async {
           'test/sign_in_mocks.dart',
           'signUpTestAccount',
         ),
+      ),
+      // The paywall of the module, over the purchases of the app,
+      // whichever module provides them: a request for the screen of the
+      // subscription, whose route needs premium access, opens the paywall
+      // over the page, a restore that finds nothing says so, the close
+      // button drops the request, and once the user bought a plan with the
+      // mocks of the provider, the router closes the paywall and shows the
+      // screen of the subscription; the paywall that code pushes closes the
+      // same way. Over a service of the test, the paywall shows grey cards
+      // while the plans load, a card for each plan with its price and its
+      // intro offer, the button, what the plan costs after its trial and
+      // the terms of the selected plan, the text of each failure, a busy
+      // button, plans that are not available with a note for the developer,
+      // also after a restore there, the link to the address of .env and the
+      // key that has none (see _paywallLinksOf); the
+      // screen of the subscription tells the plan and when it renews or
+      // ends, opens the page of the store and closes once the access ends;
+      // and the paywall fits a small phone with a large text size. For them
+      // the matrix writes the screen that the app starts on, the settings
+      // screen of the app with the entry of the module, if the app has one,
+      // whether that screen is a destination of the main navigation, and
+      // the texts of the module in each language of the app (see
+      // _paywallOfAppOf). The router shows the paywall and closes it,
+      // whichever module provides it, as the router role says of the routes
+      // that ask for a condition, so this is a test of the router role too.
+      // The mocks buy the first plan of the offer before the app starts,
+      // through the purchases of the app, and the matrix sets them up for
+      // the tests of every module of the app, which expect the screens that
+      // the guard of premium access would keep them from. The test has no
+      // probe for the start check: the walk of the routes shows the paywall
+      // on a device, where nothing is bought.
+      MatrixAppTest(
+        '$paywall/paywall',
+        appliesTo: _has(PaywallModule.id),
+        devDependencies: const ['url_launcher_platform_interface'],
+        envValues: _paywallLinksOf,
+        generatedFiles: _paywallOfAppOf,
+        roles: {routerRole},
+        mocks: const MatrixMocks('test/paywall_mocks.dart', 'grantPremium'),
       ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
@@ -2564,6 +2605,134 @@ const Type accountEntry = ${entry.codeWith('entry')};
 /// them: each text by its name in the module. An app without the
 /// localization role has the English texts alone.
 const Map<String, Map<String, String>> signInTexts = {
+$texts};
+''',
+  };
+}
+
+/// The values that the test of the paywall module gives the keys of the
+/// module in .env, the same in every app: an address of the terms of use,
+/// which its link opens, and none of the privacy policy, whose link the
+/// paywall then leaves out and whose key its note for the developer names.
+Map<String, String?> _paywallLinksOf(MatrixApp app) => {
+      PaywallModule.termsKey.name: 'https://example.com/terms',
+      PaywallModule.privacyKey.name: '',
+    };
+
+/// The path in an app of what the matrix writes for the tests of the
+/// paywall module: `startScreen`, the type of the screen that the app
+/// starts on; `settingsLocation` and `settingsScreen`, the location of the
+/// route that the provider of the settings screen role names as the
+/// settings screen and the type of that screen, `settingsInMainNavigation`,
+/// whether that screen is a destination of the main navigation of the app,
+/// and `subscriptionEntry`, the type of the widget of the entry that the
+/// module gives that screen, each `null` or `false` in an app without a
+/// settings screen; and `paywallTexts`, the texts of the module
+/// ([PaywallModule.texts], with [PaywallModule.settingTexts] in an app with
+/// a settings screen), each by its name, in each language of the app, by
+/// the code of the language. The languages are those of the localization
+/// role of the app ([LocalizationRole.localesIn]), in its order, and
+/// English alone in an app without the role.
+const paywallOfAppFile = 'test/paywall/of_app.dart';
+
+/// The file at [paywallOfAppFile] of [app], an app of the matrix with the
+/// router role, whose package is [packageName].
+///
+/// The screen that the app starts on is that of the route that the router
+/// role chose, or the fallback start screen of the app entry role; the file
+/// imports its file with the prefix `screen`. The settings screen and the
+/// entry come from the data of the settings screen role, whichever module
+/// provides it: the entry is the one that the module gave the role.
+Map<String, String> _paywallOfAppOf(MatrixApp app, String packageName) {
+  final (import, screen) = _startScreenClassOf(app);
+  final hasSettings = app.hook!.presentRoles.contains(settingsScreenRole);
+  final texts = _textsByLanguageOf(
+    app,
+    TextsData([
+      ...PaywallModule.texts.texts,
+      if (hasSettings) ...PaywallModule.settingTexts.texts,
+    ]),
+  );
+  var settingsImports = '';
+  var settings = '''
+/// The location of the route that shows the settings screen, or `null` in
+/// an app without one.
+const AppLocation? settingsLocation = null;
+
+/// The type of the settings screen, or `null` in an app without one.
+const Type? settingsScreen = null;
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = false;
+
+/// The type of the widget of the entry of the subscription on the settings
+/// screen, or `null` in an app without one.
+const Type? subscriptionEntry = null;
+''';
+  if (hasSettings) {
+    final input = settingsScreenRole.hookInput(app.hook!);
+    final route = _settingsRouteOf(app, input);
+    final entries = [
+      for (final RoleData(:value, :origin) in input.data)
+        if (value is SettingsEntry &&
+            origin == const ModuleOrigin(PaywallModule.id))
+          value,
+    ];
+    if (entries.length != 1) {
+      throw StateError(
+        'The module ${PaywallModule.id} gives the settings screen of '
+        '${app.name} ${entries.length} entries, rather than the entry of the '
+        'subscription alone.',
+      );
+    }
+    final entry = entries.single.widget;
+    final settingsScreen = route.route.screen;
+    settingsImports =
+        "import '${entry.import!.resolveUri(packageName)}' as entry;\n"
+        "import '${settingsScreen.import.resolveUri(packageName)}' "
+        'as settings;\n';
+    settings = '''
+// The constants have the types of an app without a settings screen, where
+// they are `null`, so that the tests read them alike in every app.
+// ignore_for_file: unnecessary_nullable_for_final_variable_declarations
+
+/// The location of the route that shows the settings screen, or `null` in
+/// an app without one.
+const AppLocation? settingsLocation = ${route.locationClass}();
+
+/// The type of the settings screen, or `null` in an app without one.
+const Type? settingsScreen = settings.${settingsScreen.className};
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = ${_settingsInMainNavigationOf(app)};
+
+/// The type of the widget of the entry of the subscription on the settings
+/// screen, or `null` in an app without one.
+const Type? subscriptionEntry = ${entry.codeWith('entry')};
+''';
+  }
+  return {
+    paywallOfAppFile: '''
+// What the tests of the paywall module, in test/paywall, need to know of
+// the app, which the matrix of SMF writes from the data of the router role
+// of the app and of the settings screen role of the app, from the texts of
+// the module and from the languages of the localization role of the app.
+import '${_navigationOf(packageName)}';
+${settingsImports}import '${import.resolveUri(packageName)}' as screen;
+
+/// The type of the screen that the app starts on: that of the route that
+/// the router role chose, or the fallback start screen of the app entry
+/// role in an app that no route can start.
+const Type startScreen = screen.$screen;
+
+$settings
+/// The texts of the paywall by the code of each language of the app, the
+/// first of which the app uses when the device asks for none of them: each
+/// text by its name in the module. An app without the localization role has
+/// the English texts alone.
+const Map<String, Map<String, String>> paywallTexts = {
 $texts};
 ''',
   };

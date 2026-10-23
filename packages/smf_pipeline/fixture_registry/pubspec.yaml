@@ -61,6 +61,9 @@ dependencies:
   # The onboarding of the CLI, for its app test in the app of several
   # providers, whose other tests its mocks open its guard for.
   smf_onboarding: ^0.5.1
+  # The paywall of the CLI, for its app test in the app of several
+  # providers, whose other tests its mocks open its guard for.
+  smf_paywall: ^0.6.0
   # The provider of the purchases role in the registry of several providers,
   # for the app test that it keeps and the tests of the role that the CLI
   # keeps.

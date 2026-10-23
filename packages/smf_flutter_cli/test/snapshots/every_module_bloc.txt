@@ -14,6 +14,12 @@ REVENUECAT_GOOGLE_KEY=
 
 # The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 REVENUECAT_TEST_KEY=
+
+# The address of the terms of use that the paywall links to
+PAYWALL_TERMS_URL=
+
+# The address of the privacy policy that the paywall links to
+PAYWALL_PRIVACY_URL=
 === .env.example (role:env) ===
 # This file lists the keys of the values that the app reads, each under a
 # comment that says what goes there. After a clone, copy it to .env and fill
@@ -31,6 +37,12 @@ REVENUECAT_GOOGLE_KEY=
 
 # The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 REVENUECAT_TEST_KEY=
+
+# The address of the terms of use that the paywall links to
+PAYWALL_TERMS_URL=
+
+# The address of the privacy policy that the paywall links to
+PAYWALL_PRIVACY_URL=
 === .gitignore (flutter_core) ===
 # Miscellaneous
 *.class
@@ -281,6 +293,21 @@ With `flutter_local_notifications`:
 - To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` takes the `BuildContext` of the onboarding screen and returns a `Future`, and `showIf` returns a `bool` at once. The onboarding goes on once the future of `run` completes. A `run` that shows a screen of its own over the onboarding pushes it with `Navigator.of(context, rootNavigator: true)` and completes once that screen is closed. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
 - Skipping the onboarding skips its steps. So the app does not rely on `run` alone for what a step does, such as asking for a permission: the code that needs it calls the same function too.
 
+## Paywall
+
+- The paywall is `PaywallScreen`, the route `paywall.paywall` at `/paywall`, in `lib/features/paywall/`. The screen of the subscription is `SubscriptionScreen`, the route `paywall.subscription` at `/paywall/subscription`, which asks for the condition `PurchasesRole.premium`. The guard `paywall.hasPremium` of `routeGuards` stands for it, with `paywallHasPremium()` of `lib/features/paywall/paywall_guards.dart`, which returns `appPurchases.hasPremium`.
+- No screen of the paywall closes itself or navigates after a purchase or a restore. The access changes, and the router closes the paywall and shows the route that was asked for. To sell from a button, navigate to a route that needs premium access, such as `context.nav.paywall.subscription().push<void>()`. For a user without the access, the router opens the paywall over the page first. A route of your own needs the access when a module lists `PurchasesRole.premium` in its `conditions`, or when its full name is among the `routes` of `paywall.hasPremium` in `routeGuards`.
+- Never push `/paywall` for a user with premium access: the flow of the guard is over, so the router shows the screen that the app starts on.
+- The look and the state are in different files. The look is `PaywallView` of `lib/features/paywall/paywall_view.dart` and `SubscriptionView` of `lib/features/paywall/subscription_view.dart`, with the widgets of `lib/features/paywall/paywall_widgets.dart` and the card of `lib/features/paywall/paywall_card.dart`. They are plain Flutter widgets: a view gets the state and callbacks, and imports nothing that manages state. Its state is a `PaywallState` of `lib/features/paywall/paywall_state.dart`, which stays busy after a purchase or a restore for as long as the user has premium access.
+- The benefits on the paywall are texts of the module, `benefitAll`, `benefitNew` and `benefitSupport`: change them to what your premium access gives. With localization, `lib/features/paywall/paywall_view.dart` reads them as `context.l10n.paywallBenefitAll` and so on: change them where the provider of the localization keeps the texts of the app, in each language. Without it, they are English texts in that file.
+- A plan gets its name, the suffix of its price and the length of its intro offer in `lib/features/paywall/paywall_texts.dart`, from the `period` of the plan and of its `introOffer`. A text has no parameters, so the file has a text for each period that the stores have, and the price is the one that the store gives. A failure gets its text in `failureTextOf()` there, which has a text for every `PurchasesFailureReason`, and `PaywallMessage` shows the `developerHint` of a failure in debug mode only.
+- `lib/features/paywall/paywall_links.dart` reads the addresses of the terms of use and of the privacy policy from `PAYWALL_TERMS_URL` and `PAYWALL_PRIVACY_URL` of `.env`, and opens a link with `url_launcher`. While a value is empty, the paywall leaves its link out, but for the terms of use on iOS, which lead to the standard license agreement of Apple, and a debug build names the key in a note for the developer.
+- In an app with sign-in, a user may buy before signing in. A sign-up keeps the purchase in the new account, while a sign-in to an account that exists already leaves it with the user of the device until a restore.
+- While a purchase is on its way, and after one that gave premium access, the button spins, and so does the link of a restore. A widget test that waits with `pumpAndSettle()` returns only once the router closed the paywall, so until then it shows frames with `pump()`.
+
+- The state of each screen is a cubit in a file next to it: `PaywallCubit` and `SubscriptionCubit`. The screen provides its cubit and builds its view from the state. A cubit takes the purchases through its constructor, so a test creates one with an `AppPurchasesController` of its own. `lib/features/paywall/paywall_composition.dart` creates the cubits with `appPurchases`.
+- A widget reads the access of the user with `context.watch<PremiumCubit>().state`, an `AppAccess`. The root of the app provides the `PremiumCubit` of `lib/features/paywall/premium_cubit.dart`, which follows `appPurchases`.
+
 ## Preferences
 
 - `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
@@ -443,7 +470,7 @@ Generated with [Say My Frame](https://doc.saymyframe.com).
 
 ## Finish the setup
 
-Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,purchases.store_agreements,purchases.store_products,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key,revenuecat.entitlement_and_offering,revenuecat.api_keys,revenuecat.app_store_key,revenuecat.play_service_account) shows each one click by click:
+Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,purchases.store_agreements,purchases.store_products,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key,revenuecat.entitlement_and_offering,revenuecat.api_keys,revenuecat.app_store_key,revenuecat.play_service_account,paywall.legal_pages) shows each one click by click:
 
 1. In Xcode, sign the iOS app with your paid Apple Developer team
 2. Set up payments in App Store Connect and Google Play Console
@@ -457,6 +484,7 @@ Once any commands of the sections below have run, the setup still needs these st
 10. Copy the API keys of your RevenueCat apps into .env
 11. Give RevenueCat your In-App Purchase key from App Store Connect
 12. Give RevenueCat access to Google Play with a service account
+13. Publish your terms of use and privacy policy and put their links into .env
 
 ## Run, test and build with .env
 
@@ -644,6 +672,8 @@ The keys of the app:
 - `REVENUECAT_APPLE_KEY`, read as `AppEnv.revenuecatAppleKey`, from the module `revenuecat`: The public API key of the App Store app in RevenueCat, which starts with appl_
 - `REVENUECAT_GOOGLE_KEY`, read as `AppEnv.revenuecatGoogleKey`, from the module `revenuecat`: The public API key of the Play Store app in RevenueCat, which starts with goog_
 - `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
+- `PAYWALL_TERMS_URL`, read as `AppEnv.paywallTermsUrl`, from the module `paywall`: The address of the terms of use that the paywall links to
+- `PAYWALL_PRIVACY_URL`, read as `AppEnv.paywallPrivacyUrl`, from the module `paywall`: The address of the privacy policy that the paywall links to
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
 
@@ -722,6 +752,24 @@ A screen that only users with premium access may see stands behind a guard of th
 The purchases belong to the user of `appSession`, by the id of the user: the user of an account, or an anonymous user. While nobody is signed in, they belong to the user of this device. A user who buys before signing up keeps the purchase in the new account, which takes it over from the user of this device, and an anonymous user keeps it when the account takes the id of that user. A user who signs in to an account that exists already leaves the purchases with the user of this device. After a sign-out, the user of this device is a new one, with nothing bought. In both cases a purchase comes back only through a restore, which may also move purchases from another user, as the backend of the provider decides. Without a restore, the next user of the device never gets the purchases of a user who signed out. The entry `RestorePurchasesSetting` of the settings screen, in `lib/core/purchases/restore_purchases_setting.dart`, restores purchases.
 
 Until the provider of purchases has what it needs, such as its keys, the app runs without purchases: `appPurchases.value` stays `NoAccess`, every call fails with the reason `notConfigured`, whose `developerHint` names what is missing, and in debug mode the app prints that hint once.
+
+## Paywall
+
+The paywall is at `/paywall`, in `lib/features/paywall/`. It shows the plans of the current offer of the purchases of the app (see the section Purchases): a card for each plan, with the price that the store gives, how often the plan renews and its free trial or lower price at first. A yearly plan that costs less than twelve months of a monthly plan in the same currency is the best value. The button buys the selected plan, and the paywall restores purchases and links to your terms of use and your privacy policy.
+
+The screen of the subscription, at `/paywall/subscription`, is only for a user with premium access. It shows the plan, when it renews or ends, and a button to the page of the store where the user manages or cancels it. A request for it from a user without the access opens the paywall over the page first. In an app with a settings screen, its entry Subscription leads there. In an app without one, open it from a screen of yours with `context.nav.paywall.subscription().push<void>()`, so that the user finds where to cancel.
+
+No screen of the paywall closes itself or navigates after a purchase. The route `/paywall/subscription` asks for premium access, and the guard `paywall.hasPremium` stands for it: once the user has the access, the router closes the paywall and shows the route. To sell from a button of yours, navigate to a route that needs premium access, as above. To keep a screen of your own for users with the access, list `PurchasesRole.premium` in the `conditions` of its route in a module, or add its full name to the `routes` of `paywall.hasPremium` in `routeGuards`. Do not navigate to `/paywall` itself for a user with premium access: the router shows the screen that the app starts on then.
+
+The paywall shows what the App Store and Google Play ask of a screen that sells a plan: the full price of each plan most clearly, the length of a free trial and the price after it right below the button, that the plan renews until the user cancels it in the store, a way to restore purchases, the links to the terms of use and the privacy policy, and a close button that stays in sight. A plan paid once says that it is no subscription.
+
+A text of the app has no parameters, so the paywall names the periods and the lengths of intro offers that the stores have: a plan that renews every week, every 1, 2, 3 or 6 months, or every year, and an intro offer of 3 days, 1 or 2 weeks, 1, 2, 3 or 6 months, or 1 year. A plan of another period shows the title of its product in the store, and an intro offer of another length is a free trial or an introductory price without its length. `lib/features/paywall/paywall_texts.dart` puts these texts together.
+
+The benefits on the paywall are texts of the module, `benefitAll`, `benefitNew` and `benefitSupport`. Change them to what premium access gives in your app. In an app with localization, they are texts of the app, which `lib/features/paywall/paywall_view.dart` reads as `context.l10n.paywallBenefitAll`, `paywallBenefitNew` and `paywallBenefitSupport`: change them where the provider of the localization keeps the texts of the app, in each language. In an app without it, they are the English texts in that file.
+
+Put the addresses of your terms of use and of your privacy policy into `PAYWALL_TERMS_URL` and `PAYWALL_PRIVACY_URL` in `.env` (see the section Values in .env). The App Store asks a paywall to link to both. While a value is empty or is no web address, the paywall leaves its link out, but on iOS the terms of use then lead to the standard license agreement of Apple. A debug build shows a note for you at the bottom of the paywall, which names the keys that are empty and what the provider of purchases says is missing, such as its key.
+
+In an app with sign-in, a user may buy before signing in. A sign-up keeps the purchase in the new account, while a sign-in to an account that exists already leaves the purchase with the user of the device until the user restores it.
 
 ## Push messages
 
@@ -3456,6 +3504,18 @@ abstract final class AppEnv {
   /// test_, for debug builds only.
   static String? get revenuecatTestKey {
     const value = String.fromEnvironment('REVENUECAT_TEST_KEY');
+    return value.isEmpty ? null : value;
+  }
+
+  /// The address of the terms of use that the paywall links to.
+  static String? get paywallTermsUrl {
+    const value = String.fromEnvironment('PAYWALL_TERMS_URL');
+    return value.isEmpty ? null : value;
+  }
+
+  /// The address of the privacy policy that the paywall links to.
+  static String? get paywallPrivacyUrl {
+    const value = String.fromEnvironment('PAYWALL_PRIVACY_URL');
     return value.isEmpty ? null : value;
   }
 }
@@ -7311,6 +7371,7 @@ abstract interface class PushService {
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:my_app/features/onboarding/onboarding_status.dart' as guard0;
+import 'package:my_app/features/paywall/paywall_guards.dart' as guard2;
 import 'package:my_app/features/sign_in/sign_in_guards.dart' as guard1;
 
 import 'app_router_factory.dart';
@@ -7468,6 +7529,13 @@ final List<RouteGuard> routeGuards = [
     flow: const {'sign_in.signIn', 'sign_in.signUp', 'sign_in.resetPassword'},
     resumes: false,
     routes: const {'sign_in.account'},
+  ),
+  RouteGuard(
+    'paywall.hasPremium',
+    allows: guard2.paywallHasPremium(),
+    redirectTo: const PaywallPaywallLocation(),
+    flow: const {'paywall.paywall'},
+    routes: const {'paywall.subscription'},
   ),
 ];
 
@@ -7851,6 +7919,8 @@ import 'package:my_app/core/layout/app_shell.dart' show AppShell;
 import 'package:my_app/core/layout/destination.dart' show appDestinations;
 import 'package:my_app/features/home/home_screen.dart' as screen0;
 import 'package:my_app/features/onboarding/onboarding_screen.dart' as screen2;
+import 'package:my_app/features/paywall/paywall_screen.dart' as screen7;
+import 'package:my_app/features/paywall/subscription_screen.dart' as screen8;
 import 'package:my_app/features/settings/settings_screen.dart' as screen1;
 import 'package:my_app/features/sign_in/account_screen.dart' as screen6;
 import 'package:my_app/features/sign_in/reset_password_screen.dart' as screen5;
@@ -7930,6 +8000,16 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
           path: '/sign_in/account',
           name: 'sign_in.account',
           builder: (context, state) => const screen6.AccountScreen(),
+        ),
+        GoRoute(
+          path: '/paywall',
+          name: 'paywall.paywall',
+          builder: (context, state) => const screen7.PaywallScreen(),
+        ),
+        GoRoute(
+          path: '/paywall/subscription',
+          name: 'paywall.subscription',
+          builder: (context, state) => const screen8.SubscriptionScreen(),
         ),
       ],
     ),
@@ -8756,6 +8836,30 @@ final class SignInAccountLocation extends AppLocation {
   String get path => '/sign_in/account';
 }
 
+/// The location of `paywall.paywall`: `/paywall`.
+final class PaywallPaywallLocation extends AppLocation {
+  /// Creates the location.
+  const PaywallPaywallLocation();
+
+  @override
+  String get routeName => 'paywall.paywall';
+
+  @override
+  String get path => '/paywall';
+}
+
+/// The location of `paywall.subscription`: `/paywall/subscription`.
+final class PaywallSubscriptionLocation extends AppLocation {
+  /// Creates the location.
+  const PaywallSubscriptionLocation();
+
+  @override
+  String get routeName => 'paywall.subscription';
+
+  @override
+  String get path => '/paywall/subscription';
+}
+
 /// Typed navigation to the routes of the app.
 extension AppNavigation on BuildContext {
   /// The routes of the app by module.
@@ -8779,6 +8883,9 @@ final class AppNav {
 
   /// The routes of the module `sign_in`.
   SignInRoutes get signIn => SignInRoutes._(_context);
+
+  /// The routes of the module `paywall`.
+  PaywallRoutes get paywall => PaywallRoutes._(_context);
 }
 
 /// The routes of the module `home`.
@@ -8830,6 +8937,20 @@ final class SignInRoutes {
 
   /// The route `sign_in.account`: `/sign_in/account`.
   NavLink account() => NavLink(_context, const SignInAccountLocation());
+}
+
+/// The routes of the module `paywall`.
+final class PaywallRoutes {
+  const PaywallRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `paywall.paywall`: `/paywall`.
+  NavLink paywall() => NavLink(_context, const PaywallPaywallLocation());
+
+  /// The route `paywall.subscription`: `/paywall/subscription`.
+  NavLink subscription() =>
+      NavLink(_context, const PaywallSubscriptionLocation());
 }
 === lib/core/theme/app_theme.dart (material_theme) ===
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -10937,13 +11058,2792 @@ ValueListenable<bool> onboardingCompleted() => onboardingStatus.completed;
 /// restorer of the preferences, which the app calls before its first frame.
 void restoreOnboarding(AppPreferences preferences) =>
     onboardingStatus._restore(preferences);
+=== lib/features/paywall/paywall_card.dart (paywall) ===
+import 'package:flutter/material.dart';
+
+import 'paywall_widgets.dart';
+
+/// The name of the app, as the card shows it.
+const _appName = 'My App';
+
+/// The symbol of the app in its cell, as an element of the periodic table
+/// has one: the first letters of the first two words of its name, or the
+/// first two letters of a name of one word.
+const _appSymbol = 'Ma';
+
+/// The number in the cell of the app: how many letters and digits its name
+/// has.
+const _appNumber = 5;
+
+/// The colours of Say My Frame, which the card keeps in the light and in
+/// the dark theme, as the start screen of SMF does.
+const _brandGreen = Color(0xFF0F3326);
+const _brandCream = Color(0xFFF1F1E8);
+const _brandAccent = Color(0xFF4ADE80);
+
+/// The side of the cell of the app in the card, the space between the cell
+/// and the edges of the card, the side of a cell of the table on the right
+/// of the card, the space between two of them, and their space from the
+/// edges of the card.
+const _cellSide = 76.0;
+const _cardPadding = 22.0;
+const _tableCell = 40.0;
+const _tableGap = 8.0;
+const _tableInset = 20.0;
+
+/// The card in the colours of Say My Frame at the top of the paywall and of
+/// the screen of the subscription: the app as an element of a table, its
+/// name with `Premium` above it, and on the right the cells of a table that
+/// light up one after another while [animation] runs and end in a cell in
+/// the accent with the icon of premium access, which grows a little once:
+/// the table unlocks.
+///
+/// With [badge], such as `Unlocked`, it shows the badge next to `Premium`.
+/// A screen reader reads the name with `Premium` as a header.
+class PremiumCard extends StatelessWidget {
+  /// Creates the card.
+  const PremiumCard({
+    required this.animation,
+    required this.premium,
+    this.badge,
+    super.key,
+  });
+
+  /// The entrance of the card, from 0 to 1.
+  final Animation<double> animation;
+
+  /// The text `Premium` in the language of the app.
+  final String premium;
+
+  /// The text of the badge next to `Premium`, or `null`.
+  final String? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final badge = this.badge;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _brandGreen,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: ExcludeSemantics(
+                child: CustomPaint(painter: _TablePainter(animation)),
+              ),
+            ),
+            PositionedDirectional(
+              top: _tableInset,
+              end: _tableInset,
+              child: _UnlockCell(animation: animation),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(_cardPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _ElementCell(),
+                  const SizedBox(height: 40),
+                  Semantics(
+                    header: true,
+                    label: '$_appName $premium',
+                    excludeSemantics: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            // A label, which grows only by half with the
+                            // text size of the device.
+                            MediaQuery.withClampedTextScaling(
+                              maxScaleFactor: 1.5,
+                              child: Text(
+                                premium.toUpperCase(),
+                                style: monospace.copyWith(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 2,
+                                  color: _brandAccent,
+                                ),
+                              ),
+                            ),
+                            if (badge != null) _Badge(badge),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // The name is large already, so it grows only by
+                        // half with the text size of the device.
+                        WholeWords(
+                          _appName,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: _brandCream,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxScaleFactor: 1.5,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The badge of a [PremiumCard], such as `Unlocked`: the text in the
+/// accent of Say My Frame in a pill of that accent.
+class _Badge extends StatelessWidget {
+  const _Badge(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: _brandAccent.withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: _brandAccent.withValues(alpha: 0.5)),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_rounded, size: 14, color: _brandAccent),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: _brandAccent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// The cell of the app, with its symbol and its number, as the mark of Say
+/// My Frame has one.
+///
+/// It is a picture of the app, whose name the card tells below it. So its
+/// letters keep their size when the text of the device is larger, and a
+/// screen reader passes it by.
+class _ElementCell extends StatelessWidget {
+  const _ElementCell();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ExcludeSemantics(
+      child: MediaQuery.withNoTextScaling(
+        child: Container(
+          width: _cellSide,
+          height: _cellSide,
+          decoration: BoxDecoration(
+            color: _brandGreen,
+            border: Border.all(color: _brandCream, width: 1.5),
+          ),
+          child: Stack(
+            children: [
+              PositionedDirectional(
+                top: 5,
+                end: 7,
+                child: Text(
+                  '$_appNumber',
+                  style: monospace.copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: _brandCream,
+                  ),
+                ),
+              ),
+              Center(
+                child: Text(
+                  _appSymbol,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 36,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -1.2,
+                    color: _brandCream,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The cell at the top of the table of a [PremiumCard]: it fills with the
+/// accent of Say My Frame once the other cells lit up, with the icon of
+/// premium access, which grows a little and back once.
+class _UnlockCell extends StatelessWidget {
+  const _UnlockCell({required this.animation});
+
+  final Animation<double> animation;
+
+  /// When the cell fills, and when it grows and comes back, in the
+  /// entrance of the card.
+  static const _fill = Interval(0.6, 0.78, curve: Curves.easeOut);
+  static final _grow = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween<double>(
+        begin: 1,
+        end: 1.06,
+      ).chain(CurveTween(curve: Curves.easeOut)),
+      weight: 1,
+    ),
+    TweenSequenceItem(
+      tween: Tween<double>(
+        begin: 1.06,
+        end: 1,
+      ).chain(CurveTween(curve: Curves.easeIn)),
+      weight: 1,
+    ),
+  ]).chain(CurveTween(curve: const Interval(0.74, 1)));
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final filled = _fill.transform(animation.value);
+        return Transform.scale(
+          scale: _grow.transform(animation.value),
+          child: Container(
+            width: _tableCell,
+            height: _tableCell,
+            decoration: BoxDecoration(
+              color: _brandAccent.withValues(alpha: filled),
+              border: Border.all(
+                color: _brandCream.withValues(alpha: 0.14 + 0.86 * filled),
+              ),
+            ),
+            child: Opacity(
+              opacity: filled,
+              child: const Icon(
+                Icons.workspace_premium_rounded,
+                size: 24,
+                color: _brandGreen,
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+/// The cells of a table on the right of a [PremiumCard], but for the cell
+/// at its top right, which [_UnlockCell] is: outlines, some of which light
+/// up one after another while [animation] runs.
+class _TablePainter extends CustomPainter {
+  _TablePainter(this.animation) : super(repaint: animation);
+
+  final Animation<double> animation;
+
+  /// The cells that light up, by column from the right and row from the
+  /// top, each with its colour and the order in which it lights up.
+  static const _lit = <(int, int, Color, int)>[
+    (2, 1, Color(0x33F1F1E8), 0),
+    (1, 2, Color(0x664ADE80), 1),
+    (3, 0, Color(0x1FF1F1E8), 2),
+    (1, 1, Color(0x994ADE80), 3),
+    (0, 1, Color(0x33F1F1E8), 4),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outline = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (var column = 0; column < 4; column++) {
+      for (var row = 0; row < 3; row++) {
+        // The cell at the top right is the cell that unlocks.
+        if (column == 0 && row == 0) continue;
+        final rect = Rect.fromLTWH(
+          size.width -
+              _tableInset -
+              _tableCell -
+              column * (_tableCell + _tableGap),
+          _tableInset + row * (_tableCell + _tableGap),
+          _tableCell,
+          _tableCell,
+        );
+        // A narrow card has no room for every column: it leaves out those
+        // that would reach the cell of the app on its left.
+        if (rect.left < _cardPadding + _cellSide + _tableGap) continue;
+        // The outlines fade towards the cell of the app.
+        outline.color = _brandCream.withValues(alpha: 0.14 - column * 0.03);
+        canvas.drawRect(rect, outline);
+        for (final (litColumn, litRow, color, order) in _lit) {
+          if (litColumn != column || litRow != row) continue;
+          final start = 0.15 + order * 0.08;
+          final shown = Interval(
+            start,
+            (start + 0.25).clamp(0, 1),
+            curve: Curves.easeOut,
+          ).transform(animation.value);
+          canvas.drawRect(
+            rect,
+            Paint()..color = color.withValues(alpha: color.a * shown),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TablePainter oldDelegate) =>
+      oldDelegate.animation != animation;
+}
+=== lib/features/paywall/paywall_composition.dart (paywall (bloc)) ===
+import '../../core/purchases/app_purchases.dart';
+import 'paywall_cubit.dart';
+import 'paywall_links.dart';
+import 'premium_cubit.dart';
+import 'subscription_cubit.dart';
+
+/// Creates the cubit of the paywall, which loads the plans at once.
+///
+/// The cubits of the paywall get the purchases of the app here, and no
+/// other file of the screens names them: a test creates a cubit with an
+/// `AppPurchasesController` of its own.
+PaywallCubit createPaywallCubit() =>
+    PaywallCubit(appPurchases, openPaywallLink);
+
+/// Creates the cubit of the screen of the subscription.
+SubscriptionCubit createSubscriptionCubit() =>
+    SubscriptionCubit(appPurchases, openPaywallLink);
+
+/// Creates the cubit with the access of the user, which the root of the
+/// app provides to every widget.
+PremiumCubit createPremiumCubit() => PremiumCubit(appPurchases);
+=== lib/features/paywall/paywall_cubit.dart (paywall (bloc)) ===
+import 'dart:async';
+
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../core/purchases/app_purchases.dart';
+import 'paywall_state.dart';
+
+/// The state of the paywall: it loads the plans of the current offer, buys
+/// the selected plan and restores purchases through the purchases of the
+/// app, and tells which call is on its way and what the last one ended
+/// with.
+class PaywallCubit extends Cubit<PaywallState> {
+  /// Creates the cubit that buys through [_purchases] and opens a link with
+  /// [_openLink], and loads the plans.
+  PaywallCubit(this._purchases, this._openLink) : super(const PaywallState()) {
+    _purchases.hasPremium.addListener(_follow);
+    unawaited(load());
+  }
+
+  final AppPurchasesController _purchases;
+  final Future<void> Function(Uri url) _openLink;
+
+  /// Whether a purchase or a restore of this cubit is on its way.
+  var _calling = false;
+
+  /// Loads the plans of the current offer, and selects the plan that the
+  /// paywall selects first.
+  Future<void> load() async {
+    if (state.busy != null) return;
+    emit(const PaywallState());
+    try {
+      final plans = await _purchases.plans();
+      if (!isClosed) {
+        emit(PaywallState(plans: plans, selected: preselectedPlan(plans)));
+      }
+    } on PurchasesFailure catch (failure) {
+      if (!isClosed) emit(PaywallState(loadFailure: failure));
+    }
+  }
+
+  /// Selects [plan], unless a call is on its way.
+  void select(Plan plan) {
+    if (state.busy != null) return;
+    emit(state.selecting(plan));
+  }
+
+  /// Buys the selected plan.
+  ///
+  /// Once the user has premium access, the router closes the paywall, so
+  /// the state stays busy for as long as the user has it. When the user
+  /// cancels, the state is again as it was, and a payment that waits for an
+  /// approval tells the user so.
+  Future<void> purchase() async {
+    final plan = state.selected;
+    if (plan == null) return;
+    await _run(PaywallAction.purchase, () => _purchases.purchase(plan));
+  }
+
+  /// Restores what the store account of the user bought.
+  ///
+  /// Once the user has premium access, the router closes the paywall, so
+  /// the state stays busy for as long as the user has it. A restore that
+  /// finds nothing tells the user so.
+  Future<void> restore() => _run(
+    PaywallAction.restore,
+    () async => await _purchases.restore() is PremiumAccess,
+    otherwise: PaywallNotice.nothingToRestore,
+  );
+
+  /// Opens [url], a link of the paywall.
+  Future<void> openLink(Uri url) => _openLink(url);
+
+  /// Makes [call], the call of [action], unless a call is on its way or the
+  /// plans load. [call] returns whether the user has premium access then,
+  /// and the state stays busy if so. Otherwise it is idle again, with the
+  /// notice [otherwise], if any.
+  Future<void> _run(
+    PaywallAction action,
+    Future<bool> Function() call, {
+    PaywallNotice? otherwise,
+  }) async {
+    if (state.busy != null || state.loading) return;
+    _calling = true;
+    emit(state.busyWith(action));
+    final bool premium;
+    try {
+      premium = await call();
+    } on PurchasesFailure catch (failure) {
+      _calling = false;
+      // The user may have left the paywall while the call was on its way.
+      if (isClosed) return;
+      emit(
+        failure.reason == PurchasesFailureReason.pending
+            ? state.idle(notice: PaywallNotice.pending)
+            : state.idle(failure: failure),
+      );
+      return;
+    }
+    _calling = false;
+    if (isClosed) return;
+    if (premium) {
+      _follow();
+    } else {
+      emit(state.idle(notice: otherwise));
+    }
+  }
+
+  /// Ends the busy state that a call left once the user has no premium
+  /// access: the access ended again before the router took the paywall
+  /// away, and the paywall is back.
+  void _follow() {
+    if (_calling || isClosed || state.busy == null) return;
+    if (!_purchases.hasPremium.value) emit(state.idle());
+  }
+
+  @override
+  Future<void> close() {
+    _purchases.hasPremium.removeListener(_follow);
+    return super.close();
+  }
+}
+=== lib/features/paywall/paywall_guards.dart (paywall) ===
+import 'package:flutter/foundation.dart';
+
+import '../../core/purchases/app_purchases.dart';
+
+/// Whether the user has premium access, as the guard of the routes that
+/// need it asks: while the value is `false`, the router opens the paywall
+/// over the page that the user is on in place of such a route, and once it
+/// is `true`, the router closes the paywall and shows the route.
+ValueListenable<bool> paywallHasPremium() => appPurchases.hasPremium;
+=== lib/features/paywall/paywall_links.dart (paywall) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/env/app_env.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// The name of the key of the address of the terms of use in `.env`.
+const String paywallTermsKey = 'PAYWALL_TERMS_URL';
+
+/// The name of the key of the address of the privacy policy in `.env`.
+const String paywallPrivacyKey = 'PAYWALL_PRIVACY_URL';
+
+/// The standard license agreement of Apple, which the terms of use of the
+/// paywall lead to on iOS while `.env` has no address of the terms of use.
+final Uri appleStandardEula = Uri.parse(
+  'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/',
+);
+
+/// The address of the terms of use that the paywall links to: the value of
+/// [paywallTermsKey] in `.env`, or on iOS and macOS the standard license
+/// agreement of Apple while that value is empty or no web address, and
+/// otherwise `null`, for no link.
+Uri? paywallTermsUrl() =>
+    webAddressOf(AppEnv.paywallTermsUrl) ??
+    switch (defaultTargetPlatform) {
+      TargetPlatform.iOS || TargetPlatform.macOS => appleStandardEula,
+      _ => null,
+    };
+
+/// The address of the privacy policy that the paywall links to: the value
+/// of [paywallPrivacyKey] in `.env`, or `null`, for no link, while that
+/// value is empty or no web address.
+Uri? paywallPrivacyUrl() => webAddressOf(AppEnv.paywallPrivacyUrl);
+
+/// The keys of `.env` whose values the paywall cannot link to, since they
+/// are empty or no web address: in a debug build, the paywall names them
+/// for the developer of the app.
+List<String> missingPaywallKeys() => [
+  if (webAddressOf(AppEnv.paywallTermsUrl) == null) paywallTermsKey,
+  if (webAddressOf(AppEnv.paywallPrivacyUrl) == null) paywallPrivacyKey,
+];
+
+/// [value] as a web address, with `https` or `http` and a host, or `null`
+/// for an empty value and for anything else.
+Uri? webAddressOf(String? value) {
+  final address = Uri.tryParse(value?.trim() ?? '');
+  if (address == null || address.host.isEmpty) return null;
+  return address.isScheme('https') || address.isScheme('http') ? address : null;
+}
+
+/// Opens [url] outside the app: a page in the browser, or a page of the
+/// store in the app of the store.
+Future<void> openPaywallLink(Uri url) async {
+  await launchUrl(url, mode: LaunchMode.externalApplication);
+}
+=== lib/features/paywall/paywall_screen.dart (paywall (bloc)) ===
+import 'package:flutter/widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import 'paywall_composition.dart';
+import 'paywall_cubit.dart';
+import 'paywall_state.dart';
+import 'paywall_view.dart';
+
+/// The paywall: the [PaywallView] with the state of a [PaywallCubit].
+///
+/// It does not close itself after a purchase or a restore, and nothing
+/// navigates to it: the router shows it in place of a route that needs
+/// premium access while the user has none, and closes it once the user has
+/// it.
+class PaywallScreen extends StatelessWidget {
+  /// Creates the screen.
+  const PaywallScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => createPaywallCubit(),
+    child: BlocBuilder<PaywallCubit, PaywallState>(
+      builder: (context, state) => PaywallView(
+        state: state,
+        onSelect: context.read<PaywallCubit>().select,
+        onPurchase: context.read<PaywallCubit>().purchase,
+        onRestore: context.read<PaywallCubit>().restore,
+        onRetry: context.read<PaywallCubit>().load,
+        onOpenLink: context.read<PaywallCubit>().openLink,
+      ),
+    ),
+  );
+}
+=== lib/features/paywall/paywall_state.dart (paywall) ===
+import 'package:flutter/foundation.dart';
+
+import '../../core/purchases/app_purchases.dart';
+
+/// A call of the paywall that is on its way.
+enum PaywallAction {
+  /// Buying the selected plan.
+  purchase,
+
+  /// Restoring what the store account of the user bought.
+  restore,
+}
+
+/// What the paywall tells the user after a call that did not fail.
+enum PaywallNotice {
+  /// The payment waits for an approval, as one that a parent approves: the
+  /// access comes once the store took the payment, and the router closes
+  /// the paywall then.
+  pending,
+
+  /// A restore found nothing that the store account bought.
+  nothingToRestore,
+}
+
+/// The state of the paywall: the plans of the current offer, or why they
+/// did not load, the plan that the user selected, which call is on its way,
+/// and what the last call ended with.
+@immutable
+final class PaywallState {
+  /// Creates the state, which is loading the plans without [plans] and
+  /// [loadFailure].
+  const PaywallState({
+    this.plans,
+    this.loadFailure,
+    this.selected,
+    this.busy,
+    this.failure,
+    this.notice,
+  });
+
+  /// The plans of the current offer, in the order of the provider of
+  /// purchases, or `null` while they load or when they did not.
+  final List<Plan>? plans;
+
+  /// Why the plans did not load, or `null`.
+  final PurchasesFailure? loadFailure;
+
+  /// The plan that the button of the paywall buys, or `null` while there
+  /// are no plans.
+  final Plan? selected;
+
+  /// The call that is on its way, or `null` when none is. While it is, the
+  /// paywall takes no other call.
+  ///
+  /// It stays so after a purchase or a restore that gave the user premium
+  /// access, for as long as the user has it: what comes next is up to the
+  /// router, which closes the paywall. The paywall neither closes itself
+  /// nor navigates. When the access ends before the router took the
+  /// paywall away, the paywall is idle again.
+  ///
+  /// While the plans load, the paywall takes no call, so that no plan comes
+  /// in to be bought while a restore is on its way.
+  final PaywallAction? busy;
+
+  /// Why the last call failed, or `null` if it did not.
+  final PurchasesFailure? failure;
+
+  /// What the last call that did not fail tells the user, or `null`.
+  final PaywallNotice? notice;
+
+  /// Whether the plans are loading.
+  bool get loading => plans == null && loadFailure == null;
+
+  /// The state with [plan] selected, with nothing on its way and nothing to
+  /// tell.
+  PaywallState selecting(Plan plan) =>
+      PaywallState(plans: plans, loadFailure: loadFailure, selected: plan);
+
+  /// The state while [action] is on its way. The plans, or why they did not
+  /// load, stay as they are.
+  PaywallState busyWith(PaywallAction action) => PaywallState(
+    plans: plans,
+    loadFailure: loadFailure,
+    selected: selected,
+    busy: action,
+  );
+
+  /// The state with nothing on its way, which tells of [failure] or
+  /// [notice], if any. The plans, or why they did not load, stay as they
+  /// are.
+  PaywallState idle({PurchasesFailure? failure, PaywallNotice? notice}) =>
+      PaywallState(
+        plans: plans,
+        loadFailure: loadFailure,
+        selected: selected,
+        failure: failure,
+        notice: notice,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is PaywallState &&
+      other.plans == plans &&
+      other.loadFailure == loadFailure &&
+      other.selected == selected &&
+      other.busy == busy &&
+      other.failure == failure &&
+      other.notice == notice;
+
+  @override
+  int get hashCode =>
+      Object.hash(plans, loadFailure, selected, busy, failure, notice);
+}
+
+/// How often a plan is billed, for the periods that the paywall has words
+/// for: those that the stores offer.
+enum PlanTerm {
+  /// Every week.
+  week,
+
+  /// Every month.
+  month,
+
+  /// Every 2 months.
+  twoMonths,
+
+  /// Every 3 months.
+  threeMonths,
+
+  /// Every 6 months.
+  sixMonths,
+
+  /// Every year.
+  year,
+}
+
+/// The term of [period], or `null` for a period that the paywall has no
+/// words for. Seven days are a week, and twelve months a year.
+PlanTerm? termOf(BillingPeriod period) => switch ((period.unit, period.count)) {
+  (BillingUnit.day, 7) || (BillingUnit.week, 1) => PlanTerm.week,
+  (BillingUnit.month, 1) => PlanTerm.month,
+  (BillingUnit.month, 2) => PlanTerm.twoMonths,
+  (BillingUnit.month, 3) => PlanTerm.threeMonths,
+  (BillingUnit.month, 6) => PlanTerm.sixMonths,
+  (BillingUnit.month, 12) || (BillingUnit.year, 1) => PlanTerm.year,
+  _ => null,
+};
+
+/// How long an intro offer lasts, for the lengths that the paywall has
+/// words for: those of the free trials of the stores.
+enum OfferLength {
+  /// 3 days.
+  threeDays,
+
+  /// 1 week.
+  oneWeek,
+
+  /// 2 weeks.
+  twoWeeks,
+
+  /// 1 month.
+  oneMonth,
+
+  /// 2 months.
+  twoMonths,
+
+  /// 3 months.
+  threeMonths,
+
+  /// 6 months.
+  sixMonths,
+
+  /// 1 year.
+  oneYear,
+}
+
+/// How long [offer] lasts in all, its period times its cycles, or `null`
+/// for a length that the paywall has no words for. Seven days are a week,
+/// fourteen days two weeks, and twelve months a year.
+OfferLength? lengthOf(IntroOffer offer) =>
+    switch ((offer.period.unit, offer.period.count * offer.cycles)) {
+      (BillingUnit.day, 3) => OfferLength.threeDays,
+      (BillingUnit.day, 7) || (BillingUnit.week, 1) => OfferLength.oneWeek,
+      (BillingUnit.day, 14) || (BillingUnit.week, 2) => OfferLength.twoWeeks,
+      (BillingUnit.month, 1) => OfferLength.oneMonth,
+      (BillingUnit.month, 2) => OfferLength.twoMonths,
+      (BillingUnit.month, 3) => OfferLength.threeMonths,
+      (BillingUnit.month, 6) => OfferLength.sixMonths,
+      (BillingUnit.month, 12) || (BillingUnit.year, 1) => OfferLength.oneYear,
+      _ => null,
+    };
+
+/// The plan of [plans] that the paywall selects when it shows them: the
+/// first that renews every year, or else the first plan.
+Plan? preselectedPlan(List<Plan> plans) {
+  for (final plan in plans) {
+    if (_yearly(plan)) return plan;
+  }
+  return plans.isEmpty ? null : plans.first;
+}
+
+/// Whether [plan] is the best value of [plans]: a plan that renews every
+/// year and costs less than twelve times a plan of [plans] that renews
+/// every month, in the same currency.
+///
+/// The paywall says so on the plan, and never shows a yearly plan by what
+/// it costs a month, which Google Play does not allow.
+bool isBestValue(Plan plan, List<Plan> plans) {
+  if (!_yearly(plan)) return false;
+  for (final other in plans) {
+    final monthly = switch (other.period) {
+      final period? => termOf(period) == PlanTerm.month,
+      null => false,
+    };
+    if (monthly &&
+        other.currencyCode == plan.currencyCode &&
+        plan.amount < other.amount * 12) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Whether [plan] renews every year.
+bool _yearly(Plan plan) => switch (plan.period) {
+  final period? => termOf(period) == PlanTerm.year,
+  null => false,
+};
+=== lib/features/paywall/paywall_texts.dart (paywall) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import '../../core/purchases/app_purchases.dart';
+import 'paywall_state.dart';
+
+// The texts of the paywall that depend on a plan. A text of the app has no
+// parameters, so these put the texts of closed sets together with the
+// prices that the store gives: the name and the suffix of the price for
+// each term of a plan, and the length of each intro offer that the stores
+// have. A term or a length outside those sets gets a text without it.
+
+/// The name of [plan] on the paywall: the name of its term, `Lifetime` for
+/// a plan paid once, or the title of its product in the store for a term
+/// that the paywall has no name for.
+String planNameOf(BuildContext context, Plan plan) => switch (plan.period) {
+  null => context.l10n.paywallPlanLifetime,
+  final period => termNameOf(context, period) ?? plan.title,
+};
+
+/// The name of the plan of [period], such as `Monthly`, or `null` for a
+/// period that the paywall has no name for.
+String? termNameOf(BuildContext context, BillingPeriod period) =>
+    switch (termOf(period)) {
+      PlanTerm.week => context.l10n.paywallPlanWeekly,
+      PlanTerm.month => context.l10n.paywallPlanMonthly,
+      PlanTerm.twoMonths => context.l10n.paywallPlanTwoMonths,
+      PlanTerm.threeMonths => context.l10n.paywallPlanThreeMonths,
+      PlanTerm.sixMonths => context.l10n.paywallPlanSixMonths,
+      PlanTerm.year => context.l10n.paywallPlanYearly,
+      null => null,
+    };
+
+/// What follows the price of a plan of [period], such as `/ month`, or
+/// `once` for a plan paid once, or `null` for a period that the paywall has
+/// no words for.
+String? priceSuffixOf(BuildContext context, BillingPeriod? period) =>
+    switch (period) {
+      null => context.l10n.paywallOnce,
+      final period => switch (termOf(period)) {
+        PlanTerm.week => context.l10n.paywallPerWeek,
+        PlanTerm.month => context.l10n.paywallPerMonth,
+        PlanTerm.twoMonths => context.l10n.paywallPerTwoMonths,
+        PlanTerm.threeMonths => context.l10n.paywallPerThreeMonths,
+        PlanTerm.sixMonths => context.l10n.paywallPerSixMonths,
+        PlanTerm.year => context.l10n.paywallPerYear,
+        null => null,
+      },
+    };
+
+/// The price of [plan] with what follows it, such as `$4.99 / month`, with
+/// no-break spaces, so that a line never breaks inside it.
+String priceOf(BuildContext context, Plan plan) => [
+  plan.price,
+  ?priceSuffixOf(context, plan.period),
+].join(' ').replaceAll(' ', _noBreakSpace);
+
+/// The no-break space, which keeps the words on each side of it on one line.
+const String _noBreakSpace = '\u00A0';
+
+/// How long an intro offer of [length] lasts, such as `1 week`.
+String lengthTextOf(BuildContext context, OfferLength length) =>
+    switch (length) {
+      OfferLength.threeDays => context.l10n.paywallThreeDays,
+      OfferLength.oneWeek => context.l10n.paywallOneWeek,
+      OfferLength.twoWeeks => context.l10n.paywallTwoWeeks,
+      OfferLength.oneMonth => context.l10n.paywallOneMonth,
+      OfferLength.twoMonths => context.l10n.paywallTwoMonths,
+      OfferLength.threeMonths => context.l10n.paywallThreeMonths,
+      OfferLength.sixMonths => context.l10n.paywallSixMonths,
+      OfferLength.oneYear => context.l10n.paywallOneYear,
+    };
+
+/// What [offer] gives, as the card of its plan shows it: `1 week free` for
+/// a free trial, `$1.99 for 3 months` for a lower price, or with the
+/// suffix of its period, `$0.99 / month for 3 months`, for a lower price of
+/// several periods. For a length that the paywall has no words for, it is
+/// `Free trial` or `Introductory price`.
+String offerTextOf(BuildContext context, IntroOffer offer) {
+  final length = switch (lengthOf(offer)) {
+    final length? => lengthTextOf(context, length),
+    null => null,
+  };
+  if (offer.isFree) {
+    final free = context.l10n.paywallFree;
+    return length == null ? context.l10n.paywallFreeTrial : '$length $free';
+  }
+  final suffix = offer.cycles > 1 ? priceSuffixOf(context, offer.period) : null;
+  if (length == null || (offer.cycles > 1 && suffix == null)) {
+    return context.l10n.paywallIntroPrice;
+  }
+  return [
+    offer.price,
+    ?suffix,
+    context.l10n.paywallForLength,
+    length,
+  ].join(' ');
+}
+
+/// What [plan] costs after its intro offer, as the paywall says right
+/// below its button, such as `1 week free, then $29.99 / year`, or `null`
+/// for a plan without an intro offer.
+String? afterOfferTextOf(BuildContext context, Plan plan) {
+  final offer = plan.introOffer;
+  if (offer == null) return null;
+  final then = context.l10n.paywallThen;
+  return '${offerTextOf(context, offer)}, $then ${priceOf(context, plan)}';
+}
+
+/// The label of the button that buys [plan]: `Start free trial` for a plan
+/// with a free trial, `Buy` for a plan paid once, and `Subscribe` for any
+/// other plan and while there is none.
+String purchaseLabelOf(BuildContext context, Plan? plan) => switch (plan) {
+  Plan(introOffer: IntroOffer(isFree: true)) => context.l10n.paywallStartTrial,
+  Plan(period: null) => context.l10n.paywallBuy,
+  _ => context.l10n.paywallSubscribe,
+};
+
+/// What the user agrees to by buying [plan], below the button: that a
+/// plan paid once is no subscription, or that the plan renews until the
+/// user cancels it in the store of the platform, with what the user pays
+/// after an intro offer.
+String termsTextOf(BuildContext context, Plan plan) {
+  if (plan.period == null) return context.l10n.paywallTermsLifetime;
+  final store = switch (defaultTargetPlatform) {
+    TargetPlatform.iOS ||
+    TargetPlatform.macOS => context.l10n.paywallTermsApple,
+    _ => context.l10n.paywallTermsGoogle,
+  };
+  final offer = switch (plan.introOffer) {
+    null => null,
+    IntroOffer(isFree: true) => context.l10n.paywallTermsTrial,
+    IntroOffer() => context.l10n.paywallTermsIntro,
+  };
+  return [store, ?offer].join(' ');
+}
+
+/// The text of the app for [reason], the reason of a failure of purchases.
+///
+/// It has a text for every reason: a reason that the app gets later has
+/// none here, and the app does not compile until it has.
+String failureTextOf(
+  BuildContext context,
+  PurchasesFailureReason reason,
+) => switch (reason) {
+  PurchasesFailureReason.network => context.l10n.paywallFailureNetwork,
+  PurchasesFailureReason.pending => context.l10n.paywallPendingNotice,
+  PurchasesFailureReason.alreadyOwned => context.l10n.paywallFailureOwned,
+  PurchasesFailureReason.notAllowed => context.l10n.paywallFailureNotAllowed,
+  PurchasesFailureReason.unavailable => context.l10n.paywallFailureUnavailable,
+  PurchasesFailureReason.storeProblem => context.l10n.paywallFailureStore,
+  PurchasesFailureReason.notConfigured => context.l10n.paywallFailureNotSetUp,
+  PurchasesFailureReason.unknown => context.l10n.paywallFailureUnknown,
+};
+
+/// The text of the app for [notice].
+String noticeTextOf(BuildContext context, PaywallNotice notice) =>
+    switch (notice) {
+      PaywallNotice.pending => context.l10n.paywallPendingNotice,
+      PaywallNotice.nothingToRestore => context.l10n.paywallNothingToRestore,
+    };
+=== lib/features/paywall/paywall_view.dart (paywall) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import '../../core/purchases/app_purchases.dart';
+import 'paywall_card.dart';
+import 'paywall_links.dart';
+import 'paywall_state.dart';
+import 'paywall_texts.dart';
+import 'paywall_widgets.dart';
+
+/// What the paywall shows: the card of premium access, what it gives, a
+/// card for each plan of the current offer, the button that buys the
+/// selected plan with what the plan costs after its intro offer and the
+/// terms of the store, and the links that restore purchases and lead to the
+/// terms of use and the privacy policy. Its close button is at the top,
+/// outside what scrolls, whenever there is a page below to go back to.
+///
+/// It keeps nothing of the calls themselves: the screen gives it the state
+/// of the paywall and takes what the user asks for. So it is the same
+/// whichever way the app manages state. It never closes itself after a
+/// purchase or a restore: the router closes it once the user has premium
+/// access.
+class PaywallView extends StatefulWidget {
+  /// Creates the view.
+  const PaywallView({
+    required this.state,
+    required this.onSelect,
+    required this.onPurchase,
+    required this.onRestore,
+    required this.onRetry,
+    required this.onOpenLink,
+    super.key,
+  });
+
+  /// The state of the paywall.
+  final PaywallState state;
+
+  /// Selects a plan.
+  final void Function(Plan plan) onSelect;
+
+  /// Buys the selected plan.
+  final VoidCallback onPurchase;
+
+  /// Restores what the store account of the user bought.
+  final VoidCallback onRestore;
+
+  /// Loads the plans again, after they did not load.
+  final VoidCallback onRetry;
+
+  /// Opens a link of the paywall outside the app.
+  final void Function(Uri url) onOpenLink;
+
+  @override
+  State<PaywallView> createState() => _PaywallViewState();
+}
+
+class _PaywallViewState extends State<PaywallView>
+    with TickerProviderStateMixin {
+  /// Lets the parts of the paywall rise in one after another, once.
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  /// Lets the cards of the plans come in one after another once they are
+  /// there.
+  late final AnimationController _plansIn = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+  );
+
+  var _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // An app that asks for less motion shows the paywall at once.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entrance.value = 1;
+      _plansIn.value = 1;
+    } else {
+      // The entrance starts when the paywall is first built. A widget test
+      // that starts the app in real time, as with tester.runAsync(), does
+      // so once in its file: when a second test of the file starts the app
+      // again, the time of this animation runs backwards, and Flutter
+      // fails an assertion.
+      _entrance.forward();
+      if (widget.state.plans != null) _plansIn.value = 1;
+    }
+  }
+
+  @override
+  void didUpdateWidget(PaywallView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.plans == null && widget.state.plans != null) {
+      // An app that asks for less motion shows the plans at once.
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _plansIn.value = 1;
+      } else {
+        _plansIn.forward(from: 0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    _plansIn.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final state = widget.state;
+    final idle = state.busy == null;
+    final selected = state.selected;
+    // Whether a page below this one is there to go back to.
+    final canClose = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+    final failure = state.failure;
+    final notice = state.notice;
+    final terms = paywallTermsUrl();
+    final privacy = paywallPrivacyUrl();
+    final afterOffer = selected == null
+        ? null
+        : afterOfferTextOf(context, selected);
+    final inset = MediaQuery.paddingOf(context).bottom;
+    // On a phone with room for it, the button stays in sight at the bottom
+    // while the rest scrolls. On a small phone, or with a large text size,
+    // it scrolls with the rest, so that the plans have room.
+    final pinned =
+        MediaQuery.sizeOf(context).height >= 640 &&
+        MediaQuery.textScalerOf(context).scale(16) <= 24;
+    // What the last call ended with, such as a restore that found nothing.
+    final message = PaywallMessage(
+      text: failure != null
+          ? failureTextOf(context, failure.reason)
+          : notice != null
+          ? noticeTextOf(context, notice)
+          : null,
+      failed: failure != null,
+      hint: failure?.developerHint,
+    );
+    // What buys: the message, the button and what the selected plan costs
+    // after its intro offer. While the plans did not load, there is nothing
+    // to buy, and the message is above the links.
+    final purchase = state.loadFailure != null
+        ? null
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              message,
+              PurchaseButton(
+                label: purchaseLabelOf(context, selected),
+                busy: state.busy == PaywallAction.purchase,
+                onPressed: idle && selected != null ? widget.onPurchase : null,
+              ),
+              if (afterOffer != null) ...[
+                const SizedBox(height: 10),
+                WholeWords(
+                  afterOffer,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          );
+    // What the user agrees to, and the links.
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (purchase == null) message,
+        if (selected != null && state.loadFailure == null) ...[
+          WholeWords(
+            termsTextOf(context, selected),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        _Links(
+          links: [
+            // While the plans load, there is no restore either, so that no
+            // plan comes in to be bought while one is on its way.
+            PaywallLink(
+              label: context.l10n.paywallRestore,
+              busy: state.busy == PaywallAction.restore,
+              onPressed: idle && !state.loading ? widget.onRestore : null,
+            ),
+            if (terms != null)
+              PaywallLink(
+                label: context.l10n.paywallTerms,
+                onPressed: () => widget.onOpenLink(terms),
+              ),
+            if (privacy != null)
+              PaywallLink(
+                label: context.l10n.paywallPrivacy,
+                onPressed: () => widget.onOpenLink(privacy),
+              ),
+          ],
+        ),
+      ],
+    );
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // The way out stays in sight on any phone, outside what
+            // scrolls.
+            SizedBox(
+              height: 52,
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: canClose
+                    ? Padding(
+                        padding: const EdgeInsetsDirectional.only(start: 8),
+                        child: IconButton(
+                          tooltip: context.l10n.paywallClose,
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.maybePop(context),
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                // Without the button below it, the paywall scrolls under
+                // what covers the bottom of the screen, such as the bar of
+                // the home gesture, and ends above it.
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  0,
+                  20,
+                  pinned && purchase != null ? 24 : 32 + inset,
+                ),
+                child: _Phone(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Rise(
+                        animation: _entrance,
+                        order: 0,
+                        child: PremiumCard(
+                          animation: _entrance,
+                          premium: context.l10n.paywallPremium,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Rise(
+                        animation: _entrance,
+                        order: 1,
+                        child: _Benefits(
+                          benefits: [
+                            context.l10n.paywallBenefitAll,
+                            context.l10n.paywallBenefitNew,
+                            context.l10n.paywallBenefitSupport,
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Rise(
+                        animation: _entrance,
+                        order: 2,
+                        child: _plansOf(context, state),
+                      ),
+                      const SizedBox(height: 16),
+                      if (!pinned && purchase != null) ...[
+                        Rise(animation: _entrance, order: 3, child: purchase),
+                        const SizedBox(height: 12),
+                      ],
+                      Rise(animation: _entrance, order: 4, child: details),
+                      DeveloperNote(
+                        hint: state.loadFailure?.developerHint,
+                        keys: missingPaywallKeys(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (pinned && purchase != null)
+              Rise(
+                animation: _entrance,
+                order: 3,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    border: Border(
+                      top: BorderSide(color: colors.outlineVariant),
+                    ),
+                  ),
+                  child: Padding(
+                    // Above what covers the bottom of the screen.
+                    padding: EdgeInsets.fromLTRB(20, 12, 20, 12 + inset),
+                    child: _Phone(child: purchase),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The plans of [state]: grey cards while they load, a card for each of
+  /// them, or what the paywall says when they did not load, with the button
+  /// that loads them again.
+  Widget _plansOf(BuildContext context, PaywallState state) {
+    final plans = state.plans;
+    final Widget shown;
+    if (plans != null) {
+      shown = Column(
+        key: const ValueKey('plans'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (index, plan) in plans.indexed) ...[
+            if (index > 0) const SizedBox(height: 12),
+            Rise(
+              animation: _plansIn,
+              order: index,
+              child: PlanCard(
+                name: planNameOf(context, plan),
+                price: plan.price,
+                suffix: priceSuffixOf(context, plan.period),
+                offer: switch (plan.introOffer) {
+                  final offer? => offerTextOf(context, offer),
+                  null => null,
+                },
+                badge: isBestValue(plan, plans)
+                    ? context.l10n.paywallBestValue
+                    : null,
+                selected: plan == state.selected,
+                onTap: state.busy == null ? () => widget.onSelect(plan) : null,
+              ),
+            ),
+          ],
+        ],
+      );
+    } else if (state.loadFailure != null) {
+      shown = _Unavailable(
+        key: const ValueKey('unavailable'),
+        onRetry: widget.onRetry,
+      );
+    } else {
+      shown = const Column(
+        key: ValueKey('loading'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [PlanSkeleton(), SizedBox(height: 12), PlanSkeleton()],
+      );
+    }
+    if (MediaQuery.disableAnimationsOf(context)) return shown;
+    return AnimatedSwitcher(
+      duration: Durations.medium2,
+      // The plans that come in and the skeleton that leaves are as wide
+      // as the paywall.
+      layoutBuilder: (current, previous) => Stack(
+        alignment: Alignment.topCenter,
+        fit: StackFit.passthrough,
+        children: [...previous, ?current],
+      ),
+      child: shown,
+    );
+  }
+}
+
+/// [child] in the middle of the screen, no wider than a phone.
+class _Phone extends StatelessWidget {
+  const _Phone({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 480),
+      child: child,
+    ),
+  );
+}
+
+/// What premium access gives, one line below the other, each with a check
+/// in the accent of the theme of the app.
+class _Benefits extends StatelessWidget {
+  const _Benefits({required this.benefits});
+
+  final List<String> benefits;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (index, benefit) in benefits.indexed) ...[
+          if (index > 0) const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: colors.secondaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.check_rounded,
+                  size: 16,
+                  color: colors.onSecondaryContainer,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // With a large text size, a long word gets smaller rather
+              // than break.
+              Expanded(
+                child: WholeWords(benefit, style: theme.textTheme.bodyLarge),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// What the paywall shows in the place of the plans when they did not
+/// load: that they are not available, and the button that loads them
+/// again.
+class _Unavailable extends StatelessWidget {
+  const _Unavailable({required this.onRetry, super.key});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    // As wide as the plans would be.
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 32,
+              color: colors.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                context.l10n.paywallPlansUnavailable,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: WholeWords(
+                context.l10n.paywallTryAgain,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The links below the button of the paywall, side by side with a dot
+/// between them, on more lines where they do not fit one.
+class _Links extends StatelessWidget {
+  const _Links({required this.links});
+
+  final List<Widget> links;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (final (index, link) in links.indexed) ...[
+          if (index > 0)
+            ExcludeSemantics(
+              child: Text('·', style: TextStyle(color: colors.outline)),
+            ),
+          link,
+        ],
+      ],
+    );
+  }
+}
+=== lib/features/paywall/paywall_widgets.dart (paywall) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// The font of a key of `.env` and of a hint for the developer: the
+/// monospaced font of the device, whose name differs between the
+/// platforms.
+const monospace = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class WholeWords extends StatelessWidget {
+  /// Creates the text.
+  const WholeWords(
+    this.text, {
+    this.style,
+    this.textAlign,
+    this.maxScaleFactor = double.infinity,
+    super.key,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none,
+  /// the text is as the text around it, as the label of a button is in the
+  /// style that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// How the lines of the text are aligned.
+  final TextAlign? textAlign;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: over that of the text around it,
+    // and bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in text.split(' ')) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textAlign: textAlign,
+          textScaler: scaler,
+        );
+      },
+    );
+  }
+}
+
+/// Lets [child] fade in and rise while [animation] runs, later for a higher
+/// [order].
+class Rise extends StatelessWidget {
+  /// Creates the part [order] of an entrance.
+  const Rise({
+    required this.animation,
+    required this.order,
+    required this.child,
+    super.key,
+  });
+
+  /// The entrance, from 0 to 1.
+  final Animation<double> animation;
+
+  /// The place of [child] in the entrance: a part of a higher order comes
+  /// in later.
+  final int order;
+
+  /// What comes in.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = (order * 0.08).clamp(0.0, 0.5);
+    final curve = Interval(
+      start,
+      start + 0.5,
+      curve: Easing.emphasizedDecelerate,
+    );
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final shown = curve.transform(animation.value);
+        return Opacity(
+          opacity: shown,
+          child: Transform.translate(
+            offset: Offset(0, (1 - shown) * 18),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+/// Whether a button whose call is on its way spins. In an app that asks for
+/// less motion, nothing spins: the button is disabled and keeps its label.
+bool _spins(BuildContext context, {required bool busy}) =>
+    busy && !MediaQuery.disableAnimationsOf(context);
+
+/// What a tap on a button does while its call may be on its way: a button
+/// that spins keeps its colour and does nothing, and one that is busy
+/// without spinning takes no tap.
+VoidCallback? _whileBusy(
+  VoidCallback? onPressed, {
+  required bool busy,
+  required bool spins,
+}) {
+  if (!busy) return onPressed;
+  return spins ? () {} : null;
+}
+
+/// The label of a button, or what spins in its place while the call of the
+/// button is on its way. A new label fades in where the old one was.
+class _BusyLabel extends StatelessWidget {
+  const _BusyLabel(this.label, {required this.spins, this.spinnerSize = 22});
+
+  final String label;
+  final bool spins;
+  final double spinnerSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = WholeWords(
+      label,
+      key: ValueKey(label),
+      textAlign: TextAlign.center,
+    );
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // The label keeps its place, so that the button keeps its size.
+        Visibility.maintain(
+          visible: !spins,
+          child: MediaQuery.disableAnimationsOf(context)
+              ? text
+              : AnimatedSwitcher(duration: Durations.short4, child: text),
+        ),
+        if (spins)
+          // In the colour that the button gives its label.
+          SizedBox.square(
+            dimension: spinnerSize,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: DefaultTextStyle.of(context).style.color,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The button of the paywall that buys the selected plan, as wide as the
+/// paywall. While the purchase is on its way, it shows that it is [busy]
+/// and does nothing.
+///
+/// It spins for as long as the purchase takes, and after a purchase that
+/// gave premium access until the router closes the paywall. So a widget
+/// test that waits for the paywall with `pumpAndSettle()` returns only once
+/// it is closed: until then, such a test pumps frames one at a time.
+class PurchaseButton extends StatelessWidget {
+  /// Creates the button.
+  const PurchaseButton({
+    required this.label,
+    required this.busy,
+    required this.onPressed,
+    super.key,
+  });
+
+  /// The text of the button, which keeps its words whole.
+  final String label;
+
+  /// Whether the purchase is on its way.
+  final bool busy;
+
+  /// Buys the selected plan, or `null` while the button takes no tap, as
+  /// while the plans load or a restore is on its way.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spins = _spins(context, busy: busy);
+    return FilledButton(
+      onPressed: _whileBusy(onPressed, busy: busy, spins: spins),
+      child: _BusyLabel(label, spins: spins),
+    );
+  }
+}
+
+/// A link of the paywall below its button, such as the one that restores
+/// purchases: a small text button of the theme of the app. While its call
+/// is on its way, it shows that it is [busy] and does nothing.
+class PaywallLink extends StatelessWidget {
+  /// Creates the link.
+  const PaywallLink({
+    required this.label,
+    required this.onPressed,
+    this.busy = false,
+    super.key,
+  });
+
+  /// The text of the link.
+  final String label;
+
+  /// Whether the call of the link is on its way.
+  final bool busy;
+
+  /// What the link does, or `null` while it takes no tap.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final spins = _spins(context, busy: busy);
+    return TextButton(
+      style: TextButton.styleFrom(
+        textStyle: Theme.of(context).textTheme.labelLarge,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(48, 40),
+      ),
+      onPressed: _whileBusy(onPressed, busy: busy, spins: spins),
+      child: _BusyLabel(label, spins: spins, spinnerSize: 16),
+    );
+  }
+}
+
+/// The card of a plan on the paywall: a radio dot, the [name] of the plan,
+/// its [price], the most prominent text of the card, with what follows it,
+/// and what its intro offer gives, if it has one.
+///
+/// The selected card has a border and a tint in the accent of the theme of
+/// the app, `colorScheme.secondary`, and the others a hairline. A screen
+/// reader reads a card as one button of a group of which one is selected.
+class PlanCard extends StatelessWidget {
+  /// Creates the card.
+  const PlanCard({
+    required this.name,
+    required this.price,
+    required this.suffix,
+    required this.offer,
+    required this.badge,
+    required this.selected,
+    required this.onTap,
+    super.key,
+  });
+
+  /// The name of the plan.
+  final String name;
+
+  /// The price of the plan as the store gives it.
+  final String price;
+
+  /// What follows the price, such as `/ month`, or `null`.
+  final String? suffix;
+
+  /// What the intro offer of the plan gives, or `null` for a plan without
+  /// one.
+  final String? offer;
+
+  /// The text of the badge of the plan, such as `Best value`, or `null`.
+  final String? badge;
+
+  /// Whether the plan is the selected one.
+  final bool selected;
+
+  /// Selects the plan, or `null` while the card takes no tap.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final accent = colors.secondary;
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Durations.short4;
+    final badge = this.badge;
+    final offer = this.offer;
+    final radius = BorderRadius.circular(20);
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      label: [
+        name,
+        [price, ?suffix].join(' '),
+        ?offer,
+        ?badge,
+      ].join(', '),
+      onTap: onTap,
+      excludeSemantics: true,
+      child: AnimatedContainer(
+        duration: duration,
+        curve: Easing.standard,
+        decoration: BoxDecoration(
+          color: selected
+              ? Color.alphaBlend(accent.withValues(alpha: 0.08), colors.surface)
+              : colors.surfaceContainerLow,
+          borderRadius: radius,
+          border: Border.all(
+            color: selected ? accent : colors.outlineVariant,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: onTap,
+            child: Padding(
+              // The border of a selected card is wider, and the content of
+              // the card stays where it is.
+              padding: EdgeInsets.all(selected ? 15 : 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: _RadioDot(selected: selected, duration: duration),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // The badge follows the name, and goes below it
+                        // where both do not fit one line.
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            // No larger than the price, which grows only by
+                            // half too.
+                            WholeWords(
+                              name,
+                              style: theme.textTheme.titleMedium,
+                              maxScaleFactor: 1.5,
+                            ),
+                            ?switch (badge) {
+                              final badge? => Pill(badge, strong: true),
+                              null => null,
+                            },
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        // The price grows only by half with the text size
+                        // of the device, so that it keeps to its line.
+                        MediaQuery.withClampedTextScaling(
+                          maxScaleFactor: 1.5,
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: price,
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                ),
+                                // The price and what follows it stay on
+                                // one line.
+                                if (suffix case final suffix?)
+                                  TextSpan(
+                                    text:
+                                        '\u00A0'
+                                        '${suffix.replaceAll(' ', '\u00A0')}',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (offer != null) ...[
+                          const SizedBox(height: 10),
+                          Pill(offer),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The dot of a [PlanCard] that tells whether the plan is selected: a ring
+/// in the accent of the theme with a dot inside for the selected plan, and
+/// a ring of the outline for the others.
+class _RadioDot extends StatelessWidget {
+  const _RadioDot({required this.selected, required this.duration});
+
+  final bool selected;
+  final Duration duration;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AnimatedContainer(
+      duration: duration,
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected ? colors.secondary : Colors.transparent,
+        border: Border.all(
+          color: selected ? colors.secondary : colors.outline,
+          width: 1.5,
+        ),
+      ),
+      child: Center(
+        child: AnimatedContainer(
+          duration: duration,
+          width: selected ? 8 : 0,
+          height: selected ? 8 : 0,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: colors.onSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A short text in a pill, such as what an intro offer gives: in the
+/// container colour of the accent, or with [strong] in the accent itself.
+class Pill extends StatelessWidget {
+  /// Creates the pill of [text].
+  const Pill(this.text, {this.strong = false, super.key});
+
+  /// The text of the pill.
+  final String text;
+
+  /// Whether the pill is in the accent of the theme rather than in its
+  /// container colour.
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: strong ? colors.secondary : colors.secondaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        // A label, which grows only by half with the text size of the
+        // device.
+        child: MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.5,
+          child: Text(
+            text,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: strong ? colors.onSecondary : colors.onSecondaryContainer,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the paywall shows in the place of a plan while the plans load: a
+/// card of the size of a plan with grey bars, which does not move, so that
+/// the paywall settles.
+class PlanSkeleton extends StatelessWidget {
+  /// Creates the skeleton.
+  const PlanSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    Widget bar(double width, double height) => Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+    );
+    return ExcludeSemantics(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: colors.outlineVariant),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: colors.outlineVariant, width: 1.5),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 3),
+                bar(96, 14),
+                const SizedBox(height: 12),
+                bar(140, 22),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The message of the paywall after a call: why it failed, or what it tells
+/// the user, or nothing while both are `null`. It takes its place smoothly,
+/// and a screen reader announces it when it appears.
+///
+/// In debug mode it also shows what the provider of purchases says to the
+/// developer of the app about a failure, which is no text for a user.
+class PaywallMessage extends StatelessWidget {
+  /// Creates the message.
+  const PaywallMessage({
+    required this.text,
+    required this.failed,
+    this.hint,
+    super.key,
+  });
+
+  /// The text of the message for the user, or `null` for none.
+  final String? text;
+
+  /// Whether the message tells of a failure, in the colours that the theme
+  /// has for an error, rather than of a notice.
+  final bool failed;
+
+  /// What the provider of purchases says to the developer of the app.
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = this.text;
+    final message = text == null
+        ? const SizedBox(width: double.infinity)
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _MessageCard(text: text, failed: failed, hint: hint),
+          );
+    // An app that asks for less motion shows the message at once. It does
+    // so without an AnimatedSize: one with a duration of zero fails an
+    // assertion of Flutter when the size of its child changes.
+    if (MediaQuery.disableAnimationsOf(context)) return message;
+    return AnimatedSize(
+      duration: Durations.short4,
+      curve: Easing.emphasizedDecelerate,
+      alignment: Alignment.topCenter,
+      child: message,
+    );
+  }
+}
+
+/// The box of a [PaywallMessage]: a card in a tint of the colour that the
+/// theme has for an error, or of its accent for a notice.
+class _MessageCard extends StatelessWidget {
+  const _MessageCard({
+    required this.text,
+    required this.failed,
+    required this.hint,
+  });
+
+  final String text;
+  final bool failed;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final tone = failed ? colors.error : colors.secondary;
+    final hint = kDebugMode ? this.hint : null;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Card.outlined(
+        margin: EdgeInsets.zero,
+        color: Color.alphaBlend(tone.withValues(alpha: 0.08), colors.surface),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                failed
+                    ? Icons.error_outline_rounded
+                    : Icons.info_outline_rounded,
+                // The icon grows with the first line of the text next to it.
+                size: MediaQuery.textScalerOf(context).scale(20),
+                color: tone,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      text,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurface,
+                      ),
+                    ),
+                    if (hint != null) ...[
+                      const SizedBox(height: 6),
+                      // As a path, it is not much larger than usual.
+                      MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: 1.5,
+                        child: Text(
+                          hint,
+                          style: monospace.copyWith(
+                            fontSize: 12,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A note for the developer of the app, which only a debug build shows, in
+/// English: what the provider of purchases says is missing, and the keys of
+/// `.env` that the paywall cannot link to, each of which a tap copies.
+class DeveloperNote extends StatelessWidget {
+  /// Creates the note, which shows nothing without a [hint] and [keys].
+  const DeveloperNote({required this.hint, required this.keys, super.key});
+
+  /// What the provider of purchases says to the developer of the app, such
+  /// as the key that it lacks, or `null`.
+  final String? hint;
+
+  /// The keys of `.env` whose values the paywall cannot link to.
+  final List<String> keys;
+
+  /// Copies [key] and says so.
+  Future<void> _copy(BuildContext context, String key) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: key));
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('Copied: $key')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = this.hint;
+    if (!kDebugMode || (hint == null && keys.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final small = theme.textTheme.bodySmall?.copyWith(
+      color: colors.onSurfaceVariant,
+    );
+    return Container(
+      margin: const EdgeInsets.only(top: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.code_rounded,
+                size: 18,
+                color: colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'For the developer',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          if (hint != null) ...[
+            const SizedBox(height: 10),
+            Text('Purchases are not set up yet:', style: small),
+            const SizedBox(height: 4),
+            MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.5,
+              child: Text(
+                hint,
+                style: monospace.copyWith(
+                  fontSize: 12,
+                  color: colors.onSurface,
+                ),
+              ),
+            ),
+          ],
+          if (keys.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Fill in these values in .env, so that the paywall links to '
+              'your pages:',
+              style: small,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final key in keys)
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainerHigh,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => _copy(context, key),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A key grows only by half, so that it
+                                // keeps to a line of its own.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    key,
+                                    style: monospace.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 14,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text('Only a debug build shows this note.', style: small),
+        ],
+      ),
+    );
+  }
+}
+=== lib/features/paywall/premium_cubit.dart (paywall (bloc)) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../core/purchases/app_purchases.dart';
+
+/// The access of the user, for the widgets of the app: its state is the
+/// `AppAccess` of the purchases of the app, `NoAccess` or `PremiumAccess`,
+/// and it emits each change of it.
+///
+/// The root of the app provides one to every widget, so a widget reads the
+/// access with `context.watch<PremiumCubit>().state`.
+class PremiumCubit extends Cubit<AppAccess> {
+  /// Creates the cubit that follows [_purchases].
+  PremiumCubit(this._purchases) : super(_purchases.value) {
+    _purchases.addListener(_follow);
+  }
+
+  final ValueListenable<AppAccess> _purchases;
+
+  void _follow() => emit(_purchases.value);
+
+  @override
+  Future<void> close() {
+    _purchases.removeListener(_follow);
+    return super.close();
+  }
+}
+=== lib/features/paywall/subscription_cubit.dart (paywall (bloc)) ===
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../core/purchases/app_purchases.dart';
+
+/// The state of the screen of the subscription: the access of the user from
+/// the purchases of the app, which it follows, and the page of the store
+/// where the user manages the plan.
+class SubscriptionCubit extends Cubit<AppAccess> {
+  /// Creates the cubit that follows [_purchases] and opens a page with
+  /// [_openLink].
+  SubscriptionCubit(this._purchases, this._openLink) : super(_purchases.value) {
+    _purchases.addListener(_follow);
+  }
+
+  final AppPurchasesController _purchases;
+  final Future<void> Function(Uri url) _openLink;
+
+  /// Opens [url], the page of the store where the user manages the plan.
+  Future<void> manage(Uri url) => _openLink(url);
+
+  void _follow() => emit(_purchases.value);
+
+  @override
+  Future<void> close() {
+    _purchases.removeListener(_follow);
+    return super.close();
+  }
+}
+=== lib/features/paywall/subscription_screen.dart (paywall (bloc)) ===
+import 'package:flutter/widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../core/purchases/app_purchases.dart';
+import 'paywall_composition.dart';
+import 'subscription_cubit.dart';
+import 'subscription_view.dart';
+
+/// The screen of the subscription: the [SubscriptionView] with the access
+/// of a [SubscriptionCubit].
+///
+/// It neither closes itself nor navigates once the access ends: the router
+/// closes it then.
+class SubscriptionScreen extends StatelessWidget {
+  /// Creates the screen.
+  const SubscriptionScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => createSubscriptionCubit(),
+    child: BlocBuilder<SubscriptionCubit, AppAccess>(
+      builder: (context, access) => SubscriptionView(
+        access: access,
+        onManage: context.read<SubscriptionCubit>().manage,
+      ),
+    ),
+  );
+}
+=== lib/features/paywall/subscription_setting.dart (paywall (bloc)) ===
+import 'package:flutter/widgets.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../core/purchases/app_purchases.dart';
+import '../../core/router/navigation.dart';
+import 'premium_cubit.dart';
+import 'subscription_setting_row.dart';
+
+/// The entry of the subscription on the settings screen: the
+/// [SubscriptionSettingRow] with the access of the user, from the
+/// [PremiumCubit] of the app, which leads to the screen of the
+/// subscription.
+///
+/// For a user without premium access, the router shows the paywall over
+/// the settings screen first, and the screen of the subscription once the
+/// user has the access.
+class SubscriptionSetting extends StatelessWidget {
+  /// Creates the entry.
+  const SubscriptionSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) => SubscriptionSettingRow(
+    active: context.watch<PremiumCubit>().state is PremiumAccess,
+    onTap: () => context.nav.paywall.subscription().push<void>(),
+  );
+}
+=== lib/features/paywall/subscription_setting_row.dart (paywall) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+/// What the entry of the subscription on the settings screen shows: a row,
+/// as the other entries of the screen are, which tells whether the user has
+/// premium access and leads to the screen of the subscription.
+///
+/// It keeps nothing: the entry gives it whether the user has the access and
+/// takes the tap. So it is the same whichever way the app manages state.
+class SubscriptionSettingRow extends StatelessWidget {
+  /// Creates the row.
+  const SubscriptionSettingRow({
+    required this.active,
+    required this.onTap,
+    super.key,
+  });
+
+  /// Whether the user has premium access.
+  final bool active;
+
+  /// Shows the screen of the subscription, or the paywall first for a user
+  /// without premium access.
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return ListTile(
+      leading: Icon(
+        active ? Icons.workspace_premium : Icons.workspace_premium_outlined,
+        color: active ? theme.colorScheme.secondary : null,
+      ),
+      title: Text(context.l10n.paywallSettingTitle),
+      subtitle: Text(
+        active
+            ? context.l10n.paywallSettingActive
+            : context.l10n.paywallSettingInactive,
+        style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+      ),
+      trailing: Icon(Icons.chevron_right, color: muted),
+      onTap: onTap,
+    );
+  }
+}
+=== lib/features/paywall/subscription_view.dart (paywall) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import '../../core/purchases/app_purchases.dart';
+import 'paywall_card.dart';
+import 'paywall_texts.dart';
+import 'paywall_widgets.dart';
+
+/// What the screen of the subscription shows to a user with premium access:
+/// the card of premium access, unlocked, the plan, when it renews or ends,
+/// or that it is for good, and the button to the page of the store where
+/// the user manages the plan, when the store has one.
+///
+/// It keeps nothing of the access itself: the screen gives it the access of
+/// the user and takes what the user asks for. So it is the same whichever
+/// way the app manages state. When the access ends, the router closes the
+/// screen; until then the view shows the access that the user had.
+class SubscriptionView extends StatefulWidget {
+  /// Creates the view.
+  const SubscriptionView({
+    required this.access,
+    required this.onManage,
+    super.key,
+  });
+
+  /// The access of the user.
+  final AppAccess access;
+
+  /// Opens the page of the store where the user manages the plan.
+  final void Function(Uri url) onManage;
+
+  @override
+  State<SubscriptionView> createState() => _SubscriptionViewState();
+}
+
+class _SubscriptionViewState extends State<SubscriptionView>
+    with SingleTickerProviderStateMixin {
+  /// Lets the parts of the screen rise in one after another, once.
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  var _started = false;
+
+  /// The access that the screen shows: that of the user, also once it
+  /// ended, since the screen shows until the router closes it.
+  late PremiumAccess? _shown = switch (widget.access) {
+    final PremiumAccess access => access,
+    NoAccess() => null,
+  };
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // An app that asks for less motion shows the screen at once.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entrance.value = 1;
+    } else {
+      _entrance.forward();
+    }
+  }
+
+  @override
+  void didUpdateWidget(SubscriptionView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.access case final PremiumAccess access) _shown = access;
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final access = _shown;
+    // Whether a page below this one is there to go back to.
+    final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+    final manageUrl = access?.manageUrl;
+    return Scaffold(
+      appBar: back ? AppBar() : null,
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          // The screen scrolls under what covers the bottom of the screen,
+          // such as the bar of the home gesture, and ends above it.
+          padding: EdgeInsets.fromLTRB(
+            20,
+            back ? 8 : 24,
+            20,
+            32 + MediaQuery.paddingOf(context).bottom,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Rise(
+                    animation: _entrance,
+                    order: 0,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Semantics(
+                          header: true,
+                          // The title is large already, so it grows only by
+                          // half with the text size of the device.
+                          child: WholeWords(
+                            context.l10n.paywallSubscriptionTitle,
+                            style: theme.textTheme.headlineLarge,
+                            maxScaleFactor: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          context.l10n.paywallSubscriptionIntro,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Rise(
+                    animation: _entrance,
+                    order: 1,
+                    child: PremiumCard(
+                      animation: _entrance,
+                      premium: context.l10n.paywallPremium,
+                      badge: context.l10n.paywallUnlocked,
+                    ),
+                  ),
+                  if (access != null) ...[
+                    const SizedBox(height: 24),
+                    Rise(
+                      animation: _entrance,
+                      order: 2,
+                      child: _Details(access: access),
+                    ),
+                  ],
+                  if (manageUrl != null) ...[
+                    const SizedBox(height: 24),
+                    Rise(
+                      animation: _entrance,
+                      order: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FilledButton.tonalIcon(
+                            onPressed: () => widget.onManage(manageUrl),
+                            icon: const Icon(Icons.open_in_new_rounded),
+                            label: WholeWords(
+                              context.l10n.paywallManage,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            context.l10n.paywallManageHint,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The plan of [access] and when it renews or ends, or that it is for
+/// good, one below the other on a card, with a line between them.
+class _Details extends StatelessWidget {
+  const _Details({required this.access});
+
+  final PremiumAccess access;
+
+  @override
+  Widget build(BuildContext context) {
+    final period = access.period;
+    final plan = period == null ? null : termNameOf(context, period);
+    final expiresAt = access.expiresAt;
+    final rows = [
+      if (plan != null)
+        _Row(
+          icon: Icons.workspace_premium_outlined,
+          label: context.l10n.paywallPlanLabel,
+          value: plan,
+        ),
+      if (expiresAt == null)
+        _Row(
+          icon: Icons.all_inclusive_rounded,
+          label: context.l10n.paywallLifetimeAccess,
+        )
+      else
+        _Row(
+          icon: access.inTrial
+              ? Icons.hourglass_bottom_rounded
+              : access.renews
+              ? Icons.autorenew_rounded
+              : Icons.event_busy_outlined,
+          label: access.inTrial
+              ? context.l10n.paywallTrialEndsOn
+              : access.renews
+              ? context.l10n.paywallRenewsOn
+              : context.l10n.paywallEndsOn,
+          value: MaterialLocalizations.of(
+            context,
+          ).formatShortDate(expiresAt.toLocal()),
+        ),
+    ];
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (index, row) in rows.indexed) ...[
+            if (index > 0) const Divider(height: 1, indent: 56),
+            row,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A row of the card of the subscription: its [icon], its [label] and its
+/// [value], if it has one. A screen reader reads it as one line.
+class _Row extends StatelessWidget {
+  const _Row({required this.icon, required this.label, this.value});
+
+  final IconData icon;
+  final String label;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final value = this.value;
+    return MergeSemantics(
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(label),
+        // Below the label, where a long value has the width of the row.
+        subtitle: value == null
+            ? null
+            : Text(
+                value,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+      ),
+    );
+  }
+}
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
-import 'package:my_app/core/l10n/language_setting.dart' as entry2;
-import 'package:my_app/core/notifications/notifications_setting.dart' as entry3;
-import 'package:my_app/core/purchases/restore_purchases_setting.dart' as entry4;
-import 'package:my_app/core/theme/theme_mode_setting.dart' as entry1;
+import 'package:my_app/core/l10n/language_setting.dart' as entry3;
+import 'package:my_app/core/notifications/notifications_setting.dart' as entry4;
+import 'package:my_app/core/purchases/restore_purchases_setting.dart' as entry5;
+import 'package:my_app/core/theme/theme_mode_setting.dart' as entry2;
+import 'package:my_app/features/paywall/subscription_setting.dart' as entry1;
 import 'package:my_app/features/sign_in/account_setting.dart' as entry0;
 
 /// The settings of the app: an entry for each setting that a module of the
@@ -10988,10 +13888,11 @@ class SettingsScreen extends StatelessWidget {
             const _Group(
               children: [
                 entry0.AccountSetting(),
-                entry1.ThemeModeSetting(),
-                entry2.LanguageSetting(),
-                entry3.NotificationsSetting(),
-                entry4.RestorePurchasesSetting(),
+                entry1.SubscriptionSetting(),
+                entry2.ThemeModeSetting(),
+                entry3.LanguageSetting(),
+                entry4.NotificationsSetting(),
+                entry5.RestorePurchasesSetting(),
               ],
             ),
           ],
@@ -13680,6 +16581,74 @@ class DefaultFirebaseOptions {
   "signInDeleteOtherAccount": "That is a different account. Confirm the deletion with the account you are signed in to.",
   "signInSettingSignedIn": "Signed in",
   "signInNotSignedIn": "Not signed in",
+  "paywallClose": "Close",
+  "paywallPremium": "Premium",
+  "paywallBenefitAll": "Every feature of the app, without limits",
+  "paywallBenefitNew": "New features as soon as they arrive",
+  "paywallBenefitSupport": "Support for the work on the app",
+  "paywallBestValue": "Best value",
+  "paywallPlanWeekly": "Weekly",
+  "paywallPlanMonthly": "Monthly",
+  "paywallPlanTwoMonths": "Every 2 months",
+  "paywallPlanThreeMonths": "Every 3 months",
+  "paywallPlanSixMonths": "Every 6 months",
+  "paywallPlanYearly": "Yearly",
+  "paywallPlanLifetime": "Lifetime",
+  "paywallPerWeek": "/ week",
+  "paywallPerMonth": "/ month",
+  "paywallPerTwoMonths": "/ 2 months",
+  "paywallPerThreeMonths": "/ 3 months",
+  "paywallPerSixMonths": "/ 6 months",
+  "paywallPerYear": "/ year",
+  "paywallOnce": "once",
+  "paywallThreeDays": "3 days",
+  "paywallOneWeek": "1 week",
+  "paywallTwoWeeks": "2 weeks",
+  "paywallOneMonth": "1 month",
+  "paywallTwoMonths": "2 months",
+  "paywallThreeMonths": "3 months",
+  "paywallSixMonths": "6 months",
+  "paywallOneYear": "1 year",
+  "paywallFree": "free",
+  "paywallForLength": "for",
+  "paywallThen": "then",
+  "paywallFreeTrial": "Free trial",
+  "paywallIntroPrice": "Introductory price",
+  "paywallStartTrial": "Start free trial",
+  "paywallSubscribe": "Subscribe",
+  "paywallBuy": "Buy",
+  "paywallTermsApple": "The plan renews automatically until you cancel it. Payment is charged to your Apple Account. Cancel at least 24 hours before the period ends, in the settings of the App Store.",
+  "paywallTermsGoogle": "The plan renews automatically until you cancel it. Cancel anytime in Google Play, under Payments & subscriptions.",
+  "paywallTermsTrial": "Unless you cancel before the free trial ends, the full price is charged then.",
+  "paywallTermsIntro": "After the introductory price, the full price is charged for each period.",
+  "paywallTermsLifetime": "One-time payment. No subscription.",
+  "paywallRestore": "Restore purchases",
+  "paywallTerms": "Terms of Use",
+  "paywallPrivacy": "Privacy Policy",
+  "paywallNothingToRestore": "No purchases to restore.",
+  "paywallPendingNotice": "Your purchase is waiting for approval. Premium unlocks once it goes through.",
+  "paywallPlansUnavailable": "Plans are not available right now.",
+  "paywallTryAgain": "Try again",
+  "paywallFailureNetwork": "No connection. Check the internet and try again.",
+  "paywallFailureOwned": "Your store account owns this plan already. Restore purchases to unlock premium.",
+  "paywallFailureNotAllowed": "Purchases are not allowed on this device.",
+  "paywallFailureUnavailable": "This plan is not available on this device.",
+  "paywallFailureStore": "The store had a problem. Try again later.",
+  "paywallFailureNotSetUp": "Purchases are unavailable right now.",
+  "paywallFailureUnknown": "Something went wrong. Try again.",
+  "paywallSubscriptionTitle": "Subscription",
+  "paywallSubscriptionIntro": "Thank you for your support. Premium is unlocked.",
+  "paywallUnlocked": "Unlocked",
+  "paywallPlanLabel": "Plan",
+  "paywallRenewsOn": "Renews on",
+  "paywallEndsOn": "Ends on",
+  "paywallTrialEndsOn": "Trial ends on",
+  "paywallLifetimeAccess": "Lifetime access",
+  "paywallManage": "Manage subscription",
+  "paywallManageHint": "Cancel anytime in the store where you subscribed.",
+  "paywallSettingTitle": "Subscription",
+  "paywallSettingActive": "Active",
+  "paywallSettingInactive": "Not active",
   "themeTitle": "Theme",
   "themeSystem": "System",
   "themeLight": "Light",
@@ -13774,6 +16743,74 @@ class DefaultFirebaseOptions {
   "signInDeleteOtherAccount": "Це інший акаунт. Підтвердьте видалення акаунтом, у який ви увійшли.",
   "signInSettingSignedIn": "Вхід виконано",
   "signInNotSignedIn": "Вхід не виконано",
+  "paywallClose": "Закрити",
+  "paywallPremium": "Преміум",
+  "paywallBenefitAll": "Усі можливості застосунку без обмежень",
+  "paywallBenefitNew": "Нові можливості, щойно вони з’являються",
+  "paywallBenefitSupport": "Підтримка роботи над застосунком",
+  "paywallBestValue": "Найвигідніше",
+  "paywallPlanWeekly": "Щотижня",
+  "paywallPlanMonthly": "Щомісяця",
+  "paywallPlanTwoMonths": "Кожні 2 місяці",
+  "paywallPlanThreeMonths": "Кожні 3 місяці",
+  "paywallPlanSixMonths": "Кожні 6 місяців",
+  "paywallPlanYearly": "Щороку",
+  "paywallPlanLifetime": "Назавжди",
+  "paywallPerWeek": "/ тиждень",
+  "paywallPerMonth": "/ місяць",
+  "paywallPerTwoMonths": "/ 2 місяці",
+  "paywallPerThreeMonths": "/ 3 місяці",
+  "paywallPerSixMonths": "/ 6 місяців",
+  "paywallPerYear": "/ рік",
+  "paywallOnce": "один раз",
+  "paywallThreeDays": "3 дні",
+  "paywallOneWeek": "1 тиждень",
+  "paywallTwoWeeks": "2 тижні",
+  "paywallOneMonth": "1 місяць",
+  "paywallTwoMonths": "2 місяці",
+  "paywallThreeMonths": "3 місяці",
+  "paywallSixMonths": "6 місяців",
+  "paywallOneYear": "1 рік",
+  "paywallFree": "безкоштовно",
+  "paywallForLength": "на",
+  "paywallThen": "далі",
+  "paywallFreeTrial": "Безкоштовний пробний період",
+  "paywallIntroPrice": "Вступна ціна",
+  "paywallStartTrial": "Спробувати безкоштовно",
+  "paywallSubscribe": "Підписатися",
+  "paywallBuy": "Купити",
+  "paywallTermsApple": "План поновлюється автоматично, доки ви його не скасуєте. Оплату знімають з вашого облікового запису Apple. Скасуйте щонайменше за 24 години до кінця періоду, у налаштуваннях App Store.",
+  "paywallTermsGoogle": "План поновлюється автоматично, доки ви його не скасуєте. Скасувати можна будь-коли в Google Play, у розділі «Платежі й підписки».",
+  "paywallTermsTrial": "Якщо не скасувати до кінця безкоштовного періоду, тоді буде знято повну ціну.",
+  "paywallTermsIntro": "Після вступної ціни за кожен період знімають повну ціну.",
+  "paywallTermsLifetime": "Одноразовий платіж. Без підписки.",
+  "paywallRestore": "Відновити покупки",
+  "paywallTerms": "Умови використання",
+  "paywallPrivacy": "Політика конфіденційності",
+  "paywallNothingToRestore": "Немає покупок для відновлення.",
+  "paywallPendingNotice": "Покупка чекає на підтвердження. Преміум відкриється, щойно її підтвердять.",
+  "paywallPlansUnavailable": "Плани зараз недоступні.",
+  "paywallTryAgain": "Спробувати ще раз",
+  "paywallFailureNetwork": "Немає зв’язку. Перевірте інтернет і спробуйте ще раз.",
+  "paywallFailureOwned": "Ваш обліковий запис у магазині вже має цей план. Відновіть покупки, щоб відкрити преміум.",
+  "paywallFailureNotAllowed": "На цьому пристрої покупки заборонені.",
+  "paywallFailureUnavailable": "Цей план недоступний на цьому пристрої.",
+  "paywallFailureStore": "У магазині сталася помилка. Спробуйте пізніше.",
+  "paywallFailureNotSetUp": "Покупки зараз недоступні.",
+  "paywallFailureUnknown": "Щось пішло не так. Спробуйте ще раз.",
+  "paywallSubscriptionTitle": "Підписка",
+  "paywallSubscriptionIntro": "Дякуємо за підтримку. Преміум відкрито.",
+  "paywallUnlocked": "Відкрито",
+  "paywallPlanLabel": "План",
+  "paywallRenewsOn": "Поновиться",
+  "paywallEndsOn": "Закінчиться",
+  "paywallTrialEndsOn": "Пробний період закінчиться",
+  "paywallLifetimeAccess": "Доступ назавжди",
+  "paywallManage": "Керувати підпискою",
+  "paywallManageHint": "Скасувати можна будь-коли в магазині, де ви підписалися.",
+  "paywallSettingTitle": "Підписка",
+  "paywallSettingActive": "Активна",
+  "paywallSettingInactive": "Не активна",
   "themeTitle": "Тема",
   "themeSystem": "Системна",
   "themeLight": "Світла",
@@ -13797,6 +16834,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart' show BlocProvider;
 import 'package:my_app/core/l10n/app_locale.dart';
 import 'package:my_app/core/theme/theme_mode.dart';
+import 'package:my_app/features/paywall/paywall_composition.dart'
+    show createPremiumCubit;
 import 'package:my_app/features/sign_in/sign_in_composition.dart'
     show createSessionCubit;
 
@@ -13807,13 +16846,16 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await bootstrap();
   runApp(
-    AppLocaleScope(
-      notifier: appLocale,
-      child: AppThemeModeScope(
-        notifier: appThemeMode,
-        child: BlocProvider(
-          create: (_) => createSessionCubit(),
-          child: const App(),
+    BlocProvider(
+      create: (_) => createPremiumCubit(),
+      child: AppLocaleScope(
+        notifier: appLocale,
+        child: AppThemeModeScope(
+          notifier: appThemeMode,
+          child: BlocProvider(
+            create: (_) => createSessionCubit(),
+            child: const App(),
+          ),
         ),
       ),
     ),
@@ -13852,6 +16894,7 @@ dependencies:
   shared_preferences_android: "^2.5.2"
   sign_in_with_apple: "^8.2.0"
   timezone: "^0.11.0"
+  url_launcher: "^6.3.2"
 
 dev_dependencies:
   flutter_test:

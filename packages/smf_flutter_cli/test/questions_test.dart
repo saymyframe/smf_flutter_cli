@@ -202,6 +202,10 @@ Future<_Run> _create(
 const _signInChoice = 'sign_in — Sign-in, sign-up and password reset with '
     "email or the app's ways to sign in, and an account screen";
 
+/// How a run in a terminal offers the feature `paywall`.
+const _paywallChoice = 'paywall — A paywall with the plans of the purchases '
+    'of the app, and a subscription screen';
+
 void main() {
   test(
       'a run in a terminal asks for the features first, and not for the '
@@ -251,6 +255,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       _signInChoice,
+      _paywallChoice,
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -427,6 +432,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       _signInChoice,
+      _paywallChoice,
     ]);
     expect(
       run.lines,
@@ -2260,20 +2266,19 @@ void main() {
       'get_it',
       'bloc',
       'event_bus',
-      'revenuecat',
+      'paywall',
       'firebase_crashlytics',
       'firebase_analytics',
     ];
     final run = await _create(
       {
-        'Features': ['home', 'sign_in'],
+        'Features': ['home', 'sign_in', 'paywall'],
         'Infrastructure': ['firebase_core', 'google_sign_in', 'apple_sign_in'],
         'Layout': ['bottom_tabs'],
         'Onboarding screen': ['onboarding'],
         'Localization': ['gen_l10n'],
         'Theme': ['material_theme'],
         'Push messages': ['firebase_messaging'],
-        'Purchases': ['revenuecat'],
         'Dependency injection': ['get_it'],
         'State management': ['bloc'],
         'Events': ['event_bus'],
@@ -2293,9 +2298,8 @@ void main() {
     // role requires, which come after the two screens that the
     // notifications role adds to; what is under the hood, the preferences
     // that the localization, the theme, the onboarding and the
-    // notifications require, the DI container, the state manager, the
-    // events, and the purchases, whose provider needs the values of .env;
-    // and last the services of crash reporting, analytics and
+    // notifications require, the DI container, the state manager and the
+    // events; and last the services of crash reporting, analytics and
     // authentication. The choices of the roles come once the modules are
     // known.
     expect(run.asked.map((question) => question.message), [
@@ -2312,15 +2316,14 @@ void main() {
         'Which module provides it?',
       ),
       'Events: which module provides it?',
-      'Purchases: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Who may use the app without an account?',
     ]);
     // The answers before the questions of the settings screen, the router,
-    // the notifications, the preferences, the values of .env and the
-    // authentication need those roles, so the run asks none of them and
-    // adds their only providers.
+    // the notifications, the preferences, the purchases, the values of .env
+    // and the authentication need those roles, so the run asks none of them
+    // and adds their only providers.
     final added = [
       for (final line in run.lines)
         if (line.startsWith('Adding ')) line,
@@ -2343,16 +2346,20 @@ void main() {
         'which sign_in requires.',
       ),
       equals(
+        'Adding revenuecat: the only provider of the purchases role, which '
+        'paywall requires.',
+      ),
+      equals(
+        'Adding dart_define: the only provider of the values in .env role, '
+        'which paywall requires.',
+      ),
+      equals(
         'Adding shared_preferences: the only provider of the preferences '
         'role, which onboarding requires.',
       ),
       equals(
         'Adding local_notifications: the only provider of the notifications '
         'role, which firebase_messaging requires.',
-      ),
-      equals(
-        'Adding dart_define: the only provider of the values in .env role, '
-        'which revenuecat requires.',
       ),
     ]);
     // So the app has every module of smf create but the other state

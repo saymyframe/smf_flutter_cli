@@ -1,0 +1,10 @@
+name: paywall_riverpod
+description: "The state of the paywall of an SMF app with Riverpod: a provider for each screen, the screens that give their views its state, and the providers with the purchases of the app and the access of the user."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags and the rendered sockets of its tags.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1
