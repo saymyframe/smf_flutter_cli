@@ -201,13 +201,20 @@ List<String> _differencesOf(Plan plan, StoreProduct product) {
 /// already, which the user of a new install does not have: the verdict then
 /// tells why. The [service] is that of the app, and the [directory] the
 /// temporary directory of the app, unless a test gives another.
+///
+/// The check of a [release] build, whose files the script of CI cannot read,
+/// prints its verdict only once it asked for access. So the start of a
+/// release app in CI, which takes no key of the Test Store and so asks for
+/// nothing, prints no failure into a log that passes.
 Future<String> checkAccess({
   PurchasesService? service,
   Directory? directory,
   Duration wait = accessTimeout,
   Duration interval = readInterval,
+  bool release = kReleaseMode,
 }) async {
   final files = directory ?? Directory.systemTemp;
+  final request = File('${files.path}/smf_start_request_$exchangeName');
   String verdict;
   try {
     final problem = await _problemOfAccess(
@@ -225,7 +232,9 @@ Future<String> checkAccess({
   } on Object catch (error) {
     debugPrint('The check of the access wrote no verdict: $error');
   }
-  debugPrint('The check of the access $verdict');
+  if (!release || request.existsSync()) {
+    debugPrint('The check of the access $verdict');
+  }
   return verdict;
 }
 

@@ -316,6 +316,46 @@ void main() {
   );
 
   testWidgets(
+    'the check of a release build, which takes no key of the Test Store and '
+    'whose files nobody reads, prints nothing when it asks for nothing, and '
+    'still writes its verdict; that of a debug build prints it',
+    (tester) async {
+      await startUp(tester);
+      // A service without a key, created in real time, as the check runs.
+      RevenueCatPurchasesService withoutKey() => RevenueCatPurchasesService(
+            const RevenueCatKey.none('REVENUECAT_GOOGLE_KEY has no value.'),
+          );
+      late String released;
+      late String debugged;
+
+      final ofRelease = await checking(tester, () async {
+        released = await checkAccess(
+          service: withoutKey(),
+          directory: temporary,
+          release: true,
+        );
+      });
+      final verdictOfRelease = report().readAsStringSync().trim();
+      final ofDebug = await checking(tester, () async {
+        debugged = await checkAccess(
+          service: withoutKey(),
+          directory: temporary,
+        );
+      });
+
+      const verdict = 'failed: RevenueCat is not configured in this build, so '
+          'no access can reach the app: REVENUECAT_GOOGLE_KEY has no value.';
+      expect(released, verdict);
+      expect(verdictOfRelease, verdict);
+      expect(ofRelease, isEmpty);
+      expect(debugged, verdict);
+      expect(ofDebug, ['The check of the access $verdict']);
+      expect(request().existsSync(), isFalse);
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
     'the check asks for nothing when RevenueCat is not configured, without '
     'a key or with one that RevenueCat refused, and tells why, or when the '
     'purchases of the app are not those of RevenueCat',
