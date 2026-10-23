@@ -3221,6 +3221,8 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
         'integration_test/walk/walk.dart',
         'test/walk_test.dart',
         startProbesFile,
+        startAnswersFile,
+        startBuildArgumentsFile,
       ]);
       expect(startProbesFile, 'integration_test/start_probes.dart');
       final list =
@@ -3329,6 +3331,165 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           'which the matrix writes for the probes of the tests.',
         ),
       );
+      expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+    });
+
+    /// The tests of [directory] with a probe in a file of their own in
+    /// `integration_test/`, named after the directory, that asks for
+    /// [answer].
+    MatrixAppTest asking(String directory, String answer) {
+      final probe = 'integration_test/${directory.split('/').last}.dart';
+      fileSystem.file('$directory/$probe')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// {{app_name}}\n');
+      return MatrixAppTest(
+        directory,
+        appliesTo: (_) => true,
+        startProbe: MatrixStartProbe(probe, 'probe', answer: answer),
+      );
+    }
+
+    /// The text of the file at [path] of the app.
+    String read(String path) =>
+        fileSystem.file('/apps/app_1/$path').readAsStringSync();
+
+    test(
+        'go into the app with the answers of CI that they ask for and the '
+        'arguments that build the app, next to the list, each on a line of '
+        'its own, for the script that starts the app on a device', () {
+      expect(startAnswersFile, 'integration_test/start_answers');
+      expect(startBuildArgumentsFile, 'integration_test/start_build_arguments');
+
+      final added = addAppTests(
+        [
+          asking('/tests/messages', 'messages'),
+          start,
+          walk(),
+          asking('/tests/access', 'access_2'),
+        ],
+        app: app,
+        directory: '/apps/app_1',
+        packageName: 'my_app',
+        buildArguments: const ['--dart-define-from-file=.env', '--flavor=ci'],
+        fileSystem: fileSystem,
+      );
+
+      expect(
+        added,
+        containsAll([
+          startProbesFile,
+          startAnswersFile,
+          startBuildArgumentsFile,
+        ]),
+      );
+      expect(read(startAnswersFile), 'messages\naccess_2\n');
+      expect(
+        read(startBuildArgumentsFile),
+        '--dart-define-from-file=.env\n--flavor=ci\n',
+      );
+    });
+
+    test(
+        'give the app no answer and no build argument without them, and only '
+        'with tests that run the probes', () {
+      expect(add([start, walk()]), containsAll([startAnswersFile]));
+      expect(read(startAnswersFile), '');
+      expect(read(startBuildArgumentsFile), '');
+
+      fileSystem.directory('/apps/app_1').deleteSync(recursive: true);
+      final added = addAppTests(
+        [asking('/tests/messages', 'messages')],
+        app: app,
+        directory: '/apps/app_1',
+        packageName: 'my_app',
+        buildArguments: const ['--dart-define-from-file=.env'],
+        fileSystem: fileSystem,
+      );
+      expect(added, isNot(contains(startAnswersFile)));
+      expect(added, isNot(contains(startBuildArgumentsFile)));
+    });
+
+    test(
+        'ask for answers with names that the script takes, each of one probe '
+        'only, and the build arguments fit on their lines', () {
+      Matcher throwsProblem(String message) => throwsA(
+            isA<MatrixAppTestException>()
+                .having((error) => error.message, 'message', message),
+          );
+      List<String> addWith(
+        List<MatrixAppTest> tests, {
+        List<String> buildArguments = const [],
+      }) =>
+          addAppTests(
+            tests,
+            app: app,
+            directory: '/apps/app_1',
+            packageName: 'my_app',
+            buildArguments: buildArguments,
+            fileSystem: fileSystem,
+          );
+
+      for (final answer in ['', 'Messages', 'push-messages', 'a b']) {
+        for (final tests in [
+          [start, asking('/tests/messages', answer)],
+          [asking('/tests/messages', answer)],
+        ]) {
+          expect(
+            () => addWith(tests),
+            throwsProblem(
+              'The probe of /tests/messages asks for the answer "$answer", '
+              'but the name of an answer has only small letters, digits and '
+              'underscores, as the script of CI takes it.',
+            ),
+            reason: '"$answer" with ${tests.length} tests',
+          );
+        }
+      }
+      expect(
+        () => addWith([
+          asking('/tests/messages', 'messages'),
+          start,
+          asking('/tests/other', 'messages'),
+        ]),
+        throwsProblem(
+          'The probes of /tests/messages and /tests/other both ask for the '
+          'answer messages.',
+        ),
+      );
+      for (final argument in ['', '--a\n--b', '--a\r']) {
+        expect(
+          () => addWith([start], buildArguments: ['--flavor=ci', argument]),
+          throwsProblem(
+            'A build argument of the app is empty or has a line break, which '
+            'integration_test/start_build_arguments cannot hold.',
+          ),
+          reason: argument,
+        );
+      }
+      expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+    });
+
+    test('the answers and the build arguments are no files of a test', () {
+      for (final (path, what) in [
+        (startAnswersFile, 'the answers that their probes ask for'),
+        (startBuildArgumentsFile, 'the arguments that build the app'),
+      ]) {
+        final file = fileSystem.file('/tests/walk/$path')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('of the tests\n');
+        expect(
+          () => add([walk(), start]),
+          throwsA(
+            isA<MatrixAppTestException>().having(
+              (error) => error.message,
+              'message',
+              'The tests of /tests/walk have $path, which the matrix writes '
+                  'for $what.',
+            ),
+          ),
+        );
+        file.deleteSync();
+      }
       expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
     });
   });
@@ -3817,11 +3978,15 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       List<MatrixAppTest> tests, {
       Map<String, int> codes = const {},
       MatrixApp? app,
+      MatrixEnv? env,
+      String? envValues,
     }) =>
         addAppTestsTo(
           generated,
           tests,
           app: app,
+          env: env,
+          envValues: envValues,
           fileSystem: fileSystem,
           flutter: (arguments, directory) async {
             final command = arguments.join(' ');
@@ -4016,6 +4181,219 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         'but the app is none.',
       );
       expect(fileSystem.directory('/apps/start_app').existsSync(), isFalse);
+    });
+
+    group('for the script that starts the app on a device', () {
+      /// How the apps get their values: from `.env`, with an argument of the
+      /// flutter tool that names the app.
+      final env = MatrixEnv(
+        file: '.env',
+        toolArguments: (app) => ['--dart-define-from-file=.env', app.name],
+        keys: (app) => const {},
+      );
+      const app = MatrixApp('every_module', [ModuleId('home')]);
+      final start = MatrixAppTest(
+        '/tests/start',
+        appliesTo: (app) => true,
+        readsStartProbes: true,
+      );
+
+      /// The text of the file at [path] of the app.
+      String read(String path) =>
+          fileSystem.file('/apps/start_app/$path').readAsStringSync();
+
+      test(
+          'writes the arguments that build the app of the matrix with its '
+          'values, and none without the app, whose roles they come from',
+          () async {
+        final (code, output) = await add([start], app: app, env: env);
+
+        expect(code, 0, reason: output);
+        expect(
+          read(startBuildArgumentsFile),
+          '--dart-define-from-file=.env\nevery_module\n',
+        );
+        expect(read(startAnswersFile), '');
+
+        for (final (app, withEnv) in [(null, env), (app, null)]) {
+          fileSystem.directory('/apps/start_app').deleteSync(recursive: true);
+          final (code, output) = await add([start], app: app, env: withEnv);
+
+          expect(code, 0, reason: output);
+          expect(read(startBuildArgumentsFile), '');
+        }
+      });
+
+      group('with values of CI', () {
+        const values = '/ci/values.env';
+        late File dotEnv;
+
+        setUp(() {
+          dotEnv = fileSystem.file('/apps/start_app/.env')
+            ..createSync(recursive: true)
+            ..writeAsStringSync(
+              '# The key of the shop.\n'
+              'SHOP_KEY=\n'
+              'SHOP_URL=https://kept.example\n'
+              '# The text of the shop, SHOP_TEXT=\n'
+              'SHOP_TEXT = \n'
+              'SHOP_NOTE=\n',
+            );
+        });
+
+        /// Writes [text] into the file of the values of CI.
+        void writeValues(String text) => fileSystem.file(values)
+          ..createSync(recursive: true)
+          ..writeAsStringSync(text);
+
+        test(
+            'writes each of them into the line of its key in .env that has no '
+            'value yet, as it is or in double quotes, keeps every other line, '
+            'and names the keys without a value', () async {
+          writeValues(
+            '# The values of CI.\n'
+            '\n'
+            'SHOP_KEY=test_ci_secret\r\n'
+            'SHOP_URL=https://ci.example\n'
+            '  SHOP_TEXT = "Ціни # без змін"  \n'
+            'OTHER_KEY=other_ci_secret\n'
+            'SHOP_NOTE=\n',
+          );
+
+          final (code, output) = await add(
+            [start],
+            app: app,
+            env: env,
+            envValues: values,
+          );
+
+          expect(code, 0, reason: output);
+          expect(
+            dotEnv.readAsStringSync(),
+            '# The key of the shop.\n'
+            'SHOP_KEY=test_ci_secret\n'
+            'SHOP_URL=https://kept.example\n'
+            '# The text of the shop, SHOP_TEXT=\n'
+            'SHOP_TEXT="Ціни # без змін"\n'
+            'SHOP_NOTE=\n',
+          );
+          expect(
+            output,
+            contains(
+              '.env: wrote the values of SHOP_KEY, SHOP_TEXT from $values. '
+              '.env has no line without a value of SHOP_URL, OTHER_KEY, so '
+              'the values of $values for them stay out of it.\n',
+            ),
+          );
+          for (final value in ['secret', 'ci.example', 'Ціни']) {
+            expect(output, isNot(contains(value)));
+          }
+        });
+
+        test(
+            'writes them into an app outside the matrix too, and none into an '
+            'app without .env', () async {
+          writeValues('SHOP_KEY=test_ci_secret\n');
+
+          final (code, output) = await add(
+            [start],
+            env: env,
+            envValues: values,
+          );
+
+          expect(code, 0, reason: output);
+          expect(
+            dotEnv.readAsStringSync(),
+            startsWith('# The key of the shop.\nSHOP_KEY=test_ci_secret\n'),
+          );
+          expect(
+            output,
+            contains('.env: wrote the values of SHOP_KEY from $values.\n'),
+          );
+
+          dotEnv.deleteSync();
+          final (without, said) = await add(
+            [start],
+            env: env,
+            envValues: values,
+          );
+
+          expect(without, 0, reason: said);
+          expect(dotEnv.existsSync(), isFalse);
+          expect(
+            said,
+            contains(
+              'The app has no .env, so it takes none of the values of '
+              '$values.\n',
+            ),
+          );
+        });
+
+        test('says so when the file gives no value', () async {
+          writeValues('# No values yet.\nSHOP_KEY=\n');
+
+          final (code, output) = await add(
+            [start],
+            env: env,
+            envValues: values,
+          );
+
+          expect(code, 0, reason: output);
+          expect(output, contains('$values gives no value.\n'));
+          expect(dotEnv.readAsStringSync(), contains('SHOP_KEY=\n'));
+        });
+
+        test(
+            'fails before it adds anything on a file that is not there, a line '
+            'that is no line KEY=value, a key given twice, a value with a '
+            'double quote and values without a file of values of the apps, '
+            'without a value in what it says', () async {
+          for (final (text, withEnv, problem) in [
+            (null, env, 'There is no file of values at $values.'),
+            (
+              'SHOP_KEY=test_ci_secret\nexport test_ci_secret\n',
+              env,
+              'Line 2 of $values is no line KEY=value.',
+            ),
+            (
+              'SHOP_KEY=test_ci_secret\nSHOP_KEY=test_ci_secret\n',
+              env,
+              '$values gives SHOP_KEY twice.',
+            ),
+            (
+              'SHOP_KEY=test_ci"secret\n',
+              env,
+              'The value of SHOP_KEY in $values has a double quote, which a '
+                  'line of .env cannot hold.',
+            ),
+            (
+              'SHOP_KEY=test_ci_secret\n',
+              null,
+              'The values of $values have no file of values of the apps to go '
+                  'into (MatrixEnv).',
+            ),
+          ]) {
+            final file = fileSystem.file(values);
+            if (file.existsSync()) file.deleteSync();
+            if (text != null) writeValues(text);
+
+            final (code, output) = await add(
+              [start],
+              app: app,
+              env: withEnv,
+              envValues: values,
+            );
+
+            expect(code, 1, reason: problem);
+            expect(output, problem);
+            expect(
+              fileSystem.file('/apps/start_app/$startProbesFile').existsSync(),
+              isFalse,
+            );
+            expect(dotEnv.readAsStringSync(), contains('SHOP_KEY=\n'));
+          }
+        });
+      });
     });
   });
 }

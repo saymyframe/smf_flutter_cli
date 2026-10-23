@@ -190,6 +190,20 @@ void main() {
         ],
         reason: reason,
       );
+      // The answer of CI that the probe of Firebase Cloud Messaging asks
+      // for, which only the apps with external steps have, and the argument
+      // of the provider of the env role, dart_define, that builds the app
+      // with its .env.
+      expect(
+        read(app, startAnswersFile),
+        withoutExternalSteps ? '' : 'firebase_messaging\n',
+        reason: reason,
+      );
+      expect(
+        read(app, startBuildArgumentsFile),
+        '--dart-define-from-file=.env\n',
+        reason: reason,
+      );
       if (!withoutExternalSteps) {
         expect(
           read(app, 'integration_test/firebase_auth/probe.dart'),
@@ -255,6 +269,10 @@ void main() {
 
     expect(start.exitCode, 0, reason: '${start.stdout}${start.stderr}');
     expect(read(app, startProbesFile), contains('startProbes = [\n];\n'));
+    // No answers and no build arguments, which come from the roles of an app
+    // of the matrix, as the probes do.
+    expect(read(app, startAnswersFile), '');
+    expect(read(app, startBuildArgumentsFile), '');
 
     final walk = named('router_walk');
     final result = await run(['--add-app-tests', newApp(), walk.directory]);
@@ -267,6 +285,67 @@ void main() {
         'matrix, but the app is none.',
       ),
     );
+  });
+
+  test(
+      'with --env-values after --app, writes the values of a file of CI into '
+      'the lines of .env of the app that have none, and prints the keys and '
+      'no value', () async {
+    final (:apps, failed: _) = await everyModuleAppsOf(
+      smfModules,
+      withoutExternalSteps: true,
+    );
+    final app = newApp();
+    final dotEnv = File(p.join(app, '.env'))
+      ..writeAsStringSync('# The key.\nREVENUECAT_TEST_KEY=\n');
+    final values = File(p.join(temp.path, 'ci.env'))
+      ..writeAsStringSync('REVENUECAT_TEST_KEY=test_not_a_real_key\n');
+
+    final result = await run([
+      '--add-app-tests',
+      '--without-external-steps',
+      '--app',
+      apps.first.name,
+      '--env-values',
+      values.path,
+      app,
+      named('start').directory,
+    ]);
+
+    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    expect(
+      dotEnv.readAsStringSync(),
+      '# The key.\nREVENUECAT_TEST_KEY=test_not_a_real_key\n',
+    );
+    expect(
+      '${result.stdout}',
+      contains(
+        '.env: wrote the values of REVENUECAT_TEST_KEY from ${values.path}.',
+      ),
+    );
+    expect('${result.stdout}${result.stderr}', isNot(contains('not_a_real')));
+
+    final none = p.join(temp.path, 'none.env');
+    final missing = await run([
+      '--add-app-tests',
+      '--env-values',
+      none,
+      newApp(),
+      named('start').directory,
+    ]);
+    expect(missing.exitCode, 1);
+    expect(
+      '${missing.stdout}',
+      contains('There is no file of values at $none.'),
+    );
+
+    final alone = await run([
+      '--add-app-tests',
+      '--env-values',
+      values.path,
+      newApp(),
+    ]);
+    expect(alone.exitCode, 64);
   });
 
   test(

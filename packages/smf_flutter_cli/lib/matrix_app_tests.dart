@@ -208,7 +208,10 @@ Future<MatrixAppTests> smfAppTests() async {
       // that stays the same, and the matrix sets them up for the tests of
       // every module of the app, since the start-up of the app starts the
       // push messages. Its probe compares, on a device, the address of the
-      // app with the token that the Firebase SDK has there.
+      // app with the token that the Firebase SDK has there, and then asks
+      // the script of CI that started the app for a push message to that
+      // address, the answer firebase_messaging, which CI gives the app with
+      // Firebase on Android.
       MatrixAppTest(
         '$messaging/firebase_messaging',
         appliesTo: _has(FirebaseMessagingModule.id),
@@ -219,6 +222,7 @@ Future<MatrixAppTests> smfAppTests() async {
         startProbe: const MatrixStartProbe(
           'integration_test/firebase_messaging/probe.dart',
           'probeFirebaseMessaging',
+          answer: 'firebase_messaging',
         ),
       ),
       // The purchases service of the module on RevenueCat: the key of .env
