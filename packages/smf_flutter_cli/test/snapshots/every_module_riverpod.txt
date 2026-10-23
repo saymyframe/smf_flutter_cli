@@ -12506,7 +12506,8 @@ import '../../core/auth/app_session.dart';
 import '../../core/auth/sign_in_methods.dart';
 
 /// A text that keeps its words whole: it breaks between its words and never
-/// inside one.
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
 ///
 /// It grows with the text size of the device, by [maxScaleFactor] at most.
 /// Where its longest word would still not fit the width that the text has,
@@ -12555,10 +12556,14 @@ class WholeWords extends StatelessWidget {
           textScaler: scaler,
           maxLines: 1,
         );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
         // How wide the longest word is in a font of [size].
         double widestAt(double size) {
           var widest = 0.0;
-          for (final word in text.split(' ')) {
+          for (final word in words) {
             painter
               ..text = TextSpan(
                 text: word,
