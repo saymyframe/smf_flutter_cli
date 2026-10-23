@@ -80,11 +80,13 @@ Future<String>? _access;
 
 /// The probe of the start check: what is wrong with the purchases of the
 /// app on RevenueCat as the start-up left them. It also starts
-/// [checkAccess] the first time, without waiting for it. It waits for no
-/// screen, so it leaves [settle] out.
+/// [checkAccess] the first time, without waiting for it, with the same
+/// service, so that RevenueCat is configured once more and no more. It
+/// waits for no screen, so it leaves [settle] out.
 Future<List<String>> probeRevenueCat(Future<void> Function() settle) {
-  _access ??= checkAccess();
-  return problemsOf(createPurchasesService());
+  final service = createPurchasesService();
+  _access ??= checkAccess(service: service);
+  return problemsOf(service);
 }
 
 /// What is wrong with the purchases of the app on RevenueCat with
