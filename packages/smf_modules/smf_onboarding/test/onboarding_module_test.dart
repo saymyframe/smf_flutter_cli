@@ -1378,7 +1378,7 @@ void main() {
         _argument(skip, 'onPressed').toSource(),
         'onboardingStatus.complete',
       );
-      expect(_textsOf(_argument(skip, 'child')), ["'Skip'"]);
+      expect(_wordsOf(_argument(skip, 'child')), ["'Skip'"]);
       expect(button.methodName.name, 'FilledButton');
       expect(_argument(button, 'onPressed').toSource(), 'onPressed');
       // What the button does and says, on a page of the module and on the
@@ -1457,7 +1457,7 @@ void main() {
       );
       expect(
         _calls(label, 'maintain').single.toSource(),
-        'Visibility.maintain(visible: !spins, child: Text(label))',
+        'Visibility.maintain(visible: !spins, child: WholeWords(label))',
       );
     });
 
@@ -1472,7 +1472,7 @@ void main() {
         _argument(later, 'onPressed').toSource(),
         '_running ? null : _next',
       );
-      expect(_textsOf(_argument(later, 'child')), ['other.later!(context)']);
+      expect(_wordsOf(_argument(later, 'child')), ['other.later!(context)']);
       expect(
         _variablesOf(build),
         containsPair(
@@ -1510,6 +1510,73 @@ void main() {
         ),
         isNull,
       );
+    });
+
+    test(
+        'gives the title of a page and the label of every button the one '
+        'text that keeps its words whole: a title with half more of its size '
+        'at most, in the width of the page but for its sides, and a label '
+        'with the text size of its place', () {
+      final pages = _parsed(app, _pages);
+      final page = _methodOf(pages, 'OnboardingPage', '_build');
+
+      // The title, in the style that the theme has for it. It is below a
+      // parent that asks for the height of its children before it lays
+      // them out, so it gets the width that it has.
+      final title = _calls(page, 'WholeWords').single;
+      expect(_argumentsOf(title), {
+        '0': 'title',
+        'style': 'theme.textTheme.displaySmall',
+        'maxScaleFactor': '1.5',
+        'width': 'constraints.maxWidth - 2 * sides',
+      });
+      expect(_variablesOf(page), containsPair('sides', '28.0'));
+      expect(
+        _argument(_enclosing(title, 'Padding'), 'padding').toSource(),
+        'const EdgeInsets.fromLTRB(sides, 8, sides, 8)',
+      );
+      expect(_enclosing(title, 'IntrinsicHeight'), isNotNull);
+      // The labels of Skip, of the later of a step and of the button below
+      // the pages: with no style of their own, so each is as the theme has
+      // the label of its button, and it grows as the text size of its
+      // place asks.
+      final [skip, button, later] = _buttonCalls(unit);
+      expect(
+        [
+          for (final label in _calls(unit, 'WholeWords')) _argumentsOf(label),
+        ],
+        [
+          {'0': "'Skip'"},
+          {'0': 'other.later!(context)'},
+          {'0': 'label'},
+        ],
+      );
+      expect(_wordsOf(_argument(skip, 'child')), ["'Skip'"]);
+      expect(_wordsOf(_argument(later, 'child')), ['other.later!(context)']);
+      expect(
+        _argument(_argument(button, 'child') as MethodInvocation, 'child')
+            .toSource(),
+        startsWith('_ButtonLabel(label, '),
+      );
+      expect(_calls(unit, 'Text'), isEmpty);
+      // One piece measures the words, for the titles and the labels: in the
+      // width that it is given, and in that of its parent without one.
+      for (final measure in ['LayoutBuilder', 'TextPainter']) {
+        expect(_calls(unit, measure), isEmpty, reason: measure);
+      }
+      final words = _classOf(pages, 'WholeWords');
+      expect(_calls(words, 'TextPainter'), hasLength(1));
+      expect(
+        _methodOf(pages, 'WholeWords', 'build').body.toSource(),
+        '{if (width case final width?) return _within(context, width); '
+        'return LayoutBuilder(builder: (context, constraints) => '
+        '_within(context, constraints.maxWidth));}',
+      );
+      expect(_argumentsOf(_calls(words, 'Text').single).keys, [
+        '0',
+        'style',
+        'textScaler',
+      ]);
     });
 
     test(
@@ -1774,13 +1841,12 @@ void main() {
 
       expect(_argument(header, 'header').toSource(), 'true');
       final title = _argument(header, 'child') as MethodInvocation;
-      expect(title.methodName.name, 'Text');
+      expect(title.methodName.name, 'WholeWords');
       expect(title.argumentList.arguments.first.toSource(), 'title');
       // The text below the title is none.
-      expect(
-        _textsOf(_methodOf(unit, 'OnboardingPage', '_build')),
-        ['title', 'text'],
-      );
+      final build = _methodOf(unit, 'OnboardingPage', '_build');
+      expect(_wordsOf(build), ['title']);
+      expect(_textsOf(build), ['text']);
       // The cells, with the symbol and the number of the page.
       final picture = _calls(unit, 'ExcludeSemantics').single;
       expect(
@@ -1884,9 +1950,16 @@ void main() {
         ['164', '164'],
       );
       expect(_textsOf(box), [r"'$number'", 'symbol!']);
-      // No other text of the file is kept from the text size of the device.
+      // No other text of the file is kept from the text size of the device:
+      // the title, the text below it, and the text that keeps its words
+      // whole, which the title is.
       expect(_calls(unit, 'withNoTextScaling'), [unscaled]);
-      expect(_textsOf(unit), ['title', 'text', r"'$number'", 'symbol!']);
+      expect(_wordsOf(unit), ['title']);
+      expect(_textsOf(unit), ['text', 'text', r"'$number'", 'symbol!']);
+      expect(
+        _calls(_classOf(unit, 'WholeWords'), 'Text').single.toSource(),
+        startsWith('Text(text, '),
+      );
     });
 
     test(
@@ -2002,7 +2075,7 @@ void main() {
       // Skip, and the label of the button below the pages on a page of the
       // module.
       expect(
-        _textsOf(_argument(_buttonCalls(screen).first, 'child')),
+        _wordsOf(_argument(_buttonCalls(screen).first, 'child')),
         ['context.l10n.onboardingSkip'],
       );
       final onPageOfModule = (_methodOf(
@@ -2321,6 +2394,23 @@ List<String> _textsOf(AstNode node) => [
       for (final text in _calls(node, 'Text'))
         text.argumentList.arguments.first.toSource(),
     ];
+
+/// What the texts that keep their words whole, which [node] creates, show,
+/// in the order of the code: the code of the first argument of each.
+List<String> _wordsOf(AstNode node) => [
+      for (final text in _calls(node, 'WholeWords'))
+        text.argumentList.arguments.first.toSource(),
+    ];
+
+/// The arguments of [call], each by its name, or by its place for one
+/// without a name, as their code.
+Map<String, String> _argumentsOf(MethodInvocation call) => {
+      for (final (index, argument) in call.argumentList.arguments.indexed)
+        if (argument is NamedArgument)
+          argument.name.lexeme: argument.argumentExpression.toSource()
+        else
+          '$index': argument.toSource(),
+    };
 
 /// The call of [name] that [node] is in, such as the creation of the widget
 /// around that of [node].
