@@ -1457,7 +1457,7 @@ void main() {
       );
       expect(
         _calls(label, 'maintain').single.toSource(),
-        'Visibility.maintain(visible: !spins, child: WholeWords(label))',
+        'Visibility.maintain(visible: !spins, child: OnboardingWords(label))',
       );
     });
 
@@ -1525,7 +1525,7 @@ void main() {
       // below it. They are below a parent that asks for the height of its
       // children before it lays them out, so they get the width that they
       // have.
-      final [title, text] = _calls(page, 'WholeWords');
+      final [title, text] = _calls(page, 'OnboardingWords');
       expect(_argumentsOf(title), {
         '0': 'title',
         'style': 'theme.textTheme.displaySmall',
@@ -1558,7 +1558,8 @@ void main() {
       final [skip, button, later] = _buttonCalls(unit);
       expect(
         [
-          for (final label in _calls(unit, 'WholeWords')) _argumentsOf(label),
+          for (final label in _calls(unit, 'OnboardingWords'))
+            _argumentsOf(label),
         ],
         [
           {'0': "'Skip'"},
@@ -1579,10 +1580,10 @@ void main() {
       for (final measure in ['LayoutBuilder', 'TextPainter']) {
         expect(_calls(unit, measure), isEmpty, reason: measure);
       }
-      final words = _classOf(pages, 'WholeWords');
+      final words = _classOf(pages, 'OnboardingWords');
       expect(_calls(words, 'TextPainter'), hasLength(1));
       expect(
-        _methodOf(pages, 'WholeWords', 'build').body.toSource(),
+        _methodOf(pages, 'OnboardingWords', 'build').body.toSource(),
         '{if (width case final width?) return _within(context, width); '
         'return LayoutBuilder(builder: (context, constraints) => '
         '_within(context, constraints.maxWidth));}',
@@ -1873,7 +1874,7 @@ void main() {
 
       expect(_argument(header, 'header').toSource(), 'true');
       final title = _argument(header, 'child') as MethodInvocation;
-      expect(title.methodName.name, 'WholeWords');
+      expect(title.methodName.name, 'OnboardingWords');
       expect(title.argumentList.arguments.first.toSource(), 'title');
       // The text below the title is none.
       final build = _methodOf(unit, 'OnboardingPage', 'build');
@@ -1939,9 +1940,12 @@ void main() {
         _argument(following, 'builder').toSource(),
         startsWith('(context, texts) => _build('),
       );
-      expect(_calls(_argument(following, 'builder'), 'WholeWords'), isEmpty);
+      expect(
+        _calls(_argument(following, 'builder'), 'OnboardingWords'),
+        isEmpty,
+      );
       // The frames move and fade the texts, and build none.
-      expect(_calls(turning, 'WholeWords'), isEmpty);
+      expect(_calls(turning, 'OnboardingWords'), isEmpty);
       expect(_textsOf(turning), isEmpty);
       final moved = _calls(turning, 'translate').single;
       expect(_argument(moved, 'child').toSource(), 'texts');
@@ -2012,8 +2016,26 @@ void main() {
       expect(_wordsOf(unit), ['title', 'text']);
       expect(_textsOf(unit), ['text', r"'$number'", 'symbol!']);
       expect(
-        _calls(_classOf(unit, 'WholeWords'), 'Text').single.toSource(),
+        _calls(_classOf(unit, 'OnboardingWords'), 'Text').single.toSource(),
         startsWith('Text(text, '),
+      );
+    });
+
+    test(
+        'name each class of the module after the onboarding, so that no '
+        'class of another feature of the app has the name of one, such as '
+        'the text that keeps its words whole', () {
+      final classes = [
+        for (final path in [_pages, _screen, _status])
+          for (final declaration
+              in _parsed(app, path).declarations.whereType<ClassDeclaration>())
+            declaration.namePart.typeName.lexeme,
+      ];
+
+      expect(classes, contains('OnboardingWords'));
+      expect(
+        classes.where((name) => !name.startsWith('_')),
+        everyElement(startsWith('Onboarding')),
       );
     });
 
@@ -2470,7 +2492,7 @@ final class _Ifs extends RecursiveAstVisitor<void> {
 /// What the texts that keep their words whole, which [node] creates, show,
 /// in the order of the code: the code of the first argument of each.
 List<String> _wordsOf(AstNode node) => [
-      for (final text in _calls(node, 'WholeWords'))
+      for (final text in _calls(node, 'OnboardingWords'))
         text.argumentList.arguments.first.toSource(),
     ];
 

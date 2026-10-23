@@ -115,7 +115,7 @@ class OnboardingPage extends StatelessWidget {
               header: true,
               // The title is large already, so it grows only by half with
               // the text size of the device.
-              child: WholeWords(
+              child: OnboardingWords(
                 title,
                 style: theme.textTheme.displaySmall,
                 maxScaleFactor: 1.5,
@@ -123,7 +123,7 @@ class OnboardingPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            WholeWords(
+            OnboardingWords(
               text,
               style: theme.textTheme.bodyLarge?.copyWith(
                 fontSize: 18,
@@ -206,9 +206,9 @@ class OnboardingPage extends StatelessWidget {
 /// Where its longest word would still not fit the width that the text has,
 /// as on a narrow phone with a large text size, the text is as large as
 /// that word allows.
-class WholeWords extends StatelessWidget {
+class OnboardingWords extends StatelessWidget {
   /// Creates the text.
-  const WholeWords(
+  const OnboardingWords(
     this.text, {
     this.style,
     this.maxScaleFactor = double.infinity,
