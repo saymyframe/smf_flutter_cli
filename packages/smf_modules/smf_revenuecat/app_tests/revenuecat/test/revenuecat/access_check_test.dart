@@ -271,17 +271,27 @@ void main() {
   );
 
   testWidgets(
-    'the check asks for nothing when RevenueCat is not configured, or when '
-    'the purchases of the app are not those of RevenueCat',
+    'the check asks for nothing when RevenueCat is not configured, without '
+    'a key or with one that RevenueCat refused, and tells why, or when the '
+    'purchases of the app are not those of RevenueCat',
     (tester) async {
       await startUp(tester);
       late String withoutKey;
+      late String refused;
       late String ofOther;
 
       await checking(tester, () async {
         withoutKey = await checkAccess(
           service: RevenueCatPurchasesService(
             const RevenueCatKey.none('REVENUECAT_TEST_KEY has no value.'),
+          ),
+          directory: temporary,
+        );
+        // RevenueCat on Android refuses to start with an empty key, and
+        // stays as it was.
+        refused = await checkAccess(
+          service: RevenueCatPurchasesService(
+            const RevenueCatKey('REVENUECAT_GOOGLE_KEY', ''),
           ),
           directory: temporary,
         );
@@ -296,6 +306,14 @@ void main() {
         'failed: RevenueCat is not configured in this build, so no access can '
         'reach the app: REVENUECAT_TEST_KEY has no value.',
       );
+      expect(
+        refused,
+        'failed: RevenueCat is not configured in this build, so no access can '
+        'reach the app: RevenueCat refused to start with '
+        'REVENUECAT_GOOGLE_KEY: API key must be set. Get this from the '
+        'RevenueCat web app',
+      );
+      expect(revenueCat.apiKey, googleKeyOfTests);
       expect(
         ofOther,
         'failed: the purchases of the app are not those of RevenueCat',

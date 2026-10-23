@@ -240,10 +240,16 @@ Future<String?> _problemOfAccess(
   if (service is! RevenueCatPurchasesService) {
     return 'the purchases of the app are not those of RevenueCat';
   }
-  final key = service.key;
-  if (key.value == null || !await service.configured.timeout(_wait)) {
+  if (!await service.configured.timeout(_wait)) {
+    // The failure of a call tells why: the hint of the key, or what
+    // RevenueCat answered when it did not start with it.
+    final why = await service.access().timeout(_wait).then<String?>(
+          (_) => null,
+          onError: (Object error) =>
+              error is PurchasesFailure ? error.developerHint : '$error',
+        );
     return 'RevenueCat is not configured in this build, so no access can '
-        'reach the app: ${key.hint ?? 'RevenueCat did not take ${key.name}.'}';
+        'reach the app: ${why ?? 'it did not start.'}';
   }
   // RevenueCat knows the customer once it gave the customer info, so the
   // server finds the customer that it grants the access to.
