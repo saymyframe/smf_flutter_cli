@@ -23,7 +23,7 @@
 // with the text size of the device, and a text whose longest word would not
 // fit is as large as that word allows. whole_words.dart, next to this file,
 // has that check, and whole_words_test.dart checks it on texts with a
-// hyphen, two spaces, a line break or a no-break space.
+// hyphen, two spaces, a line break, a tab or a no-break space.
 //
 // The screen only finishes the onboarding: the router of the app, whichever
 // module provides it, leaves the screen, as the router role says of the

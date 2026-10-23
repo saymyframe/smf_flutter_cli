@@ -6,8 +6,9 @@
 // It looks at where the lines of the text start, and not at the words one
 // by one: a line may start after a hyphen, as in "Wi-Fi", or after a line
 // break of the text itself. Only a line that starts between two letters or
-// digits starts inside a word. The texts come from the onboarding and from
-// the steps that other modules add to it, so the check takes any text.
+// digits, or at a no-break space, starts inside a word. The texts come from
+// the onboarding and from the steps that other modules add to it, so the
+// check takes any text.
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,13 +22,17 @@ const double largeTextScale = 3;
 /// as the module has it.
 const double pageTextSize = 18;
 
-/// A letter, a mark that belongs to one, or a digit: a line that starts
-/// between two of them starts inside a word.
-final RegExp _wordCharacter = RegExp(r'[\p{L}\p{M}\p{N}]', unicode: true);
+/// A letter, a mark that belongs to one, a digit, or a no-break space,
+/// which keeps the words around it together: a line that starts between
+/// two of them starts inside a word.
+final RegExp _joined = RegExp(
+  r'[\p{L}\p{M}\p{N}\u00A0\u2007\u202F]',
+  unicode: true,
+);
 
-/// A space between two words, or a line break, where a line may break. A
-/// no-break space keeps the words around it together.
-final RegExp _space = RegExp(r'[ \t\r\n]');
+/// A white space between two words, where a line may break: every one but
+/// a no-break space.
+final RegExp _space = RegExp(r'[^\S\u00A0\u2007\u202F]');
 
 /// The text of [finder], as it is laid out.
 RenderParagraph _paragraphOf(WidgetTester tester, Finder finder) =>
@@ -41,9 +46,9 @@ RenderParagraph _paragraphOf(WidgetTester tester, Finder finder) =>
 
 /// Checks that [shown], the text [text] that [what] names, keeps its words
 /// whole on the small phone, in [language]: no line starts between two
-/// letters or digits. The text is as large as its text size asks,
-/// [largest], or, when its longest word would not fit the width that the
-/// text has at that size, as large as that word allows.
+/// letters or digits, or at a no-break space. The text is as large as its
+/// text size asks, [largest], or, when its longest word would not fit the
+/// width that the text has at that size, as large as that word allows.
 void expectWholeWords(
   WidgetTester tester,
   Finder shown,
@@ -61,8 +66,7 @@ void expectWholeWords(
   // that the paragraph draws no box for.
   double? lineOf(int index) => boxesOf(index, index + 1).firstOrNull?.top;
   for (var index = 1; index < text.length; index++) {
-    if (!_wordCharacter.hasMatch(text[index - 1]) ||
-        !_wordCharacter.hasMatch(text[index])) {
+    if (!_joined.hasMatch(text[index - 1]) || !_joined.hasMatch(text[index])) {
       continue;
     }
     final (before, after) = (lineOf(index - 1), lineOf(index));
