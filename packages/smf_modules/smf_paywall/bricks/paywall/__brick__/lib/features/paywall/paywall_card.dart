@@ -119,7 +119,7 @@ class PremiumCard extends StatelessWidget {
                         const SizedBox(height: 6),
                         // The name is large already, so it grows only by
                         // half with the text size of the device.
-                        WholeWords(
+                        PaywallWords(
                           _appName,
                           style: theme.textTheme.headlineMedium?.copyWith(
                             color: _brandCream,

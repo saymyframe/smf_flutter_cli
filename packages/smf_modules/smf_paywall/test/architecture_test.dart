@@ -17,7 +17,8 @@ void main() {
         // each, the provider of the env role, which the module requires,
         // and, in some of them, the providers of the roles that the module
         // uses: the localization role, with the preferences that it
-        // requires, and the settings screen role. None of them tests with
+        // requires, the settings screen role and the onboarding screen
+        // role, which requires the preferences too. None of them tests with
         // this module. The purchases of those apps have a provider of the
         // tests, so that the module is tested with a provider that it does
         // not know.
@@ -27,6 +28,7 @@ void main() {
           'smf_flutter_core',
           'smf_gen_l10n',
           'smf_go_router',
+          'smf_onboarding',
           'smf_riverpod',
           'smf_settings',
           'smf_shared_preferences',

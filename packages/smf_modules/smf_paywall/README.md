@@ -6,7 +6,9 @@ The module keeps no purchases. It requires a module that provides the purchases 
 
 The paywall is at `/paywall`. A card for each plan shows the price that the store gives, how often the plan renews, and its free trial or lower price at first. Below the plans are the button that buys the selected plan, what the plan costs after its trial, the terms of the store, and the links that restore purchases and lead to the terms of use and the privacy policy. The screen of the subscription, at `/paywall/subscription`, shows the plan, when it renews or ends, and a button to the page of the store where the user manages it.
 
-No screen of the module closes itself after a purchase. A request for a route that needs premium access opens the paywall over the page, and once the user has the access, the router closes the paywall and shows the route. In an app with a settings screen, the entry Subscription leads to the screen of the subscription.
+No screen of the module closes itself after a purchase. A request for a route that needs premium access opens the paywall over the page, and once the user has the access, the router closes the paywall and shows the route. The exception is the paywall that the step of the onboarding shows, described below: the step closes it itself, since the router does not show it. In an app with a settings screen, the entry Subscription leads to the screen of the subscription.
+
+In an app with an onboarding, the module adds a step to it, after the steps that ask for permissions. The step shows while the user has no premium access, and its button shows the paywall over the onboarding. The onboarding goes on once the user closes the paywall or buys a plan. The page of the step shows no price: the prices are on the paywall.
 
 The addresses of the terms of use and of the privacy policy go into `.env` of the app, through the env role, which the module requires: `PAYWALL_TERMS_URL` and `PAYWALL_PRIVACY_URL`. The texts of the screens are in English and in Ukrainian. The state of the screens has a variant for BLoC and one for Riverpod.
 

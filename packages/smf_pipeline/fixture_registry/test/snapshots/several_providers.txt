@@ -282,6 +282,8 @@ With `flutter_local_notifications`:
 - In an app with sign-in, a user may buy before signing in. A sign-up keeps the purchase in the new account, while a sign-in to an account that exists already leaves it with the user of the device until a restore.
 - While a purchase is on its way, and after one that gave premium access, the button spins, and so does the link of a restore. A widget test that waits with `pumpAndSettle()` returns only once the router closed the paywall, so until then it shows frames with `pump()`.
 
+- The onboarding offers premium access on a page of its own, the step `paywall.offer`, while the user has none: `paywallStepShows()` of `lib/features/paywall/paywall_step.dart`. Its button calls `showPaywall()` there, which pushes `PaywallScreen` on the navigator at the root of the app, over the onboarding. It does so because a guard of the routes may keep the router from showing `/paywall` while the onboarding is on. The router does not know that route, so `showPaywall()` closes it itself once the user has premium access. The onboarding goes on once the paywall is closed. The texts of the page are the texts `stepTitle`, `stepText`, `stepAction` and `stepLater` of the module.
+
 - The state of each screen is a cubit in a file next to it: `PaywallCubit` and `SubscriptionCubit`. The screen provides its cubit and builds its view from the state. A cubit takes the purchases through its constructor, so a test creates one with an `AppPurchasesController` of its own. `lib/features/paywall/paywall_composition.dart` creates the cubits with `appPurchases`.
 - A widget reads the access of the user with `context.watch<PremiumCubit>().state`, an `AppAccess`. The root of the app provides the `PremiumCubit` of `lib/features/paywall/premium_cubit.dart`, which follows `appPurchases`.
 
@@ -729,6 +731,8 @@ A text of the app has no parameters, so the paywall names the periods and the le
 The benefits on the paywall are texts of the module, `benefitAll`, `benefitNew` and `benefitSupport`. Change them to what premium access gives in your app. In an app with localization, they are texts of the app, which `lib/features/paywall/paywall_view.dart` reads as `context.l10n.paywallBenefitAll`, `paywallBenefitNew` and `paywallBenefitSupport`: change them where the provider of the localization keeps the texts of the app, in each language. In an app without it, they are the English texts in that file.
 
 Put the addresses of your terms of use and of your privacy policy into `PAYWALL_TERMS_URL` and `PAYWALL_PRIVACY_URL` in `.env` (see the section Values in .env). The App Store asks a paywall to link to both. While a value is empty or is no web address, the paywall leaves its link out, but on iOS the terms of use then lead to the standard license agreement of Apple. A debug build shows a note for you at the bottom of the paywall, which names the keys that are empty and what the provider of purchases says is missing, such as its key.
+
+In an app with an onboarding, the onboarding offers premium access on a page of its own, after the pages that ask for permissions, while the user has none. Its button shows the paywall over the onboarding, and the onboarding goes on once the user closes the paywall or buys a plan. Not now goes on without the paywall. The page shows no price: the prices are on the paywall. Its texts are texts of the module too, and you change them the way you change the benefits.
 
 In an app with sign-in, a user may buy before signing in. A sign-up keeps the purchase in the new account, while a sign-in to an account that exists already leaves the purchase with the user of the device until the user restores it.
 
@@ -5204,6 +5208,31 @@ class FixtureTexts {
     _ => 'Not active',
   };
 
+  /// The text stepTitle of the module paywall.
+  String get paywallStepTitle => switch (language) {
+    'uk' => 'Відкрийте преміум',
+    _ => 'Unlock premium',
+  };
+
+  /// The text stepText of the module paywall.
+  String get paywallStepText => switch (language) {
+    'uk' =>
+      'Отримайте всі можливості застосунку й нові, щойно вони з’являться.',
+    _ => 'Get every feature of the app, and the new ones as they arrive.',
+  };
+
+  /// The text stepAction of the module paywall.
+  String get paywallStepAction => switch (language) {
+    'uk' => 'Переглянути плани',
+    _ => 'See plans',
+  };
+
+  /// The text stepLater of the module paywall.
+  String get paywallStepLater => switch (language) {
+    'uk' => 'Не зараз',
+    _ => 'Not now',
+  };
+
   /// The text title of the template of the theme role.
   String get themeTitle => switch (language) {
     'uk' => 'Тема',
@@ -6262,6 +6291,7 @@ import 'package:fixture_app/core/fixture_steps/fixture_steps.dart' as step0;
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/notifications/notifications_step.dart'
     as step1;
+import 'package:fixture_app/features/paywall/paywall_step.dart' as step2;
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -6345,6 +6375,15 @@ const List<OnboardingStep> appOnboardingSteps = [
     later: _notificationsPermissionLater,
     showIf: step1.notificationsStepShows,
   ),
+  OnboardingStep(
+    icon: Icons.workspace_premium_outlined,
+    title: _paywallOfferTitle,
+    text: _paywallOfferText,
+    action: _paywallOfferAction,
+    run: step2.showPaywall,
+    later: _paywallOfferLater,
+    showIf: step2.paywallStepShows,
+  ),
 ];
 
 String _fakeStepsAskTitle(BuildContext context) =>
@@ -6378,6 +6417,17 @@ String _notificationsPermissionAction(BuildContext context) =>
 
 String _notificationsPermissionLater(BuildContext context) =>
     context.l10n.notificationsStepLater;
+
+String _paywallOfferTitle(BuildContext context) =>
+    context.l10n.paywallStepTitle;
+
+String _paywallOfferText(BuildContext context) => context.l10n.paywallStepText;
+
+String _paywallOfferAction(BuildContext context) =>
+    context.l10n.paywallStepAction;
+
+String _paywallOfferLater(BuildContext context) =>
+    context.l10n.paywallStepLater;
 === lib/core/preferences/app_preferences.dart (role:preferences) ===
 import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:fixture_app/core/notifications/app_notifications.dart';
@@ -12592,7 +12642,7 @@ class PremiumCard extends StatelessWidget {
                         const SizedBox(height: 6),
                         // The name is large already, so it grows only by
                         // half with the text size of the device.
-                        WholeWords(
+                        PaywallWords(
                           _appName,
                           style: theme.textTheme.headlineMedium?.copyWith(
                             color: _brandCream,
@@ -13295,6 +13345,59 @@ bool _yearly(Plan plan) => switch (plan.period) {
   final period? => termOf(period) == PlanTerm.year,
   null => false,
 };
+=== lib/features/paywall/paywall_step.dart (paywall) ===
+import 'package:flutter/material.dart';
+
+import '../../core/purchases/app_purchases.dart';
+import 'paywall_screen.dart';
+
+/// Whether the onboarding shows its step that offers premium access: while
+/// the user has none.
+bool paywallStepShows() => !appPurchases.hasPremium.value;
+
+/// Shows the paywall over the onboarding: the action of the step that
+/// offers premium access. It completes once the paywall is closed, with its
+/// close button, with back, or once the user has premium access, and the
+/// onboarding then goes on. For a user who has the access already, it shows
+/// nothing.
+///
+/// While the onboarding is on, a guard of the routes may keep the router
+/// from showing the route of the paywall, so the paywall is a route of its
+/// own on the navigator at the root of the app, over the onboarding.
+///
+/// Elsewhere the paywall never closes itself after a purchase or a restore:
+/// it is a page of the router, which closes it once the guard of premium
+/// access allows. This route has no page, so the router does not own it: it
+/// leaves the routes without a page over its pages as they are when a guard
+/// notifies, and nothing else would close the paywall. So the route closes
+/// here once the user has premium access, also from below a route over it,
+/// such as a dialog, which stays, and the onboarding goes on. Only
+/// if the navigator itself is disposed with the route on it, as when the
+/// root of the app is replaced, does the listener stay, and from then on it
+/// does nothing.
+Future<void> showPaywall(BuildContext context) async {
+  if (appPurchases.hasPremium.value) return;
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final route = MaterialPageRoute<void>(
+    fullscreenDialog: true,
+    builder: (context) => const PaywallScreen(),
+  );
+  void closeOnPremium() {
+    if (!appPurchases.hasPremium.value) return;
+    if (route.isCurrent) {
+      navigator.pop();
+    } else if (route.isActive) {
+      navigator.removeRoute(route);
+    }
+  }
+
+  appPurchases.hasPremium.addListener(closeOnPremium);
+  try {
+    await navigator.push(route);
+  } finally {
+    appPurchases.hasPremium.removeListener(closeOnPremium);
+  }
+}
 === lib/features/paywall/paywall_texts.dart (paywall) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/foundation.dart';
@@ -13621,7 +13724,7 @@ class _PaywallViewState extends State<PaywallView>
               ),
               if (afterOffer != null) ...[
                 const SizedBox(height: 10),
-                WholeWords(
+                PaywallWords(
                   afterOffer,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -13638,7 +13741,7 @@ class _PaywallViewState extends State<PaywallView>
       children: [
         if (purchase == null) message,
         if (selected != null && state.loadFailure == null) ...[
-          WholeWords(
+          PaywallWords(
             termsTextOf(context, selected),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
@@ -13885,7 +13988,7 @@ class _Benefits extends StatelessWidget {
               // With a large text size, a long word gets smaller rather
               // than break.
               Expanded(
-                child: WholeWords(benefit, style: theme.textTheme.bodyLarge),
+                child: PaywallWords(benefit, style: theme.textTheme.bodyLarge),
               ),
             ],
           ),
@@ -13932,7 +14035,7 @@ class _Unavailable extends StatelessWidget {
             TextButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: WholeWords(
+              label: PaywallWords(
                 context.l10n.paywallTryAgain,
                 textAlign: TextAlign.center,
               ),
@@ -13982,16 +14085,24 @@ const monospace = TextStyle(
   fontFamilyFallback: ['Menlo', 'Courier'],
 );
 
+/// The white space at which a line of text may break: every white space but
+/// the no-break spaces.
+final RegExp _breaks = RegExp(r'[^\S\u00A0\u2007\u202F]+');
+
 /// A text that keeps its words whole: it breaks between its words and never
 /// inside one.
+///
+/// A word is what stands between two spaces at which a line may break, such
+/// as a space, a tab or a line break. A no-break space keeps the words on
+/// each side of it together, as in a price that the store gives.
 ///
 /// It grows with the text size of the device, by [maxScaleFactor] at most.
 /// Where its longest word would still not fit the width that the text has,
 /// as on a narrow phone with a large text size, the text is as large as
 /// that word allows.
-class WholeWords extends StatelessWidget {
+class PaywallWords extends StatelessWidget {
   /// Creates the text.
-  const WholeWords(
+  const PaywallWords(
     this.text, {
     this.style,
     this.textAlign,
@@ -14035,7 +14146,7 @@ class WholeWords extends StatelessWidget {
         // How wide the longest word is in a font of [size].
         double widestAt(double size) {
           var widest = 0.0;
-          for (final word in text.split(' ')) {
+          for (final word in text.split(_breaks)) {
             painter
               ..text = TextSpan(
                 text: word,
@@ -14144,7 +14255,7 @@ class _BusyLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = WholeWords(
+    final text = PaywallWords(
       label,
       key: ValueKey(label),
       textAlign: TextAlign.center,
@@ -14355,7 +14466,7 @@ class PlanCard extends StatelessWidget {
                           children: [
                             // No larger than the price, which grows only by
                             // half too.
-                            WholeWords(
+                            PaywallWords(
                               name,
                               style: theme.textTheme.titleMedium,
                               maxScaleFactor: 1.5,
@@ -15089,7 +15200,7 @@ class _SubscriptionViewState extends State<SubscriptionView>
                           header: true,
                           // The title is large already, so it grows only by
                           // half with the text size of the device.
-                          child: WholeWords(
+                          child: PaywallWords(
                             context.l10n.paywallSubscriptionTitle,
                             style: theme.textTheme.headlineLarge,
                             maxScaleFactor: 1.5,
@@ -15134,7 +15245,7 @@ class _SubscriptionViewState extends State<SubscriptionView>
                           FilledButton.tonalIcon(
                             onPressed: () => widget.onManage(manageUrl),
                             icon: const Icon(Icons.open_in_new_rounded),
-                            label: WholeWords(
+                            label: PaywallWords(
                               context.l10n.paywallManage,
                               textAlign: TextAlign.center,
                             ),

@@ -2215,12 +2215,19 @@ void main() {
       // The two steps of the fixture steps, and then the step of the
       // notifications role, whose provider of the CLI the registry has: the
       // steps of one stage come in the order of their contributors, the
-      // modules before the templates of the roles.
+      // modules before the templates of the roles. The step of the paywall,
+      // an offer, comes after every permission, also after the step of the
+      // template of a role.
       expect(
         [
           for (final step in onboardingScreenRole.stepsIn(input)) step.fullName,
         ],
-        ['fake_steps.ask', 'fake_steps.confirm', 'notifications.permission'],
+        [
+          'fake_steps.ask',
+          'fake_steps.confirm',
+          'notifications.permission',
+          'paywall.offer',
+        ],
       );
       expect(onboardingScreenRole.screenIn(input)!.fullPath, '/onboarding');
       expect(

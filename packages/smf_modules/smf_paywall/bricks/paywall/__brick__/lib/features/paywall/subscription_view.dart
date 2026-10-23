@@ -111,7 +111,7 @@ class _SubscriptionViewState extends State<SubscriptionView>
                           header: true,
                           // The title is large already, so it grows only by
                           // half with the text size of the device.
-                          child: WholeWords(
+                          child: PaywallWords(
                             {{{text_subscription_title}}},
                             style: theme.textTheme.headlineLarge,
                             maxScaleFactor: 1.5,
@@ -156,7 +156,7 @@ class _SubscriptionViewState extends State<SubscriptionView>
                           FilledButton.tonalIcon(
                             onPressed: () => widget.onManage(manageUrl),
                             icon: const Icon(Icons.open_in_new_rounded),
-                            label: WholeWords(
+                            label: PaywallWords(
                               {{{text_manage}}},
                               textAlign: TextAlign.center,
                             ),

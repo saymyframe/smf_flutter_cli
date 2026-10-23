@@ -5,6 +5,7 @@ import 'package:smf_paywall/bundles/paywall_bundle.dart';
 import 'package:smf_paywall/bundles/paywall_riverpod_bundle.dart';
 import 'package:smf_paywall/bundles/paywall_riverpod_setting_bundle.dart';
 import 'package:smf_paywall/bundles/paywall_setting_bundle.dart';
+import 'package:smf_paywall/bundles/paywall_step_bundle.dart';
 import 'package:smf_paywall/src/agents.dart';
 import 'package:smf_paywall/src/readme.dart';
 import 'package:smf_paywall/src/texts.dart';
@@ -88,12 +89,28 @@ import 'package:smf_paywall/src/texts.dart';
 /// the subscription. For a user without the access, the router opens the
 /// paywall over the settings screen first.
 ///
+/// ## The onboarding
+///
+/// The module only uses the onboarding screen role. In an app with an
+/// onboarding, it gives the role the step [step], of the stage
+/// [OnboardingStage.offer], after the steps that ask for permissions. The
+/// onboarding shows the step while the user has no premium access
+/// (`paywallStepShows()` of `lib/features/paywall/paywall_step.dart`), and
+/// its button shows the paywall over the onboarding (`showPaywall()` there):
+/// while the onboarding is on, a guard of the routes may keep the router
+/// from showing the route of the paywall, so the paywall is a route without
+/// a page on the navigator at the root of the app. The router does not
+/// close that route once the user has premium access, so `showPaywall()`
+/// closes it itself then, and the onboarding goes on once it is closed.
+/// The second button of the step goes on without the paywall.
+///
 /// ## Texts
 ///
 /// The texts of the screens are in English and in Ukrainian. The module
 /// only uses the localization role: in an app with the role they are texts
 /// of the app, and in an app without it they are English. The texts of the
-/// entry are given to the role only in an app with a settings screen.
+/// entry are given to the role only in an app with a settings screen, and
+/// those of the step only in an app with an onboarding.
 final class PaywallModule extends SmfModule {
   /// Creates the module.
   const PaywallModule();
@@ -147,6 +164,32 @@ final class PaywallModule extends SmfModule {
   /// a settings screen has.
   static const TextsData settingTexts = entryTexts;
 
+  /// The texts of the step of the onboarding, which only an app with an
+  /// onboarding has.
+  static const TextsData stepTexts = onboardingStepTexts;
+
+  /// The name of the step of the module in the onboarding, `offer`; its
+  /// full name is `paywall.offer`.
+  static const stepName = 'offer';
+
+  /// The step of the onboarding that offers premium access: it shows while
+  /// the user has none, and its button shows the paywall over the
+  /// onboarding. Its page has no price, which the paywall shows.
+  static const step = OnboardingStep(
+    name: stepName,
+    stage: OnboardingStage.offer,
+    icon: Fragment(
+      'Icons.workspace_premium_outlined',
+      imports: [ImportRef('package:flutter/material.dart')],
+    ),
+    title: stepTitle,
+    text: stepText,
+    action: stepAction,
+    later: stepLater,
+    run: FunctionRef('showPaywall', import: _step),
+    showIf: FunctionRef('paywallStepShows', import: _step),
+  );
+
   /// The name of the route of the paywall, the target of the guard.
   static const _route = 'paywall';
 
@@ -155,6 +198,9 @@ final class PaywallModule extends SmfModule {
   /// The file with the function of the guard.
   static const _guards = ImportRef.app('$_folder/paywall_guards.dart');
 
+  /// The file with the functions of the step of the onboarding.
+  static const _step = ImportRef.app('$_folder/paywall_step.dart');
+
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
@@ -162,7 +208,7 @@ final class PaywallModule extends SmfModule {
             'and a subscription screen',
         kind: ModuleKinds.feature,
         requires: {purchasesRole, envRole},
-        uses: {localizationRole, settingsScreenRole},
+        uses: {localizationRole, settingsScreenRole, onboardingScreenRole},
         variants: Variants(
           role: stateManagementRole,
           // Each variant imports the package of its provider, whose
@@ -291,8 +337,21 @@ final class PaywallModule extends SmfModule {
             ),
           ),
         ),
+        // Only an app with an onboarding gets the functions of the step and
+        // its texts, and only there does the step apply.
+        BrickContribution(
+          paywallStepBundle,
+          when: const {onboardingScreenRole},
+        ),
+        onboardingScreenRole.data(step),
+        localizationRole.data(stepTexts, when: const {onboardingScreenRole}),
         legalPagesStep,
         AppEntryRole.readmeSections.entry(readmeHeading, readmeSection),
         AppEntryRole.agentSections.entry(agentHeading, AgentNote(agentNote)),
+        AppEntryRole.agentSections.entry(
+          agentHeading,
+          AgentNote(stepAgentNote),
+          when: const {onboardingScreenRole},
+        ),
       ];
 }

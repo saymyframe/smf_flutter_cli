@@ -392,6 +392,8 @@ The benefits on the paywall are texts of the module, `benefitAll`, `benefitNew` 
 
 Put the addresses of your terms of use and of your privacy policy into `PAYWALL_TERMS_URL` and `PAYWALL_PRIVACY_URL` in `.env` (see the section Values in .env). The App Store asks a paywall to link to both. While a value is empty or is no web address, the paywall leaves its link out, but on iOS the terms of use then lead to the standard license agreement of Apple. A debug build shows a note for you at the bottom of the paywall, which names the keys that are empty and what the provider of purchases says is missing, such as its key.
 
+In an app with an onboarding, the onboarding offers premium access on a page of its own, after the pages that ask for permissions, while the user has none. Its button shows the paywall over the onboarding, and the onboarding goes on once the user closes the paywall or buys a plan. Not now goes on without the paywall. The page shows no price: the prices are on the paywall. Its texts are texts of the module too, and you change them the way you change the benefits.
+
 In an app with sign-in, a user may buy before signing in. A sign-up keeps the purchase in the new account, while a sign-in to an account that exists already leaves the purchase with the user of the device until the user restores it.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
@@ -4037,7 +4039,7 @@ class PremiumCard extends StatelessWidget {
                         const SizedBox(height: 6),
                         // The name is large already, so it grows only by
                         // half with the text size of the device.
-                        WholeWords(
+                        PaywallWords(
                           _appName,
                           style: theme.textTheme.headlineMedium?.copyWith(
                             color: _brandCream,
@@ -5066,7 +5068,7 @@ class _PaywallViewState extends State<PaywallView>
               ),
               if (afterOffer != null) ...[
                 const SizedBox(height: 10),
-                WholeWords(
+                PaywallWords(
                   afterOffer,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -5083,7 +5085,7 @@ class _PaywallViewState extends State<PaywallView>
       children: [
         if (purchase == null) message,
         if (selected != null && state.loadFailure == null) ...[
-          WholeWords(
+          PaywallWords(
             termsTextOf(context, selected),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
@@ -5330,7 +5332,7 @@ class _Benefits extends StatelessWidget {
               // With a large text size, a long word gets smaller rather
               // than break.
               Expanded(
-                child: WholeWords(benefit, style: theme.textTheme.bodyLarge),
+                child: PaywallWords(benefit, style: theme.textTheme.bodyLarge),
               ),
             ],
           ),
@@ -5377,7 +5379,7 @@ class _Unavailable extends StatelessWidget {
             TextButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: WholeWords(
+              label: PaywallWords(
                 context.l10n.paywallTryAgain,
                 textAlign: TextAlign.center,
               ),
@@ -5427,16 +5429,24 @@ const monospace = TextStyle(
   fontFamilyFallback: ['Menlo', 'Courier'],
 );
 
+/// The white space at which a line of text may break: every white space but
+/// the no-break spaces.
+final RegExp _breaks = RegExp(r'[^\S\u00A0\u2007\u202F]+');
+
 /// A text that keeps its words whole: it breaks between its words and never
 /// inside one.
+///
+/// A word is what stands between two spaces at which a line may break, such
+/// as a space, a tab or a line break. A no-break space keeps the words on
+/// each side of it together, as in a price that the store gives.
 ///
 /// It grows with the text size of the device, by [maxScaleFactor] at most.
 /// Where its longest word would still not fit the width that the text has,
 /// as on a narrow phone with a large text size, the text is as large as
 /// that word allows.
-class WholeWords extends StatelessWidget {
+class PaywallWords extends StatelessWidget {
   /// Creates the text.
-  const WholeWords(
+  const PaywallWords(
     this.text, {
     this.style,
     this.textAlign,
@@ -5480,7 +5490,7 @@ class WholeWords extends StatelessWidget {
         // How wide the longest word is in a font of [size].
         double widestAt(double size) {
           var widest = 0.0;
-          for (final word in text.split(' ')) {
+          for (final word in text.split(_breaks)) {
             painter
               ..text = TextSpan(
                 text: word,
@@ -5589,7 +5599,7 @@ class _BusyLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = WholeWords(
+    final text = PaywallWords(
       label,
       key: ValueKey(label),
       textAlign: TextAlign.center,
@@ -5800,7 +5810,7 @@ class PlanCard extends StatelessWidget {
                           children: [
                             // No larger than the price, which grows only by
                             // half too.
-                            WholeWords(
+                            PaywallWords(
                               name,
                               style: theme.textTheme.titleMedium,
                               maxScaleFactor: 1.5,
@@ -6461,7 +6471,7 @@ class _SubscriptionViewState extends State<SubscriptionView>
                           header: true,
                           // The title is large already, so it grows only by
                           // half with the text size of the device.
-                          child: WholeWords(
+                          child: PaywallWords(
                             context.l10n.paywallSubscriptionTitle,
                             style: theme.textTheme.headlineLarge,
                             maxScaleFactor: 1.5,
@@ -6506,7 +6516,7 @@ class _SubscriptionViewState extends State<SubscriptionView>
                           FilledButton.tonalIcon(
                             onPressed: () => widget.onManage(manageUrl),
                             icon: const Icon(Icons.open_in_new_rounded),
-                            label: WholeWords(
+                            label: PaywallWords(
                               context.l10n.paywallManage,
                               textAlign: TextAlign.center,
                             ),

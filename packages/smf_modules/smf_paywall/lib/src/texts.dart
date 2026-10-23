@@ -305,3 +305,44 @@ const entryTexts = TextsData([
     translations: {'uk': 'Не активна'},
   ),
 ]);
+
+/// The title of the step of the onboarding that offers premium access,
+/// which only an app with an onboarding has.
+const stepTitle = LocalizedText(
+  'stepTitle',
+  en: 'Unlock premium',
+  translations: {'uk': 'Відкрийте преміум'},
+);
+
+/// The text of the step of the onboarding, below its title.
+const stepText = LocalizedText(
+  'stepText',
+  en: 'Get every feature of the app, and the new ones as they arrive.',
+  translations: {
+    'uk': 'Отримайте всі можливості застосунку й нові, щойно вони '
+        'з’являться.',
+  },
+);
+
+/// The label of the button of the step that shows the paywall.
+const stepAction = LocalizedText(
+  'stepAction',
+  en: 'See plans',
+  translations: {'uk': 'Переглянути плани'},
+);
+
+/// The label of the button of the step that goes on without the paywall.
+const stepLater = LocalizedText(
+  'stepLater',
+  en: 'Not now',
+  translations: {'uk': 'Не зараз'},
+);
+
+/// The texts of the step of the onboarding, which only an app with an
+/// onboarding has.
+const onboardingStepTexts = TextsData([
+  stepTitle,
+  stepText,
+  stepAction,
+  stepLater,
+]);
