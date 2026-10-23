@@ -11,9 +11,14 @@
 #
 # The app has the start check that the CLI keeps in app_tests/start,
 # integration_test/start_check.dart, which its matrix tool adds with
-# --add-app-tests. The script builds an app with the check as its entry,
-# for Android with build_apk.sh, which builds it again when a package of
-# the Android SDK did not download. It installs the app anew, launches it
+# --add-app-tests, and next to it integration_test/start_build_arguments:
+# the arguments of the flutter tool that build the app with its values,
+# one on each line, such as the argument with which the provider of the
+# values of the app gives the build its .env, from the data of the roles of
+# the app. The script builds an app with the check as its entry and those
+# arguments, so it knows no role and no provider. For Android it builds
+# with build_apk.sh, which builds the app again when a package of the
+# Android SDK did not download. It installs the app anew, launches it
 # with adb or simctl, and waits for the line that the check writes to the
 # file smf_start_check in the temporary directory of the app: `passed`, or
 # `failed: ` and the problems.
@@ -56,7 +61,14 @@
 # request. An app that gives its verdict without a request, as
 # when it has nothing to ask for, gets no command. The app writes each file
 # next to its place and renames it, so that it is there only whole. The
-# answers run one after another, in their order. The script fails when the
+# answers run one after another, in their order, but for those that the
+# app does not ask for: integration_test/start_answers, which the matrix
+# tool writes next to the start check, lists the answers that the probes of
+# the app ask for, one on each line. The script skips the others with a
+# notice, so a job of CI gives every app of a covering of the providers of
+# a role every answer it has, whether the provider of the probe that asks
+# for one is in the app or not. Without that file, it runs no answer and
+# fails before it builds the app. The script fails when the
 # app writes neither file in 150 s after its start check passed, when the
 # command fails or takes more than 300 s, when the app gives no verdict in
 # 150 s after each of the three commands, when the app stops before it, and
@@ -117,9 +129,43 @@ limit=
 purpose=
 deadline=
 
-if [ ! -f "$check" ]; then
-  echo "::error::$PWD has no $check: add it with the --add-app-tests of packages/smf_flutter_cli/tool/matrix.dart."
-  exit 1
+# The arguments of the flutter tool that build the app, and the answers
+# that the probes of the app ask for, which --add-app-tests writes next to
+# the start check.
+build_arguments_file=integration_test/start_build_arguments
+answers_file=integration_test/start_answers
+for file in "$check" "$build_arguments_file"; do
+  if [ ! -f "$file" ]; then
+    echo "::error::$PWD has no $file: add the start check with the --add-app-tests of packages/smf_flutter_cli/tool/matrix.dart."
+    exit 1
+  fi
+done
+# The arguments of the builds of the app: the start check as its entry,
+# and those of the list.
+build_arguments=(-t "$check")
+while IFS= read -r argument || [ -n "$argument" ]; do
+  if [ -n "$argument" ]; then
+    build_arguments+=("$argument")
+  fi
+done < "$build_arguments_file"
+if [ ${#answers[@]} -gt 0 ]; then
+  if [ ! -f "$answers_file" ]; then
+    echo "::error::$PWD has no $answers_file, which lists the answers that the probes of the app ask for: add the start check with the --add-app-tests of packages/smf_flutter_cli/tool/matrix.dart."
+    exit 1
+  fi
+  asked=" $(tr '\n' ' ' < "$answers_file") "
+  given=("${answers[@]}")
+  given_commands=("${commands[@]}")
+  answers=()
+  commands=()
+  for ((index = 0; index < ${#given[@]}; index++)); do
+    if [[ "$asked" == *" ${given[$index]} "* ]]; then
+      answers+=("${given[$index]}")
+      commands+=("${given_commands[$index]}")
+    else
+      echo "::notice::The app asks for no answer ${given[$index]}: no probe of it lists it in $answers_file, so the script skips it."
+    fi
+  done
 fi
 
 # Runs the command after $1 for at most $1 seconds, with perl rather than
@@ -330,9 +376,9 @@ android() {
   adb=("$sdk/platform-tools/adb" -s "$device")
   if [ "$mode" = release ]; then
     android_target
-    build 'flutter build apk' build_apk --release --target-platform "$target" -t "$check"
+    build 'flutter build apk' build_apk --release --target-platform "$target" "${build_arguments[@]}"
   else
-    build 'flutter build apk' build_apk --debug -t "$check"
+    build 'flutter build apk' build_apk --debug "${build_arguments[@]}"
   fi
   # The application id and the activity that starts the app, from the APK,
   # with aapt2 of the newest build tools of the Android SDK.
@@ -430,7 +476,7 @@ ios() {
   # 3.44 fails to build for both: the lipo of Xcode 27 takes only one
   # architecture after -verify_arch.)
   build 'flutter build ios' env FLUTTER_XCODE_ARCHS="$(uname -m)" \
-    flutter build ios --simulator --debug -t "$check"
+    flutter build ios --simulator --debug "${build_arguments[@]}"
   local app=build/ios/iphonesimulator/Runner.app launched
   id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
   executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"

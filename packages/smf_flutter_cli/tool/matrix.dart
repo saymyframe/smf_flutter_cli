@@ -86,8 +86,24 @@ import 'package:yaml/yaml.dart';
 /// that app of the matrix. With the start check, which runs the probes of
 /// the tests of the app on a device, it adds the tests of this tool with a
 /// probe that apply to the app too, such as the walk of its routes; see
-/// `appTestsFor`. Without `--app`, a test that needs an app of the matrix,
-/// such as one that generates files, fails.
+/// `appTestsFor`. Next to the list of the probes, it writes what
+/// `.github/scripts/start_app.sh`, which starts the app on a device, reads:
+/// the answers of CI that the probes ask for, `startAnswersFile`, and the
+/// arguments of the `flutter` tool that build the app with its values, from
+/// the provider of the env role of the app, `startBuildArgumentsFile`.
+/// Without `--app`, a test that needs an app of the matrix, such as one
+/// that generates files, fails, and the start check gets no probes, no
+/// answers and no build arguments.
+///
+/// With `--env-values` and a file after `--app` and the other options of
+/// `--add-app-tests`, it writes the values of that file, lines `KEY=value`
+/// in the forms of a value of `.env`, into the lines of `.env` of the app
+/// that have no value yet, such as the public key of a service of the
+/// project of CI, which CI keeps in a secret; see `addAppTestsTo`. It names
+/// the keys, and never prints a value. Without `--app`, the build of the
+/// app would get no arguments that give it the values, so the tool refuses
+/// `--env-values` then. Of the values that the tests give an app of the
+/// matrix in its runs, it writes none.
 Future<void> main(List<String> given) async {
   if (given case ['--plan', ...final options]) {
     exit(await printMatrixPlan(smfModules, options, native: appEntryRole));
@@ -118,7 +134,21 @@ Future<void> main(List<String> given) async {
       final NamedEveryModuleApp named => named,
       _ => null,
     };
-    final given = withoutExternalSteps ? rest.skip(1).toList() : rest;
+    var given = withoutExternalSteps ? rest.skip(1).toList() : rest;
+    String? envValues;
+    if (given case ['--env-values', final file, ...final after]) {
+      envValues = file;
+      given = after;
+    }
+    // The values reach the build of the app only through the arguments of
+    // its provider of the env role, which come from the app of --app.
+    if (envValues != null && named == null) {
+      _usage(
+        '--env-values goes with --app: without the app of the matrix, the '
+        'start check gets no arguments that build the app with its values, so '
+        'the values of .env would not reach the app.',
+      );
+    }
     // --without-external-steps tells which app with every module --app
     // names, so it goes only with --app.
     if (given case [final app, ...final directories]
@@ -131,6 +161,7 @@ Future<void> main(List<String> given) async {
           directories,
           named,
           withoutExternalSteps: withoutExternalSteps,
+          envValues: envValues,
         ),
       );
     }
@@ -207,8 +238,8 @@ Never _usage([String? problem]) {
     ..writeln('       dart run tool/matrix.dart --app-tests [--json]')
     ..writeln(
       '       dart run tool/matrix.dart --add-app-tests '
-      '[--without-external-steps --app <name> | --app <name>] <app> '
-      '<app tests>...',
+      '[--without-external-steps --app <name> | --app <name>] '
+      '[--env-values <file>] <app> <app tests>...',
     )
     ..writeln(
       '<c>: pairwise (by default), 3-wise or all, the combinations of the '
@@ -245,12 +276,14 @@ Future<int> _create(
 /// of that name that it was generated as, one of those without the modules
 /// whose steps need an external service with [withoutExternalSteps], with
 /// the tests of the probes of the roles of the app when the tests of
-/// [directories] run them; returns the exit code.
+/// [directories] run them, and with the values of the file [envValues] in
+/// its `.env`, if it is given; returns the exit code.
 Future<int> _addAppTests(
   String app,
   List<String> directories,
   NamedEveryModuleApp? named, {
   required bool withoutExternalSteps,
+  required String? envValues,
 }) async {
   final appTests = (await smfAppTests()).tests;
   var tests = <MatrixAppTest>[];
@@ -292,6 +325,8 @@ Future<int> _addAppTests(
     GeneratedApp(name: name, path: p.absolute(app)),
     tests,
     app: matrixApp,
+    env: matrixEnv,
+    envValues: envValues,
   );
   stdout.writeln(output.trim());
   await Future.wait<void>([stdout.flush(), stderr.flush()]);

@@ -517,7 +517,12 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   the key (`module`) and its package (`package`), as [env] tells them
 ///   (see [MatrixEnv.keys]), both `null` where no module of the app gives
 ///   the key, and the names of those apps (`apps`), in the order of the
-///   apps and of the keys.
+///   apps and of the keys;
+/// - `answer`, the answer of CI that its probe asks for
+///   ([MatrixStartProbe.answer]), only if it has one, so that the checks of
+///   the repository find an answer that a workflow gives the script that
+///   starts the apps and that no probe asks for, which the script would
+///   skip in every app.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
@@ -584,6 +589,7 @@ Future<List<Map<String, Object>>> appTestsReport(
         fileSystem,
       ),
       'envKeys': _envKeysGivenBy(test, matrix, env, packages),
+      if (test.startProbe?.answer case final answer?) 'answer': answer,
     });
   }
   return report;
@@ -1073,7 +1079,8 @@ final class MatrixAppTest {
   /// before `flutter test`, which it runs with the arguments of
   /// [MatrixEnv.toolArguments] that give the app the values. It writes no
   /// value into an app that [addAppTestsTo] adds tests to, such as one that
-  /// CI starts on a device. A run fails when two tests of an app give a key
+  /// CI starts on a device, which takes values of CI from a file instead,
+  /// if any. A run fails when two tests of an app give a key
   /// different values, when the app has no file of values or the file has
   /// no line of a key, and when a value has a line break or a double quote,
   /// which the file cannot hold. A value without white space, `#` or a
@@ -1147,8 +1154,8 @@ final class MatrixAppTest {
 /// of the app settled (see [MatrixAppTest.startProbe]).
 final class MatrixStartProbe {
   /// Creates the probe that the function [function] of the file at [path]
-  /// is.
-  const MatrixStartProbe(this.path, this.function);
+  /// is, which asks the script of CI for the [answer] if it has one.
+  const MatrixStartProbe(this.path, this.function, {this.answer});
 
   /// The path of the Dart file with the function among the files of the
   /// tests or those that they generate, in their directory
@@ -1160,6 +1167,21 @@ final class MatrixStartProbe {
   /// as `probeRoutes`. The check calls it with a function that waits until
   /// the screen settles, and adds the problems that it returns to its own.
   final String function;
+
+  /// The name of what the probe asks of the script of CI that starts the
+  /// app on a device, once the app runs, or `null` if it asks nothing: an
+  /// answer of the script, such as a push message, which only a server
+  /// with a key can send. It has small letters, digits and underscores, and
+  /// names the files of the exchange, `smf_start_request_<answer>` and
+  /// `smf_start_report_<answer>` in the temporary directory of the app, and
+  /// the answer that the script is given, `<answer>=<command>`.
+  ///
+  /// The matrix lists the answers of the probes that it adds to an app,
+  /// [startAnswersFile], and the script runs only the answers that the app
+  /// lists. So a job that gives every answer of CI starts each app of a
+  /// covering of the providers of a role, whether the provider of the probe
+  /// is in the app or not.
+  final String? answer;
 }
 
 /// The path in an app of the list of the probes of its tests, which
@@ -1167,6 +1189,18 @@ final class MatrixStartProbe {
 /// ([MatrixAppTest.readsStartProbes]): `startProbes`, the name of the tests
 /// of each probe and the probe, in the order of the tests.
 const startProbesFile = 'integration_test/start_probes.dart';
+
+/// The path in an app of the answers of CI that the probes of its tests ask
+/// for ([MatrixStartProbe.answer]), one on each line in the order of the
+/// tests, which [addAppTests] writes next to [startProbesFile]: the script
+/// of CI that starts the app on a device runs only those of its answers.
+const startAnswersFile = 'integration_test/start_answers';
+
+/// The path in an app of the arguments of the `flutter` tool that build the
+/// app with its values, one on each line, which [addAppTests] writes next
+/// to [startProbesFile] (see [MatrixEnv.toolArguments]): the script of CI
+/// that starts the app on a device builds it with them.
+const startBuildArgumentsFile = 'integration_test/start_build_arguments';
 
 /// A function among the files of a [MatrixAppTest] that sets up the mocks of
 /// the platform side of what the module of the tests runs in an app (see
@@ -1470,6 +1504,11 @@ final class MatrixAppTests {
 /// order of the [tests], each named after the directory of its tests. So
 /// the start check that the matrix analyzes in its apps and the one that CI
 /// starts on a device run the probes of the tests that go into the app.
+/// Next to it, it writes what the script of CI that starts the app on a
+/// device needs: the answers that those probes ask for, [startAnswersFile],
+/// and the [buildArguments], the arguments of the `flutter` tool that build
+/// the app with its values (see [MatrixEnv.toolArguments]),
+/// [startBuildArgumentsFile]; each with one on a line.
 ///
 /// Throws a [MatrixAppTestException], before it copies anything, if a test
 /// generates files without [app], if a file keeps a placeholder that no
@@ -1477,10 +1516,13 @@ final class MatrixAppTests {
 /// files they generate included, if a test generates a file at a path that
 /// is no relative path in the app, if the mocks of a test are in no file
 /// of it in `test/`, if its probe is in no file of it in
-/// `integration_test/`, or if a test has a file at the path of the
-/// configuration of the mocks or of the list of the probes, which the
-/// matrix writes, or at [envFile], the path of the file of the values of
-/// the app (see [MatrixEnv.file]), whose values the tests give through
+/// `integration_test/`, if the answer of a probe is no name of small
+/// letters, digits and underscores or the answer of another probe too, if
+/// a build argument is empty or has a line break, or if a test has a file
+/// at the path of the configuration of the mocks, of the list of the
+/// probes, of the answers or of the build arguments, which the matrix
+/// writes, or at [envFile], the path of the file of the values of the app
+/// (see [MatrixEnv.file]), whose values the tests give through
 /// [MatrixAppTest.envValues].
 List<String> addAppTests(
   List<MatrixAppTest> tests, {
@@ -1488,6 +1530,7 @@ List<String> addAppTests(
   required String packageName,
   MatrixApp? app,
   String? envFile,
+  List<String> buildArguments = const [],
   FileSystem fileSystem = const LocalFileSystem(),
 }) {
   final context = fileSystem.path;
@@ -1518,14 +1561,38 @@ List<String> addAppTests(
   }
   final probes = _probesOf(tests, owners, fileSystem);
   if (tests.any((test) => test.readsStartProbes)) {
-    final list = context.joinAll(startProbesFile.split('/'));
-    if (owners[list] case final other?) {
-      throw MatrixAppTestException(
-        'The tests of $other have $startProbesFile, which the matrix writes '
-        'for the probes of the tests.',
-      );
+    for (final argument in buildArguments) {
+      if (argument.isEmpty || argument.contains(RegExp('[\n\r]'))) {
+        throw const MatrixAppTestException(
+          'A build argument of the app is empty or has a line break, which '
+          '$startBuildArgumentsFile cannot hold.',
+        );
+      }
     }
-    texts[list] = _startProbesOf(probes);
+    for (final (path, text, what) in [
+      (startProbesFile, _startProbesOf(probes), 'the probes of the tests'),
+      (
+        startAnswersFile,
+        _linesOf([
+          for (final (_, probe) in probes)
+            if (probe.answer case final answer?) answer,
+        ]),
+        'the answers that their probes ask for',
+      ),
+      (
+        startBuildArgumentsFile,
+        _linesOf(buildArguments),
+        'the arguments that build the app',
+      ),
+    ]) {
+      final file = context.joinAll(path.split('/'));
+      if (owners[file] case final other?) {
+        throw MatrixAppTestException(
+          'The tests of $other have $path, which the matrix writes for $what.',
+        );
+      }
+      texts[file] = text;
+    }
   }
   for (final MapEntry(key: path, value: text) in texts.entries) {
     fileSystem.file(context.join(directory, path))
@@ -1639,7 +1706,8 @@ List<MatrixMocks> _mocksOf(
 
 /// The probes that [tests] declare, in their order, each with the name of
 /// the directory of its test and in a file of its test in
-/// `integration_test/`, as the [owners] of the files tell.
+/// `integration_test/`, as the [owners] of the files tell, and each with an
+/// answer of its own, if it has one, that the script of CI takes.
 List<(String, MatrixStartProbe)> _probesOf(
   List<MatrixAppTest> tests,
   Map<String, String> owners,
@@ -1647,6 +1715,7 @@ List<(String, MatrixStartProbe)> _probesOf(
 ) {
   final context = fileSystem.path;
   final probes = <(String, MatrixStartProbe)>[];
+  final answers = <String, String>{};
   for (final test in tests) {
     final probe = test.startProbe;
     if (probe == null) continue;
@@ -1658,10 +1727,30 @@ List<(String, MatrixStartProbe)> _probesOf(
         '${probe.path}, which is no file of theirs in $_integrationTest.',
       );
     }
+    if (probe.answer case final answer?) {
+      if (!RegExp(r'^[a-z0-9_]+$').hasMatch(answer)) {
+        throw MatrixAppTestException(
+          'The probe of ${test.directory} asks for the answer "$answer", but '
+          'the name of an answer has only small letters, digits and '
+          'underscores, as the script of CI takes it.',
+        );
+      }
+      if (answers[answer] case final other?) {
+        throw MatrixAppTestException(
+          'The probes of $other and ${test.directory} both ask for the answer '
+          '$answer.',
+        );
+      }
+      answers[answer] = test.directory;
+    }
     probes.add((context.basename(test.directory), probe));
   }
   return probes;
 }
+
+/// [lines], each ended by a line break.
+String _linesOf(List<String> lines) =>
+    [for (final line in lines) '$line\n'].join();
 
 /// The directory of an app with the checks that run on a device, such as
 /// the start check, as the paths of the files of a [MatrixAppTest] start.
@@ -1854,7 +1943,8 @@ Future<(int, String)> runAppTests(
         tests,
         toolArguments: env?.toolArguments(app) ?? const [],
       ),
-      ofRun: (env: env),
+      env: env,
+      valuesOf: () => _envValuesOf(tests, app, env, generated.path, fileSystem),
       flutter: flutter,
       fileSystem: fileSystem,
     );
@@ -1904,16 +1994,35 @@ List<MatrixAppTest> appTestsFor(
 /// such as an app with every module of the plan of CI that the matrix tool
 /// of the CLI generates with `--create --app`, it fills the values of the
 /// tests too, and writes the files that they generate for [app] (see
-/// [MatrixAppTest.generatedFiles]), as for an app of the matrix.
+/// [MatrixAppTest.generatedFiles]), as for an app of the matrix. With the
+/// start check, it also writes the arguments that build [app] with its
+/// values, the tool arguments of [env] for it ([startBuildArgumentsFile]);
+/// none without [app], whose roles they come from, as the probes of the
+/// tests of the app do.
+///
+/// It writes none of the values that the tests give an app of the matrix
+/// ([MatrixAppTest.envValues]). With [envValues], the path of a file of
+/// values of CI in the form of the file of [env], such as `.env`, with a
+/// line `KEY=value` for each key, and with [app], whose build arguments
+/// give the build those values, it writes each of them into the line of
+/// its key in the file of [env] of the app, where that line has no value
+/// yet, such as the public key of a service of the project of CI. It
+/// leaves out a key that the app has no such line of, and the values of an
+/// app without the file. What it prints names the keys, and no value.
 ///
 /// Returns 0 and the output, or the exit code of `flutter pub add` and the
 /// output if it fails. A problem of the files of the tests is a failure
 /// too, with the exit code 1, such as a placeholder that only an app of the
-/// matrix fills, or files that tests generate, without [app].
+/// matrix fills, or files that tests generate, without [app]; and so is a
+/// problem of [envValues], such as a file that is not there, a line that is
+/// no line `KEY=value`, a key given twice, a value with a double quote, or
+/// values without [app] or [env].
 Future<(int, String)> addAppTestsTo(
   GeneratedApp generated,
   List<MatrixAppTest> tests, {
   MatrixApp? app,
+  MatrixEnv? env,
+  String? envValues,
   MatrixFlutter flutter = _flutter,
   FileSystem fileSystem = const LocalFileSystem(),
 }) =>
@@ -1922,39 +2031,44 @@ Future<(int, String)> addAppTestsTo(
       app,
       tests,
       _pubAdd(tests),
+      env: env,
+      valuesOf: () => envValues == null
+          ? null
+          : _envValuesOfFile(envValues, app, env, generated.path, fileSystem),
       flutter: flutter,
       fileSystem: fileSystem,
     );
 
 /// Adds [tests] to [generated], for the app of the matrix [app] if it is
-/// one, and runs [commands] with [flutter] until one fails; returns its
-/// exit code and the output up to it, or 0 and the output of all.
+/// one, with the build arguments of [env] for [app], and runs [commands]
+/// with [flutter] until one fails; returns its exit code and the output up
+/// to it, or 0 and the output of all.
 ///
-/// With [ofRun], as a run of the matrix gives it for [app], an app of the
-/// matrix, it also writes the values that the tests give the app into the
-/// file of the env of the run: a run without an env has no file to write
-/// them into, which is a problem when the tests give values.
+/// It also writes into the file of the values of the app what [valuesOf]
+/// gives, such as the values that the tests give an app of the matrix in a
+/// run, and prints its summary. A problem that [valuesOf] throws is a
+/// failure with the exit code 1, before anything is copied.
 Future<(int, String)> _addAndRun(
   GeneratedApp generated,
   MatrixApp? app,
   List<MatrixAppTest> tests,
   List<List<String>> commands, {
+  required MatrixEnv? env,
+  required _EnvValues? Function() valuesOf,
   required MatrixFlutter flutter,
   required FileSystem fileSystem,
-  _EnvOfRun? ofRun,
 }) async {
   final List<String> added;
   final _EnvValues? values;
   try {
-    values = ofRun == null
-        ? null
-        : _envValuesOf(tests, app!, ofRun.env, generated.path, fileSystem);
+    values = valuesOf();
     added = addAppTests(
       tests,
       app: app,
       directory: generated.path,
       packageName: generated.name,
-      envFile: ofRun?.env?.file,
+      envFile: env?.file,
+      buildArguments: [if (app != null) ...?env?.toolArguments(app)],
       fileSystem: fileSystem,
     );
   } on MatrixAppTestException catch (error) {
@@ -1962,7 +2076,9 @@ Future<(int, String)> _addAndRun(
   }
   final output = StringBuffer('Added the tests ${added.join(', ')}.\n');
   if (values != null) {
-    fileSystem.file(values.path).writeAsStringSync(values.text);
+    if (values.text case final text?) {
+      fileSystem.file(values.path).writeAsStringSync(text);
+    }
     output.writeln(values.summary);
   }
   for (final arguments in commands) {
@@ -1976,15 +2092,11 @@ Future<(int, String)> _addAndRun(
   return (0, '$output');
 }
 
-/// What a run of the matrix gives the tests of an app of the matrix: the
-/// `env` of the run, if it has one, into whose file it writes the values
-/// that the tests give the app.
-typedef _EnvOfRun = ({MatrixEnv? env});
-
-/// The file of the values of an app with the values that its tests give
-/// it: the `path` of the file in the file system, its new `text`, and a
-/// `summary` of what changed, which names the keys and no value.
-typedef _EnvValues = ({String path, String text, String summary});
+/// The file of the values of an app with the values that it gets, such as
+/// those that its tests give it: the `path` of the file in the file system,
+/// its new `text`, or `null` when nothing changes in it, and a `summary` of
+/// what changed, which names the keys and no value.
+typedef _EnvValues = ({String path, String? text, String summary});
 
 /// The values that the tests of an app give it, by their keys, and the
 /// directory of the first test that gives each key (`givers`).
@@ -2129,6 +2241,141 @@ String _envSummaryOf(Map<String, String?> values, String path) {
 /// otherwise, the two forms that every provider of the values reads alike.
 String _envValue(String value) =>
     value.contains(RegExp(r'''[\s#'"`]''')) ? '"$value"' : value;
+
+/// The file of the values of [app], generated in [directory], with the
+/// values of the file at [path], such as the values of CI for the apps
+/// that it starts on a device: the file of [env], with the value of each
+/// key of [path] in the line of that key that has no value yet, which
+/// becomes `KEY=value`; see [addAppTestsTo]. The text is `null` when the
+/// app has no such line of any of the keys, or no file of [env].
+///
+/// It reads the file at [path] and the file of [env] of the app in the
+/// forms of a value that the env role names: a plain value, without white
+/// space, `#` or quotes, or a value in double quotes, each with a comment
+/// after it or none; a line that is empty or starts with `#` gives no value
+/// (see [_envValuesIn]). An empty value is no value.
+///
+/// Throws a [MatrixAppTestException] if there is no [app], whose build
+/// arguments the start check would lack, if there is no [env], if there is
+/// no file at [path], if a line of either file is in none of those forms,
+/// or if a file gives a key twice. No message has a value or a line of a
+/// file, which may be a key of CI.
+_EnvValues _envValuesOfFile(
+  String path,
+  MatrixApp? app,
+  MatrixEnv? env,
+  String directory,
+  FileSystem fileSystem,
+) {
+  if (app == null) {
+    throw MatrixAppTestException(
+      'The values of $path go only into an app of the matrix: without it, the '
+      'start check gets no arguments that build the app with its values '
+      '($startBuildArgumentsFile), so they would not reach the app.',
+    );
+  }
+  if (env == null) {
+    throw MatrixAppTestException(
+      'The values of $path have no file of values of the apps to go into '
+      '(MatrixEnv).',
+    );
+  }
+  final source = fileSystem.file(path);
+  if (!source.existsSync()) {
+    throw MatrixAppTestException('There is no file of values at $path.');
+  }
+  final values = {
+    for (final (key, value, _) in _envValuesIn(source.readAsStringSync(), path))
+      if (value.isNotEmpty) key: value,
+  };
+  final context = fileSystem.path;
+  final file = fileSystem.file(
+    context.join(directory, context.joinAll(env.file.split('/'))),
+  );
+  if (!file.existsSync()) {
+    return (
+      path: file.path,
+      text: null,
+      summary: 'The app has no ${env.file}, so it takes none of the values of '
+          '$path.',
+    );
+  }
+  final lines = file.readAsStringSync().split('\n');
+  final written = <String>{};
+  for (final (key, value, index)
+      in _envValuesIn(lines.join('\n'), '${env.file} of the app')) {
+    if (value.isNotEmpty || !values.containsKey(key)) continue;
+    written.add(key);
+    lines[index] = '$key=${_envValue(values[key]!)}';
+  }
+  final left = [
+    for (final key in values.keys)
+      if (!written.contains(key)) key,
+  ];
+  final leftOut = '${env.file} has no line without a value of '
+      '${left.join(', ')}, so the values of $path for them stay out of it.';
+  final summary = [
+    if (written.isNotEmpty)
+      '${env.file}: wrote the values of ${written.join(', ')} from $path.',
+    if (left.isNotEmpty) leftOut,
+  ];
+  return (
+    path: file.path,
+    text: written.isEmpty ? null : lines.join('\n'),
+    summary: summary.isEmpty ? '$path gives no value.' : summary.join(' '),
+  );
+}
+
+/// A line `KEY=value` of a file of values, without the white space around
+/// it: the key, and the rest of the line, which starts with the value.
+final _envKeyLine = RegExp(r'^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$');
+
+/// A value in double quotes, with a comment after it or none.
+final _quotedEnvValue = RegExp(r'^"([^"]*)"\s*(?:#.*)?$');
+
+/// A plain value, which may be empty, with a comment after it or none.
+final _plainEnvValue = RegExp(r'''^([^\s#"'`]*)\s*(?:#.*)?$''');
+
+/// The values of [text], the text of the file of values [file], in the
+/// forms of a value that the env role names, each with its key and the
+/// index of its line, in the order of the lines. A line that is empty or
+/// starts with `#` gives no value.
+///
+/// Throws a [MatrixAppTestException] for a line that is neither `KEY=value`,
+/// a comment nor empty, for a line whose value is in none of those forms,
+/// and for a key that has two lines. None names a value.
+List<(String, String, int)> _envValuesIn(String text, String file) {
+  final values = <(String, String, int)>[];
+  final keys = <String>{};
+  for (final (index, raw) in text.split('\n').indexed) {
+    final line = raw.trim();
+    if (line.isEmpty || line.startsWith('#')) continue;
+    final match = _envKeyLine.firstMatch(line);
+    if (match == null) {
+      throw MatrixAppTestException(
+        'Line ${index + 1} of $file is neither KEY=value, a comment nor '
+        'empty.',
+      );
+    }
+    final key = match[1]!;
+    final value = (_quotedEnvValue.firstMatch(match[2]!) ??
+            _plainEnvValue.firstMatch(match[2]!))
+        ?.group(1);
+    if (value == null) {
+      throw MatrixAppTestException(
+        'Line ${index + 1} of $file, the line of $key, has a value in none of '
+        'the forms of a value of the env role: a plain value without white '
+        'space, # or quotes, or a value in double quotes, each with a comment '
+        'after it or none.',
+      );
+    }
+    if (!keys.add(key)) {
+      throw MatrixAppTestException('$file gives $key twice.');
+    }
+    values.add((key, value, index));
+  }
+  return values;
+}
 
 /// Generates the app of `smf create` with [arguments] and gives it to
 /// [onCreated]; returns the exit code.
@@ -2446,7 +2693,8 @@ Future<(List<String>, String)> runFailingAppTests(
       ..._pubAdd(tests),
       const ['analyze'],
     ],
-    ofRun: (env: env),
+    env: env,
+    valuesOf: () => _envValuesOf(tests, app, env, generated.path, fileSystem),
     flutter: flutter,
     fileSystem: fileSystem,
   );

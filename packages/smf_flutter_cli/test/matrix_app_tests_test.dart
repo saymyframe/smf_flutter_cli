@@ -1946,6 +1946,21 @@ void main() {
   });
 
   test(
+      'the probe of Firebase Cloud Messaging asks the script of CI that '
+      'starts the app for the answer firebase_messaging, a push message, by '
+      'the name with which a job gives the answer, and no other probe asks '
+      'for one', () {
+    expect(
+      {
+        for (final test in appTests.tests)
+          if (test.startProbe?.answer case final answer?)
+            p.basename(test.directory): answer,
+      },
+      {'firebase_messaging': 'firebase_messaging'},
+    );
+  });
+
+  test(
       'the start check runs the probes of the tests that go into an app '
       'with it, the walk of the routes, the services of the DI role, the '
       'preferences of the role, those of shared_preferences once they are '
