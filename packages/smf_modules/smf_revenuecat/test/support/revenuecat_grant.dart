@@ -102,9 +102,13 @@ final class AccessNotGranted implements Exception {
 /// key the request names, and the customer of the app user id of the
 /// request, which it asks for again, [pause] apart, while RevenueCat does
 /// not know it yet. It grants the entitlement to the customer until the end
-/// of the request, unless the customer has it until then already, as after
-/// an earlier answer to the same request, which the script of CI runs again
-/// when the app gives no verdict in time. A request that RevenueCat may take
+/// of the request, unless the customer has it already until a time
+/// [duplicateWindow] or less from that end, which RevenueCat takes for the
+/// same grant, as after an earlier answer to the same request, which the
+/// script of CI runs again when the app gives no verdict in time. When the
+/// grant fails, it reads the customer again and takes such a grant for done,
+/// since RevenueCat may have applied it though the client got an error or no
+/// answer. A request that RevenueCat may take
 /// later, after it limited the requests, failed itself or was not reached,
 /// goes again, [attempts] times in all, once [wait] waited for the time that
 /// RevenueCat asks for or [pause].
@@ -155,32 +159,80 @@ Future<String> grantAccess(
     request.expiresAt,
     isUtc: true,
   ).toIso8601String();
-  final known = await api.get(
+  final granted = await _grantedUntil(
+    api,
     customer,
     'the customer ${request.appUserId} in $name',
-    unknownCustomer: true,
+    entitlementId,
+    request,
   );
+  if (granted != null) {
+    return 'The customer ${request.appUserId} has ${request.entitlement} '
+        'until $granted in $name already, two hours or less from the end '
+        'that the request asks for, $until, which RevenueCat takes for the '
+        'same grant, as after an earlier answer to the same request.';
+  }
+  final what = 'the grant of ${request.entitlement} to the customer '
+      '${request.appUserId} in $name';
+  try {
+    await api.post(
+      '$customer/actions/grant_entitlement',
+      {'entitlement_id': entitlementId, 'expires_at': request.expiresAt},
+      what,
+    );
+  } on AccessNotGranted catch (error) {
+    // RevenueCat may have applied the grant though the client got an
+    // error, as for a request that ran out of time on the client, or for
+    // one that RevenueCat took for a duplicate of one that it applied.
+    final applied = await _grantedUntil(
+      api,
+      customer,
+      'the customer ${request.appUserId} in $name',
+      entitlementId,
+      request,
+    );
+    if (applied == null) rethrow;
+    return '${error.meaning} But the customer has ${request.entitlement} '
+        'until $applied now, so RevenueCat applied the grant.';
+  }
+  return 'RevenueCat granted ${request.entitlement} to the customer '
+      '${request.appUserId} until $until in $name.';
+}
+
+/// How far from the end of a grant RevenueCat takes another grant of the
+/// same entitlement for a duplicate of it, which it ignores.
+const duplicateWindow = Duration(hours: 2);
+
+/// When the customer at [customer], which [what] names, has the entitlement
+/// [entitlementId] until, in ISO 8601, when that end is [duplicateWindow] or
+/// less from the end of [request], or `null` when the customer has no such
+/// grant.
+Future<String?> _grantedUntil(
+  _Api api,
+  String customer,
+  String what,
+  String entitlementId,
+  AccessRequest request,
+) async {
+  final known = await api.get(customer, what, unknownCustomer: true);
   final active = switch (known['active_entitlements']) {
     final Map<String, Object?> list => _itemsOf(list),
     _ => const <Map<String, Object?>>[],
   };
-  if (active.any(
-    (item) =>
-        item['entitlement_id'] == entitlementId &&
-        item['expires_at'] == request.expiresAt,
-  )) {
-    return 'The customer ${request.appUserId} has ${request.entitlement} '
-        'until $until in $name already, from an earlier answer to the same '
-        'request.';
+  for (final item in active) {
+    if (item
+        case {
+          'entitlement_id': final String id,
+          'expires_at': final int expiresAt,
+        }
+        when id == entitlementId &&
+            (expiresAt - request.expiresAt).abs() <=
+                duplicateWindow.inMilliseconds) {
+      return DateTime.fromMillisecondsSinceEpoch(expiresAt, isUtc: true)
+          .toIso8601String();
+    }
   }
-  await api.post(
-    '$customer/actions/grant_entitlement',
-    {'entitlement_id': entitlementId, 'expires_at': request.expiresAt},
-    'the grant of ${request.entitlement} to the customer '
-        '${request.appUserId} in $name',
-  );
-  return 'RevenueCat granted ${request.entitlement} to the customer '
-      '${request.appUserId} until $until in $name.';
+  return null;
 }
 
 Future<void> _wait(Duration duration) => Future<void>.delayed(duration);

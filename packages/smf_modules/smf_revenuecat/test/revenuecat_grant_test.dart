@@ -57,6 +57,13 @@ final class _RevenueCat {
   /// The active entitlements of the customer.
   final List<Map<String, Object?>> active = [];
 
+  /// What RevenueCat answers to a grant that it applies, in place of the
+  /// customer, such as an error after it applied the grant; and whether
+  /// the client then gets no answer at all, as when its request runs out
+  /// of time after RevenueCat applied the grant.
+  http.Response? answerToGrant;
+  bool grantUnanswered = false;
+
   /// The requests that reached RevenueCat, in their order.
   final List<http.Request> requests = [];
 
@@ -100,7 +107,10 @@ final class _RevenueCat {
       'entitlement_id': body['entitlement_id'],
       'expires_at': body['expires_at'],
     });
-    return _json(201, _customerObject());
+    if (grantUnanswered) {
+      throw http.ClientException('The request timed out.', request.url);
+    }
+    return answerToGrant ?? _json(201, _customerObject());
   }
 
   Map<String, Object?> _customerObject() => {
@@ -257,32 +267,107 @@ void main() {
     });
 
     test(
-        'grants nothing to a customer that has the entitlement until the end '
-        'of the request already, as after an earlier answer to the request, '
-        'and grants it to one that has it until another time', () async {
-      revenueCat.active.add({
-        'entitlement_id': 'entl0001',
-        'expires_at': _expiresAt,
-      });
+        'grants nothing to a customer that has the entitlement until two '
+        'hours or less from the end of the request already, which RevenueCat '
+        'takes for the same grant, as after an earlier answer to the request, '
+        'and grants it to one that has it until a time further off, or has '
+        'another entitlement', () async {
+      const hour = 3600000;
+      for (final end in [
+        _expiresAt,
+        _expiresAt + 1000,
+        _expiresAt - 2 * hour,
+        _expiresAt + 2 * hour,
+      ]) {
+        revenueCat
+          ..requests.clear()
+          ..active.clear()
+          ..active.add({'entitlement_id': 'entl0001', 'expires_at': end});
+
+        final ends = DateTime.fromMillisecondsSinceEpoch(end, isUtc: true);
+        expect(
+          await grant(),
+          'The customer $_user has premium until ${ends.toIso8601String()} '
+          'in the project SMF CI of RevenueCat already, two hours or less from '
+          'the end that the request asks for, 2026-10-14T17:46:40.000Z, which '
+          'RevenueCat takes for the same grant, as after an earlier answer to '
+          'the same request.',
+          reason: '$end',
+        );
+        expect(revenueCat.calls.last, 'GET $_customer', reason: '$end');
+      }
+
+      for (final (id, end) in [
+        ('entl0001', _expiresAt + 2 * hour + 1),
+        ('entl0001', _expiresAt - 2 * hour - 1),
+        ('entl0002', _expiresAt),
+      ]) {
+        revenueCat
+          ..requests.clear()
+          ..active.clear()
+          ..active.add({'entitlement_id': id, 'expires_at': end});
+        await grant();
+        expect(
+          revenueCat.calls.last,
+          'POST $_customer/actions/grant_entitlement',
+          reason: '$id $end',
+        );
+      }
+    });
+
+    test(
+        'takes a grant that RevenueCat applied for done, though it answered '
+        'the request with an error or with no answer at all, once it reads '
+        'the customer again', () async {
+      revenueCat.answerToGrant =
+          _error(422, 'invalid_request', 'The grant is a duplicate.');
 
       expect(
         await grant(),
-        'The customer $_user has premium until 2026-10-14T17:46:40.000Z in '
-        'the project SMF CI of RevenueCat already, from an earlier answer to '
-        'the same request.',
+        'RevenueCat refused the grant of premium to the customer $_user in '
+        'the project SMF CI of RevenueCat (422, invalid_request: The grant is '
+        'a duplicate.). But the customer has premium until '
+        '2026-10-14T17:46:40.000Z now, so RevenueCat applied the grant.',
       );
       expect(revenueCat.calls.last, 'GET $_customer');
 
       revenueCat
+        ..requests.clear()
         ..active.clear()
-        ..active.add({
-          'entitlement_id': 'entl0001',
-          'expires_at': _expiresAt + 1000,
-        });
-      await grant();
+        ..answerToGrant = null
+        ..grantUnanswered = true;
       expect(
-        revenueCat.calls.last,
-        'POST $_customer/actions/grant_entitlement',
+        await grant(),
+        allOf(
+          startsWith(
+            'The test did not reach RevenueCat for the grant of premium to the '
+            'customer $_user in the project SMF CI of RevenueCat in 3 '
+            'attempts: ',
+          ),
+          endsWith(
+            'But the customer has premium until 2026-10-14T17:46:40.000Z now, '
+            'so RevenueCat applied the grant.',
+          ),
+        ),
+      );
+      expect(
+        revenueCat.calls.where((call) => call.startsWith('POST')),
+        hasLength(3),
+      );
+
+      // An error after which the customer has no such grant stays one.
+      revenueCat
+        ..requests.clear()
+        ..active.clear()
+        ..grantUnanswered = false
+        ..script('POST', '$_customer/actions/grant_entitlement', [
+          _error(422, 'invalid_request', 'expires_at must be in the future.'),
+        ]);
+      expect(
+        await failure(),
+        'RevenueCat refused the grant of premium to the customer $_user in '
+        'the project SMF CI of RevenueCat (422, invalid_request: expires_at '
+        'must be in the future.).',
       );
     });
 
