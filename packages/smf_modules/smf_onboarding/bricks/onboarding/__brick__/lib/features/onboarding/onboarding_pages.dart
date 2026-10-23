@@ -97,86 +97,101 @@ class OnboardingPage extends StatelessWidget {
   /// What the page says below its title.
   final String text;
 
+  /// How far the texts keep from the sides of the page.
+  static const double _sides = 28;
+
   @override
   Widget build(BuildContext context) {
     final scope = OnboardingPageScope.maybeOf(context);
-    if (scope == null) return _build(context, turned: 0, index: 0);
-    return AnimatedBuilder(
-      animation: scope.controller,
-      builder: (context, _) =>
-          _build(context, turned: scope.turned, index: scope.index),
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The texts, built once for a width and not on each frame while the
+        // pages turn, since measuring their words takes time.
+        final texts = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              header: true,
+              // The title is large already, so it grows only by half with
+              // the text size of the device.
+              child: WholeWords(
+                title,
+                style: theme.textTheme.displaySmall,
+                maxScaleFactor: 1.5,
+                width: constraints.maxWidth - 2 * _sides,
+              ),
+            ),
+            const SizedBox(height: 12),
+            WholeWords(
+              text,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontSize: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              width: constraints.maxWidth - 2 * _sides,
+            ),
+          ],
+        );
+        if (scope == null) {
+          return _build(constraints, texts, turned: 0, index: 0);
+        }
+        return AnimatedBuilder(
+          animation: scope.controller,
+          child: texts,
+          builder: (context, texts) => _build(
+            constraints,
+            texts!,
+            turned: scope.turned,
+            index: scope.index,
+          ),
+        );
+      },
     );
   }
 
-  /// The page at [index] while the pages are [turned] away from it.
+  /// The page at [index] in [constraints], with [texts] below its cells,
+  /// while the pages are [turned] away from it.
   Widget _build(
-    BuildContext context, {
+    BoxConstraints constraints,
+    Widget texts, {
     required double turned,
     required int index,
   }) {
-    final theme = Theme.of(context);
     // The texts leave faster than the page, and fade as they go.
     final shown = (1 - turned.abs() * 1.6).clamp(0.0, 1.0);
-    // How far the texts keep from the sides of the page.
-    const sides = 28.0;
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: IntrinsicHeight(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 280),
-                    child: ExcludeSemantics(
-                      child: _Cells(
-                        mirrored: index.isOdd,
-                        turned: turned,
-                        number: index + 1,
-                        symbol: symbol,
-                        icon: icon,
-                      ),
+    return SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: IntrinsicHeight(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 280),
+                  child: ExcludeSemantics(
+                    child: _Cells(
+                      mirrored: index.isOdd,
+                      turned: turned,
+                      number: index + 1,
+                      symbol: symbol,
+                      icon: icon,
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(sides, 8, sides, 8),
-                  child: Opacity(
-                    opacity: shown,
-                    child: Transform.translate(
-                      offset: Offset(-turned * 56, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Semantics(
-                            header: true,
-                            // The title is large already, so it grows only
-                            // by half with the text size of the device.
-                            child: WholeWords(
-                              title,
-                              style: theme.textTheme.displaySmall,
-                              maxScaleFactor: 1.5,
-                              width: constraints.maxWidth - 2 * sides,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          WholeWords(
-                            text,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 18,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            width: constraints.maxWidth - 2 * sides,
-                          ),
-                        ],
-                      ),
-                    ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(_sides, 8, _sides, 8),
+                child: Opacity(
+                  opacity: shown,
+                  child: Transform.translate(
+                    offset: Offset(-turned * 56, 0),
+                    child: texts,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

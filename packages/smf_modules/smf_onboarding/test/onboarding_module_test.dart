@@ -1518,7 +1518,8 @@ void main() {
         'at most and the text below it, in the width of the page but for its '
         'sides, and a label with the text size of its place', () {
       final pages = _parsed(app, _pages);
-      final page = _methodOf(pages, 'OnboardingPage', '_build');
+      final page = _methodOf(pages, 'OnboardingPage', 'build');
+      final turning = _methodOf(pages, 'OnboardingPage', '_build');
 
       // The title, in the style that the theme has for it, and the text
       // below it. They are below a parent that asks for the height of its
@@ -1529,20 +1530,25 @@ void main() {
         '0': 'title',
         'style': 'theme.textTheme.displaySmall',
         'maxScaleFactor': '1.5',
-        'width': 'constraints.maxWidth - 2 * sides',
+        'width': 'constraints.maxWidth - 2 * _sides',
       });
       expect(_argumentsOf(text), {
         '0': 'text',
         'style': 'theme.textTheme.bodyLarge?.copyWith(fontSize: 18, '
             'color: theme.colorScheme.onSurfaceVariant)',
-        'width': 'constraints.maxWidth - 2 * sides',
+        'width': 'constraints.maxWidth - 2 * _sides',
       });
-      expect(_variablesOf(page), containsPair('sides', '28.0'));
-      final texts = _enclosing(title, 'Padding');
-      expect(_enclosing(text, 'Padding'), texts);
+      final sides = _classOf(pages, 'OnboardingPage')
+          .body
+          .members
+          .whereType<FieldDeclaration>()
+          .singleWhere((field) => field.isStatic);
+      expect(sides.fields.isConst, isTrue);
+      expect(sides.fields.variables.single.toSource(), '_sides = 28');
+      final texts = _calls(turning, 'Padding').single;
       expect(
         _argument(texts, 'padding').toSource(),
-        'const EdgeInsets.fromLTRB(sides, 8, sides, 8)',
+        'const EdgeInsets.fromLTRB(_sides, 8, _sides, 8)',
       );
       expect(_enclosing(texts, 'IntrinsicHeight'), isNotNull);
       // The labels of Skip, of the later of a step and of the button below
@@ -1837,9 +1843,26 @@ void main() {
         _argument(box, 'constraints').toSource(),
         'BoxConstraints(minHeight: constraints.maxHeight)',
       );
+      // In the constraints that the page has.
+      final layout =
+          _calls(_methodOf(unit, 'OnboardingPage', 'build'), 'LayoutBuilder')
+              .single;
       expect(
-        _argument(_enclosing(scroll, 'LayoutBuilder'), 'builder').toSource(),
-        startsWith('(context, constraints) => SingleChildScrollView('),
+        _argument(layout, 'builder').toSource(),
+        startsWith('(context, constraints) {'),
+      );
+      expect(
+        _methodOf(unit, 'OnboardingPage', '_build').parameters!.toSource(),
+        '(BoxConstraints constraints, Widget texts, {required double turned, '
+        'required int index})',
+      );
+      expect(
+        (_methodOf(unit, 'OnboardingPage', '_build').body as BlockFunctionBody)
+            .block
+            .statements
+            .last
+            .toSource(),
+        startsWith('return SingleChildScrollView('),
       );
     });
 
@@ -1853,7 +1876,7 @@ void main() {
       expect(title.methodName.name, 'WholeWords');
       expect(title.argumentList.arguments.first.toSource(), 'title');
       // The text below the title is none.
-      final build = _methodOf(unit, 'OnboardingPage', '_build');
+      final build = _methodOf(unit, 'OnboardingPage', 'build');
       expect(_wordsOf(build), ['title', 'text']);
       expect(_textsOf(build), isEmpty);
       // The cells, with the symbol and the number of the page.
@@ -1885,22 +1908,46 @@ void main() {
         _variablesOf(build),
         containsPair('scope', 'OnboardingPageScope.maybeOf(context)'),
       );
-      final withoutScope = (build.body as BlockFunctionBody)
-          .block
-          .statements
-          .whereType<IfStatement>()
-          .single;
+      final withoutScope = _ifsOf(build).single;
       expect(withoutScope.expression.toSource(), 'scope == null');
       expect(
         withoutScope.thenStatement.toSource(),
-        'return _build(context, turned: 0, index: 0);',
+        '{return _build(constraints, texts, turned: 0, index: 0);}',
       );
       // With a scope, the page follows the controller of the pages.
       final following = _calls(build, 'AnimatedBuilder').single;
       expect(_argument(following, 'animation').toSource(), 'scope.controller');
       expect(
         _calls(following, '_build').single.argumentList.toSource(),
-        '(context, turned: scope.turned, index: scope.index)',
+        '(constraints, texts!, turned: scope.turned, index: scope.index)',
+      );
+    });
+
+    test(
+        'build their texts once for a width, and not on each frame while the '
+        'pages turn: the builder of the frames gets them as its child', () {
+      final build = _methodOf(unit, 'OnboardingPage', 'build');
+      final turning = _methodOf(unit, 'OnboardingPage', '_build');
+      final following = _calls(build, 'AnimatedBuilder').single;
+
+      // The texts are a variable of the builder of the constraints, outside
+      // the builder of the frames, which gets them as its child.
+      final texts = _variablesOf(build)['texts']!;
+      expect(texts, startsWith('Column('));
+      expect(_argument(following, 'child').toSource(), 'texts');
+      expect(
+        _argument(following, 'builder').toSource(),
+        startsWith('(context, texts) => _build('),
+      );
+      expect(_calls(_argument(following, 'builder'), 'WholeWords'), isEmpty);
+      // The frames move and fade the texts, and build none.
+      expect(_calls(turning, 'WholeWords'), isEmpty);
+      expect(_textsOf(turning), isEmpty);
+      final moved = _calls(turning, 'translate').single;
+      expect(_argument(moved, 'child').toSource(), 'texts');
+      expect(
+        _argument(_enclosing(moved, 'Opacity'), 'opacity').toSource(),
+        'shown',
       );
     });
 
@@ -2402,6 +2449,23 @@ List<String> _textsOf(AstNode node) => [
       for (final text in _calls(node, 'Text'))
         text.argumentList.arguments.first.toSource(),
     ];
+
+/// The `if` statements in [node], in the order of the code.
+List<IfStatement> _ifsOf(AstNode node) {
+  final visitor = _Ifs();
+  node.accept(visitor);
+  return visitor.found;
+}
+
+final class _Ifs extends RecursiveAstVisitor<void> {
+  final List<IfStatement> found = [];
+
+  @override
+  void visitIfStatement(IfStatement node) {
+    found.add(node);
+    super.visitIfStatement(node);
+  }
+}
 
 /// What the texts that keep their words whole, which [node] creates, show,
 /// in the order of the code: the code of the first argument of each.
