@@ -1243,6 +1243,44 @@ void main() {
   });
 
   test(
+      'the report of the app tests names the answer of CI that the probe of '
+      'each asks for, if it asks for one', () async {
+    final cli = await _appTestsOf('smf_flutter_cli');
+    const probe = 'integration_test/probe.dart';
+
+    final report = await appTestsReport(
+      [
+        MatrixAppTest(
+          '$cli/messages',
+          appliesTo: (_) => true,
+          startProbe: const MatrixStartProbe(
+            probe,
+            'probeMessages',
+            answer: 'messages',
+          ),
+        ),
+        MatrixAppTest(
+          '$cli/walk',
+          appliesTo: (_) => true,
+          startProbe: const MatrixStartProbe(probe, 'probeRoutes'),
+        ),
+        MatrixAppTest('$cli/plain', appliesTo: (_) => true),
+      ],
+      modules: const [FlutterCoreModule()],
+      packages: const {FlutterCoreModule.id: 'smf_flutter_core'},
+      apps: () async => const [
+        MatrixApp('app', [FlutterCoreModule.id])
+      ],
+    );
+
+    expect(
+      [for (final test in report) test['answer']],
+      ['messages', null, null],
+    );
+    expect(report[1].containsKey('answer'), isFalse);
+  });
+
+  test(
       'the report of the app tests names the modules of the package that '
       'keeps each, the apps it applies to without them, and the roles whose '
       'contract it checks', () async {

@@ -58,6 +58,8 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
+import 'workspace.dart';
+
 /// The steps that may refer to the package of a module, by the name of the
 /// step and the package, with the reason. Each runs tests of the module.
 const modulePaths = {
@@ -218,6 +220,72 @@ List<String> scriptProblemsOf(
   ];
 }
 
+/// The answers that the steps of [workflow], the text of the workflow
+/// [file] of GitHub Actions, give .github/scripts/start_app.sh, each with
+/// where it is: the name of each argument `<name>=<command>` after the
+/// script in a command that runs it, directly or through a variable of the
+/// step, of its job or of the workflow, a variable that the step assigns,
+/// or the items of an array of bash that it assigns.
+List<(String, String)> startAnswersOf(String workflow, {required String file}) {
+  final root = loadYaml(workflow) as YamlMap;
+  return [
+    for (final MapEntry(key: job, :value) in (root['jobs'] as YamlMap).entries)
+      for (final step in (value as YamlMap)['steps'] as YamlList? ?? YamlList())
+        for (final name in _Script(
+          '$file, job $job, step "${_nameOf(step as YamlMap)}"',
+          '${step['run'] ?? ''}',
+          powerShell: _isPowerShell(
+            step['shell'] ??
+                _default(value, 'shell') ??
+                _default(root, 'shell'),
+          ),
+          environment: {
+            ..._map(root['env']),
+            ..._map(value['env']),
+            ..._map(step['env']),
+          },
+        ).startAnswers)
+          ('$file, job $job, step "${_nameOf(step)}"', name),
+  ];
+}
+
+/// The answers that [script], the text of the script [file] of
+/// .github/scripts, gives .github/scripts/start_app.sh, as in
+/// [startAnswersOf].
+List<(String, String)> scriptStartAnswersOf(
+  String script, {
+  required String file,
+  bool powerShell = false,
+}) =>
+    [
+      for (final name
+          in _Script(file, script, powerShell: powerShell).startAnswers)
+        (file, name),
+    ];
+
+/// The problems of [answers], each with where it is, that no probe of a
+/// matrix tool asks for, of those that probes ask for, [asked]. The script
+/// skips an answer that the app does not list, with a notice, since an app
+/// of a covering of the providers of a role may lack the provider whose
+/// probe asks for it. So a name that no probe has would turn a check of CI
+/// off in every app, quietly.
+List<String> answerProblemsOf(
+  List<(String, String)> answers,
+  Set<String> asked,
+) {
+  final names = (asked.toList()..sort()).join(', ');
+  final known = asked.isEmpty ? '' : ', one of $names';
+  String problem(String where, String name) =>
+      '$where gives start_app.sh the answer $name, which no probe of a '
+      'matrix tool asks for (MatrixStartProbe.answer), so the script would '
+      'skip it in every app: name the answer as the probe that asks for it '
+      'does$known.';
+  return [
+    for (final (where, name) in answers)
+      if (!asked.contains(name)) problem(where, name),
+  ];
+}
+
 /// The name of [step] in the problems: its name, or else the action it
 /// uses or its command.
 String _nameOf(YamlMap step) =>
@@ -296,6 +364,46 @@ final class _Script {
           if (_appsNamed([directory], created).isNotEmpty)
             _namedApp(where, directory),
       ];
+
+  /// The names of the answers that the script gives start_app.sh: the
+  /// name of each argument `<name>=<command>` after the script in a command
+  /// that runs it, also through a variable or an array (see
+  /// [startAnswersOf]).
+  late final List<String> startAnswers = [
+    for (final words in commands)
+      for (final (index, word) in words.indexed)
+        if (word.endsWith('start_app.sh'))
+          for (final argument in words.skip(index + 1))
+            for (final value in _valuesOf(argument))
+              if (RegExp('^([a-z0-9_]+)=.').firstMatch(value) case final match?)
+                match[1]!,
+  ];
+
+  /// What [word] may stand for: the values of the variable that it refers
+  /// to, of the environment or assigned in the script, the items of the
+  /// array of bash that it expands, as `"${answers[@]}"`, which the script
+  /// assigns or adds to, or else itself.
+  List<String> _valuesOf(String word) {
+    if (RegExp(r'^\$\{(\w+)\[[@*]\]\}$').firstMatch(word) case final match?) {
+      return [
+        for (final (index, words) in commands.indexed)
+          if (words case [final assignment]
+              when assignment == '${match[1]}=' ||
+                  assignment == '${match[1]}+=')
+            if (index + 1 < commands.length) ...commands[index + 1],
+      ];
+    }
+    final variable = _variableOf(word);
+    if (variable == null) return [word];
+    return [
+      if (_environment[variable] case final value?) value,
+      for (final words in commands)
+        for (final word in words)
+          if (_assignment.firstMatch(word) case final match?
+              when match[1] == variable)
+            match[2]!,
+    ];
+  }
 
   List<String> _problemsOf(List<String> words, Set<String> created) => [
         if (_namesOfApps(words, _isTool) case final names when names.isNotEmpty)
@@ -3619,6 +3727,91 @@ jobs:
       ]);
     });
   });
+
+  test(
+      'finds the answers that a step or a script gives start_app.sh, also '
+      'through a variable or an array, and those that no probe asks for', () {
+    final text = workflow(r'''
+      - name: Start
+        env:
+          ANSWER: from_env=dart test test/a_test.dart
+        run: |
+          answer="from_script=dart test test/b_test.dart"
+          answers=()
+          answers+=("from_array=cd 'a b' && dart test test/c_test.dart --file-reporter json:c.json")
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 \
+            "firebase_messaging=dart test" "$ANSWER" "$answer" "${answers[@]}"
+          other=x=y
+      - name: Release
+        run: .github/scripts/start_app.sh android emulator-5554 240 release
+''');
+
+    final answers = startAnswersOf(text, file: 'apps.yml');
+
+    expect(answers, [
+      for (final name in [
+        'firebase_messaging',
+        'from_env',
+        'from_script',
+        'from_array',
+      ])
+        ('apps.yml, job a, step "Start"', name),
+    ]);
+    expect(
+      scriptStartAnswersOf(
+        r'''
+#!/usr/bin/env bash
+"$(dirname "$0")/start_app.sh" ios "$1" 240 "push=dart test" "$@"
+''',
+        file: '.github/scripts/start.sh',
+      ),
+      [('.github/scripts/start.sh', 'push')],
+    );
+    String problem(String name) =>
+        'apps.yml, job a, step "Start" gives start_app.sh the answer $name, '
+        'which no probe of a matrix tool asks for (MatrixStartProbe.answer), '
+        'so the script would skip it in every app: name the answer as the '
+        'probe that asks for it does, one of firebase_messaging, from_array.';
+    expect(
+      answerProblemsOf(answers, {'firebase_messaging', 'from_array'}),
+      [problem('from_env'), problem('from_script')],
+    );
+  });
+
+  test(
+    'every answer that a workflow or a script of the repository gives '
+    'start_app.sh is the answer of a probe of a matrix tool',
+    () async {
+      final root = repositoryRoot();
+      final asked = {
+        for (final tool in matrixTools.keys)
+          for (final test in await appTestsListedBy(root, tool))
+            if (test.answer case final answer?) answer,
+      };
+      final answers = [
+        for (final entity in Directory('$root/.github/workflows').listSync())
+          if (entity is File && RegExp(r'\.ya?ml$').hasMatch(entity.path))
+            ...startAnswersOf(
+              entity.readAsStringSync(),
+              file: entity.uri.pathSegments.last,
+            ),
+        for (final entity in Directory('$root/.github/scripts').listSync())
+          if (entity is File && RegExp(r'\.(sh|ps1)$').hasMatch(entity.path))
+            ...scriptStartAnswersOf(
+              entity.readAsStringSync(),
+              file: '.github/scripts/${entity.uri.pathSegments.last}',
+              powerShell: entity.path.endsWith('.ps1'),
+            ),
+      ];
+
+      expect(answers, isNotEmpty);
+      expect(answerProblemsOf(answers, asked), isEmpty);
+    },
+    // Each tool loads the modules of its matrix first, which takes a while
+    // on the runners of CI.
+    timeout: const Timeout(Duration(minutes: 5)),
+  );
 
   test(
       'the workflows and the scripts of the repository choose their apps by '

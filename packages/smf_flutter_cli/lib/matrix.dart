@@ -517,7 +517,12 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   the key (`module`) and its package (`package`), as [env] tells them
 ///   (see [MatrixEnv.keys]), both `null` where no module of the app gives
 ///   the key, and the names of those apps (`apps`), in the order of the
-///   apps and of the keys.
+///   apps and of the keys;
+/// - `answer`, the answer of CI that its probe asks for
+///   ([MatrixStartProbe.answer]), only if it has one, so that the checks of
+///   the repository find an answer that a workflow gives the script that
+///   starts the apps and that no probe asks for, which the script would
+///   skip in every app.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
@@ -584,6 +589,7 @@ Future<List<Map<String, Object>>> appTestsReport(
         fileSystem,
       ),
       'envKeys': _envKeysGivenBy(test, matrix, env, packages),
+      if (test.startProbe?.answer case final answer?) 'answer': answer,
     });
   }
   return report;
