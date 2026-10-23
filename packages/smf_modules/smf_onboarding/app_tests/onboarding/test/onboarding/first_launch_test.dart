@@ -21,7 +21,9 @@
 // and the text of each page, the pages of the steps included, and the label
 // of each button keep their words whole there. The titles grow only by half
 // with the text size of the device, and a text whose longest word would not
-// fit is as large as that word allows.
+// fit is as large as that word allows. whole_words.dart, next to this file,
+// has that check, and whole_words_test.dart checks it on texts with a
+// hyphen, two spaces, a line break or a no-break space.
 //
 // The screen only finishes the onboarding: the router of the app, whichever
 // module provides it, leaves the screen, as the router role says of the
@@ -36,7 +38,6 @@
 // with a swipe. The test starts the app once, since the start-up of an app
 // may not run twice, and each expectation gives its reason.
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/onboarding/onboarding_steps.dart';
 import 'package:{{app_name}}/core/preferences/app_preferences.dart';
@@ -49,73 +50,11 @@ import '../onboarding_mocks.dart';
 import 'app.dart';
 import 'start_screen.dart';
 import 'texts.dart';
+import 'whole_words.dart';
 
 /// The inset at the top and at the bottom of the small phone of the test,
 /// such as a notch and the bar of the home gesture.
 const double _inset = 40;
-
-/// The text size of the device on the small phone of the test: three times
-/// the usual one, about the largest that the settings of a device have.
-const double _textScale = 3;
-
-/// The size of the text below the title of a page at the usual text size,
-/// as the module has it.
-const double _textSize = 18;
-
-/// The text of [finder], as it is laid out.
-RenderParagraph _paragraphOf(WidgetTester tester, Finder finder) =>
-    tester.renderObject<RenderParagraph>(
-      find.descendant(
-        of: finder,
-        matching: find.byType(RichText),
-        matchRoot: true,
-      ),
-    );
-
-/// Checks that [shown], the text [text] that [what] names, keeps its words
-/// whole on the small phone, in [language]: each word is on one line. The
-/// text is as large as its text size asks, [largest], or, when its longest
-/// word would not fit the width that the text has at that size, as large as
-/// that word allows.
-void _expectWholeWords(
-  WidgetTester tester,
-  Finder shown,
-  String text, {
-  required String what,
-  required String language,
-  required double largest,
-}) {
-  final paragraph = _paragraphOf(tester, shown);
-  final size = paragraph.textScaler.scale(paragraph.text.style!.fontSize!);
-  // Each word on one line: its boxes have one top.
-  var start = 0;
-  var widest = 0.0;
-  for (final word in text.split(' ')) {
-    final boxes = paragraph.getBoxesForSelection(
-      TextSelection(baseOffset: start, extentOffset: start + word.length),
-    );
-    expect(
-      {for (final box in boxes) box.top},
-      hasLength(1),
-      reason: 'On the small phone, $what "$text" breaks between its words '
-          'and not inside "$word", in $language: where a word would not '
-          'fit, the text is as large as the word allows.',
-    );
-    final width = boxes.last.right - boxes.first.left;
-    if (width > widest) widest = width;
-    start += word.length + 1;
-  }
-  final room = paragraph.constraints.maxWidth;
-  expect(
-    size <= largest + 0.01 &&
-        (size >= largest - 0.01 || (widest <= room && widest >= room * 0.9)),
-    isTrue,
-    reason: 'On the small phone, $what "$text" is as large as its text size '
-        'asks, $largest, or as large as its longest word allows, in '
-        '$language: it is $size, and its longest word takes $widest of '
-        '$room.',
-  );
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -364,7 +303,7 @@ void main() {
   ) {
     final shownTitle = shown(find.text(title));
     final style = Theme.of(tester.element(shownTitle)).textTheme.displaySmall!;
-    _expectWholeWords(
+    expectWholeWords(
       tester,
       shownTitle,
       title,
@@ -372,13 +311,13 @@ void main() {
       language: language,
       largest: style.fontSize! * 1.5,
     );
-    _expectWholeWords(
+    expectWholeWords(
       tester,
       shown(find.text(text)),
       text,
       what: 'the text',
       language: language,
-      largest: _textSize * _textScale,
+      largest: pageTextSize * largeTextScale,
     );
   }
 
@@ -415,7 +354,7 @@ void main() {
     final shownLabel = find.descendant(of: button, matching: find.text(label));
     // In the style that the theme of the app gives the button.
     final base = DefaultTextStyle.of(tester.element(shownLabel)).style;
-    _expectWholeWords(
+    expectWholeWords(
       tester,
       shownLabel,
       label,
@@ -873,7 +812,7 @@ void main() {
           ..devicePixelRatio = 1
           ..padding = insets
           ..viewPadding = insets;
-        tester.platformDispatcher.textScaleFactorTestValue = _textScale;
+        tester.platformDispatcher.textScaleFactorTestValue = largeTextScale;
         await tester.pumpAndSettle();
         expect(
           tester.takeException(),
@@ -887,7 +826,7 @@ void main() {
           skip(),
           texts['skip']!,
           language,
-          scale: _textScale,
+          scale: largeTextScale,
         );
         expectWholeLabel(tester, next(), texts['next']!, language, scale: 1.5);
         for (final button in [skip(), next()]) {
@@ -923,7 +862,7 @@ void main() {
             skip(),
             texts['skip']!,
             language,
-            scale: _textScale,
+            scale: largeTextScale,
           );
           expectWholeLabel(
             tester,

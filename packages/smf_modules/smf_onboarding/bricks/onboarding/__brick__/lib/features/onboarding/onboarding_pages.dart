@@ -257,10 +257,13 @@ class WholeWords extends StatelessWidget {
       textScaler: scaler,
       maxLines: 1,
     );
+    // The words of the text, between its spaces and line breaks, where a
+    // line may break. A no-break space keeps the words around it together.
+    final words = text.split(RegExp(r'[ \t\r\n]+'));
     // How wide the longest word is in a font of [size].
     double widestAt(double size) {
       var widest = 0.0;
-      for (final word in text.split(' ')) {
+      for (final word in words) {
         painter
           ..text = TextSpan(text: word, style: style.copyWith(fontSize: size))
           ..layout();
