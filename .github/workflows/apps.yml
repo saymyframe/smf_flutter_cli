@@ -77,6 +77,12 @@ on:
       FIREBASE_SERVICE_ACCOUNT:
         description: The JSON key of a service account of the Firebase project of CI, with which the jobs configure an app with Firebase to start it. Without it, as in a pull request from a fork, they start only the apps without Firebase.
         required: false
+      CI_APP_ENV:
+        description: Lines KEY=value of .env for the apps that CI starts without external services, such as the public key of the Test Store of the RevenueCat project of CI. The matrix tool writes each value into the line of its key in .env of an app that has no value. Without it, as in a pull request from a fork, the apps start with an empty .env.
+        required: false
+      REVENUECAT_SECRET_KEY:
+        description: A V2 secret key of the RevenueCat project of CI, with which a test of smf_revenuecat grants premium access to the apps that CI starts without external services, as the probe of the module asks. Without it, the jobs grant nothing.
+        required: false
 
 env:
   FLUTTER_VERSION: ${{ inputs.flutter_version }}
@@ -481,9 +487,10 @@ jobs:
     name: Android start (${{ matrix.app }})
     needs: plan
     runs-on: ubuntu-latest
-    # About 8 minutes: the emulator boots while the app is generated, then
+    # About 9 minutes: the emulator boots while the app is generated, then
     # the app is built and starts, which start_app.sh gives 240 s once the
-    # emulator has the app. The first app of the plan then starts once more
+    # emulator has the app, and gets premium access in RevenueCat, which
+    # takes about a minute. The first app of the plan then starts once more
     # as a release app, which takes a few minutes more.
     timeout-minutes: 30
     strategy:
@@ -540,14 +547,43 @@ jobs:
             -memory 3072 > "$RUNNER_TEMP/emulator.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/emulator.pid"
 
+      # The values of CI for .env, such as the key of the Test Store of the
+      # RevenueCat project of CI, come from the secret CI_APP_ENV, lines
+      # KEY=value, through a file that only this step has: --env-values
+      # writes each value into the line of its key in .env of the app that
+      # has no value, and prints only the keys. The step names no key, so a
+      # module with a value of its own only adds a line to the secret.
       - name: Generate the app without external services to start
-        env: *app_env
+        env:
+          APP: ${{ matrix.app }}
+          CI_APP_ENV: ${{ secrets.CI_APP_ENV }}
         run: |
           apps="$RUNNER_TEMP/SMF apps/start"
+          values="$RUNNER_TEMP/ci_app_env"
+          trap 'rm -f "$values"' EXIT
+          if [ -z "$CI_APP_ENV" ]; then
+            echo "::notice::CI_APP_ENV is not set, as in a pull request from a fork: the app starts with an empty .env."
+          fi
+          (umask 077 && printf '%s\n' "$CI_APP_ENV" > "$values")
+          unset CI_APP_ENV
+          # Each value is masked by itself: GitHub masks the secret as it is,
+          # with its lines KEY=value, while a log may show the value alone,
+          # as an SDK prints its key.
+          while IFS= read -r line || [ -n "$line" ]; do
+            value="${line#*=}"
+            value="${value%$'\r'}"
+            unquoted="${value#\"}"
+            unquoted="${unquoted%\"}"
+            for masked in "$value" "$unquoted"; do
+              if [ "$value" != "$line" ] && [ -n "$masked" ]; then
+                echo "::add-mask::$masked"
+              fi
+            done
+          done < "$values"
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
           for app in "$apps"/*/; do
             dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-              --without-external-steps --app "$APP" \
+              --without-external-steps --app "$APP" --env-values "$values" \
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
@@ -602,11 +638,34 @@ jobs:
       # limits the build, and the script gives the emulator a time of its
       # own to install the app, so that neither a slow build nor a slow
       # install leaves the start without time.
-      - name: Start the app without external services on the Android emulator
-        timeout-minutes: 12
+      # Once the start check passed, the probe of revenuecat asks
+      # start_app.sh for premium access for the user of the app in the
+      # RevenueCat project of CI, and tells whether it reached appPurchases.
+      # The answer, a test of the module, grants it with the secret key of
+      # the project, in a file that only this step has, which never reaches
+      # the app: the step unsets the variable before the build. The script
+      # runs the answer only for an app whose probes ask for it. Without the
+      # secret key, as in a pull request from a fork, the step gives no
+      # answer, and the app starts as before. The grant, the check and the
+      # compile of the test take about a minute more.
+      - name: Start the app without external services on the Android emulator, and grant it premium access in RevenueCat
+        timeout-minutes: 16
+        env:
+          REVENUECAT_SECRET_KEY: ${{ secrets.REVENUECAT_SECRET_KEY }}
+          SMF_REVENUECAT_SECRET_KEY: ${{ runner.temp }}/revenuecat-secret-key
         run: |
+          trap 'rm -f "$SMF_REVENUECAT_SECRET_KEY"' EXIT
+          answers=()
+          if [ -n "$REVENUECAT_SECRET_KEY" ]; then
+            (umask 077 && printf '%s' "$REVENUECAT_SECRET_KEY" > "$SMF_REVENUECAT_SECRET_KEY")
+            revenuecat="$GITHUB_WORKSPACE/packages/smf_modules/smf_revenuecat"
+            answers+=("revenuecat=cd '$revenuecat' && dart test test/grant_access_test.dart --file-reporter json:build/test-results/grant_access_test.json")
+          else
+            echo "::notice::REVENUECAT_SECRET_KEY is not set, as in a pull request from a fork: the app starts without premium access from RevenueCat."
+          fi
+          unset REVENUECAT_SECRET_KEY
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
-            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 "${answers[@]}"
 
       # The app as a user installs it: a release build, in which R8 shrinks
       # the Java and Kotlin code and renames the classes that no rule keeps.
@@ -619,13 +678,24 @@ jobs:
       # starts so, which keeps the other jobs as they are; start_app.sh
       # builds it for the ABI of the emulator only. The timeout of the step
       # limits the build with R8, a few minutes longer than that of a debug
-      # app.
+      # app. Its .env keeps the values of CI, the key of the Test Store of
+      # RevenueCat among them, which no release build may take: RevenueCat
+      # stops a release app configured with it, and the start fails then.
       - name: Start the app without external services as a release app on the Android emulator
         if: strategy.job-index == 0
         timeout-minutes: 15
         run: |
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 release
+
+      # The tests of the packages that failed, as annotations that the page
+      # of the run lists at the top rather than as lines in the long log of
+      # a step; see tools/test_annotations.dart. Also after a failed step and
+      # in a cancelled job, whenever Flutter is there.
+      - &annotate
+        name: Annotate the failed tests
+        if: ${{ always() && steps.flutter.outcome == 'success' }}
+        run: dart tools/test_annotations.dart
 
   # An app with Firebase starts only once flutterfire configured it: the
   # placeholder of its options throws at start-up. flutterfire writes the
@@ -787,14 +857,7 @@ jobs:
 
       - *delete_key
 
-      # The tests of the packages that failed, as annotations that the page
-      # of the run lists at the top rather than as lines in the long log of
-      # a step; see tools/test_annotations.dart. Also after a failed step and
-      # in a cancelled job, whenever Flutter is there.
-      - &annotate
-        name: Annotate the failed tests
-        if: ${{ always() && steps.flutter.outcome == 'success' }}
-        run: dart tools/test_annotations.dart
+      - *annotate
 
   # The brick follows the template of the pinned Flutter, and another one
   # may differ from it without breaking the apps.
@@ -1072,10 +1135,11 @@ jobs:
     needs: plan
     if: inputs.macos_and_windows
     runs-on: macos-26
-    # About 15 minutes: the app, the simulator, the build of the app, which
+    # About 16 minutes: the app, the simulator, the build of the app, which
     # takes up to 10 minutes on a busy runner, its install, which
-    # start_app.sh gives the simulator up to 8 minutes for, and its start,
-    # which the script gives 240 s once the simulator has the app.
+    # start_app.sh gives the simulator up to 8 minutes for, its start, which
+    # the script gives 240 s once the simulator has the app, and premium
+    # access in RevenueCat, about a minute.
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -1091,14 +1155,43 @@ jobs:
       - *swiftpm_week
       - *pub_get
 
+      # The values of CI for .env, such as the key of the Test Store of the
+      # RevenueCat project of CI, come from the secret CI_APP_ENV, lines
+      # KEY=value, through a file that only this step has: --env-values
+      # writes each value into the line of its key in .env of the app that
+      # has no value, and prints only the keys. The step names no key, so a
+      # module with a value of its own only adds a line to the secret.
       - name: Generate the app without external services to start
-        env: *app_env
+        env:
+          APP: ${{ matrix.app }}
+          CI_APP_ENV: ${{ secrets.CI_APP_ENV }}
         run: |
           apps="$RUNNER_TEMP/SMF apps застосунки é/start"
+          values="$RUNNER_TEMP/ci_app_env"
+          trap 'rm -f "$values"' EXIT
+          if [ -z "$CI_APP_ENV" ]; then
+            echo "::notice::CI_APP_ENV is not set, as in a pull request from a fork: the app starts with an empty .env."
+          fi
+          (umask 077 && printf '%s\n' "$CI_APP_ENV" > "$values")
+          unset CI_APP_ENV
+          # Each value is masked by itself: GitHub masks the secret as it is,
+          # with its lines KEY=value, while a log may show the value alone,
+          # as an SDK prints its key.
+          while IFS= read -r line || [ -n "$line" ]; do
+            value="${line#*=}"
+            value="${value%$'\r'}"
+            unquoted="${value#\"}"
+            unquoted="${unquoted%\"}"
+            for masked in "$value" "$unquoted"; do
+              if [ "$value" != "$line" ] && [ -n "$masked" ]; then
+                echo "::add-mask::$masked"
+              fi
+            done
+          done < "$values"
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
           for app in "$apps"/*/; do
             dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
-              --without-external-steps --app "$APP" \
+              --without-external-steps --app "$APP" --env-values "$values" \
               "${app%/}" packages/smf_flutter_cli/app_tests/start
           done
 
@@ -1146,11 +1239,32 @@ jobs:
       # the step limits the build, and the script gives the simulator a time
       # of its own to install the app, so that neither a slow build nor a
       # slow install leaves the start without time.
-      - name: Start the app without external services on the iOS simulator
-        timeout-minutes: 24
+      # Once the start check passed, the probe of revenuecat asks for premium
+      # access, as on Android, which the step grants with the secret key of
+      # the RevenueCat project of CI. RevenueCat stops an app configured with
+      # a key of the Test Store that it takes for a release build, as it
+      # would a debug app whose Swift package of RevenueCat was built without
+      # DEBUG, so the check runs on iOS too.
+      - name: Start the app without external services on the iOS simulator, and grant it premium access in RevenueCat
+        timeout-minutes: 28
+        env:
+          REVENUECAT_SECRET_KEY: ${{ secrets.REVENUECAT_SECRET_KEY }}
+          SMF_REVENUECAT_SECRET_KEY: ${{ runner.temp }}/revenuecat-secret-key
         run: |
+          trap 'rm -f "$SMF_REVENUECAT_SECRET_KEY"' EXIT
+          answers=()
+          if [ -n "$REVENUECAT_SECRET_KEY" ]; then
+            (umask 077 && printf '%s' "$REVENUECAT_SECRET_KEY" > "$SMF_REVENUECAT_SECRET_KEY")
+            revenuecat="$GITHUB_WORKSPACE/packages/smf_modules/smf_revenuecat"
+            answers+=("revenuecat=cd '$revenuecat' && dart test test/grant_access_test.dart --file-reporter json:build/test-results/grant_access_test.json")
+          else
+            echo "::notice::REVENUECAT_SECRET_KEY is not set, as in a pull request from a fork: the app starts without premium access from RevenueCat."
+          fi
+          unset REVENUECAT_SECRET_KEY
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/start" \
-            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 240
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 240 "${answers[@]}"
+
+      - *annotate
 
   # The app with every module of each provider of the app entry, as on
   # Linux, archived with the build phase for Crashlytics that flutterfire
