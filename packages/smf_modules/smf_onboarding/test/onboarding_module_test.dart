@@ -1513,29 +1513,38 @@ void main() {
     });
 
     test(
-        'gives the title of a page and the label of every button the one '
+        'gives the texts of a page and the label of every button the one '
         'text that keeps its words whole: a title with half more of its size '
-        'at most, in the width of the page but for its sides, and a label '
-        'with the text size of its place', () {
+        'at most and the text below it, in the width of the page but for its '
+        'sides, and a label with the text size of its place', () {
       final pages = _parsed(app, _pages);
       final page = _methodOf(pages, 'OnboardingPage', '_build');
 
-      // The title, in the style that the theme has for it. It is below a
-      // parent that asks for the height of its children before it lays
-      // them out, so it gets the width that it has.
-      final title = _calls(page, 'WholeWords').single;
+      // The title, in the style that the theme has for it, and the text
+      // below it. They are below a parent that asks for the height of its
+      // children before it lays them out, so they get the width that they
+      // have.
+      final [title, text] = _calls(page, 'WholeWords');
       expect(_argumentsOf(title), {
         '0': 'title',
         'style': 'theme.textTheme.displaySmall',
         'maxScaleFactor': '1.5',
         'width': 'constraints.maxWidth - 2 * sides',
       });
+      expect(_argumentsOf(text), {
+        '0': 'text',
+        'style': 'theme.textTheme.bodyLarge?.copyWith(fontSize: 18, '
+            'color: theme.colorScheme.onSurfaceVariant)',
+        'width': 'constraints.maxWidth - 2 * sides',
+      });
       expect(_variablesOf(page), containsPair('sides', '28.0'));
+      final texts = _enclosing(title, 'Padding');
+      expect(_enclosing(text, 'Padding'), texts);
       expect(
-        _argument(_enclosing(title, 'Padding'), 'padding').toSource(),
+        _argument(texts, 'padding').toSource(),
         'const EdgeInsets.fromLTRB(sides, 8, sides, 8)',
       );
-      expect(_enclosing(title, 'IntrinsicHeight'), isNotNull);
+      expect(_enclosing(texts, 'IntrinsicHeight'), isNotNull);
       // The labels of Skip, of the later of a step and of the button below
       // the pages: with no style of their own, so each is as the theme has
       // the label of its button, and it grows as the text size of its
@@ -1845,8 +1854,8 @@ void main() {
       expect(title.argumentList.arguments.first.toSource(), 'title');
       // The text below the title is none.
       final build = _methodOf(unit, 'OnboardingPage', '_build');
-      expect(_wordsOf(build), ['title']);
-      expect(_textsOf(build), ['text']);
+      expect(_wordsOf(build), ['title', 'text']);
+      expect(_textsOf(build), isEmpty);
       // The cells, with the symbol and the number of the page.
       final picture = _calls(unit, 'ExcludeSemantics').single;
       expect(
@@ -1951,11 +1960,10 @@ void main() {
       );
       expect(_textsOf(box), [r"'$number'", 'symbol!']);
       // No other text of the file is kept from the text size of the device:
-      // the title, the text below it, and the text that keeps its words
-      // whole, which the title is.
+      // the title and the text below it, which keep their words whole.
       expect(_calls(unit, 'withNoTextScaling'), [unscaled]);
-      expect(_wordsOf(unit), ['title']);
-      expect(_textsOf(unit), ['text', 'text', r"'$number'", 'symbol!']);
+      expect(_wordsOf(unit), ['title', 'text']);
+      expect(_textsOf(unit), ['text', r"'$number'", 'symbol!']);
       expect(
         _calls(_classOf(unit, 'WholeWords'), 'Text').single.toSource(),
         startsWith('Text(text, '),

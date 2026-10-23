@@ -18,10 +18,10 @@
 // reader, and fits a small phone with a large text size and insets in each.
 // The letters and the number in the cell of a page keep to the cell there:
 // they are part of a picture, which does not grow with the text. The title
-// of each page, the steps included, and the label of each button keep their
-// words whole there. The titles grow only by half with the text size of the
-// device, and a title or a label whose longest word would not fit is as
-// large as that word allows.
+// and the text of each page, the pages of the steps included, and the label
+// of each button keep their words whole there. The titles grow only by half
+// with the text size of the device, and a text whose longest word would not
+// fit is as large as that word allows.
 //
 // The screen only finishes the onboarding: the router of the app, whichever
 // module provides it, leaves the screen, as the router role says of the
@@ -57,6 +57,10 @@ const double _inset = 40;
 /// The text size of the device on the small phone of the test: three times
 /// the usual one, about the largest that the settings of a device have.
 const double _textScale = 3;
+
+/// The size of the text below the title of a page at the usual text size,
+/// as the module has it.
+const double _textSize = 18;
 
 /// The text of [finder], as it is laid out.
 RenderParagraph _paragraphOf(WidgetTester tester, Finder finder) =>
@@ -347,11 +351,17 @@ void main() {
             'picture, and would not fit a cell that does not grow.',
       );
 
-  /// Checks, on the small phone, the title [title] of the page that the
-  /// user sees, in [language]: it keeps its words whole, and it grows only
-  /// by half with the text size of the device, since it is large already,
-  /// or less where its longest word would not fit.
-  void expectWholeTitle(WidgetTester tester, String title, String language) {
+  /// Checks, on the small phone, the texts of the page that the user sees,
+  /// in [language]: its title [title] and the text [text] below it keep
+  /// their words whole. The title grows only by half with the text size of
+  /// the device, since it is large already, and the text as the device
+  /// asks, each less where its longest word would not fit.
+  void expectWholeTexts(
+    WidgetTester tester,
+    String title,
+    String text,
+    String language,
+  ) {
     final shownTitle = shown(find.text(title));
     final style = Theme.of(tester.element(shownTitle)).textTheme.displaySmall!;
     _expectWholeWords(
@@ -361,6 +371,14 @@ void main() {
       what: 'the title',
       language: language,
       largest: style.fontSize! * 1.5,
+    );
+    _expectWholeWords(
+      tester,
+      shown(find.text(text)),
+      text,
+      what: 'the text',
+      language: language,
+      largest: _textSize * _textScale,
     );
   }
 
@@ -863,7 +881,7 @@ void main() {
           reason: 'The first page of the onboarding fits a small phone with '
               'a large text size, in $language.',
         );
-        expectWholeTitle(tester, appName, language);
+        expectWholeTexts(tester, appName, texts['welcome']!, language);
         expectWholeLabel(
           tester,
           skip(),
@@ -894,7 +912,12 @@ void main() {
             reason: 'The page of a step fits a small phone with a large text '
                 'size, in $language: $title.',
           );
-          expectWholeTitle(tester, title, language);
+          expectWholeTexts(
+            tester,
+            title,
+            step.text(screen(tester)),
+            language,
+          );
           expectWholeLabel(
             tester,
             skip(),
@@ -943,7 +966,12 @@ void main() {
           reason: 'The last page of the onboarding fits a small phone with '
               'a large text size, in $language.',
         );
-        expectWholeTitle(tester, texts['readyTitle']!, language);
+        expectWholeTexts(
+          tester,
+          texts['readyTitle']!,
+          texts['ready']!,
+          language,
+        );
         expectWholeLabel(tester, done(), texts['done']!, language, scale: 1.5);
         expect(
           done().hitTestable(),

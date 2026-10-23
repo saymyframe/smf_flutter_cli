@@ -72,7 +72,7 @@ class OnboardingPageScope extends InheritedWidget {
 /// [icon], among smaller cells, and a title and a text below them. The
 /// cells and the texts move at their own pace while the pages turn. The
 /// page scrolls when it is too small for them, as with a large text size on
-/// a small phone, where the title keeps its words whole. A screen reader
+/// a small phone, where the texts keep their words whole. A screen reader
 /// announces the title as a header, and passes over the cells, which are a
 /// picture.
 class OnboardingPage extends StatelessWidget {
@@ -162,12 +162,13 @@ class OnboardingPage extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          Text(
+                          WholeWords(
                             text,
                             style: theme.textTheme.bodyLarge?.copyWith(
                               fontSize: 18,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
+                            width: constraints.maxWidth - 2 * sides,
                           ),
                         ],
                       ),
