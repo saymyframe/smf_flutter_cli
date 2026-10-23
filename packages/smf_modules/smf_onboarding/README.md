@@ -28,7 +28,7 @@ The page that the user sees is the state of a `PageController` in the screen, so
 
 The screen takes its colours and its text styles from the theme of the app, in its light and in its dark mode, so it follows a theme of your own. It names no font but the monospaced one of the device, for the number in a cell.
 
-A page scrolls when it is too small for what it shows, as with a large text size on a small phone. Skip grows with the text size of the device, but the labels of the buttons below the pages grow only by half, so the pages keep some room on a small phone. The letters and the number in a cell keep their size, since they are part of the picture. A screen reader announces the title of each page as a header and passes over the picture.
+A page scrolls when it is too small for what it shows, as with a large text size on a small phone. Skip grows with the text size of the device, but the labels of the buttons below the pages grow only by half, so the pages keep some room on a small phone. The title of a page is large already, so it also grows only by half. Titles, the texts of the pages and the labels of the buttons break between words and never inside one: a text whose longest word would not fit is as large as that word allows. The letters and the number in a cell keep their size, since they are part of the picture. A screen reader announces the title of each page as a header and passes over the picture.
 
 The texts of the screen are in English and in Ukrainian. In an app with a module that provides localization, they follow the language of the app. An app without such a module shows them in English.
 

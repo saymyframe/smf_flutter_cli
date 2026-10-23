@@ -1378,7 +1378,7 @@ void main() {
         _argument(skip, 'onPressed').toSource(),
         'onboardingStatus.complete',
       );
-      expect(_textsOf(_argument(skip, 'child')), ["'Skip'"]);
+      expect(_wordsOf(_argument(skip, 'child')), ["'Skip'"]);
       expect(button.methodName.name, 'FilledButton');
       expect(_argument(button, 'onPressed').toSource(), 'onPressed');
       // What the button does and says, on a page of the module and on the
@@ -1457,7 +1457,7 @@ void main() {
       );
       expect(
         _calls(label, 'maintain').single.toSource(),
-        'Visibility.maintain(visible: !spins, child: Text(label))',
+        'Visibility.maintain(visible: !spins, child: OnboardingWords(label))',
       );
     });
 
@@ -1472,7 +1472,7 @@ void main() {
         _argument(later, 'onPressed').toSource(),
         '_running ? null : _next',
       );
-      expect(_textsOf(_argument(later, 'child')), ['other.later!(context)']);
+      expect(_wordsOf(_argument(later, 'child')), ['other.later!(context)']);
       expect(
         _variablesOf(build),
         containsPair(
@@ -1510,6 +1510,89 @@ void main() {
         ),
         isNull,
       );
+    });
+
+    test(
+        'gives the texts of a page and the label of every button the one '
+        'text that keeps its words whole: a title with half more of its size '
+        'at most and the text below it, in the width of the page but for its '
+        'sides, and a label with the text size of its place', () {
+      final pages = _parsed(app, _pages);
+      final page = _methodOf(pages, 'OnboardingPage', 'build');
+      final turning = _methodOf(pages, 'OnboardingPage', '_build');
+
+      // The title, in the style that the theme has for it, and the text
+      // below it. They are below a parent that asks for the height of its
+      // children before it lays them out, so they get the width that they
+      // have.
+      final [title, text] = _calls(page, 'OnboardingWords');
+      expect(_argumentsOf(title), {
+        '0': 'title',
+        'style': 'theme.textTheme.displaySmall',
+        'maxScaleFactor': '1.5',
+        'width': 'constraints.maxWidth - 2 * _sides',
+      });
+      expect(_argumentsOf(text), {
+        '0': 'text',
+        'style': 'theme.textTheme.bodyLarge?.copyWith(fontSize: 18, '
+            'color: theme.colorScheme.onSurfaceVariant)',
+        'width': 'constraints.maxWidth - 2 * _sides',
+      });
+      final sides = _classOf(pages, 'OnboardingPage')
+          .body
+          .members
+          .whereType<FieldDeclaration>()
+          .singleWhere((field) => field.isStatic);
+      expect(sides.fields.isConst, isTrue);
+      expect(sides.fields.variables.single.toSource(), '_sides = 28');
+      final texts = _calls(turning, 'Padding').single;
+      expect(
+        _argument(texts, 'padding').toSource(),
+        'const EdgeInsets.fromLTRB(_sides, 8, _sides, 8)',
+      );
+      expect(_enclosing(texts, 'IntrinsicHeight'), isNotNull);
+      // The labels of Skip, of the later of a step and of the button below
+      // the pages: with no style of their own, so each is as the theme has
+      // the label of its button, and it grows as the text size of its
+      // place asks.
+      final [skip, button, later] = _buttonCalls(unit);
+      expect(
+        [
+          for (final label in _calls(unit, 'OnboardingWords'))
+            _argumentsOf(label),
+        ],
+        [
+          {'0': "'Skip'"},
+          {'0': 'other.later!(context)'},
+          {'0': 'label'},
+        ],
+      );
+      expect(_wordsOf(_argument(skip, 'child')), ["'Skip'"]);
+      expect(_wordsOf(_argument(later, 'child')), ['other.later!(context)']);
+      expect(
+        _argument(_argument(button, 'child') as MethodInvocation, 'child')
+            .toSource(),
+        startsWith('_ButtonLabel(label, '),
+      );
+      expect(_calls(unit, 'Text'), isEmpty);
+      // One piece measures the words, for the titles and the labels: in the
+      // width that it is given, and in that of its parent without one.
+      for (final measure in ['LayoutBuilder', 'TextPainter']) {
+        expect(_calls(unit, measure), isEmpty, reason: measure);
+      }
+      final words = _classOf(pages, 'OnboardingWords');
+      expect(_calls(words, 'TextPainter'), hasLength(1));
+      expect(
+        _methodOf(pages, 'OnboardingWords', 'build').body.toSource(),
+        '{if (width case final width?) return _within(context, width); '
+        'return LayoutBuilder(builder: (context, constraints) => '
+        '_within(context, constraints.maxWidth));}',
+      );
+      expect(_argumentsOf(_calls(words, 'Text').single).keys, [
+        '0',
+        'style',
+        'textScaler',
+      ]);
     });
 
     test(
@@ -1761,9 +1844,26 @@ void main() {
         _argument(box, 'constraints').toSource(),
         'BoxConstraints(minHeight: constraints.maxHeight)',
       );
+      // In the constraints that the page has.
+      final layout =
+          _calls(_methodOf(unit, 'OnboardingPage', 'build'), 'LayoutBuilder')
+              .single;
       expect(
-        _argument(_enclosing(scroll, 'LayoutBuilder'), 'builder').toSource(),
-        startsWith('(context, constraints) => SingleChildScrollView('),
+        _argument(layout, 'builder').toSource(),
+        startsWith('(context, constraints) {'),
+      );
+      expect(
+        _methodOf(unit, 'OnboardingPage', '_build').parameters!.toSource(),
+        '(BoxConstraints constraints, Widget texts, {required double turned, '
+        'required int index})',
+      );
+      expect(
+        (_methodOf(unit, 'OnboardingPage', '_build').body as BlockFunctionBody)
+            .block
+            .statements
+            .last
+            .toSource(),
+        startsWith('return SingleChildScrollView('),
       );
     });
 
@@ -1774,13 +1874,12 @@ void main() {
 
       expect(_argument(header, 'header').toSource(), 'true');
       final title = _argument(header, 'child') as MethodInvocation;
-      expect(title.methodName.name, 'Text');
+      expect(title.methodName.name, 'OnboardingWords');
       expect(title.argumentList.arguments.first.toSource(), 'title');
       // The text below the title is none.
-      expect(
-        _textsOf(_methodOf(unit, 'OnboardingPage', '_build')),
-        ['title', 'text'],
-      );
+      final build = _methodOf(unit, 'OnboardingPage', 'build');
+      expect(_wordsOf(build), ['title', 'text']);
+      expect(_textsOf(build), isEmpty);
       // The cells, with the symbol and the number of the page.
       final picture = _calls(unit, 'ExcludeSemantics').single;
       expect(
@@ -1810,22 +1909,49 @@ void main() {
         _variablesOf(build),
         containsPair('scope', 'OnboardingPageScope.maybeOf(context)'),
       );
-      final withoutScope = (build.body as BlockFunctionBody)
-          .block
-          .statements
-          .whereType<IfStatement>()
-          .single;
+      final withoutScope = _ifsOf(build).single;
       expect(withoutScope.expression.toSource(), 'scope == null');
       expect(
         withoutScope.thenStatement.toSource(),
-        'return _build(context, turned: 0, index: 0);',
+        '{return _build(constraints, texts, turned: 0, index: 0);}',
       );
       // With a scope, the page follows the controller of the pages.
       final following = _calls(build, 'AnimatedBuilder').single;
       expect(_argument(following, 'animation').toSource(), 'scope.controller');
       expect(
         _calls(following, '_build').single.argumentList.toSource(),
-        '(context, turned: scope.turned, index: scope.index)',
+        '(constraints, texts!, turned: scope.turned, index: scope.index)',
+      );
+    });
+
+    test(
+        'build their texts once for a width, and not on each frame while the '
+        'pages turn: the builder of the frames gets them as its child', () {
+      final build = _methodOf(unit, 'OnboardingPage', 'build');
+      final turning = _methodOf(unit, 'OnboardingPage', '_build');
+      final following = _calls(build, 'AnimatedBuilder').single;
+
+      // The texts are a variable of the builder of the constraints, outside
+      // the builder of the frames, which gets them as its child.
+      final texts = _variablesOf(build)['texts']!;
+      expect(texts, startsWith('Column('));
+      expect(_argument(following, 'child').toSource(), 'texts');
+      expect(
+        _argument(following, 'builder').toSource(),
+        startsWith('(context, texts) => _build('),
+      );
+      expect(
+        _calls(_argument(following, 'builder'), 'OnboardingWords'),
+        isEmpty,
+      );
+      // The frames move and fade the texts, and build none.
+      expect(_calls(turning, 'OnboardingWords'), isEmpty);
+      expect(_textsOf(turning), isEmpty);
+      final moved = _calls(turning, 'translate').single;
+      expect(_argument(moved, 'child').toSource(), 'texts');
+      expect(
+        _argument(_enclosing(moved, 'Opacity'), 'opacity').toSource(),
+        'shown',
       );
     });
 
@@ -1884,9 +2010,33 @@ void main() {
         ['164', '164'],
       );
       expect(_textsOf(box), [r"'$number'", 'symbol!']);
-      // No other text of the file is kept from the text size of the device.
+      // No other text of the file is kept from the text size of the device:
+      // the title and the text below it, which keep their words whole.
       expect(_calls(unit, 'withNoTextScaling'), [unscaled]);
-      expect(_textsOf(unit), ['title', 'text', r"'$number'", 'symbol!']);
+      expect(_wordsOf(unit), ['title', 'text']);
+      expect(_textsOf(unit), ['text', r"'$number'", 'symbol!']);
+      expect(
+        _calls(_classOf(unit, 'OnboardingWords'), 'Text').single.toSource(),
+        startsWith('Text(text, '),
+      );
+    });
+
+    test(
+        'name each class of the module after the onboarding, so that no '
+        'class of another feature of the app has the name of one, such as '
+        'the text that keeps its words whole', () {
+      final classes = [
+        for (final path in [_pages, _screen, _status])
+          for (final declaration
+              in _parsed(app, path).declarations.whereType<ClassDeclaration>())
+            declaration.namePart.typeName.lexeme,
+      ];
+
+      expect(classes, contains('OnboardingWords'));
+      expect(
+        classes.where((name) => !name.startsWith('_')),
+        everyElement(startsWith('Onboarding')),
+      );
     });
 
     test(
@@ -2002,7 +2152,7 @@ void main() {
       // Skip, and the label of the button below the pages on a page of the
       // module.
       expect(
-        _textsOf(_argument(_buttonCalls(screen).first, 'child')),
+        _wordsOf(_argument(_buttonCalls(screen).first, 'child')),
         ['context.l10n.onboardingSkip'],
       );
       final onPageOfModule = (_methodOf(
@@ -2321,6 +2471,40 @@ List<String> _textsOf(AstNode node) => [
       for (final text in _calls(node, 'Text'))
         text.argumentList.arguments.first.toSource(),
     ];
+
+/// The `if` statements in [node], in the order of the code.
+List<IfStatement> _ifsOf(AstNode node) {
+  final visitor = _Ifs();
+  node.accept(visitor);
+  return visitor.found;
+}
+
+final class _Ifs extends RecursiveAstVisitor<void> {
+  final List<IfStatement> found = [];
+
+  @override
+  void visitIfStatement(IfStatement node) {
+    found.add(node);
+    super.visitIfStatement(node);
+  }
+}
+
+/// What the texts that keep their words whole, which [node] creates, show,
+/// in the order of the code: the code of the first argument of each.
+List<String> _wordsOf(AstNode node) => [
+      for (final text in _calls(node, 'OnboardingWords'))
+        text.argumentList.arguments.first.toSource(),
+    ];
+
+/// The arguments of [call], each by its name, or by its place for one
+/// without a name, as their code.
+Map<String, String> _argumentsOf(MethodInvocation call) => {
+      for (final (index, argument) in call.argumentList.arguments.indexed)
+        if (argument is NamedArgument)
+          argument.name.lexeme: argument.argumentExpression.toSource()
+        else
+          '$index': argument.toSource(),
+    };
 
 /// The call of [name] that [node] is in, such as the creation of the widget
 /// around that of [node].
