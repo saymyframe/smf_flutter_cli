@@ -103,7 +103,11 @@ void main() {
     return printed;
   }
 
-  /// Starts the purchases of the app with a user that no logIn named.
+  /// Starts the purchases of the app with a user that no logIn named. The
+  /// first such user of a test file takes over what the user of the device
+  /// bought, as the mocks of another module may have, such as one that
+  /// opens a guard of premium access for the tests of the app; so a test
+  /// starts with a throwaway user first.
   Future<void> startWithNewUser(WidgetTester tester, String name) {
     final user = freshUser(name);
     return inRealTime(
@@ -125,6 +129,10 @@ void main() {
     'without the key',
     (tester) async {
       await startUp(tester);
+      // A user without purchases, whatever the mocks of the other modules
+      // bought for the user of the device.
+      await startWithNewUser(tester, 'throwaway');
+      await startWithNewUser(tester, 'probed');
       late List<String> problems;
       String? requested;
       String? verdict;
@@ -198,6 +206,7 @@ void main() {
       late String before;
       String? requestBefore;
 
+      await startWithNewUser(tester, 'throwaway');
       await startWithNewUser(tester, 'other end');
       await checking(tester, () async {
         final check = checkAccess(
