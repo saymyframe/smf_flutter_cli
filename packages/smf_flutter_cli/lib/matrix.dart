@@ -558,7 +558,6 @@ Future<List<Map<String, Object>>> appTestsReport(
   MatrixEnv? env,
   FileSystem fileSystem = const LocalFileSystem(),
 }) async {
-  final path = const LocalFileSystem().path;
   final appTests = {
     for (final package in {...packages.values})
       package: await appTestsDirectoryOf(package),
@@ -568,20 +567,13 @@ Future<List<Map<String, Object>>> appTestsReport(
   final report = <Map<String, Object>>[];
   for (final test in tests) {
     final matrix = all ??= await apps();
-    final ids = {
-      for (final MapEntry(key: id, value: package) in packages.entries)
-        if (path.isWithin(appTests[package]!, test.directory)) id,
-    };
+    final ids = _modulesKeeping(test, packages, appTests);
     report.add({
       'directory': test.directory,
       'modules': [for (final id in ids) id.value],
       'appliesWithout':
           ids.isEmpty ? const <String>[] : _appliesWithout(test, ids, matrix),
-      'uses': [
-        for (final MapEntry(key: id, value: names)
-            in _usesOf(test, matrix).entries)
-          {'module': id.value, 'package': packages[id]!, 'apps': names},
-      ],
+      'uses': _usesReportOf(test, matrix, packages),
       'roles': [for (final role in test.roles) role.id],
       'roleFunctionUses': _roleFunctionUses(
         test.directory,
@@ -594,6 +586,33 @@ Future<List<Map<String, Object>>> appTestsReport(
   }
   return report;
 }
+
+/// The ids of the modules of [packages], the package of each module of the
+/// matrix, whose package keeps [test] in its `app_tests`, by [appTests], the
+/// directory `app_tests` of each package; see [appTestsReport].
+Set<ModuleId> _modulesKeeping(
+  MatrixAppTest test,
+  Map<ModuleId, String> packages,
+  Map<String, String> appTests,
+) {
+  final path = const LocalFileSystem().path;
+  return {
+    for (final MapEntry(key: id, value: package) in packages.entries)
+      if (path.isWithin(appTests[package]!, test.directory)) id,
+  };
+}
+
+/// The modules of [apps] whose ids [test] uses, each with its id, its
+/// package of [packages] and the names of the apps; see [appTestsReport].
+List<Map<String, Object>> _usesReportOf(
+  MatrixAppTest test,
+  List<MatrixApp> apps,
+  Map<ModuleId, String> packages,
+) =>
+    [
+      for (final MapEntry(key: id, value: names) in _usesOf(test, apps).entries)
+        {'module': id.value, 'package': packages[id]!, 'apps': names},
+    ];
 
 /// The uses of [functions], the functions of roles by the path of their
 /// file in the app, in the Dart files of the tests in [directory], each
@@ -1540,36 +1559,77 @@ List<String> addAppTests(
     app: app,
     fileSystem: fileSystem,
   );
+  String matrixFile(String path, String written) =>
+      _matrixFileOf(path, written, owners, fileSystem);
   if (envFile != null) {
-    if (owners[context.joinAll(envFile.split('/'))] case final other?) {
-      throw MatrixAppTestException(
-        'The tests of $other have $envFile, whose values the matrix writes '
-        'from those that the tests give (MatrixAppTest.envValues).',
-      );
-    }
+    matrixFile(
+      envFile,
+      'whose values the matrix writes from those that the tests give '
+      '(MatrixAppTest.envValues).',
+    );
   }
   final mocks = _mocksOf(tests, owners, fileSystem);
   if (mocks.isNotEmpty) {
-    final config = context.joinAll(_testConfig.split('/'));
-    if (owners[config] case final other?) {
-      throw MatrixAppTestException(
-        'The tests of $other have $_testConfig, which the matrix writes for '
-        'the mocks of the tests.',
-      );
-    }
+    final config = matrixFile(
+      _testConfig,
+      'which the matrix writes for the mocks of the tests.',
+    );
     texts[config] = _testConfigOf(mocks);
   }
   final probes = _probesOf(tests, owners, fileSystem);
   if (tests.any((test) => test.readsStartProbes)) {
-    for (final argument in buildArguments) {
-      if (argument.isEmpty || argument.contains(RegExp('[\n\r]'))) {
-        throw const MatrixAppTestException(
-          'A build argument of the app is empty or has a line break, which '
-          '$startBuildArgumentsFile cannot hold.',
-        );
-      }
+    _checkBuildArguments(buildArguments);
+    for (final (path, text, what) in _startFilesOf(probes, buildArguments)) {
+      texts[matrixFile(path, 'which the matrix writes for $what.')] = text;
     }
-    for (final (path, text, what) in [
+  }
+  for (final MapEntry(key: path, value: text) in texts.entries) {
+    fileSystem.file(context.join(directory, path))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+  }
+  return [...texts.keys];
+}
+
+/// The path in [fileSystem] of [path], the path in the app of a file that
+/// the matrix writes itself, as [written] says.
+///
+/// Throws a [MatrixAppTestException] if a test has a file at that path, as
+/// the [owners] of the files tell, with [written] at the end of the message.
+String _matrixFileOf(
+  String path,
+  String written,
+  Map<String, String> owners,
+  FileSystem fileSystem,
+) {
+  final file = fileSystem.path.joinAll(path.split('/'));
+  if (owners[file] case final other?) {
+    throw MatrixAppTestException('The tests of $other have $path, $written');
+  }
+  return file;
+}
+
+/// Throws a [MatrixAppTestException] if one of [buildArguments] is empty or
+/// has a line break, which [startBuildArgumentsFile] cannot hold.
+void _checkBuildArguments(List<String> buildArguments) {
+  for (final argument in buildArguments) {
+    if (argument.isEmpty || argument.contains(RegExp('[\n\r]'))) {
+      throw const MatrixAppTestException(
+        'A build argument of the app is empty or has a line break, which '
+        '$startBuildArgumentsFile cannot hold.',
+      );
+    }
+  }
+}
+
+/// The files that the matrix writes for the script of CI that starts an app
+/// on a device, with [probes] and [buildArguments]: the path of each, its
+/// text and for what the matrix writes it; see [addAppTests].
+List<(String, String, String)> _startFilesOf(
+  List<(String, MatrixStartProbe)> probes,
+  List<String> buildArguments,
+) =>
+    [
       (startProbesFile, _startProbesOf(probes), 'the probes of the tests'),
       (
         startAnswersFile,
@@ -1584,23 +1644,7 @@ List<String> addAppTests(
         _linesOf(buildArguments),
         'the arguments that build the app',
       ),
-    ]) {
-      final file = context.joinAll(path.split('/'));
-      if (owners[file] case final other?) {
-        throw MatrixAppTestException(
-          'The tests of $other have $path, which the matrix writes for $what.',
-        );
-      }
-      texts[file] = text;
-    }
-  }
-  for (final MapEntry(key: path, value: text) in texts.entries) {
-    fileSystem.file(context.join(directory, path))
-      ..createSync(recursive: true)
-      ..writeAsStringSync(text);
-  }
-  return [...texts.keys];
-}
+    ];
 
 /// The files that [tests] put into the app [app] with the package
 /// [packageName], see [addAppTests]: the `texts` of the files of their
@@ -1936,8 +1980,7 @@ Future<(int, String)> runAppTests(
   FileSystem fileSystem = const LocalFileSystem(),
 }) =>
     _addAndRun(
-      generated,
-      app,
+      (generated: generated, app: app),
       tests,
       appTestCommands(
         tests,
@@ -2027,8 +2070,7 @@ Future<(int, String)> addAppTestsTo(
   FileSystem fileSystem = const LocalFileSystem(),
 }) =>
     _addAndRun(
-      generated,
-      app,
+      (generated: generated, app: app),
       tests,
       _pubAdd(tests),
       env: env,
@@ -2039,18 +2081,22 @@ Future<(int, String)> addAppTestsTo(
       fileSystem: fileSystem,
     );
 
-/// Adds [tests] to [generated], for the app of the matrix [app] if it is
-/// one, with the build arguments of [env] for [app], and runs [commands]
-/// with [flutter] until one fails; returns its exit code and the output up
-/// to it, or 0 and the output of all.
+/// An app that tests go into: the app that `smf create` generated
+/// (`generated`), and the app of the matrix that it was generated as
+/// (`app`), `null` for an app that it generated outside the matrix.
+typedef _TestedApp = ({GeneratedApp generated, MatrixApp? app});
+
+/// Adds [tests] to the `generated` app of [target], for its `app` of the
+/// matrix if it has one, with the build arguments of [env] for that app,
+/// and runs [commands] with [flutter] until one fails; returns its exit
+/// code and the output up to it, or 0 and the output of all.
 ///
 /// It also writes into the file of the values of the app what [valuesOf]
 /// gives, such as the values that the tests give an app of the matrix in a
 /// run, and prints its summary. A problem that [valuesOf] throws is a
 /// failure with the exit code 1, before anything is copied.
 Future<(int, String)> _addAndRun(
-  GeneratedApp generated,
-  MatrixApp? app,
+  _TestedApp target,
   List<MatrixAppTest> tests,
   List<List<String>> commands, {
   required MatrixEnv? env,
@@ -2058,6 +2104,7 @@ Future<(int, String)> _addAndRun(
   required MatrixFlutter flutter,
   required FileSystem fileSystem,
 }) async {
+  final (:generated, :app) = target;
   final List<String> added;
   final _EnvValues? values;
   try {
@@ -2280,14 +2327,7 @@ _EnvValues _envValuesOfFile(
       '(MatrixEnv).',
     );
   }
-  final source = fileSystem.file(path);
-  if (!source.existsSync()) {
-    throw MatrixAppTestException('There is no file of values at $path.');
-  }
-  final values = {
-    for (final (key, value, _) in _envValuesIn(source.readAsStringSync(), path))
-      if (value.isNotEmpty) key: value,
-  };
+  final values = _envValuesAt(path, fileSystem);
   final context = fileSystem.path;
   final file = fileSystem.file(
     context.join(directory, context.joinAll(env.file.split('/'))),
@@ -2300,10 +2340,41 @@ _EnvValues _envValuesOfFile(
           '$path.',
     );
   }
+  return _withEnvValuesOfFile(file, env.file, values, path);
+}
+
+/// The values of the file of values at [path], by their keys, each that is
+/// not empty; see [_envValuesOfFile].
+///
+/// Throws a [MatrixAppTestException] if there is no file at [path], or if
+/// the file is not one of values (see [_envValuesIn]).
+Map<String, String> _envValuesAt(String path, FileSystem fileSystem) {
+  final source = fileSystem.file(path);
+  if (!source.existsSync()) {
+    throw MatrixAppTestException('There is no file of values at $path.');
+  }
+  return {
+    for (final (key, value, _) in _envValuesIn(source.readAsStringSync(), path))
+      if (value.isNotEmpty) key: value,
+  };
+}
+
+/// [file], the file of the values of an app at [envFile] in it, with
+/// [values], the values of the file at [path]: the value of each key in the
+/// line of that key that has no value yet; see [_envValuesOfFile].
+///
+/// Throws a [MatrixAppTestException] if [file] is not one of values (see
+/// [_envValuesIn]).
+_EnvValues _withEnvValuesOfFile(
+  File file,
+  String envFile,
+  Map<String, String> values,
+  String path,
+) {
   final lines = file.readAsStringSync().split('\n');
   final written = <String>{};
   for (final (key, value, index)
-      in _envValuesIn(lines.join('\n'), '${env.file} of the app')) {
+      in _envValuesIn(lines.join('\n'), '$envFile of the app')) {
     if (value.isNotEmpty || !values.containsKey(key)) continue;
     written.add(key);
     lines[index] = '$key=${_envValue(values[key]!)}';
@@ -2312,11 +2383,11 @@ _EnvValues _envValuesOfFile(
     for (final key in values.keys)
       if (!written.contains(key)) key,
   ];
-  final leftOut = '${env.file} has no line without a value of '
+  final leftOut = '$envFile has no line without a value of '
       '${left.join(', ')}, so the values of $path for them stay out of it.';
   final summary = [
     if (written.isNotEmpty)
-      '${env.file}: wrote the values of ${written.join(', ')} from $path.',
+      '$envFile: wrote the values of ${written.join(', ')} from $path.',
     if (left.isNotEmpty) leftOut,
   ];
   return (
@@ -2686,8 +2757,7 @@ Future<(List<String>, String)> runFailingAppTests(
   FileSystem fileSystem = const LocalFileSystem(),
 }) async {
   final (code, output) = await _addAndRun(
-    generated,
-    app,
+    (generated: generated, app: app),
     tests,
     [
       ..._pubAdd(tests),
