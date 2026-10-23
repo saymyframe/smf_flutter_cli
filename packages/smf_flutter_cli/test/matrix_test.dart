@@ -4018,6 +4018,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       MatrixApp? app,
       MatrixEnv? env,
       String? envValues,
+      bool maskValues = false,
     }) =>
         addAppTestsTo(
           generated,
@@ -4025,6 +4026,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           app: app,
           env: env,
           envValues: envValues,
+          maskValues: maskValues,
           fileSystem: fileSystem,
           flutter: (arguments, directory) async {
             final command = arguments.join(' ');
@@ -4379,6 +4381,65 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
               '$values.\n',
             ),
           );
+        });
+
+        test(
+            'with masks of the values, as in GitHub Actions, first prints the '
+            'command that hides each value of the file as it reads it, also of '
+            'a key that the app has no line of, and without them none',
+            () async {
+          writeValues(
+            'SHOP_KEY = test_ci_secret # the key\n'
+            'SHOP_NAME="Shop of CI" # the name\n'
+            'OTHER_KEY=other_ci_secret\n'
+            'SHOP_NOTE=\n',
+          );
+
+          final (code, output) = await add(
+            [start],
+            app: app,
+            env: env,
+            envValues: values,
+            maskValues: true,
+          );
+
+          expect(code, 0, reason: output);
+          expect(
+            output,
+            contains(
+              '::add-mask::test_ci_secret\n'
+              '::add-mask::Shop of CI\n'
+              '::add-mask::other_ci_secret\n'
+              '.env: wrote the values of SHOP_KEY, SHOP_NAME from $values.',
+            ),
+          );
+          expect(output, isNot(contains('::add-mask::\n')));
+
+          dotEnv.deleteSync();
+          final (without, said) = await add(
+            [start],
+            app: app,
+            env: env,
+            envValues: values,
+            maskValues: true,
+          );
+          expect(without, 0, reason: said);
+          expect(
+            said,
+            contains(
+              '::add-mask::other_ci_secret\n'
+              'The app has no .env, so it takes none of the values of $values.',
+            ),
+          );
+
+          final (plain, quiet) = await add(
+            [start],
+            app: app,
+            env: env,
+            envValues: values,
+          );
+          expect(plain, 0, reason: quiet);
+          expect(quiet, isNot(contains('add-mask')));
         });
 
         test('says so when the file gives no value', () async {

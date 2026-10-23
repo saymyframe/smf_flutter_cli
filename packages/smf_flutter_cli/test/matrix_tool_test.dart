@@ -73,8 +73,12 @@ void main() {
   tearDownAll(() => temp.deleteSync(recursive: true));
 
   /// Runs the tool with the stand-in for flutter before the commands of
-  /// the machine on its path.
-  Future<ProcessResult> run(List<String> arguments) {
+  /// the machine on its path, in a job of GitHub Actions with
+  /// [githubActions], and outside one otherwise, wherever the test runs.
+  Future<ProcessResult> run(
+    List<String> arguments, {
+    bool githubActions = false,
+  }) {
     // The name of the variable as the machine has it: `Path` on Windows.
     final path = Platform.environment.keys.firstWhere(
       (name) => name.toUpperCase() == 'PATH',
@@ -86,6 +90,7 @@ void main() {
       ['--packages=$packages', kernel, ...arguments],
       environment: {
         path: '$bin$separator${Platform.environment[path] ?? ''}',
+        'GITHUB_ACTIONS': '$githubActions',
       },
       stdoutEncoding: utf8,
       stderrEncoding: utf8,
@@ -327,6 +332,33 @@ void main() {
       ),
     );
     expect('${result.stdout}${result.stderr}', isNot(contains('not_a_real')));
+
+    // In a job of GitHub Actions, it first prints the mask of the value,
+    // which the runner takes as a command and never shows.
+    final inActions = newApp();
+    File(p.join(inActions, '.env'))
+        .writeAsStringSync('# The key.\nREVENUECAT_TEST_KEY=\n');
+    final masked = await run(
+      [
+        '--add-app-tests',
+        '--without-external-steps',
+        '--app',
+        apps.first.name,
+        '--env-values',
+        values.path,
+        inActions,
+        named('start').directory,
+      ],
+      githubActions: true,
+    );
+    expect(masked.exitCode, 0, reason: '${masked.stdout}${masked.stderr}');
+    expect(
+      '${masked.stdout}',
+      contains(
+        '::add-mask::test_not_a_real_key\n.env: wrote the values of '
+        'REVENUECAT_TEST_KEY from ${values.path}.',
+      ),
+    );
 
     final none = p.join(temp.path, 'none.env');
     final missing = await run([

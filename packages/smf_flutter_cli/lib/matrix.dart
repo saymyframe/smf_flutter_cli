@@ -2051,7 +2051,12 @@ List<MatrixAppTest> appTestsFor(
 /// its key in the file of [env] of the app, where that line has no value
 /// yet, such as the public key of a service of the project of CI. It
 /// leaves out a key that the app has no such line of, and the values of an
-/// app without the file. What it prints names the keys, and no value.
+/// app without the file. What it prints names the keys, and no value, but
+/// with [maskValues], as in a job of GitHub Actions: then it first prints
+/// `::add-mask::<value>` for each value of the file, as it reads it, a
+/// command that the runner takes and never shows, which hides the value in
+/// the rest of the log of the job, such as where an SDK of the app prints
+/// its key.
 ///
 /// Returns 0 and the output, or the exit code of `flutter pub add` and the
 /// output if it fails. A problem of the files of the tests is a failure
@@ -2066,6 +2071,7 @@ Future<(int, String)> addAppTestsTo(
   MatrixApp? app,
   MatrixEnv? env,
   String? envValues,
+  bool maskValues = false,
   MatrixFlutter flutter = _flutter,
   FileSystem fileSystem = const LocalFileSystem(),
 }) =>
@@ -2076,7 +2082,14 @@ Future<(int, String)> addAppTestsTo(
       env: env,
       valuesOf: () => envValues == null
           ? null
-          : _envValuesOfFile(envValues, app, env, generated.path, fileSystem),
+          : _envValuesOfFile(
+              envValues,
+              app,
+              env,
+              generated.path,
+              fileSystem,
+              mask: maskValues,
+            ),
       flutter: flutter,
       fileSystem: fileSystem,
     );
@@ -2302,6 +2315,10 @@ String _envValue(String value) =>
 /// after it or none; a line that is empty or starts with `#` gives no value
 /// (see [_envValuesIn]). An empty value is no value.
 ///
+/// With [mask], the summary starts with a line `::add-mask::<value>` for
+/// each value of the file at [path], which the runner of GitHub Actions
+/// takes as a command to hide the value; see [addAppTestsTo].
+///
 /// Throws a [MatrixAppTestException] if there is no [app], whose build
 /// arguments the start check would lack, if there is no [env], if there is
 /// no file at [path], if a line of either file is in none of those forms,
@@ -2312,8 +2329,9 @@ _EnvValues _envValuesOfFile(
   MatrixApp? app,
   MatrixEnv? env,
   String directory,
-  FileSystem fileSystem,
-) {
+  FileSystem fileSystem, {
+  required bool mask,
+}) {
   if (app == null) {
     throw MatrixAppTestException(
       'The values of $path go only into an app of the matrix: without it, the '
@@ -2332,15 +2350,23 @@ _EnvValues _envValuesOfFile(
   final file = fileSystem.file(
     context.join(directory, context.joinAll(env.file.split('/'))),
   );
-  if (!file.existsSync()) {
-    return (
-      path: file.path,
-      text: null,
-      summary: 'The app has no ${env.file}, so it takes none of the values of '
-          '$path.',
-    );
-  }
-  return _withEnvValuesOfFile(file, env.file, values, path);
+  final (path: written, :text, :summary) = file.existsSync()
+      ? _withEnvValuesOfFile(file, env.file, values, path)
+      : (
+          path: file.path,
+          text: null,
+          summary: 'The app has no ${env.file}, so it takes none of the '
+              'values of $path.',
+        );
+  return (
+    path: written,
+    text: text,
+    summary: [
+      if (mask)
+        for (final value in values.values) '::add-mask::$value',
+      summary,
+    ].join('\n'),
+  );
 }
 
 /// The values of the file of values at [path], by their keys, each that is

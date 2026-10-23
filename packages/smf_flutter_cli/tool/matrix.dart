@@ -100,10 +100,13 @@ import 'package:yaml/yaml.dart';
 /// in the forms of a value of `.env`, into the lines of `.env` of the app
 /// that have no value yet, such as the public key of a service of the
 /// project of CI, which CI keeps in a secret; see `addAppTestsTo`. It names
-/// the keys, and never prints a value. Without `--app`, the build of the
-/// app would get no arguments that give it the values, so the tool refuses
-/// `--env-values` then. Of the values that the tests give an app of the
-/// matrix in its runs, it writes none.
+/// the keys, and prints no value but in a job of GitHub Actions, where it
+/// first prints `::add-mask::<value>` for each value of the file, as it
+/// reads it, which the runner takes and never shows: so the values are
+/// hidden in the rest of the log of the job. Without `--app`, the build of
+/// the app would get no arguments that give it the values, so the tool
+/// refuses `--env-values` then. Of the values that the tests give an app of
+/// the matrix in its runs, it writes none.
 Future<void> main(List<String> given) async {
   if (given case ['--plan', ...final options]) {
     exit(await printMatrixPlan(smfModules, options, native: appEntryRole));
@@ -327,6 +330,9 @@ Future<int> _addAppTests(
     app: matrixApp,
     env: matrixEnv,
     envValues: envValues,
+    // The runner of GitHub Actions takes the masks of the values as
+    // commands, and hides the values in the rest of the log of the job.
+    maskValues: Platform.environment['GITHUB_ACTIONS'] == 'true',
   );
   stdout.writeln(output.trim());
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
