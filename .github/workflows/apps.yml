@@ -491,8 +491,11 @@ jobs:
     # the app is built and starts, which start_app.sh gives 240 s once the
     # emulator has the app, and gets premium access in RevenueCat, which
     # takes about a minute. The first app of the plan then starts once more
-    # as a release app, which takes a few minutes more.
-    timeout-minutes: 30
+    # as a release app, which takes a few minutes more. The timeout covers
+    # the timeouts of its steps, 15 minutes for the emulator, 16 for the
+    # start and 15 for the release start, and the steps before them, so
+    # that a step that runs out of time fails with its own message.
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -551,8 +554,12 @@ jobs:
       # RevenueCat project of CI, come from the secret CI_APP_ENV, lines
       # KEY=value, through a file that only this step has: --env-values
       # writes each value into the line of its key in .env of the app that
-      # has no value, and prints only the keys. The step names no key, so a
-      # module with a value of its own only adds a line to the secret.
+      # has no value, and prints only the keys. GitHub masks the secret as
+      # it is, with its lines KEY=value, while a log may show a value alone,
+      # as an SDK prints its key. So the tool, in GitHub Actions, first
+      # prints a mask of each value as it reads it, which the runner takes
+      # and never shows. The step names no key, so a module with a value of
+      # its own only adds a line to the secret.
       - name: Generate the app without external services to start
         env:
           APP: ${{ matrix.app }}
@@ -566,20 +573,6 @@ jobs:
           fi
           (umask 077 && printf '%s\n' "$CI_APP_ENV" > "$values")
           unset CI_APP_ENV
-          # Each value is masked on its own: GitHub masks the secret as it is,
-          # with its lines KEY=value, while a log may show the value alone,
-          # as an SDK prints its key.
-          while IFS= read -r line || [ -n "$line" ]; do
-            value="${line#*=}"
-            value="${value%$'\r'}"
-            unquoted="${value#\"}"
-            unquoted="${unquoted%\"}"
-            for masked in "$value" "$unquoted"; do
-              if [ "$value" != "$line" ] && [ -n "$masked" ]; then
-                echo "::add-mask::$masked"
-              fi
-            done
-          done < "$values"
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
           for app in "$apps"/*/; do
             dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
@@ -642,8 +635,10 @@ jobs:
       # start_app.sh for premium access for the user of the app in the
       # RevenueCat project of CI, and tells whether it reached appPurchases.
       # The answer, a test of the module, grants it with the secret key of
-      # the project, in a file that only this step has, which never reaches
-      # the app: the step unsets the variable before the build. The script
+      # the project, in a file that only this step has. That file is on disk
+      # while the app builds in this step too, though nothing of the build
+      # reads it, and the step unsets the variable with the key before the
+      # build; a step after it deletes the file whatever happens. The script
       # runs the answer only for an app whose probes ask for it. Without the
       # secret key, as in a pull request from a fork, the step gives no
       # answer, and the app starts as before. The grant, the check and the
@@ -666,6 +661,11 @@ jobs:
           unset REVENUECAT_SECRET_KEY
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 "${answers[@]}"
+
+      - &delete_revenuecat_key
+        name: Delete the secret key of RevenueCat
+        if: always()
+        run: rm -f "$RUNNER_TEMP/revenuecat-secret-key"
 
       # The app as a user installs it: a release build, in which R8 shrinks
       # the Java and Kotlin code and renames the classes that no rule keeps.
@@ -1139,8 +1139,11 @@ jobs:
     # takes up to 10 minutes on a busy runner, its install, which
     # start_app.sh gives the simulator up to 8 minutes for, its start, which
     # the script gives 240 s once the simulator has the app, and premium
-    # access in RevenueCat, about a minute.
-    timeout-minutes: 35
+    # access in RevenueCat, about a minute. The timeout covers the timeouts
+    # of its steps, 10 minutes for the simulator and 28 for the start, and
+    # the steps before them, so that a step that runs out of time fails with
+    # its own message.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -1159,8 +1162,12 @@ jobs:
       # RevenueCat project of CI, come from the secret CI_APP_ENV, lines
       # KEY=value, through a file that only this step has: --env-values
       # writes each value into the line of its key in .env of the app that
-      # has no value, and prints only the keys. The step names no key, so a
-      # module with a value of its own only adds a line to the secret.
+      # has no value, and prints only the keys. GitHub masks the secret as
+      # it is, with its lines KEY=value, while a log may show a value alone,
+      # as an SDK prints its key. So the tool, in GitHub Actions, first
+      # prints a mask of each value as it reads it, which the runner takes
+      # and never shows. The step names no key, so a module with a value of
+      # its own only adds a line to the secret.
       - name: Generate the app without external services to start
         env:
           APP: ${{ matrix.app }}
@@ -1174,20 +1181,6 @@ jobs:
           fi
           (umask 077 && printf '%s\n' "$CI_APP_ENV" > "$values")
           unset CI_APP_ENV
-          # Each value is masked on its own: GitHub masks the secret as it is,
-          # with its lines KEY=value, while a log may show the value alone,
-          # as an SDK prints its key.
-          while IFS= read -r line || [ -n "$line" ]; do
-            value="${line#*=}"
-            value="${value%$'\r'}"
-            unquoted="${value#\"}"
-            unquoted="${unquoted%\"}"
-            for masked in "$value" "$unquoted"; do
-              if [ "$value" != "$line" ] && [ -n "$masked" ]; then
-                echo "::add-mask::$masked"
-              fi
-            done
-          done < "$values"
           dart run packages/smf_flutter_cli/tool/matrix.dart --create --without-external-steps --app "$APP" "$apps" start_app
           for app in "$apps"/*/; do
             dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests \
@@ -1241,7 +1234,8 @@ jobs:
       # slow install leaves the start without time.
       # Once the start check passed, the probe of revenuecat asks for premium
       # access, as on Android, which the step grants with the secret key of
-      # the RevenueCat project of CI. RevenueCat stops an app configured with
+      # the RevenueCat project of CI, in a file that is on disk while the app
+      # builds in this step too and that a step after it deletes. RevenueCat stops an app configured with
       # a key of the Test Store that it takes for a release build, as it
       # would a debug app whose Swift package of RevenueCat was built without
       # DEBUG, so the check runs on iOS too.
@@ -1263,6 +1257,8 @@ jobs:
           unset REVENUECAT_SECRET_KEY
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps застосунки é/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" ios "$SIMULATOR" 240 "${answers[@]}"
+
+      - *delete_revenuecat_key
 
       - *annotate
 
