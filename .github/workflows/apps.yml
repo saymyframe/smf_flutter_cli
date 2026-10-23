@@ -405,8 +405,9 @@ jobs:
       # writer downloads everything when it builds from an empty cache. So
       # every build of Gradle in the job takes what it would download from
       # Maven Central, which answers 403 to a runner that downloads too
-      # much, from the mirror of Maven Central that Google keeps, through
-      # the init script .github/gradle/maven_central_mirror.gradle in
+      # much, from the mirror of Maven Central that Google keeps, and from
+      # Maven Central only what the mirror does not have yet, through the
+      # init script .github/gradle/maven_central_mirror.gradle in
       # ~/.gradle/init.d.
       - &maven_central_mirror
         name: Take the downloads of Gradle from the mirror of Maven Central
