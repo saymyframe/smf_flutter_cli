@@ -9995,8 +9995,9 @@ class OnboardingPageScope extends InheritedWidget {
 /// [icon], among smaller cells, and a title and a text below them. The
 /// cells and the texts move at their own pace while the pages turn. The
 /// page scrolls when it is too small for them, as with a large text size on
-/// a small phone. A screen reader announces the title as a header, and
-/// passes over the cells, which are a picture.
+/// a small phone, where the texts keep their words whole. A screen reader
+/// announces the title as a header, and passes over the cells, which are a
+/// picture.
 class OnboardingPage extends StatelessWidget {
   /// Creates the page.
   const OnboardingPage({
@@ -10039,6 +10040,8 @@ class OnboardingPage extends StatelessWidget {
     final theme = Theme.of(context);
     // The texts leave faster than the page, and fade as they go.
     final shown = (1 - turned.abs() * 1.6).clamp(0.0, 1.0);
+    // How far the texts keep from the sides of the page.
+    const sides = 28.0;
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: ConstrainedBox(
@@ -10062,7 +10065,7 @@ class OnboardingPage extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+                  padding: const EdgeInsets.fromLTRB(sides, 8, sides, 8),
                   child: Opacity(
                     opacity: shown,
                     child: Transform.translate(
@@ -10072,18 +10075,23 @@ class OnboardingPage extends StatelessWidget {
                         children: [
                           Semantics(
                             header: true,
-                            child: Text(
+                            // The title is large already, so it grows only
+                            // by half with the text size of the device.
+                            child: WholeWords(
                               title,
                               style: theme.textTheme.displaySmall,
+                              maxScaleFactor: 1.5,
+                              width: constraints.maxWidth - 2 * sides,
                             ),
                           ),
                           const SizedBox(height: 12),
-                          Text(
+                          WholeWords(
                             text,
                             style: theme.textTheme.bodyLarge?.copyWith(
                               fontSize: 18,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
+                            width: constraints.maxWidth - 2 * sides,
                           ),
                         ],
                       ),
@@ -10095,6 +10103,99 @@ class OnboardingPage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class WholeWords extends StatelessWidget {
+  /// Creates the text.
+  const WholeWords(
+    this.text, {
+    this.style,
+    this.maxScaleFactor = double.infinity,
+    this.width,
+    super.key,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none,
+  /// the text is as the text around it, as the label of a button is in the
+  /// style that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  /// The width that the text has. Without it, the text takes the width
+  /// that its parent gives it, which a parent that asks for the size of
+  /// its children before it lays them out, such as [IntrinsicHeight], does
+  /// not tell: below such a parent, the text needs it.
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    if (width case final width?) return _within(context, width);
+    return LayoutBuilder(
+      builder: (context, constraints) => _within(context, constraints.maxWidth),
+    );
+  }
+
+  /// The text, as large as its words allow in the width [room].
+  Widget _within(BuildContext context, double room) {
+    // The style in which a Text paints: over that of the text around it,
+    // and bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+      maxLines: 1,
+    );
+    // How wide the longest word is in a font of [size].
+    double widestAt(double size) {
+      var widest = 0.0;
+      for (final word in text.split(' ')) {
+        painter
+          ..text = TextSpan(
+            text: word,
+            style: style.copyWith(fontSize: size),
+          )
+          ..layout();
+        if (painter.width > widest) widest = painter.width;
+      }
+      return widest;
+    }
+
+    // The size of a text of Flutter whose style gives none.
+    var size = style.fontSize ?? 14;
+    var widest = widestAt(size);
+    // In a few steps: the text size of a device may grow a small font by
+    // more than a large one.
+    for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+      // A little smaller than the width allows, so that the rounding of the
+      // layout breaks no word.
+      size *= room / widest * 0.98;
+      widest = widestAt(size);
+    }
+    painter.dispose();
+    return Text(
+      text,
+      style: style.copyWith(fontSize: size),
+      textScaler: scaler,
     );
   }
 }
@@ -10552,7 +10653,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ? const SizedBox.shrink()
                             : TextButton(
                                 onPressed: onboardingStatus.complete,
-                                child: Text(context.l10n.onboardingSkip),
+                                child: WholeWords(context.l10n.onboardingSkip),
                               ),
                       ),
                     ),
@@ -10627,7 +10728,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               for (final other in withLater)
                                 TextButton(
                                   onPressed: _running ? null : _next,
-                                  child: Text(other.later!(context)),
+                                  child: WholeWords(other.later!(context)),
                                 ),
                               const SizedBox.shrink(),
                             ],
@@ -10658,7 +10759,7 @@ class _ButtonLabel extends StatelessWidget {
     alignment: Alignment.center,
     children: [
       // The label keeps its place, so that the button keeps its size.
-      Visibility.maintain(visible: !spins, child: Text(label)),
+      Visibility.maintain(visible: !spins, child: WholeWords(label)),
       if (spins)
         // In the colour that the button gives its label.
         SizedBox.square(
