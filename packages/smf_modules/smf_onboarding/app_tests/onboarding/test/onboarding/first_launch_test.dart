@@ -17,7 +17,13 @@
 // app, as the device asks for it, with its title as a header for a screen
 // reader, and fits a small phone with a large text size and insets in each.
 // The letters and the number in the cell of a page keep to the cell there:
-// they are part of a picture, which does not grow with the text.
+// they are part of a picture, which does not grow with the text. The title
+// and the text of each page, the pages of the steps included, and the label
+// of each button keep their words whole there. The titles grow only by half
+// with the text size of the device, and a text whose longest word would not
+// fit is as large as that word allows. whole_words.dart, next to this file,
+// has that check, and whole_words_test.dart checks it on texts with a
+// hyphen, two spaces, a line break, a tab or a no-break space.
 //
 // The screen only finishes the onboarding: the router of the app, whichever
 // module provides it, leaves the screen, as the router role says of the
@@ -44,6 +50,7 @@ import '../onboarding_mocks.dart';
 import 'app.dart';
 import 'start_screen.dart';
 import 'texts.dart';
+import 'whole_words.dart';
 
 /// The inset at the top and at the bottom of the small phone of the test,
 /// such as a notch and the bar of the home gesture.
@@ -268,27 +275,49 @@ void main() {
   /// Checks, on a device with a large text size, the page that the user
   /// sees, whose title is [title]: the texts in its cell have the sizes
   /// [atNormalSize], which they have at the normal text size, since they
-  /// are part of a picture in a cell that does not grow, while the title
-  /// of the page grows with the text size of the device.
+  /// are part of a picture in a cell that does not grow.
   void expectCellKeepsTextSize(
     WidgetTester tester,
     String title,
     Map<String, Size> atNormalSize,
     String language,
+  ) =>
+      expect(
+        cellTexts(tester),
+        atNormalSize,
+        reason: 'With a large text size, the texts in the cell of the page '
+            '"$title" keep their size, in $language: they are part of the '
+            'picture, and would not fit a cell that does not grow.',
+      );
+
+  /// Checks, on the small phone, the texts of the page that the user sees,
+  /// in [language]: its title [title] and the text [text] below it keep
+  /// their words whole. The title grows only by half with the text size of
+  /// the device, since it is large already, and the text as the device
+  /// asks, each less where its longest word would not fit.
+  void expectWholeTexts(
+    WidgetTester tester,
+    String title,
+    String text,
+    String language,
   ) {
-    expect(
-      cellTexts(tester),
-      atNormalSize,
-      reason: 'With a large text size, the texts in the cell of the page '
-          '"$title" keep their size, in $language: they are part of the '
-          'picture, and would not fit a cell that does not grow.',
+    final shownTitle = shown(find.text(title));
+    final style = Theme.of(tester.element(shownTitle)).textTheme.displaySmall!;
+    expectWholeWords(
+      tester,
+      shownTitle,
+      title,
+      what: 'the title',
+      language: language,
+      largest: style.fontSize! * 1.5,
     );
-    expect(
-      MediaQuery.textScalerOf(tester.element(shown(find.text(title))))
-          .scale(10),
-      10 * tester.platformDispatcher.textScaleFactor,
-      reason: 'The title of the page "$title" grows with the text size of '
-          'the device, in $language.',
+    expectWholeWords(
+      tester,
+      shown(find.text(text)),
+      text,
+      what: 'the text',
+      language: language,
+      largest: pageTextSize * largeTextScale,
     );
   }
 
@@ -310,6 +339,29 @@ void main() {
             'pages grow only by half, in $language.',
       );
     }
+  }
+
+  /// Checks, on the small phone, [label], the label of [button], in
+  /// [language]: it keeps its words whole, and it grows by [scale] with the
+  /// text size of the device, or less where its longest word would not fit.
+  void expectWholeLabel(
+    WidgetTester tester,
+    Finder button,
+    String label,
+    String language, {
+    required double scale,
+  }) {
+    final shownLabel = find.descendant(of: button, matching: find.text(label));
+    // In the style that the theme of the app gives the button.
+    final base = DefaultTextStyle.of(tester.element(shownLabel)).style;
+    expectWholeWords(
+      tester,
+      shownLabel,
+      label,
+      what: 'the label',
+      language: language,
+      largest: base.fontSize! * scale,
+    );
   }
 
   /// Goes on from the page of [step], which the user sees, to the next
@@ -760,7 +812,7 @@ void main() {
           ..devicePixelRatio = 1
           ..padding = insets
           ..viewPadding = insets;
-        tester.platformDispatcher.textScaleFactorTestValue = 3;
+        tester.platformDispatcher.textScaleFactorTestValue = largeTextScale;
         await tester.pumpAndSettle();
         expect(
           tester.takeException(),
@@ -768,6 +820,15 @@ void main() {
           reason: 'The first page of the onboarding fits a small phone with '
               'a large text size, in $language.',
         );
+        expectWholeTexts(tester, appName, texts['welcome']!, language);
+        expectWholeLabel(
+          tester,
+          skip(),
+          texts['skip']!,
+          language,
+          scale: largeTextScale,
+        );
+        expectWholeLabel(tester, next(), texts['next']!, language, scale: 1.5);
         for (final button in [skip(), next()]) {
           expect(
             button.hitTestable(),
@@ -790,6 +851,35 @@ void main() {
             reason: 'The page of a step fits a small phone with a large text '
                 'size, in $language: $title.',
           );
+          expectWholeTexts(
+            tester,
+            title,
+            step.text(screen(tester)),
+            language,
+          );
+          expectWholeLabel(
+            tester,
+            skip(),
+            texts['skip']!,
+            language,
+            scale: largeTextScale,
+          );
+          expectWholeLabel(
+            tester,
+            action(tester, step),
+            step.action(screen(tester)),
+            language,
+            scale: 1.5,
+          );
+          if (step.later case final stepLater?) {
+            expectWholeLabel(
+              tester,
+              later(tester, step),
+              stepLater(screen(tester)),
+              language,
+              scale: 1.5,
+            );
+          }
           final buttons = [
             skip(),
             action(tester, step),
@@ -815,6 +905,13 @@ void main() {
           reason: 'The last page of the onboarding fits a small phone with '
               'a large text size, in $language.',
         );
+        expectWholeTexts(
+          tester,
+          texts['readyTitle']!,
+          texts['ready']!,
+          language,
+        );
+        expectWholeLabel(tester, done(), texts['done']!, language, scale: 1.5);
         expect(
           done().hitTestable(),
           findsOneWidget,

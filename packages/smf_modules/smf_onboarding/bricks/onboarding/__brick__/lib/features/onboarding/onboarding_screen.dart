@@ -178,7 +178,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ? const SizedBox.shrink()
                             : TextButton(
                                 onPressed: onboardingStatus.complete,
-                                child: Text({{{text_skip}}}),
+                                child: OnboardingWords({{{text_skip}}}),
                               ),
                       ),
                     ),
@@ -253,7 +253,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               for (final other in withLater)
                                 TextButton(
                                   onPressed: _running ? null : _next,
-                                  child: Text(other.later!(context)),
+                                  child: OnboardingWords(other.later!(context)),
                                 ),
                               const SizedBox.shrink(),
                             ],
@@ -284,7 +284,7 @@ class _ButtonLabel extends StatelessWidget {
     alignment: Alignment.center,
     children: [
       // The label keeps its place, so that the button keeps its size.
-      Visibility.maintain(visible: !spins, child: Text(label)),
+      Visibility.maintain(visible: !spins, child: OnboardingWords(label)),
       if (spins)
         // In the colour that the button gives its label.
         SizedBox.square(

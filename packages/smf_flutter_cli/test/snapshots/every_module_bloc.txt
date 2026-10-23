@@ -10116,8 +10116,9 @@ class OnboardingPageScope extends InheritedWidget {
 /// [icon], among smaller cells, and a title and a text below them. The
 /// cells and the texts move at their own pace while the pages turn. The
 /// page scrolls when it is too small for them, as with a large text size on
-/// a small phone. A screen reader announces the title as a header, and
-/// passes over the cells, which are a picture.
+/// a small phone, where the texts keep their words whole. A screen reader
+/// announces the title as a header, and passes over the cells, which are a
+/// picture.
 class OnboardingPage extends StatelessWidget {
   /// Creates the page.
   const OnboardingPage({
@@ -10140,82 +10141,201 @@ class OnboardingPage extends StatelessWidget {
   /// What the page says below its title.
   final String text;
 
+  /// How far the texts keep from the sides of the page.
+  static const double _sides = 28;
+
   @override
   Widget build(BuildContext context) {
     final scope = OnboardingPageScope.maybeOf(context);
-    if (scope == null) return _build(context, turned: 0, index: 0);
-    return AnimatedBuilder(
-      animation: scope.controller,
-      builder: (context, _) =>
-          _build(context, turned: scope.turned, index: scope.index),
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The texts, built once for a width and not on each frame while the
+        // pages turn, since measuring their words takes time.
+        final texts = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              header: true,
+              // The title is large already, so it grows only by half with
+              // the text size of the device.
+              child: OnboardingWords(
+                title,
+                style: theme.textTheme.displaySmall,
+                maxScaleFactor: 1.5,
+                width: constraints.maxWidth - 2 * _sides,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OnboardingWords(
+              text,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontSize: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              width: constraints.maxWidth - 2 * _sides,
+            ),
+          ],
+        );
+        if (scope == null) {
+          return _build(constraints, texts, turned: 0, index: 0);
+        }
+        return AnimatedBuilder(
+          animation: scope.controller,
+          child: texts,
+          builder: (context, texts) => _build(
+            constraints,
+            texts!,
+            turned: scope.turned,
+            index: scope.index,
+          ),
+        );
+      },
     );
   }
 
-  /// The page at [index] while the pages are [turned] away from it.
+  /// The page at [index] in [constraints], with [texts] below its cells,
+  /// while the pages are [turned] away from it.
   Widget _build(
-    BuildContext context, {
+    BoxConstraints constraints,
+    Widget texts, {
     required double turned,
     required int index,
   }) {
-    final theme = Theme.of(context);
     // The texts leave faster than the page, and fade as they go.
     final shown = (1 - turned.abs() * 1.6).clamp(0.0, 1.0);
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: IntrinsicHeight(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 280),
-                    child: ExcludeSemantics(
-                      child: _Cells(
-                        mirrored: index.isOdd,
-                        turned: turned,
-                        number: index + 1,
-                        symbol: symbol,
-                        icon: icon,
-                      ),
+    return SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: IntrinsicHeight(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 280),
+                  child: ExcludeSemantics(
+                    child: _Cells(
+                      mirrored: index.isOdd,
+                      turned: turned,
+                      number: index + 1,
+                      symbol: symbol,
+                      icon: icon,
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
-                  child: Opacity(
-                    opacity: shown,
-                    child: Transform.translate(
-                      offset: Offset(-turned * 56, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Semantics(
-                            header: true,
-                            child: Text(
-                              title,
-                              style: theme.textTheme.displaySmall,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            text,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 18,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(_sides, 8, _sides, 8),
+                child: Opacity(
+                  opacity: shown,
+                  child: Transform.translate(
+                    offset: Offset(-turned * 56, 0),
+                    child: texts,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class OnboardingWords extends StatelessWidget {
+  /// Creates the text.
+  const OnboardingWords(
+    this.text, {
+    this.style,
+    this.maxScaleFactor = double.infinity,
+    this.width,
+    super.key,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none,
+  /// the text is as the text around it, as the label of a button is in the
+  /// style that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  /// The width that the text has. Without it, the text takes the width
+  /// that its parent gives it, which a parent that asks for the size of
+  /// its children before it lays them out, such as [IntrinsicHeight], does
+  /// not tell: below such a parent, the text needs it.
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    if (width case final width?) return _within(context, width);
+    return LayoutBuilder(
+      builder: (context, constraints) => _within(context, constraints.maxWidth),
+    );
+  }
+
+  /// The text, as large as its words allow in the width [room].
+  Widget _within(BuildContext context, double room) {
+    // The style in which a Text paints: over that of the text around it,
+    // and bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+      maxLines: 1,
+    );
+    // The words of the text, between its white spaces, where a line may
+    // break: every one but a no-break space, which keeps the words around
+    // it together.
+    final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+    // How wide the longest word is in a font of [size].
+    double widestAt(double size) {
+      var widest = 0.0;
+      for (final word in words) {
+        painter
+          ..text = TextSpan(
+            text: word,
+            style: style.copyWith(fontSize: size),
+          )
+          ..layout();
+        if (painter.width > widest) widest = painter.width;
+      }
+      return widest;
+    }
+
+    // The size of a text of Flutter whose style gives none.
+    var size = style.fontSize ?? 14;
+    var widest = widestAt(size);
+    // In a few steps: the text size of a device may grow a small font by
+    // more than a large one.
+    for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+      // A little smaller than the width allows, so that the rounding of the
+      // layout breaks no word.
+      size *= room / widest * 0.98;
+      widest = widestAt(size);
+    }
+    painter.dispose();
+    return Text(
+      text,
+      style: style.copyWith(fontSize: size),
+      textScaler: scaler,
     );
   }
 }
@@ -10673,7 +10793,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ? const SizedBox.shrink()
                             : TextButton(
                                 onPressed: onboardingStatus.complete,
-                                child: Text(context.l10n.onboardingSkip),
+                                child: OnboardingWords(
+                                  context.l10n.onboardingSkip,
+                                ),
                               ),
                       ),
                     ),
@@ -10748,7 +10870,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               for (final other in withLater)
                                 TextButton(
                                   onPressed: _running ? null : _next,
-                                  child: Text(other.later!(context)),
+                                  child: OnboardingWords(other.later!(context)),
                                 ),
                               const SizedBox.shrink(),
                             ],
@@ -10779,7 +10901,7 @@ class _ButtonLabel extends StatelessWidget {
     alignment: Alignment.center,
     children: [
       // The label keeps its place, so that the button keeps its size.
-      Visibility.maintain(visible: !spins, child: Text(label)),
+      Visibility.maintain(visible: !spins, child: OnboardingWords(label)),
       if (spins)
         // In the colour that the button gives its label.
         SizedBox.square(
