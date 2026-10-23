@@ -702,6 +702,7 @@ void main() {
                 'current offering'),
             contains('make that offering the default one'),
             contains('In-App Purchase key of App Store Connect'),
+            contains('give it the type Non-consumable in RevenueCat'),
             contains('service account of Google Play'),
             contains('A profile or release build never takes it'),
             contains('leave `REVENUECAT_TEST_KEY` empty'),
