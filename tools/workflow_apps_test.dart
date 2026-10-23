@@ -96,6 +96,21 @@ const modulePaths = {
       'of the module in the start check, through start_app.sh: it sends a '
       'push message to the address of the device with the key of the '
       'service account, and the app tells the script whether it came.',
+  (
+    'Start the app without external services on the Android emulator, and '
+        'grant it premium access in RevenueCat',
+    'smf_revenuecat',
+  ): 'The test of revenuecat that answers the request of the probe of the '
+      'module in the start check, through start_app.sh: it grants premium '
+      'access to the user of the app in the RevenueCat project of CI with its '
+      'secret key, and the app tells the script whether the access reached '
+      'it.',
+  (
+    'Start the app without external services on the iOS simulator, and '
+        'grant it premium access in RevenueCat',
+    'smf_revenuecat',
+  ): 'The test of revenuecat that answers the request of the probe of the '
+      'module in the start check, through start_app.sh, as on Android.',
   ('Archive the app with every module', 'smf_firebase_crashlytics'):
       'The test of firebase_crashlytics that archives the app of the job '
           'with the build phase for Crashlytics fixed by the command of its '

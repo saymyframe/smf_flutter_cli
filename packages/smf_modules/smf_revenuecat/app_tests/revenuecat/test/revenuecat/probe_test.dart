@@ -3,8 +3,11 @@
 // finds no problem after the start-up of the app, with the key of the tests,
 // nor for a user with premium access, nor for a grant of the backend that
 // reaches the app while the probe reads it. It reports an access of the app
-// that RevenueCat does not give, a configured RevenueCat in an app without a
-// key, and purchases that are not those of RevenueCat.
+// that RevenueCat does not give, plans that differ from the packages of the
+// current offering, a configured RevenueCat in an app without a key, and
+// purchases that are not those of RevenueCat. The test asks problemsOf,
+// whose problems the probe returns, since the probe also starts the check of
+// the access once in a run of the app, which access_check_test.dart checks.
 //
 // The start-up of the app runs first, as on a device, with the mocks of the
 // platform side of every module of the app, which the matrix sets up before
@@ -80,7 +83,7 @@ void main() {
       late List<String> withOtherAccess;
 
       await inRealTime(tester, 'the probe after the start-up', () async {
-        afterStartUp = await probeRevenueCat(() async {});
+        afterStartUp = await problemsOf(createPurchasesService());
       });
       for (final user in [freshUser('throwaway'), freshUser('probed')]) {
         await inRealTime(
@@ -93,7 +96,7 @@ void main() {
       await inRealTime(tester, 'a purchase and the probe', () async {
         final plans = await appPurchases.plans();
         await appPurchases.purchase(plans.last);
-        withPremium = await probeRevenueCat(() async {});
+        withPremium = await problemsOf(createPurchasesService());
       });
       final granted = freshUser('granted');
       await inRealTime(tester, 'a grant and the probe', () async {
@@ -103,7 +106,7 @@ void main() {
         );
         revenueCat.grant(granted, until: DateTime.utc(2099));
         await Purchases.invalidateCustomerInfoCache();
-        withGrant = await probeRevenueCat(() async {});
+        withGrant = await problemsOf(createPurchasesService());
       });
 
       await inRealTime(
@@ -135,9 +138,21 @@ void main() {
         reason: 'The read of the customer info tells the app of the grant, '
             'and the probe compares what the app shows once it has the info.',
       );
+      // Nor are its plans those of the packages: each costs $1.00, and none
+      // has a period.
       expect(withOtherAccess, [
         'The app shows premium access, but the entitlement premium is not '
             'active in RevenueCat.',
+        r'The plan $rc_monthly of the app costs $1.00, but its package in '
+            r'RevenueCat costs $4.99.',
+        r'The plan $rc_monthly of the app has no period, but its product in '
+            'RevenueCat renews every P1M.',
+        r'The plan $rc_annual of the app costs $1.00, but its package in '
+            r'RevenueCat costs $39.99.',
+        r'The plan $rc_annual of the app has no period, but its product in '
+            'RevenueCat renews every P1Y.',
+        r'The plan $rc_lifetime of the app costs $1.00, but its package in '
+            r'RevenueCat costs $99.99.',
       ]);
     },
     timeout: timeout,

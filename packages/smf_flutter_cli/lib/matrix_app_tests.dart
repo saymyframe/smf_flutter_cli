@@ -243,7 +243,10 @@ Future<MatrixAppTests> smfAppTests() async {
       // the platforms, with that of the Test Store empty, so that the
       // service is configured in every test of the app (see
       // _revenueCatKeysOf). Its probe compares, on a device, the access and
-      // the plans of the app with what the RevenueCat SDK gives there.
+      // the plans of the app with what the RevenueCat SDK gives there, and
+      // then asks the script of CI that started the app for premium access,
+      // the answer revenuecat, which CI grants in the RevenueCat project of
+      // CI to the apps that it starts without external services.
       MatrixAppTest(
         '$revenueCat/revenuecat',
         appliesTo: _has(RevenueCatModule.id),
@@ -255,6 +258,7 @@ Future<MatrixAppTests> smfAppTests() async {
         startProbe: const MatrixStartProbe(
           'integration_test/revenuecat/probe.dart',
           'probeRevenueCat',
+          answer: 'revenuecat',
         ),
       ),
       // The onboarding of the module: on its first launch, the app shows

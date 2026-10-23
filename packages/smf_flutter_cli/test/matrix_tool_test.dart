@@ -190,13 +190,16 @@ void main() {
         ],
         reason: reason,
       );
-      // The answer of CI that the probe of Firebase Cloud Messaging asks
-      // for, which only the apps with external steps have, and the argument
-      // of the provider of the env role, dart_define, that builds the app
-      // with its .env.
+      // The answers of CI that the probes ask for, in the order of the
+      // tests: that of Firebase Cloud Messaging, which only the apps with
+      // external steps have, and that of RevenueCat; and the argument of
+      // the provider of the env role, dart_define, that builds the app with
+      // its .env.
       expect(
         read(app, startAnswersFile),
-        withoutExternalSteps ? '' : 'firebase_messaging\n',
+        withoutExternalSteps
+            ? 'revenuecat\n'
+            : 'firebase_messaging\nrevenuecat\n',
         reason: reason,
       );
       expect(
