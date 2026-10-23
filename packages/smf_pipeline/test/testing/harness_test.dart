@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -3606,6 +3609,299 @@ void main() {
         expect(withRole.app, isNull);
       });
 
+      group('the env role', () {
+        const shopApple = EnvKey(
+          'SHOP_APPLE_KEY',
+          description: 'The public key of the shop on iOS',
+        );
+        const shopGoogle = EnvKey(
+          'SHOP_GOOGLE_KEY',
+          description: 'The public key of the shop on Android',
+        );
+        const feedUrl = EnvKey(
+          'FEED_URL',
+          description: 'The address of the feed',
+        );
+
+        /// A harness with the app entry, the stand-in provider of the role,
+        /// a module that requires the role and reads its own keys, once
+        /// through the variables of the role and once with a prefix, and a
+        /// module that uses the role, reads its key through a variable and
+        /// the key of the other module with a prefix.
+        ContractHarness harness() => ContractHarness(
+              ModuleRegistry([
+                scaffold(),
+                TestModule(
+                  'dotenv_reader',
+                  providers: [const _EnvProvider()],
+                  contributions: [
+                    envRole.data(const EnvToolArguments(['--values=.env'])),
+                  ],
+                ),
+                TestModule(
+                  'shop',
+                  requires: {envRole},
+                  contributions: [
+                    envRole.data(shopApple),
+                    envRole.data(shopGoogle),
+                    BrickContribution(
+                      bundle(
+                        'shop',
+                        files: {
+                          'lib/shop/shop.dart': '''
+import '../core/env/app_env.dart' as env;
+
+final apple = {{{env_shop_apple_key}}};
+
+final google = env.AppEnv.shopGoogleKey;
+''',
+                        },
+                      ),
+                      vars: envRole.varsOf(const ModuleId('shop'), const [
+                        shopApple,
+                      ]),
+                    ),
+                  ],
+                ),
+                TestModule(
+                  'feed',
+                  uses: {envRole},
+                  contributions: [
+                    envRole.data(feedUrl),
+                    BrickContribution(
+                      bundle(
+                        'feed',
+                        files: {
+                          'lib/feed/feed.dart': '''
+final url = {{{env_feed_url}}};
+''',
+                        },
+                      ),
+                      vars: envRole.varsOf(const ModuleId('feed'), const [
+                        feedUrl,
+                      ]),
+                    ),
+                    BrickContribution(
+                      bundle(
+                        'feed_shop',
+                        files: {
+                          'lib/feed/shop_key.dart': '''
+import '../core/env/app_env.dart' as env;
+
+final apple = env.AppEnv.shopAppleKey;
+''',
+                        },
+                      ),
+                      when: const {envRole},
+                    ),
+                  ],
+                ),
+              ]),
+            );
+
+        test(
+            'renders the files of its template, and its rules find what the '
+            'code of a module reads from AppEnv as the indexer indexes it',
+            () async {
+          final result = await harness().check(
+            const ContractCase(
+              'env',
+              requested: [
+                ModuleId('shop'),
+                ModuleId('feed'),
+                ModuleId('dotenv_reader'),
+              ],
+            ),
+          );
+
+          // The provider keeps the interface of the role and renders every
+          // key, so only the read of the key of another module is wrong.
+          expect(
+            [
+              for (final issue in result.errors)
+                '${issue.origin}: ${issue.message}',
+            ],
+            [
+              equals(
+                'feed: lib/feed/shop_key.dart reads env.AppEnv.shopAppleKey, '
+                'the key SHOP_APPLE_KEY of the module shop, but the module '
+                'feed may only read its own keys and those of the modules it '
+                'depends on.',
+              ),
+            ],
+          );
+          final files = result.app!.files;
+          const keys = '\n'
+              '# The public key of the shop on iOS\n'
+              'SHOP_APPLE_KEY=\n'
+              '\n'
+              '# The public key of the shop on Android\n'
+              'SHOP_GOOGLE_KEY=\n'
+              '\n'
+              '# The address of the feed\n'
+              'FEED_URL=\n';
+          const forms = '#\n'
+              '# Write a value as it is, or in double quotes if it has a '
+              'space, a # or a quote.\n';
+          expect(
+            files[EnvRole.dotEnvFile]!.text,
+            endsWith('missing.\n$forms$keys'),
+          );
+          expect(
+            files[EnvRole.exampleFile]!.text,
+            endsWith('counts as missing.\n$forms$keys'),
+          );
+          expect(
+            files['lib/shop/shop.dart']!.text,
+            contains('final apple = AppEnv.shopAppleKey;'),
+          );
+          expect(
+            files['lib/shop/shop.dart']!.text,
+            // The pipeline adds the import of the code of the variable.
+            startsWith("import 'package:contract_app/core/env/app_env.dart';"),
+          );
+          expect(
+            files[AppEntryRole.gitignoreFile]!.text,
+            '/build/\n'
+            '\n'
+            '# The values of the app, which each developer fills in from '
+            '.env.example\n'
+            '.env\n',
+          );
+          expect(
+            files['README.md']!.text,
+            contains(
+              '## ${EnvRole.readmeHeading}\n\n`.env` at the root of the app',
+            ),
+          );
+          expect(
+            envRole.toolArgumentsIn(envRole.hookInput(result.hook!)),
+            ['--values=.env'],
+          );
+          expect(
+            [
+              for (final key in envRole.keysIn(envRole.hookInput(result.hook!)))
+                key.getter,
+            ],
+            ['shopAppleKey', 'shopGoogleKey', 'feedUrl'],
+          );
+        });
+
+        test(
+            'keeps only .env out of git, and .env.example and every other '
+            'file of the app in it', () async {
+          final result = await harness().check(
+            const ContractCase(
+              'env',
+              requested: [
+                ModuleId('shop'),
+                ModuleId('feed'),
+                ModuleId('dotenv_reader'),
+              ],
+            ),
+          );
+          final files = result.app!.files;
+          final root = Directory.systemTemp.createTempSync('smf_env_');
+          addTearDown(() => root.deleteSync(recursive: true));
+          // Neither the excludes of the user nor those of the system count.
+          final excludes = File('${root.path}/excludes')..writeAsStringSync('');
+          Future<ProcessResult> git(List<String> arguments) => Process.run(
+                'git',
+                ['-c', 'core.excludesFile=${excludes.path}', ...arguments],
+                workingDirectory: root.path,
+              );
+          expect((await git(['init', '-q'])).exitCode, 0);
+          File('${root.path}/${AppEntryRole.gitignoreFile}')
+              .writeAsStringSync(files[AppEntryRole.gitignoreFile]!.text);
+
+          final ignored = await git([
+            'check-ignore',
+            '--no-index',
+            '--',
+            ...files.keys,
+          ]);
+
+          expect(files.keys, containsAll([EnvRole.exampleFile, 'README.md']));
+          expect(ignored.exitCode, 0, reason: '${ignored.stderr}');
+          expect(
+            const LineSplitter().convert('${ignored.stdout}'),
+            [EnvRole.dotEnvFile],
+          );
+        });
+
+        test(
+            'leaves the line of the keys out of the files of an app without '
+            'keys', () async {
+          final result = await harness().check(
+            const ContractCase(
+              'env alone',
+              requested: [ModuleId('dotenv_reader')],
+            ),
+          );
+
+          expect(result.errors, isEmpty);
+          final files = result.app!.files;
+          expect(
+            files[EnvRole.dotEnvFile]!.text,
+            '# The values that the app reads, each under a comment that says '
+            'what goes\n'
+            '# there. This file stays out of git; .env.example has the same '
+            'keys without\n'
+            '# values. Every value ends up in the app, where anyone can read '
+            'it, so never\n'
+            '# put a secret here. An empty value counts as missing.\n'
+            '#\n'
+            '# Write a value as it is, or in double quotes if it has a space, '
+            'a # or a quote.\n',
+          );
+          expect(
+            files[EnvRole.exampleFile]!.text,
+            endsWith(
+              '# counts as missing.\n#\n# Write a value as it is, or in '
+              'double quotes if it has a space, a # or a quote.\n',
+            ),
+          );
+          expect(
+            files['README.md']!.text,
+            contains('No module of the app reads a value yet.'),
+          );
+        });
+
+        test(
+            'has a note in the guide for coding agents that names no provider '
+            'and no package', () async {
+          final results = [
+            await harness().check(
+              const ContractCase(
+                'env',
+                requested: [
+                  ModuleId('shop'),
+                  ModuleId('feed'),
+                  ModuleId('dotenv_reader'),
+                ],
+              ),
+            ),
+          ];
+
+          expect(
+            [
+              for (final (origin, heading, _)
+                  in results.single.app!.entriesOf(AppEntryRole.agentSections))
+                if (origin == const RoleTemplateOrigin(envRole)) heading,
+            ],
+            [envRole.description],
+          );
+          expect(
+            roleNoteProblems(
+              results,
+              AppEntryRole.agentSections,
+              textOf: (note) => note.text,
+            ),
+            isEmpty,
+          );
+        });
+      });
+
       test('the files of render hooks are checked like the files of bricks',
           () async {
         final notes = TestRole<NoDsl>(
@@ -5130,6 +5426,31 @@ final class _FilesProvider extends RoleProvider<NoDsl> {
 
   @override
   RoleOutput render(RoleHookInput<NoDsl> input) => RoleOutput(files: files);
+}
+
+/// A stand-in for a provider of the env role: its render hook generates
+/// `AppEnv` with a static getter for each key of the app, which is `null`
+/// as for a value that is missing.
+final class _EnvProvider extends RoleProvider<EnvData> {
+  const _EnvProvider();
+
+  @override
+  Role<EnvData> get role => envRole;
+
+  @override
+  RoleOutput render(RoleHookInput<EnvData> input) => RoleOutput(
+        files: {
+          EnvRole.readerFile: [
+            'abstract final class AppEnv {',
+            for (final key in envRole.keysIn(input)) ...[
+              '  /// ${key.description}.',
+              '  static String? get ${key.getter} => null;',
+            ],
+            '}',
+            '',
+          ].join('\n'),
+        },
+      );
 }
 
 /// A `{` in a mason template.

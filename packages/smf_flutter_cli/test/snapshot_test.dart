@@ -40,13 +40,14 @@ List<MatrixApp> _withSnapshot(List<MatrixApp> apps) => [
     ];
 
 /// The files of the app entry that the snapshots show: the Dart code, the
-/// pubspec, the README, and the native files with sockets. The Xcode project
-/// shows only its minimum iOS versions.
+/// pubspec, the README, `.gitignore`, and the native files with sockets.
+/// The Xcode project shows only its minimum iOS versions.
 bool _shownOfAppEntry(String path) =>
     path.startsWith('lib/') ||
     path.startsWith('test/') ||
     const {
       'pubspec.yaml',
+      AppEntryRole.gitignoreFile,
       AppEntryRole.androidManifestFile,
       AppEntryRole.infoPlistFile,
       AppEntryRole.iosEntitlementsFile,
@@ -77,8 +78,8 @@ Version _languageVersionOf(RenderedApp app) {
 /// owner. Every file of the modules is shown, and the files of the provider
 /// of the app entry among [_shownOfAppEntry]. Dart files are formatted as
 /// `dart format` formats the app, and the YAML, XML and plist files, the
-/// entitlements, which are a plist, and the ARB files, which are JSON, must
-/// parse.
+/// entitlements, which are a plist, and the JSON files and the ARB files,
+/// which are JSON, must parse.
 String _snapshotOf(RenderedApp app, Set<ContributionOrigin> appEntry) {
   final formatter = DartFormatter(languageVersion: _languageVersionOf(app));
   final buffer = StringBuffer();
@@ -99,7 +100,7 @@ String _snapshotOf(RenderedApp app, Set<ContributionOrigin> appEntry) {
       XmlDocument.parse(text);
     } else if (path.endsWith('.yaml')) {
       loadYaml(text, sourceUrl: Uri.file(path));
-    } else if (path.endsWith('.arb')) {
+    } else if (path.endsWith('.arb') || path.endsWith('.json')) {
       jsonDecode(text);
     } else if (path == AppEntryRole.xcodeProjectFile) {
       text = [

@@ -8,6 +8,8 @@ import 'package:smf_contracts/bundles/notifications_role_bundle.dart';
 import 'package:smf_contracts/bundles/notifications_role_setting_bundle.dart';
 import 'package:smf_contracts/bundles/notifications_role_step_bundle.dart';
 import 'package:smf_contracts/bundles/preferences_role_bundle.dart';
+import 'package:smf_contracts/bundles/purchases_role_bundle.dart';
+import 'package:smf_contracts/bundles/purchases_role_setting_bundle.dart';
 import 'package:smf_contracts/bundles/push_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/brick_templates.dart';
@@ -20,13 +22,15 @@ part 'services/crash_reporting.dart';
 part 'services/events.dart';
 part 'services/notifications.dart';
 part 'services/preferences.dart';
+part 'services/purchases.dart';
 part 'services/push.dart';
 
 /// The implementation of a service role that a provider contributes as its
 /// data, such as the Firebase implementation of `AnalyticsService`.
 ///
 /// The service roles are [eventsRole], [preferencesRole], [analyticsRole],
-/// [crashReportingRole], [authRole], [notificationsRole] and [pushRole].
+/// [crashReportingRole], [authRole], [notificationsRole], [pushRole] and
+/// [purchasesRole].
 /// Each generates the interface of its service and a factory that returns
 /// the implementation, or, for a role with many providers, one service that
 /// forwards every call to all of them. Every provider contributes exactly
@@ -43,11 +47,12 @@ part 'services/push.dart';
 ///
 /// The factory takes no services: the services work without a DI
 /// container. The role registers its service in the DI container when one
-/// is present, but for the [authRole], the [notificationsRole] and the
-/// [pushRole], which register nothing: the code of an app does not use the
-/// service of their provider, only the controller that the role generates
-/// over it, the session of [AuthRole], the notifications of
-/// [NotificationsRole] and the push messages of [PushRole].
+/// is present, but for the [authRole], the [notificationsRole], the
+/// [pushRole] and the [purchasesRole], which register nothing: the code of
+/// an app does not use the service of their provider, only the controller
+/// that the role generates over it, the session of [AuthRole], the
+/// notifications of [NotificationsRole], the push messages of [PushRole]
+/// and the purchases of [PurchasesRole].
 ///
 /// A role that an app can have several providers of creates each
 /// implementation on its own: one whose factory throws, or whose
@@ -456,11 +461,11 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
         SocketContribution.code(
           implementations,
           Fragment(
-            single ? _single(all) : _many(all),
+            single ? _single(all, input) : _many(all),
             imports: [
               for (final entry in all)
                 entry.implementation.factory.import.withPrefix(entry.prefix),
-              if (!single) _foundation,
+              if (single) ..._singleImports(input) else _foundation,
             ],
           ),
         ),
@@ -468,6 +473,7 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
           SocketContribution.code(
             AppEntryRole.bootstrapPlatform,
             Fragment(code, imports: [import]),
+            when: _bootstrapWhen(input),
           ),
       ],
     );
@@ -478,10 +484,22 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
   String? bootstrap({required bool hasAsync}) =>
       hasAsync ? 'await $initFunction();' : null;
 
-  /// The code of the only implementation in [all]; see [render]. A role
-  /// that does more with its implementation than create it, such as the
-  /// preferences, renders it otherwise.
-  String _single(List<_Prefixed> all) {
+  /// The roles in the condition of the code of [bootstrap] in the app of
+  /// [input], each one that the app has: none, unless the start of the role
+  /// needs the start of a role that it only uses before it. The order of the
+  /// code of a socket follows the conditions of that code, so the code then
+  /// comes after the providers and the templates of those roles.
+  Set<Role> _bootstrapWhen(RoleHookInput<D> input) => const {};
+
+  /// The files that the code of [_single] in the app of [input] uses beyond
+  /// the file of the implementation, such as the file of a role that the
+  /// role uses: none, unless the role renders its implementation otherwise.
+  List<ImportRef> _singleImports(RoleHookInput<D> input) => const [];
+
+  /// The code of the only implementation in [all] in the app of [input];
+  /// see [render]. A role that does more with its implementation than
+  /// create it, such as the preferences, renders it otherwise.
+  String _single(List<_Prefixed> all, RoleHookInput<D> input) {
     final (:implementation, :prefix) = all.single;
     final factory = implementation.factory.codeWith(prefix);
     if (!implementation.isAsync) {

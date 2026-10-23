@@ -5,8 +5,11 @@
 // job with Flutter, which checks that they apply to some app and that they
 // check the contract of their roles with every provider only at its end;
 // these tests check the same without Flutter.
+import 'dart:convert';
+
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:fake_feature/bundles/fake_gate_bundle.dart';
 import 'package:fake_feature/fake_feature.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_roles/fake_roles.dart';
@@ -160,8 +163,9 @@ void main() {
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
       'of the auth role, of the onboarding screen role, of the notifications '
-      'role and of the push role with every provider of each, which they tell '
-      'apart by the roles of the app only', () {
+      'role, of the push role, of the purchases role and of the env role with '
+      'every provider of each, which they tell apart by the roles of the app '
+      'only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -177,14 +181,28 @@ void main() {
         onboardingScreenRole,
         notificationsRole,
         pushRole,
+        purchasesRole,
+        envRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
     expect(named('auth_methods').roles, {authRole});
-    expect(named('onboarding_screen_role').roles, {onboardingScreenRole});
+    expect(
+      named('onboarding_screen_role').roles,
+      {onboardingScreenRole, routerRole},
+    );
     expect(named('notifications_role').roles, {notificationsRole});
     expect(named('notifications_step').roles, {notificationsRole});
     expect(named('push_role').roles, {pushRole});
+    expect(named('purchases_role').roles, {purchasesRole});
+    // The test of the purchases of the users of the session checks the
+    // template of the purchases role, which follows the session, and the
+    // contract of its providers.
+    expect(named('purchases_session').roles, {purchasesRole});
+    expect(named('purchases_device').roles, {purchasesRole});
+    expect(named('env_role').roles, {envRole});
+    // The test of the module that reads values of .env tests a module.
+    expect(named('env_variables').roles, isEmpty);
     expect(named('localization_role').roles, {localizationRole});
     expect(named('router_screens').roles, {routerRole});
     expect(named('router_listeners').roles, {routerRole});
@@ -273,9 +291,9 @@ void main() {
   test(
       'the tests of the events role, of the preferences role, of the '
       'localization role, of the theme role, of the notifications role, of '
-      'the push role and of the walk of the routes apply only to the apps '
-      'with every module, which have the roles and run flutter test for '
-      'other tests already', () {
+      'the push role, of the purchases role and of the walk of the routes '
+      'apply only to the apps with every module, which have the roles and '
+      'run flutter test for other tests already', () {
     final everyModule = [
       for (final app in apps)
         if (app.everyModuleWith != null) app,
@@ -301,6 +319,10 @@ void main() {
       // The test of the push messages that the CLI keeps, for the fixture
       // push messages, which every such app has.
       'push_role',
+      // The tests of the purchases that the CLI keeps, for the fixture
+      // purchases, which every such app has, with the fixture sign-in.
+      'purchases_role',
+      'purchases_session',
     ]) {
       expect(
         appsOf(named(name)),
@@ -344,6 +366,8 @@ void main() {
           themeRole,
           notificationsRole,
           pushRole,
+          purchasesRole,
+          authRole,
         ]),
         reason: app.name,
       );
@@ -354,6 +378,7 @@ void main() {
           FakeThemeModule.id,
           FakeNotificationsModule.id,
           FakePushModule.id,
+          FakePurchasesModule.id,
         ]),
         reason: app.name,
       );
@@ -481,7 +506,7 @@ void main() {
         apps.singleWhere((app) => app.name == name),
         'my_app',
       );
-      expect(files.keys, [onboardingOfAppFile]);
+      expect(files.keys, [onboardingGuardsFile, onboardingOfAppFile]);
       return parseString(content: files[onboardingOfAppFile]!).unit;
     }
 
@@ -667,6 +692,107 @@ void main() {
   });
 
   test(
+      'the tests of the onboarding screen role get the guards of the fixture '
+      'gates in an app with them, to keep the user on a gate and to have the '
+      'guards notify, and nothing to change in any other app', () {
+    final onboarding = named('onboarding_screen_role');
+
+    /// The file of the guards that the matrix writes for [app], whose
+    /// package is `my_app`, parsed.
+    CompilationUnit guardsOf(MatrixApp app) => parseString(
+          content:
+              onboarding.generatedFiles!(app, 'my_app')[onboardingGuardsFile]!,
+        ).unit;
+
+    /// The bodies of the top-level functions of [unit], by name.
+    Map<String, String> bodiesOf(CompilationUnit unit) => {
+          for (final function
+              in unit.declarations.whereType<FunctionDeclaration>())
+            function.name.lexeme: function.functionExpression.body.toSource(),
+        };
+
+    List<String?> importsOf(CompilationUnit unit) => [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ];
+
+    const gatesFile = 'lib/features/fake_gate/fixture_gates.dart';
+    final applies = apps.where(onboarding.appliesTo).toList();
+    final withGates = [
+      for (final app in applies)
+        if (app.modules.contains(FakeGateModule.id)) app,
+    ];
+    // The apps with every module of the state manager of the fixture gates
+    // have them, and those of the other state manager have no guard.
+    expect(withGates, isNotEmpty);
+    expect(withGates.length, lessThan(applies.length));
+    for (final app in applies) {
+      final unit = guardsOf(app);
+      final bodies = bodiesOf(unit);
+      expect(bodies.keys, ['keepOnGate', 'notifyGuards'], reason: app.name);
+      if (withGates.contains(app)) {
+        expect(
+          importsOf(unit),
+          ['package:my_app/${gatesFile.substring('lib/'.length)}'],
+          reason: app.name,
+        );
+        expect(
+          bodies,
+          {
+            'keepOnGate': '=> fixtureGate.value = !keep;',
+            'notifyGuards': 'async {fixtureGate.poke(); await settle(); '
+                'fixtureSecondGate.poke(); await settle(); '
+                'fixtureHolder.value = false; await settle(); '
+                'fixtureHolder.value = true; await settle();}',
+          },
+          reason: app.name,
+        );
+      } else {
+        expect(importsOf(unit), isEmpty, reason: app.name);
+        expect(
+          bodies,
+          {'keepOnGate': '{}', 'notifyGuards': 'async {}'},
+          reason: app.name,
+        );
+      }
+    }
+
+    // What the file names is in the file of the fixture gates: the three
+    // gates, of which the guard of the badge reads the last, and poke() of
+    // a gate, which notifies without a change.
+    final gates = parseString(
+      content: utf8
+          .decode(
+            base64.decode(
+              fakeGateBundle.files
+                  .singleWhere((file) => file.path == gatesFile)
+                  .data,
+            ),
+          )
+          .replaceAll('{{{open}}}', 'true'),
+    ).unit;
+    expect(
+      [
+        for (final declaration
+            in gates.declarations.whereType<TopLevelVariableDeclaration>())
+          for (final variable in declaration.variables.variables)
+            variable.name.lexeme,
+      ],
+      containsAll(['fixtureGate', 'fixtureSecondGate', 'fixtureHolder']),
+    );
+    final gate = gates.declarations.whereType<ClassDeclaration>().singleWhere(
+          (type) => type.namePart.typeName.lexeme == 'FixtureGate',
+        );
+    expect(
+      [
+        for (final member in gate.body.members.whereType<MethodDeclaration>())
+          member.name.lexeme,
+      ],
+      contains('poke'),
+    );
+  });
+
+  test(
       'the test of the notifications role applies to the apps with every '
       'module, where the fixture notifications provide the role, and not to '
       'the apps of the fixture alone, which the matrix only analyzes', () {
@@ -775,6 +901,128 @@ void main() {
   });
 
   test(
+      'the tests of the purchases role apply to the apps with every module, '
+      'where the fixture purchases provide the role next to the fixture '
+      'sign-in, and not to the apps of the fixture alone, which the matrix '
+      'only analyzes; the test of the session runs where the test of the '
+      'role, whose helpers it uses, runs', () {
+    final roleTest = named('purchases_role');
+    final sessionTest = named('purchases_session');
+    final withRole = [
+      for (final app in apps)
+        if (app.hook!.presentRoles.contains(purchasesRole)) app.name,
+    ];
+
+    // The purchases role uses the auth role and the localization role, so
+    // its provider has an app with the fixture sign-in and one without,
+    // each with the texts of the app and without them.
+    expect(
+      withRole,
+      containsAll([
+        'fake_purchases with auth, localization',
+        'fake_purchases with auth',
+        'fake_purchases with localization',
+        'fake_purchases',
+      ]),
+    );
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ];
+    expect(appsOf(roleTest), everyModule);
+    expect(appsOf(sessionTest), everyModule);
+    // In each mode of the auth role, whose apps with every module the
+    // matrix has once more for each other mode.
+    expect(
+      {
+        for (final app in apps.where(sessionTest.appliesTo))
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+      },
+      AuthMode.values.toSet(),
+    );
+    expect(roleTest.startProbe!.function, 'probePurchases');
+    // The purchases of the user of the device of an app without sign-in run
+    // in the apps of the fixture alone without the fixture sign-in, which
+    // no app with every module is.
+    expect(appsOf(named('purchases_device')), [
+      'fake_purchases with localization',
+      'fake_purchases',
+    ]);
+    // The test of the entry that restores purchases is not registered for
+    // the fixtures: no app of their matrix has a settings screen next to the
+    // purchases, so it would apply to no app, which fails the run. Once an
+    // app of the matrix has both roles, such as with a fixture provider of
+    // the settings screen role, the test belongs among those of the
+    // fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'purchases_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({purchasesRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register purchasesSettingAppTest() in fixtureAppTests() for '
+          'these apps.',
+    );
+  });
+
+  test(
+      'the test of the env role applies to the apps with every module, where '
+      'the fixture values of .env provide the role and the module that reads '
+      'values of .env gives it keys, and not to the apps of the two alone, '
+      'which the matrix only analyzes; there the test of that module gives '
+      'its keys a value in double quotes, an empty value and none, and the '
+      'test of the role gives no value', () {
+    final roleTest = named('env_role');
+    final valuesTest = named('env_variables');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    // The module uses the role, so it has an app with the role and one
+    // without, and the provider has an app without keys.
+    expect(
+      [
+        for (final app in apps)
+          if (app.modules.contains(FakeEnvModule.id) ||
+              app.modules.contains(FakeEnvUserModule.id))
+            if (app.everyModuleWith == null) app.name,
+      ],
+      ['fake_env', 'fake_env_user with env', 'fake_env_user'],
+    );
+    expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
+    expect(appsOf(valuesTest), appsOf(roleTest));
+    for (final app in everyModule) {
+      final keys = envRole.keysIn(envRole.hookInput(app.hook!));
+      expect(
+        [for (final key in keys) key.name],
+        [for (final key in FakeEnvUserModule.keys) key.name],
+        reason: app.name,
+      );
+      // A value in double quotes, an empty one, and none, as of a key that
+      // the file lacks: each case of the test of the role.
+      expect(valuesTest.envValues!(app), {
+        'FAKE_ENV_USER_FIRST': 'the first value # of the fixture',
+        'FAKE_ENV_USER_SECOND': '',
+        'FAKE_ENV_USER_THIRD': null,
+      });
+      expect(roleTest.envValues, isNull);
+      expect(roleTest.generatedFiles!(app, 'fixture_app').keys, [
+        'test/env_role/keys.dart',
+      ]);
+    }
+  });
+
+  test(
       'the test of the auth role applies to every app with the role, the '
       'apps of the fixture sign-in alone, with a router and without one, '
       'and the apps with every module, in each mode of the role, and gets '
@@ -804,6 +1052,9 @@ void main() {
         // The fixture way to sign in requires the role.
         'fake_sign_in_method with localization',
         'fake_sign_in_method',
+        // The fixture purchases use the role.
+        'fake_purchases with auth, localization',
+        'fake_purchases with auth',
         for (final mode in ['guest', 'anonymous']) '$ofModes --auth-mode=$mode',
         for (final app in apps)
           if (app.everyModuleWith != null) app.name,
@@ -824,8 +1075,9 @@ void main() {
     );
     // The apps of each mode: those of the fixture alone, six in the
     // default mode and one in each other mode, the two of the fixture way
-    // to sign in in the default mode, and each app with every module with
-    // a clock of 24 hours and with one of 12.
+    // to sign in and the two of the fixture purchases with the role in the
+    // default mode, and each app with every module with a clock of 24 hours
+    // and with one of 12.
     expect(
       {
         for (final mode in AuthMode.values)
@@ -833,7 +1085,7 @@ void main() {
               .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
               .length,
       },
-      {'required': 24, 'guest': 17, 'anonymous': 17},
+      {'required': 26, 'guest': 17, 'anonymous': 17},
     );
     // The mode comes from the choice of the role, which an app has without
     // the option too.
@@ -1705,10 +1957,11 @@ void main() {
     test(
         'gets the app tests of the modules of the CLI, the tests of the DI '
         'role, of the events role, of the preferences role, of the auth '
-        'role, of the settings screen role and of the theme role, the mocks '
-        'of the fixture providers, the tests of the roles of several '
-        'providers and the test of the onboarding screen role, which all '
-        'apply to it', () {
+        'role, of the purchases role, of the settings screen role and of the '
+        'theme role, the test of the paywall, the mocks of the fixture '
+        'providers, the tests of the '
+        'roles of several providers and the test of the onboarding screen '
+        'role, which all apply to it', () {
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
         containsAll([
@@ -1739,7 +1992,18 @@ void main() {
           'notifications_role',
           'notifications_setting',
           'notifications_step',
+          'revenuecat',
+          'purchases_role',
+          'purchases_session',
+          'purchases_setting',
+          'paywall',
         ]),
+      );
+      // The test of the purchases of the user of the device is for an app
+      // without sign-in.
+      expect(
+        [for (final test in severalProviders.tests) nameOf(test)],
+        isNot(contains('purchases_device')),
       );
       for (final test in severalProviders.tests) {
         expect(test.appliesTo(everyModule), isTrue, reason: test.directory);
@@ -1856,6 +2120,42 @@ void main() {
     });
 
     test(
+        'has the entry that restores purchases on the settings screen, which '
+        'the template of the purchases role gives it with the provider of '
+        'the CLI, and the test of the entry, a test of the purchases role, '
+        'applies to it with the helpers of the tests of the settings screen '
+        'and of the purchases', () {
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(purchasesRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('revenuecat')],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(everyModule.hook!)))
+            entry.file,
+        ],
+        contains(PurchasesRole.settingFile),
+      );
+      final test = ofSeveral('purchases_setting');
+      expect(test.roles, {purchasesRole});
+      expect(test.appliesTo(everyModule), isTrue);
+      for (final app in matrix.where(test.appliesTo)) {
+        for (final helper in ['settings_screen_role', 'purchases_role']) {
+          expect(
+            ofSeveral(helper).appliesTo(app),
+            isTrue,
+            reason: '$helper in ${app.name}',
+          );
+        }
+      }
+    });
+
+    test(
         'checks the contract of the analytics role and of the crash reporting '
         'role with every provider of each, which it tells apart by the roles '
         'of the app only, in the app with every module only', () {
@@ -1902,7 +2202,7 @@ void main() {
       final hook = everyModule.hook!;
       final input = onboardingScreenRole.hookInput(hook);
 
-      expect(test.roles, {onboardingScreenRole});
+      expect(test.roles, {onboardingScreenRole, routerRole});
       expect(
         [
           for (final module in severalProvidersModules())
@@ -1915,12 +2215,19 @@ void main() {
       // The two steps of the fixture steps, and then the step of the
       // notifications role, whose provider of the CLI the registry has: the
       // steps of one stage come in the order of their contributors, the
-      // modules before the templates of the roles.
+      // modules before the templates of the roles. The step of the paywall,
+      // an offer, comes after every permission, also after the step of the
+      // template of a role.
       expect(
         [
           for (final step in onboardingScreenRole.stepsIn(input)) step.fullName,
         ],
-        ['fake_steps.ask', 'fake_steps.confirm', 'notifications.permission'],
+        [
+          'fake_steps.ask',
+          'fake_steps.confirm',
+          'notifications.permission',
+          'paywall.offer',
+        ],
       );
       expect(onboardingScreenRole.screenIn(input)!.fullPath, '/onboarding');
       expect(

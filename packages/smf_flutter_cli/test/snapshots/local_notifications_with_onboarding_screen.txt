@@ -1,3 +1,49 @@
+=== .gitignore (flutter_core) ===
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
 === AGENTS.md (role:app_entry) ===
 # AGENTS.md
 
@@ -58,7 +104,7 @@ With `flutter_local_notifications`:
 ## Onboarding screen
 
 - The onboarding shows the steps of `appOnboardingSteps` in `lib/core/onboarding/onboarding_steps.dart`, each on a page of its own, in the order of the list. A step is an `OnboardingStep`: an `icon`, a `title`, a `text`, the label of its `action` and the function `run` that the action calls. Its `later` is the label of a button that goes on without calling `run`, and the onboarding leaves the step out when its `showIf` returns `false` as the onboarding opens.
-- To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` returns a `Future`, and `showIf` returns a `bool` at once. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
+- To add a step, add an `OnboardingStep` to `appOnboardingSteps`. Its labels, `run` and `showIf` are top-level functions, so that the list stays `const`: a label takes a `BuildContext` and returns the text, `run` takes the `BuildContext` of the onboarding screen and returns a `Future`, and `showIf` returns a `bool` at once. The onboarding goes on once the future of `run` completes. A `run` that shows a screen of its own over the onboarding pushes it with `Navigator.of(context, rootNavigator: true)` and completes once that screen is closed. Show a label with `step.title(context)` in the `build` of the widget that shows it, and do not keep what it returned: the text follows the language of the app.
 - Skipping the onboarding skips its steps. So the app does not rely on `run` alone for what a step does, such as asking for a permission: the code that needs it calls the same function too.
 
 ## Preferences
@@ -772,10 +818,17 @@ final class NotificationsController {
   StreamSubscription<NotificationTap>? _serviceTaps;
   NotificationTap? _launchTap;
 
-  /// Completes when the app has started for the first time, with the error
-  /// of that start if it failed. Nothing but a call that waits for the start
-  /// reports that error, which the start throws itself.
-  final Completer<void> _started = Completer<void>()..future.ignore();
+  /// Whether the app has started for the first time, also when that start
+  /// failed.
+  bool _started = false;
+
+  /// What the calls made before the first start wait for, each created by
+  /// its call. The first start completes them, with its error if it failed,
+  /// each in the zone of its call: created with the controller, they would
+  /// complete in a microtask of the zone that read [appNotifications]
+  /// first, which may run none any more, as the fake time of a widget test
+  /// that is over before a later test starts the app in real time.
+  final List<Completer<void>> _untilStarted = [];
 
   /// The preferences that remember that the app asked, once the app opened
   /// them.
@@ -860,10 +913,10 @@ final class NotificationsController {
     try {
       await _refresh();
     } on Object catch (error, stackTrace) {
-      if (!_started.isCompleted) _started.completeError(error, stackTrace);
+      _firstStarted(error, stackTrace);
       rethrow;
     }
-    if (!_started.isCompleted) _started.complete();
+    _firstStarted();
   }
 
   /// Asks the user for the permission to show notifications, unless the app
@@ -924,8 +977,29 @@ final class NotificationsController {
 
   /// The service, once the app has started for the first time.
   Future<NotificationsService> _ready() async {
-    if (!_started.isCompleted) await _started.future;
+    if (!_started) {
+      final untilStarted = Completer<void>();
+      _untilStarted.add(untilStarted);
+      await untilStarted.future;
+    }
     return _service!;
+  }
+
+  /// Takes it that the app has started for the first time, unless it had,
+  /// and lets the calls that waited for that go on, or fail with [error] of
+  /// the start. Nothing but these calls reports that error, which the start
+  /// throws itself.
+  void _firstStarted([Object? error, StackTrace? stackTrace]) {
+    if (_started) return;
+    _started = true;
+    for (final untilStarted in _untilStarted) {
+      if (error == null) {
+        untilStarted.complete();
+      } else {
+        untilStarted.completeError(error, stackTrace);
+      }
+    }
+    _untilStarted.clear();
   }
 
   Future<NotificationPermission> _ask() async {
@@ -1415,6 +1489,8 @@ abstract interface class NotificationsService {
   Future<List<AppNotification>> scheduled();
 }
 === lib/core/notifications/notifications_step.dart (role:notifications) ===
+import 'package:flutter/widgets.dart';
+
 import 'app_notifications.dart';
 
 /// Whether the onboarding shows its step that asks for the permission to
@@ -1423,8 +1499,9 @@ bool notificationsStepShows() =>
     appNotifications.permission.value == NotificationPermission.notAsked;
 
 /// Asks for the permission to show notifications: the action of the step of
-/// the onboarding.
-Future<void> allowNotifications() => appNotifications.request();
+/// the onboarding, which needs nothing of the context of the onboarding
+/// screen.
+Future<void> allowNotifications(BuildContext _) => appNotifications.request();
 === lib/core/onboarding/onboarding_steps.dart (role:onboarding_screen) ===
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -1463,10 +1540,15 @@ final class OnboardingStep {
   /// Returns the label of the button that calls [run], as [title] does.
   final String Function(BuildContext context) action;
 
-  /// What the button [action] does, such as asking for a permission. The
-  /// onboarding goes on to its next page once the future completes, also
-  /// when it fails.
-  final Future<void> Function() run;
+  /// What the button [action] does, such as asking for a permission, for
+  /// the context of the onboarding screen. The onboarding goes on to its
+  /// next page once the future completes, also when it fails.
+  ///
+  /// To show a screen of its own over the onboarding, it pushes a route on
+  /// the navigator at the root of the app, with
+  /// `Navigator.of(context, rootNavigator: true)`, and completes once that
+  /// route is popped.
+  final Future<void> Function(BuildContext context) run;
 
   /// Returns the label of the button that goes on to the next page without
   /// calling [run], as [title] does, or is `null` for a step without that
@@ -2107,7 +2189,10 @@ final class GuardedNavigation<L> {
   }
 
   /// What the router does now that a guard started or stopped allowing, or
-  /// `null` to leave its pages as they are.
+  /// `null` to leave its pages as they are. With `null` the router changes
+  /// nothing: its pages stay, and so do the routes without a page that code
+  /// pushed over them, such as a dialog or the screen that the action of an
+  /// onboarding step shows.
   ///
   /// [pages] are the pages that the user can get back to, the one on top
   /// first: those of the root navigator and of the selected branch of the
@@ -2989,8 +3074,9 @@ class OnboardingPageScope extends InheritedWidget {
 /// [icon], among smaller cells, and a title and a text below them. The
 /// cells and the texts move at their own pace while the pages turn. The
 /// page scrolls when it is too small for them, as with a large text size on
-/// a small phone. A screen reader announces the title as a header, and
-/// passes over the cells, which are a picture.
+/// a small phone, where the texts keep their words whole. A screen reader
+/// announces the title as a header, and passes over the cells, which are a
+/// picture.
 class OnboardingPage extends StatelessWidget {
   /// Creates the page.
   const OnboardingPage({
@@ -3013,82 +3099,201 @@ class OnboardingPage extends StatelessWidget {
   /// What the page says below its title.
   final String text;
 
+  /// How far the texts keep from the sides of the page.
+  static const double _sides = 28;
+
   @override
   Widget build(BuildContext context) {
     final scope = OnboardingPageScope.maybeOf(context);
-    if (scope == null) return _build(context, turned: 0, index: 0);
-    return AnimatedBuilder(
-      animation: scope.controller,
-      builder: (context, _) =>
-          _build(context, turned: scope.turned, index: scope.index),
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The texts, built once for a width and not on each frame while the
+        // pages turn, since measuring their words takes time.
+        final texts = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              header: true,
+              // The title is large already, so it grows only by half with
+              // the text size of the device.
+              child: OnboardingWords(
+                title,
+                style: theme.textTheme.displaySmall,
+                maxScaleFactor: 1.5,
+                width: constraints.maxWidth - 2 * _sides,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OnboardingWords(
+              text,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontSize: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              width: constraints.maxWidth - 2 * _sides,
+            ),
+          ],
+        );
+        if (scope == null) {
+          return _build(constraints, texts, turned: 0, index: 0);
+        }
+        return AnimatedBuilder(
+          animation: scope.controller,
+          child: texts,
+          builder: (context, texts) => _build(
+            constraints,
+            texts!,
+            turned: scope.turned,
+            index: scope.index,
+          ),
+        );
+      },
     );
   }
 
-  /// The page at [index] while the pages are [turned] away from it.
+  /// The page at [index] in [constraints], with [texts] below its cells,
+  /// while the pages are [turned] away from it.
   Widget _build(
-    BuildContext context, {
+    BoxConstraints constraints,
+    Widget texts, {
     required double turned,
     required int index,
   }) {
-    final theme = Theme.of(context);
     // The texts leave faster than the page, and fade as they go.
     final shown = (1 - turned.abs() * 1.6).clamp(0.0, 1.0);
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: IntrinsicHeight(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 280),
-                    child: ExcludeSemantics(
-                      child: _Cells(
-                        mirrored: index.isOdd,
-                        turned: turned,
-                        number: index + 1,
-                        symbol: symbol,
-                        icon: icon,
-                      ),
+    return SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: IntrinsicHeight(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 280),
+                  child: ExcludeSemantics(
+                    child: _Cells(
+                      mirrored: index.isOdd,
+                      turned: turned,
+                      number: index + 1,
+                      symbol: symbol,
+                      icon: icon,
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
-                  child: Opacity(
-                    opacity: shown,
-                    child: Transform.translate(
-                      offset: Offset(-turned * 56, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Semantics(
-                            header: true,
-                            child: Text(
-                              title,
-                              style: theme.textTheme.displaySmall,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            text,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 18,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(_sides, 8, _sides, 8),
+                child: Opacity(
+                  opacity: shown,
+                  child: Transform.translate(
+                    offset: Offset(-turned * 56, 0),
+                    child: texts,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class OnboardingWords extends StatelessWidget {
+  /// Creates the text.
+  const OnboardingWords(
+    this.text, {
+    this.style,
+    this.maxScaleFactor = double.infinity,
+    this.width,
+    super.key,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none,
+  /// the text is as the text around it, as the label of a button is in the
+  /// style that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  /// The width that the text has. Without it, the text takes the width
+  /// that its parent gives it, which a parent that asks for the size of
+  /// its children before it lays them out, such as [IntrinsicHeight], does
+  /// not tell: below such a parent, the text needs it.
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    if (width case final width?) return _within(context, width);
+    return LayoutBuilder(
+      builder: (context, constraints) => _within(context, constraints.maxWidth),
+    );
+  }
+
+  /// The text, as large as its words allow in the width [room].
+  Widget _within(BuildContext context, double room) {
+    // The style in which a Text paints: over that of the text around it,
+    // and bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+      maxLines: 1,
+    );
+    // The words of the text, between its white spaces, where a line may
+    // break: every one but a no-break space, which keeps the words around
+    // it together.
+    final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+    // How wide the longest word is in a font of [size].
+    double widestAt(double size) {
+      var widest = 0.0;
+      for (final word in words) {
+        painter
+          ..text = TextSpan(
+            text: word,
+            style: style.copyWith(fontSize: size),
+          )
+          ..layout();
+        if (painter.width > widest) widest = painter.width;
+      }
+      return widest;
+    }
+
+    // The size of a text of Flutter whose style gives none.
+    var size = style.fontSize ?? 14;
+    var widest = widestAt(size);
+    // In a few steps: the text size of a device may grow a small font by
+    // more than a large one.
+    for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+      // A little smaller than the width allows, so that the rounding of the
+      // layout breaks no word.
+      size *= room / widest * 0.98;
+      widest = widestAt(size);
+    }
+    painter.dispose();
+    return Text(
+      text,
+      style: style.copyWith(fontSize: size),
+      textScaler: scaler,
     );
   }
 }
@@ -3442,13 +3647,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  /// Calls the action of [step], and shows the next page once its future
-  /// completes, also when it fails: the error goes on to the handlers of
-  /// the errors of the app that nothing caught.
+  /// Calls the action of [step] with the context of the screen, and shows
+  /// the next page once its future completes, also when it fails: the error
+  /// goes on to the handlers of the errors of the app that nothing caught.
   Future<void> _run(OnboardingStep step) async {
     setState(() => _running = true);
     try {
-      await step.run();
+      await step.run(context);
     } finally {
       if (mounted) {
         setState(() => _running = false);
@@ -3543,7 +3748,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ? const SizedBox.shrink()
                             : TextButton(
                                 onPressed: onboardingStatus.complete,
-                                child: Text('Skip'),
+                                child: OnboardingWords('Skip'),
                               ),
                       ),
                     ),
@@ -3618,7 +3823,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               for (final other in withLater)
                                 TextButton(
                                   onPressed: _running ? null : _next,
-                                  child: Text(other.later!(context)),
+                                  child: OnboardingWords(other.later!(context)),
                                 ),
                               const SizedBox.shrink(),
                             ],
@@ -3649,7 +3854,7 @@ class _ButtonLabel extends StatelessWidget {
     alignment: Alignment.center,
     children: [
       // The label keeps its place, so that the button keeps its size.
-      Visibility.maintain(visible: !spins, child: Text(label)),
+      Visibility.maintain(visible: !spins, child: OnboardingWords(label)),
       if (spins)
         // In the colour that the button gives its label.
         SizedBox.square(

@@ -110,8 +110,8 @@ const _context = ModuleContext(
 );
 
 /// The files of flutter_core that the fixtures change: the Dart code, the
-/// pubspec, the README, and the native files with sockets. The Xcode project
-/// shows only its minimum iOS versions.
+/// pubspec, the README, `.gitignore`, and the native files with sockets.
+/// The Xcode project shows only its minimum iOS versions.
 bool _shownOfAppEntry(String path) =>
     path.startsWith('lib/') ||
     path.startsWith('test/') ||
@@ -125,6 +125,7 @@ bool _shownOfAppEntry(String path) =>
       AppEntryRole.gradleAppFile,
       AppEntryRole.xcodeProjectFile,
       AppEntryRole.readmeFile,
+      AppEntryRole.gitignoreFile,
     }.contains(path);
 
 /// The language version that `dart format` formats [app] with: the one of

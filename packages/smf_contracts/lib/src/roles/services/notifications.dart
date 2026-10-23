@@ -190,7 +190,9 @@ const notificationsRole = NotificationsRole._();
 /// ## Tests
 ///
 /// A call of `appNotifications` made before the first
-/// `initNotifications()` waits for it. A test gives `appNotifications.start()`
+/// `initNotifications()` waits for it in the zone it was made in. Code may
+/// have read `appNotifications` first anywhere, even in the body of an
+/// earlier widget test. A test gives `appNotifications.start()`
 /// a service of its own to script what a provider answers, and runs
 /// `initNotifications()` again to see what the next launch of the app
 /// finds. A test that brings the user back to the app may go through any
@@ -675,7 +677,10 @@ final class _NotificationsTemplate
   ///
   /// It may run again, so the variable is not final.
   @override
-  String _single(List<_Prefixed> all) {
+  String _single(
+    List<_Prefixed> all,
+    RoleHookInput<RoleImplementation> input,
+  ) {
     final (:implementation, :prefix) = all.single;
     final factory = implementation.factory.codeWith(prefix);
     final create = implementation.isAsync ? 'await $factory()' : '$factory()';

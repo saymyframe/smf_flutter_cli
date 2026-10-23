@@ -1,3 +1,49 @@
+=== .gitignore (flutter_core) ===
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
 === AGENTS.md (role:app_entry) ===
 # AGENTS.md
 
@@ -872,8 +918,17 @@ final class AppSessionController extends ChangeNotifier
   AppSession _session = const SignedOutSession();
   bool _disposed = false;
 
-  /// Completes when the app has started for the first time.
-  final Completer<void> _started = Completer<void>();
+  /// Whether the app has started for the first time.
+  bool _started = false;
+
+  /// Completes at the first start. Only the first call made before it waits
+  /// for it, and each later call waits for the call before it. That call
+  /// creates it, so the start completes it in the zone of the call: created
+  /// with the controller, it would complete in a microtask of the zone that
+  /// read [appSession] first, which may run none any more, as the fake time
+  /// of a widget test that is over before a later test starts the app in
+  /// real time.
+  Completer<void>? _untilStarted;
 
   /// The call that was made last, while a call is on its way: the next one
   /// waits for it. It is `null` when none is, and a call then awaits
@@ -946,7 +1001,7 @@ final class AppSessionController extends ChangeNotifier
     // The calls that were made before this start. The first start lets
     // them run once it has the user, and a later one waits for them.
     final earlier = _lastCall;
-    final first = !_started.isCompleted;
+    final first = !_started;
     if (!first) await earlier;
     unawaited(_userChanges?.cancel());
     _service = service;
@@ -966,7 +1021,10 @@ final class AppSessionController extends ChangeNotifier
       }
       await _signInAnonymously();
     }
-    if (!_started.isCompleted) _started.complete();
+    if (!_started) {
+      _started = true;
+      _untilStarted?.complete();
+    }
     if (first) await earlier;
   }
 
@@ -1100,7 +1158,8 @@ final class AppSessionController extends ChangeNotifier
     bool waitsForAnonymousUser = false,
   }) async {
     final earlier =
-        _lastCall ?? (_started.isCompleted ? null : _started.future);
+        _lastCall ??
+        (_started ? null : (_untilStarted ??= Completer<void>()).future);
     final done = Completer<void>();
     final own = _lastCall = done.future;
     if (earlier != null) await earlier;
@@ -2289,7 +2348,14 @@ const String _logo = 'lib/core/google_sign_in/assets/google_logo.png';
 
 /// The start of google_sign_in, which [googleCredential] waits for: the
 /// package is started once, before its first sign-in.
-Future<void>? _started;
+Future<void>? _start;
+
+/// Whether [_start] completed. A call after that does not wait for it
+/// again: a future that completed lets each call that awaits it go on in a
+/// microtask of the zone that started it, which may run none any more, as
+/// the fake time of a widget test that is over before a later test signs in
+/// in real time.
+bool _started = false;
 
 /// Asks Google for a credential with the sheet of Google sign-in, and
 /// returns it, or `null` when the user closed the sheet.
@@ -2309,7 +2375,10 @@ Future<void>? _started;
 Future<SignInCredential?> googleCredential() async {
   final GoogleSignInAccount account;
   try {
-    await (_started ??= GoogleSignIn.instance.initialize());
+    if (!_started) {
+      await (_start ??= GoogleSignIn.instance.initialize());
+      _started = true;
+    }
     account = await GoogleSignIn.instance.authenticate();
   } on GoogleSignInException catch (error) {
     switch (error.code) {

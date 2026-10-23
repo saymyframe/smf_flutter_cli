@@ -9,6 +9,7 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_contracts/smf_contracts.dart' show appEntryRole;
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
+import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:yaml/yaml.dart';
@@ -19,7 +20,10 @@ import 'package:yaml/yaml.dart';
 /// `runMatrix`. The tests, and the roles whose contract they check with
 /// every provider, are those of `smfAppTests` in
 /// `lib/matrix_app_tests.dart`, which the tests of the package check too. Any further argument names an app of the matrix, such as
-/// `go_router with layout`, and only the apps named are checked.
+/// `go_router with layout`, and only the apps named are checked. The matrix
+/// writes the values that the tests give an app into its `.env`, and runs
+/// `flutter test` with the arguments that the provider of the env role of
+/// the app needs; see `matrixEnv`.
 ///
 /// With `--every-module` before the directory, it checks only the apps with
 /// every module, one for each combination of the providers of the roles
@@ -82,8 +86,27 @@ import 'package:yaml/yaml.dart';
 /// that app of the matrix. With the start check, which runs the probes of
 /// the tests of the app on a device, it adds the tests of this tool with a
 /// probe that apply to the app too, such as the walk of its routes; see
-/// `appTestsFor`. Without `--app`, a test that needs an app of the matrix,
-/// such as one that generates files, fails.
+/// `appTestsFor`. Next to the list of the probes, it writes what
+/// `.github/scripts/start_app.sh`, which starts the app on a device, reads:
+/// the answers of CI that the probes ask for, `startAnswersFile`, and the
+/// arguments of the `flutter` tool that build the app with its values, from
+/// the provider of the env role of the app, `startBuildArgumentsFile`.
+/// Without `--app`, a test that needs an app of the matrix, such as one
+/// that generates files, fails, and the start check gets no probes, no
+/// answers and no build arguments.
+///
+/// With `--env-values` and a file after `--app` and the other options of
+/// `--add-app-tests`, it writes the values of that file, lines `KEY=value`
+/// in the forms of a value of `.env`, into the lines of `.env` of the app
+/// that have no value yet, such as the public key of a service of the
+/// project of CI, which CI keeps in a secret; see `addAppTestsTo`. It names
+/// the keys, and prints no value but in a job of GitHub Actions, where it
+/// first prints `::add-mask::<value>` for each value of the file, as it
+/// reads it, which the runner takes and never shows: so the values are
+/// hidden in the rest of the log of the job. Without `--app`, the build of
+/// the app would get no arguments that give it the values, so the tool
+/// refuses `--env-values` then. Of the values that the tests give an app of
+/// the matrix in its runs, it writes none.
 Future<void> main(List<String> given) async {
   if (given case ['--plan', ...final options]) {
     exit(await printMatrixPlan(smfModules, options, native: appEntryRole));
@@ -103,6 +126,7 @@ Future<void> main(List<String> given) async {
       modules: smfModules,
       packages: _packagesOf(smfModules),
       apps: () async => (await matrixOf(smfModules)).apps,
+      env: matrixEnv,
     );
     stdout.writeln(jsonEncode(report));
     return;
@@ -113,7 +137,21 @@ Future<void> main(List<String> given) async {
       final NamedEveryModuleApp named => named,
       _ => null,
     };
-    final given = withoutExternalSteps ? rest.skip(1).toList() : rest;
+    var given = withoutExternalSteps ? rest.skip(1).toList() : rest;
+    String? envValues;
+    if (given case ['--env-values', final file, ...final after]) {
+      envValues = file;
+      given = after;
+    }
+    // The values reach the build of the app only through the arguments of
+    // its provider of the env role, which come from the app of --app.
+    if (envValues != null && named == null) {
+      _usage(
+        '--env-values goes with --app: without the app of the matrix, the '
+        'start check gets no arguments that build the app with its values, so '
+        'the values of .env would not reach the app.',
+      );
+    }
     // --without-external-steps tells which app with every module --app
     // names, so it goes only with --app.
     if (given case [final app, ...final directories]
@@ -126,6 +164,7 @@ Future<void> main(List<String> given) async {
           directories,
           named,
           withoutExternalSteps: withoutExternalSteps,
+          envValues: envValues,
         ),
       );
     }
@@ -169,6 +208,7 @@ Future<void> main(List<String> given) async {
     smfModules,
     directory: rest.first,
     appTests: await smfAppTests(),
+    env: matrixEnv,
     selection: MatrixSelection(
       only: rest.length > 1 ? rest.skip(1).toSet() : null,
       everyModule: everyModule,
@@ -201,8 +241,8 @@ Never _usage([String? problem]) {
     ..writeln('       dart run tool/matrix.dart --app-tests [--json]')
     ..writeln(
       '       dart run tool/matrix.dart --add-app-tests '
-      '[--without-external-steps --app <name> | --app <name>] <app> '
-      '<app tests>...',
+      '[--without-external-steps --app <name> | --app <name>] '
+      '[--env-values <file>] <app> <app tests>...',
     )
     ..writeln(
       '<c>: pairwise (by default), 3-wise or all, the combinations of the '
@@ -239,12 +279,14 @@ Future<int> _create(
 /// of that name that it was generated as, one of those without the modules
 /// whose steps need an external service with [withoutExternalSteps], with
 /// the tests of the probes of the roles of the app when the tests of
-/// [directories] run them; returns the exit code.
+/// [directories] run them, and with the values of the file [envValues] in
+/// its `.env`, if it is given; returns the exit code.
 Future<int> _addAppTests(
   String app,
   List<String> directories,
   NamedEveryModuleApp? named, {
   required bool withoutExternalSteps,
+  required String? envValues,
 }) async {
   final appTests = (await smfAppTests()).tests;
   var tests = <MatrixAppTest>[];
@@ -286,6 +328,16 @@ Future<int> _addAppTests(
     GeneratedApp(name: name, path: p.absolute(app)),
     tests,
     app: matrixApp,
+    env: matrixEnv,
+    envValues: envValues == null
+        ? null
+        : (
+            path: envValues,
+            // The runner of GitHub Actions takes the masks of the values as
+            // commands, and hides the values in the rest of the log of the
+            // job.
+            mask: Platform.environment['GITHUB_ACTIONS'] == 'true',
+          ),
   );
   stdout.writeln(output.trim());
   await Future.wait<void>([stdout.flush(), stderr.flush()]);

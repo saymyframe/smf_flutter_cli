@@ -25,7 +25,12 @@ const double _height = 4000;
 /// Starts the app on a tall surface and goes to the settings screen, the
 /// location of the route that the provider of the role names, from the
 /// navigator of the page that the user sees.
-Future<void> openSettings(WidgetTester tester) async {
+///
+/// It waits for the screen to settle, or with [settle] `false` shows frames
+/// for a while instead ([showFrames]), so that an entry that keeps moving,
+/// such as a spinner that never stops, fails the expectation of a test
+/// rather than time out.
+Future<void> openSettings(WidgetTester tester, {bool settle = true}) async {
   tester.view
     ..physicalSize = const Size(800, _height)
     ..devicePixelRatio = 1;
@@ -34,7 +39,20 @@ Future<void> openSettings(WidgetTester tester) async {
   appRouter
       .navigatorOf(tester.element(find.byType(Navigator).last))
       .go(settingsLocation);
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await showFrames(tester);
+  }
+}
+
+/// Shows frames for two seconds of the fake time of the test, enough for a
+/// transition or the ink of a tap to end, without waiting for the screen to
+/// settle, which a spinner that never stops would keep from happening.
+Future<void> showFrames(WidgetTester tester) async {
+  for (var frame = 0; frame < 20; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 /// Starts the app as on a device, with what its main() puts around it, and

@@ -26,6 +26,7 @@ workspace:
   - packages/smf_modules/smf_bloc
   - packages/smf_modules/smf_bottom_tabs
   - packages/smf_modules/smf_contribution_engine
+  - packages/smf_modules/smf_dart_define
   - packages/smf_modules/smf_event_bus
   - packages/smf_modules/smf_firebase_analytics
   - packages/smf_modules/smf_firebase_auth
@@ -41,6 +42,8 @@ workspace:
   - packages/smf_modules/smf_local_notifications
   - packages/smf_modules/smf_material_theme
   - packages/smf_modules/smf_onboarding
+  - packages/smf_modules/smf_paywall
+  - packages/smf_modules/smf_revenuecat
   - packages/smf_modules/smf_riverpod
   - packages/smf_modules/smf_settings
   - packages/smf_modules/smf_shared_preferences

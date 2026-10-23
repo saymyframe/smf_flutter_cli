@@ -243,6 +243,55 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Signs in with Google first in a zone whose microtasks run only while
+/// the script flushes them, as those of a widget test in fake time do, and
+/// then, once that zone runs none any more, as when the test is over,
+/// signs in again in the root zone, as a later test does in real time.
+const _otherZoneScript = '''
+import 'dart:async';
+import 'dart:isolate';
+
+import 'package:contract_app/core/auth/app_session.dart';
+import 'package:contract_app/core/google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  final result = <String, Object?>{};
+  final microtasks = <void Function()>[];
+  final zone = Zone.current.fork(
+    specification: ZoneSpecification(
+      scheduleMicrotask: (self, parent, zone, microtask) =>
+          microtasks.add(microtask),
+    ),
+  );
+  googleAnswers
+    ..add(const GoogleAnswer('token-1'))
+    ..add(const GoogleAnswer('token-2'));
+
+  String? first;
+  zone.run(
+    () => unawaited(
+      googleCredential().then(
+        (credential) => first = (credential! as IdTokenCredential).idToken,
+      ),
+    ),
+  );
+  while (microtasks.isNotEmpty) {
+    microtasks.removeAt(0)();
+  }
+  result['the first sign-in'] = first;
+
+  result['a sign-in after it'] = await Future.any([
+    googleCredential().then(
+      (credential) => (credential! as IdTokenCredential).idToken,
+    ),
+    Future<String>.delayed(const Duration(seconds: 1), () => 'still waiting'),
+  ]);
+  result['starts'] = googleStarts.length;
+  port.send(result);
+}
+''';
+
 void main() {
   const module = GoogleSignInModule();
 
@@ -749,15 +798,28 @@ void main() {
 
   group('the function of the way to sign in', () {
     late Map<Object?, Object?> calls;
+    late Map<Object?, Object?> otherZone;
 
     setUpAll(() async {
       final result = await _resultOf(const [GoogleSignInModule.id]);
       final app = await DartApp.write(result.app!);
       try {
         calls = (await app.run(_script))! as Map<Object?, Object?>;
+        otherZone = (await app.run(_otherZoneScript))! as Map<Object?, Object?>;
       } finally {
         app.delete();
       }
+    });
+
+    test(
+        'waits for the start of google_sign_in in the zone of each call: a '
+        'widget test in fake time may sign in first, before a later test '
+        'signs in in real time', () {
+      expect(otherZone, {
+        'the first sign-in': 'token-1',
+        'a sign-in after it': 'token-2',
+        'starts': 1,
+      });
     });
 
     test(

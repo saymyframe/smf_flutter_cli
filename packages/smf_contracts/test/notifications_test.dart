@@ -136,12 +136,15 @@ class ValueNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
 ''';
 
 /// A stand-in for the part of Flutter's widgets library that the files of
-/// the role use: what that library exports of the foundation library, and
-/// the binding with the observers of the lifecycle of the app.
-/// `lifecycle()` puts the app into a state, and `resumeApp()` stands for
-/// the user who comes back to the app.
+/// the role use: what that library exports of the foundation library, the
+/// binding with the observers of the lifecycle of the app, and the context
+/// that the action of the step of the onboarding takes. `lifecycle()` puts
+/// the app into a state, and `resumeApp()` stands for the user who comes
+/// back to the app.
 const _widgets = '''
 export 'foundation.dart' show ChangeNotifier, Listenable, ValueNotifier, VoidCallback;
+
+abstract class BuildContext {}
 
 enum AppLifecycleState { detached, resumed, inactive, hidden, paused }
 
@@ -792,6 +795,39 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['the permission'] = appNotifications.permission.value.name;
   failures.clear();
   await appNotifications.show(const AppNotification(id: 2, title: 'Later'));
+  result['the calls'] = takeCalls();
+  port.send(result);
+}
+''';
+
+/// Shows a notification first in a zone that runs no microtask any more, as
+/// the fake time of a widget test that is over does, a call that never goes
+/// on, and then, in the root zone, shows another one and starts the
+/// notifications, as a later test does in real time. The start fails if
+/// [startFails].
+String _createdElsewhere({required bool startFails}) => '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  runZoned(
+    () => unawaited(
+      appNotifications.show(const AppNotification(id: 7, title: 'Dead')),
+    ),
+    zoneSpecification: ZoneSpecification(
+      scheduleMicrotask: (self, parent, zone, microtask) {},
+    ),
+  );
+  final early = appNotifications
+      .show(const AppNotification(id: 1, title: 'Early'))
+      .then((_) => 'completed', onError: (Object error) => 'failed: \$error');
+  if ($startFails) failures['areEnabled'] = StateError('The platform broke.');
+  try {
+    await initNotifications();
+  } on StateError {
+    // The call made before the start fails with the same error.
+  }
+  result['the call made before the start'] = await Future.any([
+    early,
+    Future<String>.delayed(const Duration(seconds: 1), () => 'still waiting'),
+  ]);
   result['the calls'] = takeCalls();
   port.send(result);
 }
@@ -1592,6 +1628,28 @@ void main() {
       });
 
       test(
+          'completes or fails a call made before the first start in its own '
+          'zone, wherever the controller was first read or called: a widget '
+          'test in fake time may call it before a later test starts the app '
+          'in real time', () async {
+        expect(
+          await app.run('$_notes${_createdElsewhere(startFails: false)}'),
+          {
+            'the call made before the start': 'completed',
+            'the calls': ['areEnabled', 'show 1'],
+          },
+        );
+        expect(
+          await app.run('$_notes${_createdElsewhere(startFails: true)}'),
+          {
+            'the call made before the start':
+                'failed: Bad state: The platform broke.',
+            'the calls': ['areEnabled'],
+          },
+        );
+      });
+
+      test(
           'leaves an error of the service on the taps or on a resume to the '
           'handler of the uncaught errors, and goes on', () async {
         expect(await app.run('$_notes$_errors'), {
@@ -1809,7 +1867,8 @@ void main() {
       );
 
       // The functions of the file of the step, which the rule of the role
-      // reads: what each returns, and that neither takes an argument.
+      // reads: what each returns, and that the condition takes no argument
+      // and the action the context of the onboarding screen.
       final rendered = await _rendered(present: {onboardingScreenRole});
       final functions = _functionsOf(
         parseString(content: rendered.files[NotificationsRole.stepFile]!).unit,
@@ -1822,7 +1881,7 @@ void main() {
         },
         {
           'notificationsStepShows': 'bool ()',
-          'allowNotifications': 'Future<void> ()',
+          'allowNotifications': 'Future<void> (BuildContext _)',
         },
       );
       final index = DartFileIndex(
@@ -1833,6 +1892,16 @@ void main() {
               name: name,
               kind: DeclarationKind.function,
               type: '${function.returnType}',
+              parameters: [
+                for (final parameter
+                    in function.functionExpression.parameters!.parameters)
+                  IndexedParameter(
+                    parameter.name!.lexeme,
+                    kind: parameter.isRequiredPositional
+                        ? ParameterKind.requiredPositional
+                        : ParameterKind.optionalNamed,
+                  ),
+              ],
             ),
         ],
       );

@@ -25,6 +25,7 @@
 // which runs in every app that this test runs in. The tests of the file
 // run in their order, and the first looks at the app as the start-up left
 // it, before any request. Each expectation gives its reason.
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/notifications/app_notifications.dart';
 import 'package:{{app_name}}/core/onboarding/onboarding_steps.dart';
@@ -42,9 +43,18 @@ Future<void> _startWith(WidgetTester tester, ScriptedNotifications service) =>
     });
 
 /// Runs the action of the step in real time, as the button of the step
-/// does, and completes once its future completed.
-Future<void> _runAction(WidgetTester tester) =>
-    inRealTime(tester, 'the action of the step', stepAction);
+/// does, and completes once its future completed. The action gets the
+/// context of a widget that the test shows, as the button gives it the
+/// context of the onboarding screen.
+Future<void> _runAction(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  final context = tester.element(find.byType(SizedBox));
+  await inRealTime(
+    tester,
+    'the action of the step',
+    () => stepAction(context),
+  );
+}
 
 /// Runs the action of the step as [_runAction] does, and returns the calls
 /// that it made to [service], those that it starts without waiting for

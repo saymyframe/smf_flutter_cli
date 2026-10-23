@@ -2296,6 +2296,43 @@ void main() {
       );
     });
 
+    test(
+        'a pattern of .gitignore is an error of the provider of the app '
+        'entry whose .gitignore lacks the tag of the socket', () {
+      final store = TestModule(
+        'store',
+        contributions: [
+          AppEntryRole.gitignore.entry('/store/', 'What the store keeps'),
+        ],
+      );
+      final withoutTag = {...entryFiles}..remove(AppEntryRole.gitignoreFile);
+
+      expect(
+        _messages(
+          _validate([
+            scaffold(
+              bricks: false,
+              contributions: [
+                BrickContribution(bundle('entry', files: withoutTag)),
+                fallbackBrick(),
+              ],
+            ),
+            store,
+          ]),
+        ),
+        [
+          equals(
+            'scaffold: store contributes to the socket app_entry.gitignore, '
+            'but no template of the app has its tag smf_app_entry__gitignore, '
+            'so what they contribute would be lost.',
+          ),
+        ],
+      );
+      // Every module may contribute a pattern, since the role is open to
+      // all, and a provider with the tag takes it.
+      expect(_validate([entry, store]).issues, isEmpty);
+    });
+
     test('a required value of a module is an error of the module', () {
       const version = SocketRef<ValueSocket<String>>.module(
         ModuleId('lib_x'),

@@ -77,13 +77,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  /// Calls the action of [step], and shows the next page once its future
-  /// completes, also when it fails: the error goes on to the handlers of
-  /// the errors of the app that nothing caught.
+  /// Calls the action of [step] with the context of the screen, and shows
+  /// the next page once its future completes, also when it fails: the error
+  /// goes on to the handlers of the errors of the app that nothing caught.
   Future<void> _run(OnboardingStep step) async {
     setState(() => _running = true);
     try {
-      await step.run();
+      await step.run(context);
     } finally {
       if (mounted) {
         setState(() => _running = false);
@@ -178,7 +178,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ? const SizedBox.shrink()
                             : TextButton(
                                 onPressed: onboardingStatus.complete,
-                                child: Text({{{text_skip}}}),
+                                child: OnboardingWords({{{text_skip}}}),
                               ),
                       ),
                     ),
@@ -253,7 +253,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               for (final other in withLater)
                                 TextButton(
                                   onPressed: _running ? null : _next,
-                                  child: Text(other.later!(context)),
+                                  child: OnboardingWords(other.later!(context)),
                                 ),
                               const SizedBox.shrink(),
                             ],
@@ -284,7 +284,7 @@ class _ButtonLabel extends StatelessWidget {
     alignment: Alignment.center,
     children: [
       // The label keeps its place, so that the button keeps its size.
-      Visibility.maintain(visible: !spins, child: Text(label)),
+      Visibility.maintain(visible: !spins, child: OnboardingWords(label)),
       if (spins)
         // In the colour that the button gives its label.
         SizedBox.square(

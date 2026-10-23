@@ -27,6 +27,7 @@ import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -40,6 +41,8 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_paywall/smf_paywall.dart';
+import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -80,6 +83,9 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeSignInMethodModule(),
       const FakeNotificationsModule(),
       const FakePushModule(),
+      const FakePurchasesModule(),
+      const FakeEnvModule(),
+      const FakeEnvUserModule(),
       const FakeRegistrationsModule(),
       const FakeParentModule(),
       const FakeChildModule(),
@@ -129,6 +135,9 @@ List<ModuleId> everyFixture({
       FakeSignInMethodModule.id,
       FakeNotificationsModule.id,
       FakePushModule.id,
+      FakePurchasesModule.id,
+      FakeEnvModule.id,
+      FakeEnvUserModule.id,
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
@@ -186,10 +195,21 @@ List<ModuleId> everyFixture({
 /// the other modules. Then comes local_notifications, the provider of the
 /// notifications role that the CLI has, for the app test that it keeps and
 /// for the test of that role that the CLI keeps, whose entry the settings
-/// screen shows too. Last comes Firebase Cloud Messaging, the provider of
+/// screen shows too. Then comes Firebase Cloud Messaging, the provider of
 /// the push role that the CLI has, for the app test that it keeps and for
 /// the test of that role that the CLI keeps, which run there next to the
 /// other Firebase modules and show a message through those notifications.
+/// Last come dart_define, the provider of the env role that the CLI has,
+/// and RevenueCat, the provider of the purchases role that the CLI has,
+/// which reads its keys from the values of .env, for the app test that it
+/// keeps and for the tests of that role that the CLI keeps, which run
+/// there with the users of the session of Firebase Authentication and
+/// whose entry that restores purchases the settings screen shows too, and
+/// the paywall of the CLI, for the app tests that it keeps, which buy over
+/// the purchases of RevenueCat: that of the paywall, whose entry of the
+/// subscription the settings screen shows below the entries of the other
+/// features, and that of its step of the onboarding, which comes after the
+/// steps of the fixture steps and of the notifications role.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -232,4 +252,7 @@ List<SmfModule> severalProvidersModules() => const [
       SignInModule(),
       LocalNotificationsModule(),
       FirebaseMessagingModule(),
+      DartDefineModule(),
+      RevenueCatModule(),
+      PaywallModule(),
     ];

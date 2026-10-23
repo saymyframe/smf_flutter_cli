@@ -6,12 +6,15 @@ import 'package:fake_infra/bundles/fake_analytics_bundle.dart';
 import 'package:fake_infra/bundles/fake_auth_bundle.dart';
 import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
+import 'package:fake_infra/bundles/fake_env_bundle.dart';
+import 'package:fake_infra/bundles/fake_env_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
 import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
 import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_bundle.dart';
 import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
+import 'package:fake_infra/bundles/fake_purchases_bundle.dart';
 import 'package:fake_infra/bundles/fake_push_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
@@ -41,6 +44,10 @@ const _materialDelegate = Fragment(
 /// [FakeOverlapModule] both add.
 const _readmeSection = 'The app has something in every socket of its entry, '
     'with `code` and a [link](https://example.com).';
+
+/// The comment of the pattern of `.gitignore` that [FakeSocketsModule] and
+/// [FakeOverlapModule] both add.
+const _logsComment = 'The logs of the fixture';
 
 /// The note for coding agents that [FakeSocketsModule] and
 /// [FakeOverlapModule] both add.
@@ -208,6 +215,13 @@ final class FakeSocketsModule extends SmfModule {
           '1.9.1',
         ),
         AppEntryRole.androidCoreLibraryDesugaring.value('2.1.4'),
+        // .gitignore has the patterns in their order, whatever the order of
+        // their contributions.
+        AppEntryRole.gitignore.entry(
+          '/fixture.local',
+          'The values of the fixture that each developer keeps',
+        ),
+        AppEntryRole.gitignore.entry('*.fixture.log', _logsComment),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
         AppEntryRole.agentSections.entry(
@@ -219,10 +233,11 @@ final class FakeSocketsModule extends SmfModule {
 
 /// A module that puts into the sockets of the app entry some of the keys
 /// and values that [FakeSocketsModule] does, so an app with both merges
-/// them: equal permissions, meta-data, plist strings, entitlements and
-/// README sections agree, the plist arrays of Info.plist and of the
-/// entitlements are united, the highest versions win, those of Gradle and
-/// of the library of core library desugaring too, the delegate of the
+/// them: equal permissions, meta-data, plist strings, entitlements,
+/// patterns of `.gitignore` and README sections agree, the plist arrays of
+/// Info.plist and of the entitlements and the comments of a pattern of
+/// `.gitignore` are united, the highest versions win, those of Gradle and of
+/// the library of core library desugaring too, the delegate of the
 /// localizations appears once, and so do the note for coding agents and the
 /// step by hand that both have. It puts nothing into the sockets of code of
 /// the native files, such as the components of the Android application,
@@ -284,6 +299,12 @@ final class FakeOverlapModule extends SmfModule {
           '1.8.0',
         ),
         AppEntryRole.androidCoreLibraryDesugaring.value('2.1.3'),
+        AppEntryRole.gitignore.entry('*.fixture.log', _logsComment),
+        // The pattern of fake_sockets in other words: .gitignore has both.
+        AppEntryRole.gitignore.entry(
+          '/fixture.local',
+          'What the fixture keeps on one machine',
+        ),
         AppEntryRole.readmeSections.entry('Fixture', _readmeSection),
         AppEntryRole.agentSections.entry('Fixture', AgentNote(_agentNote)),
       ];
@@ -699,9 +720,12 @@ final class FakePreferencesUserModule extends SmfModule {
 /// A module with two steps of the onboarding, which it gives the onboarding
 /// screen role in an app with that role: `ask`, with the button `later`
 /// and a function that says whether the onboarding shows it, and then
-/// `confirm`, without either. Their actions note each call, and that of
-/// `ask` waits for what a test holds it back with and fails when a test
-/// says so. A test also says whether the onboarding shows `ask`.
+/// `confirm`, without either. Their actions note each call. That of `ask`
+/// fails when a test says so, and otherwise shows a screen of its own over
+/// the onboarding, as a route without a page on the navigator at the root
+/// of the app, which it finds from the context of the onboarding screen.
+/// It waits until that screen is closed, and then for what a test holds it
+/// back with. A test also says whether the onboarding shows `ask`.
 ///
 /// It uses the localization role: the texts of the steps are texts of the
 /// module, in English and in Ukrainian, but for the text of `confirm`,
@@ -1064,6 +1088,205 @@ final class FakePushModule extends SmfModule {
             init: FactoryRef('openFixturePush', import: _file),
           ),
         ),
+      ];
+}
+
+/// A provider of the purchases role, which has at most one provider, whose
+/// service opens asynchronously, as one does that asks the store for what
+/// it keeps, and each of whose calls takes a turn of the event loop. Its
+/// offer has three plans: one that renews each month, with a free week for
+/// a user who never bought it, one that renews each year, and one that the
+/// user pays for once. A purchase by a user without premium access
+/// completes at once and succeeds.
+///
+/// It keeps in memory what each user of the app bought, and the user whom
+/// the device has, where they stand for the backend of a provider and the
+/// storage of the device, which each start of the app finds as the last
+/// one left them. It keeps the purchases of each user as the role says,
+/// with the user of the device: `identify(null)` after another user starts
+/// a new user of the device with nothing bought, a user that no
+/// identification named before takes over the purchases of the user of the
+/// device, and a restore gives the user who is identified what was bought
+/// on the device.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appPurchases`, which follows the session of
+/// an app with sign-in.
+final class FakePurchasesModule extends SmfModule {
+  /// Creates the module.
+  const FakePurchasesModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_purchases');
+
+  static const _file = ImportRef.app(
+    'core/fixture_purchases/fixture_purchases.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Purchases in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(purchasesRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakePurchasesBundle),
+        purchasesRole.data(
+          const RoleImplementation.async(
+            type: TypeRef('FixturePurchases', import: _file),
+            init: FactoryRef('openFixturePurchases', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the env role with code of its own: `AppEnv` keeps in a
+/// constant map what a command of the `flutter` tool read from `.env`,
+/// given `--dart-define-from-file .env` (the flag and the path as two
+/// arguments, which it gives the role), and a static getter of each key
+/// returns its value from the map, or `null` while it is empty or missing.
+///
+/// Its render hook writes the getters and the map for the keys of the app,
+/// and an app without keys has the class without members. The template of
+/// the role does the rest, whichever module provides it: `.env`,
+/// `.env.example` and the entry of `.env` in `.gitignore`.
+final class FakeEnvModule extends SmfModule {
+  /// Creates the module.
+  const FakeEnvModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_env');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'The values of .env in a constant map (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [_FakeEnvProvider()],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeEnvBundle),
+        envRole.data(
+          const EnvToolArguments([
+            '--dart-define-from-file',
+            EnvRole.dotEnvFile,
+          ]),
+        ),
+      ];
+}
+
+/// Renders the members of `AppEnv` of [FakeEnvModule] for the keys of the
+/// app.
+final class _FakeEnvProvider extends RoleProvider<EnvData> {
+  const _FakeEnvProvider();
+
+  @override
+  Role<EnvData> get role => envRole;
+
+  @override
+  RoleOutput render(RoleHookInput<EnvData> input) {
+    final keys = envRole.keysIn(input);
+    return RoleOutput(
+      vars: {
+        'fixture_env_members': Fragment(
+          keys.isEmpty
+              ? ''
+              : [
+                  for (final key in keys) _getterOf(key),
+                  _valuesOf(keys),
+                  _valueOf,
+                ].join('\n\n'),
+        ),
+      },
+    );
+  }
+
+  /// The getter of [key], which reads its value from the map.
+  static String _getterOf(AppEnvKey key) {
+    final name = SmfNames.dartString(key.name);
+    return '  /// The value of `${key.name}`.\n'
+        '  static String? get ${key.getter} => _valueOf($name);';
+  }
+
+  /// The map of what the command that built the app read from `.env` for
+  /// [keys]: an empty value as an empty text, and no entry for a key that
+  /// `.env` lacks, which the command did not define.
+  static String _valuesOf(List<AppEnvKey> keys) => [
+        _valuesDoc,
+        '  static const Map<String, String> _values = {',
+        for (final name in [
+          for (final key in keys) SmfNames.dartString(key.name),
+        ]) ...[
+          '    if (bool.hasEnvironment($name))',
+          '      $name: String.fromEnvironment($name),',
+        ],
+        '  };',
+      ].join('\n');
+
+  /// The doc of the map of the values.
+  static const _valuesDoc = '''
+  /// What the command that built the app read from `.env`, by the keys of
+  /// the app: an empty value as an empty text, and no entry for a key that
+  /// `.env` lacks.''';
+
+  /// The function that the getters read their values with.
+  static const _valueOf = '''
+  /// The value of [key], or `null` while `.env` leaves it empty or lacks
+  /// it.
+  static String? _valueOf(String key) {
+    final value = _values[key];
+    return value == null || value.isEmpty ? null : value;
+  }''';
+}
+
+/// A module that reads three values of `.env`, which it gives the env role
+/// as keys in an app with that role: `FAKE_ENV_USER_FIRST`,
+/// `FAKE_ENV_USER_SECOND` and `FAKE_ENV_USER_THIRD`. Its brick reads each
+/// through the variable of its key ([EnvRole.varsOf]), so it reads `null`
+/// in an app without the role.
+final class FakeEnvUserModule extends SmfModule {
+  /// Creates the module.
+  const FakeEnvUserModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_env_user');
+
+  /// The keys of the module, in their order.
+  static const keys = [
+    EnvKey(
+      'FAKE_ENV_USER_FIRST',
+      description: 'The first value of the fixture',
+    ),
+    EnvKey(
+      'FAKE_ENV_USER_SECOND',
+      description: 'The second value of the fixture',
+    ),
+    EnvKey(
+      'FAKE_ENV_USER_THIRD',
+      description: 'The third value of the fixture',
+    ),
+  ];
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Three values of .env (fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {envRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          fakeEnvUserBundle,
+          vars: envRole.varsOf(id, keys),
+        ),
+        for (final key in keys) envRole.data(key),
       ];
 }
 

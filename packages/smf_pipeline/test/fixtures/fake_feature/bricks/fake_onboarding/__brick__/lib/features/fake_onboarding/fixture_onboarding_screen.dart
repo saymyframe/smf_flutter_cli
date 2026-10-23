@@ -46,13 +46,13 @@ class _FixtureOnboardingScreenState extends State<FixtureOnboardingScreen> {
     );
   }
 
-  /// Calls the action of [step] and shows the next page once its future
-  /// completes, also when it fails: the error goes on to the handlers of
-  /// the uncaught errors of the app.
+  /// Calls the action of [step] with the context of the screen and shows
+  /// the next page once its future completes, also when it fails: the error
+  /// goes on to the handlers of the uncaught errors of the app.
   Future<void> _run(OnboardingStep step) async {
     setState(() => _running = true);
     try {
-      await step.run();
+      await step.run(context);
     } finally {
       if (mounted) {
         setState(() => _running = false);

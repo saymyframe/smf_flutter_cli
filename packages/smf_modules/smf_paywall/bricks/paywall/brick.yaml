@@ -1,0 +1,15 @@
+name: paywall
+description: "The look of the paywall of an SMF app: the views of the paywall and of the subscription, their widgets, the card in the colours of Say My Frame, the texts that depend on a plan, the links of the paywall, the values of its state, and the function of the guard of the routes."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: app_symbol, the symbol of the app in its cell as a Dart
+# string, app_number, the number in that cell, terms_key and privacy_key,
+# the names of the keys of the module in .env, text_<name> for each text of
+# the module, the code that reads it, and env_<key> for each key of the
+# module, the code that reads its value.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

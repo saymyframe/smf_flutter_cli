@@ -483,6 +483,31 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router that pops the routes without a page from its root
+  /// navigator whenever the guards of the routes answer nothing to a
+  /// notification, rather than leaving them as they are: a dialog, or the
+  /// screen that the action of an onboarding step shows over the
+  /// onboarding, goes away when a guard notifies, though no page changed.
+  static const routerDroppingRoutesWithoutPage = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_drops_routes_without_page'),
+    'A plain navigator that drops the routes without a page when a guard '
+    'notifies (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    switch (_guards.changed(_pages)) {\n'
+            '      case null:\n'
+            '        break;\n',
+        '    switch (_guards.changed(_pages)) {\n'
+            '      case null:\n'
+            '        _navigatorKey.currentState?.popUntil(\n'
+            '          (route) => route.settings is Page<Object?>,\n'
+            '        );\n',
+      ),
+    ],
+  );
+
   /// The fixture events whose `on<T>()` gives a listener the events of
   /// every type, cast to its type, rather than only those of its type: an
   /// event of another type reaches the listener as an error.
@@ -728,6 +753,28 @@ final class BrokenModule extends SmfModule {
       (
         '  await _answer();\n  if (_address == null)',
         '  await _answer();\n  _address = null;\n  if (_address == null)',
+      ),
+    ],
+  );
+
+  /// The fixture purchases whose service keeps the purchases in a field of
+  /// its own, for every user together, rather than for each user in what
+  /// stands for the backend of the provider, as a provider does that keeps
+  /// them only in memory and gives every user of the app what any of them
+  /// bought: the next user of the device has the purchases of the one who
+  /// signed out, and the next start of the app has none.
+  static const purchasesKeptByService = BrokenModule._(
+    FakePurchasesModule(),
+    ModuleId('broken_purchases_kept_by_service'),
+    'Purchases that the service keeps for every user together (fixture)',
+    'lib/core/fixture_purchases/fixture_purchases.dart',
+    [
+      (
+        '  Map<String, _Purchase> _of(String user) =>\n'
+            '      _bought.putIfAbsent(user, () => {});\n',
+        '  Map<String, _Purchase> _of(String user) => _kept;\n'
+            '\n'
+            '  final Map<String, _Purchase> _kept = {};\n',
       ),
     ],
   );
@@ -982,6 +1029,90 @@ final class _BrokenDiProvider extends DiProvider {
         'registrations': Fragment(
           lines.join('\n'),
           imports: registrations.imports,
+        ),
+      },
+      files: output.files,
+    );
+  }
+}
+
+/// A provider of the env role with one known bug: the fixture values of
+/// `.env`, whose `AppEnv` returns the value of a key as the command that
+/// built the app read it, so a key that `.env` leaves empty is an empty
+/// text rather than `null`. A key that `.env` lacks is still `null`.
+///
+/// `AppEnv` still declares a static getter for every key, as the rule
+/// `env.keys_rendered` of the role wants, and the app analyzes: only a
+/// running app shows the bug.
+final class BrokenEnvModule extends SmfModule {
+  /// Creates the module.
+  const BrokenEnvModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_env_keeps_empty_values');
+
+  /// The fixture values of `.env`, whose bricks this module contributes.
+  static const _fixture = FakeEnvModule();
+
+  @override
+  ModuleDescriptor get descriptor {
+    final fixture = _fixture.descriptor;
+    return ModuleDescriptor(
+      id: id,
+      description: 'The values of .env, empty ones as empty texts (fixture)',
+      kind: fixture.kind,
+      providers: [
+        // The fixture provides only the env role.
+        _BrokenEnvProvider(
+          fixture.providers.single as RoleProvider<EnvData>,
+        ),
+      ],
+    );
+  }
+
+  @override
+  List<Contribution> contribute(ModuleContext context) =>
+      _fixture.contribute(context);
+}
+
+/// Renders the members of `AppEnv` as the fixture values of `.env` do, but
+/// with a function that returns a value as the command read it.
+final class _BrokenEnvProvider extends RoleProvider<EnvData> {
+  const _BrokenEnvProvider(this._fixture);
+
+  /// The provider of the fixture values of `.env`.
+  final RoleProvider<EnvData> _fixture;
+
+  /// What the function of the getters of the fixture returns, which keeps
+  /// an empty value from them.
+  static const _checked =
+      '    return value == null || value.isEmpty ? null : value;\n';
+
+  @override
+  Role<EnvData> get role => envRole;
+
+  /// The output of [_fixture], whose function of the getters returns the
+  /// value as it is. The output stays as it is in an app without keys,
+  /// whose `AppEnv` has no members. Throws a [StateError] when [_fixture]
+  /// renders the function otherwise, so the app would not have the bug.
+  @override
+  RoleOutput render(RoleHookInput<EnvData> input) {
+    final output = _fixture.render(input);
+    if (envRole.keysIn(input).isEmpty) return output;
+    final members = output.vars['fixture_env_members']! as Fragment;
+    if (_checked.allMatches(members.code).length != 1) {
+      throw StateError(
+        'fake_env does not render once what ${BrokenEnvModule.id} changes, '
+        'so its app would not have its bug: $_checked',
+      );
+    }
+    return RoleOutput(
+      fragments: output.fragments,
+      vars: {
+        ...output.vars,
+        'fixture_env_members': Fragment(
+          members.code.replaceFirst(_checked, '    return value;\n'),
+          imports: members.imports,
         ),
       },
       files: output.files,

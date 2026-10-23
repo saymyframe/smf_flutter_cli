@@ -1,0 +1,10 @@
+name: paywall_riverpod_setting
+description: "The entry of the subscription on the settings screen of an SMF app with a paywall and Riverpod."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags and the rendered sockets of its tags.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

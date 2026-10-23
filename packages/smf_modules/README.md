@@ -16,6 +16,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_get_it` | `get_it`, dependency injection |
 | `smf_event_bus` | `event_bus`, events |
 | `smf_shared_preferences` | `shared_preferences`, the settings that the app remembers |
+| `smf_dart_define` | `dart_define`, the values of `.env` with `--dart-define-from-file` |
 | `smf_local_notifications` | `local_notifications`, notifications |
 | `smf_firebase_core` | `firebase_core`, Firebase |
 | `smf_firebase_crashlytics` | `firebase_crashlytics`, crash reporting |
@@ -25,6 +26,8 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_google_sign_in` | `google_sign_in`, Google sign-in on Android and iOS |
 | `smf_apple_sign_in` | `apple_sign_in`, Sign in with Apple on iOS |
 | `smf_sign_in` | `sign_in`, the screens of sign-in and of the account |
+| `smf_revenuecat` | `revenuecat`, premium access sold with RevenueCat |
+| `smf_paywall` | `paywall`, the paywall and the screen of the subscription |
 
 `smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.
 

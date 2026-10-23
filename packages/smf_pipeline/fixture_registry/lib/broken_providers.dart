@@ -885,6 +885,40 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.routerDroppingRoutesWithoutPage,
+        role: routerRole,
+        bug: 'It pops the routes without a page from its root navigator '
+            'whenever the guards of the routes answer nothing to a '
+            'notification, so the screen that the action of an onboarding '
+            'step shows over the onboarding goes away when a guard notifies, '
+            'though no page changed.',
+        // The fixture gates with their badge, whose guards the test of the
+        // onboarding screen role has notify, the fixture onboarding, which
+        // provides that role, and the fixture steps, whose step ask shows
+        // the screen.
+        app: [
+          FakeGateModule.id,
+          FakeClockBadgeModule.id,
+          FakeBlocModule.id,
+          FakeOnboardingModule.id,
+          FakeStepsModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/onboarding_screen_role/step_actions_test.dart',
+            'the action of a step runs once, with the context of the screen, '
+                'takes no tap until its future completes and then shows the '
+                'next page, also when it fails, a screen that it shows stays '
+                'while the guards notify, and later shows the next page '
+                'without it',
+            'A route without a page that the action of a step pushes on the '
+                'navigator at the root of the app stays on top while the '
+                'guards of the routes notify, also when a guard of a condition '
+                'stops and starts allowing.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         _goRouterAskingWithinItsCalls,
         role: routerRole,
         bug: 'Its redirect asks the guards of the routes about the locations '
@@ -1441,6 +1475,82 @@ List<BrokenProvider> brokenProviders() => const [
             'A backend keeps the address of a device, so a service that the '
                 'function of the provider creates again has the address that '
                 'the device kept, and the next start has the same one.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.purchasesKeptByService,
+        role: purchasesRole,
+        bug: 'Its service keeps the purchases in a field of its own, for '
+            'every user together: a user of the app has what any other user '
+            'bought through that service, and a service that its function '
+            'creates again has nothing.',
+        // The fixture sign-in, so that the test of the purchases of the
+        // users of the session applies to the app too.
+        app: [FakeAuthModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/purchases_role/provider_test.dart',
+            'the purchases of each user stay apart: a fresh user has nothing, '
+                'a purchase gives that user premium access, another fresh '
+                'user has nothing, and the first user has the access again',
+            'A provider keeps the purchases of each user apart: a user that '
+                'no identification named before, identified after another '
+                'user of the app, has nothing bought, whatever the users of '
+                'the app before bought.',
+          ),
+          MatrixExpectedFailure(
+            'test/purchases_role/next_start_test.dart',
+            'the store keeps what a user bought, so the next start has the '
+                'premium access of that user',
+            'The store keeps what a user bought, so the next start has it: a '
+                'service that the function of the provider creates again '
+                'gives the user the same premium access.',
+          ),
+          MatrixExpectedFailure(
+            'test/purchases_session/purchases_session_test.dart',
+            'after a sign-out, the next user of the device has none of the '
+                'purchases of the user who signed out, and a sign-in to the '
+                'account gives them back',
+            'Without a restore, the next user of the device never gets the '
+                'purchases of the one who signed out: after a sign-out the '
+                'user of the device is a new one, with nothing bought, and in '
+                'the mode anonymous so is the next anonymous user.',
+          ),
+          MatrixExpectedFailure(
+            'test/purchases_session/purchases_session_test.dart',
+            'the user without an account keeps what it bought at the next '
+                'start of the app, in every mode',
+            'The store keeps what the user without an account bought, and the '
+                'device keeps that user from one launch of the app to the '
+                'next, so the next start has its premium access',
+          ),
+          MatrixExpectedFailure(
+            'test/purchases_session/purchases_session_test.dart',
+            'a sign-in to an account that exists already leaves the purchases '
+                'with the user of the device, and the next user of the device '
+                'after a sign-out of that account has none of them',
+            'After the sign-out of an account, the next user of the device is '
+                'a new one, with nothing bought',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenEnvModule(),
+        role: envRole,
+        bug: 'Its AppEnv returns the value of a key as the command that built '
+            'the app read it from .env, so a key that .env leaves empty is an '
+            'empty text rather than null.',
+        // The module that reads values of .env, whose keys the test of the
+        // role checks, and whose test gives one of them an empty value.
+        app: [FakeEnvUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/env_role/env_role_test.dart',
+            'AppEnv returns null for each key that .env leaves empty',
+            'FAKE_ENV_USER_SECOND is empty in .env, so '
+                'AppEnv.fakeEnvUserSecond is null: an empty value counts as '
+                'missing.',
           ),
         ],
       ),

@@ -1066,6 +1066,35 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Reads `appSession` first in a zone that runs no microtask any more, as
+/// the fake time of a widget test that is over does, and then, in the root
+/// zone, signs up and starts the app, as the mocks of a later test do in
+/// real time.
+const _createdElsewhere = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  runZoned(
+    () => appSession.value,
+    zoneSpecification: ZoneSpecification(
+      scheduleMicrotask: (self, parent, zone, microtask) {},
+    ),
+  );
+  var signedUp = false;
+  unawaited(
+    appSession
+        .signUp(email: email, password: password)
+        .then((_) => signedUp = true),
+  );
+  result['the start'] = await Future.any([
+    initAuth().then((_) => 'completed'),
+    Future<String>.delayed(const Duration(seconds: 1), () => 'still waiting'),
+  ]);
+  result['the call is done'] = signedUp;
+  result['calls'] = takeCalls();
+  result['state'] = show(appSession.value);
+  port.send(result);
+}
+''';
+
 /// Starts sessions in the anonymous mode whose anonymous sign-in takes
 /// long, comes in time or fails, brings the user back to the app, and
 /// signs out; and sessions in the other modes, which sign nobody in.
@@ -3263,6 +3292,19 @@ void main() {
             'state': 'signed out',
           },
           'a start is done': true,
+        });
+      });
+
+      test(
+          'runs a call made before the first start in its own zone, '
+          'wherever the session was first read: a widget test in fake time '
+          'may read it before a later test starts the app in real time',
+          () async {
+        expect(await app.run('$_notes$_createdElsewhere'), {
+          'the start': 'completed',
+          'the call is done': true,
+          'calls': ['signUp $_email'],
+          'state': 'account user-1 $_email',
         });
       });
 

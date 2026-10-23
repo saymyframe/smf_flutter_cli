@@ -202,6 +202,10 @@ Future<_Run> _create(
 const _signInChoice = 'sign_in — Sign-in, sign-up and password reset with '
     "email or the app's ways to sign in, and an account screen";
 
+/// How a run in a terminal offers the feature `paywall`.
+const _paywallChoice = 'paywall — A paywall with the plans of the purchases '
+    'of the app, and a subscription screen';
+
 void main() {
   test(
       'a run in a terminal asks for the features first, and not for the '
@@ -219,6 +223,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -240,6 +246,8 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Purchases: which module provides it?',
+      'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
@@ -247,6 +255,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       _signInChoice,
+      _paywallChoice,
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -318,6 +327,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -339,6 +350,8 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Purchases: which module provides it?',
+      'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
@@ -393,6 +406,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -417,6 +432,7 @@ void main() {
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
       _signInChoice,
+      _paywallChoice,
     ]);
     expect(
       run.lines,
@@ -485,6 +501,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -539,6 +557,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -560,6 +580,8 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Purchases: which module provides it?',
+      'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
@@ -604,6 +626,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -626,6 +650,8 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Purchases: which module provides it?',
+      'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
@@ -662,6 +688,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -797,6 +825,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -866,6 +896,8 @@ void main() {
       'Events': ['event_bus'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -935,6 +967,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1026,6 +1060,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1115,6 +1151,8 @@ void main() {
       'Events': ['None'],
       'Notifications': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1230,6 +1268,8 @@ void main() {
         'Events': ['None'],
         'Notifications': ['None'],
         'Push messages': ['None'],
+        'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1306,6 +1346,8 @@ void main() {
         'Events': ['None'],
         'Notifications': ['None'],
         'Push messages': ['None'],
+        'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1420,6 +1462,8 @@ void main() {
         'Events': ['None'],
         'Notifications': ['None'],
         'Push messages': ['None'],
+        'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1545,6 +1589,8 @@ void main() {
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Push messages': ['firebase_messaging'],
+        'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
@@ -1636,6 +1682,8 @@ void main() {
       'Localization': ['None'],
       'Theme': ['None'],
       'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
       'Notifications': ['local_notifications'],
       'Dependency injection': ['None'],
       'State management': ['None'],
@@ -1731,6 +1779,8 @@ void main() {
         'Events': ['None'],
         'Notifications': ['None'],
         'Push messages': ['None'],
+        'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1788,6 +1838,8 @@ void main() {
         'Events': ['None'],
         'Notifications': ['None'],
         'Push messages': ['None'],
+        'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1974,6 +2026,8 @@ void main() {
         'Events': ['None'],
         'Notifications': ['None'],
         'Push messages': ['None'],
+        'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2093,6 +2147,8 @@ void main() {
         'Events': ['None'],
         'Notifications': ['None'],
         'Push messages': ['None'],
+        'Values in .env': ['None'],
+        'Purchases': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2210,12 +2266,13 @@ void main() {
       'get_it',
       'bloc',
       'event_bus',
+      'paywall',
       'firebase_crashlytics',
       'firebase_analytics',
     ];
     final run = await _create(
       {
-        'Features': ['home', 'sign_in'],
+        'Features': ['home', 'sign_in', 'paywall'],
         'Infrastructure': ['firebase_core', 'google_sign_in', 'apple_sign_in'],
         'Layout': ['bottom_tabs'],
         'Onboarding screen': ['onboarding'],
@@ -2264,8 +2321,9 @@ void main() {
       'Who may use the app without an account?',
     ]);
     // The answers before the questions of the settings screen, the router,
-    // the notifications, the preferences and the authentication need those
-    // roles, so the run asks none of them and adds their only providers.
+    // the notifications, the preferences, the purchases, the values of .env
+    // and the authentication need those roles, so the run asks none of them
+    // and adds their only providers.
     final added = [
       for (final line in run.lines)
         if (line.startsWith('Adding ')) line,
@@ -2286,6 +2344,14 @@ void main() {
       equals(
         'Adding settings: the only provider of the settings screen role, '
         'which sign_in requires.',
+      ),
+      equals(
+        'Adding revenuecat: the only provider of the purchases role, which '
+        'paywall requires.',
+      ),
+      equals(
+        'Adding dart_define: the only provider of the values in .env role, '
+        'which paywall requires.',
       ),
       equals(
         'Adding shared_preferences: the only provider of the preferences '

@@ -16,7 +16,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// events role, the preferences role, the localization role, the theme
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode, the auth role, the onboarding screen role, the
-/// notifications role and the push role.
+/// notifications role, the push role, the purchases role and the env role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -27,7 +27,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// hear, the fixture setting, whose restorers note what they read, the
 /// fixture theme, whose colour a test changes, the module that uses the
 /// fixture clock, which shows an hour on a clock of 24 hours or of 12, and
-/// the fixture steps of the onboarding, whose actions note their calls.
+/// the fixture steps of the onboarding, whose actions note their calls, and
+/// the module that reads values of .env, whose keys a test gives values.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -353,14 +354,19 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // that its showIf keeps when the screen opens, on a page of its own,
       // in the order of the role, with its icon, its title as a header and
       // its labels in the language of the app; the button of the action
-      // calls the action once, takes no tap until its future completes and
-      // then shows the next page, also when the action fails; and that of
-      // later shows it without the action. The matrix writes the screen
-      // and the texts of the steps for the tests, from the data of the role
-      // and of the localization role, and the tests take the two steps of
-      // the fixture steps, whose actions note their calls. Only in the apps
-      // with every module whose modules give the role steps, which run
-      // flutter test for other tests already.
+      // calls the action once with the context of the screen, takes no tap
+      // until its future completes and then shows the next page, also when
+      // the action fails; and that of later shows it without the action. A
+      // screen that the action shows over the onboarding, on the navigator
+      // at the root of the app, stays there, also while the guards of the
+      // routes notify in an app with the fixture gates, so the test is one
+      // of the router role too. The matrix writes the screen and the texts
+      // of the steps for the tests, from the data of the role and of the
+      // localization role, and the guards of the routes that the tests
+      // change, and the tests take the two steps of the fixture steps, whose
+      // actions note their calls. Only in the apps with every module whose
+      // modules give the role steps, which run flutter test for other tests
+      // already.
       _onboardingScreenRoleTest(appTests),
       // Sign-in in the apps with the auth role, whichever module provides
       // it, the test that the CLI keeps: in every app with the role, since
@@ -405,6 +411,46 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // notifications the notifications role, which the push role
       // requires.
       await pushRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The purchases of the apps with the purchases role, whichever module
+      // provides it, the test that the CLI keeps: only in the apps with
+      // every module, which run flutter test for other tests already. There
+      // the fixture purchases provide the role, with the fixture sign-in,
+      // which the role uses.
+      await purchasesRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The purchases of the users of the session in the apps with the
+      // purchases role and the auth role, whichever modules provide them,
+      // the test that the CLI keeps: only in the apps with every module,
+      // which the matrix has once more for each other mode of the auth role.
+      await purchasesSessionAppTest(
+        among: (app) => app.everyModuleWith != null,
+      ),
+      // The purchases of the user of the device in the apps with the
+      // purchases role and without the auth role, whichever module provides
+      // the purchases, the test that the CLI keeps: the apps of the fixture
+      // purchases alone, with the texts of the app and without them, since
+      // every app with every module has the fixture sign-in.
+      await purchasesDeviceAppTest(),
+      // The values of .env in the apps with the env role whose modules give
+      // the role keys, whichever module provides it, the test that the CLI
+      // keeps: only in the apps with every module, which run flutter test
+      // for other tests already. There the fixture values of .env provide
+      // the role, and the module that reads values of .env gives it three
+      // keys, whose values the test of that module gives the app.
+      await envRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The module that reads values of .env, fake_env_user: it reads the
+      // value of each of its keys from AppEnv, whichever module provides the
+      // env role. Its tests give its keys the values that the test of the
+      // env role checks: one in double quotes, one empty, and one that .env
+      // lacks. Only in the apps with every module, which run flutter test
+      // for other tests already. It tests a module, so it names no role.
+      MatrixAppTest(
+        '$appTests/env_variables',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            app.hook!.presentRoles.contains(envRole) &&
+            app.modules.contains(FakeEnvUserModule.id),
+        envValues: (app) => _fixtureValues,
+      ),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -433,19 +479,36 @@ Future<MatrixAppTests> fixtureAppTests() async {
       onboardingScreenRole,
       notificationsRole,
       pushRole,
+      purchasesRole,
+      envRole,
     },
   );
 }
 
+/// The values that the test of the module that reads values of .env gives
+/// its keys in the file of the values of an app: a value that goes into the
+/// file in double quotes, since it has white space and a `#`, an empty
+/// value, and none, which removes the line of the key, as of a key that the
+/// file lacks.
+final Map<String, String?> _fixtureValues = {
+  FakeEnvUserModule.keys[0].name: 'the first value # of the fixture',
+  FakeEnvUserModule.keys[1].name: '',
+  FakeEnvUserModule.keys[2].name: null,
+};
+
 /// The test of the onboarding screen role, in [appTests], the directory of
 /// the app tests of the fixture registry: in the apps with every module
 /// whose modules give the role steps, whichever module provides the role.
+/// It is a test of the router role too, whichever module provides it: a
+/// screen that the action of a step pushes on the root navigator stays,
+/// also while the guards of the routes notify in an app with the fixture
+/// gates.
 MatrixAppTest _onboardingScreenRoleTest(String appTests) => MatrixAppTest(
       '$appTests/onboarding_screen_role',
       appliesTo: (app) =>
           app.everyModuleWith != null && _stepsOf(app).isNotEmpty,
       generatedFiles: _onboardingOf,
-      roles: {onboardingScreenRole},
+      roles: {onboardingScreenRole, routerRole},
     );
 
 /// The steps of the onboarding of [app], an app of the matrix, in the order
@@ -481,6 +544,8 @@ const onboardingOfAppFile = 'test/onboarding_screen_role/of_app.dart';
 /// owner that does not list that role. Throws a [StateError] if no module
 /// names a route of its own as the onboarding screen, which the rules of the
 /// role report in an app of the matrix.
+///
+/// It also writes the file at [onboardingGuardsFile] of [app].
 Map<String, String> _onboardingOf(MatrixApp app, String packageName) {
   final hook = app.hook!;
   final input = onboardingScreenRole.hookInput(hook);
@@ -540,6 +605,7 @@ Map<String, String> _onboardingOf(MatrixApp app, String packageName) {
     "import '${screen.import.resolveUri(packageName)}' as screen;",
   ]..sort();
   return {
+    onboardingGuardsFile: _onboardingGuardsOf(app, packageName),
     onboardingOfAppFile: '''
 // The onboarding screen of the app and the texts of its steps, which the
 // matrix of SMF writes from the data of the onboarding screen role and of
@@ -576,6 +642,65 @@ const List<({String name, Map<String, StepTexts> texts})> appSteps = [
 $steps];
 ${localized ? _withStepLanguages : _withoutStepLanguages}''',
   };
+}
+
+/// The path in an app of the guards of the routes that the tests of the
+/// onboarding screen role change, which the matrix writes for them:
+/// `keepOnGate()`, which keeps the user on the target of a gate or lets the
+/// user in again, as an onboarding keeps a new user on it with a guard of
+/// the routes, and `notifyGuards()`, which has the guards notify though
+/// they keep the user from no page that the app shows. In an app with the
+/// fixture gates, they change the guards of that module, and in any other
+/// app, whose guards the tests cannot change, they do nothing.
+const onboardingGuardsFile = 'test/onboarding_screen_role/guards_of_app.dart';
+
+/// The file at [onboardingGuardsFile] of [app], an app of the matrix whose
+/// package is [packageName].
+String _onboardingGuardsOf(MatrixApp app, String packageName) {
+  const intro = '''
+// The guards of the routes that the tests of the onboarding screen role
+// change, which the matrix of SMF writes for them.''';
+  if (!app.modules.contains(const ModuleId('fake_gate'))) {
+    return '''
+$intro The app has none of the
+// guards that the tests change.
+
+/// Does nothing: the app has no gate that the tests close.
+void keepOnGate({required bool keep}) {}
+
+/// Does nothing: the app has no guard that the tests have notify.
+Future<void> notifyGuards(Future<void> Function() settle) async {}
+''';
+  }
+  final gates = const ImportRef.app('features/fake_gate/fixture_gates.dart')
+      .resolveUri(packageName);
+  return '''
+$intro They are the guards of the
+// fixture gates.
+import '$gates';
+
+/// Keeps the user on the target of the first guard of the fixture gates
+/// while [keep] is `true`, as an onboarding keeps a new user on it with a
+/// guard of the routes, and lets the user into the app again once it is
+/// `false`.
+void keepOnGate({required bool keep}) => fixtureGate.value = !keep;
+
+/// Has the guards of the fixture gates notify, though they keep the user
+/// from no page that the app shows: the first gate and the second notify
+/// without a change, and the guard of the badge of the fixture stops
+/// allowing and allows again while no page asks for the badge. [settle]
+/// shows the frames after each notification.
+Future<void> notifyGuards(Future<void> Function() settle) async {
+  fixtureGate.poke();
+  await settle();
+  fixtureSecondGate.poke();
+  await settle();
+  fixtureHolder.value = false;
+  await settle();
+  fixtureHolder.value = true;
+  await settle();
+}
+''';
 }
 
 /// What [onboardingOfAppFile] has in an app with the localization role, to
@@ -816,7 +941,9 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// are checked with a second provider of the role there. The test of the
 /// onboarding screen role, which the fixture registry keeps, runs there
 /// too, with the onboarding of the CLI, which provides that role, and the
-/// fixture steps.
+/// fixture steps. Of the tests that the CLI keeps, only the test of the
+/// purchases of the user of the device is left out: it is for an app
+/// without sign-in, and the app with every module has sign-in.
 ///
 /// A test of such a role checks that each call of the service of the role
 /// reaches every provider once, whatever the other providers do with it. So
@@ -827,9 +954,11 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// the platform side of the other fixture providers.
 Future<MatrixAppTests> severalProvidersAppTests() async {
   final appTests = await appTestsDirectoryOf('fixture_registry');
+  final ofDevice = (await purchasesDeviceAppTest()).directory;
   return MatrixAppTests(
     [
-      ...(await smfAppTests()).tests,
+      for (final test in (await smfAppTests()).tests)
+        if (test.directory != ofDevice) test,
       ...await _fixtureMocks(),
       // Each call of the analytics service of the app reaches every
       // analytics service once. A service that fails, or that changes the

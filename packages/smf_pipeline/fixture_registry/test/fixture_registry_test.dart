@@ -487,6 +487,20 @@ void main() {
         rendered(result, AppEntryRole.iosAppDelegateLaunch).values.single,
         '    application.applicationSupportsShakeToEdit = true',
       );
+      // The patterns of .gitignore in their order: the one that both modules
+      // give in the same words once, the one of the template of the env
+      // role, and the one that they give in other words under both
+      // comments.
+      expect(
+        rendered(result, AppEntryRole.gitignore).values.single,
+        '\n# The logs of the fixture\n*.fixture.log\n'
+        '\n# The values of the app, which each developer fills in from '
+        '.env.example\n'
+        '.env\n'
+        '\n# The values of the fixture that each developer keeps\n'
+        '# What the fixture keeps on one machine\n'
+        '/fixture.local',
+      );
       // fake_overlap asks for 2.1.3: the highest version of the library
       // wins, and the switch comes with it.
       const library = 'com.android.tools:desugar_jdk_libs:2.1.4';
@@ -1934,15 +1948,16 @@ void main() {
       ];
       // The apps of the fixture alone, without a router and with each of
       // the two, with the texts of the app and without them, the apps of
-      // the fixture way to sign in, with the texts and without them, and
-      // each app with every module, with a clock of 24 hours and with one
-      // of 12.
+      // the fixture way to sign in, with the texts and without them, the
+      // apps of the fixture purchases with the fixture sign-in, with the
+      // texts and without them, and each app with every module, with a
+      // clock of 24 hours and with one of 12.
       expect(withoutMode, contains(named('fake_auth')));
       expect(
         named('fake_auth').hook!.presentRoles,
         isNot(contains(routerRole)),
       );
-      expect(withoutMode, hasLength(24));
+      expect(withoutMode, hasLength(26));
       for (final app in withoutMode) {
         expect(
           app.createArguments('app_1', '/apps'),
@@ -2487,6 +2502,17 @@ const _cases = [
   // push role requires, and the fixture preferences, which those require.
   // The push role uses no role, so its provider has one case.
   'fake_push',
+  // The fixture purchases with the fixture sign-in and without it, and with
+  // the texts of the app and without them: the purchases role uses the auth
+  // role and the localization role, and the settings screen role too, which
+  // no fixture provides.
+  'fake_purchases with auth, localization',
+  'fake_purchases with auth',
+  'fake_purchases with localization',
+  'fake_purchases',
+  'fake_env',
+  'fake_env_user with env',
+  'fake_env_user',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',

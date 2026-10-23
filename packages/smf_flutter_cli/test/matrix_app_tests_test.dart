@@ -11,9 +11,12 @@ import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
+import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_pipeline/testing.dart';
+import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
 import 'package:test/test.dart';
 
@@ -250,7 +253,51 @@ const _lnSettings = '$_ln with settings_screen';
 const _lnOnboarding = '$_ln with onboarding_screen';
 const _lnL10n = '$_ln with localization';
 
-/// Those of them with the localization.
+/// The app of revenuecat alone, and its apps with the roles that the
+/// purchases role uses: the auth, the settings screen and the localization.
+const _rc = 'revenuecat';
+const _rcAll = '$_rc with auth, settings_screen, localization';
+const _rcAuthSettings = '$_rc with auth, settings_screen';
+const _rcAuthL10n = '$_rc with auth, localization';
+const _rcSettingsL10n = '$_rc with settings_screen, localization';
+const _rcAuth = '$_rc with auth';
+const _rcSettings = '$_rc with settings_screen';
+const _rcL10n = '$_rc with localization';
+
+/// The apps of the paywall: one for each state manager, with and without
+/// each role that the module uses, the localization, the settings screen
+/// and the onboarding screen, in the order of the matrix.
+const List<String> _paywall = [
+  'paywall (bloc) with localization, settings_screen, onboarding_screen',
+  'paywall (riverpod) with localization, settings_screen, onboarding_screen',
+  'paywall (bloc) with localization, settings_screen',
+  'paywall (riverpod) with localization, settings_screen',
+  'paywall (bloc) with localization, onboarding_screen',
+  'paywall (riverpod) with localization, onboarding_screen',
+  'paywall (bloc) with settings_screen, onboarding_screen',
+  'paywall (riverpod) with settings_screen, onboarding_screen',
+  'paywall (bloc) with localization',
+  'paywall (riverpod) with localization',
+  'paywall (bloc) with settings_screen',
+  'paywall (riverpod) with settings_screen',
+  'paywall (bloc) with onboarding_screen',
+  'paywall (riverpod) with onboarding_screen',
+  'paywall (bloc)',
+  'paywall (riverpod)',
+];
+
+/// The apps of [_paywall] with each of [roles] and none of [without], each
+/// named as the names of the apps name it, such as `localization`, in the
+/// order of the matrix.
+List<String> _paywallWith(
+  Set<String> roles, {
+  Set<String> without = const {},
+}) =>
+    [
+      for (final app in _paywall)
+        if (roles.every(app.contains) && !without.any(app.contains)) app,
+    ];
+
 const _localizedSignIn = [
   'sign_in (bloc) with localization',
   'sign_in (riverpod) with localization',
@@ -300,12 +347,62 @@ void main() {
   });
 
   test(
+      'the apps of the matrices get their values from the file of the env '
+      'role, and flutter test gets the tool arguments that the provider of '
+      'the role in an app gives the role, none in an app without the role', () {
+    MatrixApp app(String name) => apps.singleWhere((app) => app.name == name);
+
+    expect(matrixEnv.file, EnvRole.dotEnvFile);
+    expect(matrixEnv.toolArguments(app('dart_define')), [
+      '--dart-define-from-file=${EnvRole.dotEnvFile}',
+    ]);
+    expect(matrixEnv.toolArguments(app('flutter_core')), isEmpty);
+    // Every app with the role has the arguments of its provider, and no
+    // other app has any.
+    for (final app in apps) {
+      expect(
+        matrixEnv.toolArguments(app),
+        app.hook!.presentRoles.contains(envRole)
+            ? envRole.toolArgumentsIn(envRole.hookInput(app.hook!))
+            : isEmpty,
+        reason: app.name,
+      );
+    }
+    // An app that the contract harness did not build has no data of the
+    // role.
+    expect(
+      matrixEnv.toolArguments(const MatrixApp('outside', [])),
+      isEmpty,
+    );
+    expect(matrixEnv.keys(const MatrixApp('outside', [])), isEmpty);
+    // The keys of an app are those of the role, each with the module that
+    // gives it, such as the keys of revenuecat.
+    expect(matrixEnv.keys(app(_rc)), {
+      'REVENUECAT_APPLE_KEY': RevenueCatModule.id,
+      'REVENUECAT_GOOGLE_KEY': RevenueCatModule.id,
+      'REVENUECAT_TEST_KEY': RevenueCatModule.id,
+    });
+    for (final app in apps) {
+      expect(
+        matrixEnv.keys(app),
+        app.hook!.presentRoles.contains(envRole)
+            ? {
+                for (final key in envRole.keysIn(envRole.hookInput(app.hook!)))
+                  key.name: (key.owner as ModuleOrigin).module,
+              }
+            : isEmpty,
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
       'the app tests check the contract of the router role, of the DI role, '
-      'of the events role, of the preferences role, of the auth role, of '
-      'the notifications role, of the push role, of the settings screen '
-      'role, of the theme role, of the localization role and of the app '
-      'entry role with every provider of each, which they tell apart by the '
-      'roles of the app only', () {
+      'of the events role, of the preferences role, of the env role, of the '
+      'auth role, of the notifications role, of the push role, of the '
+      'purchases role, of the settings screen role, of the theme role, of '
+      'the localization role and of the app entry role with every provider '
+      'of each, which they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -313,9 +410,11 @@ void main() {
         diRole,
         eventsRole,
         preferencesRole,
+        envRole,
         authRole,
         notificationsRole,
         pushRole,
+        purchasesRole,
         settingsScreenRole,
         themeRole,
         appEntryRole,
@@ -325,9 +424,14 @@ void main() {
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('onboarding').roles, {routerRole});
     expect(named('sign_in').roles, {routerRole});
+    // The onboarding shows the step of the paywall and goes on once the
+    // paywall that it shows closes, and the router leaves that paywall over
+    // its pages while the guard of premium access notifies.
+    expect(named('paywall_step').roles, {routerRole, onboardingScreenRole});
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
     expect(named('preferences_role').roles, {preferencesRole});
+    expect(named('env_role').roles, {envRole});
     expect(named('auth_role').roles, {authRole});
     // The test of the provider of the role checks what only it does.
     expect(named('firebase_auth').roles, isEmpty);
@@ -342,6 +446,14 @@ void main() {
     expect(named('push_role').roles, {pushRole});
     // And the test of the provider of the push role.
     expect(named('firebase_messaging').roles, isEmpty);
+    expect(named('purchases_role').roles, {purchasesRole});
+    expect(named('purchases_session').roles, {purchasesRole});
+    expect(named('purchases_device').roles, {purchasesRole});
+    // So is the test of the entry of the settings screen that the template
+    // of the role contributes, the same with every provider.
+    expect(named('purchases_setting').roles, {purchasesRole});
+    // And the test of the provider of the purchases role.
+    expect(named('revenuecat').roles, isEmpty);
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
     // The test of the theme role checks that the root of the app, which the
@@ -1039,6 +1151,15 @@ void main() {
         'apple_sign_in with localization',
         'sign_in (bloc) with localization',
         'sign_in (riverpod) with localization',
+        // The apps of revenuecat with the localization.
+        _rcAll,
+        _rcAuthL10n,
+        _rcSettingsL10n,
+        _rcL10n,
+        // And the apps of the paywall with it or with the onboarding.
+        for (final app in _paywall)
+          if (app.contains('localization') || app.contains('onboarding_screen'))
+            app,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1161,6 +1282,15 @@ void main() {
         'apple_sign_in with localization',
         'sign_in (bloc) with localization',
         'sign_in (riverpod) with localization',
+        // The apps of revenuecat with the localization: the purchases role
+        // gives the texts of its entry of the settings screen, and an app
+        // without a router has the texts of the fallback start screen.
+        _rcAll,
+        _rcAuthL10n,
+        _rcSettingsL10n,
+        _rcL10n,
+        // The paywall, whose screens have texts.
+        ..._paywallWith({'localization'}),
         ..._authModes,
         ..._everyModule,
       ],
@@ -1189,6 +1319,8 @@ void main() {
         'bottom_tabs with localization': ['en', 'uk'],
         'material_theme with settings_screen, localization': ['en', 'uk'],
         'material_theme with localization': ['en', 'uk'],
+        for (final app in [_rcAll, _rcAuthL10n, _rcSettingsL10n, _rcL10n])
+          app: ['en', 'uk'],
         'onboarding with localization': ['en', 'uk'],
         for (final app in [_lnAll, _lnSettingsL10n, _lnOnboardingL10n, _lnL10n])
           app: ['en', 'uk'],
@@ -1198,6 +1330,7 @@ void main() {
         'apple_sign_in with localization': ['en', 'uk'],
         'sign_in (bloc) with localization': ['en', 'uk'],
         'sign_in (riverpod) with localization': ['en', 'uk'],
+        for (final app in _paywallWith({'localization'})) app: ['en', 'uk'],
         for (final app in _authModes) app: ['en', 'uk'],
         for (final app in _everyModule) app: ['en', 'uk'],
       },
@@ -1531,6 +1664,9 @@ void main() {
         _lnAll,
         _lnSettingsL10n,
         ..._localizedSignIn,
+        _rcAll,
+        _rcSettingsL10n,
+        ..._paywallWith({'localization', 'settings_screen'}),
         ..._everyModule,
       ],
     );
@@ -1810,6 +1946,22 @@ void main() {
   });
 
   test(
+      'the probe of Firebase Cloud Messaging asks the script of CI that '
+      'starts the app for the answer firebase_messaging, a push message, and '
+      'that of RevenueCat for the answer revenuecat, premium access, by the '
+      'names with which the jobs give the answers, and no other probe asks '
+      'for one', () {
+    expect(
+      {
+        for (final test in appTests.tests)
+          if (test.startProbe?.answer case final answer?)
+            p.basename(test.directory): answer,
+      },
+      {'firebase_messaging': 'firebase_messaging', 'revenuecat': 'revenuecat'},
+    );
+  });
+
+  test(
       'the start check runs the probes of the tests that go into an app '
       'with it, the walk of the routes, the services of the DI role, the '
       'preferences of the role, those of shared_preferences once they are '
@@ -1817,9 +1969,9 @@ void main() {
       'of a first launch, the languages of the localization role, the '
       'permission of the notifications role and the channel of '
       'local_notifications, the push messages of the role and the address '
-      'of Firebase Cloud Messaging, each '
-      'a function of a file of its tests that takes the one that waits '
-      'until the screen settles', () async {
+      'of Firebase Cloud Messaging, the purchases of the role and those of '
+      'RevenueCat, each a function of a file of its tests that takes the one '
+      'that waits until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -1832,6 +1984,7 @@ void main() {
             'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
             'probeFirebaseMessaging',
+        'revenuecat': 'integration_test/revenuecat/probe.dart probeRevenueCat',
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
@@ -1844,6 +1997,8 @@ void main() {
         'notifications_role':
             'integration_test/notifications_role/probe.dart probeNotifications',
         'push_role': 'integration_test/push_role/probe.dart probePush',
+        'purchases_role':
+            'integration_test/purchases_role/probe.dart probePurchases',
         'router_walk': 'integration_test/router_walk/walk.dart probeRoutes',
         'localization_role':
             'integration_test/localization_role/probe.dart probeLanguages',
@@ -1874,9 +2029,9 @@ void main() {
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
     // the routes of the app past it. Those of Firebase Authentication, of
-    // Firebase Cloud Messaging, of the notifications role, of
-    // local_notifications and of the push role only read, so they hold
-    // wherever they come.
+    // Firebase Cloud Messaging, of RevenueCat, of the notifications role,
+    // of local_notifications, of the push role and of the purchases role
+    // only read, so they hold wherever they come.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
@@ -1885,6 +2040,7 @@ void main() {
         'start',
         'firebase_auth',
         'firebase_messaging',
+        'revenuecat',
         'onboarding',
         'shared_preferences',
         'local_notifications',
@@ -1892,6 +2048,7 @@ void main() {
         'preferences_role',
         'notifications_role',
         'push_role',
+        'purchases_role',
         'router_walk',
         'localization_role',
       ],
@@ -1927,40 +2084,36 @@ void main() {
       [
         'probe0: firebase_auth/probe.dart',
         'probe1: firebase_messaging/probe.dart',
-        'probe2: onboarding/probe.dart',
-        'probe3: shared_preferences/probe.dart',
-        'probe4: local_notifications/probe.dart',
-        'probe5: di_role/probe.dart',
-        'probe6: preferences_role/probe.dart',
-        'probe7: notifications_role/probe.dart',
-        'probe8: push_role/probe.dart',
-        'probe9: router_walk/walk.dart',
-        'probe10: localization_role/probe.dart',
+        'probe2: revenuecat/probe.dart',
+        'probe3: onboarding/probe.dart',
+        'probe4: shared_preferences/probe.dart',
+        'probe5: local_notifications/probe.dart',
+        'probe6: di_role/probe.dart',
+        'probe7: preferences_role/probe.dart',
+        'probe8: notifications_role/probe.dart',
+        'probe9: push_role/probe.dart',
+        'probe10: purchases_role/probe.dart',
+        'probe11: router_walk/walk.dart',
+        'probe12: localization_role/probe.dart',
       ],
     );
-    expect(list, contains("('firebase_auth', probe0.probeFirebaseAuth),"));
-    expect(
-      list,
-      contains("('firebase_messaging', probe1.probeFirebaseMessaging),"),
-    );
-    expect(list, contains("('onboarding', probe2.probeOnboarding),"));
-    expect(
-      list,
-      contains("('shared_preferences', probe3.probeSharedPreferences),"),
-    );
-    expect(
-      list,
-      contains("('local_notifications', probe4.probeLocalNotifications),"),
-    );
-    expect(list, contains("('di_role', probe5.probeServices),"));
-    expect(list, contains("('preferences_role', probe6.probePreferences),"));
-    expect(
-      list,
-      contains("('notifications_role', probe7.probeNotifications),"),
-    );
-    expect(list, contains("('push_role', probe8.probePush),"));
-    expect(list, contains("('router_walk', probe9.probeRoutes),"));
-    expect(list, contains("('localization_role', probe10.probeLanguages),"));
+    for (final (name, probe) in [
+      ('firebase_auth', 'probe0.probeFirebaseAuth'),
+      ('firebase_messaging', 'probe1.probeFirebaseMessaging'),
+      ('revenuecat', 'probe2.probeRevenueCat'),
+      ('onboarding', 'probe3.probeOnboarding'),
+      ('shared_preferences', 'probe4.probeSharedPreferences'),
+      ('local_notifications', 'probe5.probeLocalNotifications'),
+      ('di_role', 'probe6.probeServices'),
+      ('preferences_role', 'probe7.probePreferences'),
+      ('notifications_role', 'probe8.probeNotifications'),
+      ('push_role', 'probe9.probePush'),
+      ('purchases_role', 'probe10.probePurchases'),
+      ('router_walk', 'probe11.probeRoutes'),
+      ('localization_role', 'probe12.probeLanguages'),
+    ]) {
+      expect(list, contains("('$name', $probe),"));
+    }
   });
 
   test(
@@ -2021,21 +2174,22 @@ void main() {
       screens[app.name] = '${import.uri}: '
           '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
     }
-    // The apps of the notifications with the onboarding screen, which the
-    // onboarding provides.
-    const notificationsWithOnboarding = [
+    // The apps of the notifications and of the paywall with the onboarding
+    // screen, which the onboarding provides.
+    final withOnboarding = [
       _lnAll,
       _lnSettingsOnboarding,
       _lnOnboardingL10n,
       _lnOnboarding,
+      ..._paywallWith({'onboarding_screen'}),
     ];
     expect(screens, {
       // No route can start the app, since the onboarding cannot, and
-      // neither can the settings screen.
+      // neither can the settings screen or the paywall.
       for (final name in [
         'onboarding with localization',
         'onboarding',
-        ...notificationsWithOnboarding,
+        ...withOnboarding,
       ])
         name: 'package:my_app/core/app/fallback_start_screen.dart: '
             'screen.FallbackStartScreen',
@@ -2049,8 +2203,8 @@ void main() {
     expect(languages, {
       'onboarding with localization': ['en', 'uk'],
       'onboarding': ['en'],
-      for (final app in notificationsWithOnboarding)
-        app: app.endsWith('localization') ? ['en', 'uk'] : ['en'],
+      for (final app in withOnboarding)
+        app: app.contains('localization') ? ['en', 'uk'] : ['en'],
       for (final app in _everyModule) app: ['en', 'uk'],
     });
     for (final app in apps.where(test.appliesTo)) {
@@ -2532,6 +2686,11 @@ void main() {
         _lnSettingsL10n,
         _lnSettings,
         ..._signIn,
+        _rcAll,
+        _rcAuthSettings,
+        _rcSettingsL10n,
+        _rcSettings,
+        ..._paywallWith({'settings_screen'}),
         ..._everyModule,
       ],
     );
@@ -2540,16 +2699,19 @@ void main() {
     expect(settings.startProbe, isNull);
     // The entries of each app, as the role gives them: none in the app of
     // the settings module alone, whose modules have no setting; the entry
-    // of the account, which the sign-in module gives the role, in the apps
-    // with that module, before the entries of the templates of the roles;
+    // of the account and the entry of the subscription, which the sign-in
+    // module and the paywall module give the role, in the apps with those
+    // modules, before the entries of the templates of the roles;
     // the entry of the theme mode, which the template of the theme role
     // contributes, in the apps with the theme; the setting of the
     // language, which the template of the localization role contributes, in
     // the apps with the localization, after that of the theme, as the
     // modules that provide the two roles are in the list of the CLI; and
     // the entry of the notifications, which the template of the
-    // notifications role contributes, in the apps with the notifications,
-    // in the order of the templates of the roles of each app.
+    // notifications role contributes, in the apps with the notifications;
+    // and the entry that restores purchases, which the template of the
+    // purchases role contributes, in the apps with the purchases, in the
+    // order of the templates of the roles of each app.
     List<SettingsEntry> entriesOf(MatrixApp app) =>
         settingsScreenRole.entriesIn(settingsScreenRole.hookInput(app.hook!));
     expect(
@@ -2565,6 +2727,10 @@ void main() {
           'LanguageSetting',
         ],
         'material_theme with settings_screen': ['ThemeModeSetting'],
+        for (final app in [_rcAll, _rcSettingsL10n])
+          app: ['RestorePurchasesSetting', 'LanguageSetting'],
+        for (final app in [_rcAuthSettings, _rcSettings])
+          app: ['RestorePurchasesSetting'],
         for (final app in [_lnAll, _lnSettingsL10n])
           app: ['NotificationsSetting', 'LanguageSetting'],
         for (final app in [_lnSettingsOnboarding, _lnSettings])
@@ -2573,12 +2739,27 @@ void main() {
           app: ['AccountSetting', 'LanguageSetting'],
         'sign_in (bloc)': ['AccountSetting'],
         'sign_in (riverpod)': ['AccountSetting'],
+        // The entry of the subscription, which the paywall module gives
+        // the role, before the entries of the templates of the roles.
+        for (final app in _paywallWith({'localization', 'settings_screen'}))
+          app: [
+            'SubscriptionSetting',
+            'LanguageSetting',
+            'RestorePurchasesSetting',
+          ],
+        for (final app in _paywallWith(
+          {'settings_screen'},
+          without: {'localization'},
+        ))
+          app: ['SubscriptionSetting', 'RestorePurchasesSetting'],
         for (final app in _everyModule)
           app: [
             'AccountSetting',
+            'SubscriptionSetting',
             'ThemeModeSetting',
             'LanguageSetting',
             'NotificationsSetting',
+            'RestorePurchasesSetting',
           ],
       },
     );
@@ -3029,6 +3210,11 @@ void main() {
         _lnSettingsL10n,
         _lnSettings,
         ..._signIn,
+        _rcAll,
+        _rcAuthSettings,
+        _rcSettingsL10n,
+        _rcSettings,
+        ..._paywallWith({'settings_screen'}),
         ..._everyModule,
       ],
     );
@@ -3052,6 +3238,9 @@ void main() {
         _lnSettings,
         'sign_in (bloc)',
         'sign_in (riverpod)',
+        _rcAuthSettings,
+        _rcSettings,
+        ..._paywallWith({'settings_screen'}, without: {'localization'}),
       ],
     );
     for (final app in withoutRole) {
@@ -3110,6 +3299,9 @@ void main() {
           _lnAll,
           _lnSettingsL10n,
           ..._localizedSignIn,
+          _rcAll,
+          _rcSettingsL10n,
+          ..._paywallWith({'localization', 'settings_screen'}),
           ..._everyModule,
         ],
         reason: languages,
@@ -3248,13 +3440,26 @@ void main() {
         'settings': (0, false),
         'material_theme with settings_screen, localization': (2, false),
         'material_theme with settings_screen': (1, false),
+        // The entry that restores purchases, and the setting of the
+        // language.
+        for (final app in [_rcAll, _rcSettingsL10n]) app: (2, false),
+        for (final app in [_rcAuthSettings, _rcSettings]) app: (1, false),
         for (final app in [_lnAll, _lnSettingsL10n]) app: (2, false),
         for (final app in [_lnSettingsOnboarding, _lnSettings]) app: (1, false),
         // The entry of the account, and the setting of the language.
         for (final app in _localizedSignIn) app: (2, false),
         'sign_in (bloc)': (1, false),
         'sign_in (riverpod)': (1, false),
-        for (final app in _everyModule) app: (4, true),
+        // The entry of the subscription, the entry that restores purchases,
+        // and the setting of the language.
+        for (final app in _paywallWith({'localization', 'settings_screen'}))
+          app: (3, false),
+        for (final app in _paywallWith(
+          {'settings_screen'},
+          without: {'localization'},
+        ))
+          app: (2, false),
+        for (final app in _everyModule) app: (6, true),
       },
     );
     for (final app in apps.where(settings.appliesTo)) {
@@ -3469,6 +3674,12 @@ void main() {
       },
       {
         for (final name in const [
+          // The apps of revenuecat with the auth role, which the purchases
+          // role uses.
+          _rcAll,
+          _rcAuthSettings,
+          _rcAuthL10n,
+          _rcAuth,
           'firebase_auth with localization, router',
           'firebase_auth with localization',
           'firebase_auth with router',
@@ -4063,7 +4274,7 @@ void main() {
             'step0.notificationsStepShows;\n',
           ),
           contains(
-            'const Future<void> Function() stepAction = '
+            'const Future<void> Function(BuildContext context) stepAction = '
             'step0.allowNotifications;\n',
           ),
         ),
@@ -4100,7 +4311,10 @@ void main() {
     expect(errors, isEmpty);
     expect(
       [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
-      ['package:my_app/core/notifications/notifications_step.dart as step0'],
+      [
+        'package:flutter/widgets.dart as null',
+        'package:my_app/core/notifications/notifications_step.dart as step0',
+      ],
     );
     expect(
       index.declarations.map((declaration) => declaration.name),
@@ -4137,7 +4351,7 @@ void main() {
           'const bool Function() stepShows = step0.notificationsStepShows;\n',
         ),
         contains(
-          'const Future<void> Function() stepAction = '
+          'const Future<void> Function(BuildContext context) stepAction = '
           'step1.allowNotifications;\n',
         ),
       ),
@@ -4270,6 +4484,865 @@ void main() {
   });
 
   test(
+      'the test of the paywall applies to the apps with the module, whatever '
+      'else they have, gives the terms of use an address in .env and the '
+      'privacy policy none, '
+      'declares the mocks that buy a plan through the purchases of the app '
+      'for the tests of every module of those apps, has no probe, and '
+      'expects the screen that the app starts on, the settings screen with '
+      'the entry of the module where the app has one, and the texts of the '
+      'module in each language of the app', () {
+    final test = named('paywall');
+    final applies = apps.where(test.appliesTo).toList();
+
+    expect(
+      [for (final app in applies) app.name],
+      [
+        for (final app in apps)
+          if (app.modules.contains(PaywallModule.id)) app.name,
+      ],
+    );
+    expect(
+      [for (final app in applies) app.name],
+      [..._paywall, ..._everyModule],
+    );
+    // The router shows the paywall and closes it, whichever module
+    // provides it.
+    expect(test.roles, {routerRole});
+    expect(test.devDependencies, ['url_launcher_platform_interface']);
+    expect(test.values, isNull);
+    // The walk of the routes shows the paywall on a device.
+    expect(test.startProbe, isNull);
+    for (final app in applies) {
+      expect(
+        test.envValues!(app),
+        {
+          'PAYWALL_TERMS_URL': 'https://example.com/terms',
+          'PAYWALL_PRIVACY_URL': '',
+        },
+        reason: app.name,
+      );
+    }
+    expect(test.mocks!.path, 'test/paywall_mocks.dart');
+    expect(test.mocks!.function, 'grantPremium');
+    final mocks = DartFileIndexer.index(
+      test.mocks!.path,
+      File(p.joinAll([test.directory, ...test.mocks!.path.split('/')]))
+          .readAsStringSync(),
+    );
+    final function = mocks.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.parameters, isEmpty);
+    // The purchase goes through the purchases of the app, so the mocks know
+    // no provider of the purchases role: they buy the first plan of
+    // appPurchases, and import no other file of the app than that of the
+    // role.
+    expect(
+      [
+        for (final call in mocks.invocations)
+          if (call.enclosingDeclaration == test.mocks!.function) call.name,
+      ],
+      containsAll(['plans', 'purchase', 'unawaited']),
+    );
+    final controllerFile =
+        PurchasesRole.controllerFile.substring('lib/'.length);
+    expect(
+      [
+        for (final import in mocks.imports)
+          if (import.uri.startsWith('package:')) import.uri,
+      ],
+      ['package:{{app_name}}/$controllerFile'],
+    );
+
+    final settings = <String, String>{};
+    final screens = <String, String>{};
+    final languages = <String, List<String>>{};
+    for (final app in applies) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [paywallOfAppFile], reason: app.name);
+      final text = files[paywallOfAppFile]!;
+      languages[app.name] = _languagesOf(text);
+      final (:index, :errors) = DartFileIndexer.parse(paywallOfAppFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        [
+          'startScreen',
+          'settingsLocation',
+          'settingsScreen',
+          'settingsInMainNavigation',
+          'subscriptionEntry',
+          'paywallTexts',
+        ],
+        reason: app.name,
+      );
+      settings[app.name] = [
+        for (final name in [
+          r'AppLocation\? settingsLocation',
+          r'Type\? settingsScreen',
+          'bool settingsInMainNavigation',
+          r'Type\? subscriptionEntry',
+        ])
+          RegExp('^const $name = (.+);\$', multiLine: true)
+              .firstMatch(text)![1],
+      ].join(', ');
+      final import =
+          index.imports.singleWhere((import) => import.prefix == 'screen');
+      screens[app.name] = '${import.uri}: '
+          '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
+      // The texts of the entry only in an app with a settings screen, and
+      // those of the step only in an app with an onboarding.
+      expect(
+        text.contains("'settingTitle': "),
+        app.hook!.presentRoles.contains(settingsScreenRole),
+        reason: app.name,
+      );
+      expect(
+        text.contains("'stepTitle': "),
+        app.hook!.presentRoles.contains(onboardingScreenRole),
+        reason: app.name,
+      );
+    }
+    // The settings screen of the settings module, with the entry of the
+    // module, in the apps with a settings screen, a destination of the main
+    // navigation of the apps with every module, and nothing in the others.
+    const withSettings = 'SettingsSettingsLocation(), '
+        'settings.SettingsScreen, %, entry.SubscriptionSetting';
+    expect(settings, {
+      for (final name in _paywallWith({'settings_screen'}))
+        name: withSettings.replaceFirst('%', 'false'),
+      for (final name in _paywallWith({}, without: {'settings_screen'}))
+        name: 'null, null, false, null',
+      for (final name in _everyModule)
+        name: withSettings.replaceFirst('%', 'true'),
+    });
+    // The fallback start screen of the app entry in the apps of the module,
+    // which no route starts, and home in the apps with every module.
+    expect(screens, {
+      for (final name in _paywall)
+        name: 'package:my_app/core/app/fallback_start_screen.dart: '
+            'screen.FallbackStartScreen',
+      for (final name in _everyModule)
+        name: 'package:my_app/features/home/home_screen.dart: '
+            'screen.HomeScreen',
+    });
+    expect(languages, {
+      for (final name in _paywallWith({'localization'})) name: ['en', 'uk'],
+      for (final name in _paywallWith({}, without: {'localization'}))
+        name: ['en'],
+      for (final name in _everyModule) name: ['en', 'uk'],
+    });
+    // Each text of the module by its name, in the language of the app.
+    final text = test.generatedFiles!(
+      apps.singleWhere((app) => app.name == _paywall.first),
+      'my_app',
+    )[paywallOfAppFile]!;
+    expect(
+      text,
+      allOf(
+        contains("    'planYearly': 'Yearly',"),
+        contains("    'planYearly': 'Щороку',"),
+        contains("    'settingInactive': 'Не активна',"),
+        contains("    'stepAction': 'Переглянути плани',"),
+      ),
+    );
+    // An app whose settings screen gives the module no entry, or more than
+    // one, has no file of the test.
+    expect(
+      () => test.generatedFiles!(
+        apps.singleWhere((app) => app.name == 'settings'),
+        'my_app',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'The module paywall gives the settings screen of settings 0 '
+              'entries, rather than the entry of the subscription alone.',
+        ),
+      ),
+    );
+  });
+
+  test(
+      'the test of the step of the paywall in the onboarding applies to the '
+      'apps with the module and the onboarding screen role, whichever module '
+      'provides it, where the test of the paywall runs too, has neither '
+      'mocks nor a probe, and gets the onboarding screen from the data of '
+      'the role', () {
+    final test = named('paywall_step');
+    final applies = apps.where(test.appliesTo).toList();
+
+    expect(
+      [for (final app in applies) app.name],
+      [
+        for (final app in apps)
+          if (app.modules.contains(PaywallModule.id) &&
+              app.hook!.presentRoles.contains(onboardingScreenRole))
+            app.name,
+      ],
+    );
+    expect(
+      [for (final app in applies) app.name],
+      [
+        ..._paywallWith({'onboarding_screen'}),
+        ..._everyModule,
+      ],
+    );
+    // It uses the helpers, the texts and the mocks of the test of the
+    // paywall.
+    expect(applies.where(named('paywall').appliesTo), applies);
+    expect(test.mocks, isNull);
+    expect(test.envValues, isNull);
+    expect(test.values, isNull);
+    expect(test.devDependencies, isEmpty);
+    // Nothing is bought on a device.
+    expect(test.startProbe, isNull);
+    for (final app in applies) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [paywallStepOnboardingFile], reason: app.name);
+      final text = files[paywallStepOnboardingFile]!;
+      final (:index, :errors) =
+          DartFileIndexer.parse(paywallStepOnboardingFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['onboardingScreen', 'newOnboardingScreen'],
+        reason: app.name,
+      );
+      // The screen of the route that the onboarding module names, the
+      // provider of the role in the CLI.
+      expect(
+        index.imports.singleWhere((import) => import.prefix == 'screen').uri,
+        'package:my_app/features/onboarding/onboarding_screen.dart',
+        reason: app.name,
+      );
+      expect(
+        text,
+        allOf(
+          contains('const Type onboardingScreen = screen.OnboardingScreen;'),
+          contains(
+            'Widget newOnboardingScreen() => screen.OnboardingScreen();',
+          ),
+        ),
+        reason: app.name,
+      );
+    }
+    // An app whose modules name no onboarding screen has no file of the
+    // test.
+    expect(
+      () => test.generatedFiles!(
+        const MatrixApp(
+          'nameless',
+          [PaywallModule.id],
+          hook: RoleHookRequest(
+            data: [],
+            presentRoles: {onboardingScreenRole, routerRole},
+            context: ContractHarness.defaultContext,
+          ),
+        ),
+        'my_app',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'No module of nameless names a route of its own as the onboarding '
+              'screen.',
+        ),
+      ),
+    );
+  });
+
+  group('the tests of the purchases role', () {
+    MatrixApp appWith(Set<Role> roles, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'purchases',
+          const [ModuleId('purchases')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    test(
+        'the test of the role applies to the apps with the role, whichever '
+        'module provides it, or to those of them that it is given, and has '
+        'a probe for the start check', () async {
+      final test = await purchasesRoleAppTest();
+
+      expect(p.basename(test.directory), 'purchases_role');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      expect(test.roles, {purchasesRole});
+      expect(test.appliesTo(appWith({purchasesRole})), isTrue);
+      expect(test.appliesTo(appWith({authRole})), isFalse);
+      // The matrix fills in nothing, writes no file for the test, and the
+      // test has no mocks.
+      expect(test.values, isNull);
+      expect(test.generatedFiles, isNull);
+      expect(test.mocks, isNull);
+      // The matrix of the CLI runs it in every app with the role, which
+      // revenuecat provides there: the apps of the module and the apps with
+      // every module.
+      final registered = named('purchases_role');
+      expect(registered.roles, test.roles);
+      expect(registered.startProbe!.path, test.startProbe!.path);
+      expect(
+        [
+          for (final app in apps)
+            if (registered.appliesTo(app)) app.name,
+        ],
+        [
+          _rcAll,
+          _rcAuthSettings,
+          _rcAuthL10n,
+          _rcSettingsL10n,
+          _rcAuth,
+          _rcSettings,
+          _rcL10n,
+          _rc,
+          ..._paywall,
+          ..._everyModule,
+        ],
+      );
+
+      // As the fixtures take it, only in the apps with every module.
+      final everyModule = await purchasesRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      );
+      expect(everyModule.appliesTo(appWith({purchasesRole})), isFalse);
+      expect(
+        everyModule.appliesTo(
+          appWith({purchasesRole}, everyModuleWith: const []),
+        ),
+        isTrue,
+      );
+      expect(
+        everyModule.appliesTo(appWith({authRole}, everyModuleWith: const [])),
+        isFalse,
+      );
+
+      // Its probe is a function of a file of the test that takes the one
+      // that waits until the screen settles, as the start check calls it.
+      final probe = test.startProbe!;
+      expect(probe.path, 'integration_test/purchases_role/probe.dart');
+      final file = File(p.joinAll([test.directory, ...probe.path.split('/')]));
+      final (:index, :errors) =
+          DartFileIndexer.parse(probe.path, file.readAsStringSync());
+      expect(errors, isEmpty);
+      final function = index.declarations
+          .singleWhere((declaration) => declaration.name == probe.function);
+      expect(function.name, 'probePurchases');
+      expect(function.kind, DeclarationKind.function);
+      expect(function.type, 'Future<List<String>>');
+      expect(
+        [
+          for (final parameter in function.parameters)
+            '${parameter.kind.name} ${parameter.type}',
+        ],
+        ['requiredPositional Future<void> Function()'],
+      );
+    });
+
+    test(
+        'the test of the purchases of the users of the session applies to '
+        'the apps with the purchases role and the auth role, whichever '
+        'modules provide them, or to those of them that it is given, and '
+        'uses the helpers of the test of the role, which applies to each of '
+        'them', () async {
+      final test = await purchasesSessionAppTest();
+      final ofRole = await purchasesRoleAppTest();
+
+      expect(p.basename(test.directory), 'purchases_session');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      // A test of the purchases role, whose template follows the session.
+      expect(test.roles, {purchasesRole});
+      final withBoth = appWith({purchasesRole, authRole});
+      expect(test.appliesTo(withBoth), isTrue);
+      expect(ofRole.appliesTo(withBoth), isTrue);
+      expect(test.appliesTo(appWith({purchasesRole})), isFalse);
+      expect(test.appliesTo(appWith({authRole})), isFalse);
+      // It reads the mode of the app from the app, has no mocks, and no
+      // probe: nobody can sign in on a device.
+      expect(test.values, isNull);
+      expect(test.generatedFiles, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      // The matrix of the CLI runs it in the apps of revenuecat with the
+      // auth role and in the apps with every module, in each mode of the
+      // auth role.
+      expect(
+        [
+          for (final app in apps)
+            if (named('purchases_session').appliesTo(app)) app.name,
+        ],
+        [_rcAll, _rcAuthSettings, _rcAuthL10n, _rcAuth, ..._everyModule],
+      );
+
+      final everyModule = await purchasesSessionAppTest(
+        among: (app) => app.everyModuleWith != null,
+      );
+      expect(everyModule.appliesTo(withBoth), isFalse);
+      expect(
+        everyModule.appliesTo(
+          appWith({purchasesRole, authRole}, everyModuleWith: const []),
+        ),
+        isTrue,
+      );
+      expect(
+        everyModule.appliesTo(
+          appWith({purchasesRole}, everyModuleWith: const []),
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+        'the test of the purchases of the user of the device applies to the '
+        'apps with the purchases role and without the auth role, whichever '
+        'module provides the purchases, with helpers of its own', () async {
+      final test = await purchasesDeviceAppTest();
+
+      expect(p.basename(test.directory), 'purchases_device');
+      expect(test.roles, {purchasesRole});
+      expect(test.appliesTo(appWith({purchasesRole})), isTrue);
+      expect(test.appliesTo(appWith({purchasesRole, authRole})), isFalse);
+      expect(test.appliesTo(appWith({authRole})), isFalse);
+      expect(test.values, isNull);
+      expect(test.generatedFiles, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      // The matrix of the CLI runs it in the apps of revenuecat without the
+      // auth role.
+      expect(
+        [
+          for (final app in apps)
+            if (named('purchases_device').appliesTo(app)) app.name,
+        ],
+        [_rcSettingsL10n, _rcSettings, _rcL10n, _rc, ..._paywall],
+      );
+      // It imports no file of another test, which need not run in its apps.
+      final files = Directory(test.directory)
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'));
+      expect(files, isNotEmpty);
+      for (final file in files) {
+        expect(
+          file.readAsStringSync(),
+          isNot(contains("import '../")),
+          reason: file.path,
+        );
+      }
+    });
+
+    test(
+        'the test of the entry that restores purchases applies to the apps '
+        'with the purchases role and the settings screen role, whichever '
+        'modules provide them, and gets the widget of the entry and its '
+        'texts in each language of the app from the data of the roles',
+        () async {
+      const settingFile = ImportRef.app(
+        'core/purchases/restore_purchases_setting.dart',
+      );
+      RoleData<Object> entry(TypeRef widget, ContributionOrigin origin) =>
+          settingsScreenRole
+              .data(SettingsEntry(widget: widget))
+              .withOrigin(origin);
+      final ofRole = entry(
+        const TypeRef('RestorePurchasesSetting', import: settingFile),
+        const RoleTemplateOrigin(purchasesRole),
+      );
+      // An entry of a module, whose widget has the same name, and one of
+      // the template of another role.
+      final others = [
+        entry(
+          const TypeRef(
+            'RestorePurchasesSetting',
+            import:
+                ImportRef.app('features/shop/restore_purchases_setting.dart'),
+          ),
+          const ModuleOrigin(ModuleId('shop')),
+        ),
+        entry(
+          const TypeRef(
+            'ThemeModeSetting',
+            import: ImportRef.app('core/theme/theme_mode_setting.dart'),
+          ),
+          const RoleTemplateOrigin(themeRole),
+        ),
+      ];
+      MatrixApp withEntries(
+        Set<Role> roles, {
+        List<RoleData<Object>>? entries,
+        List<String>? languages,
+      }) =>
+          MatrixApp(
+            'purchases',
+            const [ModuleId('purchases'), ModuleId('screen')],
+            hook: RoleHookRequest(
+              data: entries ?? [others.first, ofRole, others.last],
+              presentRoles: roles,
+              context: ContractHarness.defaultContext,
+              choices: {
+                if (languages != null)
+                  localizationRole: LocalizationChoice(languages),
+              },
+            ),
+          );
+      final test = await purchasesSettingAppTest();
+
+      expect(p.basename(test.directory), 'purchases_setting');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      // A test of the purchases role, whose template gives the entry.
+      expect(test.roles, {purchasesRole});
+      // A restore could ask for the store account on a device.
+      expect(test.startProbe, isNull);
+      expect(test.mocks, isNull);
+      expect(test.values, isNull);
+      expect(
+        test.appliesTo(withEntries({purchasesRole, settingsScreenRole})),
+        isTrue,
+      );
+      expect(test.appliesTo(withEntries({purchasesRole})), isFalse);
+      expect(test.appliesTo(withEntries({settingsScreenRole})), isFalse);
+      // The apps of the matrix of the CLI with both roles: the apps of
+      // revenuecat and of the paywall with a settings screen, and the apps
+      // with every module.
+      final registered = named('purchases_setting');
+      expect(registered.roles, test.roles);
+      final applies = [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ];
+      expect(applies, [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({purchasesRole, settingsScreenRole}))
+            app.name,
+      ]);
+      expect(applies, [
+        _rcAll,
+        _rcAuthSettings,
+        _rcSettingsL10n,
+        _rcSettings,
+        ..._paywallWith({'settings_screen'}),
+        ..._everyModule,
+      ]);
+      for (final app in apps.where(registered.appliesTo)) {
+        // It opens the settings screen with the helper of the tests of the
+        // settings screen role, and takes the service of the test from the
+        // files of the test of the purchases role, which apply to each of
+        // its apps.
+        for (final helper in ['settings_screen_role', 'purchases_role']) {
+          expect(
+            named(helper).appliesTo(app),
+            isTrue,
+            reason: '$helper in ${app.name}',
+          );
+        }
+        final text =
+            registered.generatedFiles!(app, 'my_app')[purchasesSettingFile]!;
+        final (:index, :errors) =
+            DartFileIndexer.parse(purchasesSettingFile, text);
+        expect(errors, isEmpty, reason: app.name);
+        expect(
+          [
+            for (final import in index.imports)
+              '${import.uri} as ${import.prefix}',
+          ],
+          [
+            'package:my_app/core/purchases/restore_purchases_setting.dart as entry',
+          ],
+          reason: app.name,
+        );
+      }
+      expect('lib/${settingFile.uri}', PurchasesRole.settingFile);
+
+      final files = test.generatedFiles!(
+        withEntries(
+          {purchasesRole, settingsScreenRole, localizationRole},
+          languages: ['uk', 'en', 'de'],
+        ),
+        'my_app',
+      );
+      expect(files.keys, [purchasesSettingFile]);
+      final text = files[purchasesSettingFile]!;
+      final (:index, :errors) =
+          DartFileIndexer.parse(purchasesSettingFile, text);
+      expect(errors, isEmpty);
+      // The entry of the template of the role, not that of the module,
+      // whose widget has the same name.
+      expect(
+        [
+          for (final import in index.imports)
+            '${import.uri} as ${import.prefix}',
+        ],
+        [
+          'package:my_app/core/purchases/restore_purchases_setting.dart as entry',
+        ],
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['restorePurchasesSetting', 'RestoreTexts', 'restoreTexts'],
+      );
+      expect(
+        text,
+        contains(
+          'const Type restorePurchasesSetting = '
+          'entry.RestorePurchasesSetting;',
+        ),
+      );
+      // Each language of the app in its order, in English where the texts
+      // have no translation.
+      const english = r'''
+    title: 'Restore purchases',
+    active: 'Your premium access is back.',
+    none: 'No purchases to restore.',
+    failed: 'Couldn\'t restore purchases. Try again.',
+''';
+      expect(
+        text,
+        contains(
+          'const Map<String, RestoreTexts> restoreTexts = {\n'
+          "  'uk': (\n"
+          "    title: 'Відновити покупки',\n"
+          "    active: 'Преміум-доступ відновлено.',\n"
+          "    none: 'Немає покупок для відновлення.',\n"
+          "    failed: 'Не вдалося відновити покупки. Спробуйте ще раз.',\n"
+          '  ),\n'
+          "  'en': (\n"
+          '$english'
+          '  ),\n'
+          "  'de': (\n"
+          '$english'
+          '  ),\n'
+          '};\n',
+        ),
+      );
+      // An app without the localization role is in English alone.
+      expect(
+        test.generatedFiles!(
+          withEntries({purchasesRole, settingsScreenRole}),
+          'my_app',
+        )[purchasesSettingFile],
+        contains(
+          'const Map<String, RestoreTexts> restoreTexts = {\n'
+          "  'en': (\n"
+          '$english'
+          '  ),\n'
+          '};\n',
+        ),
+      );
+
+      // The test taps one entry: an app in which the template of the role
+      // gives the settings screen none, or two, is no app of the matrix.
+      for (final (entries, count) in [
+        (others, 0),
+        ([ofRole, ofRole], 2),
+      ]) {
+        expect(
+          () => test.generatedFiles!(
+            withEntries(
+              {purchasesRole, settingsScreenRole},
+              entries: entries,
+            ),
+            'my_app',
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'The template of the purchases role gives the settings screen '
+                  'of purchases $count entries, rather than the entry that '
+                  'restores purchases alone.',
+            ),
+          ),
+          reason: '$count',
+        );
+      }
+    });
+  });
+
+  group('the test of the env role', () {
+    const shopKey = EnvKey(
+      'SHOP_PUBLIC_KEY',
+      description: 'The public key of the shop',
+    );
+    const shopUrl = EnvKey('SHOP_TERMS_URL', description: 'The terms');
+    const feedUrl = EnvKey('FEED_URL', description: 'The address of the feed');
+
+    /// An app with [roles] whose modules give the env role [keys], each
+    /// with its module.
+    MatrixApp appWith(
+      Set<Role> roles, {
+      List<(ModuleId, EnvKey)> keys = const [],
+      List<ModuleId>? everyModuleWith,
+    }) =>
+        MatrixApp(
+          'env',
+          const [ModuleId('shop')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: [
+              for (final (module, key) in keys)
+                envRole.data(key).withOrigin(ModuleOrigin(module)),
+              envRole
+                  .data(const EnvToolArguments(['--values=.env']))
+                  .withOrigin(const ModuleOrigin(ModuleId('values'))),
+            ],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    const shop = ModuleId('shop');
+    const feed = ModuleId('feed');
+    final withKeys = appWith(
+      {envRole},
+      keys: [(shop, shopKey), (shop, shopUrl), (feed, feedUrl)],
+    );
+
+    test(
+        'applies to the apps with the role whose modules give it keys, '
+        'whichever module provides the role, or to those of them that it is '
+        'given, and only reads', () async {
+      final test = await envRoleAppTest();
+
+      expect(p.basename(test.directory), 'env_role');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      expect(test.roles, {envRole});
+      expect(test.appliesTo(withKeys), isTrue);
+      // An app with the role and no key has no getter to read, and an app
+      // without the role has no AppEnv.
+      expect(test.appliesTo(appWith({envRole})), isFalse);
+      expect(
+        test.appliesTo(
+          appWith(const {}, keys: [(shop, shopKey)]),
+        ),
+        isFalse,
+      );
+      // It gives no value, has no mocks, and no probe: the values of an app
+      // on a device are those of its developer.
+      expect(test.envValues, isNull);
+      expect(test.values, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      // The matrix of the CLI runs it in the apps whose modules give the
+      // role keys: those of revenuecat and of the paywall, whose tests give
+      // the keys values in .env, and those with every module.
+      expect(
+        [
+          for (final app in apps)
+            if (named('env_role').appliesTo(app)) app.name,
+        ],
+        [
+          _rcAll,
+          _rcAuthSettings,
+          _rcAuthL10n,
+          _rcSettingsL10n,
+          _rcAuth,
+          _rcSettings,
+          _rcL10n,
+          _rc,
+          ..._paywall,
+          ..._everyModule,
+        ],
+      );
+
+      // As the fixtures take it, only in the apps with every module.
+      final everyModule = await envRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      );
+      expect(everyModule.appliesTo(withKeys), isFalse);
+      expect(
+        everyModule.appliesTo(
+          appWith(
+            {envRole},
+            keys: [(shop, shopKey)],
+            everyModuleWith: const [],
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        everyModule.appliesTo(appWith({envRole}, everyModuleWith: const [])),
+        isFalse,
+      );
+    });
+
+    test(
+        'gets the file of the values of the app and its keys, each with its '
+        'getter of AppEnv, in the order of the role, from the data of the '
+        'role', () async {
+      final test = await envRoleAppTest();
+
+      final files = test.generatedFiles!(withKeys, 'my_app');
+
+      expect(files.keys, [envKeysFile]);
+      final text = files[envKeysFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(envKeysFile, text);
+      expect(errors, isEmpty);
+      expect(
+        [for (final import in index.imports) import.uri],
+        ['package:my_app/core/env/app_env.dart'],
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['dotEnvFile', 'AppKey', 'appKeys'],
+      );
+      expect(text, contains("const String dotEnvFile = '.env';"));
+      expect(
+        text,
+        contains(
+          'final List<AppKey> appKeys = [\n'
+          '  (\n'
+          "    name: 'SHOP_PUBLIC_KEY',\n"
+          "    getter: 'shopPublicKey',\n"
+          '    read: () => AppEnv.shopPublicKey,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'SHOP_TERMS_URL',\n"
+          "    getter: 'shopTermsUrl',\n"
+          '    read: () => AppEnv.shopTermsUrl,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'FEED_URL',\n"
+          "    getter: 'feedUrl',\n"
+          '    read: () => AppEnv.feedUrl,\n'
+          '  ),\n'
+          '];\n',
+        ),
+      );
+      // The test of the role reads the file of the values from the path of
+      // the role, which the matrix writes the values into.
+      expect(EnvRole.dotEnvFile, matrixEnv.file);
+      // It imports the file that the matrix writes next to it, and no file
+      // of the app.
+      final testFile = File(
+        p.join(test.directory, 'test', 'env_role', 'env_role_test.dart'),
+      );
+      final parsed = DartFileIndexer.parse(
+        'test/env_role/env_role_test.dart',
+        testFile.readAsStringSync(),
+      );
+      expect(parsed.errors, isEmpty);
+      expect(
+        [for (final import in parsed.index.imports) import.uri],
+        ['dart:io', 'package:flutter_test/flutter_test.dart', 'keys.dart'],
+      );
+      expect(p.posix.basename(envKeysFile), 'keys.dart');
+      expect(
+        p.posix.dirname(envKeysFile),
+        p.posix.dirname('test/env_role/env_role_test.dart'),
+      );
+    });
+  });
+
+  test(
       'the test of local_notifications applies to the apps with the module, '
       'whatever else they have, declares the mocks of its platform side for '
       'the tests of every module of those apps, and has a probe for the '
@@ -4328,6 +5401,92 @@ void main() {
           if (parameter.kind.name.startsWith('required')) parameter.name,
       ],
       isEmpty,
+    );
+  });
+
+  test(
+      'the test of revenuecat applies to the apps with the module, whatever '
+      'else they have, gives the keys of the module values of the tests in '
+      '.env, declares the mocks of its platform side for the tests of every '
+      'module of those apps, and has a probe for the start check', () {
+    final test = named('revenuecat');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        _rcAll,
+        _rcAuthSettings,
+        _rcAuthL10n,
+        _rcSettingsL10n,
+        _rcAuth,
+        _rcSettings,
+        _rcL10n,
+        _rc,
+        ..._paywall,
+        ..._everyModule,
+      ],
+    );
+    // It tests what only this provider of the purchases role does, so it
+    // names no role: the tests of the role check what every provider keeps
+    // to.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    expect(test.devDependencies, isEmpty);
+    // Keys for the stores of the platforms, which only the mocks take, and
+    // none for the Test Store, which a debug build would take instead, the
+    // same in every app.
+    for (final app in apps.where(test.appliesTo)) {
+      expect(
+        test.envValues!(app),
+        {
+          'REVENUECAT_APPLE_KEY': 'appl_tests',
+          'REVENUECAT_GOOGLE_KEY': 'goog_tests',
+          'REVENUECAT_TEST_KEY': '',
+        },
+        reason: app.name,
+      );
+    }
+    expect(test.mocks!.path, 'test/revenuecat_mocks.dart');
+    expect(test.mocks!.function, 'mockRevenueCat');
+    expect(test.startProbe!.path, 'integration_test/revenuecat/probe.dart');
+    expect(test.startProbe!.function, 'probeRevenueCat');
+    // The mocks are a function of their file that takes nothing and
+    // returns RevenueCat in memory, as the configuration of the tests of an
+    // app calls it, and the probe a function of its file that takes the one
+    // that waits until the screen settles, as the start check calls it.
+    String fileOf(String path) =>
+        File(p.joinAll([test.directory, ...path.split('/')]))
+            .readAsStringSync();
+    final mocks = DartFileIndexer.parse(
+      test.mocks!.path,
+      fileOf(test.mocks!.path),
+    );
+    expect(mocks.errors, isEmpty);
+    final function = mocks.index.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'MockRevenueCat');
+    expect(function.parameters, isEmpty);
+    final probe = DartFileIndexer.parse(
+      test.startProbe!.path,
+      fileOf(test.startProbe!.path),
+    );
+    expect(probe.errors, isEmpty);
+    final probing = probe.index.declarations.singleWhere(
+      (declaration) => declaration.name == test.startProbe!.function,
+    );
+    expect(probing.kind, DeclarationKind.function);
+    expect(probing.type, 'Future<List<String>>');
+    expect(
+      [
+        for (final parameter in probing.parameters)
+          '${parameter.kind.name} ${parameter.type}',
+      ],
+      ['requiredPositional Future<void> Function()'],
     );
   });
 
@@ -4413,10 +5572,15 @@ void main() {
         'firebase_auth with router',
         'firebase_auth',
         // The apps of Google sign-in, of Sign in with Apple and of the
-        // sign-in get the provider of the auth role.
+        // sign-in get the provider of the auth role, and so do the apps of
+        // revenuecat with the auth role, which the purchases role uses.
         ..._googleSignIn,
         ..._appleSignIn,
         ..._signIn,
+        _rcAll,
+        _rcAuthSettings,
+        _rcAuthL10n,
+        _rcAuth,
         ..._authModes,
         ..._everyModule,
       ],

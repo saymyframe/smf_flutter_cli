@@ -15,6 +15,8 @@ import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
+import 'package:smf_paywall/smf_paywall.dart';
+import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
@@ -42,6 +44,8 @@ Future<MatrixAppTests> smfAppTests() async {
     'smf_local_notifications',
   );
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
+  final paywall = await appTestsDirectoryOf('smf_paywall');
+  final revenueCat = await appTestsDirectoryOf('smf_revenuecat');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
     'smf_shared_preferences',
@@ -204,7 +208,10 @@ Future<MatrixAppTests> smfAppTests() async {
       // that stays the same, and the matrix sets them up for the tests of
       // every module of the app, since the start-up of the app starts the
       // push messages. Its probe compares, on a device, the address of the
-      // app with the token that the Firebase SDK has there.
+      // app with the token that the Firebase SDK has there, and then asks
+      // the script of CI that started the app for a push message to that
+      // address, the answer firebase_messaging, which CI gives the app with
+      // Firebase on Android.
       MatrixAppTest(
         '$messaging/firebase_messaging',
         appliesTo: _has(FirebaseMessagingModule.id),
@@ -215,6 +222,43 @@ Future<MatrixAppTests> smfAppTests() async {
         startProbe: const MatrixStartProbe(
           'integration_test/firebase_messaging/probe.dart',
           'probeFirebaseMessaging',
+          answer: 'firebase_messaging',
+        ),
+      ),
+      // The purchases service of the module on RevenueCat: the key of .env
+      // that a build takes, the key of the Test Store only in a debug build,
+      // and no call of RevenueCat without a key or before RevenueCat is
+      // configured; what each call sends to RevenueCat, on Android and on
+      // iOS, and the reason that each code of RevenueCat gets, also a code
+      // that is no number, and a cancel, which is no failure; the plans from
+      // the current offering, with the intro offers that the user may take,
+      // and the access from the entitlement premium; and a grant of the
+      // backend, which reaches appPurchases once the cache of the customer
+      // info is emptied. The tests use the service of the module, and leave
+      // what every provider of the purchases role does to the tests of the
+      // role. The mocks are RevenueCat, its backend and the store account of
+      // a device in memory, which the matrix sets up for the tests of every
+      // module of the app, since the start-up of the app starts the
+      // purchases, and the matrix writes the keys of the tests into .env for
+      // the platforms, with that of the Test Store empty, so that the
+      // service is configured in every test of the app (see
+      // _revenueCatKeysOf). Its probe compares, on a device, the access and
+      // the plans of the app with what the RevenueCat SDK gives there, and
+      // then asks the script of CI that started the app for premium access,
+      // the answer revenuecat, which CI grants in the RevenueCat project of
+      // CI to the apps that it starts without external services.
+      MatrixAppTest(
+        '$revenueCat/revenuecat',
+        appliesTo: _has(RevenueCatModule.id),
+        envValues: _revenueCatKeysOf,
+        mocks: const MatrixMocks(
+          'test/revenuecat_mocks.dart',
+          'mockRevenueCat',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/revenuecat/probe.dart',
+          'probeRevenueCat',
+          answer: 'revenuecat',
         ),
       ),
       // The onboarding of the module: on its first launch, the app shows
@@ -379,6 +423,71 @@ Future<MatrixAppTests> smfAppTests() async {
           'signUpTestAccount',
         ),
       ),
+      // The paywall of the module, over the purchases of the app,
+      // whichever module provides them: a request for the screen of the
+      // subscription, whose route needs premium access, opens the paywall
+      // over the page, a restore that finds nothing says so, the close
+      // button drops the request, and once the user bought a plan with the
+      // mocks of the provider, the router closes the paywall and shows the
+      // screen of the subscription; the paywall that code pushes closes the
+      // same way. Over a service of the test, the paywall shows grey cards
+      // while the plans load, a card for each plan with its price and its
+      // intro offer, the button, what the plan costs after its trial and
+      // the terms of the selected plan, the text of each failure, a busy
+      // button, plans that are not available with a note for the developer,
+      // also after a restore there, the link to the address of .env and the
+      // key that has none (see _paywallLinksOf); the
+      // screen of the subscription tells the plan and when it renews or
+      // ends, opens the page of the store and closes once the access ends;
+      // and the paywall fits a small phone with a large text size. For them
+      // the matrix writes the screen that the app starts on, the settings
+      // screen of the app with the entry of the module, if the app has one,
+      // whether that screen is a destination of the main navigation, and
+      // the texts of the module in each language of the app (see
+      // _paywallOfAppOf). The router shows the paywall and closes it,
+      // whichever module provides it, as the router role says of the routes
+      // that ask for a condition, so this is a test of the router role too.
+      // The mocks buy the first plan of the offer before the app starts,
+      // through the purchases of the app, and the matrix sets them up for
+      // the tests of every module of the app, which expect the screens that
+      // the guard of premium access would keep them from. The test has no
+      // probe for the start check: the walk of the routes shows the paywall
+      // on a device, where nothing is bought.
+      MatrixAppTest(
+        '$paywall/paywall',
+        appliesTo: _has(PaywallModule.id),
+        devDependencies: const ['url_launcher_platform_interface'],
+        envValues: _paywallLinksOf,
+        generatedFiles: _paywallOfAppOf,
+        roles: {routerRole},
+        mocks: const MatrixMocks('test/paywall_mocks.dart', 'grantPremium'),
+      ),
+      // The step of the paywall module in the onboarding, in the apps with
+      // the module and the onboarding screen role, whichever module
+      // provides it: the list of the steps of the app has the step once, a
+      // new onboarding screen shows it while the user has no premium access,
+      // in each language of the app, and its button shows the paywall over
+      // the onboarding. The close button and back close the paywall, and
+      // once the user bought a plan with the mocks of the provider of
+      // purchases, the step closes the paywall itself, since the router does
+      // not know its route; each time the onboarding goes on, and the page
+      // below it stays. Then a new onboarding screen leaves the step out.
+      // For it the matrix writes the onboarding screen of the app (see
+      // _paywallStepOf), and the texts of the step among those of the test
+      // of the paywall, whose helpers it uses and which runs in every app
+      // that this test runs in. The onboarding shows the step and goes on,
+      // and the router leaves the routes without a page over its pages as
+      // they are while the guard of premium access notifies, whichever
+      // modules provide the two roles, so this is a test of both roles too.
+      // It has no probe for the start check: nothing is bought on a device.
+      MatrixAppTest(
+        '$paywall/paywall_step',
+        appliesTo: (app) =>
+            app.modules.contains(PaywallModule.id) &&
+            app.hook!.presentRoles.contains(onboardingScreenRole),
+        generatedFiles: _paywallStepOf,
+        roles: {routerRole, onboardingScreenRole},
+      ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
       await diRoleAppTest(),
@@ -388,6 +497,12 @@ Future<MatrixAppTests> smfAppTests() async {
       // The preferences of the apps with the preferences role, whichever
       // module provides it.
       await preferencesRoleAppTest(),
+      // The values of the apps with the env role whose modules give it
+      // keys, whichever module provides it: each getter of AppEnv returns
+      // the value that .env gives its key, and null for a key that .env
+      // leaves empty. The values are those that the tests of the modules of
+      // the app give their keys, such as those of the test of revenuecat.
+      await envRoleAppTest(),
       // The sign-in of the apps with the auth role, whichever module
       // provides it, in the mode that the role chose for each: the service
       // of the provider keeps its contract, and the session of the app
@@ -425,6 +540,24 @@ Future<MatrixAppTests> smfAppTests() async {
       // message in the foreground where the platform does not, gives each
       // tap once, and the next start has the same address.
       await pushRoleAppTest(),
+      // The purchases of the apps with the purchases role, whichever module
+      // provides it: appPurchases over a scripted service and over the
+      // service of the provider, the purchases of each user apart, and the
+      // next start with what a user bought.
+      await purchasesRoleAppTest(),
+      // The purchases of the users of the session, in the apps with the
+      // purchases role and the auth role, whichever modules provide them,
+      // in each mode of the auth role.
+      await purchasesSessionAppTest(),
+      // The purchases of the user of the device at the next start, in the
+      // apps with the purchases role and without the auth role.
+      await purchasesDeviceAppTest(),
+      // The entry that restores purchases on the settings screen of the
+      // apps with the purchases role and the settings screen role,
+      // whichever modules provide them: a tap restores once and shows what
+      // the restore found in the language of the app, and the entry takes
+      // no second tap while a restore is on its way.
+      await purchasesSettingAppTest(),
       // The routes of the apps with a router, whichever module provides
       // it: the test starts the app and goes to each location that needs
       // no values.
@@ -477,19 +610,21 @@ Future<MatrixAppTests> smfAppTests() async {
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
-    // role, of the auth role, of the notifications role, of the push role,
-    // of the settings screen role, of the theme role and of the
-    // localization role gets the tests of its role. Each provider of the
-    // app entry role gets the test of the theme role, which checks that its
-    // root rebuilds.
+    // role, of the env role, of the auth role, of the notifications role,
+    // of the push role, of the purchases role, of the settings screen role,
+    // of the theme role and of the localization role gets the tests of its
+    // role. Each provider of the app entry role gets the test of the theme
+    // role, which checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
       eventsRole,
       preferencesRole,
+      envRole,
       authRole,
       notificationsRole,
       pushRole,
+      purchasesRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,
@@ -1172,6 +1307,7 @@ Map<String, String> _notificationsStepOf(MatrixApp app, String packageName) {
   final shows = codeOf(showIf);
   final action = codeOf(steps.single.run);
   final imports = [
+    "import 'package:flutter/widgets.dart';",
     for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
       "import '$uri' as $prefix;",
   ]..sort();
@@ -1188,8 +1324,8 @@ ${imports.join('\n')}
 const bool Function() stepShows = $shows;
 
 /// What the button of the step does: its action, which asks for the
-/// permission.
-const Future<void> Function() stepAction = $action;
+/// permission, for the context of the onboarding screen.
+const Future<void> Function(BuildContext context) stepAction = $action;
 ''',
   };
 }
@@ -1244,10 +1380,323 @@ Future<MatrixAppTest> pushRoleAppTest({
       ),
     );
 
+/// The values that the test of the revenuecat module gives the keys of the
+/// module in .env, the same in every app: keys of the tests for the stores
+/// of the platforms, which only the mocks take, and none for the Test
+/// Store, which a debug build would take in their place.
+Map<String, String?> _revenueCatKeysOf(MatrixApp app) => {
+      RevenueCatModule.appleKey.name: 'appl_tests',
+      RevenueCatModule.googleKey.name: 'goog_tests',
+      RevenueCatModule.testKey.name: '',
+    };
+
 /// The values of the files of the test of the push role, the same in every
 /// app: `push_owner`, the owner of the notifications through which the app
 /// shows a message, which is the id of the role.
 Map<String, String> _pushValuesOf(MatrixApp app) => {'push_owner': pushRole.id};
+
+/// The test of the purchases role that the CLI keeps in its
+/// `app_tests/purchases_role`, for the apps with the role, whichever module
+/// provides it, that [among] accepts, or all of them:
+/// - `appPurchases`, over a service of purchases of the test that scripts
+///   what a provider answers, and with a controller of its own: a call made
+///   before the first start waits for it, and the start completes after it
+///   and after the purchase that its completion makes; the start waits for
+///   the access at most `startWait`, and a later access still becomes the
+///   value; the controller asks again when the user comes back to the app,
+///   and takes each change that the service tells of; a change of the user
+///   waits for the purchase on its way, which belongs to the user who made
+///   it; a provider without what it needs leaves the app without purchases,
+///   prints its hint once and stops nothing; and a call fails only with a
+///   `PurchasesFailure`, a cancel completes with `false`, and an answer that
+///   gives no premium access fails with `notConfigured`;
+/// - `appPurchases` over the service of the provider, with users of the
+///   test: the offer has at least one plan, each with an id of its own, a
+///   title, a price in a currency and periods of one unit or more; a fresh
+///   user who buys a plan has premium access as the plan gives it, which the
+///   listeners hear of once, with no other change right after it, and a
+///   restore gives; a fresh user who restores gets what the device bought;
+///   and the purchases of each user stay apart;
+/// - the next start, `initPurchases()` again, gives a user the premium
+///   access that the user bought.
+///
+/// The test knows only the role. It relies on the convention that the mocks
+/// of every provider keep to, as the role says, and identifies a throwaway
+/// user before its fresh users, so that none of them takes over what the
+/// user of the device bought. Its probe, `probePurchases()` of
+/// `integration_test/purchases_role/probe.dart`, only reads, for the start
+/// check on a device: the access of the app is the one that the service of
+/// the provider gives, and a provider that is not set up, or a store that
+/// does not answer, is no problem while the app shows no premium access.
+/// The test runs the probe too.
+Future<MatrixAppTest> purchasesRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(purchasesRole) &&
+          (among?.call(app) ?? true),
+      roles: {purchasesRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/purchases_role/probe.dart',
+        'probePurchases',
+      ),
+    );
+
+/// The test of the purchases of the users of the session that the CLI keeps
+/// in its `app_tests/purchases_session`, for the apps with the purchases
+/// role and the auth role, whichever modules provide them, that [among]
+/// accepts, or all of them, in each mode of the auth role: a user without
+/// an account who buys a plan keeps the premium access after a sign-up;
+/// after a sign-out the next user of the device has none of the purchases
+/// of the user who signed out, whose account has them again after a
+/// sign-in; the user without an account keeps what it bought at the next
+/// start; and a sign-in to an account that exists already leaves the
+/// purchases with the user of the device, while the next user of the device
+/// after that account signs out has none of them.
+///
+/// It is a test of the purchases role, whose template makes `appPurchases`
+/// follow the session of the app, and whose contract says whose purchases
+/// they are. It reads the mode of the app from `authMode` of the app, so
+/// the matrix fills in nothing. It uses the helpers of the test of the
+/// purchases role ([purchasesRoleAppTest]), which every such app among
+/// those that [among] accepts has. It has no probe for the start check:
+/// nobody can sign in on a device.
+Future<MatrixAppTest> purchasesSessionAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_session',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.containsAll(const [purchasesRole, authRole]) &&
+          (among?.call(app) ?? true),
+      roles: {purchasesRole},
+    );
+
+/// The test of the purchases of the user of the device that the CLI keeps in
+/// its `app_tests/purchases_device`, for the apps with the purchases role and
+/// without the auth role, whichever module provides the purchases: the next
+/// start of the app, `initPurchases()` again, gives the user of the device
+/// the premium access that it bought, which the device keeps with its user
+/// from one launch to the next.
+///
+/// It is a test of the purchases role, for the apps whose purchases belong
+/// to the user of the device alone; the test of the purchases of the users
+/// of the session ([purchasesSessionAppTest]) checks the user of the device
+/// in the apps with sign-in. It has helpers of its own, since the test of
+/// the role need not run in its apps, and no probe for the start check: a
+/// purchase would show the sheet of the store on a device.
+Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_device',
+      appliesTo: (app) {
+        final roles = app.hook!.presentRoles;
+        return roles.contains(purchasesRole) && !roles.contains(authRole);
+      },
+      roles: {purchasesRole},
+    );
+
+/// The test of the env role that the CLI keeps in its `app_tests/env_role`,
+/// for the apps with the role whose modules give it keys, whichever module
+/// provides the role, that [among] accepts, or all of them: for each key of
+/// the app, the getter of `AppEnv` returns the value that `.env` gives the
+/// key, and `null` when `.env` leaves the value empty or lacks the key.
+///
+/// The test only reads: it parses the file of the values of the app
+/// ([EnvRole.dotEnvFile]), in the forms of a value that the role names, as
+/// the matrix wrote it with the values that the tests of the modules of the
+/// app give their keys (`MatrixAppTest.envValues`), and it gives no value
+/// itself. The matrix writes the keys of the app for it into [envKeysFile],
+/// from the data of the role. It has no probe for the start check: the
+/// values of an app on a device are those of its developer.
+///
+/// Only the apps of the fixtures have a key that `.env` lacks, whose line
+/// the test of a fixture module removes. In an app of the CLI, the template
+/// of the role writes a line for every key and no test of a module removes
+/// one, so the test of the missing keys is skipped there, and only the
+/// fixture provider of the role is checked for them.
+Future<MatrixAppTest> envRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/env_role',
+      appliesTo: (app) =>
+          _envKeysOf(app).isNotEmpty && (among?.call(app) ?? true),
+      generatedFiles: _envKeysFileOf,
+      roles: {envRole},
+    );
+
+/// The keys of the env role of [app], an app of the matrix, in the order of
+/// the role ([EnvRole.keysIn]), or none in an app without the role.
+List<AppEnvKey> _envKeysOf(MatrixApp app) {
+  final hook = app.hook!;
+  return hook.presentRoles.contains(envRole)
+      ? envRole.keysIn(envRole.hookInput(hook))
+      : const [];
+}
+
+/// The path in an app of what the matrix writes for the test of the env
+/// role: `dotEnvFile`, the path of the file of the values of the app from
+/// its root ([EnvRole.dotEnvFile]), and `appKeys`, the keys of the app in
+/// the order of the role ([EnvRole.keysIn]), each an `AppKey` with its
+/// name, the name of its getter of `AppEnv` and a function that reads the
+/// getter.
+const envKeysFile = 'test/env_role/keys.dart';
+
+/// The file at [envKeysFile] of [app], an app of the matrix with the env
+/// role, whose package is [packageName].
+Map<String, String> _envKeysFileOf(MatrixApp app, String packageName) {
+  final keys = StringBuffer();
+  for (final key in _envKeysOf(app)) {
+    keys
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString(key.name)},')
+      ..writeln('    getter: ${SmfNames.dartString(key.getter)},')
+      ..writeln('    read: () => AppEnv.${key.getter},')
+      ..writeln('  ),');
+  }
+  return {
+    envKeysFile: '''
+// The keys of the values of the app, which the matrix of SMF writes from the
+// data of the env role of the app for the test of the env role.
+import '${EnvRole.appEnv.importRef.resolveUri(packageName)}';
+
+/// The path of the file of the values of the app, from its root.
+const String dotEnvFile = ${SmfNames.dartString(EnvRole.dotEnvFile)};
+
+/// A key of the app: its name, the name of its getter of `AppEnv`, and a
+/// function that reads the getter.
+typedef AppKey = ({String name, String getter, String? Function() read});
+
+/// The keys of the app, in the order of the env role.
+final List<AppKey> appKeys = [
+$keys];
+''',
+  };
+}
+
+/// The test of the entry that restores purchases on the settings screen,
+/// which the template of the purchases role contributes, that the CLI keeps
+/// in its `app_tests/purchases_setting`, for the apps with the purchases
+/// role and the settings screen role, whichever modules provide them. Over
+/// a service of purchases of the test that scripts what a provider answers:
+/// - the settings screen shows the entry once, with its title and no result
+///   before a restore, in each language of the app;
+/// - a tap restores once, and the entry shows what the restore found: that
+///   the premium access is back, that there was nothing to restore, or that
+///   the restore failed, for every reason of a failure and for an error of
+///   another kind, with the words of the provider below it in debug mode;
+///   a screen reader reads the result as it comes;
+/// - while a restore is on its way, the entry shows a spinner and no result
+///   of an earlier restore, and a second tap restores nothing more;
+/// - on a small phone with a large text size, the title and a long failure
+///   stay in the row of the entry, in full.
+///
+/// The test knows only the two roles. The matrix writes the type of the
+/// widget of the entry for it into [purchasesSettingFile], from the entries
+/// of the settings screen role of the app, with the texts of the entry in
+/// each language of the app, from the localization role. It opens the
+/// settings screen with the helper of the tests of the settings screen
+/// role, and takes the service of the test from the files of the test of
+/// the purchases role ([purchasesRoleAppTest]), which runs in every app that
+/// this test runs in. It has no probe for the start check: a restore could
+/// ask for the store account on a device, and the walk of the routes goes
+/// to the settings screen there.
+Future<MatrixAppTest> purchasesSettingAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/purchases_setting',
+      appliesTo: (app) => app.hook!.presentRoles
+          .containsAll(const [purchasesRole, settingsScreenRole]),
+      generatedFiles: _purchasesSettingOf,
+      roles: {purchasesRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the entry
+/// that restores purchases on the settings screen:
+/// `restorePurchasesSetting`, the type of the widget of the entry that the
+/// template of the purchases role gives the settings screen role, and
+/// `restoreTexts`, the texts of the entry in each language of the app, by
+/// the code of the language: its title ([PurchasesRole.restoreTitle]) and
+/// what it shows when a restore found premium access, when it found
+/// nothing and when it failed ([PurchasesRole.restoreActive],
+/// [PurchasesRole.restoreNone] and [PurchasesRole.restoreFailed]). The
+/// languages are those of the localization role of the app
+/// ([LocalizationRole.localesIn]), in its order, and English alone in an
+/// app without the role, whose entry has the English texts.
+const purchasesSettingFile = 'test/purchases_setting/setting.dart';
+
+/// The file at [purchasesSettingFile] of [app], an app of the matrix with
+/// the purchases role and the settings screen role, whose package is
+/// [packageName].
+///
+/// It imports the file of the entry with the prefix `entry`. A text without
+/// a translation into a language of the app is the English one there, as
+/// the localization role says of the texts of an app. Throws a
+/// [StateError] if the template of the purchases role gives the settings
+/// screen no entry or more than one: the test taps one entry.
+Map<String, String> _purchasesSettingOf(MatrixApp app, String packageName) {
+  final hook = app.hook!;
+  final entries = [
+    for (final RoleData(:value, :origin)
+        in settingsScreenRole.hookInput(hook).data)
+      if (value is SettingsEntry &&
+          origin == const RoleTemplateOrigin(purchasesRole))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The template of the $purchasesRole gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry that '
+      'restores purchases alone.',
+    );
+  }
+  final widget = entries.single.widget;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final texts = StringBuffer();
+  for (final language in languages) {
+    texts.writeln('  ${SmfNames.dartString(language)}: (');
+    for (final (field, text) in const [
+      ('title', PurchasesRole.restoreTitle),
+      ('active', PurchasesRole.restoreActive),
+      ('none', PurchasesRole.restoreNone),
+      ('failed', PurchasesRole.restoreFailed),
+    ]) {
+      final value = SmfNames.dartString(text.textIn(language) ?? text.en);
+      texts.writeln('    $field: $value,');
+    }
+    texts.writeln('  ),');
+  }
+  return {
+    purchasesSettingFile: '''
+// The entry that restores purchases on the settings screen and its texts,
+// which the matrix of SMF writes from the data of the settings screen role
+// and of the localization role of the app for the test of the entry, in
+// test/purchases_setting.
+import '${widget.import!.resolveUri(packageName)}' as entry;
+
+/// The type of the widget of the entry that restores purchases, an entry of
+/// the settings screen.
+const Type restorePurchasesSetting = ${widget.codeWith('entry')};
+
+/// The texts of the entry in one language: its title, and what it shows
+/// when a restore found premium access, when it found nothing and when it
+/// failed.
+typedef RestoreTexts = ({
+  String title,
+  String active,
+  String none,
+  String failed,
+});
+
+/// The texts of the entry by the code of each language of the app, the first
+/// of which the app uses when the device asks for none of them. An app
+/// without the localization role has the English texts alone.
+const Map<String, RestoreTexts> restoreTexts = {
+$texts};
+''',
+  };
+}
 
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module
@@ -2191,6 +2640,180 @@ const Type accountEntry = ${entry.codeWith('entry')};
 /// localization role has the English texts alone.
 const Map<String, Map<String, String>> signInTexts = {
 $texts};
+''',
+  };
+}
+
+/// The values that the test of the paywall module gives the keys of the
+/// module in .env, the same in every app: an address of the terms of use,
+/// which its link opens, and none of the privacy policy, whose link the
+/// paywall then leaves out and whose key its note for the developer names.
+Map<String, String?> _paywallLinksOf(MatrixApp app) => {
+      PaywallModule.termsKey.name: 'https://example.com/terms',
+      PaywallModule.privacyKey.name: '',
+    };
+
+/// The path in an app of what the matrix writes for the tests of the
+/// paywall module: `startScreen`, the type of the screen that the app
+/// starts on; `settingsLocation` and `settingsScreen`, the location of the
+/// route that the provider of the settings screen role names as the
+/// settings screen and the type of that screen, `settingsInMainNavigation`,
+/// whether that screen is a destination of the main navigation of the app,
+/// and `subscriptionEntry`, the type of the widget of the entry that the
+/// module gives that screen, each `null` or `false` in an app without a
+/// settings screen; and `paywallTexts`, the texts of the module
+/// ([PaywallModule.texts], with [PaywallModule.settingTexts] in an app with
+/// a settings screen and [PaywallModule.stepTexts] in an app with an
+/// onboarding), each by its name, in each language of the app, by the code
+/// of the language. The languages are those of the localization
+/// role of the app ([LocalizationRole.localesIn]), in its order, and
+/// English alone in an app without the role.
+const paywallOfAppFile = 'test/paywall/of_app.dart';
+
+/// The file at [paywallOfAppFile] of [app], an app of the matrix with the
+/// router role, whose package is [packageName].
+///
+/// The screen that the app starts on is that of the route that the router
+/// role chose, or the fallback start screen of the app entry role; the file
+/// imports its file with the prefix `screen`. The settings screen and the
+/// entry come from the data of the settings screen role, whichever module
+/// provides it: the entry is the one that the module gave the role.
+Map<String, String> _paywallOfAppOf(MatrixApp app, String packageName) {
+  final (import, screen) = _startScreenClassOf(app);
+  final hasSettings = app.hook!.presentRoles.contains(settingsScreenRole);
+  final hasOnboarding = app.hook!.presentRoles.contains(onboardingScreenRole);
+  final texts = _textsByLanguageOf(
+    app,
+    TextsData([
+      ...PaywallModule.texts.texts,
+      if (hasSettings) ...PaywallModule.settingTexts.texts,
+      if (hasOnboarding) ...PaywallModule.stepTexts.texts,
+    ]),
+  );
+  var settingsImports = '';
+  var settings = '''
+/// The location of the route that shows the settings screen, or `null` in
+/// an app without one.
+const AppLocation? settingsLocation = null;
+
+/// The type of the settings screen, or `null` in an app without one.
+const Type? settingsScreen = null;
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = false;
+
+/// The type of the widget of the entry of the subscription on the settings
+/// screen, or `null` in an app without one.
+const Type? subscriptionEntry = null;
+''';
+  if (hasSettings) {
+    final input = settingsScreenRole.hookInput(app.hook!);
+    final route = _settingsRouteOf(app, input);
+    final entries = [
+      for (final RoleData(:value, :origin) in input.data)
+        if (value is SettingsEntry &&
+            origin == const ModuleOrigin(PaywallModule.id))
+          value,
+    ];
+    if (entries.length != 1) {
+      throw StateError(
+        'The module ${PaywallModule.id} gives the settings screen of '
+        '${app.name} ${entries.length} entries, rather than the entry of the '
+        'subscription alone.',
+      );
+    }
+    final entry = entries.single.widget;
+    final settingsScreen = route.route.screen;
+    settingsImports =
+        "import '${entry.import!.resolveUri(packageName)}' as entry;\n"
+        "import '${settingsScreen.import.resolveUri(packageName)}' "
+        'as settings;\n';
+    settings = '''
+// The constants have the types of an app without a settings screen, where
+// they are `null`, so that the tests read them alike in every app.
+// ignore_for_file: unnecessary_nullable_for_final_variable_declarations
+
+/// The location of the route that shows the settings screen, or `null` in
+/// an app without one.
+const AppLocation? settingsLocation = ${route.locationClass}();
+
+/// The type of the settings screen, or `null` in an app without one.
+const Type? settingsScreen = settings.${settingsScreen.className};
+
+/// Whether the settings screen is a destination of the main navigation of
+/// the app. Code cannot push such a screen on top of another one.
+const bool settingsInMainNavigation = ${_settingsInMainNavigationOf(app)};
+
+/// The type of the widget of the entry of the subscription on the settings
+/// screen, or `null` in an app without one.
+const Type? subscriptionEntry = ${entry.codeWith('entry')};
+''';
+  }
+  return {
+    paywallOfAppFile: '''
+// What the tests of the paywall module, in test/paywall, need to know of
+// the app, which the matrix of SMF writes from the data of the router role
+// of the app and of the settings screen role of the app, from the texts of
+// the module and from the languages of the localization role of the app.
+import '${_navigationOf(packageName)}';
+${settingsImports}import '${import.resolveUri(packageName)}' as screen;
+
+/// The type of the screen that the app starts on: that of the route that
+/// the router role chose, or the fallback start screen of the app entry
+/// role in an app that no route can start.
+const Type startScreen = screen.$screen;
+
+$settings
+/// The texts of the paywall by the code of each language of the app, the
+/// first of which the app uses when the device asks for none of them: each
+/// text by its name in the module. An app without the localization role has
+/// the English texts alone.
+const Map<String, Map<String, String>> paywallTexts = {
+$texts};
+''',
+  };
+}
+
+/// The path in an app of what the matrix writes for the test of the step of
+/// the paywall module in the onboarding: `onboardingScreen`, the type of the
+/// screen of the route that the provider of the onboarding screen role
+/// names ([OnboardingScreenRole.screenIn]), and `newOnboardingScreen()`,
+/// which creates one as that route does.
+const paywallStepOnboardingFile = 'test/paywall_step/onboarding.dart';
+
+/// The file at [paywallStepOnboardingFile] of [app], an app of the matrix
+/// with the paywall module and the onboarding screen role, whose package is
+/// [packageName].
+///
+/// Throws a [StateError] if no module names a route of its own as the
+/// onboarding screen, which the rules of the role report in an app of the
+/// matrix.
+Map<String, String> _paywallStepOf(MatrixApp app, String packageName) {
+  final route = onboardingScreenRole.screenIn(
+    onboardingScreenRole.hookInput(app.hook!),
+  );
+  if (route == null) {
+    throw StateError(
+      'No module of ${app.name} names a route of its own as the onboarding '
+      'screen.',
+    );
+  }
+  final screen = route.route.screen;
+  return {
+    paywallStepOnboardingFile: '''
+// The onboarding screen of the app, which the matrix of SMF writes from the
+// data of the onboarding screen role of the app for the test of the step of
+// the paywall module in the onboarding.
+import 'package:flutter/widgets.dart';
+import '${screen.import.resolveUri(packageName)}' as screen;
+
+/// The type of the onboarding screen: that of the route that the provider
+/// of the onboarding screen role names.
+const Type onboardingScreen = screen.${screen.className};
+
+/// Creates an onboarding screen, as the route of the screen does.
+Widget newOnboardingScreen() => screen.${screen.className}();
 ''',
   };
 }

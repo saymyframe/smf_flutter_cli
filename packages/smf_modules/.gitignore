@@ -12,6 +12,8 @@ pubspec_overrides.yaml
 # IDE
 .idea/
 .vscode/
+# The run configuration of VS Code that a brick puts into the apps.
+!/*/bricks/*/__brick__/.vscode/
 *.iml
 
 # macOS

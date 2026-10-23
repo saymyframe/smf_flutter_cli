@@ -32,6 +32,7 @@ dependencies:
   smf_bloc: ^0.3.3
   smf_bottom_tabs: ^0.4.2
   smf_contracts: ^0.6.0
+  smf_dart_define: ^0.6.0
   smf_event_bus: ^0.3.3
   smf_firebase_analytics: ^0.4.2
   smf_firebase_auth: ^0.6.0
@@ -47,7 +48,9 @@ dependencies:
   smf_local_notifications: ^0.6.0
   smf_material_theme: ^0.4.2
   smf_onboarding: ^0.5.1
+  smf_paywall: ^0.6.0
   smf_pipeline: ^0.6.0
+  smf_revenuecat: ^0.6.0
   smf_riverpod: ^0.3.3
   smf_settings: ^0.4.2
   smf_shared_preferences: ^0.4.3
