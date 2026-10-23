@@ -83,7 +83,7 @@
     },
     {
       "id": "revenuecat.entitlement_and_offering",
-      "title": "Set up the entitlement premium and a current offering in RevenueCat",
+      "title": "Set up the entitlement premium and the default offering in RevenueCat",
       "owner": "revenuecat",
       "ownerKind": "module",
       "ownerName": "revenuecat",

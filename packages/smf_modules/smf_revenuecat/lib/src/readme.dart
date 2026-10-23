@@ -27,13 +27,13 @@ const String _env = EnvRole.dotEnvFile;
 /// what a release needs, which key a build takes, that the keys are public,
 /// and what the app does without a key.
 final String readmeSection = '''
-The app sells its premium access with [RevenueCat](https://www.revenuecat.com) and [purchases_flutter](https://pub.dev/packages/purchases_flutter): `$serviceFile` implements the purchases service of the app on it (see the section ${PurchasesRole.readmeHeading}). The premium access is the entitlement `$_entitlement` in RevenueCat, and the plans of the app are the packages of the current offering. Every package of that offering unlocks the same access, so attach each of its products to `$_entitlement`.
+The app sells its premium access with [RevenueCat](https://www.revenuecat.com) and [purchases_flutter](https://pub.dev/packages/purchases_flutter): `$serviceFile` implements the purchases service of the app on it (see the section ${PurchasesRole.readmeHeading}). The premium access is the entitlement `$_entitlement` in RevenueCat, and the plans of the app are the packages of the default offering, which the SDK calls the current offering. Every package of that offering unlocks the same access, so attach each of its products to `$_entitlement`.
 
 To buy a plan right after generating the app, with no account in a store:
 
 1. Create a project in RevenueCat. A new project has a Test Store with products.
 2. Create an entitlement with the identifier `$_entitlement` and attach the products to it.
-3. Add the packages of those products to an offering, and make that offering the current one.
+3. Add the packages of those products to an offering, and make that offering the default one.
 4. Copy the public API key of the Test Store, which starts with `test_`, into `$_test` in `$_env`.
 5. Run a debug build as the section ${EnvRole.readmeHeading} says, and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
 

@@ -386,7 +386,7 @@ void main() {
         },
         {
           'revenuecat.entitlement_and_offering': 'Set up the entitlement '
-              'premium and a current offering in RevenueCat',
+              'premium and the default offering in RevenueCat',
           'revenuecat.api_keys': 'Copy the API keys of your RevenueCat apps '
               'into .env',
           'revenuecat.app_store_key': 'Give RevenueCat your In-App Purchase '
@@ -698,7 +698,9 @@ void main() {
           allOf([
             contains('Test Store'),
             contains('Test valid purchase'),
-            contains('make that offering the current one'),
+            contains('the default offering, which the SDK calls the '
+                'current offering'),
+            contains('make that offering the default one'),
             contains('In-App Purchase key of App Store Connect'),
             contains('service account of Google Play'),
             contains('A profile or release build never takes it'),

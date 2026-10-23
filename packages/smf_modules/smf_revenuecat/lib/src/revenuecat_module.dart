@@ -85,10 +85,11 @@ final class RevenueCatModule extends SmfModule {
 
   /// The step by hand in which the developer creates the entitlement
   /// [entitlement] in RevenueCat, attaches the products to it and makes an
-  /// offering with their packages current.
+  /// offering with their packages the default offering, which the SDK reads
+  /// as `offerings.current`.
   static const entitlementAndOfferingStep = ManualStep(
     ManualStepId(id, 'entitlement_and_offering'),
-    'Set up the entitlement premium and a current offering in RevenueCat',
+    'Set up the entitlement premium and the default offering in RevenueCat',
   );
 
   /// The step by hand in which the developer copies the public API keys of

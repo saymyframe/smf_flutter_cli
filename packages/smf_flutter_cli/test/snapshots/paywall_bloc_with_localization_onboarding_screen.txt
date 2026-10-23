@@ -283,7 +283,7 @@ Once any commands of the sections below have run, the setup still needs these st
 
 1. Set up payments in App Store Connect and Google Play Console
 2. Create the products of your plans in App Store Connect and Google Play Console
-3. Set up the entitlement premium and a current offering in RevenueCat
+3. Set up the entitlement premium and the default offering in RevenueCat
 4. Copy the API keys of your RevenueCat apps into .env
 5. Give RevenueCat your In-App Purchase key from App Store Connect
 6. Give RevenueCat access to Google Play with a service account
@@ -347,13 +347,13 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
 
 ## RevenueCat
 
-The app sells its premium access with [RevenueCat](https://www.revenuecat.com) and [purchases_flutter](https://pub.dev/packages/purchases_flutter): `lib/core/purchases/revenuecat_purchases_service.dart` implements the purchases service of the app on it (see the section Purchases). The premium access is the entitlement `premium` in RevenueCat, and the plans of the app are the packages of the current offering. Every package of that offering unlocks the same access, so attach each of its products to `premium`.
+The app sells its premium access with [RevenueCat](https://www.revenuecat.com) and [purchases_flutter](https://pub.dev/packages/purchases_flutter): `lib/core/purchases/revenuecat_purchases_service.dart` implements the purchases service of the app on it (see the section Purchases). The premium access is the entitlement `premium` in RevenueCat, and the plans of the app are the packages of the default offering, which the SDK calls the current offering. Every package of that offering unlocks the same access, so attach each of its products to `premium`.
 
 To buy a plan right after generating the app, with no account in a store:
 
 1. Create a project in RevenueCat. A new project has a Test Store with products.
 2. Create an entitlement with the identifier `premium` and attach the products to it.
-3. Add the packages of those products to an offering, and make that offering the current one.
+3. Add the packages of those products to an offering, and make that offering the default one.
 4. Copy the public API key of the Test Store, which starts with `test_`, into `REVENUECAT_TEST_KEY` in `.env`.
 5. Run a debug build as the section Values in .env says, and buy a plan. The Test Store shows a dialog of its own, where "Test valid purchase" completes the purchase.
 
