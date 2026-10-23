@@ -24,8 +24,8 @@ import 'package:smf_paywall/src/texts.dart';
 /// the period of the plan and its intro offer. Below the plans are the
 /// button that buys the selected plan, what the plan costs after its intro
 /// offer, the terms of the store, and the links to restore purchases, to
-/// the terms of use and to the privacy policy. Its close button is at the
-/// top, outside what scrolls.
+/// the terms of use and to the privacy policy. Whenever a page is below it,
+/// its close button is at the top, outside what scrolls.
 ///
 /// `SubscriptionScreen`, at `/paywall/subscription`, shows what the user
 /// has: the plan, when it renews or ends, or that it is for good, and a
