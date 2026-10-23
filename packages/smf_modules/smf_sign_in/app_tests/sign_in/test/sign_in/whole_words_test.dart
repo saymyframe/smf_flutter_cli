@@ -22,13 +22,14 @@ import 'whole_words.dart';
 const double _textScale = 3;
 
 /// Texts that a title or a label may have, each as the title of the page
-/// and as the labels of its buttons. The third has a word after its line
-/// break that the line does not fit at the size of the page, the fourth a
+/// and as the labels of its buttons. At the size of the page, a line of the
+/// first starts after the hyphen of "e-mail", and the third has a word
+/// after its line break that the line does not fit. The fourth has a
 /// no-break space, which keeps its words together, the fifth a tab before
 /// its longest word, and the last a line break, a tab, two spaces and
 /// no-break spaces.
 const _texts = [
-  'Turn on Wi-Fi a cd-efg, будь-коли',
+  'Turn on Wi-Fi, e-mail будь-коли',
   'Ok  now',
   'Line one\nUnbreakablewordhere',
   'Walk 10\u00A0kilometres',
