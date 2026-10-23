@@ -2044,7 +2044,7 @@ List<MatrixAppTest> appTestsFor(
 /// tests of the app do.
 ///
 /// It writes none of the values that the tests give an app of the matrix
-/// ([MatrixAppTest.envValues]). With [envValues], the path of a file of
+/// ([MatrixAppTest.envValues]). With [envValues], whose `path` is a file of
 /// values of CI in the form of the file of [env], such as `.env`, with a
 /// line `KEY=value` for each key, and with [app], whose build arguments
 /// give the build those values, it writes each of them into the line of
@@ -2052,7 +2052,8 @@ List<MatrixAppTest> appTestsFor(
 /// yet, such as the public key of a service of the project of CI. It
 /// leaves out a key that the app has no such line of, and the values of an
 /// app without the file. What it prints names the keys, and no value, but
-/// with [maskValues], as in a job of GitHub Actions: then it first prints
+/// when the `mask` of [envValues] is true, as in a job of GitHub Actions,
+/// it first prints
 /// `::add-mask::<value>` for each value of the file, as it reads it, a
 /// command that the runner takes and never shows, which hides the value in
 /// the rest of the log of the job, such as where an SDK of the app prints
@@ -2070,8 +2071,7 @@ Future<(int, String)> addAppTestsTo(
   List<MatrixAppTest> tests, {
   MatrixApp? app,
   MatrixEnv? env,
-  String? envValues,
-  bool maskValues = false,
+  CiEnvValues? envValues,
   MatrixFlutter flutter = _flutter,
   FileSystem fileSystem = const LocalFileSystem(),
 }) =>
@@ -2083,16 +2083,22 @@ Future<(int, String)> addAppTestsTo(
       valuesOf: () => envValues == null
           ? null
           : _envValuesOfFile(
-              envValues,
+              envValues.path,
               app,
               env,
               generated.path,
               fileSystem,
-              mask: maskValues,
+              mask: envValues.mask,
             ),
       flutter: flutter,
       fileSystem: fileSystem,
     );
+
+/// A file of values of CI for the file of the values of an app, such as
+/// `.env`, which [addAppTestsTo] writes into the app: its `path`, and
+/// whether the values are masked as they are read (`mask`), as in a job of
+/// GitHub Actions.
+typedef CiEnvValues = ({String path, bool mask});
 
 /// An app that tests go into: the app that `smf create` generated
 /// (`generated`), and the app of the matrix that it was generated as

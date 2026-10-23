@@ -4025,8 +4025,8 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           tests,
           app: app,
           env: env,
-          envValues: envValues,
-          maskValues: maskValues,
+          envValues:
+              envValues == null ? null : (path: envValues, mask: maskValues),
           fileSystem: fileSystem,
           flutter: (arguments, directory) async {
             final command = arguments.join(' ');

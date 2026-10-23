@@ -329,10 +329,15 @@ Future<int> _addAppTests(
     tests,
     app: matrixApp,
     env: matrixEnv,
-    envValues: envValues,
-    // The runner of GitHub Actions takes the masks of the values as
-    // commands, and hides the values in the rest of the log of the job.
-    maskValues: Platform.environment['GITHUB_ACTIONS'] == 'true',
+    envValues: envValues == null
+        ? null
+        : (
+            path: envValues,
+            // The runner of GitHub Actions takes the masks of the values as
+            // commands, and hides the values in the rest of the log of the
+            // job.
+            mask: Platform.environment['GITHUB_ACTIONS'] == 'true',
+          ),
   );
   stdout.writeln(output.trim());
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
