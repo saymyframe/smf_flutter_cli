@@ -95,13 +95,15 @@ import 'package:yaml/yaml.dart';
 /// that generates files, fails, and the start check gets no probes, no
 /// answers and no build arguments.
 ///
-/// With `--env-values` and a file after the options of `--add-app-tests`,
-/// it writes the values of that file, lines `KEY=value` as `.env` has them,
-/// into the lines of `.env` of the app that have no value yet, such as the
-/// public key of a service of the project of CI, which CI keeps in a
-/// secret; see `addAppTestsTo`. It names the keys, and never prints a
-/// value. Of the values that the tests give an app of the matrix in its
-/// runs, it writes none.
+/// With `--env-values` and a file after `--app` and the other options of
+/// `--add-app-tests`, it writes the values of that file, lines `KEY=value`
+/// in the forms of a value of `.env`, into the lines of `.env` of the app
+/// that have no value yet, such as the public key of a service of the
+/// project of CI, which CI keeps in a secret; see `addAppTestsTo`. It names
+/// the keys, and never prints a value. Without `--app`, the build of the
+/// app would get no arguments that give it the values, so the tool refuses
+/// `--env-values` then. Of the values that the tests give an app of the
+/// matrix in its runs, it writes none.
 Future<void> main(List<String> given) async {
   if (given case ['--plan', ...final options]) {
     exit(await printMatrixPlan(smfModules, options, native: appEntryRole));
@@ -137,6 +139,15 @@ Future<void> main(List<String> given) async {
     if (given case ['--env-values', final file, ...final after]) {
       envValues = file;
       given = after;
+    }
+    // The values reach the build of the app only through the arguments of
+    // its provider of the env role, which come from the app of --app.
+    if (envValues != null && named == null) {
+      _usage(
+        '--env-values goes with --app: without the app of the matrix, the '
+        'start check gets no arguments that build the app with its values, so '
+        'the values of .env would not reach the app.',
+      );
     }
     // --without-external-steps tells which app with every module --app
     // names, so it goes only with --app.

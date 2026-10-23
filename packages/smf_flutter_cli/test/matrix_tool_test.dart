@@ -290,7 +290,7 @@ void main() {
   test(
       'with --env-values after --app, writes the values of a file of CI into '
       'the lines of .env of the app that have none, and prints the keys and '
-      'no value', () async {
+      'no value, and refuses --env-values without --app', () async {
     final (:apps, failed: _) = await everyModuleAppsOf(
       smfModules,
       withoutExternalSteps: true,
@@ -328,6 +328,9 @@ void main() {
     final none = p.join(temp.path, 'none.env');
     final missing = await run([
       '--add-app-tests',
+      '--without-external-steps',
+      '--app',
+      apps.first.name,
       '--env-values',
       none,
       newApp(),
@@ -339,8 +342,38 @@ void main() {
       contains('There is no file of values at $none.'),
     );
 
+    // Without --app, the build of the app would get no arguments that give
+    // it the values.
+    final withoutApp = newApp();
+    File(p.join(withoutApp, '.env'))
+        .writeAsStringSync('REVENUECAT_TEST_KEY=\n');
+    final outside = await run([
+      '--add-app-tests',
+      '--env-values',
+      values.path,
+      withoutApp,
+      named('start').directory,
+    ]);
+    expect(outside.exitCode, 64);
+    expect(
+      '${outside.stderr}',
+      startsWith(
+        '--env-values goes with --app: without the app of the matrix, the '
+        'start check gets no arguments that build the app with its values, so '
+        'the values of .env would not reach the app.\n',
+      ),
+    );
+    expect(
+      File(p.join(withoutApp, '.env')).readAsStringSync(),
+      'REVENUECAT_TEST_KEY=\n',
+    );
+    expect(File(p.join(withoutApp, startProbesFile)).existsSync(), isFalse);
+
     final alone = await run([
       '--add-app-tests',
+      '--without-external-steps',
+      '--app',
+      apps.first.name,
       '--env-values',
       values.path,
       newApp(),

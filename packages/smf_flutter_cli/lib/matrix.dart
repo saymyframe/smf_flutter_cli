@@ -2003,9 +2003,10 @@ List<MatrixAppTest> appTestsFor(
 /// It writes none of the values that the tests give an app of the matrix
 /// ([MatrixAppTest.envValues]). With [envValues], the path of a file of
 /// values of CI in the form of the file of [env], such as `.env`, with a
-/// line `KEY=value` for each key, it writes each of those values into the
-/// line of its key in the file of [env] of the app, where that line has no
-/// value yet, such as the public key of a service of the project of CI. It
+/// line `KEY=value` for each key, and with [app], whose build arguments
+/// give the build those values, it writes each of them into the line of
+/// its key in the file of [env] of the app, where that line has no value
+/// yet, such as the public key of a service of the project of CI. It
 /// leaves out a key that the app has no such line of, and the values of an
 /// app without the file. What it prints names the keys, and no value.
 ///
@@ -2015,7 +2016,7 @@ List<MatrixAppTest> appTestsFor(
 /// matrix fills, or files that tests generate, without [app]; and so is a
 /// problem of [envValues], such as a file that is not there, a line that is
 /// no line `KEY=value`, a key given twice, a value with a double quote, or
-/// values without [env].
+/// values without [app] or [env].
 Future<(int, String)> addAppTestsTo(
   GeneratedApp generated,
   List<MatrixAppTest> tests, {
@@ -2033,7 +2034,7 @@ Future<(int, String)> addAppTestsTo(
       env: env,
       valuesOf: () => envValues == null
           ? null
-          : _envValuesOfFile(envValues, env, generated.path, fileSystem),
+          : _envValuesOfFile(envValues, app, env, generated.path, fileSystem),
       flutter: flutter,
       fileSystem: fileSystem,
     );
@@ -2241,7 +2242,7 @@ String _envSummaryOf(Map<String, String?> values, String path) {
 String _envValue(String value) =>
     value.contains(RegExp(r'''[\s#'"`]''')) ? '"$value"' : value;
 
-/// The file of the values of the app generated in [directory] with the
+/// The file of the values of [app], generated in [directory], with the
 /// values of the file at [path], such as the values of CI for the apps
 /// that it starts on a device: the file of [env], with the value of each
 /// key of [path] in the line of that key that has no value yet; see
@@ -2252,17 +2253,26 @@ String _envValue(String value) =>
 /// of the file of the values of an app does, and a line that starts with
 /// `#` is a comment.
 ///
-/// Throws a [MatrixAppTestException] if there is no [env], if there is no
-/// file at [path], if a line of it that is neither empty nor a comment is
+/// Throws a [MatrixAppTestException] if there is no [app], whose build
+/// arguments the start check would lack, if there is no [env], if there is
+/// no file at [path], if a line of it that is neither empty nor a comment is
 /// no line `KEY=value`, if it gives a key twice, or if a value has a double
 /// quote, which [_envValue] cannot put into a line. No message has a value
 /// or a line of the file, which may be a key of CI.
 _EnvValues _envValuesOfFile(
   String path,
+  MatrixApp? app,
   MatrixEnv? env,
   String directory,
   FileSystem fileSystem,
 ) {
+  if (app == null) {
+    throw MatrixAppTestException(
+      'The values of $path go only into an app of the matrix: without it, the '
+      'start check gets no arguments that build the app with its values '
+      '($startBuildArgumentsFile), so they would not reach the app.',
+    );
+  }
   if (env == null) {
     throw MatrixAppTestException(
       'The values of $path have no file of values of the apps to go into '

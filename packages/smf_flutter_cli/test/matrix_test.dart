@@ -1269,7 +1269,7 @@ void main() {
       modules: const [FlutterCoreModule()],
       packages: const {FlutterCoreModule.id: 'smf_flutter_core'},
       apps: () async => const [
-        MatrixApp('app', [FlutterCoreModule.id])
+        MatrixApp('app', [FlutterCoreModule.id]),
       ],
     );
 
@@ -4329,29 +4329,35 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         });
 
         test(
-            'writes them into an app outside the matrix too, and none into an '
-            'app without .env', () async {
+            'writes none into an app outside the matrix, whose build would get '
+            'no arguments that give it the values, nor into an app without '
+            '.env', () async {
           writeValues('SHOP_KEY=test_ci_secret\n');
 
-          final (code, output) = await add(
+          final (outside, problem) = await add(
             [start],
             env: env,
             envValues: values,
           );
 
-          expect(code, 0, reason: output);
+          expect(outside, 1);
           expect(
-            dotEnv.readAsStringSync(),
-            startsWith('# The key of the shop.\nSHOP_KEY=test_ci_secret\n'),
+            problem,
+            'The values of $values go only into an app of the matrix: without '
+            'it, the start check gets no arguments that build the app with its '
+            'values (integration_test/start_build_arguments), so they would '
+            'not reach the app.',
           );
+          expect(dotEnv.readAsStringSync(), contains('SHOP_KEY=\n'));
           expect(
-            output,
-            contains('.env: wrote the values of SHOP_KEY from $values.\n'),
+            fileSystem.file('/apps/start_app/$startProbesFile').existsSync(),
+            isFalse,
           );
 
           dotEnv.deleteSync();
           final (without, said) = await add(
             [start],
+            app: app,
             env: env,
             envValues: values,
           );
@@ -4372,6 +4378,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
           final (code, output) = await add(
             [start],
+            app: app,
             env: env,
             envValues: values,
           );
