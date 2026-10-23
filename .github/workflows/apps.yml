@@ -566,7 +566,7 @@ jobs:
           fi
           (umask 077 && printf '%s\n' "$CI_APP_ENV" > "$values")
           unset CI_APP_ENV
-          # Each value is masked by itself: GitHub masks the secret as it is,
+          # Each value is masked on its own: GitHub masks the secret as it is,
           # with its lines KEY=value, while a log may show the value alone,
           # as an SDK prints its key.
           while IFS= read -r line || [ -n "$line" ]; do
@@ -1174,7 +1174,7 @@ jobs:
           fi
           (umask 077 && printf '%s\n' "$CI_APP_ENV" > "$values")
           unset CI_APP_ENV
-          # Each value is masked by itself: GitHub masks the secret as it is,
+          # Each value is masked on its own: GitHub masks the secret as it is,
           # with its lines KEY=value, while a log may show the value alone,
           # as an SDK prints its key.
           while IFS= read -r line || [ -n "$line" ]; do
