@@ -155,6 +155,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 With `firebase_analytics`:
 
 - Screen views need no code: the router calls `logFirebaseScreenView()` with each screen that the user sees, and it logs the screen under the name of its route.
+- `android/app/src/main/AndroidManifest.xml` and `ios/Runner/Info.plist` turn off the screen views that Firebase Analytics logs itself, which would name the one activity or view controller of Flutter rather than a screen.
 
 ## Authentication
 
@@ -834,6 +835,7 @@ dependencies {
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <meta-data android:name="google_analytics_automatic_screen_reporting_enabled" android:value="false"/>
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="default"/>
         <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_notification"/>
         <receiver
@@ -1107,6 +1109,8 @@ import UIKit
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>FirebaseAutomaticScreenReportingEnabled</key>
+	<false/>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
