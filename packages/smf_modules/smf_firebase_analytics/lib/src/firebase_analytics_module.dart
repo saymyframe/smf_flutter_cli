@@ -30,6 +30,13 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// view, so an error of the platform is printed rather than left to the
 /// handler of the uncaught errors of the app.
 ///
+/// In such an app, the manifest of Android and `Info.plist` also turn off
+/// the screen views that Firebase Analytics logs itself, one for each
+/// activity on Android and each view controller on iOS. Flutter has one of
+/// each for the whole app, so such a view names no screen of the app and
+/// only adds to the views of the listener, as at each start of the app. An
+/// app without a router keeps them, as nothing else logs a screen there.
+///
 /// Analytics works on the Firebase app, so the module depends on
 /// [FirebaseCoreModule], which initializes Firebase in `bootstrap()`. The
 /// service is created on first use, without waiting, and the first screen
@@ -99,6 +106,19 @@ final class FirebaseAnalyticsModule extends SmfModule {
               ),
             ],
           ),
+          when: {routerRole},
+        ),
+        // The listener logs the screens, so Firebase Analytics logs none of
+        // its own, which would name the one activity of Flutter on Android
+        // and its one view controller on iOS rather than a screen.
+        AppEntryRole.androidManifestApplicationMeta.entry(
+          'google_analytics_automatic_screen_reporting_enabled',
+          const AndroidMetaData.value('false'),
+          when: {routerRole},
+        ),
+        AppEntryRole.infoPlist.entry(
+          'FirebaseAutomaticScreenReportingEnabled',
+          const PlistBoolean(false),
           when: {routerRole},
         ),
         // Of the listener, which only an app with a router has.

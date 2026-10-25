@@ -14,6 +14,7 @@ import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
+import 'package:xml/xml.dart';
 import 'package:yaml/yaml.dart';
 
 import 'support/navigation.dart';
@@ -68,6 +69,43 @@ const _listenerImports = [
   "import 'package:flutter/foundation.dart' show debugPrint;",
   "import 'package:flutter/services.dart' show PlatformException;",
 ];
+
+/// The meta-data of the manifest of Android with which Firebase Analytics
+/// logs a screen view of its own for each activity, which the one activity
+/// of Flutter would make the screen of every screen of the app.
+const _androidScreenReporting =
+    'google_analytics_automatic_screen_reporting_enabled';
+
+/// The key of `Info.plist` with which Firebase Analytics logs a screen view
+/// of its own for each view controller, which the one view controller of
+/// Flutter would make the screen of every screen of the app.
+const _iosScreenReporting = 'FirebaseAutomaticScreenReportingEnabled';
+
+/// The native files in which the module turns off the screen views that
+/// Firebase Analytics logs itself.
+const Set<String> _screenReportingFiles = {
+  AppEntryRole.androidManifestFile,
+  AppEntryRole.infoPlistFile,
+};
+
+/// The native file [path] of an app with [text] without the lines with which
+/// the module turns off the screen views that Firebase Analytics logs
+/// itself: the line of the meta-data in the manifest of Android, and the
+/// lines of the key and of its value in `Info.plist`.
+String _withoutScreenReporting(String path, String text) {
+  final lines = text.split('\n');
+  final manifest = path == AppEntryRole.androidManifestFile;
+  final at = lines.indexWhere(
+    (line) => line.contains(
+      manifest
+          ? 'android:name="$_androidScreenReporting"'
+          : '<key>$_iosScreenReporting</key>',
+    ),
+  );
+  expect(at, isNot(-1), reason: path);
+  lines.removeRange(at, manifest ? at + 1 : at + 2);
+  return lines.join('\n');
+}
 
 /// The statement of firebase_core that initializes Firebase in
 /// `bootstrap()`.
@@ -205,11 +243,14 @@ final Set<ContributionOrigin> _analytics = {
 /// guide for coding agents, the step by hand of the module, which opens the
 /// README and adds the note of the app entry on the steps by hand to the
 /// guide, and the files that the modules [changedBy] generate; its
-/// `bootstrap()` included, since the service starts without waiting.
+/// `bootstrap()` included, since the service starts without waiting. With
+/// [screenReportingOff], the manifest of Android and `Info.plist` also turn
+/// off the screen views that Firebase Analytics logs itself.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
   Set<ModuleId> changedBy = const {},
+  bool screenReportingOff = false,
 }) {
   expect(
     app.files.keys.toSet(),
@@ -230,6 +271,15 @@ void _expectTheAppWithout(
     }
     if (file.owner case ModuleOrigin(:final module)
         when changedBy.contains(module)) {
+      continue;
+    }
+    if (screenReportingOff && _screenReportingFiles.contains(path)) {
+      expect(
+        _withoutScreenReporting(path, app.files[path]!.text),
+        file.text,
+        reason: path,
+      );
+      expect(app.files[path]!.owner, file.owner, reason: path);
       continue;
     }
     expect(app.files[path]!.bytes, file.bytes, reason: path);
@@ -452,11 +502,12 @@ void main() {
     test(
         'contributes its brick, firebase_analytics, its implementation of the '
         'service, created without waiting, the step by hand of Google '
-        'Analytics, a listener of the screen for a router and its note for '
-        'coding agents, and nothing else', () {
+        'Analytics, a listener of the screen for a router with the screen '
+        'views of Firebase itself turned off, and its note for coding agents, '
+        'and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(6));
+      expect(contributions, hasLength(8));
       // Of the listener of the screen, which only an app with a router has.
       final note = contributions.last as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
@@ -519,6 +570,20 @@ void main() {
           show: ['logFirebaseScreenView'],
         ),
       ]);
+
+      // With the listener, Firebase Analytics logs no screen view of its
+      // own, which would name each screen after the one activity of Flutter
+      // on Android and its one view controller on iOS.
+      final android = contributions[5] as SocketContribution;
+      expect(android.socket, AppEntryRole.androidManifestApplicationMeta);
+      expect(android.entryKey, _androidScreenReporting);
+      expect(android.entryValue, const AndroidMetaData.value('false'));
+      expect(android.when, {routerRole});
+      final ios = contributions[6] as SocketContribution;
+      expect(ios.socket, AppEntryRole.infoPlist);
+      expect(ios.entryKey, _iosScreenReporting);
+      expect(ios.entryValue, const PlistBoolean(false));
+      expect(ios.when, {routerRole});
     });
   });
 
@@ -580,7 +645,8 @@ void main() {
         'firebase_analytics', () {
       // Its native files, the Gradle files and the Xcode project among
       // them, and its README are those of Firebase: the module sets up
-      // nothing of the platforms.
+      // nothing of the platforms. Firebase Analytics logs its own screen
+      // views there, as nothing else logs them.
       _expectTheAppWithout(withAnalytics, without);
       expect(
         _yamlOf(withAnalytics.files['pubspec.yaml']!.text)['dependencies'],
@@ -863,12 +929,45 @@ void main() {
         withAnalytics,
         without,
         changedBy: _providersOf(result, routerRole),
+        screenReportingOff: true,
       );
       _expectTheRouterWithout(result, resultWithout);
       expect(
         _contributionsTo(resultWithout, RouterRole.screenListeners),
         isEmpty,
       );
+    });
+
+    test(
+        'turns off the screen views that Firebase Analytics logs itself, one '
+        'for each activity on Android and each view controller on iOS, so '
+        'that the listener alone logs the screens', () {
+      final application = XmlDocument.parse(
+        withAnalytics.files[AppEntryRole.androidManifestFile]!.text,
+      ).rootElement.getElement('application')!;
+      expect(
+        [
+          for (final element in application.findElements('meta-data'))
+            if (element.getAttribute('android:name') == _androidScreenReporting)
+              (
+                element.getAttribute('android:value'),
+                element.getAttribute('android:resource'),
+              ),
+        ],
+        [('false', null)],
+      );
+
+      final entries = XmlDocument.parse(
+        withAnalytics.files[AppEntryRole.infoPlistFile]!.text,
+      ).rootElement.getElement('dict')!.childElements.toList();
+      final keys = [
+        for (final (index, element) in entries.indexed)
+          if (element.name.local == 'key' &&
+              element.innerText == _iosScreenReporting)
+            index,
+      ];
+      expect(keys, hasLength(1));
+      expect(entries[keys.single + 1].name.local, 'false');
     });
 
     test(
@@ -942,6 +1041,16 @@ void main() {
         screenViewsAgentNote,
         contains('the router calls `$_listener()` with each screen'),
       );
+      // The two native files that turn off the screen views of Firebase
+      // itself, as the test above shows.
+      expect(
+        screenViewsAgentNote,
+        contains(
+          '`${AppEntryRole.androidManifestFile}` and '
+          '`${AppEntryRole.infoPlistFile}` turn off the screen views that '
+          'Firebase Analytics logs itself',
+        ),
+      );
     });
 
     test('has the file of the module of an app without a router otherwise',
@@ -1000,6 +1109,7 @@ void main() {
         result.app!,
         resultWithout.app!,
         changedBy: _providersOf(result, routerRole),
+        screenReportingOff: true,
       );
       _expectTheRouterWithout(result, resultWithout);
     });
