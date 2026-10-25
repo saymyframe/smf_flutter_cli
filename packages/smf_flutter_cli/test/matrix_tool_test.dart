@@ -296,125 +296,132 @@ void main() {
   });
 
   test(
-      'with --env-values after --app, writes the values of a file of CI into '
-      'the lines of .env of the app that have none, and prints the keys and '
-      'no value, and refuses --env-values without --app', () async {
-    final (:apps, failed: _) = await everyModuleAppsOf(
-      smfModules,
-      withoutExternalSteps: true,
-    );
-    final app = newApp();
-    final dotEnv = File(p.join(app, '.env'))
-      ..writeAsStringSync('# The key.\nREVENUECAT_TEST_KEY=\n');
-    final values = File(p.join(temp.path, 'ci.env'))
-      ..writeAsStringSync('REVENUECAT_TEST_KEY=test_not_a_real_key\n');
+    'with --env-values after --app, writes the values of a file of CI into '
+    'the lines of .env of the app that have none, and prints the keys and '
+    'no value, and refuses --env-values without --app',
+    () async {
+      final (:apps, failed: _) = await everyModuleAppsOf(
+        smfModules,
+        withoutExternalSteps: true,
+      );
+      final app = newApp();
+      final dotEnv = File(p.join(app, '.env'))
+        ..writeAsStringSync('# The key.\nREVENUECAT_TEST_KEY=\n');
+      final values = File(p.join(temp.path, 'ci.env'))
+        ..writeAsStringSync('REVENUECAT_TEST_KEY=test_not_a_real_key\n');
 
-    final result = await run([
-      '--add-app-tests',
-      '--without-external-steps',
-      '--app',
-      apps.first.name,
-      '--env-values',
-      values.path,
-      app,
-      named('start').directory,
-    ]);
-
-    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
-    expect(
-      dotEnv.readAsStringSync(),
-      '# The key.\nREVENUECAT_TEST_KEY=test_not_a_real_key\n',
-    );
-    expect(
-      '${result.stdout}',
-      contains(
-        '.env: wrote the values of REVENUECAT_TEST_KEY from ${values.path}.',
-      ),
-    );
-    expect('${result.stdout}${result.stderr}', isNot(contains('not_a_real')));
-
-    // In a job of GitHub Actions, it first prints the mask of the value,
-    // which the runner takes as a command and never shows.
-    final inActions = newApp();
-    File(p.join(inActions, '.env'))
-        .writeAsStringSync('# The key.\nREVENUECAT_TEST_KEY=\n');
-    final masked = await run(
-      [
+      final result = await run([
         '--add-app-tests',
         '--without-external-steps',
         '--app',
         apps.first.name,
         '--env-values',
         values.path,
-        inActions,
+        app,
         named('start').directory,
-      ],
-      githubActions: true,
-    );
-    expect(masked.exitCode, 0, reason: '${masked.stdout}${masked.stderr}');
-    expect(
-      '${masked.stdout}',
-      contains(
-        '::add-mask::test_not_a_real_key\n.env: wrote the values of '
-        'REVENUECAT_TEST_KEY from ${values.path}.',
-      ),
-    );
+      ]);
 
-    final none = p.join(temp.path, 'none.env');
-    final missing = await run([
-      '--add-app-tests',
-      '--without-external-steps',
-      '--app',
-      apps.first.name,
-      '--env-values',
-      none,
-      newApp(),
-      named('start').directory,
-    ]);
-    expect(missing.exitCode, 1);
-    expect(
-      '${missing.stdout}',
-      contains('There is no file of values at $none.'),
-    );
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      expect(
+        dotEnv.readAsStringSync(),
+        '# The key.\nREVENUECAT_TEST_KEY=test_not_a_real_key\n',
+      );
+      expect(
+        '${result.stdout}',
+        contains(
+          '.env: wrote the values of REVENUECAT_TEST_KEY from ${values.path}.',
+        ),
+      );
+      expect('${result.stdout}${result.stderr}', isNot(contains('not_a_real')));
 
-    // Without --app, the build of the app would get no arguments that give
-    // it the values.
-    final withoutApp = newApp();
-    File(p.join(withoutApp, '.env'))
-        .writeAsStringSync('REVENUECAT_TEST_KEY=\n');
-    final outside = await run([
-      '--add-app-tests',
-      '--env-values',
-      values.path,
-      withoutApp,
-      named('start').directory,
-    ]);
-    expect(outside.exitCode, 64);
-    expect(
-      '${outside.stderr}',
-      startsWith(
-        '--env-values goes with --app: without the app of the matrix, the '
-        'start check gets no arguments that build the app with its values, so '
-        'the values of .env would not reach the app.\n',
-      ),
-    );
-    expect(
-      File(p.join(withoutApp, '.env')).readAsStringSync(),
-      'REVENUECAT_TEST_KEY=\n',
-    );
-    expect(File(p.join(withoutApp, startProbesFile)).existsSync(), isFalse);
+      // In a job of GitHub Actions, it first prints the mask of the value,
+      // which the runner takes as a command and never shows.
+      final inActions = newApp();
+      File(p.join(inActions, '.env'))
+          .writeAsStringSync('# The key.\nREVENUECAT_TEST_KEY=\n');
+      final masked = await run(
+        [
+          '--add-app-tests',
+          '--without-external-steps',
+          '--app',
+          apps.first.name,
+          '--env-values',
+          values.path,
+          inActions,
+          named('start').directory,
+        ],
+        githubActions: true,
+      );
+      expect(masked.exitCode, 0, reason: '${masked.stdout}${masked.stderr}');
+      expect(
+        '${masked.stdout}',
+        contains(
+          '::add-mask::test_not_a_real_key\n.env: wrote the values of '
+          'REVENUECAT_TEST_KEY from ${values.path}.',
+        ),
+      );
 
-    final alone = await run([
-      '--add-app-tests',
-      '--without-external-steps',
-      '--app',
-      apps.first.name,
-      '--env-values',
-      values.path,
-      newApp(),
-    ]);
-    expect(alone.exitCode, 64);
-  });
+      final none = p.join(temp.path, 'none.env');
+      final missing = await run([
+        '--add-app-tests',
+        '--without-external-steps',
+        '--app',
+        apps.first.name,
+        '--env-values',
+        none,
+        newApp(),
+        named('start').directory,
+      ]);
+      expect(missing.exitCode, 1);
+      expect(
+        '${missing.stdout}',
+        contains('There is no file of values at $none.'),
+      );
+
+      // Without --app, the build of the app would get no arguments that give
+      // it the values.
+      final withoutApp = newApp();
+      File(p.join(withoutApp, '.env'))
+          .writeAsStringSync('REVENUECAT_TEST_KEY=\n');
+      final outside = await run([
+        '--add-app-tests',
+        '--env-values',
+        values.path,
+        withoutApp,
+        named('start').directory,
+      ]);
+      expect(outside.exitCode, 64);
+      expect(
+        '${outside.stderr}',
+        startsWith(
+          '--env-values goes with --app: without the app of the matrix, the '
+          'start check gets no arguments that build the app with its values, '
+          'so the values of .env would not reach the app.\n',
+        ),
+      );
+      expect(
+        File(p.join(withoutApp, '.env')).readAsStringSync(),
+        'REVENUECAT_TEST_KEY=\n',
+      );
+      expect(File(p.join(withoutApp, startProbesFile)).existsSync(), isFalse);
+
+      final alone = await run([
+        '--add-app-tests',
+        '--without-external-steps',
+        '--app',
+        apps.first.name,
+        '--env-values',
+        values.path,
+        newApp(),
+      ]);
+      expect(alone.exitCode, 64);
+    },
+    // The test renders the apps with every module and runs the tool with
+    // --app several times, which renders the apps of the matrix again: 22
+    // to 25 s on the macOS runners of GitHub, where the default of 30 s
+    // once ran out.
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test(
       'fails on --without-external-steps without --app, on an app with '
