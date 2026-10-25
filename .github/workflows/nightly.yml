@@ -4,8 +4,11 @@ name: Nightly
 # users run into it.
 on:
   schedule:
-    # At the end of every day
-    - cron: "0 0 * * *"
+    # Every night, at 01:37 in Kyiv in winter and 02:37 in summer. GitHub
+    # delays a scheduled run while Actions is busy, most at the start of an
+    # hour and most of all at 00:00 UTC: a run scheduled then started 4 to 5
+    # hours late. So the run is before midnight UTC and off the hour.
+    - cron: "37 23 * * *"
   workflow_dispatch:
 
 jobs:
