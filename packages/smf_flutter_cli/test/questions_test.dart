@@ -2350,7 +2350,7 @@ void main() {
         'paywall requires.',
       ),
       equals(
-        'Adding dart_define: the only provider of the values in .env role, '
+        'Adding dart_define: the only provider of the env role, '
         'which paywall requires.',
       ),
       equals(

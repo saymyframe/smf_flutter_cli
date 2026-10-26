@@ -129,6 +129,12 @@ final class EnvRole extends Role<EnvData> {
   @override
   String get description => 'Values in .env';
 
+  /// The role as messages name it, `env role`: its [description] titles a
+  /// question and a section, but reads badly before the word role, as in
+  /// the only provider of the values in .env role.
+  @override
+  String toString() => 'env role';
+
   @override
   RoleCardinality get cardinality => RoleCardinality.atMostOne;
 

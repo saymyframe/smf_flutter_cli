@@ -40,7 +40,9 @@ void main() {
     }
   });
 
-  test('messages name the roles by their descriptions', () {
+  test(
+      'messages name the roles by their descriptions, and the env role by '
+      'its id', () {
     final names = [for (final role in _roles) '$role'];
 
     expect(names, [
@@ -61,7 +63,7 @@ void main() {
       'settings screen role',
       'onboarding screen role',
       'theme role',
-      'values in .env role',
+      'env role',
     ]);
   });
 
