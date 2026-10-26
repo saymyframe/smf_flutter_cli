@@ -72,7 +72,9 @@ void main() {
       // The heading of the role in the guide for coding agents of the app,
       // and its line in the explanation of smf create.
       expect(envRole.description, 'Values in .env');
-      expect('$envRole', 'values in .env role');
+      // Messages name the role by its id, since its description reads badly
+      // before the word role: the only provider of the values in .env role.
+      expect('$envRole', 'env role');
       expect(envRole.presenceFlag, 'has_env');
       expect(envRole.cardinality, RoleCardinality.atMostOne);
       expect(envRole.requires, isEmpty);
@@ -246,10 +248,10 @@ void main() {
       expect(given.problems(), isEmpty);
       expect(const EnvToolArguments([]).problems(), isEmpty);
       expect('$given', 'tool arguments --values=.env --debug');
-      const empty = 'An argument of the tool arguments of the values in .env '
-          'role is empty.';
-      const notOneLine = 'An argument of the tool arguments of the values in '
-          '.env role is not one line.';
+      const empty = 'An argument of the tool arguments of the env role is '
+          'empty.';
+      const notOneLine = 'An argument of the tool arguments of the env role '
+          'is not one line.';
       expect(const EnvToolArguments(['--a', '']).problems(), [empty]);
       for (final arguments in [
         ['--a\n--b'],
@@ -554,7 +556,7 @@ final described = describe(${vars['env_feed_url']!.absent});
       ]).single;
       expect(
         issue.message,
-        'The module gives the values in .env role tool arguments, which only '
+        'The module gives the env role tool arguments, which only '
         'a provider of the role gives.',
       );
       expect(issue.hint, contains('keys'));
@@ -569,12 +571,12 @@ final described = describe(${vars['env_feed_url']!.absent});
         ),
         [
           equals(
-            'reader: A provider of the values in .env role gives it tool '
+            'reader: A provider of the env role gives it tool '
             'arguments at most once, but the module gives them 2 times.',
           ),
           equals(
-            'reader: An argument of the tool arguments of the values in .env '
-            'role is empty.',
+            'reader: An argument of the tool arguments of the env role is '
+            'empty.',
           ),
         ],
       );
@@ -658,7 +660,7 @@ final described = describe(${vars['env_feed_url']!.absent});
           ('FEED_URL', 'the module feed', 'feedUrl'),
         ])
           equals(
-            'reader: The provider of the values in .env role does not render '
+            'reader: The provider of the env role does not render '
             'the key $key of $owner: AppEnv in lib/core/env/app_env.dart '
             'declares no static getter $getter.',
           ),
@@ -848,7 +850,7 @@ final described = describe(${vars['env_feed_url']!.absent});
         (RoleTemplateOrigin(_boardRole), 'the template of the board role'),
         (
           const RoleTemplateOrigin(envRole),
-          'the template of the values in .env role',
+          'the template of the env role',
         ),
         (const PipelineOrigin(), 'the pipeline'),
       ]) {
@@ -1086,8 +1088,8 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
 
         expect(_messages(issues), [
           equals(
-            'role:board: The template of the board role gives the values in '
-            '.env role the key BOARD_TOKEN, but only modules give the role '
+            'role:board: The template of the board role gives the env role '
+            'the key BOARD_TOKEN, but only modules give the role '
             'keys.',
           ),
         ]);
@@ -1108,7 +1110,7 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
 
         expect(
           issue.message,
-          'The template of the board role gives the values in .env role tool '
+          'The template of the board role gives the env role tool '
           'arguments, which only a provider of the role gives.',
         );
         expect(issue.origin, RoleTemplateOrigin(_boardRole));
@@ -1148,7 +1150,7 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
         expect(_messages(issues), [
           equals(
             'shop_cart: Both the module shop and the module shop_cart give '
-            'the values in .env role the key SHOP_CART_KEY.',
+            'the env role the key SHOP_CART_KEY.',
           ),
           equals(
             'shop: The key SHOP1_KEY of the module shop1 and the key '

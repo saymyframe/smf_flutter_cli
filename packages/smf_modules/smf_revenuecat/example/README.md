@@ -11,7 +11,7 @@ The module reads the keys of RevenueCat from `.env` through the env role, so `sm
 
 ```text
 Adding flutter_core: the only provider of the app entry role, which every app needs.
-Adding dart_define: the only provider of the values in .env role, which revenuecat requires.
+Adding dart_define: the only provider of the env role, which revenuecat requires.
 ```
 
 The module adds purchases_flutter to the `pubspec.yaml` of the app, and `lib/core/purchases/revenuecat_purchases_service.dart` with the purchases service on `Purchases`. The purchases role adds `lib/core/purchases/app_purchases.dart` with `appPurchases`, which the rest of the app uses. `bootstrap()` starts the purchases before the first frame, so the app knows the access of the user from what the device keeps:
