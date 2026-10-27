@@ -1,3 +1,7 @@
+## 0.4.3
+
+ - **FIX**(settings): fit the note of an app without settings on a phone in landscape ([#254](https://github.com/saymyframe/smf_flutter_cli/issues/254)). ([57370b68](https://github.com/saymyframe/smf_flutter_cli/commit/57370b6814d16de636b62c01b90fcdd3d5b36787))
+
 ## 0.4.2
 
  - Update a dependency to the latest release.

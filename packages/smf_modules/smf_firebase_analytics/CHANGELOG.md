@@ -1,3 +1,7 @@
+## 0.4.3
+
+ - **FIX**(firebase_analytics): turn off the screen views that Firebase logs itself ([#273](https://github.com/saymyframe/smf_flutter_cli/issues/273)). ([e90566e0](https://github.com/saymyframe/smf_flutter_cli/commit/e90566e03115e3c61a12984adf6f1e83a8b3d9cb))
+
 ## 0.4.2
 
  - **FEAT**(firebase_auth,firebase_analytics): the steps by hand of Apple, Google Play and Analytics ([#236](https://github.com/saymyframe/smf_flutter_cli/issues/236)). ([e009ede2](https://github.com/saymyframe/smf_flutter_cli/commit/e009ede2c1b205763ef4ad05455defb8fcdf8b9e))

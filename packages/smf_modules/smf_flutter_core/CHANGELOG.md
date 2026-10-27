@@ -1,3 +1,10 @@
+## 0.6.0
+
+> Note: This release has breaking changes.
+
+ - **FEAT**(contracts): say in the README of every app that Say My Frame generated it ([#239](https://github.com/saymyframe/smf_flutter_cli/issues/239)). ([a1e47e53](https://github.com/saymyframe/smf_flutter_cli/commit/a1e47e531aa1e0adbbf9aee74fc4e79402b6ac92))
+ - **BREAKING** **FEAT**(contracts): add a .gitignore socket to the app entry role ([#243](https://github.com/saymyframe/smf_flutter_cli/issues/243)). ([27879740](https://github.com/saymyframe/smf_flutter_cli/commit/278797409cae63825923bd95865fca6d70a9d736))
+
 ## 0.5.0
 
 > Note: This release has breaking changes.

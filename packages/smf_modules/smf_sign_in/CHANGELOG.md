@@ -1,3 +1,8 @@
+## 0.6.1
+
+ - **REFACTOR**(contracts,pipeline,cli,sign_in): split the functions that SonarCloud finds too complex ([#240](https://github.com/saymyframe/smf_flutter_cli/issues/240)). ([7055060d](https://github.com/saymyframe/smf_flutter_cli/commit/7055060df967273c99faa10f381fcca99b19955b))
+ - **FIX**(sign_in): measure the words of a text between every white space but a no-break space, and check where its lines start ([#267](https://github.com/saymyframe/smf_flutter_cli/issues/267)). ([597b5c5f](https://github.com/saymyframe/smf_flutter_cli/commit/597b5c5f9b07f8e1c135eb202a5a2b8ddbfeb839))
+
 ## 0.6.0
 
 > Note: This release has breaking changes.

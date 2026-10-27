@@ -1,3 +1,25 @@
+## 0.7.0
+
+> Note: This release has breaking changes.
+
+ - **REFACTOR**(contracts,pipeline,cli,sign_in): split the functions that SonarCloud finds too complex ([#240](https://github.com/saymyframe/smf_flutter_cli/issues/240)). ([7055060d](https://github.com/saymyframe/smf_flutter_cli/commit/7055060df967273c99faa10f381fcca99b19955b))
+ - **FIX**(firebase_analytics): turn off the screen views that Firebase logs itself ([#273](https://github.com/saymyframe/smf_flutter_cli/issues/273)). ([e90566e0](https://github.com/saymyframe/smf_flutter_cli/commit/e90566e03115e3c61a12984adf6f1e83a8b3d9cb))
+ - **FIX**(sign_in): measure the words of a text between every white space but a no-break space, and check where its lines start ([#267](https://github.com/saymyframe/smf_flutter_cli/issues/267)). ([597b5c5f](https://github.com/saymyframe/smf_flutter_cli/commit/597b5c5f9b07f8e1c135eb202a5a2b8ddbfeb839))
+ - **FIX**(onboarding): break the titles of the onboarding between words on a small phone with a large text size ([#266](https://github.com/saymyframe/smf_flutter_cli/issues/266)). ([f93373c8](https://github.com/saymyframe/smf_flutter_cli/commit/f93373c8cd343c61f9f1db58202ed21be379749e))
+ - **FIX**(contracts): let a call made before the first start of a controller wait in its own zone ([#257](https://github.com/saymyframe/smf_flutter_cli/issues/257)). ([994cb3a6](https://github.com/saymyframe/smf_flutter_cli/commit/994cb3a6c670a6c0219aa9e6e5c91605c1325c87))
+ - **FIX**(google_sign_in): let a sign-in after the start of google_sign_in wait in its own zone ([#256](https://github.com/saymyframe/smf_flutter_cli/issues/256)). ([872b148d](https://github.com/saymyframe/smf_flutter_cli/commit/872b148d875c9c32cfe70399a8459c71bcc8f79d))
+ - **FEAT**(paywall): add the paywall, its guard of premium and the subscription screen, in a bloc and a riverpod variant ([#265](https://github.com/saymyframe/smf_flutter_cli/issues/265)). ([e65f88ba](https://github.com/saymyframe/smf_flutter_cli/commit/e65f88ba07965ca3923026f3c8aaa7fbc155b1a2))
+ - **FEAT**(revenuecat): add RevenueCat as the provider of the purchases role ([#260](https://github.com/saymyframe/smf_flutter_cli/issues/260)). ([f5019461](https://github.com/saymyframe/smf_flutter_cli/commit/f50194614da578baeb86cc2c016946b2bda235db))
+ - **FEAT**(dart_define): provide the env role with --dart-define-from-file ([#258](https://github.com/saymyframe/smf_flutter_cli/issues/258)). ([d74bac6d](https://github.com/saymyframe/smf_flutter_cli/commit/d74bac6d3708bfd40e21ddc8db7f6ddd56d41a76))
+ - **FEAT**(contracts): add the env role ([#250](https://github.com/saymyframe/smf_flutter_cli/issues/250)). ([ade87c6f](https://github.com/saymyframe/smf_flutter_cli/commit/ade87c6fca5892aefd80e7a2677ce2b4ee36ef1e))
+ - **FEAT**(contracts): add the purchases role, which sells premium access through one provider ([#245](https://github.com/saymyframe/smf_flutter_cli/issues/245)). ([745cd159](https://github.com/saymyframe/smf_flutter_cli/commit/745cd159b1c464821856d06521a29c9810b3d12d))
+ - **FEAT**(contracts): say in the README of every app that Say My Frame generated it ([#239](https://github.com/saymyframe/smf_flutter_cli/issues/239)). ([a1e47e53](https://github.com/saymyframe/smf_flutter_cli/commit/a1e47e531aa1e0adbbf9aee74fc4e79402b6ac92))
+ - **DOCS**(paywall): say that the paywall has its close button only over a page. ([c25bfdc6](https://github.com/saymyframe/smf_flutter_cli/commit/c25bfdc6e34c8d83dc7473357e9548794eabae70))
+ - **DOCS**(revenuecat): tell that a lifetime plan of Google Play is Non-consumable in RevenueCat. ([352737c6](https://github.com/saymyframe/smf_flutter_cli/commit/352737c630362a263aa3f3b4f663ebf08ddb1259))
+ - **DOCS**(revenuecat): name the default offering of RevenueCat in the step by hand and in the READMEs. ([41aa5fff](https://github.com/saymyframe/smf_flutter_cli/commit/41aa5fff56d271622bd53b5ff6021d89c2862174))
+ - **BREAKING** **FEAT**(contracts): add the stage offer of the onboarding steps and give the action of a step the context of the onboarding screen ([#247](https://github.com/saymyframe/smf_flutter_cli/issues/247)). ([d054df6f](https://github.com/saymyframe/smf_flutter_cli/commit/d054df6f197d5891c6316167c76f467394465afc))
+ - **BREAKING** **FEAT**(contracts): add a .gitignore socket to the app entry role ([#243](https://github.com/saymyframe/smf_flutter_cli/issues/243)). ([27879740](https://github.com/saymyframe/smf_flutter_cli/commit/278797409cae63825923bd95865fca6d70a9d736))
+
 ## 0.6.0
 
 > Note: This release has breaking changes.

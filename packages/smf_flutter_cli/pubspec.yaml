@@ -1,6 +1,6 @@
 name: smf_flutter_cli
 description: "The smf command of Say My Frame: generates Flutter apps from independent modules, such as a router, tabs, sign-in, dependency injection, state management and Firebase."
-version: 0.6.0
+version: 0.7.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli
 issue_tracker: https://github.com/saymyframe/smf_flutter_cli/issues
@@ -28,33 +28,33 @@ dependencies:
   pub_semver: ^2.2.0
 
   # SMF packages
-  smf_apple_sign_in: ^0.6.0
-  smf_bloc: ^0.3.3
-  smf_bottom_tabs: ^0.4.2
-  smf_contracts: ^0.6.0
-  smf_dart_define: ^0.6.0
-  smf_event_bus: ^0.3.3
-  smf_firebase_analytics: ^0.4.2
-  smf_firebase_auth: ^0.6.0
-  smf_firebase_core: ^0.4.2
-  smf_firebase_crashlytics: ^0.4.2
-  smf_firebase_messaging: ^0.6.0
-  smf_flutter_core: ^0.5.0
-  smf_gen_l10n: ^0.5.0
-  smf_get_it: ^0.4.2
-  smf_go_router: ^0.6.0
-  smf_google_sign_in: ^0.6.0
-  smf_home_flutter: ^0.5.0
-  smf_local_notifications: ^0.6.0
-  smf_material_theme: ^0.4.2
-  smf_onboarding: ^0.5.1
-  smf_paywall: ^0.6.0
-  smf_pipeline: ^0.6.0
-  smf_revenuecat: ^0.6.0
-  smf_riverpod: ^0.3.3
-  smf_settings: ^0.4.2
-  smf_shared_preferences: ^0.4.3
-  smf_sign_in: ^0.6.0
+  smf_apple_sign_in: ^0.6.1
+  smf_bloc: ^0.3.4
+  smf_bottom_tabs: ^0.4.3
+  smf_contracts: ^0.7.0
+  smf_dart_define: ^0.7.0
+  smf_event_bus: ^0.3.4
+  smf_firebase_analytics: ^0.4.3
+  smf_firebase_auth: ^0.6.1
+  smf_firebase_core: ^0.4.3
+  smf_firebase_crashlytics: ^0.4.3
+  smf_firebase_messaging: ^0.6.1
+  smf_flutter_core: ^0.6.0
+  smf_gen_l10n: ^0.5.1
+  smf_get_it: ^0.4.3
+  smf_go_router: ^0.6.1
+  smf_google_sign_in: ^0.6.1
+  smf_home_flutter: ^0.5.1
+  smf_local_notifications: ^0.6.1
+  smf_material_theme: ^0.4.3
+  smf_onboarding: ^0.6.0
+  smf_paywall: ^0.7.0
+  smf_pipeline: ^0.7.0
+  smf_revenuecat: ^0.7.0
+  smf_riverpod: ^0.3.4
+  smf_settings: ^0.4.3
+  smf_shared_preferences: ^0.4.4
+  smf_sign_in: ^0.6.1
 
 dev_dependencies:
   # The snapshots are formatted with it, so they change only when it does.
