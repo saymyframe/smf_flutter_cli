@@ -21,8 +21,12 @@ import 'mode_registry.dart';
 void main() {
   // The time of a test that lists the apps of a registry, in the tool and
   // again in the test: on a busy Windows runner that takes most of the
-  // default 30 seconds, and more with each module that the CLI offers.
-  const timeout = Timeout(Duration(minutes: 2));
+  // default 30 seconds, and more with each module that the CLI offers. It
+  // took 28 to 51 s on the Windows runners of GitHub, and once over 2
+  // minutes, while other test files ran next to it. A factor of the
+  // default, unlike a duration, also takes the factor that CI gives the
+  // tests on Windows (--timeout 3x): 2 minutes elsewhere, 6 minutes there.
+  const timeout = Timeout.factor(4);
   late Directory temp;
   late String kernel;
 
