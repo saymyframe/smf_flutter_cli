@@ -1,3 +1,18 @@
+## 0.7.0
+
+> Note: This release has breaking changes.
+
+ - **REFACTOR**(contracts): split the check of the reads of the values of the app that SonarCloud finds too complex. ([dc69854c](https://github.com/saymyframe/smf_flutter_cli/commit/dc69854ceced397417f5919030c76d633946ffe1))
+ - **REFACTOR**(contracts): split the checks of the onboarding steps that SonarCloud finds too complex ([#251](https://github.com/saymyframe/smf_flutter_cli/issues/251)). ([7ec11898](https://github.com/saymyframe/smf_flutter_cli/commit/7ec11898e1644e28c086ef31ed554ccfd15de584))
+ - **REFACTOR**(contracts,pipeline,cli,sign_in): split the functions that SonarCloud finds too complex ([#240](https://github.com/saymyframe/smf_flutter_cli/issues/240)). ([7055060d](https://github.com/saymyframe/smf_flutter_cli/commit/7055060df967273c99faa10f381fcca99b19955b))
+ - **FIX**(contracts): call the env role the env role in messages, not the values in .env role ([#277](https://github.com/saymyframe/smf_flutter_cli/issues/277)). ([90d58df8](https://github.com/saymyframe/smf_flutter_cli/commit/90d58df8d407de3a6058e7b2b9c39c293fc94ec9))
+ - **FIX**(contracts): let a call made before the first start of a controller wait in its own zone ([#257](https://github.com/saymyframe/smf_flutter_cli/issues/257)). ([994cb3a6](https://github.com/saymyframe/smf_flutter_cli/commit/994cb3a6c670a6c0219aa9e6e5c91605c1325c87))
+ - **FEAT**(contracts): add the env role ([#250](https://github.com/saymyframe/smf_flutter_cli/issues/250)). ([ade87c6f](https://github.com/saymyframe/smf_flutter_cli/commit/ade87c6fca5892aefd80e7a2677ce2b4ee36ef1e))
+ - **FEAT**(contracts): add the purchases role, which sells premium access through one provider ([#245](https://github.com/saymyframe/smf_flutter_cli/issues/245)). ([745cd159](https://github.com/saymyframe/smf_flutter_cli/commit/745cd159b1c464821856d06521a29c9810b3d12d))
+ - **FEAT**(contracts): say in the README of every app that Say My Frame generated it ([#239](https://github.com/saymyframe/smf_flutter_cli/issues/239)). ([a1e47e53](https://github.com/saymyframe/smf_flutter_cli/commit/a1e47e531aa1e0adbbf9aee74fc4e79402b6ac92))
+ - **BREAKING** **FEAT**(contracts): add the stage offer of the onboarding steps and give the action of a step the context of the onboarding screen ([#247](https://github.com/saymyframe/smf_flutter_cli/issues/247)). ([d054df6f](https://github.com/saymyframe/smf_flutter_cli/commit/d054df6f197d5891c6316167c76f467394465afc))
+ - **BREAKING** **FEAT**(contracts): add a .gitignore socket to the app entry role ([#243](https://github.com/saymyframe/smf_flutter_cli/issues/243)). ([27879740](https://github.com/saymyframe/smf_flutter_cli/commit/278797409cae63825923bd95865fca6d70a9d736))
+
 ## 0.6.0
 
 > Note: This release has breaking changes.

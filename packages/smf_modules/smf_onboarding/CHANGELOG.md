@@ -1,3 +1,10 @@
+## 0.6.0
+
+> Note: This release has breaking changes.
+
+ - **FIX**(onboarding): break the titles of the onboarding between words on a small phone with a large text size ([#266](https://github.com/saymyframe/smf_flutter_cli/issues/266)). ([f93373c8](https://github.com/saymyframe/smf_flutter_cli/commit/f93373c8cd343c61f9f1db58202ed21be379749e))
+ - **BREAKING** **FEAT**(contracts): add the stage offer of the onboarding steps and give the action of a step the context of the onboarding screen ([#247](https://github.com/saymyframe/smf_flutter_cli/issues/247)). ([d054df6f](https://github.com/saymyframe/smf_flutter_cli/commit/d054df6f197d5891c6316167c76f467394465afc))
+
 ## 0.5.1
 
  - **FEAT**(local_notifications): add a provider of the notifications role on flutter_local_notifications ([#206](https://github.com/saymyframe/smf_flutter_cli/issues/206)). ([d16e9a43](https://github.com/saymyframe/smf_flutter_cli/commit/d16e9a4349cf578660660b535744b66490995fb6))

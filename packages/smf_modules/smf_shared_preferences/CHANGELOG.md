@@ -1,3 +1,7 @@
+## 0.4.4
+
+ - **FIX**(shared_preferences): allow shared_preferences_android 2.5.2, which keeps the Kotlin classes that release builds need ([#252](https://github.com/saymyframe/smf_flutter_cli/issues/252)). ([9f671572](https://github.com/saymyframe/smf_flutter_cli/commit/9f67157246610f17ad742c6e3daf843fb5cc207e))
+
 ## 0.4.3
 
  - Update a dependency to the latest release.
