@@ -1,3 +1,7 @@
+## 0.7.1
+
+ - **FIX**(google_sign_in): fail with notConfigured when Android answers an unknown key as a cancel ([#281](https://github.com/saymyframe/smf_flutter_cli/issues/281)). ([4fcd71fa](https://github.com/saymyframe/smf_flutter_cli/commit/4fcd71fab131b780d47ab1f8c7e3864f83a76d32))
+
 ## 0.7.0
 
 > Note: This release has breaking changes.

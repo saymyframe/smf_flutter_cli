@@ -42,7 +42,7 @@ dev_dependencies:
   # The provider of the onboarding screen role, which gets the step of the
   # module in some apps of the tests.
   smf_onboarding: ^0.6.0
-  smf_pipeline: ^0.7.0
+  smf_pipeline: ^0.7.1
   # The other module that manages state, for the variant with it.
   smf_riverpod: ^0.3.4
   # The provider of the settings screen role, which gets the entry of the
