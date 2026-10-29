@@ -28,7 +28,7 @@ dev_dependencies:
   smf_gen_l10n: ^0.5.1
   # The router that the tests render the route of the module with.
   smf_go_router: ^0.6.1
-  smf_pipeline: ^0.7.0
+  smf_pipeline: ^0.7.1
   # The preferences in which an app with texts remembers its language.
   smf_shared_preferences: ^0.4.4
   test: ^1.32.0

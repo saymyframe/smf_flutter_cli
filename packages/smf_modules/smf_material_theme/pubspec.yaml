@@ -27,7 +27,7 @@ dev_dependencies:
   # The router that renders the route of the settings screen in the apps of
   # the tests.
   smf_go_router: ^0.6.1
-  smf_pipeline: ^0.7.0
+  smf_pipeline: ^0.7.1
   # The settings screen that shows the entry of the theme mode in the apps of
   # the tests.
   smf_settings: ^0.4.3

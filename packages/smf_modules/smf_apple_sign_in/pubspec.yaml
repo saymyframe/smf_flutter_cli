@@ -24,7 +24,7 @@ dev_dependencies:
   # The provider of the localization role that gets the label of the button
   # in some of the apps of the tests.
   smf_gen_l10n: ^0.5.1
-  smf_pipeline: ^0.7.0
+  smf_pipeline: ^0.7.1
   # The provider of the preferences role, which the localization role
   # requires.
   smf_shared_preferences: ^0.4.4

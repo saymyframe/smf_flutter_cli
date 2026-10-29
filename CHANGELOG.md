@@ -3,6 +3,37 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 2026-10-29
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
+ - [`smf_flutter_cli` - `v0.7.1`](#smf_flutter_cli---v071)
+ - [`smf_google_sign_in` - `v0.6.2`](#smf_google_sign_in---v062)
+ - [`smf_pipeline` - `v0.7.1`](#smf_pipeline---v071)
+
+---
+
+#### `smf_flutter_cli` - `v0.7.1`
+
+ - **FIX**(google_sign_in): fail with notConfigured when Android answers an unknown key as a cancel ([#281](https://github.com/saymyframe/smf_flutter_cli/issues/281)). ([4fcd71fa](https://github.com/saymyframe/smf_flutter_cli/commit/4fcd71fab131b780d47ab1f8c7e3864f83a76d32))
+
+#### `smf_google_sign_in` - `v0.6.2`
+
+ - **FIX**(google_sign_in): fail with notConfigured when Android answers an unknown key as a cancel ([#281](https://github.com/saymyframe/smf_flutter_cli/issues/281)). ([4fcd71fa](https://github.com/saymyframe/smf_flutter_cli/commit/4fcd71fab131b780d47ab1f8c7e3864f83a76d32))
+
+#### `smf_pipeline` - `v0.7.1`
+
+ - **FIX**(google_sign_in): fail with notConfigured when Android answers an unknown key as a cancel ([#281](https://github.com/saymyframe/smf_flutter_cli/issues/281)). ([4fcd71fa](https://github.com/saymyframe/smf_flutter_cli/commit/4fcd71fab131b780d47ab1f8c7e3864f83a76d32))
+
+
 ## 2026-10-27
 
 ### Changes

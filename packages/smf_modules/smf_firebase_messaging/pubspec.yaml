@@ -31,7 +31,7 @@ dev_dependencies:
   # The provider of the notifications role, which the push role requires,
   # in the apps of the tests.
   smf_local_notifications: ^0.6.1
-  smf_pipeline: ^0.7.0
+  smf_pipeline: ^0.7.1
   # The provider of the preferences role, which the notifications role
   # requires.
   smf_shared_preferences: ^0.4.4

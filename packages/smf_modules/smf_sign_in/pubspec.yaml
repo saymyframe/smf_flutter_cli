@@ -36,7 +36,7 @@ dev_dependencies:
   # The router that renders the routes of the module and asks its guards in
   # the apps of the tests.
   smf_go_router: ^0.6.1
-  smf_pipeline: ^0.7.0
+  smf_pipeline: ^0.7.1
   # The other module that manages state, for the variant with it.
   smf_riverpod: ^0.3.4
   # The provider of the settings screen role, which the module requires.

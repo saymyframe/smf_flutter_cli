@@ -26,7 +26,7 @@ dev_dependencies:
   smf_gen_l10n: ^0.5.1
   # The router that builds the main navigation of the apps of the tests.
   smf_go_router: ^0.6.1
-  smf_pipeline: ^0.7.0
+  smf_pipeline: ^0.7.1
   # The preferences that the localization role requires, in which an app
   # remembers its language.
   smf_shared_preferences: ^0.4.4

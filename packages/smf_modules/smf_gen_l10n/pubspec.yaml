@@ -21,7 +21,7 @@ dev_dependencies:
   analyzer: ^14.4.0
   # The app entry of the apps that the tests render.
   smf_flutter_core: ^0.6.0
-  smf_pipeline: ^0.7.0
+  smf_pipeline: ^0.7.1
   # The preferences that the localization role requires, in which an app
   # remembers its language.
   smf_shared_preferences: ^0.4.4
