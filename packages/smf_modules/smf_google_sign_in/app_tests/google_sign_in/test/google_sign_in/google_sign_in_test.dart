@@ -8,8 +8,10 @@
 // clients of Google, and returns the ID token of the Google account that
 // the user chose as a credential of the issuer of Google. A closed sheet
 // returns null, the errors with which Google refuses an app that is not
-// set up for it fail with notConfigured, and any other error with
-// unknown. The app lists the way to sign in on Android and iOS, and its
+// set up for it fail with notConfigured, also the cancel with which
+// Credential Manager answers a key that Google does not know, and any
+// other error fails with unknown. The app lists the way to sign in on
+// Android and iOS, and its
 // icon shows the logo of Google from the assets of the app, in its own
 // colours, at the size of the icons of the button.
 //
@@ -143,6 +145,24 @@ void main() {
           'canceled',
           const GoogleSignInException(code: GoogleSignInExceptionCode.canceled),
         ),
+        // Credential Manager on Android, when the user closes the sheet.
+        (
+          'canceled by the user',
+          const GoogleSignInException(
+            code: GoogleSignInExceptionCode.canceled,
+            description: '[16] Cancelled by user.',
+          ),
+        ),
+        // Credential Manager on Android, after the user picked an account,
+        // when Google does not know the SHA-1 of the key that signed the
+        // app, or the device cannot reach Google.
+        (
+          'canceled when the reauth of the account failed',
+          const GoogleSignInException(
+            code: GoogleSignInExceptionCode.canceled,
+            description: '[16] Account reauth failed.',
+          ),
+        ),
         (
           'clientConfigurationError',
           const GoogleSignInException(
@@ -158,7 +178,7 @@ void main() {
           ),
         ),
         (
-          'unknownError of a key that Google does not know',
+          'unknownError of a server client that is no web client',
           const GoogleSignInException(
             code: GoogleSignInExceptionCode.unknownError,
             description: '[28444] Developer console is not set up correctly.',
@@ -194,16 +214,21 @@ void main() {
         outcomes,
         {
           'canceled': null,
+          'canceled by the user': null,
+          'canceled when the reauth of the account failed':
+              'failed: notConfigured',
           'clientConfigurationError': 'failed: notConfigured',
           'providerConfigurationError': 'failed: notConfigured',
-          'unknownError of a key that Google does not know':
+          'unknownError of a server client that is no web client':
               'failed: notConfigured',
           'interrupted': 'failed: unknown',
           'another unknownError': 'failed: unknown',
           'another exception of the platform': 'failed: unknown',
         },
         reason: 'Closing the sheet of Google is no failure. Google refuses '
-            'an app without its clients, or whose key it does not know.',
+            'an app without its clients, or whose key it does not know, '
+            'which Credential Manager answers as a cancel whose reauth of '
+            'the account failed.',
       );
       googleSignIn.failNext(
         const GoogleSignInException(
@@ -219,6 +244,25 @@ void main() {
         ),
         reason: 'The hint of the failure tells what Google answered and '
             'names the section of the README of the app on Google sign-in.',
+      );
+      googleSignIn.failNext(
+        const GoogleSignInException(
+          code: GoogleSignInExceptionCode.canceled,
+          description: '[16] Account reauth failed.',
+        ),
+      );
+      expect(
+        await _outcome(),
+        allOf(
+          contains('[16] Account reauth failed.'),
+          contains('SHA-1 of the key that signed'),
+          contains('cannot reach Google'),
+          contains('See the section "Google sign-in" of the README'),
+        ),
+        reason: 'The hint of a reauth that failed names the SHA-1 of the '
+            'key that signed the app and a device without a connection, the '
+            'two causes for which Credential Manager answers so, and the '
+            'section of the README of the app on Google sign-in.',
       );
     },
     timeout: timeout,

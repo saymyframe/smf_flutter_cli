@@ -37,6 +37,12 @@ bool _started = false;
 /// fails with `unknown`. On iOS, the Google Sign-In SDK stops the app
 /// instead when the app has no iOS client of Google or not its URL scheme,
 /// since the package does not catch what the SDK throws then.
+///
+/// On Android, Credential Manager answers a key that Google does not know
+/// as a cancel, after the user picked an account. Its description tells it
+/// from a closed sheet: "[16] Account reauth failed." rather than "[16]
+/// Cancelled by user.". A device that cannot reach Google gets the same
+/// answer, so the hint names both.
 Future<SignInCredential?> googleCredential() async {
   final GoogleSignInAccount account;
   try {
@@ -47,14 +53,23 @@ Future<SignInCredential?> googleCredential() async {
     account = await GoogleSignIn.instance.authenticate();
   } on GoogleSignInException catch (error) {
     switch (error.code) {
+      case GoogleSignInExceptionCode.canceled
+          when (error.description ?? '').contains('Account reauth failed'):
+        throw _notConfigured(
+          error.description!,
+          cause: 'On Android, Credential Manager answers so when Google does '
+              'not know the SHA-1 of the key that signed this build of the '
+              'app, and also when the device cannot reach Google.',
+        );
       case GoogleSignInExceptionCode.canceled:
         return null;
       case GoogleSignInExceptionCode.clientConfigurationError:
       case GoogleSignInExceptionCode.providerConfigurationError:
         throw _notConfigured(error.description ?? error.code.name);
-      // Credential Manager on Android answers so when the Google project
-      // has no Android client with the name of the package and the SHA-1
-      // of the key that signed the app.
+      // Credential Manager on Android answers so when Google does not take
+      // the server client of the app, `default_web_client_id` or the
+      // `serverClientId` of `initialize()`, as a web client of the Google
+      // project, such as the id of an Android client or of no client.
       case GoogleSignInExceptionCode.unknownError
           when RegExp(r'\b28444\b').hasMatch(error.description ?? ''):
         throw _notConfigured(error.description!);
@@ -75,12 +90,13 @@ Future<SignInCredential?> googleCredential() async {
 }
 
 /// The failure of a sign-in with Google that the app or the Google project
-/// is not set up for, with [message], what Google answered.
-AuthFailure _notConfigured(String message) => AuthFailure(
+/// is not set up for, with [message], what Google answered, and [cause],
+/// what Google answers so for when [message] does not tell it.
+AuthFailure _notConfigured(String message, {String? cause}) => AuthFailure(
       AuthFailureReason.notConfigured,
-      developerHint:
-          'Google sign-in is not set up for the app ($message). See the '
-          'section "{{{readme}}}" of the README of the app.',
+      developerHint: 'Google sign-in is not set up for the app ($message).'
+          '${cause == null ? '' : ' $cause'} See the section "{{{readme}}}" '
+          'of the README of the app.',
     );
 
 /// The icon of the button of Google sign-in: the "G" of Google in its own
