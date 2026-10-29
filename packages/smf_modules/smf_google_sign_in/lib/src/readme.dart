@@ -35,9 +35,9 @@ Google sign-in needs the Google project of the app to know the app, and the app 
 
 On iOS, the Google Sign-In SDK stops the app instead when the app has no iOS client of Google or not its URL scheme: google_sign_in does not catch the exception that the SDK throws then. Set both up before you try the button on iOS.
 
-On Android, the `developerHint` has one of two answers of Credential Manager when the setup is the cause:
+On Android, when the setup is the cause, the `developerHint` has one of these two answers of Credential Manager:
 
-- `[16] Account reauth failed.`, after the user picked an account: Google does not know the SHA-1 of the key that signed this build of the app. Register the SHA-1 of that key, such as the upload key or the app signing key of Google Play for a release. A device that cannot reach Google gets the same answer.
+- `[16] Account reauth failed.`, after the user picked an account: Google does not know the SHA-1 of the key that signed this build of the app. Register the SHA-1 of that key; for a release, that is the upload key or the app signing key of Google Play. A device that cannot reach Google gets the same answer.
 - `[28444] Developer console is not set up correctly.`: Google does not take the server client of the app as a web client of the Google project, as when `initialize()` gets the id of the Android client as its `serverClientId`. Use the id of the web client.
 
 The icon of the button, `GoogleSignInIcon` in `$googleSignInFile`, shows the "G" of Google from `$googleLogoFile`, the logo of the Google Sign-In SDK (Apache License 2.0). The [branding guidelines of Sign in with Google]($_branding) ask a custom button to show that logo in its own colours, on a light background, without a change: keep the image as it is.
