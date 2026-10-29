@@ -19,9 +19,9 @@ const _branding = 'https://developers.google.com/identity/branding-guidelines';
 /// the Google project and of the app on Android and on iOS, where
 /// google_sign_in reads the ids of the clients of Google, that the section
 /// of the provider of sign-in tells what it sets up, that the SDK of Google
-/// stops an iOS app that lacks its client, what to check when the button
-/// does nothing on Android, and the logo of Google, which the branding
-/// guidelines of Google keep as it is.
+/// stops an iOS app that lacks its client, what the two answers of
+/// Credential Manager on Android that point at the setup mean, and the logo
+/// of Google, which the branding guidelines of Google keep as it is.
 const String readmeSection = '''
 The app signs in with Google on Android and iOS: `googleCredential()` in `$googleSignInFile` asks Google for a credential with the sheet of Google sign-in. A sign-in screen of the app, such as the one of the `sign_in` module, shows the button of Google.
 
@@ -35,7 +35,10 @@ Google sign-in needs the Google project of the app to know the app, and the app 
 
 On iOS, the Google Sign-In SDK stops the app instead when the app has no iOS client of Google or not its URL scheme: google_sign_in does not catch the exception that the SDK throws then. Set both up before you try the button on iOS.
 
-If the button of Google does nothing on Android, check that the SHA-1 of the key that signs the app is registered with Google: Credential Manager may answer a key that Google does not know as if the user had closed the sheet.
+On Android, when the setup is the cause, the `developerHint` has one of these two answers of Credential Manager:
+
+- `[16] Account reauth failed.`, after the user picked an account: Google does not know the SHA-1 of the key that signed this build of the app. Register the SHA-1 of that key; for a release, that is the upload key or the app signing key of Google Play. A device that cannot reach Google gets the same answer.
+- `[28444] Developer console is not set up correctly.`: Google does not take the server client of the app as a web client of the Google project, as when `initialize()` gets the id of the Android client as its `serverClientId`. Use the id of the web client.
 
 The icon of the button, `GoogleSignInIcon` in `$googleSignInFile`, shows the "G" of Google from `$googleLogoFile`, the logo of the Google Sign-In SDK (Apache License 2.0). The [branding guidelines of Sign in with Google]($_branding) ask a custom button to show that logo in its own colours, on a light background, without a change: keep the image as it is.
 ''';

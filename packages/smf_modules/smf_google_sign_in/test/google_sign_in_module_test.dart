@@ -203,14 +203,41 @@ Future<void> main(List<String> arguments, SendPort port) async {
         GoogleSignInException(code: code, description: 'Google of ${code.name}.'),
       ),
     (
-      'unknownError of a key that Google does not know',
+      'canceled by the user',
+      const GoogleSignInException(
+        code: GoogleSignInExceptionCode.canceled,
+        description: '[16] Cancelled by user.',
+      ),
+    ),
+    (
+      'canceled without a description',
+      const GoogleSignInException(code: GoogleSignInExceptionCode.canceled),
+    ),
+    (
+      'canceled when the reauth of the account failed',
+      const GoogleSignInException(
+        code: GoogleSignInExceptionCode.canceled,
+        description: '[16] Account reauth failed.',
+      ),
+    ),
+    (
+      'canceled when the reauth of the account failed, in another form',
+      const GoogleSignInException(
+        code: GoogleSignInExceptionCode.canceled,
+        description: 'GetCredentialCancellationException: Account reauth '
+            'failed',
+      ),
+    ),
+    (
+      'unknownError of a server client that is no web client',
       const GoogleSignInException(
         code: GoogleSignInExceptionCode.unknownError,
         description: '[28444] Developer console is not set up correctly.',
       ),
     ),
     (
-      'unknownError of a key that Google does not know, in another form',
+      'unknownError of a server client that is no web client, in another '
+          'form',
       const GoogleSignInException(
         code: GoogleSignInExceptionCode.unknownError,
         description: 'GetCredentialCustomException: 28444: Developer console '
@@ -703,8 +730,13 @@ void main() {
               'which of these it sets up.'),
           contains('fails with the reason `notConfigured`'),
           contains('On iOS, the Google Sign-In SDK stops the app instead'),
-          contains('If the button of Google does nothing on Android, check '
-              'that the SHA-1'),
+          contains('- `[16] Account reauth failed.`, after the user picked '
+              'an account: Google does not know the SHA-1 of the key that '
+              'signed this build of the app.'),
+          contains('A device that cannot reach Google gets the same answer.'),
+          contains('- `[28444] Developer console is not set up correctly.`: '
+              'Google does not take the server client of the app as a web '
+              'client of the Google project'),
           contains('such as the one of the `sign_in` module'),
           contains('pass them to `initialize()` in `googleCredential()` of '
               '`$googleSignInFile`'),
@@ -747,6 +779,8 @@ void main() {
           'idToken',
           'rawNonce',
           'GoogleSignInExceptionCode.canceled',
+          'canceled',
+          'Account reauth failed',
           'clientConfigurationError',
           'providerConfigurationError',
           'unknownError',
@@ -861,37 +895,59 @@ void main() {
       String notConfigured(String message) => 'failed: notConfigured: Google '
           'sign-in is not set up for the app ($message). See the section '
           '"Google sign-in" of the README of the app.';
+      String reauthFailed(String message) => 'failed: notConfigured: Google '
+          'sign-in is not set up for the app ($message). On Android, '
+          'Credential Manager answers so when Google does not know the SHA-1 '
+          'of the key that signed this build of the app, and also when the '
+          'device cannot reach Google. See the section "Google sign-in" of '
+          'the README of the app.';
       String unknownOf(String code) => 'failed: unknown: '
           'GoogleSignInException(code GoogleSignInExceptionCode.$code, '
           'Google of $code., null)';
-      expect(calls['errors'], {
-        'unknownError': unknownOf('unknownError'),
-        'canceled': 'null',
-        'interrupted': unknownOf('interrupted'),
-        'clientConfigurationError':
-            notConfigured('Google of clientConfigurationError.'),
-        'providerConfigurationError':
-            notConfigured('Google of providerConfigurationError.'),
-        'uiUnavailable': unknownOf('uiUnavailable'),
-        'userMismatch': unknownOf('userMismatch'),
-        'unknownError of a key that Google does not know': notConfigured(
-          '[28444] Developer console is not set up correctly.',
-        ),
-        'unknownError of a key that Google does not know, in another form':
-            notConfigured(
-          'GetCredentialCustomException: 28444: Developer console is not set '
-          'up correctly.',
-        ),
-        'unknownError with another number': 'failed: unknown: '
-            'GoogleSignInException(code '
-            'GoogleSignInExceptionCode.unknownError, Error 128444., null)',
-        'clientConfigurationError without a description':
-            notConfigured('clientConfigurationError'),
-        'another error': 'failed: unknown: Bad state: broken',
-        'no ID token': 'failed: unknown: Google gave no ID token.',
-      });
+      expect(
+        calls['errors'],
+        {
+          'unknownError': unknownOf('unknownError'),
+          'canceled': 'null',
+          'interrupted': unknownOf('interrupted'),
+          'clientConfigurationError':
+              notConfigured('Google of clientConfigurationError.'),
+          'providerConfigurationError':
+              notConfigured('Google of providerConfigurationError.'),
+          'uiUnavailable': unknownOf('uiUnavailable'),
+          'userMismatch': unknownOf('userMismatch'),
+          'canceled by the user': 'null',
+          'canceled without a description': 'null',
+          'canceled when the reauth of the account failed':
+              reauthFailed('[16] Account reauth failed.'),
+          'canceled when the reauth of the account failed, in another form':
+              reauthFailed(
+            'GetCredentialCancellationException: Account reauth failed',
+          ),
+          'unknownError of a server client that is no web client':
+              notConfigured(
+            '[28444] Developer console is not set up correctly.',
+          ),
+          'unknownError of a server client that is no web client, in another '
+              'form': notConfigured(
+            'GetCredentialCustomException: 28444: Developer console is not '
+            'set up correctly.',
+          ),
+          'unknownError with another number': 'failed: unknown: '
+              'GoogleSignInException(code '
+              'GoogleSignInExceptionCode.unknownError, Error 128444., null)',
+          'clientConfigurationError without a description':
+              notConfigured('clientConfigurationError'),
+          'another error': 'failed: unknown: Bad state: broken',
+          'no ID token': 'failed: unknown: Google gave no ID token.',
+        },
+        reason: 'A cancel of Credential Manager whose reauth of the account '
+            'failed, which it answers after the user picked an account when '
+            'Google does not know the SHA-1 of the key that signed the app, '
+            'is no closed sheet.',
+      );
       // Each of them asked Google once.
-      expect(calls['sign-ins of the errors'], 13);
+      expect(calls['sign-ins of the errors'], 17);
     });
   });
 }
