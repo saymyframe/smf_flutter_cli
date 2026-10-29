@@ -6,6 +6,8 @@
 // place of flutter fails as such a build does, a number of times, and
 // notes each call. The script waits between its attempts, which the tests
 // stand in for with a sleep that only notes how long it would have taken.
+// The SDK of the app is a directory of the test, which the command in place
+// of flutter changes as the Gradle plugin of Android does.
 @TestOn('!windows')
 library;
 
@@ -18,6 +20,24 @@ import 'package:test/test.dart';
 const _brokenDownload =
     'Warning: An error occurred while preparing SDK package NDK (Side by '
     'side) 28.2.13676358: Error on ZipFile unknown archive.';
+
+/// What a build of Gradle prints when the Gradle plugin of Android could
+/// not install the NDK of Flutter because its download broke off, as it did
+/// in a nightly run with Flutter 3.44.3.
+const _brokenNdk = '''
+Warning: An error occurred while preparing SDK package NDK (Side by side) 28.2.13676358: Error reading Zip content from a SeekableByteChannel.:
+java.io.IOException: Error reading Zip content from a SeekableByteChannel
+\tat com.android.repository.util.InstallerUtil.unzip(InstallerUtil.java:101)
+"Install NDK (Side by side) 28.2.13676358 v.28.2.13676358" failed.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+A problem occurred configuring project ':app'.
+> com.android.builder.sdk.InstallFailedException: Failed to install the following SDK components:
+      ndk;28.2.13676358 NDK (Side by side) 28.2.13676358
+  Install the missing components using the SDK manager in Android Studio.
+''';
 
 void main() {
   late String script;
@@ -40,13 +60,19 @@ void main() {
 
   /// Runs build_apk.sh with [arguments], with a flutter whose first
   /// [failures] builds print [output] and end with [code], and whose builds
-  /// after them pass.
+  /// after them pass. With [leavesNdk], each of those builds leaves the
+  /// directory of the NDK of Flutter in the SDK of the app without the NDK,
+  /// as a download that breaks off does, and a build fails at once while
+  /// that directory has no NDK, as the Gradle plugin of Android does.
   ProcessResult run(
     List<String> arguments, {
     int failures = 0,
     String output = _brokenDownload,
     int code = 1,
+    bool leavesNdk = false,
   }) {
+    File('${temp.path}/output').writeAsStringSync('$output\n');
+    final ndk = '${temp.path}/sdk/ndk/28.2.13676358';
     final flutter = File('${temp.path}/bin/flutter')
       ..createSync(recursive: true)
       ..writeAsStringSync('''
@@ -54,8 +80,16 @@ void main() {
 echo "\$*" >> "${temp.path}/calls"
 calls=\$(wc -l < "${temp.path}/calls" | tr -d " ")
 echo "Running Gradle task 'assembleDebug'..."
+if [ -d '$ndk' ] && [ ! -f '$ndk/source.properties' ]; then
+  echo '[CXX1101] NDK at $ndk did not have a source.properties file' >&2
+  echo 'BUILD FAILED in 1s'
+  exit 1
+fi
 if [ "\$calls" -le $failures ]; then
-  echo '$output' >&2
+  if $leavesNdk; then
+    mkdir -p '$ndk/.installer'
+  fi
+  cat '${temp.path}/output' >&2
   echo 'BUILD FAILED in 1m 31s'
   exit $code
 fi
@@ -141,6 +175,44 @@ echo 'Built build/app/outputs/flutter-apk/app-debug.apk'
     expect(calls(), hasLength(3));
     expect(sleeps(), ['15', '15']);
     expect('${result.stdout}', endsWith('BUILD FAILED in 1m 31s\n'));
+  });
+
+  test(
+      'removes what a download that broke off left of a package of the '
+      'Android SDK before it builds the app again', () {
+    File('${temp.path}/android/local.properties')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        'sdk.dir=${temp.path}/sdk\nflutter.sdk=${temp.path}/flutter\n',
+      );
+    final installed =
+        File('${temp.path}/sdk/ndk/27.0.12077973/source.properties')
+          ..createSync(recursive: true);
+    final platform = File('${temp.path}/sdk/platforms/android-35/android.jar')
+      ..createSync(recursive: true);
+
+    final result = run(
+      ['--debug'],
+      failures: 1,
+      output: _brokenNdk,
+      leavesNdk: true,
+    );
+
+    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    expect(calls(), ['build apk --debug', 'build apk --debug']);
+    expect(
+      Directory('${temp.path}/sdk/ndk/28.2.13676358').existsSync(),
+      isFalse,
+    );
+    expect(installed.existsSync(), isTrue);
+    expect(platform.existsSync(), isTrue);
+    expect(
+      '${result.stdout}',
+      contains(
+        'Removing ${temp.path}/sdk/ndk/28.2.13676358, which the SDK manager '
+        'left without the package ndk;28.2.13676358.\n',
+      ),
+    );
   });
 
   test('fails at once on any other failure of the build', () {
