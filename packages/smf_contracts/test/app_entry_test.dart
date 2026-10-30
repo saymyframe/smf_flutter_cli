@@ -4732,13 +4732,8 @@ $components
 
       test('the signing of the app holds for each of its configurations', () {
         const signs = 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;';
-        final names = [
-          for (final flavor in AppEntryRole.flavors)
-            ...flavor.xcodeConfigurations,
-        ];
-
-        expect(names, hasLength(9));
-        for (final name in names) {
+        expect(_configurationNames, hasLength(12));
+        for (final name in _configurationNames) {
           final id = _configurationId('B', name);
 
           expect(
