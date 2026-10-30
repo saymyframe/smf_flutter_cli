@@ -24,6 +24,7 @@ const List<Role> _roles = [
   onboardingScreenRole,
   themeRole,
   envRole,
+  ciRole,
 ];
 
 final RegExp _mustache = RegExp(r'\{\{\{?\s*([^}]*?)\s*\}?\}\}');
@@ -64,6 +65,7 @@ void main() {
       'onboarding screen role',
       'theme role',
       'env role',
+      'CI role',
     ]);
   });
 
@@ -178,6 +180,13 @@ void main() {
       'requires': <String>{},
       'uses': <String>{},
     });
+    // A repository lives on one host, and a job of CI works with the values
+    // of .env when the app has them.
+    expect(shape(ciRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'env'},
+    });
   });
 
   test('only the app entry is open to all modules', () {
@@ -284,6 +293,7 @@ void main() {
           'onboarding_screen',
           'theme',
           'env',
+          'ci',
         ],
       );
     });
