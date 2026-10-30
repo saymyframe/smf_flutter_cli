@@ -1956,9 +1956,10 @@ abstract interface class AuthService {
   /// It fails with [AuthFailureReason.network] when it needs the server and
   /// does not reach it, and with [AuthFailureReason.recentSignInRequired] for
   /// a user whose session has ended on the server, whom the service signs out
-  /// on the device first. A read tells [userChanges] nothing unless the user
-  /// changed, since the session reads the token often. No hint of a failure
-  /// has the token.
+  /// on the device first. A user whom the server disabled is signed out too,
+  /// and may fail with [AuthFailureReason.userDisabled] instead. A read tells
+  /// [userChanges] nothing unless the user changed, since the session reads
+  /// the token often. No hint of a failure has the token.
   Future<String?> userToken({bool forceRefresh = false});
 }
 === lib/core/auth/guest_data.dart (role:auth) ===
