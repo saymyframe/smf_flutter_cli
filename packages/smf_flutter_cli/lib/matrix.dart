@@ -514,10 +514,11 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   `crash_reporting`;
 /// - `envKeys`, the keys that it gives the apps of the matrix values of
 ///   ([MatrixAppTest.envValues]), each with the module that gives the app
-///   the key (`module`) and its package (`package`), as [env] tells them
-///   (see [MatrixEnv.keys]), both `null` where no module of the app gives
-///   the key, and the names of those apps (`apps`), in the order of the
-///   apps and of the keys;
+///   the key (`module`) and its package (`package`), or else the id of the
+///   role whose template gives it (`role`), as [env] tells them (see
+///   [MatrixEnv.keys]), all `null` where nothing in the app gives the key,
+///   and the names of those apps (`apps`), in the order of the apps and of
+///   the keys;
 /// - `answer`, the answer of CI that its probe asks for
 ///   ([MatrixStartProbe.answer]), only if it has one, so that the checks of
 ///   the repository find an answer that a workflow gives the script that
@@ -639,31 +640,33 @@ List<Map<String, String>> _roleFunctionUses(
 }
 
 /// The keys that [test] gives the apps of [apps] values of, each with the
-/// module that gives the app the key, as [env] tells it, and its package of
-/// [packages], `null` where no module of the app gives the key, and the
-/// names of the apps; see [appTestsReport].
+/// owner of the key in the app, as [env] tells it: the module with its
+/// package of [packages], or the id of the role, all `null` where nothing in
+/// the app gives the key. Each has the names of the apps; see
+/// [appTestsReport].
 List<Map<String, Object?>> _envKeysGivenBy(
   MatrixAppTest test,
   List<MatrixApp> apps,
   MatrixEnv? env,
   Map<ModuleId, String> packages,
 ) {
-  final given = <(String, ModuleId?), List<String>>{};
+  final given = <(String, MatrixEnvKeyOwner?), List<String>>{};
   for (final app in apps) {
     if (!test.appliesTo(app)) continue;
     final values = test.envValues?.call(app) ?? const <String, String?>{};
     if (values.isEmpty) continue;
-    final owners = env?.keys(app) ?? const <String, ModuleId>{};
+    final owners = env?.keys(app) ?? const <String, MatrixEnvKeyOwner>{};
     for (final key in values.keys) {
       (given[(key, owners[key])] ??= []).add(app.name);
     }
   }
   return [
-    for (final MapEntry(key: (key, module), value: names) in given.entries)
+    for (final MapEntry(key: (key, owner), value: names) in given.entries)
       {
         'key': key,
-        'module': module?.value,
-        'package': packages[module],
+        'module': owner?.module?.value,
+        'package': packages[owner?.module],
+        'role': owner?.role,
         'apps': names,
       },
   ];
@@ -1090,7 +1093,8 @@ final class MatrixAppTest {
   /// the module give values for the keys of the modules that their package
   /// keeps, such as a key that the mocks of the service take, so that the
   /// code of the module runs in the tests as with the values of a
-  /// developer. A value takes the place of the value in the line of its
+  /// developer. A test of a role gives values for the keys of the template
+  /// of that role ([roles]) in the same way. A value takes the place of the value in the line of its
   /// key, and `null` removes the line, as for a key that the developer left
   /// out of the file, which only the tests of the values themselves need.
   ///
@@ -1272,15 +1276,44 @@ final class MatrixEnv {
   /// an app whose modules read no values.
   final List<String> Function(MatrixApp app) toolArguments;
 
-  /// The keys of the values of an app of the matrix, each with the module
-  /// that gives the app the key; none for an app whose modules read no
-  /// values.
+  /// The keys of the values of an app of the matrix, each with who gives
+  /// the app the key; none for an app that reads no values.
   ///
   /// The report of the tests of a matrix tool ([appTestsReport]) names, for
-  /// each key that a test gives an app a value of, its module, so that the
+  /// each key that a test gives an app a value of, its owner, so that the
   /// checks of the repository find a test that gives values for the keys of
-  /// a module that it does not know.
-  final Map<String, ModuleId> Function(MatrixApp app) keys;
+  /// a module that it does not know, or of a role whose contract it does not
+  /// check.
+  final Map<String, MatrixEnvKeyOwner> Function(MatrixApp app) keys;
+}
+
+/// Who gives an app a key of its values ([MatrixEnv.keys]): a module, or the
+/// template of a role, named by its id, since this library knows no role.
+final class MatrixEnvKeyOwner {
+  /// The owner of a key that the module [module] gives.
+  const MatrixEnvKeyOwner.module(ModuleId this.module) : role = null;
+
+  /// The owner of a key that the template of the role with the id [role]
+  /// gives.
+  const MatrixEnvKeyOwner.role(String this.role) : module = null;
+
+  /// The id of the module, or `null` for the key of the template of a role.
+  final ModuleId? module;
+
+  /// The id of the role, or `null` for the key of a module.
+  final String? role;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MatrixEnvKeyOwner &&
+      other.module == module &&
+      other.role == role;
+
+  @override
+  int get hashCode => Object.hash(module, role);
+
+  @override
+  String toString() => role == null ? 'module $module' : 'role $role';
 }
 
 /// The tests that a matrix adds to its apps, and the roles whose contract

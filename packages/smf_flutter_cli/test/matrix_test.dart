@@ -1706,7 +1706,8 @@ Type type() => Types;
   test(
       'the report of the app tests names each key that a test gives the apps '
       'a value of, with the module that gives the app the key and its '
-      'package, and none where no module of the app gives it', () async {
+      'package, or the role whose template gives it, and none where nothing '
+      'in the app gives it', () async {
     final home = await _appTestsOf('smf_home_flutter');
     const withHome = MatrixApp('with home', [
       FlutterCoreModule.id,
@@ -1718,14 +1719,20 @@ Type type() => Types;
       file: '.env',
       toolArguments: (app) => const [],
       keys: (app) => {
-        if (app.modules.contains(HomeModule.id)) 'HOME_URL': HomeModule.id,
+        if (app.modules.contains(HomeModule.id))
+          'HOME_URL': const MatrixEnvKeyOwner.module(HomeModule.id),
+        'ROLE_KEY': const MatrixEnvKeyOwner.role('board'),
       },
     );
     final tests = [
       MatrixAppTest(
         '$home/values',
         appliesTo: (_) => true,
-        envValues: (app) => {'HOME_URL': 'https://home.example', 'X_KEY': null},
+        envValues: (app) => {
+          'HOME_URL': 'https://home.example',
+          'X_KEY': null,
+          'ROLE_KEY': 'a value',
+        },
       ),
       MatrixAppTest('$home/none', appliesTo: (_) => true),
     ];
@@ -1751,39 +1758,45 @@ Type type() => Types;
           'key': 'HOME_URL',
           'module': 'home',
           'package': 'smf_home_flutter',
+          'role': null,
           'apps': ['with home'],
         },
         {
           'key': 'X_KEY',
           'module': null,
           'package': null,
+          'role': null,
+          'apps': ['with home', 'without home'],
+        },
+        {
+          'key': 'ROLE_KEY',
+          'module': null,
+          'package': null,
+          'role': 'board',
           'apps': ['with home', 'without home'],
         },
         {
           'key': 'HOME_URL',
           'module': null,
           'package': null,
+          'role': null,
           'apps': ['without home'],
         },
       ],
       <Object>[],
     ]);
-    // Without the keys of the apps, no module gives a key.
+    // Without the keys of the apps, nothing gives a key.
     expect(
       (await report()).first['envKeys'],
       [
-        {
-          'key': 'HOME_URL',
-          'module': null,
-          'package': null,
-          'apps': ['with home', 'without home'],
-        },
-        {
-          'key': 'X_KEY',
-          'module': null,
-          'package': null,
-          'apps': ['with home', 'without home'],
-        },
+        for (final key in const ['HOME_URL', 'X_KEY', 'ROLE_KEY'])
+          {
+            'key': key,
+            'module': null,
+            'package': null,
+            'role': null,
+            'apps': ['with home', 'without home'],
+          },
       ],
     );
   });
