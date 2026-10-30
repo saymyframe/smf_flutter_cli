@@ -21,8 +21,8 @@
 //   plugin, such as an app of modules that bring none, which then has none.
 // - For Android, the Gradle files of the Android project, which name the
 //   versions of Gradle, of its plugins and of the dependencies of the app,
-//   without the lines that set the ids of the app, namespace and
-//   applicationId.
+//   without the lines that set the ids and the name of the app, namespace,
+//   applicationId and manifestPlaceholders.
 // - For iOS, the Swift packages that the Xcode project of the app refers to
 //   itself, besides those that the plugins bring.
 // Apps that build with the same have one text, which the file has once
@@ -96,7 +96,8 @@ Map<String, String> nativeBuildsOf(Directory directory, String platform) {
 /// - for Android, `file <path>` for each Gradle file of `android/`, but
 ///   those in hidden directories and in `build/`, in the order of their
 ///   paths, each followed by its lines, indented by two spaces, but those
-///   that set the ids of the app, namespace and applicationId;
+///   that set the ids and the name of the app, namespace, applicationId and
+///   manifestPlaceholders;
 /// - for iOS, `file <path>: remote Swift packages` for each Xcode project
 ///   of `ios/` that refers to Swift packages itself, in the order of their
 ///   paths, each followed by the lines of its
@@ -187,9 +188,14 @@ String? _pluginOf(Directory app, YamlMap packages, String name) {
   return 'plugin $name ${package['version']} ($source$commit)';
 }
 
-/// A line of a Gradle file that sets an id of the app, which differs from
-/// app to app while the downloads stay the same.
-final _setsId = RegExp(r'^\s*(?:namespace|applicationId)\b');
+/// A line of a Gradle file that sets an id of the app, or a value for its
+/// manifest such as the name of the app on a device, which differs from app
+/// to app while the downloads stay the same. No value of the manifest decides
+/// a download. An id suffix, `applicationIdSuffix`, is no such line: it does
+/// not differ from app to app, and the `\b` keeps it.
+final _setsNameOrId = RegExp(
+  r'^\s*(?:namespace|applicationId|manifestPlaceholders)\b',
+);
 
 /// The lines of the Gradle files of the Android project of [app] (see
 /// [nativeBuildOf]).
@@ -217,7 +223,7 @@ List<String> _gradleFilesOf(Directory app) {
       for (final line in const LineSplitter().convert(
         files[path]!.readAsStringSync(),
       ))
-        if (!_setsId.hasMatch(line)) '  $line',
+        if (!_setsNameOrId.hasMatch(line)) '  $line',
     ],
   ];
 }
