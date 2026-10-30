@@ -3868,6 +3868,99 @@ final apple = env.AppEnv.shopAppleKey;
         });
 
         test(
+            'takes a key of the template of a role, whose files read it, after '
+            'the keys of the modules, whatever the order of the modules',
+            () async {
+          const boardToken = EnvKey(
+            'BOARD_TOKEN',
+            description: 'The public token of the board',
+          );
+          final board = TestRole<String>(
+            'board',
+            requires: {envRole},
+            template: _VarsTemplate(const {}, [
+              envRole.data(boardToken),
+              BrickContribution(
+                bundle(
+                  'board_role',
+                  files: {
+                    'lib/core/board/board.dart': '''
+import '../env/app_env.dart';
+
+final token = AppEnv.boardToken;
+''',
+                  },
+                ),
+              ),
+            ]),
+          );
+          final result = await ContractHarness(
+            ModuleRegistry([
+              scaffold(),
+              TestModule(
+                'dotenv_reader',
+                providers: [const _EnvProvider()],
+                contributions: [
+                  envRole.data(const EnvToolArguments(['--values=.env'])),
+                ],
+              ),
+              TestModule('boards', providers: [RoleProvider.plain(board)]),
+              TestModule(
+                'shop',
+                requires: {envRole},
+                contributions: [envRole.data(shopApple)],
+              ),
+            ]),
+          ).check(
+            const ContractCase(
+              'board',
+              requested: [
+                ModuleId('boards'),
+                ModuleId('shop'),
+                ModuleId('dotenv_reader'),
+              ],
+            ),
+          );
+
+          expect(result.errors, isEmpty);
+          expect(
+            [
+              for (final key in envRole.keysIn(envRole.hookInput(result.hook!)))
+                (key.name, key.owner),
+            ],
+            [
+              ('SHOP_APPLE_KEY', const ModuleOrigin(ModuleId('shop'))),
+              ('BOARD_TOKEN', RoleTemplateOrigin(board)),
+            ],
+          );
+          final files = result.app!.files;
+          for (final file in [EnvRole.dotEnvFile, EnvRole.exampleFile]) {
+            expect(
+              files[file]!.text,
+              endsWith(
+                '# The public key of the shop on iOS\n'
+                'SHOP_APPLE_KEY=\n'
+                '\n'
+                '# The public token of the board\n'
+                'BOARD_TOKEN=\n',
+              ),
+              reason: file,
+            );
+          }
+          expect(
+            files[EnvRole.readerFile]!.text,
+            contains('static String? get boardToken => null;'),
+          );
+          expect(
+            files['README.md']!.text,
+            contains(
+              '- `BOARD_TOKEN`, read as `AppEnv.boardToken`, from the board '
+              'role: The public token of the board\n',
+            ),
+          );
+        });
+
+        test(
             'has a note in the guide for coding agents that names no provider '
             'and no package', () async {
           final results = [
