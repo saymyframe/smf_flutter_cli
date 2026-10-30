@@ -712,7 +712,8 @@ String _whole(String where, String what) =>
 /// matrix has the keys [planKeys] from the plan, all of them for `*`, an --app
 /// or a --shard of a run that generates or checks apps, adds tests to one or
 /// runs the commands of its CI, that does not come from the matrix of the plan,
-/// directly or through a variable of the environment of the step. A run that only explains what smf create would
+/// directly or through a variable of the environment of the step. A run that
+/// only explains what smf create would
 /// generate may take an app of the plan as it likes. A script of
 /// .github/scripts, which has no matrix, has no [planKeys] and takes them
 /// as it is given them.

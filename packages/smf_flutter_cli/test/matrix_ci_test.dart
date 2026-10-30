@@ -98,6 +98,10 @@ const _commands = MatrixCiCommands(
   ),
 );
 
+/// The first check of an app with the env role.
+const _copyOfExample = '[ -f ${EnvRole.dotEnvFile} ] || '
+    'cp ${EnvRole.exampleFile} ${EnvRole.dotEnvFile}';
+
 void main() {
   group('matrixCi', () {
     test(
@@ -119,9 +123,9 @@ void main() {
       );
       final ofApp = matrixCi(withEnv)!;
       const arguments = '--dart-define-from-file=${EnvRole.dotEnvFile}';
+      const buildArguments = '$arguments --target-platform android-x64';
       expect(ofApp.checks, [
-        '[ -f ${EnvRole.dotEnvFile} ] || '
-            'cp ${EnvRole.exampleFile} ${EnvRole.dotEnvFile}',
+        _copyOfExample,
         'flutter pub get',
         'dart format --output=none --set-exit-if-changed lib test',
         'flutter analyze',
@@ -131,8 +135,7 @@ void main() {
       expect(ofApp.build.commands, [
         'dart ${CiRole.writeEnvFile}',
         'flutter pub get',
-        'flutter build apk --release --flavor $environment $arguments '
-            '--target-platform android-x64',
+        'flutter build apk --release --flavor $environment $buildArguments',
       ]);
       expect(
         ofApp.build.artifact,
@@ -336,8 +339,12 @@ void main() {
               ran.add('test ${generated.path}');
               return (0, '');
             },
-            ci: (directory, commands,
-                {environment = const {}, artifact}) async {
+            ci: (
+              directory,
+              commands, {
+              environment = const {},
+              artifact,
+            }) async {
               ran.add('ci $directory: ${commands.join(', ')}');
               expect(environment, isEmpty);
               expect(artifact, isNull);
@@ -511,8 +518,12 @@ void main() {
           build: build,
           commands: MatrixCommands(
             log: log.add,
-            ci: (directory, commands,
-                {environment = const {}, artifact}) async {
+            ci: (
+              directory,
+              commands, {
+              environment = const {},
+              artifact,
+            }) async {
               expect(directory, '/apps/an app');
               runs.add((commands, environment, artifact));
               return (codes[runs.length - 1], 'Run ${runs.length}');

@@ -448,8 +448,11 @@ void main() {
     ]) {
       final result = await run(arguments);
       expect(result.exitCode, 64, reason: '$arguments');
-      expect('${result.stderr}', contains('--ci-commands'),
-          reason: '$arguments');
+      expect(
+        '${result.stderr}',
+        contains('--ci-commands'),
+        reason: '$arguments',
+      );
     }
 
     final unknown = await run([
