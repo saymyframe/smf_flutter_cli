@@ -43,6 +43,93 @@ PAYWALL_TERMS_URL=
 
 # The address of the privacy policy that the paywall links to
 PAYWALL_PRIVACY_URL=
+=== .github/workflows/ci.yml (github_actions) ===
+# The CI of this app. The section "GitHub Actions" of README.md tells what it
+# runs and where its values come from.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: The environment to build the Android app for
+        type: choice
+        required: true
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  checks:
+    name: Format, analyze and test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+      - name: Copy .env.example to .env
+        run: |
+          [ -f .env ] || cp .env.example .env
+      - name: Get the packages
+        run: flutter pub get
+      - name: Check the format
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test --dart-define-from-file=.env
+
+  build:
+    name: Build for Android (${{ inputs.environment }})
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+      - name: Write .env from the variables of the environment
+        env:
+          REVENUECAT_APPLE_KEY: ${{ vars.REVENUECAT_APPLE_KEY }}
+          REVENUECAT_GOOGLE_KEY: ${{ vars.REVENUECAT_GOOGLE_KEY }}
+          REVENUECAT_TEST_KEY: ${{ vars.REVENUECAT_TEST_KEY }}
+          PAYWALL_TERMS_URL: ${{ vars.PAYWALL_TERMS_URL }}
+          PAYWALL_PRIVACY_URL: ${{ vars.PAYWALL_PRIVACY_URL }}
+        run: dart tool/write_env.dart
+      - name: Get the packages
+        run: flutter pub get
+      - name: Build the Android app
+        env:
+          APP_ENVIRONMENT: ${{ inputs.environment }}
+        run: flutter build apk --release --flavor "$APP_ENVIRONMENT" --dart-define-from-file=.env
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-${{ inputs.environment }}-release
+          path: build/app/outputs/flutter-apk/app-${{ inputs.environment }}-release.apk
+          if-no-files-found: error
 === .gitignore (flutter_core) ===
 # Miscellaneous
 *.class
@@ -222,6 +309,23 @@ With `firebase_auth`:
 
 - For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`. After `flutterfire configure` for another project, it has to run again: run it only when asked.
 - Apple is enabled in the Firebase console by hand, with the private key of Apple that deleting an account needs. That key is a secret: never put it into the app or its repository.
+
+## CI
+
+- CI runs the commands of the section "Continuous integration" of `README.md`, in a fresh copy of the repository. Keep them passing, and run them before you finish a change.
+- A generated file that the app needs stays in git, or comes from `flutter pub get`, since no other of these commands writes it.
+
+- `tool/write_env.dart` writes `.env` for a build of CI, from the keys of `.env.example` and the variables of the process. A new key also needs its variable where CI runs. The script stops when `.env` has a value, and never replaces one.
+- The first check copies `.env.example` only when `.env` is missing, so running it keeps the values on your machine.
+- A value of `.env` ends up in the app, so never give a build of CI a secret through it.
+
+With `GitHub Actions`:
+
+- `.github/workflows/ci.yml` has the two jobs: `checks`, on each push, and `build`, which a developer starts for an environment.
+- Never put `${{ … }}` in a `run:` line, which would make a value a part of the script. Pass the value through `env:` of the step, and read it as a variable of the shell.
+- Each `uses:` line is pinned to a full commit, with its tag in a comment after it. To update an action, change the two together.
+
+- A new key of `.env` needs a line under `env:` of the step of `build` that runs `tool/write_env.dart`, as in `MY_SERVICE_KEY: ${{ vars.MY_SERVICE_KEY }}`. Without it, a build leaves that value empty.
 
 ## Crash reporting
 
@@ -676,6 +780,38 @@ The texts of a new language, such as German, go into a file of their own:
 
 The section "Languages" tells where else the new language goes.
 
+## GitHub Actions
+
+`.github/workflows/ci.yml` runs on GitHub once you push the app there. Each push runs the checks of the section "Continuous integration", which need no setup.
+
+To build an APK, open **Actions**, then **CI**, then **Run workflow**, and pick an environment, or run:
+
+```bash
+gh workflow run ci.yml -f environment=dev
+```
+
+The file has to be on the default branch of the repository for that. The APK is an artifact of the run.
+
+A build takes the values of `.env` from the variables of the GitHub environment that you picked. Set them in **Settings**, **Environments**, one environment for each of `dev`, `staging` and `prod` that you build, under **Environment variables**, by the names of the keys:
+
+- `REVENUECAT_APPLE_KEY`
+- `REVENUECAT_GOOGLE_KEY`
+- `REVENUECAT_TEST_KEY`
+- `PAYWALL_TERMS_URL`
+- `PAYWALL_PRIVACY_URL`
+
+With the GitHub CLI:
+
+```bash
+gh variable set <KEY> --env dev --body '<value>'
+```
+
+Repeat this for each environment that needs it. GitHub offers environments on a private repository only with a paid plan. Without them, set **Repository variables** instead, which give every build the same values. A key of your own also needs a line under `env:` of the step that writes `.env`, as in `MY_SERVICE_KEY: ${{ vars.MY_SERVICE_KEY }}`.
+
+CI runs the latest stable Flutter, so a new release can turn it red with no change in your code: `flutter analyze` fails on a new deprecation, and the format check on a change of the formatter. To stay on the version that you develop with, add `flutter-version: <version>` under `channel: stable` in both jobs, with the version that `flutter --version` prints, and change it when you upgrade.
+
+A build that fails on a download usually passes when you run it again.
+
 ## flutter_local_notifications
 
 The app shows its notifications with [flutter_local_notifications](https://pub.dev/packages/flutter_local_notifications): `lib/core/notifications/local_notifications_service.dart` implements the notifications service of the app on it (see the section Notifications).
@@ -743,6 +879,32 @@ On Android, when the setup is the cause, the `developerHint` has one of these tw
 - `[28444] Developer console is not set up correctly.`: Google does not take the server client of the app as a web client of the Google project, as when `initialize()` gets the id of the Android client as its `serverClientId`. Use the id of the web client.
 
 The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_sign_in.dart`, shows the "G" of Google from `lib/core/google_sign_in/assets/google_logo.png`, the logo of the Google Sign-In SDK (Apache License 2.0). The [branding guidelines of Sign in with Google](https://developers.google.com/identity/branding-guidelines) ask a custom button to show that logo in its own colours, on a light background, without a change: keep the image as it is.
+
+## Continuous integration
+
+On each push, CI of this app runs these commands in a fresh copy of the repository:
+
+```bash
+[ -f .env ] || cp .env.example .env
+flutter pub get
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test --dart-define-from-file=.env
+```
+
+On request, it builds a release APK for one of the environments `dev`, `staging` and `prod`:
+
+```bash
+dart tool/write_env.dart
+flutter pub get
+flutter build apk --release --flavor <environment> --dart-define-from-file=.env
+```
+
+The APK is `build/app/outputs/flutter-apk/app-<environment>-release.apk`. The build signs it as the Android project of the app does, so it is for testers: uploading to a store, a signing key of your own and iOS are not part of it.
+
+CI writes its own `.env`, since that file is not in git. The checks copy `.env.example` when `.env` is missing, so in a fresh copy every value is empty, and on your machine your values stay. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `.env` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
+
+The section of the module that provides CI tells how to start a build.
 
 ## Values in .env
 
@@ -18401,4 +18563,80 @@ String? _withUrlSchemes(String text, List<String> schemes) {
     '${_urlTypesOf(schemes, '$indent\t', newline)}'
     '$indent</array>$newline',
   );
+}
+=== tool/write_env.dart (role:ci) ===
+// Writes `.env` for a job of CI, from `.env.example` and the variables of the
+// process. No value in the file is a secret: every value ends up in the app.
+//
+// A key whose variable has a value gets it, in one of the two forms of a value
+// of `.env`: as it is, or in double quotes when it has white space, `#` or a
+// quote. Any other line stays as `.env.example` has it. A value with a double
+// quote, a control character or a line separator fits neither form, and could
+// add a line of its own, so the script stops and writes nothing. It never prints
+// a value.
+//
+// It never replaces a value. When `.env` has one, the script stops and leaves
+// the file as it is, and a developer who wants it written again deletes it. A
+// missing `.env`, or one without values such as a copy of `.env.example`, is
+// what a job of CI starts from.
+import 'dart:convert';
+import 'dart:io';
+
+final _key = RegExp(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=');
+final _unsafe = RegExp(r'["\x00-\x1F\x7F\u2028\u2029]');
+final _quoted = RegExp(r"[\s#'`]");
+final _withoutValue = RegExp(
+  r'^\s*(?:#.*|[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:""\s*)?(?:#.*)?)?$',
+);
+
+void main() {
+  final example = File('.env.example');
+  if (!example.existsSync()) {
+    stderr.writeln('.env.example is missing.');
+    exitCode = 1;
+    return;
+  }
+  final env = File('.env');
+  // In latin1, every file reads, so an error shows no part of a value.
+  if (env.existsSync() &&
+      !env.readAsLinesSync(encoding: latin1).every(_withoutValue.hasMatch)) {
+    stderr.writeln(
+      '.env has values, which this script would replace. Delete .env to write '
+      'it again.',
+    );
+    exitCode = 1;
+    return;
+  }
+  final lines = <String>[];
+  final empty = <String>[];
+  final refused = <String>[];
+  for (final line in example.readAsLinesSync()) {
+    final key = _key.firstMatch(line)?[1];
+    if (key == null) {
+      lines.add(line);
+      continue;
+    }
+    final value = Platform.environment[key] ?? '';
+    if (value.isEmpty) {
+      if (_withoutValue.hasMatch(line)) empty.add(key);
+      lines.add(line);
+    } else if (_unsafe.hasMatch(value)) {
+      refused.add(key);
+    } else {
+      lines.add('$key=${_quoted.hasMatch(value) ? '"$value"' : value}');
+    }
+  }
+  if (refused.isNotEmpty) {
+    stderr.writeln(
+      'The values of ${refused.join(', ')} have a double quote, a control '
+      'character or a line separator, which .env cannot hold.',
+    );
+    exitCode = 1;
+    return;
+  }
+  env.writeAsStringSync('${lines.join('\n')}\n');
+  stdout.writeln('Wrote .env.');
+  if (empty.isNotEmpty) {
+    stdout.writeln('No value for: ${empty.join(', ')}.');
+  }
 }

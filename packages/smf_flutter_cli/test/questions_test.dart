@@ -229,6 +229,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -251,6 +252,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
@@ -333,6 +335,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -355,6 +358,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -412,6 +416,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -507,6 +512,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -563,6 +569,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -585,6 +592,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -632,6 +640,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -655,6 +664,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(run.asked[5].shown, [
       'go_router — Routes and navigation with go_router',
@@ -693,6 +703,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -831,6 +842,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -902,6 +914,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -973,6 +986,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1065,6 +1079,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1156,6 +1171,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1274,6 +1290,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1352,6 +1369,7 @@ void main() {
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1468,6 +1486,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1594,6 +1613,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1691,6 +1711,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1785,6 +1806,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1819,8 +1841,8 @@ void main() {
   });
 
   test(
-      'a run in a terminal asks last which module provides the '
-      'authentication, offers Firebase Authentication, which brings '
+      'a run in a terminal asks which module provides the authentication '
+      'after the analytics, offers Firebase Authentication, which brings '
       'Firebase, and then asks who may use the app without an account',
       () async {
     final run = await _create(
@@ -1845,16 +1867,17 @@ void main() {
         'Analytics': [],
         'Authentication': ['firebase_auth'],
         'Who may use the app': ['Everyone, as an anonymous user'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
 
     expect(run.code, 0, reason: run.lines.join('\n'));
     // The roles come in the order of the list of modules, and firebase_auth
-    // is last. An app has one provider of sign-in, or none. The mode of the
-    // auth role is a choice of the role, which it asks for once the modules
-    // of the app are known, with the default first.
-    final [..., provider, mode] = run.asked;
+    // is the last but CI. An app has one provider of sign-in, or none. The
+    // mode of the auth role is a choice of the role, which it asks for once
+    // the modules of the app are known, with the default first.
+    final [..., provider, _, mode] = run.asked;
     expect(provider.message, 'Authentication: which module provides it?');
     expect(provider.shown, [
       'firebase_auth — Firebase Authentication with firebase_auth',
@@ -2032,6 +2055,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Who may use the app': ['Nobody'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2153,6 +2177,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Who may use the app': ['Nobody'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2269,6 +2294,7 @@ void main() {
       'paywall',
       'firebase_crashlytics',
       'firebase_analytics',
+      'github_actions',
     ];
     final run = await _create(
       {
@@ -2285,6 +2311,7 @@ void main() {
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': ['firebase_analytics'],
         'Who may use the app': ['Nobody'],
+        'CI': ['github_actions'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2299,9 +2326,9 @@ void main() {
     // notifications role adds to; what is under the hood, the preferences
     // that the localization, the theme, the onboarding and the
     // notifications require, the DI container, the state manager and the
-    // events; and last the services of crash reporting, analytics and
-    // authentication. The choices of the roles come once the modules are
-    // known.
+    // events; then the services of crash reporting, analytics and
+    // authentication; and last CI. The choices of the roles come once the
+    // modules are known.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
       'Infrastructure: which do you want?',
@@ -2318,6 +2345,7 @@ void main() {
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'CI: which module provides it?',
       'Who may use the app without an account?',
     ]);
     // The answers before the questions of the settings screen, the router,
