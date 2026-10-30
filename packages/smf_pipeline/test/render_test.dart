@@ -327,6 +327,7 @@ dev_dependencies:
   build_runner: "^2.10.0"
 
 flutter:
+  default-flavor: "dev"
   uses-material-design: true
   assets:
     - "assets/"
