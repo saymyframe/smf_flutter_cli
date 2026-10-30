@@ -7,7 +7,8 @@
 // that the matrix tool writes next to the start check. With answers too:
 // the script runs a command of CI for each request that the app writes once
 // its start check passed, of the answers that the app asks for, and reads
-// the verdict of the app on it.
+// the verdict of the app on it. It finds the APK of a build by the build mode,
+// so the name of a flavor in the name of the APK makes no difference to it.
 //
 // No test waits for the time to pass. The script tells the time by SECONDS
 // of bash, which the tests move on by the seconds that the build, a command
@@ -84,7 +85,11 @@ perl() {
   /// the build [mode] after them if it is given, with a build that takes
   /// [buildSeconds] by the clock of the script and ends with [buildCode],
   /// and a start check that writes [result], or nothing, to the file of the
-  /// app and to the log of the device. The first [brokenDownloads] builds
+  /// app and to the log of the device. A build for Android writes the APK of
+  /// its mode, with the name that Flutter gives it for the flavor [flavor],
+  /// `app-<flavor>-<mode>.apk`, or for an app without flavors,
+  /// `app-<mode>.apk`, and with [writesApk] `false` none. The first
+  /// [brokenDownloads] builds
   /// fail as one of Gradle does when a package of the Android SDK did not
   /// download. The command of the device that has the word [slow] takes
   /// [slowSeconds] by that clock. The emulator has the ABI [abi], and with
@@ -103,6 +108,8 @@ perl() {
     String? mode,
     int buildSeconds = 0,
     int buildCode = 0,
+    String? flavor,
+    bool writesApk = true,
     int brokenDownloads = 0,
     String? slow,
     int slowSeconds = 0,
@@ -131,8 +138,11 @@ if [ "\$(wc -l < "${temp.path}/builds" | tr -d " ")" -le $brokenDownloads ]; the
 fi
 [ $buildCode -eq 0 ] || exit $buildCode
 mkdir -p build/app/outputs/flutter-apk build/ios/iphonesimulator/Runner.app
-: > build/app/outputs/flutter-apk/app-debug.apk
-: > build/app/outputs/flutter-apk/app-release.apk
+if [ "\$2" = apk ] && $writesApk; then
+  apk="build/app/outputs/flutter-apk/app-${flavor == null ? '' : '$flavor-'}\${3#--}.apk"
+  : > "\$apk"
+  : > "\$apk.sha1"
+fi
 cat > build/ios/iphonesimulator/Runner.app/Info.plist << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
@@ -152,7 +162,8 @@ flutter() {
 }
 sleep() { SECONDS=\$((SECONDS + $sleepSeconds)); }
 ${slow == null ? '' : slowCommand(slow, slowSeconds)}''');
-    command('sdk/build-tools/35.0.0/aapt2', '''
+    command('sdk/build-tools/35.0.0/aapt2', r'''
+[ -f "$3" ] || { echo "$3: No such file" >&2; exit 1; }
 echo "package: name='com.example.app' versionCode='1'"
 echo "launchable-activity: name='com.example.app.MainActivity'"''');
     // adb -s <device> <command>: the device installs the APK, pm clear
@@ -412,6 +423,98 @@ esac''');
       '${result.stdout}',
       '::error::flutter build apk failed with the exit code 3.\n',
     );
+  });
+
+  group('finds the APK of the build by its mode', () {
+    const directory = 'build/app/outputs/flutter-apk';
+
+    /// A file that an earlier build left in the directory of the APKs.
+    void leftBehind(String name) =>
+        File('$app/$directory/$name').createSync(recursive: true);
+
+    for (final (mode, flavor, apk) in [
+      ('debug', null, 'app-debug.apk'),
+      ('release', null, 'app-release.apk'),
+      ('debug', 'dev', 'app-dev-debug.apk'),
+      ('release', 'prod', 'app-prod-release.apk'),
+    ]) {
+      test('and installs $apk of a $mode build', () {
+        final result =
+            run(seconds: 30, mode: mode, flavor: flavor, result: 'passed');
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+        expect(
+          File('${temp.path}/installed').readAsStringSync(),
+          '$directory/$apk\n',
+        );
+      });
+    }
+
+    test(
+        'and leaves the APK of the other mode alone, which the debug app that '
+        'CI starts before the release app of the same app leaves there', () {
+      final debug = run(seconds: 30, flavor: 'dev', result: 'passed');
+      final release = run(
+        seconds: 30,
+        mode: 'release',
+        flavor: 'prod',
+        result: 'passed',
+      );
+
+      expect(debug.exitCode, 0, reason: '${debug.stdout}${debug.stderr}');
+      expect(
+        release.exitCode,
+        0,
+        reason: '${release.stdout}${release.stderr}',
+      );
+      expect(
+        File('${temp.path}/installed').readAsStringSync(),
+        '$directory/app-prod-release.apk\n',
+      );
+    });
+
+    test('and fails with the APKs that it found when none is of its mode', () {
+      leftBehind('app-dev-release.apk');
+
+      final result = run(seconds: 30, writesApk: false, result: 'passed');
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::flutter build apk left 0 APKs of the mode debug, where the '
+            'script installs one. All the APKs in $directory: '
+            '$directory/app-dev-release.apk.\n',
+      );
+      expect(File('${temp.path}/installed').existsSync(), isFalse);
+    });
+
+    test('and says so when the build left no APK at all', () {
+      final result = run(seconds: 30, writesApk: false, result: 'passed');
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::flutter build apk left 0 APKs of the mode debug, where the '
+            'script installs one. All the APKs in $directory: none.\n',
+      );
+    });
+
+    test(
+        'and fails with the APKs that it found when two are of its mode, '
+        'rather than start the one that the build did not write', () {
+      leftBehind('app-debug.apk');
+
+      final result = run(seconds: 30, flavor: 'dev', result: 'passed');
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::flutter build apk left 2 APKs of the mode debug, where the '
+            'script installs one. All the APKs in $directory: '
+            '$directory/app-debug.apk $directory/app-dev-debug.apk.\n',
+      );
+      expect(File('${temp.path}/installed').existsSync(), isFalse);
+    });
   });
 
   group('with the arguments of the build', () {

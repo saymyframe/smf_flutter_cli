@@ -379,7 +379,7 @@ jobs:
       # for Android. tools/native_build.dart writes what the app builds
       # with, once it is generated, and configured in the jobs that
       # configure it: its plugins with Android code, with their versions,
-      # and its Gradle files without its ids, which name the versions of
+      # and its Gradle files without its ids or name, which name the versions of
       # Gradle and of its plugins. The key of an entry is its family, the
       # hash of that file and the version of Flutter, whose engine Gradle
       # downloads too, and the week. Each job of this matrix writes the

@@ -382,7 +382,8 @@ android() {
   fi
   # The application id and the activity that starts the app, from the APK,
   # with aapt2 of the newest build tools of the Android SDK.
-  local apk="build/app/outputs/flutter-apk/app-$mode.apk" build_tools badging activity
+  local apk build_tools badging activity
+  android_apk
   build_tools="$(ls "$sdk/build-tools" | sort -t . -k1,1n -k2,2n -k3,3n | tail -n 1)"
   badging="$("$sdk/build-tools/$build_tools/aapt2" dump badging "$apk")"
   id="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
@@ -413,6 +414,25 @@ android() {
   fi
   answer_all
   android_printed
+}
+
+# Sets apk to the APK that the build left for the build mode: app-debug.apk,
+# or with a flavor app-dev-debug.apk, whose name Flutter makes of the flavor
+# of the build. So the script knows no name of a flavor. An APK of the other
+# mode may be next to it, as the debug app that CI starts before the release
+# one of the same app. Fails unless the mode has one APK, since a second one
+# may be what an earlier build left, and prints the APKs of the directory.
+android_apk() {
+  local directory=build/app/outputs/flutter-apk all found
+  shopt -s nullglob
+  all=("$directory"/*.apk)
+  found=("$directory"/app*-"$mode".apk)
+  shopt -u nullglob
+  if [ ${#found[@]} -ne 1 ]; then
+    echo "::error::flutter build apk left ${#found[@]} APKs of the mode $mode, where the script installs one. All the APKs in $directory: ${all[*]:-none}."
+    exit 1
+  fi
+  apk="${found[0]}"
 }
 
 # Prints the file $1 of the temporary directory of the app. The files of a
