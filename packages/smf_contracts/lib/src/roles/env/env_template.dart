@@ -16,13 +16,16 @@ const _agentNote = '''
 
 /// The section of the role in the README of the app, whichever module
 /// provides the role: what the two files are for, that a value is no
-/// secret and that an empty one counts as missing, and the [keys] of the
-/// app, each with its getter, its owner and its description.
+/// secret and that an empty one counts as missing, that the file is not tied
+/// to a flavor, the [keys] of the app, each with its getter, its owner and
+/// its description, and the run configurations.
 String _readmeSection(List<AppEnvKey> keys) {
   final buffer = StringBuffer('''
 `${EnvRole.dotEnvFile}` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `$_appEnv` in `${EnvRole.readerFile}`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
 
 `.gitignore` lists `${EnvRole.dotEnvFile}`, so it stays out of git. `${EnvRole.exampleFile}` is in git and has the same keys without values: after a clone, run `cp ${EnvRole.exampleFile} ${EnvRole.dotEnvFile}` and fill in `${EnvRole.dotEnvFile}`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
+
+`${EnvRole.dotEnvFile}` is not tied to a flavor: a build of any flavor takes what `${EnvRole.dotEnvFile}` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
 
 ''');
   if (keys.isEmpty) {
@@ -40,7 +43,7 @@ String _readmeSection(List<AppEnvKey> keys) {
     '\nTo add a key of your own, put it into `${EnvRole.exampleFile}` and '
     '`${EnvRole.dotEnvFile}` and give `$_appEnv` a getter for it. The '
     'section of the module that provides the values tells how they get into '
-    'the app.\n',
+    'the app.\n\n$_runConfigurationsReadme',
   );
   return '$buffer';
 }
@@ -67,9 +70,10 @@ String _keyLines(List<AppEnvKey> keys) => [
     ].join('\n');
 
 /// The template of the [EnvRole]: the file of the values and the file of
-/// the keys, which the `.gitignore` of the app tells apart, the section of
-/// the role in the README of the app, its note for coding agents, and the
-/// checks of the data of the role that the module rules cannot make.
+/// the keys, which the `.gitignore` of the app tells apart, the run
+/// configurations of the IDEs, the section of the role in the README of the
+/// app, its note for coding agents, and the checks of the data of the role
+/// that the module rules cannot make.
 final class _EnvTemplate extends RoleTemplate<EnvData> {
   const _EnvTemplate();
 
@@ -79,7 +83,7 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
         AppEntryRole.gitignore.entry(EnvRole.dotEnvFile, _gitignoreComment),
         AppEntryRole.agentSections.entry(
           envRole.description,
-          AgentNote.ofRole(_agentNote),
+          AgentNote.ofRole('$_agentNote$_runConfigurationsNote'),
         ),
       ];
 
@@ -145,8 +149,8 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
     return issues;
   }
 
-  /// The lines of the keys in the files of the template, and the section of
-  /// the role in the README of the app.
+  /// The lines of the keys in the files of the template, the section of the
+  /// role in the README of the app, and the run configurations of the IDEs.
   @override
   RoleOutput render(RoleHookInput<EnvData> input) {
     final keys = envRole.keysIn(input);
@@ -158,6 +162,10 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
           _readmeSection(keys),
         ),
       ],
+      files: _runConfigurationsOf(
+        input.context.appName,
+        envRole.toolArgumentsIn(input),
+      ),
     );
   }
 }

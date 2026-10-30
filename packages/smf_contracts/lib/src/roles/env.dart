@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/env_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 part 'env/env_dsl.dart';
 part 'env/env_rules.dart';
+part 'env/env_run_configurations.dart';
 part 'env/env_template.dart';
 
 /// The env role; see [EnvRole].
@@ -35,7 +38,19 @@ const envRole = EnvRole._();
 /// - [exampleFile], with the same keys and no values. It stays in git, while
 ///   [dotEnvFile] does not: the template keeps [dotEnvFile] out of git with
 ///   the `.gitignore` of the app ([AppEntryRole.gitignore]), so a clone of
-///   the app copies [exampleFile] to [dotEnvFile] and fills it in.
+///   the app copies [exampleFile] to [dotEnvFile] and fills it in;
+/// - [vscodeLaunchFile] and [androidStudioRunFileOf], the run configurations
+///   of VS Code and of Android Studio, one for each flavor of the app
+///   ([AppEntryRole.flavors]), each with the flavor and then the arguments of
+///   [toolArgumentsIn]. So a provider gives its arguments and knows neither
+///   the flavors nor the IDEs. The configuration of the default flavor is the
+///   template of the launches of VS Code that name no configuration, such as
+///   a link above `main()`, a link above a test and the Testing view. An app
+///   without the role has no run configurations, and such a launch builds the
+///   default flavor through its pubspec.
+///
+/// [dotEnvFile] is not tied to a flavor: a command gives the app what the file
+/// has when the command runs, whichever flavor it builds.
 ///
 /// It also writes the section [readmeHeading] of the README of the app,
 /// with what the two files are for and the keys of the app, each with its
@@ -89,6 +104,16 @@ final class EnvRole extends Role<EnvData> {
   /// the keys of the app. The section of a provider on how the values get
   /// into the app can refer to it.
   static const readmeHeading = 'Values in .env';
+
+  /// The path of the run configurations of VS Code, one for each flavor of
+  /// the app, which the template writes.
+  static const vscodeLaunchFile = '.vscode/launch.json';
+
+  /// The path of the run configuration of Android Studio for [flavor], which
+  /// the template writes. Android Studio shares what is in `.run/`, since the
+  /// `.idea/` of a project belongs to one machine.
+  static String androidStudioRunFileOf(AppFlavor flavor) =>
+      '.run/${flavor.name}.run.xml';
 
   /// `AppEnv`, the class in [readerFile] through which code reads the
   /// values of [dotEnvFile], which every provider generates.

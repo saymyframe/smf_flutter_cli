@@ -1,9 +1,12 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
+
 import 'package:smf_contracts/bundles/env_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
+import 'package:xml/xml.dart';
 
 import 'dart_files.dart';
 import 'role_support.dart';
@@ -66,6 +69,33 @@ abstract final class AppEnv {
 }
 ''';
 
+/// The tool arguments [arguments] from a provider of the env role.
+RoleData<Object> _toolArguments(List<String> arguments) =>
+    dataOf<EnvData>(envRole, EnvToolArguments(arguments), module: 'provider');
+
+/// The files that the render hook of the template gives an app with [data].
+Map<String, String> _hookFiles(List<RoleData<Object>> data) =>
+    envRole.template.render(inputOf(envRole, data: data)).files;
+
+/// The configurations of VS Code that the template gives an app with [data].
+List<Object?> _vscodeConfigurations(List<RoleData<Object>> data) {
+  final launch = jsonDecode(_hookFiles(data)[EnvRole.vscodeLaunchFile]!);
+  return (launch as Map<String, Object?>)['configurations']! as List<Object?>;
+}
+
+/// The options of the configuration of Android Studio for [flavor] that the
+/// template gives an app with [data], by their names.
+Map<String?, String?> _androidStudioOptions(
+  List<RoleData<Object>> data,
+  AppFlavor flavor,
+) =>
+    {
+      for (final option in XmlDocument.parse(
+        _hookFiles(data)[EnvRole.androidStudioRunFileOf(flavor)]!,
+      ).rootElement.childElements.single.findElements('option'))
+        option.getAttribute('name'): option.getAttribute('value'),
+    };
+
 void main() {
   group('the env role', () {
     test(
@@ -94,6 +124,14 @@ void main() {
       expect(EnvRole.exampleFile, '.env.example');
       expect(EnvRole.readerFile, 'lib/core/env/app_env.dart');
       expect(EnvRole.readmeHeading, 'Values in .env');
+      expect(EnvRole.vscodeLaunchFile, '.vscode/launch.json');
+      expect(
+        [
+          for (final flavor in AppEntryRole.flavors)
+            EnvRole.androidStudioRunFileOf(flavor),
+        ],
+        ['.run/dev.run.xml', '.run/staging.run.xml', '.run/prod.run.xml'],
+      );
       expect(envRole.interface.files, [
         EnvRole.dotEnvFile,
         EnvRole.exampleFile,
@@ -1047,6 +1085,8 @@ final described = describe(${vars['env_feed_url']!.absent});
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
+`.env` is not tied to a flavor: a build of any flavor takes what `.env` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
+
 The keys of the app:
 
 - `SHOP_APPLE_KEY`, read as `AppEnv.shopAppleKey`, from the module `shop`: The public key of the shop on iOS
@@ -1054,6 +1094,11 @@ The keys of the app:
 - `FEED_URL`, read as `AppEnv.feedUrl`, from the module `feed`: The address of the feed
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
+
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
 ''');
     });
 
@@ -1101,7 +1146,13 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
       expect(
         section,
         contains(
-          'a private key.\n'
+          'not tied to a flavor',
+        ),
+      );
+      expect(
+        section,
+        contains(
+          'for its job.\n'
           '\n'
           'No module of the app reads a value yet.\n'
           '\n'
@@ -1134,6 +1185,222 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
       );
       final named = const EnvKey('MY_SERVICE_KEY', description: 'x').getter;
       expect(note.text, contains('`AppEnv.$named`'));
+    });
+
+    group('the run configurations', () {
+      const appName = 'my_app';
+
+      test('are the only files of its render hook', () {
+        expect(_hookFiles(const []).keys.toSet(), {
+          EnvRole.vscodeLaunchFile,
+          for (final flavor in AppEntryRole.flavors)
+            EnvRole.androidStudioRunFileOf(flavor),
+        });
+      });
+
+      test(
+          'of VS Code launch the entry of the app once for each flavor, with '
+          'the flavor and then the tool arguments of the role', () {
+        final launch = jsonDecode(
+          _hookFiles([
+            _toolArguments(const ['--dart-define-from-file', '.env']),
+          ])[EnvRole.vscodeLaunchFile]!,
+        );
+
+        expect(launch, {
+          'version': '0.2.0',
+          'configurations': [
+            {
+              'name': '$appName dev',
+              'request': 'launch',
+              'type': 'dart',
+              'program': AppEntryRole.mainFile,
+              'toolArgs': [
+                '--flavor',
+                'dev',
+                '--dart-define-from-file',
+                '.env',
+              ],
+              // Dart-Code takes the first configuration with this key as
+              // the template of a launch that names no configuration, such
+              // as a link above main() or above a test or the Testing view,
+              // and puts the file in place of the program.
+              'templateFor': '',
+            },
+            {
+              'name': '$appName staging',
+              'request': 'launch',
+              'type': 'dart',
+              'program': AppEntryRole.mainFile,
+              'toolArgs': [
+                '--flavor',
+                'staging',
+                '--dart-define-from-file',
+                '.env',
+              ],
+            },
+            {
+              'name': '$appName prod',
+              'request': 'launch',
+              'type': 'dart',
+              'program': AppEntryRole.mainFile,
+              'toolArgs': [
+                '--flavor',
+                'prod',
+                '--dart-define-from-file',
+                '.env',
+              ],
+            },
+          ],
+        });
+      });
+
+      test(
+          'of VS Code have the default flavor first, which F5 starts until '
+          'the developer selects another, and as the only template', () {
+        final configurations = _vscodeConfigurations(const []);
+        bool isTemplate(Object? configuration) =>
+            (configuration! as Map<String, Object?>).containsKey('templateFor');
+
+        expect(
+          (configurations.first! as Map<String, Object?>)['name'],
+          '$appName ${AppEntryRole.defaultFlavor.name}',
+        );
+        expect(configurations.where(isTemplate), [configurations.first]);
+      });
+
+      test(
+          'of Android Studio run the entry of the app for one flavor each, '
+          'in a configuration that the project shares', () {
+        final files = _hookFiles([
+          _toolArguments(const ['--dart-define-from-file', '.env']),
+        ]);
+
+        for (final flavor in AppEntryRole.flavors) {
+          final component = XmlDocument.parse(
+            files[EnvRole.androidStudioRunFileOf(flavor)]!,
+          ).rootElement;
+          expect(component.name.local, 'component');
+          expect(
+            component.getAttribute('name'),
+            'ProjectRunConfigurationManager',
+          );
+          final configuration = component.childElements.single;
+          expect(configuration.name.local, 'configuration');
+          expect(
+            configuration.getAttribute('name'),
+            '$appName ${flavor.name}',
+          );
+          expect(
+            configuration.getAttribute('type'),
+            'FlutterRunConfigurationType',
+          );
+          expect(configuration.getAttribute('factoryName'), 'Flutter');
+          expect(configuration.getAttribute('default'), 'false');
+          expect(
+            _androidStudioOptions(
+              [
+                _toolArguments(const ['--dart-define-from-file', '.env']),
+              ],
+              flavor,
+            ),
+            {
+              'additionalArgs':
+                  '--flavor ${flavor.name} --dart-define-from-file .env',
+              'filePath': '\$PROJECT_DIR\$/${AppEntryRole.mainFile}',
+            },
+          );
+        }
+      });
+
+      test('pass the flavor alone for a provider without tool arguments', () {
+        expect(
+          (_vscodeConfigurations(const []).first!
+              as Map<String, Object?>)['toolArgs'],
+          ['--flavor', 'dev'],
+        );
+        expect(
+          _androidStudioOptions(
+            const [],
+            AppEntryRole.releaseFlavor,
+          )['additionalArgs'],
+          '--flavor prod',
+        );
+      });
+
+      test(
+          'keep an argument whole: as it is for VS Code, and for Android '
+          'Studio in double quotes when it has a space or a quote, which '
+          'the settings of a run take as one argument', () {
+        const arguments = ['--plain', '--name=a b', 'c"d&e<f>g'];
+        final data = [_toolArguments(arguments)];
+
+        expect(
+          (_vscodeConfigurations(data).first!
+              as Map<String, Object?>)['toolArgs'],
+          ['--flavor', 'dev', ...arguments],
+        );
+        expect(
+          _androidStudioOptions(
+            data,
+            AppEntryRole.defaultFlavor,
+          )['additionalArgs'],
+          r'--flavor dev --plain "--name=a b" "c\"d&e<f>g"',
+        );
+      });
+
+      test('have the name of the app as it is written, escaped for XML', () {
+        final output = envRole.template.render(
+          envRole.hookInput(
+            const RoleHookRequest(
+              data: [],
+              presentRoles: {envRole},
+              context: ModuleContext(
+                appName: 'a&"b',
+                orgName: 'com.example',
+                appIdentity: AppIdentity(
+                  platforms: ['android', 'ios'],
+                  androidApplicationId: 'com.example.a',
+                  iosBundleId: 'com.example.a',
+                  androidNamespace: 'com.example.a',
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(
+          XmlDocument.parse(
+            output.files[
+                EnvRole.androidStudioRunFileOf(AppEntryRole.defaultFlavor)]!,
+          ).rootElement.childElements.single.getAttribute('name'),
+          'a&"b dev',
+        );
+        expect(
+          ((jsonDecode(output.files[EnvRole.vscodeLaunchFile]!)
+                  as Map<String, Object?>)['configurations']! as List<Object?>)
+              .first,
+          containsPair('name', 'a&"b dev'),
+        );
+      });
+
+      test('end with a line break, as a text file of an app does', () {
+        for (final text in _hookFiles(const []).values) {
+          expect(text, endsWith('\n'));
+        }
+      });
+
+      test('tell the guide for coding agents which launch takes which flavor',
+          () {
+        expect(
+          agentNoteOf(envRole).text,
+          allOf(
+            contains('`${EnvRole.vscodeLaunchFile}`'),
+            contains('`.run/<flavor>.run.xml`'),
+            contains('`templateFor`'),
+          ),
+        );
+      });
     });
 
     group('checks', () {
