@@ -647,7 +647,7 @@ flutter build apk --release --flavor <environment> --dart-define-from-file=.env
 
 The APK is `build/app/outputs/flutter-apk/app-<environment>-release.apk`. The build signs it as the Android project of the app does, so it is for testers: uploading to a store, a signing key of your own and iOS are not part of it.
 
-CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build. Every value ends up in the app, so never use one for a secret.
+CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `.env` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
 
 The section of the module that provides CI tells how to start a build.
 ''');
@@ -702,6 +702,7 @@ The section of the module that provides CI tells how to start a build.
           contains('`${CiRole.writeEnvFile}`'),
           contains('`${EnvRole.exampleFile}`'),
           contains('A new key also needs its variable where CI runs.'),
+          contains('stops when `.env` has a value'),
           contains('never give a build of CI a secret'),
         ),
       );
@@ -870,7 +871,7 @@ The section of the module that provides CI tells how to start a build.
           'refuses a value with $name: it names the key, never the value, '
           'and writes nothing', () {
         final directory = appWith('$key=\nFEED_URL=\n');
-        envOf(directory).writeAsStringSync('KEPT=1\n');
+        envOf(directory).writeAsStringSync('KEPT=\n');
 
         final result = run(directory, {key: value, 'FEED_URL': 'fine'});
 
@@ -881,7 +882,66 @@ The section of the module that provides CI tells how to start a build.
           'which .env cannot hold.\n',
         );
         expect(result.stdout, isEmpty);
-        expect(envOf(directory).readAsStringSync(), 'KEPT=1\n');
+        expect(envOf(directory).readAsStringSync(), 'KEPT=\n');
+      });
+    }
+
+    for (final (name, lines) in [
+      ('a plain value', '$key=mine\n'),
+      ('a value in double quotes', '$key="mine and yours"\n'),
+      ('a value before a comment', '$key=mine # The key.\n'),
+      ('a value next to an empty key', 'FEED_URL=\n# A comment.\n$key=mine\n'),
+      ('a line in another form', 'export $key=mine\n'),
+    ]) {
+      test(
+          'keeps a .env with $name, whatever the variables have: it fails, '
+          'names no value and writes nothing', () {
+        final directory = appWith('$key=\nFEED_URL=\n');
+        envOf(directory).writeAsStringSync(lines);
+
+        final result = run(directory, {key: 'from_ci', 'FEED_URL': 'from_ci'});
+
+        expect(result.exitCode, 1);
+        expect(
+          result.stderr,
+          '.env has values, which this script would replace. Delete .env to '
+          'write it again.\n',
+        );
+        expect(result.stdout, isEmpty);
+        expect(envOf(directory).readAsStringSync(), lines);
+      });
+    }
+
+    test('keeps a .env that is no text, and prints nothing of it', () {
+      final directory = appWith('$key=\n');
+      final bytes = [...'$key='.codeUnits, 0xFF, 0xFE, ...'mine\n'.codeUnits];
+      envOf(directory).writeAsBytesSync(bytes);
+
+      final result = run(directory, {key: 'from_ci'});
+
+      expect(result.exitCode, 1);
+      expect(result.stderr, startsWith('.env has values'));
+      expect(result.stderr, isNot(contains('mine')));
+      expect(envOf(directory).readAsBytesSync(), bytes);
+    });
+
+    for (final (name, lines) in [
+      ('nothing', ''),
+      ('a fresh copy of .env.example', '# The key.\n$key=\n'),
+      ('a key with empty quotes', '$key=""\n'),
+      ('an empty key before a comment', '$key= # The key.\n'),
+      ('a key whose value is a comment', '$key=#mine\n'),
+      ('a value in a comment', '# $key=mine\n\n'),
+    ]) {
+      test('writes over a .env with $name, so a job of CI needs no setting',
+          () {
+        final directory = appWith('$key=\n');
+        envOf(directory).writeAsStringSync(lines);
+
+        final result = run(directory, {key: 'from_ci'});
+
+        expect(result.exitCode, 0, reason: '${result.stderr}');
+        expect(envOf(directory).readAsStringSync(), '$key=from_ci\n');
       });
     }
 

@@ -7,18 +7,35 @@
 // quote or a control character fits neither form, and could add a line of its
 // own, so the script stops and writes nothing. It never prints a value.
 //
-// It replaces the `.env` that it finds, so a developer who wants to keep the
-// values in `.env` does not run it.
+// It never replaces a value. When `.env` has one, the script stops and leaves
+// the file as it is, and a developer who wants it written again deletes it. A
+// missing `.env`, or one without values such as a copy of `.env.example`, is
+// what a job of CI starts from.
+import 'dart:convert';
 import 'dart:io';
 
 final _key = RegExp(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=');
 final _unsafe = RegExp(r'["\x00-\x1F\x7F]');
 final _quoted = RegExp(r"[\s#'`]");
+final _withoutValue = RegExp(
+  r'^\s*(?:#.*|[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:""\s*)?(?:#.*)?)?$',
+);
 
 void main() {
   final example = File('.env.example');
   if (!example.existsSync()) {
     stderr.writeln('.env.example is missing.');
+    exitCode = 1;
+    return;
+  }
+  final env = File('.env');
+  // In latin1, every file reads, so an error shows no part of a value.
+  if (env.existsSync() &&
+      !env.readAsLinesSync(encoding: latin1).every(_withoutValue.hasMatch)) {
+    stderr.writeln(
+      '.env has values, which this script would replace. Delete .env to write '
+      'it again.',
+    );
     exitCode = 1;
     return;
   }
@@ -49,7 +66,7 @@ void main() {
     exitCode = 1;
     return;
   }
-  File('.env').writeAsStringSync('${lines.join('\n')}\n');
+  env.writeAsStringSync('${lines.join('\n')}\n');
   stdout.writeln('Wrote .env.');
   if (empty.isNotEmpty) {
     stdout.writeln('No value for: ${empty.join(', ')}.');

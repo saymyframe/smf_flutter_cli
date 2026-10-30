@@ -144,7 +144,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - CI runs the commands of the section "Continuous integration" of `README.md` and nothing else, in a fresh copy of the repository. Keep them passing, and run them before you finish a change.
 - A generated file that the app needs stays in git, or comes from `flutter pub get`: no other step of CI writes it.
 
-- `tool/write_env.dart` writes `.env` for a build of CI, from the keys of `.env.example` and the variables of the process. A new key also needs its variable where CI runs.
+- `tool/write_env.dart` writes `.env` for a build of CI, from the keys of `.env.example` and the variables of the process. A new key also needs its variable where CI runs. The script stops when `.env` has a value, and never replaces one.
 - A value of `.env` ends up in the app, so never give a build of CI a secret through it.
 
 ## Crash reporting
@@ -348,7 +348,7 @@ flutter build apk --release --flavor <environment> --dart-define-from-file .env
 
 The APK is `build/app/outputs/flutter-apk/app-<environment>-release.apk`. The build signs it as the Android project of the app does, so it is for testers: uploading to a store, a signing key of your own and iOS are not part of it.
 
-CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build. Every value ends up in the app, so never use one for a secret.
+CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `.env` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
 
 The section of the module that provides CI tells how to start a build.
 
@@ -8394,18 +8394,35 @@ void main() {
 // quote or a control character fits neither form, and could add a line of its
 // own, so the script stops and writes nothing. It never prints a value.
 //
-// It replaces the `.env` that it finds, so a developer who wants to keep the
-// values in `.env` does not run it.
+// It never replaces a value. When `.env` has one, the script stops and leaves
+// the file as it is, and a developer who wants it written again deletes it. A
+// missing `.env`, or one without values such as a copy of `.env.example`, is
+// what a job of CI starts from.
+import 'dart:convert';
 import 'dart:io';
 
 final _key = RegExp(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=');
 final _unsafe = RegExp(r'["\x00-\x1F\x7F]');
 final _quoted = RegExp(r"[\s#'`]");
+final _withoutValue = RegExp(
+  r'^\s*(?:#.*|[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:""\s*)?(?:#.*)?)?$',
+);
 
 void main() {
   final example = File('.env.example');
   if (!example.existsSync()) {
     stderr.writeln('.env.example is missing.');
+    exitCode = 1;
+    return;
+  }
+  final env = File('.env');
+  // In latin1, every file reads, so an error shows no part of a value.
+  if (env.existsSync() &&
+      !env.readAsLinesSync(encoding: latin1).every(_withoutValue.hasMatch)) {
+    stderr.writeln(
+      '.env has values, which this script would replace. Delete .env to write '
+      'it again.',
+    );
     exitCode = 1;
     return;
   }
@@ -8436,7 +8453,7 @@ void main() {
     exitCode = 1;
     return;
   }
-  File('.env').writeAsStringSync('${lines.join('\n')}\n');
+  env.writeAsStringSync('${lines.join('\n')}\n');
   stdout.writeln('Wrote .env.');
   if (empty.isNotEmpty) {
     stdout.writeln('No value for: ${empty.join(', ')}.');

@@ -9,7 +9,7 @@ const _agentNote = '''
 
 /// The note of the CI role in an app with the env role.
 const _envAgentNote = '''
-- `${CiRole.writeEnvFile}` writes `${EnvRole.dotEnvFile}` for a build of CI, from the keys of `${EnvRole.exampleFile}` and the variables of the process. A new key also needs its variable where CI runs.
+- `${CiRole.writeEnvFile}` writes `${EnvRole.dotEnvFile}` for a build of CI, from the keys of `${EnvRole.exampleFile}` and the variables of the process. A new key also needs its variable where CI runs. The script stops when `${EnvRole.dotEnvFile}` has a value, and never replaces one.
 - A value of `${EnvRole.dotEnvFile}` ends up in the app, so never give a build of CI a secret through it.
 ''';
 
@@ -43,7 +43,7 @@ The APK is `${build.artifact.of(placeholder)}`. The build signs it as the Androi
   if (hasEnv) {
     buffer.write('''
 
-CI writes its own `${EnvRole.dotEnvFile}`, since that file is not in git. The checks copy `${EnvRole.exampleFile}`, so every value is empty there. A build takes the values of the chosen environment with `${CiRole.writeEnvFile}`, and lists the keys it found no value for. A value with a double quote or a line break stops the build. Every value ends up in the app, so never use one for a secret.
+CI writes its own `${EnvRole.dotEnvFile}`, since that file is not in git. The checks copy `${EnvRole.exampleFile}`, so every value is empty there. A build takes the values of the chosen environment with `${CiRole.writeEnvFile}`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `${EnvRole.dotEnvFile}` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
 ''');
   }
   buffer.write('''

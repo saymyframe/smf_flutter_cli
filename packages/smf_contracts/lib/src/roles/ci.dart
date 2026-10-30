@@ -57,6 +57,9 @@ final class CiRole extends Role<NoDsl> {
   ///
   /// It reads the keys from [EnvRole.exampleFile] when it runs, and the
   /// value of each from the variable of the process of the same name.
+  /// It stops and writes nothing when [EnvRole.dotEnvFile] has a value, so it
+  /// never replaces what a developer filled in, and a job that runs it starts
+  /// from a copy of the repository, which has no such file.
   static const writeEnvFile = 'tool/write_env.dart';
 
   @override
