@@ -1607,7 +1607,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
 /// Reads the token of the user through a first launch, a sign-up, the next
 /// launch and a sign-out, each time with the calls that reached the provider
 /// and what the listeners of the session heard of the read.
-const _tokenLife = r'''
+const _tokenLife = '''
 Future<void> main(List<String> arguments, SendPort port) async {
   final heard = <String>[];
   Future<Map<String, Object?>> read() async {
@@ -1655,7 +1655,7 @@ Map<String, Object?> _tokenLifeIn(AuthMode mode) {
 
 /// Asks for a token in place of one that a server refused, with one user
 /// and with two, at the same time and later, also when the refresh fails.
-const _tokenRefresh = r'''
+const _tokenRefresh = '''
 Map<String, Object?> note(List<String?> tokens) => {
       'tokens': tokens,
       'calls': takeCalls(),
@@ -1735,7 +1735,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
 ''';
 
 /// Makes the read of a token fail, and notes what the session does then.
-const _tokenFailures = r'''
+const _tokenFailures = '''
 Future<void> main(List<String> arguments, SendPort port) async {
   await initAuth();
   await appSession.signUp(email: email, password: password);
@@ -1779,7 +1779,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
 /// In the mode anonymous, a read that fails for a session that has ended is
 /// followed by an anonymous sign-in, as any call that leaves nobody signed
 /// in is: once a sign-in that is on its way is over, and not next to it.
-const _tokenFailuresAnonymous = r'''
+const _tokenFailuresAnonymous = '''
 Future<void> main(List<String> arguments, SendPort port) async {
   final session = AppSessionController(
     mode: AuthMode.anonymous,

@@ -14,7 +14,7 @@ With `firebase_auth`:
 - That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section $readmeHeading of `${AppEntryRole.readmeFile}`.
 - `$enableSignInScript` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
-- `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews by itself. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
+- `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews when it is about to expire. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
 ''';
 
 /// The note of the module for an app with ways to sign in with an identity

@@ -1942,7 +1942,7 @@ abstract interface class AuthService {
   /// `null` when nobody is signed in. An anonymous user has one too.
   ///
   /// It comes from the device when it can, and the service refreshes one that
-  /// is about to expire by itself, so most reads make no request. With
+  /// is about to expire on its own, so most reads make no request. With
   /// [forceRefresh] it asks the server of the provider for a new token, which
   /// differs from the one before and which the reads after it give.
   ///

@@ -2022,10 +2022,10 @@ void main() {
         );
         expect(
           {
-            for (final (code, reason) in const [
-              ('network-request-failed', 'network'),
-              ('user-disabled', 'userDisabled'),
-              ('too-many-requests', 'tooManyAttempts'),
+            for (final code in const [
+              'network-request-failed',
+              'user-disabled',
+              'too-many-requests',
             ])
               code: tokens['refused: $code'],
           },

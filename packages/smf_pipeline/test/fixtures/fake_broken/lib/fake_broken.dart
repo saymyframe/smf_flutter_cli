@@ -749,9 +749,10 @@ final class BrokenModule extends SmfModule {
         '    if (user == null) return null;\n'
             '    final uid = user.uid;\n',
         '    if (user == null) {\n'
-            "      return _tokens.isEmpty\n"
-            "          ? null\n"
-            "          : 'fixture-token-\${_tokens.keys.last}-\${_tokens.values.last}';\n"
+            '      final last = _tokens.entries.lastOrNull;\n'
+            '      if (last == null) return null;\n'
+            '      final (uid, turn) = (last.key, last.value);\n'
+            "      return 'fixture-token-\$uid-\$turn';\n"
             '    }\n'
             '    final uid = user.uid;\n',
       ),

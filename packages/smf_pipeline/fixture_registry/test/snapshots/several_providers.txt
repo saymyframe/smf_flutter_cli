@@ -179,7 +179,7 @@ With `firebase_auth`:
 - That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section Firebase Authentication of `README.md`.
 - `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
-- `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews by itself. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
+- `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews when it is about to expire. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
 
 - For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`. After `flutterfire configure` for another project, it has to run again: run it only when asked.
 - Apple is enabled in the Firebase console by hand, with the private key of Apple that deleting an account needs. That key is a secret: never put it into the app or its repository.
@@ -2646,7 +2646,7 @@ abstract interface class AuthService {
   /// `null` when nobody is signed in. An anonymous user has one too.
   ///
   /// It comes from the device when it can, and the service refreshes one that
-  /// is about to expire by itself, so most reads make no request. With
+  /// is about to expire on its own, so most reads make no request. With
   /// [forceRefresh] it asks the server of the provider for a new token, which
   /// differs from the one before and which the reads after it give.
   ///
@@ -2767,7 +2767,7 @@ const _linkReasons = {
 /// [AuthFailureReason.notConfigured], and the account stays.
 ///
 /// [userToken] is the Firebase ID token of the user, which the Firebase SDK
-/// keeps on the device and renews by itself when it is about to expire. A
+/// keeps on the device and renews when it is about to expire. A
 /// server verifies it with the Firebase Admin SDK, as a token of the Firebase
 /// project that the app is configured with.
 final class FirebaseAuthService implements AuthService {

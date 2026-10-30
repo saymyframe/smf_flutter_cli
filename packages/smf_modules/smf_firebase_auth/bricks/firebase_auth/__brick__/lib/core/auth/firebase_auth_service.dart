@@ -103,7 +103,7 @@ const _linkReasons = {
 /// [AuthFailureReason.notConfigured], and the account stays.
 ///
 /// [userToken] is the Firebase ID token of the user, which the Firebase SDK
-/// keeps on the device and renews by itself when it is about to expire. A
+/// keeps on the device and renews when it is about to expire. A
 /// server verifies it with the Firebase Admin SDK, as a token of the Firebase
 /// project that the app is configured with.
 final class FirebaseAuthService implements AuthService {
