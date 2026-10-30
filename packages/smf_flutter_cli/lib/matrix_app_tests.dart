@@ -11,7 +11,6 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
 import 'package:smf_flutter_cli/matrix.dart';
-import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
@@ -70,14 +69,6 @@ Future<MatrixAppTests> smfAppTests() async {
         appliesTo: (_) => true,
         readsStartProbes: true,
       ),
-      // The flavor of a running app, whichever module provides the app
-      // entry: a command without --flavor builds the default flavor of the
-      // role, which only a run of the flutter tool shows. Its probe sees on
-      // a device the flavor that the build asked for: the default flavor in
-      // the debug start of CI, and the one for a release in its release
-      // start. Only in the apps with every module, which run flutter test
-      // for other tests already.
-      await flavorsAppTest(among: (app) => app.everyModuleWith != null),
       // The start-up of the app initializes Firebase, with the options that
       // `flutterfire configure` would write, and the mocks of Firebase Core,
       // which the matrix sets up for the tests of every module of the app.
@@ -609,6 +600,14 @@ Future<MatrixAppTests> smfAppTests() async {
       // choice is saved and restored. Its probe goes through the languages
       // on a device.
       await localizationRoleAppTest(),
+      // The flavor of a running app, whichever module provides the app
+      // entry: a command without --flavor builds the default flavor of the
+      // role, which only a run of the flutter tool shows. Its probe sees on
+      // a device the flavor that the build asked for: the default flavor in
+      // the debug start of CI, and the one for a release in its release
+      // start. Only in the apps with every module, which run flutter test
+      // for other tests already.
+      await flavorsAppTest(among: (app) => app.everyModuleWith != null),
       // The setting of the language on the settings screen of the apps
       // with the localization role and the settings screen role, whichever
       // modules provide them: its sheet chooses a language of the app,
@@ -1706,6 +1705,24 @@ $texts};
 ''',
   };
 }
+
+/// The name of the value of the build with which the start of an app on a
+/// device tells the probe of `app_tests/flavors` that it asked for a flavor. A
+/// build without it asks for none.
+const startFlavorDefine = 'SMF_START_FLAVOR';
+
+/// The arguments of the `flutter` tool that a build of an app as a release
+/// takes too when CI starts it on a device, which the script of CI reads
+/// ([startReleaseArgumentsFile]): the flavor that the app entry role names
+/// for a release, since a command without `--flavor` builds its default
+/// flavor in release mode too, and the same flavor for the probe of the
+/// flavor, which sees whether it reached the app. So the script names no
+/// flavor, and the release app that it starts is the one that a user gets.
+final List<String> startReleaseBuildArguments = [
+  '--flavor',
+  AppEntryRole.releaseFlavor.name,
+  '--dart-define=$startFlavorDefine=${AppEntryRole.releaseFlavor.name}',
+];
 
 /// The test of the flavor of a running app that the CLI keeps in its
 /// `app_tests/flavors`, for the apps that [among] accepts, or all of them,

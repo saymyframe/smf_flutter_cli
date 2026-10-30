@@ -176,7 +176,6 @@ void main() {
         ],
         [
           for (final (index, (name, function)) in [
-            ('flavors', 'probeFlavor'),
             if (!withoutExternalSteps) ('firebase_auth', 'probeFirebaseAuth'),
             if (!withoutExternalSteps)
               ('firebase_messaging', 'probeFirebaseMessaging'),
@@ -191,6 +190,7 @@ void main() {
             ('purchases_role', 'probePurchases'),
             ('router_walk', 'probeRoutes'),
             ('localization_role', 'probeLanguages'),
+            ('flavors', 'probeFlavor'),
           ].indexed)
             (name, index, function),
         ],

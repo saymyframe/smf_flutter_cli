@@ -2054,6 +2054,7 @@ void main() {
         'purchases_role',
         'router_walk',
         'localization_role',
+        'flavors',
       ],
     );
     final directory = Directory.systemTemp.createTempSync('smf_probes_');
@@ -2098,6 +2099,7 @@ void main() {
         'probe10: purchases_role/probe.dart',
         'probe11: router_walk/walk.dart',
         'probe12: localization_role/probe.dart',
+        'probe13: flavors/probe.dart',
       ],
     );
     for (final (name, probe) in [
@@ -2114,6 +2116,7 @@ void main() {
       ('purchases_role', 'probe10.probePurchases'),
       ('router_walk', 'probe11.probeRoutes'),
       ('localization_role', 'probe12.probeLanguages'),
+      ('flavors', 'probe13.probeFlavor'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -3018,6 +3021,15 @@ void main() {
     expect(flavors.startProbe?.answer, isNull);
     expect(flavors.mocks, isNull);
     expect(flavors.generatedFiles, isNull);
+
+    // The release start of CI builds the flavor that the role names for a
+    // release, and tells the probe so.
+    final flavor = AppEntryRole.releaseFlavor.name;
+    expect(startReleaseBuildArguments, [
+      '--flavor',
+      flavor,
+      '--dart-define=$startFlavorDefine=$flavor',
+    ]);
 
     final none = await flavorsAppTest(among: (app) => false);
     expect(apps.where(none.appliesTo), isEmpty);
