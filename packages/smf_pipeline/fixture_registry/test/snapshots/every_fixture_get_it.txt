@@ -348,7 +348,7 @@ flutter build apk --release --flavor <environment> --dart-define-from-file .env
 
 The APK is `build/app/outputs/flutter-apk/app-<environment>-release.apk`. The build signs it as the Android project of the app does, so it is for testers: uploading to a store, a signing key of your own and iOS are not part of it.
 
-CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build. Every value ends up in the app, so none is a secret.
+CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build. Every value ends up in the app, so never use one for a secret.
 
 The section of the module that provides CI tells how to start a build.
 

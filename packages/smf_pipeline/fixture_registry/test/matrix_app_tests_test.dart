@@ -989,7 +989,8 @@ void main() {
     ];
 
     // The module uses the role, so it has an app with the role and one
-    // without, and the provider has an app without keys.
+    // without, and the provider has an app without keys, as has the provider
+    // of the CI role, which uses the role.
     expect(
       [
         for (final app in apps)
@@ -997,7 +998,12 @@ void main() {
               app.modules.contains(FakeEnvUserModule.id))
             if (app.everyModuleWith == null) app.name,
       ],
-      ['fake_env', 'fake_env_user with env', 'fake_env_user'],
+      [
+        'fake_env',
+        'fake_env_user with env',
+        'fake_env_user',
+        'fake_ci with env',
+      ],
     );
     expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
     expect(appsOf(valuesTest), appsOf(roleTest));
