@@ -1408,7 +1408,7 @@ List<BrokenProvider> brokenProviders() => const [
           MatrixExpectedFailure(
             _userTokenTests,
             'an anonymous user has a token, and keeps the id with a refresh '
-            'and with an account',
+                'and with an account',
             'The account that linkPassword() gave an anonymous user has a '
                 'token, with the id of that user.',
           ),
