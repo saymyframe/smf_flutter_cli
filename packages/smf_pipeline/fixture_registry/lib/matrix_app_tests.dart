@@ -335,6 +335,10 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // provides the role, whose themes read a colour from the context of
       // the root.
       await themeRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The flavor of a running app, whichever module provides the app
+      // entry, the test that the CLI keeps: only in the apps with every
+      // module, which run flutter test for other tests already.
+      await flavorsAppTest(among: (app) => app.everyModuleWith != null),
       // The look of the fixture theme, whose themes read a colour from the
       // context of the root, through a widget that the fixture puts around
       // the root: when the test changes the colour, the screens get the

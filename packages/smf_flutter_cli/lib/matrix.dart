@@ -1221,6 +1221,13 @@ const startAnswersFile = 'integration_test/start_answers';
 /// that starts the app on a device builds it with them.
 const startBuildArgumentsFile = 'integration_test/start_build_arguments';
 
+/// The path in an app of the arguments of the `flutter` tool that a build of
+/// the app as a release takes too, one on each line, which [addAppTests]
+/// writes next to [startProbesFile]: the script of CI that starts the app on
+/// a device builds a release app with them, and a debug app without them, so
+/// that it names no flavor of the app.
+const startReleaseArgumentsFile = 'integration_test/start_release_arguments';
+
 /// A function among the files of a [MatrixAppTest] that sets up the mocks of
 /// the platform side of what the module of the tests runs in an app (see
 /// [MatrixAppTest.mocks]).
@@ -1524,10 +1531,12 @@ final class MatrixAppTests {
 /// the start check that the matrix analyzes in its apps and the one that CI
 /// starts on a device run the probes of the tests that go into the app.
 /// Next to it, it writes what the script of CI that starts the app on a
-/// device needs: the answers that those probes ask for, [startAnswersFile],
-/// and the [buildArguments], the arguments of the `flutter` tool that build
-/// the app with its values (see [MatrixEnv.toolArguments]),
-/// [startBuildArgumentsFile]; each with one on a line.
+/// device needs: the answers that those probes ask for, [startAnswersFile];
+/// the [buildArguments], the arguments of the `flutter` tool that build the
+/// app with its values (see [MatrixEnv.toolArguments]),
+/// [startBuildArgumentsFile]; and the [releaseBuildArguments], those that a
+/// build of the app as a release takes too, [startReleaseArgumentsFile]; each
+/// with one on a line.
 ///
 /// Throws a [MatrixAppTestException], before it copies anything, if a test
 /// generates files without [app], if a file keeps a placeholder that no
@@ -1539,8 +1548,9 @@ final class MatrixAppTests {
 /// letters, digits and underscores or the answer of another probe too, if
 /// a build argument is empty or has a line break, or if a test has a file
 /// at the path of the configuration of the mocks, of the list of the
-/// probes, of the answers or of the build arguments, which the matrix
-/// writes, or at [envFile], the path of the file of the values of the app
+/// probes, of the answers or of either list of build arguments, which the
+/// matrix writes, or at [envFile], the path of the file of the values of the
+/// app
 /// (see [MatrixEnv.file]), whose values the tests give through
 /// [MatrixAppTest.envValues].
 List<String> addAppTests(
@@ -1550,6 +1560,7 @@ List<String> addAppTests(
   MatrixApp? app,
   String? envFile,
   List<String> buildArguments = const [],
+  List<String> releaseBuildArguments = const [],
   FileSystem fileSystem = const LocalFileSystem(),
 }) {
   final context = fileSystem.path;
@@ -1578,8 +1589,13 @@ List<String> addAppTests(
   }
   final probes = _probesOf(tests, owners, fileSystem);
   if (tests.any((test) => test.readsStartProbes)) {
-    _checkBuildArguments(buildArguments);
-    for (final (path, text, what) in _startFilesOf(probes, buildArguments)) {
+    _checkBuildArguments(startBuildArgumentsFile, buildArguments);
+    _checkBuildArguments(startReleaseArgumentsFile, releaseBuildArguments);
+    for (final (path, text, what) in _startFilesOf(
+      probes,
+      buildArguments,
+      releaseBuildArguments,
+    )) {
       texts[matrixFile(path, 'which the matrix writes for $what.')] = text;
     }
   }
@@ -1610,24 +1626,26 @@ String _matrixFileOf(
 }
 
 /// Throws a [MatrixAppTestException] if one of [buildArguments] is empty or
-/// has a line break, which [startBuildArgumentsFile] cannot hold.
-void _checkBuildArguments(List<String> buildArguments) {
+/// has a line break, which their [file] cannot hold.
+void _checkBuildArguments(String file, List<String> buildArguments) {
   for (final argument in buildArguments) {
     if (argument.isEmpty || argument.contains(RegExp('[\n\r]'))) {
-      throw const MatrixAppTestException(
+      throw MatrixAppTestException(
         'A build argument of the app is empty or has a line break, which '
-        '$startBuildArgumentsFile cannot hold.',
+        '$file cannot hold.',
       );
     }
   }
 }
 
 /// The files that the matrix writes for the script of CI that starts an app
-/// on a device, with [probes] and [buildArguments]: the path of each, its
-/// text and for what the matrix writes it; see [addAppTests].
+/// on a device, with [probes], [buildArguments] and [releaseBuildArguments]:
+/// the path of each, its text and for what the matrix writes it; see
+/// [addAppTests].
 List<(String, String, String)> _startFilesOf(
   List<(String, MatrixStartProbe)> probes,
   List<String> buildArguments,
+  List<String> releaseBuildArguments,
 ) =>
     [
       (startProbesFile, _startProbesOf(probes), 'the probes of the tests'),
@@ -1643,6 +1661,11 @@ List<(String, String, String)> _startFilesOf(
         startBuildArgumentsFile,
         _linesOf(buildArguments),
         'the arguments that build the app',
+      ),
+      (
+        startReleaseArgumentsFile,
+        _linesOf(releaseBuildArguments),
+        'the arguments that build the app as a release',
       ),
     ];
 
@@ -2043,6 +2066,10 @@ List<MatrixAppTest> appTestsFor(
 /// none without [app], whose roles they come from, as the probes of the
 /// tests of the app do.
 ///
+/// With the start check, it also writes the [releaseBuildArguments], those
+/// that a build of the app as a release takes too
+/// ([startReleaseArgumentsFile]), with [app] or without it.
+///
 /// It writes none of the values that the tests give an app of the matrix
 /// ([MatrixAppTest.envValues]). With [envValues], whose `path` is a file of
 /// values of CI in the form of the file of [env], such as `.env`, with a
@@ -2071,6 +2098,7 @@ Future<(int, String)> addAppTestsTo(
   List<MatrixAppTest> tests, {
   MatrixApp? app,
   MatrixEnv? env,
+  List<String> releaseBuildArguments = const [],
   CiEnvValues? envValues,
   MatrixFlutter flutter = _flutter,
   FileSystem fileSystem = const LocalFileSystem(),
@@ -2080,6 +2108,7 @@ Future<(int, String)> addAppTestsTo(
       tests,
       _pubAdd(tests),
       env: env,
+      releaseBuildArguments: releaseBuildArguments,
       valuesOf: () => envValues == null
           ? null
           : _envValuesOfFile(
@@ -2106,9 +2135,10 @@ typedef CiEnvValues = ({String path, bool mask});
 typedef _TestedApp = ({GeneratedApp generated, MatrixApp? app});
 
 /// Adds [tests] to the `generated` app of [target], for its `app` of the
-/// matrix if it has one, with the build arguments of [env] for that app,
-/// and runs [commands] with [flutter] until one fails; returns its exit
-/// code and the output up to it, or 0 and the output of all.
+/// matrix if it has one, with the build arguments of [env] for that app and
+/// the [releaseBuildArguments], and runs [commands] with [flutter] until one
+/// fails; returns its exit code and the output up to it, or 0 and the output
+/// of all.
 ///
 /// It also writes into the file of the values of the app what [valuesOf]
 /// gives, such as the values that the tests give an app of the matrix in a
@@ -2122,6 +2152,7 @@ Future<(int, String)> _addAndRun(
   required _EnvValues? Function() valuesOf,
   required MatrixFlutter flutter,
   required FileSystem fileSystem,
+  List<String> releaseBuildArguments = const [],
 }) async {
   final (:generated, :app) = target;
   final List<String> added;
@@ -2135,6 +2166,7 @@ Future<(int, String)> _addAndRun(
       packageName: generated.name,
       envFile: env?.file,
       buildArguments: [if (app != null) ...?env?.toolArguments(app)],
+      releaseBuildArguments: releaseBuildArguments,
       fileSystem: fileSystem,
     );
   } on MatrixAppTestException catch (error) {

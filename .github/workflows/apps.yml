@@ -314,7 +314,7 @@ jobs:
     runs-on: ubuntu-latest
     # Its small apps run one after another, each in about half a minute;
     # the timeout leaves room for many more.
-    timeout-minutes: 20
+    timeout-minutes: 30
     env: *linux_env
 
     steps:
@@ -667,8 +667,11 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/revenuecat-secret-key"
 
-      # The app as a user installs it: a release build, in which R8 shrinks
-      # the Java and Kotlin code and renames the classes that no rule keeps.
+      # The app as a user installs it: a release build of the flavor for a
+      # release, which the script takes from a file next to the start check
+      # that the matrix tool wrote from the app entry role, and in which R8
+      # shrinks the Java and Kotlin code and renames the classes that no rule
+      # keeps.
       # A plugin that looks a class up by its name, as through JNI, then
       # fails in a release app though it works in a debug one, as
       # shared_preferences_android 2.5.0 did when the app opened the

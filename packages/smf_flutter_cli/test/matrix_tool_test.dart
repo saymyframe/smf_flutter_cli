@@ -190,6 +190,7 @@ void main() {
             ('purchases_role', 'probePurchases'),
             ('router_walk', 'probeRoutes'),
             ('localization_role', 'probeLanguages'),
+            ('flavors', 'probeFlavor'),
           ].indexed)
             (name, index, function),
         ],
@@ -210,6 +211,13 @@ void main() {
       expect(
         read(app, startBuildArgumentsFile),
         '--dart-define-from-file=.env\n',
+        reason: reason,
+      );
+      // What makes the release app that CI starts the one that a user gets,
+      // from the flavor that the app entry role names for a release.
+      expect(
+        read(app, startReleaseArgumentsFile),
+        '--flavor\nprod\n--dart-define=SMF_START_FLAVOR=prod\n',
         reason: reason,
       );
       if (!withoutExternalSteps) {
@@ -281,6 +289,12 @@ void main() {
     // of the matrix, as the probes do.
     expect(read(app, startAnswersFile), '');
     expect(read(app, startBuildArgumentsFile), '');
+    // Every app has the flavors of the app entry role, so the arguments of
+    // a release build come from no app of the matrix.
+    expect(
+      read(app, startReleaseArgumentsFile),
+      '--flavor\nprod\n--dart-define=SMF_START_FLAVOR=prod\n',
+    );
 
     final walk = named('router_walk');
     final result = await run(['--add-app-tests', newApp(), walk.directory]);

@@ -3261,6 +3261,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
         startProbesFile,
         startAnswersFile,
         startBuildArgumentsFile,
+        startReleaseArgumentsFile,
       ]);
       expect(startProbesFile, 'integration_test/start_probes.dart');
       final list =
@@ -3397,6 +3398,10 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         'its own, for the script that starts the app on a device', () {
       expect(startAnswersFile, 'integration_test/start_answers');
       expect(startBuildArgumentsFile, 'integration_test/start_build_arguments');
+      expect(
+        startReleaseArgumentsFile,
+        'integration_test/start_release_arguments',
+      );
 
       final added = addAppTests(
         [
@@ -3409,6 +3414,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         directory: '/apps/app_1',
         packageName: 'my_app',
         buildArguments: const ['--dart-define-from-file=.env', '--flavor=ci'],
+        releaseBuildArguments: const ['--flavor', 'store'],
         fileSystem: fileSystem,
       );
 
@@ -3418,6 +3424,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           startProbesFile,
           startAnswersFile,
           startBuildArgumentsFile,
+          startReleaseArgumentsFile,
         ]),
       );
       expect(read(startAnswersFile), 'messages\naccess_2\n');
@@ -3425,6 +3432,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         read(startBuildArgumentsFile),
         '--dart-define-from-file=.env\n--flavor=ci\n',
       );
+      expect(read(startReleaseArgumentsFile), '--flavor\nstore\n');
     });
 
     test(
@@ -3433,6 +3441,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       expect(add([start, walk()]), containsAll([startAnswersFile]));
       expect(read(startAnswersFile), '');
       expect(read(startBuildArgumentsFile), '');
+      expect(read(startReleaseArgumentsFile), '');
 
       fileSystem.directory('/apps/app_1').deleteSync(recursive: true);
       final added = addAppTests(
@@ -3441,10 +3450,12 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         directory: '/apps/app_1',
         packageName: 'my_app',
         buildArguments: const ['--dart-define-from-file=.env'],
+        releaseBuildArguments: const ['--flavor', 'store'],
         fileSystem: fileSystem,
       );
       expect(added, isNot(contains(startAnswersFile)));
       expect(added, isNot(contains(startBuildArgumentsFile)));
+      expect(added, isNot(contains(startReleaseArgumentsFile)));
     });
 
     test(
@@ -3457,6 +3468,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       List<String> addWith(
         List<MatrixAppTest> tests, {
         List<String> buildArguments = const [],
+        List<String> releaseBuildArguments = const [],
       }) =>
           addAppTests(
             tests,
@@ -3464,6 +3476,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
             directory: '/apps/app_1',
             packageName: 'my_app',
             buildArguments: buildArguments,
+            releaseBuildArguments: releaseBuildArguments,
             fileSystem: fileSystem,
           );
 
@@ -3503,6 +3516,17 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           ),
           reason: argument,
         );
+        expect(
+          () => addWith(
+            [start],
+            releaseBuildArguments: ['--flavor=ci', argument],
+          ),
+          throwsProblem(
+            'A build argument of the app is empty or has a line break, which '
+            'integration_test/start_release_arguments cannot hold.',
+          ),
+          reason: argument,
+        );
       }
       expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
     });
@@ -3511,6 +3535,10 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       for (final (path, what) in [
         (startAnswersFile, 'the answers that their probes ask for'),
         (startBuildArgumentsFile, 'the arguments that build the app'),
+        (
+          startReleaseArgumentsFile,
+          'the arguments that build the app as a release',
+        ),
       ]) {
         final file = fileSystem.file('/tests/walk/$path')
           ..createSync(recursive: true)
@@ -4017,6 +4045,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       Map<String, int> codes = const {},
       MatrixApp? app,
       MatrixEnv? env,
+      List<String> releaseBuildArguments = const [],
       String? envValues,
       bool maskValues = false,
     }) =>
@@ -4025,6 +4054,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           tests,
           app: app,
           env: env,
+          releaseBuildArguments: releaseBuildArguments,
           envValues:
               envValues == null ? null : (path: envValues, mask: maskValues),
           fileSystem: fileSystem,
@@ -4261,6 +4291,24 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
           expect(code, 0, reason: output);
           expect(read(startBuildArgumentsFile), '');
+        }
+      });
+
+      test(
+          'writes the arguments that build the app as a release, whose app '
+          'entry role names them, also without the app of the matrix',
+          () async {
+        for (final app in [app, null]) {
+          fileSystem.directory('/apps/start_app').createSync(recursive: true);
+          final (code, output) = await add(
+            [start],
+            app: app,
+            releaseBuildArguments: const ['--flavor', 'store'],
+          );
+
+          expect(code, 0, reason: output);
+          expect(read(startReleaseArgumentsFile), '--flavor\nstore\n');
+          fileSystem.directory('/apps/start_app').deleteSync(recursive: true);
         }
       });
 
