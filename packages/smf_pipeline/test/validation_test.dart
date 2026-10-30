@@ -1929,6 +1929,26 @@ void main() {
     expect(result.issues.single.message, contains('no version in common'));
   });
 
+  test('two default flavors are a problem of the later module', () {
+    final result = _validate([
+      entry,
+      TestModule(
+        'first',
+        contributions: const [PubspecContribution.flutter(defaultFlavor: 'a')],
+      ),
+      TestModule(
+        'second',
+        contributions: const [PubspecContribution.flutter(defaultFlavor: 'b')],
+      ),
+    ]);
+
+    expect(result.issues.single.origin, const ModuleOrigin(ModuleId('second')));
+    expect(
+      result.issues.single.message,
+      'The default flavors "a" (from first) and "b" (from second) differ.',
+    );
+  });
+
   group('hooks', () {
     test('runs the template, providers and module rules of present roles', () {
       final template = TestTemplate<String>(

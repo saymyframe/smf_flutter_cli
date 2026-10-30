@@ -53,6 +53,7 @@ final class MergedPubspec {
     this.fonts = const [],
     this.generate = false,
     this.usesMaterialDesign = false,
+    this.defaultFlavor,
   });
 
   /// The dependencies, by package, in the order first contributed.
@@ -90,6 +91,10 @@ final class MergedPubspec {
 
   /// Whether the app uses the Material icons font.
   final bool usesMaterialDesign;
+
+  /// The flavor that a `flutter` command without `--flavor` builds, if any
+  /// contribution gives one.
+  final String? defaultFlavor;
 }
 
 /// The result of merging the pubspec: the [pubspec] and the problems found.
@@ -115,7 +120,9 @@ final RegExp _packageName = RegExp(r'^[a-z][a-z0-9_]*$');
 ///   dependency with both constraints;
 /// - assets are united, fonts merged by family, and flags set if any
 ///   contribution sets them; one font file with two weights or styles is an
-///   error.
+///   error;
+/// - two different default flavors are an error at the later contributor,
+///   and the first stays.
 PubspecMergeResult mergePubspec(Iterable<Collected> contributions) {
   final merger = _PubspecMerger();
   for (final collected in contributions) {
@@ -139,6 +146,7 @@ final class _PubspecMerger {
       _fonts = {};
   bool _generate = false;
   bool _usesMaterialDesign = false;
+  (String, ContributionOrigin)? _defaultFlavor;
 
   _Constraint? _parse(String text, String what, ContributionOrigin origin) {
     try {
@@ -242,11 +250,15 @@ final class _PubspecMerger {
       ..origins.add(origin);
   }
 
-  /// Merges the assets, fonts and flags of [contribution] of [origin].
+  /// Merges the assets, fonts, flags and default flavor of [contribution] of
+  /// [origin].
   void _addFlutter(PubspecFlutter contribution, ContributionOrigin origin) {
     _assets.addAll(contribution.assets);
     _generate |= contribution.generate;
     _usesMaterialDesign |= contribution.usesMaterialDesign;
+    if (contribution.defaultFlavor case final flavor?) {
+      _addDefaultFlavor(flavor, origin);
+    }
     for (final font in contribution.fonts) {
       final files = _fonts.putIfAbsent(font.family, () => {});
       for (final asset in font.assets) {
@@ -264,6 +276,23 @@ final class _PubspecMerger {
           );
         }
       }
+    }
+  }
+
+  /// Takes [flavor] of [origin] as the default flavor, or reports that it
+  /// differs from the one that an earlier contributor gave.
+  void _addDefaultFlavor(String flavor, ContributionOrigin origin) {
+    final existing = _defaultFlavor;
+    if (existing == null) {
+      _defaultFlavor = (flavor, origin);
+    } else if (existing.$1 != flavor) {
+      _issues.add(
+        SmfIssue(
+          'The default flavors "${existing.$1}" (from ${existing.$2}) and '
+          '"$flavor" (from $origin) differ.',
+          origin: origin,
+        ),
+      );
     }
   }
 
@@ -296,6 +325,7 @@ final class _PubspecMerger {
           ],
           generate: _generate,
           usesMaterialDesign: _usesMaterialDesign,
+          defaultFlavor: _defaultFlavor?.$1,
         ),
         _issues,
       );
@@ -385,6 +415,8 @@ Map<String, String> pubspecSocketTexts(MergedPubspec pubspec) {
     PipelineSockets.pubspecDevDependencies.tag:
         section('dev_dependencies', _dependencyLines(pubspec.devDependencies)),
     PipelineSockets.pubspecFlutter.tag: section('flutter', [
+      if (pubspec.defaultFlavor case final flavor?)
+        '  default-flavor: ${_quoted(flavor)}',
       if (pubspec.usesMaterialDesign) '  uses-material-design: true',
       if (pubspec.generate) '  generate: true',
       if (pubspec.assets.isNotEmpty) '  assets:',

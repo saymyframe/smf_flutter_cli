@@ -257,6 +257,7 @@ void main() {
       expect(defaults.fonts, isEmpty);
       expect(defaults.generate, isFalse);
       expect(defaults.usesMaterialDesign, isFalse);
+      expect(defaults.defaultFlavor, isNull);
 
       const section = PubspecContribution.flutter(
         assets: ['assets/'],
@@ -268,6 +269,7 @@ void main() {
         ],
         generate: true,
         usesMaterialDesign: true,
+        defaultFlavor: 'dev',
       ) as PubspecFlutter;
 
       expect(section.assets, ['assets/']);
@@ -277,6 +279,7 @@ void main() {
       expect(section.fonts.single.assets.last.asset, 'fonts/Inter-Italic.ttf');
       expect(section.generate, isTrue);
       expect(section.usesMaterialDesign, isTrue);
+      expect(section.defaultFlavor, 'dev');
     });
   });
 
