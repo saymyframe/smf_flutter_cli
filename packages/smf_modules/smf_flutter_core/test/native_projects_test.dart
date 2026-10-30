@@ -599,10 +599,14 @@ String _block(String text, String name, {String indent = ''}) {
   return text.substring(open, text.indexOf('\n$indent}', open) + 1);
 }
 
-/// A build configuration of an Xcode project: its base configuration, as the
-/// object it refers to, and its build settings by name, each with its value
-/// as the project writes it.
-typedef _Configuration = ({String? base, Map<String, String> settings});
+/// A build configuration of an Xcode project: the name that Xcode and Flutter
+/// read, its base configuration, as the object it refers to, and its build
+/// settings by name, each with its value as the project writes it.
+typedef _Configuration = ({
+  String name,
+  String? base,
+  Map<String, String> settings,
+});
 
 /// A configuration list of an Xcode project: its [configurations] by name,
 /// in their order, and the name of its default.
@@ -626,10 +630,14 @@ final class _XcodeProject {
         r'\t\t\tisa = XCBuildConfiguration;\n'
         r'(?:\t\t\tbaseConfigurationReference = (\w{24}) /\* [^*]+ \*/;\n)?'
         r'\t\t\tbuildSettings = \{\n(.*?)\n\t\t\t\};\n'
-        r'\t\t\tname = [^;]+;\n\t\t\};',
+        r'\t\t\tname = "?([\w-]+)"?;\n\t\t\};',
         dotAll: true,
       ).allMatches(text))
-        match[1]!: (base: match[2], settings: _settingsOf(match[3]!)),
+        match[1]!: (
+          name: match[4]!,
+          base: match[2],
+          settings: _settingsOf(match[3]!),
+        ),
     };
     lists = [
       for (final match in RegExp(
@@ -641,8 +649,8 @@ final class _XcodeProject {
         _ConfigurationList(
           {
             for (final item
-                in RegExp(r'(\w{24}) /\* ([\w-]+) \*/,').allMatches(match[1]!))
-              item[2]!: objects[item[1]!]!,
+                in RegExp(r'(\w{24}) /\* [\w-]+ \*/,').allMatches(match[1]!))
+              objects[item[1]!]!.name: objects[item[1]!]!,
           },
           match[2]!,
         ),
