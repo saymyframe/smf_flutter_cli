@@ -771,6 +771,23 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture sign-in that keeps the token of the first user in a field of
+  /// its own and gives it to every next user, as a provider does that reads
+  /// the token once: a server takes the next person on the device for the
+  /// user before.
+  static const authTokenKeptForNextUser = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_token_kept_for_next_user'),
+    'Sign-in that gives every user the token of the first (fixture)',
+    _fixtureAuthFile,
+    [
+      (
+        "    return 'fixture-token-\$uid-\${_tokens[uid]}';\n",
+        "    return 'fixture-token-\${_tokens.keys.first}-\${_tokens[uid]}';\n",
+      ),
+    ],
+  );
+
   /// The file of the fixture sign-in.
   static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
 

@@ -1,8 +1,10 @@
 // A test that continuous integration runs in the apps with the auth role,
 // whichever module provides it, in each mode of the role: the token with
 // which a server of the app tells who the user is. Nobody has no token, the
-// user of an account and an anonymous user each have one, a forced refresh
-// gives another one with the same user, and a read tells nobody of a change.
+// user of an account and an anonymous user each have one, two users have
+// different tokens, a forced refresh gives another one with the same user, and
+// a read changes no user: a provider may tell of the same user again, and the
+// session ignores that.
 // Through the session of the app, a request reads the token of the user at
 // each moment, and a token that a server refused is replaced once, however
 // many requests it refused at the same time. The next start of the app still
@@ -162,19 +164,51 @@ void main() {
   );
 
   testWidgets(
-    'a read of the token tells nobody of a change',
+    'two users have different tokens',
     (tester) async {
       await startUp(tester);
+      String? ofFirst;
+      String? ofNext;
+
+      await inRealTime(tester, 'reading the tokens', () async {
+        final service = createAuthService();
+        await service.signOut();
+        await service.signUp(
+          email: addressOf('token-first'),
+          password: password,
+        );
+        ofFirst = await service.userToken();
+        await service.signOut();
+        await service.signUp(
+          email: addressOf('token-next'),
+          password: password,
+        );
+        ofNext = await service.userToken();
+      });
+
+      expect([ofFirst, ofNext], [isNotEmpty, isNotEmpty]);
+      expect(
+        ofNext == ofFirst,
+        isFalse,
+        reason: 'Two users have different tokens: a server tells who the user '
+            'is by the token.',
+      );
+    },
+    timeout: timeout,
+  );
+
+  testWidgets(
+    'a read of the token changes no user, and the session tells nobody of it',
+    (tester) async {
+      await startUp(tester);
+      final email = addressOf('token-silent');
       final heardOfService = <String>[];
       final heardOfSession = <String>[];
       void onSession() => heardOfSession.add(sessionNow());
 
       await inRealTime(tester, 'reading the token', () async {
         await appSession.signOut();
-        await appSession.signUp(
-          email: addressOf('token-silent'),
-          password: password,
-        );
+        await appSession.signUp(email: email, password: password);
         // What the sign-up tells has reached the listeners by then.
         await Future<void>.delayed(const Duration(milliseconds: 50));
         final service = createAuthService();
@@ -193,11 +227,16 @@ void main() {
       });
 
       expect(
-        [heardOfService, heardOfSession],
-        [isEmpty, isEmpty],
-        reason: 'A read leaves the user as that user was, so it tells no '
-            'listener of the service or of the session: the session reads '
-            'the token often.',
+        heardOfService,
+        everyElement('the account of $email'),
+        reason: 'A read leaves the user as that user was: a provider may tell '
+            'of the same user again after it, and of nobody else.',
+      );
+      expect(
+        heardOfSession,
+        isEmpty,
+        reason: 'The session ignores a provider that tells of the same user '
+            'again, so a read tells the listeners of the session nothing.',
       );
     },
     timeout: timeout,

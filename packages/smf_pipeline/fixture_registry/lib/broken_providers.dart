@@ -1560,6 +1560,21 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.authTokenKeptForNextUser,
+        role: authRole,
+        bug: 'It gives every user the token of the first, so a server takes '
+            'the next person on the device for the user before.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'two users have different tokens',
+            'Two users have different tokens: a server tells who the user is '
+                'by the token.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.notificationsForgettingSchedules,
         role: notificationsRole,
         bug: 'Its function forgets the notifications that are scheduled each '

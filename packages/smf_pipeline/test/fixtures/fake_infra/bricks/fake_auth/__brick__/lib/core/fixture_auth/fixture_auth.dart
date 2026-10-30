@@ -372,6 +372,8 @@ final class FixtureAuth implements AuthService {
     final uid = user.uid;
     final turn = _tokens[uid] ?? 1;
     _tokens[uid] = forceRefresh ? turn + 1 : turn;
+    // As a provider that tells of each change of the token, of the same user.
+    if (forceRefresh) _changes.add(user);
     return 'fixture-token-$uid-${_tokens[uid]}';
   }
 }
