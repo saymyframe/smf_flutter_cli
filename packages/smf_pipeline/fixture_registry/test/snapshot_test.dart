@@ -168,7 +168,7 @@ String _snapshotOf(RenderedApp app) {
         path.endsWith('.plist') ||
         path.endsWith('.entitlements')) {
       XmlDocument.parse(text);
-    } else if (path.endsWith('.yaml')) {
+    } else if (path.endsWith('.yaml') || path.endsWith('.yml')) {
       loadYaml(text, sourceUrl: Uri.file(path));
     } else if (path == AppEntryRole.xcodeProjectFile) {
       text = [

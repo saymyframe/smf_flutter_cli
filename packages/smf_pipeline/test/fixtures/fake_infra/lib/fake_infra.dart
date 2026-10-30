@@ -1244,6 +1244,67 @@ final class _FakeEnvProvider extends RoleProvider<EnvData> {
   }''';
 }
 
+/// A provider of the CI role in a format of its own, which no host reads: the
+/// file [file], with a block for each environment that has the name of the
+/// environment in its commands, and a line for each key.
+///
+/// It shows that the role needs no host. The template of the role does the
+/// rest, whichever module provides it: the script that writes `.env`, and the
+/// section of the role in the README.
+final class FakeCiModule extends SmfModule {
+  /// Creates the module.
+  const FakeCiModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_ci');
+
+  /// The path of the file of the module.
+  static const file = 'ci/pipeline.conf';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'CI in a format of its own (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [_FakeCiProvider()],
+      );
+}
+
+/// Writes the pipeline of the app for [FakeCiModule].
+final class _FakeCiProvider extends RoleProvider<NoDsl> {
+  const _FakeCiProvider();
+
+  @override
+  Role<NoDsl> get role => ciRole;
+
+  @override
+  RoleOutput render(RoleHookInput<NoDsl> input) {
+    final pipeline = ciRole.pipelineIn(input);
+    final build = pipeline.build;
+    return RoleOutput(
+      files: {
+        FakeCiModule.file: [
+          '# The CI of a fixture.',
+          'on push',
+          for (final check in pipeline.checks) _run(check),
+          for (final environment in build.environments) ...[
+            'on request $environment',
+            for (final key in build.keys) '  variable $key',
+            for (final command in build.prepare) _run(command),
+            '  run ${build.name} = ${build.command.of(environment)}',
+            '  keep ${build.artifact.of(environment)}',
+          ],
+          '',
+        ].join('\n'),
+      },
+    );
+  }
+
+  /// The line of [command].
+  static String _run(CiCommand command) =>
+      '  run ${command.name} = ${command.command}';
+}
+
 /// A module that reads three values of `.env`, which it gives the env role
 /// as keys in an app with that role: `FAKE_ENV_USER_FIRST`,
 /// `FAKE_ENV_USER_SECOND` and `FAKE_ENV_USER_THIRD`. Its brick reads each

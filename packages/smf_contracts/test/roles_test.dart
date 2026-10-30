@@ -26,6 +26,7 @@ const List<Role> _roles = [
   envRole,
   appIconRole,
   splashRole,
+  ciRole,
 ];
 
 final RegExp _mustache = RegExp(r'\{\{\{?\s*([^}]*?)\s*\}?\}\}');
@@ -68,6 +69,7 @@ void main() {
       'env role',
       'app icon role',
       'splash screen role',
+      'CI role',
     ]);
   });
 
@@ -191,6 +193,13 @@ void main() {
         'uses': <String>{},
       });
     }
+    // A repository lives on one host, and a job of CI works with the values
+    // of .env when the app has them.
+    expect(shape(ciRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'env'},
+    });
   });
 
   test('only the app entry is open to all modules', () {
@@ -304,6 +313,7 @@ void main() {
           'env',
           'app_icon',
           'splash',
+          'ci',
         ],
       );
     });
