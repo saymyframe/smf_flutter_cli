@@ -909,6 +909,8 @@ The section of the module that provides CI tells how to start a build.
       ('a tab', 'a\tb'),
       ('a double quote, which would end the quoted form', 'a" # b'),
       ('the delete character', 'a\x7Fb'),
+      ('a line separator, which fails the reader of .env', 'a\u2028b'),
+      ('a paragraph separator, which fails the reader of .env', 'a\u2029b'),
     ]) {
       test(
           'refuses a value with $name: it names the key, never the value, '
@@ -921,8 +923,8 @@ The section of the module that provides CI tells how to start a build.
         expect(result.exitCode, 1);
         expect(
           result.stderr,
-          'The values of $key have a double quote or a control character, '
-          'which .env cannot hold.\n',
+          'The values of $key have a double quote, a control character or a '
+          'line separator, which .env cannot hold.\n',
         );
         expect(result.stdout, isEmpty);
         expect(envOf(directory).readAsStringSync(), 'KEPT=\n');

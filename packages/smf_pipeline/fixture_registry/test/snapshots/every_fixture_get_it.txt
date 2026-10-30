@@ -8466,8 +8466,9 @@ void main() {
 // A key whose variable has a value gets it, in one of the two forms of a value
 // of `.env`: as it is, or in double quotes when it has white space, `#` or a
 // quote. Any other line stays as `.env.example` has it. A value with a double
-// quote or a control character fits neither form, and could add a line of its
-// own, so the script stops and writes nothing. It never prints a value.
+// quote, a control character or a line separator fits neither form, and could
+// add a line of its own, so the script stops and writes nothing. It never prints
+// a value.
 //
 // It never replaces a value. When `.env` has one, the script stops and leaves
 // the file as it is, and a developer who wants it written again deletes it. A
@@ -8477,7 +8478,7 @@ import 'dart:convert';
 import 'dart:io';
 
 final _key = RegExp(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=');
-final _unsafe = RegExp(r'["\x00-\x1F\x7F]');
+final _unsafe = RegExp(r'["\x00-\x1F\x7F\u2028\u2029]');
 final _quoted = RegExp(r"[\s#'`]");
 final _withoutValue = RegExp(
   r'^\s*(?:#.*|[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:""\s*)?(?:#.*)?)?$',
@@ -8522,8 +8523,8 @@ void main() {
   }
   if (refused.isNotEmpty) {
     stderr.writeln(
-      'The values of ${refused.join(', ')} have a double quote or a control '
-      'character, which .env cannot hold.',
+      'The values of ${refused.join(', ')} have a double quote, a control '
+      'character or a line separator, which .env cannot hold.',
     );
     exitCode = 1;
     return;
