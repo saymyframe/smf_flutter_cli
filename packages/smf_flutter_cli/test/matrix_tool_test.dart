@@ -438,6 +438,34 @@ void main() {
   );
 
   test(
+      '--ci-commands needs one app with every module and its directory, and '
+      'no other', () async {
+    for (final arguments in [
+      ['--ci-commands', newApp()],
+      ['--ci-commands', '--build', newApp()],
+      ['--ci-commands', '--app', 'every module (nothing)'],
+      ['--ci-commands', '--app', 'every module (nothing)', newApp(), newApp()],
+    ]) {
+      final result = await run(arguments);
+      expect(result.exitCode, 64, reason: '$arguments');
+      expect('${result.stderr}', contains('--ci-commands'),
+          reason: '$arguments');
+    }
+
+    final unknown = await run([
+      '--ci-commands',
+      '--app',
+      'every module (nothing)',
+      newApp(),
+    ]);
+    expect(unknown.exitCode, 64);
+    expect(
+      '${unknown.stderr}',
+      contains('No app with every module is every module (nothing).'),
+    );
+  });
+
+  test(
       'fails on --without-external-steps without --app, on an app with '
       'every module that the matrix does not have, and on tests that do not '
       'apply to the app', () async {
