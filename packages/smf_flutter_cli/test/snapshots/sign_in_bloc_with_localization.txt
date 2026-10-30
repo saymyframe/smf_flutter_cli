@@ -243,7 +243,7 @@ Use this script rather than `flutterfire configure`, which would write files tha
 
 Once one flavor is configured, a build of a flavor that is not fails on Android, with `File google-services.json is missing`. On iOS it builds and stops at start-up, but with Crashlytics it fails in the build too (see that section).
 
-A run from Xcode reads the flavor from `ios/Flutter/Generated.xcconfig`, not from the scheme. After a fresh `flutter pub get` that file has no flavor, so `appFlavor` is `null` under any scheme and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. Run `flutter build ios --config-only --flavor <flavor>` once before you run the app from Xcode.
+In Xcode, select the scheme of a flavor. It builds that flavor, whatever `ios/Flutter/Generated.xcconfig` says. The scheme `Runner` takes the flavor from that file, which has none after a fresh `flutter pub get`, so `appFlavor` is `null` there and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. `flutter build ios --config-only --flavor <flavor>` gives the file a flavor.
 
 The script changes the Xcode project only on macOS, and adds a build phase that runs `flutterfire` from `~/.pub-cache/bin`. So every Mac that builds the app for iOS needs the FlutterFire CLI activated, flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above. flutterfire needs the [Firebase CLI](https://firebase.google.com/docs/cli).
 
@@ -6904,24 +6904,24 @@ class DefaultFirebaseOptions {
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/services.dart' show appFlavor;
 
-import 'firebase_options_dev.dart' as dev;
-import 'firebase_options_prod.dart' as prod;
-import 'firebase_options_staging.dart' as staging;
+import 'firebase_options_dev.dart' as dev_options;
+import 'firebase_options_prod.dart' as prod_options;
+import 'firebase_options_staging.dart' as staging_options;
 
 /// The options of the Firebase apps of the flavor of this build.
 ///
 /// `appFlavor` is a constant, so a release build keeps only the options of
 /// its own flavor.
 FirebaseOptions get firebaseOptionsOfFlavor => switch (appFlavor) {
-  'dev' => dev.DefaultFirebaseOptions.currentPlatform,
-  'staging' => staging.DefaultFirebaseOptions.currentPlatform,
-  'prod' => prod.DefaultFirebaseOptions.currentPlatform,
+  'dev' => dev_options.DefaultFirebaseOptions.currentPlatform,
+  'staging' => staging_options.DefaultFirebaseOptions.currentPlatform,
+  'prod' => prod_options.DefaultFirebaseOptions.currentPlatform,
   _ => throw UnsupportedError(
     'The app has no Firebase options for the flavor $appFlavor. A new '
     'flavor goes into this file and into tool/configure_firebase.dart. '
-    'A run from Xcode reads the flavor from '
+    'A run from Xcode of the scheme Runner reads the flavor from '
     'ios/Flutter/Generated.xcconfig, which has none after flutter pub '
-    'get, so the flavor is null under any scheme: run flutter build ios '
+    'get: select the scheme of a flavor, or run flutter build ios '
     '--config-only --flavor <flavor> first.',
   ),
 };

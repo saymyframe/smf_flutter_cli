@@ -476,8 +476,11 @@ void main() {
         expect(
           selector,
           allOf(
-            contains("import 'firebase_options_$name.dart' as $name;"),
-            contains("'$name' => $name.DefaultFirebaseOptions.currentPlatform"),
+            contains(
+                "import 'firebase_options_$name.dart' as ${name}_options;"),
+            contains(
+              "'$name' => ${name}_options.DefaultFirebaseOptions.currentPlatform",
+            ),
           ),
         );
       }

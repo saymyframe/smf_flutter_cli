@@ -250,8 +250,8 @@ void main() {
     });
 
     test(
-        'stops without a flavor, as a run from Xcode has none after flutter '
-        'pub get, and names the command that gives it one', () async {
+        'stops without a flavor, as a run from Xcode of the scheme Runner has '
+        'none after flutter pub get, and says what gives it one', () async {
       placeOptions(AppEntryRole.flavors);
 
       expect(
@@ -260,7 +260,9 @@ void main() {
           startsWith(
             'stopped: The app has no Firebase options for the flavor null.',
           ),
+          contains('the scheme Runner'),
           contains('ios/Flutter/Generated.xcconfig'),
+          contains('select the scheme of a flavor'),
           contains('flutter build ios --config-only --flavor <flavor>'),
         ),
       );
@@ -308,8 +310,8 @@ void main() {
       placeOptions(
         AppEntryRole.flavors,
         selector: brick[FirebaseCoreModule.optionsSelectorFile]!.replaceAll(
-          '${other.name}.DefaultFirebaseOptions',
-          '${first.name}.DefaultFirebaseOptions',
+          '${other.name}_options.DefaultFirebaseOptions',
+          '${first.name}_options.DefaultFirebaseOptions',
         ),
       );
 

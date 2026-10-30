@@ -14,7 +14,7 @@ On macOS it runs `flutterfire configure` once for each Xcode build configuration
 
 Until a flavor is configured, its file is a placeholder, and a build of the flavor stops at start-up with an `UnsupportedError` that gives the command. Once one flavor is configured, a build of another one fails on Android for want of its `google-services.json`.
 
-A run from Xcode reads the flavor from `ios/Flutter/Generated.xcconfig`, not from the scheme. After a fresh `flutter pub get` that file has no flavor, so `appFlavor` is `null` under any scheme and `firebaseOptionsOfFlavor` throws. Run `flutter build ios --config-only --flavor <flavor>` once before you run the app from Xcode.
+In Xcode, select the scheme of a flavor. It builds that flavor, whatever `ios/Flutter/Generated.xcconfig` says. The scheme `Runner` takes the flavor from that file, which has none after a fresh `flutter pub get`, so `appFlavor` is `null` there and `firebaseOptionsOfFlavor` throws. `flutter build ios --config-only --flavor <flavor>` gives the file a flavor.
 
 Before generation, SMF checks what `flutterfire configure` needs: the Firebase CLI, a login that Google still accepts, flutterfire_cli 1.4.1 or a later 1.x, and on macOS the Ruby gem xcodeproj. In a terminal, it offers to set up what it can, asking first, and to log in again when the login has expired. After generation, it asks whether to configure the flavor `dev`, and prints the command to run later when the run cannot.
 

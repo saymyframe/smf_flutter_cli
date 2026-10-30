@@ -21,7 +21,7 @@ Use this script rather than `flutterfire configure`, which would write files tha
 
 Once one flavor is configured, a build of a flavor that is not fails on Android, with `File google-services.json is missing`. On iOS it builds and stops at start-up, but with Crashlytics it fails in the build too (see that section).
 
-A run from Xcode reads the flavor from `ios/Flutter/Generated.xcconfig`, not from the scheme. After a fresh `flutter pub get` that file has no flavor, so `appFlavor` is `null` under any scheme and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. Run `flutter build ios --config-only --flavor <flavor>` once before you run the app from Xcode.
+In Xcode, select the scheme of a flavor. It builds that flavor, whatever `ios/Flutter/Generated.xcconfig` says. The scheme `Runner` takes the flavor from that file, which has none after a fresh `flutter pub get`, so `appFlavor` is `null` there and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. `flutter build ios --config-only --flavor <flavor>` gives the file a flavor.
 
 The script changes the Xcode project only on macOS, and adds a build phase that runs `flutterfire` from `~/.pub-cache/bin`. So every Mac that builds the app for iOS needs the FlutterFire CLI activated, flutterfire_cli $minimumFlutterfireVersion or a later 1.x; if `dart pub global list` shows one already, skip its activation above. flutterfire needs the [Firebase CLI](https://firebase.google.com/docs/cli).
 ''';
