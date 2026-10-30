@@ -47,13 +47,25 @@ final class BrokenModule extends SmfModule {
     required List<(String, String)> changes,
   }) : this._(of, id, description, file, changes);
 
+  /// Creates the module [id], which [description] describes: the module
+  /// [of] under that id, whose contributions are what the top-level function
+  /// [contributions] makes of those of [of], for a bug that is in no file of
+  /// its bricks, such as a line of the pubspec of the app.
+  const BrokenModule.contributing(
+    SmfModule of, {
+    required ModuleId id,
+    required String description,
+    required List<Contribution> Function(List<Contribution>) contributions,
+  }) : this._(of, id, description, null, const [], contributions);
+
   const BrokenModule._(
     this.of,
     this.id,
     this._description,
     this._file,
-    this._changes,
-  );
+    this._changes, [
+    this._contributions,
+  ]);
 
   /// The fake router that tells the listeners of the screen of the page on
   /// top each time it builds its navigator, though the page on top did not
@@ -788,12 +800,15 @@ final class BrokenModule extends SmfModule {
   final String _description;
 
   /// The path of the file that the bug changes, among the files of the
-  /// bricks of [of].
-  final String _file;
+  /// bricks of [of], or `null` when the bug is in no such file.
+  final String? _file;
 
   /// The changes of the code of [of] in its file [_file]: the first text of
   /// each, which the file has once, becomes the second.
   final List<(String, String)> _changes;
+
+  /// What the bug makes of the contributions of [of], if it changes them.
+  final List<Contribution> Function(List<Contribution>)? _contributions;
 
   @override
   ModuleDescriptor get descriptor {
@@ -815,10 +830,11 @@ final class BrokenModule extends SmfModule {
   /// variables of its bricks that read its texts reading them as texts of
   /// this module. Throws a [StateError] when no brick of [of] has the file,
   /// or the file does not have the text of a change once, as when the code
-  /// of the fixture changed: the app would not have the bug.
+  /// of the fixture changed: the app would not have the bug. A bug that is in
+  /// no file of a brick changes the contributions instead.
   @override
   List<Contribution> contribute(ModuleContext context) {
-    final contributed = of.contribute(context);
+    final contributed = (_contributions ?? _same)(of.contribute(context));
     // The getter of a text starts with the id of the module that gives it.
     final texts = localizationRole.varsOf(
       id,
@@ -845,11 +861,15 @@ final class BrokenModule extends SmfModule {
         else
           contribution,
     ];
-    if (!contributions.any(_isChanged)) {
+    if (_file != null && !contributions.any(_isChanged)) {
       throw StateError('No brick of ${of.descriptor.id} has $_file.');
     }
     return contributions;
   }
+
+  /// [contributions] as they are, for a bug in a file of a brick.
+  static List<Contribution> _same(List<Contribution> contributions) =>
+      contributions;
 
   /// Whether [contribution] is a brick that this module changed.
   bool _isChanged(Contribution contribution) =>
