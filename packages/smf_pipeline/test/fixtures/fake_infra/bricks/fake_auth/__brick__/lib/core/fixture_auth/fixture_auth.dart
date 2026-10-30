@@ -25,6 +25,11 @@ typedef _Identity = ({String issuer, String subject, String? email});
 /// checks a nonce takes a token with it once, and so does the fixture.
 final Set<String> _spentNonces = {};
 
+/// How many tokens the server gave each user, by the id of the user, once
+/// the user has read one: a start of the app keeps a token, and a refresh
+/// gives the next one.
+final Map<String, int> _tokens = {};
+
 /// The user who is signed in on this device, or `null`. It stands for the
 /// storage of a device, which a start of the app reads.
 AuthUser? _onDevice;
@@ -73,7 +78,9 @@ Future<AuthService> openFixtureAuth() async {
 /// [AuthFailureReason.accountExistsWithOtherMethod]. A refused link takes
 /// the token too, and keeps the identity for the credential object, which
 /// [signInWith] of the identical object then signs in with. It has no
-/// tokens of an identity provider to revoke when it deletes an account.
+/// tokens of an identity provider to revoke when it deletes an account. The
+/// token that it gives a server is no JSON Web Token: it names the user and
+/// how many tokens that user got.
 final class FixtureAuth implements AuthService {
   FixtureAuth._();
 
@@ -355,5 +362,16 @@ final class FixtureAuth implements AuthService {
     _accounts.remove(user.uid);
     _identities.removeWhere((identity, uid) => uid == user.uid);
     _set(null);
+  }
+
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    await _answer();
+    final user = _user;
+    if (user == null) return null;
+    final uid = user.uid;
+    final turn = _tokens[uid] ?? 1;
+    _tokens[uid] = forceRefresh ? turn + 1 : turn;
+    return 'fixture-token-$uid-${_tokens[uid]}';
   }
 }
