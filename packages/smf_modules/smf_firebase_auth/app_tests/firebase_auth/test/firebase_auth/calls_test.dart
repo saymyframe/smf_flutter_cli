@@ -18,8 +18,7 @@
 // languages of its own. The service tells of a sign-out that Firebase makes
 // without a call of the app. A credential of another identity provider
 // reaches nothing of Firebase. And a read of the token of the user asks
-// Firebase for a new token only when it forces a refresh, and tells nobody of
-// a change.
+// Firebase for a new token only when it forces a refresh, and changes no user.
 //
 // It uses the service of the module and runs none of the start-up of the
 // app but the start of Firebase (service.dart). The matrix sets up the
@@ -582,7 +581,7 @@ void main() {
 
   test(
       'a read of the token reaches Firebase with what it asks for, and tells '
-      'the listeners of the service nothing', () async {
+      'the listeners of the service of no other user', () async {
     final heard = <String>[];
     final subscription = service.userChanges.listen(
       (user) => heard.add(userOf(user)),
@@ -591,13 +590,17 @@ void main() {
     final nobody = await service.userToken();
     final nobodyForced = await service.userToken(forceRefresh: true);
     final callsOfNobody = [...firebase.calls];
-    await service.signUp(email: addressOf('token'), password: password);
+    final email = addressOf('token');
+    await service.signUp(email: email, password: password);
     await pumpEventQueue();
+    final uid = service.currentUser?.uid;
     heard.clear();
     firebase.calls.clear();
 
     final read = await service.userToken();
     final again = await service.userToken();
+    await pumpEventQueue();
+    final heardOfReads = [...heard];
     final forced = await service.userToken(forceRefresh: true);
     await pumpEventQueue();
 
@@ -623,11 +626,17 @@ void main() {
       reason: 'The token is what Firebase answers.',
     );
     expect(
-      heard,
+      heardOfReads,
       isEmpty,
-      reason: 'A read of the token changes nobody, and an app may read it '
-          'for each of its requests, so the service tells its listeners '
-          'nothing.',
+      reason: 'A read that comes from the device changes nothing, and an app '
+          'may read it for each of its requests, so the service tells its '
+          'listeners nothing.',
+    );
+    expect(
+      heard,
+      ['the account $uid of $email'],
+      reason: 'Firebase tells that the token changed after a forced read, '
+          'which the service passes on as the same user.',
     );
   });
 

@@ -17,9 +17,10 @@
 // asked, with the same reason on every platform. A call that failed leaves
 // the user. A call for a user whose session has ended on the server signs
 // that user out. A read of the token of the user gets the reason of the code
-// of Firebase and leaves the user, but for such a session. The plugin on
-// Android answers that read with an unknown error, so the code comes from a
-// reload of the user then.
+// of Firebase and leaves the user, but for such a session while that user is
+// still signed in. The plugin on Android answers that read with an unknown
+// error, so the code comes from a reload of the user then. A read that finds
+// nobody on the platform, as while a sign-out is on its way, has no token.
 //
 // A call with a credential of Google or Apple gets the reason of its own
 // call: a link that Firebase refuses because the identity, or its email
@@ -40,8 +41,10 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/auth/app_session.dart';
 import 'package:{{app_name}}/core/auth/auth_service.dart';
 import 'package:{{app_name}}/core/auth/firebase_auth_service.dart';
+import 'package:{{app_name}}/core/auth/guest_data.dart';
 
 import '../firebase_auth_mocks.dart';
 import 'service.dart';
@@ -876,8 +879,6 @@ void main() {
         'ERROR_INVALID_USER_TOKEN',
         'ERROR_USER_NOT_FOUND',
         'user-not-found',
-        'NO_CURRENT_USER',
-        'no-current-user',
       ]) {
         await service.signOut();
         await service.signInAnonymously();
@@ -911,7 +912,205 @@ void main() {
           'the user has ended, the service signs the user out on this device, '
           'tells its listeners, and fails with recentSignInRequired: $found',
     );
-    expect(found, hasLength(14));
+    expect(found, hasLength(10));
+  });
+
+  test(
+      'a read of the token that finds nobody on the platform, as while a '
+      'sign-out is on its way, has no token, and signs nobody out', () async {
+    await service.signOut();
+    await service.signUp(email: addressOf('token-leaving'), password: password);
+    await pumpEventQueue();
+    final before = userOf(service.currentUser);
+    final heard = <String>[];
+    final subscription = service.userChanges.listen(
+      (user) => heard.add(userOf(user)),
+    );
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+    heard.clear();
+    final found = <String, String?>{};
+
+    for (final code in const ['NO_CURRENT_USER', 'no-current-user']) {
+      firebase
+        ..calls.clear()
+        ..failNext('getIdToken', code: code);
+      final token = await service.userToken();
+      found[code] = '$token, ${firebase.calls.map((call) => call.first)}';
+    }
+    await pumpEventQueue();
+
+    const nobody = 'null, (getIdToken)';
+    expect(
+      [found, heard, userOf(service.currentUser)],
+      [
+        {'NO_CURRENT_USER': nobody, 'no-current-user': nobody},
+        isEmpty,
+        before,
+      ],
+      reason: 'The plugin hears of a sign-out a moment after the platform: '
+          'with nobody on the platform, a read answers null, as with nobody '
+          'signed in, and leaves the rest to that sign-out.',
+    );
+  });
+
+  test(
+      'a read of the token of a user who has left that fails late leaves the '
+      'next user signed in', () async {
+    await service.signOut();
+    await service.signUp(email: addressOf('token-left'), password: password);
+    final hold = firebase.holdNext('getIdToken');
+    final read = errorOf(() => service.userToken(forceRefresh: true));
+    await pumpEventQueue();
+    await service.signOut();
+    final next = addressOf('token-next');
+    await service.signUp(email: next, password: password);
+    await pumpEventQueue();
+    final after = userOf(service.currentUser);
+    final heard = <String>[];
+    final subscription = service.userChanges.listen(
+      (user) => heard.add(userOf(user)),
+    );
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+    heard.clear();
+    firebase
+      ..calls.clear()
+      ..failNext('getIdToken', code: 'ERROR_USER_TOKEN_EXPIRED');
+
+    hold.complete();
+    final failure = await read;
+    await pumpEventQueue();
+
+    expect(
+      outcomeOf(failure),
+      AuthFailureReason.recentSignInRequired.name,
+      reason: 'The read of the user who has left fails as it does for that '
+          'user.',
+    );
+    expect(
+      [
+        userOf(service.currentUser),
+        firebase.signedInUid,
+        firebase.calls,
+        heard
+      ],
+      [after, service.currentUser?.uid, isEmpty, isEmpty],
+      reason: 'A read runs next to the calls of the app, so the service signs '
+          'out the user of the read only while that user is still signed in: '
+          'the next user stays, and nobody hears of a change.',
+    );
+  });
+
+  test(
+      'two reads of a session that has ended sign out once: the second leaves '
+      'the anonymous user who came after the first', () async {
+    await service.signOut();
+    final session = AppSessionController(
+      mode: AuthMode.anonymous,
+      takeGuestData: takeGuestData,
+    );
+    addTearDown(session.dispose);
+    await session.start(service);
+    await session.signUp(email: addressOf('token-twice'), password: password);
+    await pumpEventQueue();
+    final seen = <String>[];
+    session.addListener(() => seen.add(session.value.runtimeType.toString()));
+    final first = firebase.holdNext('getIdToken');
+    final second = firebase.holdNext('getIdToken');
+    final reads = [
+      errorOf(session.userToken),
+      errorOf(session.userToken),
+    ];
+    await pumpEventQueue();
+    firebase
+      ..calls.clear()
+      ..failNext('getIdToken', code: 'ERROR_USER_TOKEN_EXPIRED');
+
+    first.complete();
+    final firstFailure = await reads.first;
+    await pumpEventQueue();
+    final anonymous = session.value.uid;
+    firebase.failNext('getIdToken', code: 'ERROR_USER_TOKEN_EXPIRED');
+    second.complete();
+    final secondFailure = await reads.last;
+    await pumpEventQueue();
+
+    final recent = AuthFailureReason.recentSignInRequired.name;
+    expect(
+      [outcomeOf(firstFailure), outcomeOf(secondFailure)],
+      [recent, recent],
+    );
+    expect(
+      [
+        seen,
+        session.value.uid,
+        [
+          for (final call in firebase.calls)
+            if (call.first == 'signOut') call.first,
+        ],
+      ],
+      [
+        ['SignedOutSession', 'AnonymousSession'],
+        anonymous,
+        ['signOut'],
+      ],
+      reason: 'The first read ends the session of the user, and an anonymous '
+          'user follows. The second read fails for the user who has left, so '
+          'it signs out nobody, and the anonymous user stays.',
+    );
+  });
+
+  test(
+      'a read of the token that Firebase answers with an internal error on '
+      'iOS is unknown, and says nothing of a way to sign in', () async {
+    await service.signOut();
+    await service.signUp(
+        email: addressOf('token-internal'), password: password);
+    final found = <String>[];
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      for (final message in const [_internal, _notFoundOnIos]) {
+        firebase.failNext(
+          'getIdToken',
+          code: 'internal-error',
+          message: message,
+        );
+        found.add(
+          outcomeOf(await errorOf(() => service.userToken(forceRefresh: true))),
+        );
+      }
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+
+    expect(
+      found,
+      everyElement(startsWith('${AuthFailureReason.unknown.name} (')),
+      reason: 'The user of a read is signed in, so sign-in is enabled in the '
+          'project: a failure notConfigured would send the developer the '
+          'wrong way.',
+    );
+  });
+
+  test(
+      'a read of the token whose sign-out fails is a failure of the service, '
+      'and leaves the user', () async {
+    await service.signOut();
+    await service.signUp(email: addressOf('token-stays'), password: password);
+    final before = userOf(service.currentUser);
+    firebase
+      ..failNext('getIdToken', code: 'ERROR_USER_TOKEN_EXPIRED')
+      ..failNext('signOut', code: 'some-other-code', message: 'No.');
+
+    final failure = await errorOf(() => service.userToken(forceRefresh: true));
+
+    expect(
+      [outcomeOf(failure), userOf(service.currentUser)],
+      ['${AuthFailureReason.unknown.name} (some-other-code: No.)', before],
+      reason: 'A call of the service fails only with an AuthFailure, also '
+          'when its sign-out fails.',
+    );
   });
 
   test(

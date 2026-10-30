@@ -669,12 +669,21 @@ Future<void> main(List<String> arguments, SendPort port) async {
   failNext['getIdToken'] = StateError('The plugin broke in.');
   tokens['an error of another kind'] = await step(service.userToken);
   final endedRead = <String, Object?>{};
-  for (final code in _endedSessionCodes) {
+  for (final code in _endedSessionCodes.where(
+    (code) => code != 'no-current-user',
+  )) {
     await signIn();
     failNext['getIdToken'] = FirebaseAuthException(code: code);
     endedRead[code] = await step(() => service.userToken(forceRefresh: true));
   }
   tokens['ended session'] = endedRead;
+  await signIn();
+  failNext['getIdToken'] = FirebaseAuthException(code: 'no-current-user');
+  String? ofNobody = 'not read';
+  tokens['nobody on the platform'] = await step(
+    () async => ofNobody = await service.userToken(),
+  );
+  tokens['the answer with nobody on the platform'] = ofNobody;
   // The plugin on Android answers such a read with the code `unknown`.
   final unknownRead = <String, Object?>{};
   for (final code in [..._endedSessionCodes, 'user-disabled']) {
@@ -2008,7 +2017,8 @@ void main() {
 
       test(
           'gives the ID token of the user, which asks Firebase for a new one '
-          'only when it forces a refresh and tells the listener nothing', () {
+          'only when it forces a refresh and tells the listener of no other '
+          'user', () {
         final tokens = sent['tokens']! as Map<Object?, Object?>;
         const account = 'uid of a@x.dev <a@x.dev>';
         const first = 'id-token of uid of a@x.dev, number 1';
@@ -2042,9 +2052,22 @@ void main() {
               'getIdToken(true)',
               'getIdToken(false)',
             ],
-            'heard': <Object?>[],
+            // Firebase tells that the token changed, of the same user.
+            'heard': [account],
           },
         );
+        expect(
+          tokens['nobody on the platform'],
+          [
+            'completed',
+            account,
+            ['getIdToken(false)'],
+            <Object?>[],
+          ],
+          reason: 'With nobody on the platform, as while a sign-out is on its '
+              'way, a read signs nobody out.',
+        );
+        expect(tokens['the answer with nobody on the platform'], isNull);
         expect(
           {
             for (final code in const [
@@ -2079,12 +2102,13 @@ void main() {
         );
         expect(tokens['ended session'], {
           for (final code in _endedSession)
-            code: [
-              'recentSignInRequired',
-              'nobody',
-              ['getIdToken(true)', 'signOut()'],
-              ['nobody'],
-            ],
+            if (code != 'no-current-user')
+              code: [
+                'recentSignInRequired',
+                'nobody',
+                ['getIdToken(true)', 'signOut()'],
+                ['nobody'],
+              ],
         });
       });
 
