@@ -17,7 +17,7 @@ Future<void> bootstrap() async {
 }
 ```
 
-Until a flavor is configured, its options are a placeholder: the app compiles but a build of that flavor stops at start-up. Each other flavor is one command away:
+Until a flavor is configured, its options are a placeholder: the app compiles, but a build of that flavor stops at start-up. To configure another flavor, run:
 
 ```bash
 dart tool/configure_firebase.dart staging --project=<id>
