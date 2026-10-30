@@ -185,6 +185,15 @@ final class AppSessionController extends ChangeNotifier
   /// that the app starts no second one next to it.
   final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
 
+  /// What the reads of the token wait for that were made before the first
+  /// start. Each read has one of its own, which completes in the zone of that
+  /// read, so a read in a zone that runs nothing any more holds nothing up.
+  final List<Completer<void>> _tokensUntilStarted = [];
+
+  /// The refreshes of the token that are on their way, each by the id of its
+  /// user, so that the next user does not get the token of the user before.
+  final Map<String?, Future<String?>> _tokenRefreshes = {};
+
   /// Tells when the user comes back to the app, in the mode
   /// [AuthMode.anonymous].
   _ResumeObserver? _observer;
@@ -268,6 +277,10 @@ final class AppSessionController extends ChangeNotifier
     if (!_started) {
       _started = true;
       _untilStarted?.complete();
+      for (final read in _tokensUntilStarted) {
+        read.complete();
+      }
+      _tokensUntilStarted.clear();
     }
     if (first) await earlier;
   }
@@ -358,6 +371,39 @@ final class AppSessionController extends ChangeNotifier
         waitsForAnonymousUser: true,
       );
 
+  /// The token of the user for a server of the app, or `null` when nobody is
+  /// signed in.
+  ///
+  /// It waits for the first start and for an anonymous sign-in on its way,
+  /// together at most [anonymousWait], and for no other call: the sheet of a
+  /// way to sign in may be open for minutes, and a request does not wait for
+  /// it. So a read made before `initAuth()` is not over, as in `bootstrap()`,
+  /// answers `null` once that wait is over, if there is no service by then.
+  ///
+  /// It is not one of the calls that run one after another, and tells the
+  /// listeners of the session nothing, unless the provider found that the
+  /// session of the user has ended on the server: the session then has nobody
+  /// when the call fails, with [AuthFailureReason.recentSignInRequired].
+  Future<String?> userToken() => _token((service) => service.userToken());
+
+  /// A token to use in place of [rejected], which a server refused, or `null`
+  /// when nobody is signed in.
+  ///
+  /// Reads at the same time share one refresh. A read that comes later with
+  /// the same [rejected] takes the token of that refresh, and asks the server
+  /// of the provider for nothing. It waits and fails as [userToken] does.
+  Future<String?> userTokenAfter(String rejected) async {
+    final current = await userToken();
+    if (current != rejected) return current;
+    final uid = _session.uid;
+    return _tokenRefreshes[uid] ??= _token(
+      (service) => service.userToken(forceRefresh: true),
+    ).whenComplete(() {
+      // Not as an arrow: the refresh would then wait for itself.
+      _tokenRefreshes.remove(uid);
+    });
+  }
+
   /// Stops following the service and the lifecycle of the app. A call that
   /// is on its way still ends as it would have, but tells no listener, and
   /// no anonymous sign-in follows it.
@@ -386,6 +432,43 @@ final class AppSessionController extends ChangeNotifier
             .firstOrNull,
         _ => null,
       };
+
+  /// Reads the token of the user with [read], once the wait of [userToken]
+  /// is over, and `null` when the app has no service by then.
+  ///
+  /// When it fails, the session takes the user that the service has left. A
+  /// call that takes its turn follows, so that in the mode
+  /// [AuthMode.anonymous] the app signs in anonymously again, but not next to
+  /// a sign-in that is on its way.
+  Future<String?> _token(
+    Future<String?> Function(AuthService service) read,
+  ) async {
+    if (!_started || _anonymousSignIns.containsKey(_service)) {
+      await _untilTokenCanBeRead().timeout(anonymousWait, onTimeout: () {});
+    }
+    final service = _service;
+    if (service == null) return null;
+    try {
+      return await read(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      _retry();
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> _untilTokenCanBeRead() async {
+    if (!_started) {
+      final started = Completer<void>();
+      _tokensUntilStarted.add(started);
+      await started.future;
+    }
+    await _anonymousSignIns[_service];
+  }
 
   /// The user came back to the app. In the mode [AuthMode.anonymous], an
   /// app without a user then signs in anonymously again: as what follows

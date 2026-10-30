@@ -302,6 +302,10 @@ int created = 0;
 
 int _users = 0;
 
+/// How many tokens the server gave each user, by the id of the user, once
+/// a refresh gave a user more than the first.
+final Map<String, int> tokens = {};
+
 AuthService createFakeAuth() => FakeAuth();
 
 Future<AuthService> openFakeAuth() async {
@@ -450,6 +454,17 @@ final class FakeAuth implements AuthService {
     accounts.removeWhere((email, account) => account.uid == uid);
     identities.removeWhere((key, owner) => owner == uid);
     _set(null);
+  }
+
+  /// A forced read goes down as `refreshToken` among the calls.
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    final user = _user;
+    await _enter(forceRefresh ? 'refreshToken' : 'userToken');
+    if (user == null) return null;
+    final uid = user.uid;
+    if (forceRefresh) tokens[uid] = (tokens[uid] ?? 1) + 1;
+    return 'token-$uid-${tokens[uid] ?? 1}';
   }
 }
 ''';
@@ -1585,6 +1600,407 @@ Future<void> main(List<String> arguments, SendPort port) async {
 
   result['the function of the app has nothing to move'] =
       await takeGuestData('user-1') == null;
+  port.send(result);
+}
+''';
+
+/// Reads the token of the user through a first launch, a sign-up, the next
+/// launch and a sign-out, each time with the calls that reached the provider
+/// and what the listeners of the session heard of the read.
+const _tokenLife = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final heard = <String>[];
+  Future<Map<String, Object?>> read() async {
+    heard.clear();
+    takeCalls();
+    final token = await appSession.userToken();
+    await pump();
+    return {
+      'token': token,
+      'calls': takeCalls(),
+      'heard': [...heard],
+    };
+  }
+
+  await initAuth();
+  appSession.addListener(() => heard.add(show(appSession.value)));
+  result['a first launch'] = await read();
+  await appSession.signUp(email: email, password: password);
+  result['an account'] = await read();
+  await initAuth();
+  result['the next launch'] = await read();
+  await appSession.signOut();
+  result['after a sign-out'] = await read();
+  port.send(result);
+}
+''';
+
+/// What [_tokenLife] sends back from the app of [mode].
+Map<String, Object?> _tokenLifeIn(AuthMode mode) {
+  final anonymous = mode == AuthMode.anonymous;
+  Map<String, Object?> read(String? token) => {
+        'token': token,
+        'calls': ['userToken'],
+        'heard': <Object?>[],
+      };
+  return {
+    // Nobody has a token, and an anonymous user has one of its own.
+    'a first launch': read(anonymous ? 'token-user-1-1' : null),
+    // An anonymous user keeps the id with the account.
+    'an account': read('token-user-1-1'),
+    'the next launch': read('token-user-1-1'),
+    'after a sign-out': read(anonymous ? 'token-user-2-1' : null),
+  };
+}
+
+/// Asks for a token in place of one that a server refused, with one user
+/// and with two, at the same time and later, also when the refresh fails.
+const _tokenRefresh = r'''
+Map<String, Object?> note(List<String?> tokens) => {
+      'tokens': tokens,
+      'calls': takeCalls(),
+    };
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  await initAuth();
+  result['nobody signed in'] = note([await appSession.userTokenAfter('old')]);
+
+  await appSession.signUp(email: email, password: password);
+  takeCalls();
+  final first = (await appSession.userToken())!;
+  takeCalls();
+  result['a token that the session has replaced already'] =
+      note([await appSession.userTokenAfter('old')]);
+
+  // Calls at the same time, as those of requests that a server refused
+  // with one token.
+  final hold = holds['refreshToken'] = Completer<void>();
+  final refreshing = [
+    for (var i = 0; i < 8; i++) appSession.userTokenAfter(first),
+  ];
+  await pump();
+  await pump();
+  result['the calls while the refresh is on its way'] = takeCalls();
+  hold.complete();
+  holds.clear();
+  result['calls at the same time'] = {
+    'tokens': await Future.wait(refreshing),
+    'calls': takeCalls(),
+  };
+  final second = (await appSession.userToken())!;
+  takeCalls();
+  result['a call that comes later with the same token'] =
+      note([await appSession.userTokenAfter(first)]);
+  result['the next refresh'] = note([await appSession.userTokenAfter(second)]);
+
+  // A refresh that fails fails for each call that waits for it, changes
+  // nothing, and the next call asks again.
+  final third = (await appSession.userToken())!;
+  takeCalls();
+  failures['refreshToken'] = const AuthFailure(AuthFailureReason.network);
+  final failed = [
+    for (var i = 0; i < 2; i++)
+      failureOf(() => appSession.userTokenAfter(third)),
+  ];
+  result['a refresh that fails'] = {
+    'failures': await Future.wait(failed),
+    'calls': takeCalls(),
+    'state': show(appSession.value),
+  };
+  failures.clear();
+  result['the call after it'] = note([await appSession.userTokenAfter(third)]);
+
+  // The refresh of a user who has left is not the refresh of the next user.
+  final ofAnn = (await appSession.userToken())!;
+  takeCalls();
+  final slow = holds['refreshToken'] = Completer<void>();
+  final forAnn = appSession.userTokenAfter(ofAnn);
+  await pump();
+  await pump();
+  await appSession.signOut();
+  await appSession.signUp(email: 'bob@example.com', password: password);
+  final ofBob = (await appSession.userToken())!;
+  takeCalls();
+  final forBob = appSession.userTokenAfter(ofBob);
+  await pump();
+  await pump();
+  slow.complete();
+  holds.clear();
+  result['a refresh for each user'] = {
+    'tokens': [await forAnn, await forBob],
+    'calls': takeCalls(),
+  };
+  port.send(result);
+}
+''';
+
+/// Makes the read of a token fail, and notes what the session does then.
+const _tokenFailures = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  await initAuth();
+  await appSession.signUp(email: email, password: password);
+  final heard = <String>[];
+  appSession.addListener(() => heard.add(show(appSession.value)));
+  takeCalls();
+  Map<String, Object?> note(String failure) {
+    final noted = {
+      'failure': failure,
+      'state': show(appSession.value),
+      'heard': [...heard],
+      'calls': takeCalls(),
+    };
+    heard.clear();
+    return noted;
+  }
+
+  failures['userToken'] = const AuthFailure(AuthFailureReason.network);
+  result['the network'] = note(await failureOf(appSession.userToken));
+  failures['userToken'] = StateError('The plugin broke in.');
+  result['an error of another kind'] =
+      note(await failureOf(appSession.userToken));
+
+  // The session of the user has ended on the server: the provider signs the
+  // user out on the device and tells nobody.
+  failuresSignOut = true;
+  tells = false;
+  failures
+    ..remove('userToken')
+    ..['refreshToken'] =
+        const AuthFailure(AuthFailureReason.recentSignInRequired);
+  result['a session that has ended'] = note(
+    await failureOf(
+      () => appSession.userTokenAfter('token-user-1-1'),
+    ),
+  );
+  port.send(result);
+}
+''';
+
+/// In the mode anonymous, a read that fails for a session that has ended is
+/// followed by an anonymous sign-in, as any call that leaves nobody signed
+/// in is: once a sign-in that is on its way is over, and not next to it.
+const _tokenFailuresAnonymous = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final session = AppSessionController(
+    mode: AuthMode.anonymous,
+    takeGuestData: takeGuestData,
+  );
+  await session.start(FakeAuth());
+  await pump();
+  takeCalls();
+
+  failuresSignOut = true;
+  failures['userToken'] =
+      const AuthFailure(AuthFailureReason.recentSignInRequired);
+  result['alone'] = {
+    'failure': await failureOf(session.userToken),
+    'state right after it': show(session.value),
+  };
+  failures.clear();
+  await pump();
+  await pump();
+  result['alone, a moment later'] = {
+    'state': show(session.value),
+    'calls': takeCalls(),
+  };
+
+  // The same with a sign-in on its way, which decides who the user is.
+  accounts[email] = (uid: 'ann', password: password);
+  final hold = holds['signIn'] = Completer<void>();
+  final signIn = session.signIn(email: email, password: password);
+  await pump();
+  failures['userToken'] =
+      const AuthFailure(AuthFailureReason.recentSignInRequired);
+  final failure = await failureOf(session.userToken);
+  failures.clear();
+  await pump();
+  await pump();
+  result['next to a sign-in'] = {
+    'failure': failure,
+    'calls': takeCalls(),
+  };
+  hold.complete();
+  holds.clear();
+  await signIn;
+  await pump();
+  await pump();
+  result['once the sign-in is over'] = {
+    'state': show(session.value),
+    'calls': takeCalls(),
+  };
+  session.dispose();
+  port.send(result);
+}
+''';
+
+/// What a read of the token waits for: the first start and an anonymous
+/// sign-in, each at most for the wait of the session, and no other call.
+const _tokenWaits = r'''
+AppSessionController sessionOf(AuthMode mode) => AppSessionController(
+      mode: mode,
+      takeGuestData: takeGuestData,
+    );
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  // A read before the first start waits for it, with one timer, which goes
+  // once the start is over.
+  onDevice = const AuthUser(uid: 'ann', isAnonymous: false, email: email);
+  var session = sessionOf(AuthMode.required);
+  String? token;
+  late List<String> waits;
+  late List<String> calls;
+  timed(() {
+    unawaited(session.userToken().then((value) => token = value));
+  });
+  await pump();
+  waits = [for (final timer in timers) '${timer.duration}'];
+  calls = takeCalls();
+  await session.start(FakeAuth());
+  await pump();
+  await pump();
+  result['a read before the first start'] = {
+    'the waits': waits,
+    'the calls before the start': calls,
+    'the token': token,
+    'the calls after it': takeCalls(),
+    'the timers left': timers.length,
+  };
+  session.dispose();
+
+  // Without a start in time, the answer is that there is no token.
+  session = sessionOf(AuthMode.required);
+  var answered = false;
+  token = 'none yet';
+  timed(() {
+    unawaited(
+      session.userToken().then((value) {
+        answered = true;
+        token = value;
+      }),
+    );
+  });
+  await pump();
+  final beforeTheWaitIsOver = answered;
+  timers.single.fire();
+  await pump();
+  await pump();
+  result['no start in time'] = {
+    'answered before the wait is over': beforeTheWaitIsOver,
+    'answered': answered,
+    'the token': token,
+    'the calls': takeCalls(),
+  };
+  // The start that comes later still counts.
+  await session.start(FakeAuth());
+  result['the start that comes later'] = await session.userToken();
+  takeCalls();
+  session.dispose();
+
+  // A read in a zone that runs no microtask any more, as the fake time of a
+  // widget test that is over, holds up nothing that comes after it.
+  session = sessionOf(AuthMode.required);
+  runZoned(
+    () => unawaited(session.userToken()),
+    zoneSpecification: ZoneSpecification(
+      scheduleMicrotask: (self, parent, zone, microtask) {},
+      createTimer: (self, parent, zone, duration, callback) =>
+          HeldTimer(duration, callback),
+    ),
+  );
+  var signedOut = false;
+  unawaited(session.signOut().then((_) => signedOut = true));
+  result['a read in another zone'] = await Future.any([
+    session.start(FakeAuth()).then((_) => 'the start completed'),
+    Future<String>.delayed(
+      const Duration(seconds: 1),
+      () => 'the start still waits',
+    ),
+  ]);
+  result['the call after that read is done'] = signedOut;
+  takeCalls();
+  session.dispose();
+
+  // A read during an anonymous sign-in waits for it, and for no longer than
+  // the wait of the session.
+  onDevice = null;
+  session = sessionOf(AuthMode.anonymous);
+  final anonymous = holds['signInAnonymously'] = Completer<void>();
+  late Future<void> started;
+  String? inTime = 'none yet';
+  timed(() {
+    started = session.start(FakeAuth());
+    unawaited(session.userToken().then((value) => inTime = value));
+  });
+  await pump();
+  await pump();
+  final whileOnItsWay = inTime;
+  final timersWhileOnItsWay = timers.length;
+  anonymous.complete();
+  holds.clear();
+  await started;
+  await pump();
+  await pump();
+  result['a read during an anonymous sign-in'] = {
+    'the answer while it is on its way': whileOnItsWay,
+    'the timers then': timersWhileOnItsWay,
+    'the answer': inTime,
+    'the timers left': timers.length,
+  };
+  takeCalls();
+  session.dispose();
+
+  onDevice = null;
+  session = sessionOf(AuthMode.anonymous);
+  final slow = holds['signInAnonymously'] = Completer<void>();
+  var answeredLate = false;
+  String? tooLate = 'none yet';
+  timed(() {
+    unawaited(session.start(FakeAuth()));
+    unawaited(
+      session.userToken().then((value) {
+        answeredLate = true;
+        tooLate = value;
+      }),
+    );
+  });
+  await pump();
+  await pump();
+  for (final timer in [...timers]) {
+    timer.fire();
+  }
+  await pump();
+  await pump();
+  await pump();
+  final calledBack = answeredLate;
+  final token2 = tooLate;
+  result['an anonymous sign-in that takes too long'] = {
+    'answered': calledBack,
+    'the token': token2,
+  };
+  slow.complete();
+  holds.clear();
+  await pump();
+  await pump();
+  result['once it came'] = await session.userToken();
+  takeCalls();
+  session.dispose();
+
+  // A read waits for no other call, such as a sign-in whose sheet is open.
+  onDevice = const AuthUser(uid: 'ann', isAnonymous: false, email: email);
+  session = sessionOf(AuthMode.required);
+  await session.start(FakeAuth());
+  final held = holds['signIn'] = Completer<void>();
+  final signIn = session.signIn(email: email, password: password);
+  await pump();
+  takeCalls();
+  result['next to a call on its way'] = {
+    'the token': await session.userToken(),
+    'the calls': takeCalls(),
+  };
+  held.complete();
+  holds.clear();
+  await failureOf(() => signIn);
+  session.dispose();
   port.send(result);
 }
 ''';
@@ -2902,6 +3318,7 @@ void main() {
           'Future<void> sendPasswordReset(String email)',
           'Future<void> signOut()',
           'Future<void> deleteAccount({SignInCredential? fresh})',
+          'Future<String?> userToken({bool forceRefresh = false})',
         ],
       );
       expect(_enumValuesOf(unit, 'AuthFailureReason'), [
@@ -3075,6 +3492,11 @@ void main() {
             'hasAccount as the mode says', () async {
           expect(await app.run('$_notes$_life'), _lifeIn(mode));
         });
+        test(
+            'gives the token of the user as the mode says, and tells no '
+            'listener of a read', () async {
+          expect(await app.run('$_notes$_tokenLife'), _tokenLifeIn(mode));
+        });
       });
     }
 
@@ -3093,6 +3515,150 @@ void main() {
       setUpAll(() async => app = await _app());
 
       tearDownAll(() => app.delete());
+
+      test(
+          'refreshes a token that a server refused once for all the calls at '
+          'the same time, asks for nothing while it has another token, and '
+          'keeps the refreshes of two users apart', () async {
+        const account = 'account user-1 $_email';
+        expect(await app.run('$_notes$_tokenRefresh'), {
+          'nobody signed in': {
+            'tokens': [null],
+            'calls': ['userToken'],
+          },
+          'a token that the session has replaced already': {
+            'tokens': ['token-user-1-1'],
+            'calls': ['userToken'],
+          },
+          // Each call reads first, and one goes on to the refresh.
+          'the calls while the refresh is on its way': [
+            for (var i = 0; i < 8; i++) 'userToken',
+            'refreshToken',
+          ],
+          'calls at the same time': {
+            'tokens': [for (var i = 0; i < 8; i++) 'token-user-1-2'],
+            'calls': <Object?>[],
+          },
+          'a call that comes later with the same token': {
+            'tokens': ['token-user-1-2'],
+            'calls': ['userToken'],
+          },
+          'the next refresh': {
+            'tokens': ['token-user-1-3'],
+            'calls': ['userToken', 'refreshToken'],
+          },
+          'a refresh that fails': {
+            'failures': [
+              for (var i = 0; i < 2; i++)
+                'network, hint null, thrown in fake_auth.dart',
+            ],
+            'calls': ['userToken', 'userToken', 'refreshToken'],
+            'state': account,
+          },
+          'the call after it': {
+            'tokens': ['token-user-1-4'],
+            'calls': ['userToken', 'refreshToken'],
+          },
+          'a refresh for each user': {
+            'tokens': ['token-user-1-5', 'token-user-2-2'],
+            'calls': ['userToken', 'refreshToken'],
+          },
+        });
+      });
+
+      test(
+          'fails to give a token only with an AuthFailure, and takes a user '
+          'whose session has ended as signed out', () async {
+        const account = 'account user-1 $_email';
+        expect(await app.run('$_notes$_tokenFailures'), {
+          'the network': {
+            'failure': 'network, hint null, thrown in fake_auth.dart',
+            'state': account,
+            'heard': <Object?>[],
+            'calls': ['userToken'],
+          },
+          'an error of another kind': {
+            'failure': 'unknown, hint Bad state: The plugin broke in., thrown '
+                'in fake_auth.dart',
+            'state': account,
+            'heard': <Object?>[],
+            'calls': ['userToken'],
+          },
+          'a session that has ended': {
+            'failure':
+                'recentSignInRequired, hint null, thrown in fake_auth.dart',
+            'state': 'signed out',
+            'heard': ['signed out'],
+            'calls': ['userToken', 'refreshToken'],
+          },
+        });
+      });
+
+      test(
+          'in the mode anonymous follows a read that found the session ended '
+          'with an anonymous sign-in, but not next to a sign-in', () async {
+        expect(await app.run('$_notes$_tokenFailuresAnonymous'), {
+          'alone': {
+            'failure':
+                'recentSignInRequired, hint null, thrown in fake_auth.dart',
+            'state right after it': 'signed out',
+          },
+          'alone, a moment later': {
+            'state': 'anonymous user-2',
+            'calls': ['userToken', 'signInAnonymously'],
+          },
+          'next to a sign-in': {
+            'failure':
+                'recentSignInRequired, hint null, thrown in fake_auth.dart',
+            'calls': ['signIn $_email', 'userToken'],
+          },
+          'once the sign-in is over': {
+            'state': 'account ann $_email',
+            'calls': <Object?>[],
+          },
+        });
+      });
+
+      test(
+          'waits for the first start and for an anonymous sign-in, at most '
+          'the wait of the session, and for no other call', () async {
+        const three = '0:00:03.000000';
+        expect(await app.run('$_notes$_tokenWaits'), {
+          'a read before the first start': {
+            'the waits': [three],
+            'the calls before the start': <Object?>[],
+            'the token': 'token-ann-1',
+            'the calls after it': ['userToken'],
+            'the timers left': 0,
+          },
+          // With no service after the wait, there is no token to give.
+          'no start in time': {
+            'answered before the wait is over': false,
+            'answered': true,
+            'the token': null,
+            'the calls': <Object?>[],
+          },
+          'the start that comes later': 'token-ann-1',
+          'a read in another zone': 'the start completed',
+          'the call after that read is done': true,
+          'a read during an anonymous sign-in': {
+            'the answer while it is on its way': 'none yet',
+            // One of the start and one of the read.
+            'the timers then': 2,
+            'the answer': 'token-user-1-1',
+            'the timers left': 0,
+          },
+          'an anonymous sign-in that takes too long': {
+            'answered': true,
+            'the token': null,
+          },
+          'once it came': 'token-user-2-1',
+          'next to a call on its way': {
+            'the token': 'token-ann-1',
+            'the calls': ['userToken'],
+          },
+        });
+      });
 
       test(
           'fails only with an AuthFailure: one of the provider as it is, '
@@ -3594,6 +4160,8 @@ void main() {
             'createAuthService',
             'AppSessionController.signInWith',
             'AppSessionController.deleteAccount',
+            'AppSessionController.userToken',
+            'AppSessionController.userTokenAfter',
             'AccountSession.issuers',
           ],
           AuthRole.serviceFile: [
@@ -3602,6 +4170,7 @@ void main() {
             'AuthFailure.reason',
             'AuthFailure.developerHint',
             'AuthFailureReason',
+            'AuthFailureReason.network',
             'AuthFailureReason.recentSignInRequired',
             'SignInCredential',
             'IdTokenCredential',
@@ -3725,6 +4294,8 @@ void main() {
             'AppSessionController.value',
             'AppSessionController.allowsApp',
             'AppSessionController.hasAccount',
+            'AppSessionController.userToken',
+            'AppSessionController.userTokenAfter',
             'AppSession.uid',
           ],
           AuthRole.guestDataFile: ['takeGuestData'],

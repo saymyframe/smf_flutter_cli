@@ -158,6 +158,12 @@ final class MemoryAuthService implements AuthService {
     _set(null);
   }
 
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    await _answer();
+    return _user == null ? null : 'token-of-${_user!.uid}';
+  }
+
   /// It takes no credential of an identity provider.
   @override
   Future<void> signInWith(SignInCredential credential) async =>
