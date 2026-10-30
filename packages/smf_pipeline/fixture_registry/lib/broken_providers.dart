@@ -1440,6 +1440,54 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.authTokenNotRefreshed,
+        role: authRole,
+        bug: 'Its forced read of the token gives the token that the user has, '
+            'so a server that refused the token refuses the next one too.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'the user of an account has a token, which a forced refresh '
+            'replaces',
+            _newToken,
+          ),
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'an anonymous user has a token, and keeps the id with a refresh '
+            'and with an account',
+            _newToken,
+          ),
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'the session refreshes a token that a server refused once, for '
+            'all the reads at the same time and for those that come later',
+            _newToken,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.authTokenKeptAfterSignOut,
+        role: authRole,
+        bug: 'It gives the last token that it gave with nobody signed in, so '
+            'the requests of the next person on the device go to a server as '
+            'the user who left.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'the service gives no token while nobody is signed in',
+            _noToken,
+          ),
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'the session gives the token of its user, as the mode of the app '
+            'says',
+            _noTokenAfterSignOut,
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.notificationsForgettingSchedules,
         role: notificationsRole,
         bug: 'Its function forgets the notifications that are scheduled each '
@@ -1830,6 +1878,25 @@ const _probeTest = 'the probe of the role finds no problem';
 const _eachLanguageSupported =
     'For each language of the app, the root has a delegate of each kind of '
     'localizations that supports it.';
+
+/// The file of the tests of the token of the auth role, and the reasons of
+/// its expectations that the fixture sign-in with a known bug of the token
+/// fails.
+const _userTokenTests = 'test/auth_role/user_token_test.dart';
+
+/// The reason of the tests of a forced refresh of the token.
+const _newToken = 'A read with forceRefresh asks the server of the provider '
+    'for a new token: it differs from the one before, the user stays, and the '
+    'reads after it give the new one.';
+
+/// The reason of the test of the service with nobody signed in.
+const _noToken = 'With nobody signed in, the service has no token to give: a '
+    'read answers null, also a read that forces a refresh, and no earlier '
+    'token stays behind for it.';
+
+/// The reason of the test of the session after a sign-out.
+const _noTokenAfterSignOut = 'After a sign-out the session has no token, and '
+    'in the mode anonymous the token of the new anonymous user.';
 
 /// The file of the tests of the next start of the auth role, and the
 /// reason of the expectation of each of them that a start of the app has
