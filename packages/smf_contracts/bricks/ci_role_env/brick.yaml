@@ -1,0 +1,10 @@
+name: ci_role_env
+description: "The script of the CI role of SMF that writes .env for a build, from .env.example and the variables of the process."
+
+# The template of a role in the module model. Its files are relative to the
+# root of the generated app. The template contributes this brick in an app
+# with the env role.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1
