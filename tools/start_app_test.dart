@@ -618,10 +618,11 @@ esac''');
       );
 
       expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
-      expect(File('${temp.path}/builds').readAsLinesSync(), [
-        'build apk --release --target-platform android-x64 -t $check '
-            '--dart-define-from-file=.env ${flavor.join(' ')}',
-      ]);
+      const build = 'build apk --release --target-platform android-x64';
+      expect(
+        File('${temp.path}/builds').readAsLinesSync().single,
+        '$build -t $check --dart-define-from-file=.env ${flavor.join(' ')}',
+      );
       expect(
         File('${temp.path}/installed').readAsStringSync(),
         'build/app/outputs/flutter-apk/app-prod-release.apk\n',
