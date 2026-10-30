@@ -175,6 +175,10 @@ Future<({int status, String body})> _ask(String apiKey) async {
   }
 }
 
+/// The options of the default flavor of [app], which flutterfire configured.
+String _options(String app) =>
+    '$app/lib/firebase_options_${AppEntryRole.defaultFlavor.name}.dart';
+
 void main() {
   final environment = Platform.environment;
   final app = environment['SMF_CONFIGURED_APP'];
@@ -188,7 +192,7 @@ void main() {
     'script of the app enables with the command of its README in the run '
     'that may write to the project',
     () async {
-      final options = File('$app/lib/firebase_options.dart').readAsStringSync();
+      final options = File(_options(app!)).readAsStringSync();
       expect(
         options,
         contains("projectId: '$project'"),
@@ -422,7 +426,7 @@ void main() {
       expect(
         keys,
         isNotEmpty,
-        reason: 'lib/firebase_options.dart of the app has no API key.',
+        reason: '${_options(app)} of the app has no API key.',
       );
       final answer = await _signInWithoutAccount(keys.first);
       if (emailPasswordProblem(

@@ -552,7 +552,7 @@ void main() {
       expect(_startUpOf(result), [
         equals(
           'firebase_core: await Firebase.initializeApp(options: '
-          'DefaultFirebaseOptions.currentPlatform);',
+          'firebaseOptionsOfFlavor);',
         ),
         'role:preferences: await initPreferences();',
         'role:notifications: await initNotifications();',

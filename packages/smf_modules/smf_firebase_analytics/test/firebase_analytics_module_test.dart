@@ -109,8 +109,7 @@ String _withoutScreenReporting(String path, String text) {
 
 /// The statement of firebase_core that initializes Firebase in
 /// `bootstrap()`.
-const _initializeFirebase = 'await Firebase.initializeApp(options: '
-    'DefaultFirebaseOptions.currentPlatform);';
+const _initializeFirebase = 'await Firebase.initializeApp(options: firebaseOptionsOfFlavor);';
 
 /// The text of the file of [_OtherAnalyticsModule]: a service that records
 /// nothing.

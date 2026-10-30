@@ -584,7 +584,7 @@ void main() {
               : [
                   '-qec',
                   command.map((word) => "'$word'").join(' '),
-                  '/dev/null'
+                  '/dev/null',
                 ],
           workingDirectory: app.path,
           environment: environmentOf(app, environment),
