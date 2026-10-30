@@ -2091,7 +2091,8 @@ abstract interface class AuthService {
   /// It comes from the device when it can, and the service refreshes one that
   /// is about to expire on its own, so most reads make no request. With
   /// [forceRefresh] it asks the server of the provider for a new token, which
-  /// differs from the one before and which the reads after it give.
+  /// differs from the one before and which the reads after it give. A token
+  /// that the server issued in the same second may come back the same.
   ///
   /// A read changes no user, and leaves whoever is signed in, but in the case
   /// below. [userChanges] may tell of the same user again after it, as after
