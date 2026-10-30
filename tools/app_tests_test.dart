@@ -470,7 +470,8 @@ List<String> usesProblemsOf(
 /// the matrix tools, [listed] by the path of each tool, give values of
 /// (`MatrixAppTest.envValues`), among the [packages] of the workspace at
 /// [root]: one line for each key of a module that a test does not know
-/// (knownModules), and one for each key that no module of the apps gives.
+/// (knownModules), for each key of a role that a test does not name in its
+/// `MatrixAppTest.roles`, and for each key that nothing in the apps gives.
 List<String> envKeyProblemsOf(
   String root,
   List<WorkspacePackage> packages,
@@ -489,11 +490,20 @@ List<String> envKeyProblemsOf(
       ];
       for (final given in test.envKeys) {
         final apps = given.apps.join(', ');
-        if (given.module == null) {
+        if (given.role case final role?) {
+          if (!test.roles.contains(role)) {
+            problems.add(
+              '$tool gives the apps of $directory a value of ${given.key}, a '
+              'key of the template of the role $role, in these apps of the '
+              'matrix: $apps. A test gives values for the keys of a role only '
+              'when it names the role in MatrixAppTest.roles.',
+            );
+          }
+        } else if (given.module == null) {
           problems.add(
             '$tool gives the apps of $directory a value of ${given.key}, but '
-            'no module of these apps of the matrix gives them that key: '
-            '$apps.',
+            'neither a module nor the template of a role of these apps of the '
+            'matrix gives them that key: $apps.',
           );
         } else if (!test.modules.contains(given.module) &&
             !known.contains(given.package)) {
@@ -1007,7 +1017,8 @@ void main() {
 
   test(
       'finds the keys that an app test gives values of which belong to a '
-      'module that the test does not know, or to no module of the apps', () {
+      'module that the test does not know, to a role that it does not name, '
+      'or to nothing in the apps', () {
     final temp = Directory.systemTemp.createTempSync('smf_app_test_keys_');
     addTearDown(() => temp.deleteSync(recursive: true));
     final root = temp.path;
@@ -1016,6 +1027,8 @@ void main() {
       'paywall/app_tests/paywall',
       'cli/app_tests/start',
       'registry/app_tests/env',
+      'cli/app_tests/board_role',
+      'shop/app_tests/other_role',
     ]) {
       Directory('$root/$path').createSync(recursive: true);
     }
@@ -1051,6 +1064,13 @@ void main() {
           package: module,
           apps: const ['every module'],
         );
+    GivenEnvKey ofRole(String key, String role) => GivenEnvKey(
+          key,
+          module: null,
+          package: null,
+          role: role,
+          apps: const ['every module'],
+        );
     final listed = {
       'tool/matrix.dart': [
         // Its own key, and a key of a module that it depends on.
@@ -1080,6 +1100,19 @@ void main() {
           '$root/registry/app_tests/env',
           envKeys: [key('FIXTURE_KEY', 'fixture'), key('SHOP_KEY', 'shop')],
         ),
+        // A key of a role, from a test of that role, whichever package keeps
+        // it, and from a test that names another role or none.
+        ListedAppTest(
+          '$root/cli/app_tests/board_role',
+          roles: ['board'],
+          envKeys: [ofRole('BOARD_KEY', 'board')],
+        ),
+        ListedAppTest(
+          '$root/shop/app_tests/other_role',
+          modules: ['shop'],
+          roles: ['other'],
+          envKeys: [ofRole('BOARD_KEY', 'board')],
+        ),
       ],
     };
 
@@ -1093,8 +1126,8 @@ void main() {
       ),
       equals(
         'tool/matrix.dart gives the apps of paywall/app_tests/paywall a value '
-        'of PAYWALL_TYPO, but no module of these apps of the matrix gives '
-        'them that key: every module.',
+        'of PAYWALL_TYPO, but neither a module nor the template of a role of '
+        'these apps of the matrix gives them that key: every module.',
       ),
       equals(
         'tool/matrix.dart gives the apps of cli/app_tests/start a value of '
@@ -1110,7 +1143,24 @@ void main() {
         'the keys of the modules that its package keeps; the tests of '
         'registry know the modules of fixture.',
       ),
+      equals(
+        'tool/matrix.dart gives the apps of shop/app_tests/other_role a value '
+        'of BOARD_KEY, a key of the template of the role board, in these apps '
+        'of the matrix: every module. A test gives values for the keys of a '
+        'role only when it names the role in MatrixAppTest.roles.',
+      ),
     ]);
+    // The report of a tool gives the role of a key as JSON.
+    expect(
+      GivenEnvKey.fromJson(const {
+        'key': 'BOARD_KEY',
+        'module': null,
+        'package': null,
+        'role': 'board',
+        'apps': ['every module'],
+      }).role,
+      'board',
+    );
   });
 
   test(
@@ -1209,7 +1259,7 @@ void main() {
 
   test(
     'the app tests of every matrix tool give values only for the keys of the '
-    'modules that they know',
+    'modules that they know and of the roles that they name',
     () async {
       final root = repositoryRoot();
 
