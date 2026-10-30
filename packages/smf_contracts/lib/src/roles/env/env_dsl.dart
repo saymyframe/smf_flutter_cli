@@ -21,9 +21,9 @@ const Set<String> _objectMembers = {
   'toString',
 };
 
-/// What the [EnvRole] takes from the app: an [EnvKey] from a module whose
-/// code reads a value, and [EnvToolArguments] from the provider of the
-/// role.
+/// What the [EnvRole] takes from the app: an [EnvKey] from a module or the
+/// template of a role whose code reads a value, and [EnvToolArguments] from
+/// the provider of the role.
 @immutable
 sealed class EnvData {
   const EnvData();
@@ -54,11 +54,11 @@ final class EnvKey extends EnvData {
   /// The name of the key, in UPPER_SNAKE_CASE of two words or more, such as
   /// `REVENUECAT_APPLE_KEY`.
   ///
-  /// It starts with the id of its module in upper case and an underscore,
-  /// such as `REVENUECAT_` for the module `revenuecat`. So the keys of two
-  /// modules differ, and a developer sees in [EnvRole.dotEnvFile] whose
-  /// each is. It does not
-  /// start with `FLUTTER_`, under which Flutter gives the app values of its
+  /// It starts with the id of its owner in upper case and an underscore,
+  /// such as `REVENUECAT_` for the module `revenuecat`, or the id of the role
+  /// for a key of its template. So the keys of two owners differ, and a
+  /// developer sees in [EnvRole.dotEnvFile] whose each is. It does not start
+  /// with `FLUTTER_`, under which Flutter gives the app values of its
   /// own, such as `FLUTTER_VERSION`.
   final String name;
 
@@ -174,9 +174,8 @@ final class EnvToolArguments extends EnvData {
 final class AppEnvKey {
   const AppEnvKey._(this.owner, this.key);
 
-  /// Who gave the app the key: a module, also for a key of its variant. A
-  /// key of the template of a role, which the role refuses, has that
-  /// template.
+  /// Who gave the app the key: a module, also for a key of its variant, or
+  /// the template of a role.
   final ContributionOrigin owner;
 
   /// The key.
@@ -210,9 +209,10 @@ String _named(ContributionOrigin owner) => switch (owner) {
       PipelineOrigin() => 'the $owner',
     };
 
-/// The problems of [keys], the keys of the module whose id is [owner]:
-/// those of each key on its own, a name that does not start with the id of
-/// the module, two keys of one name, and two keys with one getter.
+/// The problems of [keys], the keys of the module or of the template of the
+/// role whose id is [owner]: those of each key on its own, a name that does
+/// not start with that id, two keys of one name, and two keys with one
+/// getter.
 List<String> _keyProblems(List<EnvKey> keys, String owner) {
   final prefix = '${owner.toUpperCase()}_';
   final problems = <String>[];

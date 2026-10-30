@@ -16,6 +16,9 @@ import 'support.dart';
 /// role that uses the env role could.
 final _boardRole = TestRole<NoDsl>('board', uses: {envRole});
 
+/// One more role that requires the env role, with no key of its own.
+final _otherUser = TestRole<NoDsl>('other_user', requires: {envRole});
+
 /// A role that neither requires nor uses the env role.
 final _otherRole = TestRole<NoDsl>('other');
 
@@ -324,6 +327,28 @@ void main() {
       expect(keys.first.description, _shopApple.description);
       expect(keys.first.getter, 'shopAppleKey');
       expect('${keys.first}', 'key SHOP_APPLE_KEY of the module shop');
+    });
+
+    test(
+        'are those of the modules and then those of the templates of roles, '
+        'each with its template as its owner', () {
+      final keys = envRole.keysIn(
+        inputOf(
+          envRole,
+          data: [..._appKeys, _ofTemplate(_boardRole, _boardToken)],
+        ),
+      );
+
+      expect(
+        [for (final key in keys) key.name],
+        ['SHOP_APPLE_KEY', 'SHOP_GOOGLE_KEY', 'FEED_URL', 'BOARD_TOKEN'],
+      );
+      expect(keys.last.owner, RoleTemplateOrigin(_boardRole));
+      expect(keys.last.getter, 'boardToken');
+      expect(
+        '${keys.last}',
+        'key BOARD_TOKEN of the template of the board role',
+      );
     });
 
     test('are what a role that uses the env role reads too', () {
@@ -762,7 +787,7 @@ final described = describe(${vars['env_feed_url']!.absent});
           StructuralRuleRequest(
             hook: RoleHookRequest(
               data: [..._appKeys, ...more],
-              presentRoles: {envRole, _boardRole},
+              presentRoles: {envRole, _boardRole, _otherUser},
               context: testContext,
             ),
             files: {
@@ -860,28 +885,20 @@ final described = describe(${vars['env_feed_url']!.absent});
       expect(issues.last.hint, contains('without arguments'));
     });
 
-    test(
-        'reports what the template of a role, its own too, and the pipeline '
-        'read, since only the code of a module reads values', () {
-      // Not even a key that the template gave, which validation refuses.
+    test('lets the template of a role read its own keys', () {
       expect(
-        _messages(
-          check(
-            RoleTemplateOrigin(_boardRole),
-            accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
-            more: [_ofTemplate(_boardRole, _boardToken)],
-          ),
+        check(
+          RoleTemplateOrigin(_boardRole),
+          accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
+          more: [_ofTemplate(_boardRole, _boardToken)],
         ),
-        [
-          equals(
-            'role:board: lib/file.dart reads AppEnv.boardToken, the key '
-            'BOARD_TOKEN of the template of the board role, but only the code '
-            'of a module reads the values of the app, not that of the '
-            'template of the board role.',
-          ),
-        ],
+        isEmpty,
       );
+    });
 
+    test(
+        'reports what the template of a role reads of another owner, and what '
+        'the pipeline reads, since it has no key', () {
       const read = [IndexedMemberAccess('AppEnv', 'shopAppleKey')];
 
       for (final (owner, named) in [
@@ -896,13 +913,37 @@ final described = describe(${vars['env_feed_url']!.absent});
         expect(
           issue.message,
           'lib/file.dart reads AppEnv.shopAppleKey, the key SHOP_APPLE_KEY of '
-          'the module shop, but only the code of a module reads the values of '
-          'the app, not that of $named.',
+          'the module shop, but $named may only read its own keys.',
           reason: '$owner',
         );
         expect(issue.origin, owner);
-        expect(issue.hint, contains('module'));
+        expect(issue.hint, 'Give the role a key of your own.');
       }
+
+      // A key of the template of another role.
+      expect(
+        check(
+          RoleTemplateOrigin(_otherUser),
+          accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
+          more: [_ofTemplate(_boardRole, _boardToken)],
+        ).single.message,
+        'lib/file.dart reads AppEnv.boardToken, the key BOARD_TOKEN of the '
+        'template of the board role, but the template of the other_user role '
+        'may only read its own keys.',
+      );
+    });
+
+    test('reports a module that reads a key of the template of a role', () {
+      expect(
+        check(
+          ofShop,
+          accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
+          more: [_ofTemplate(_boardRole, _boardToken)],
+        ).single.message,
+        'lib/file.dart reads AppEnv.boardToken, the key BOARD_TOKEN of the '
+        'template of the board role, but the module shop may only read its '
+        'own keys and those of the modules it depends on.',
+      );
     });
 
     test(
@@ -1059,6 +1100,40 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
 - In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
 - In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
 ''');
+    });
+
+    test(
+        'names the role of a key of the template of a role, in the files and '
+        'in the README, after the keys of the modules', () async {
+      final data = [..._appKeys, _ofTemplate(_boardRole, _boardToken)];
+      final rendered = await renderTemplate(envRole, data: data);
+
+      for (final file in [EnvRole.dotEnvFile, EnvRole.exampleFile]) {
+        expect(
+          rendered.files[file],
+          endsWith(
+            '# The address of the feed\n'
+            'FEED_URL=\n'
+            '\n'
+            '# The public token of the board\n'
+            'BOARD_TOKEN=\n',
+          ),
+          reason: file,
+        );
+      }
+      expect(
+        envRole.template
+            .render(inputOf(envRole, data: data))
+            .fragments
+            .single
+            .entryValue,
+        contains(
+          '- `FEED_URL`, read as `AppEnv.feedUrl`, from the module `feed`: The '
+          'address of the feed\n'
+          '- `BOARD_TOKEN`, read as `AppEnv.boardToken`, from the board role: '
+          'The public token of the board\n',
+        ),
+      );
     });
 
     test('says in the README of an app without keys that it has none', () {
@@ -1337,30 +1412,142 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
       });
 
       test(
-          'a key from the template of a role, which only modules give, and '
-          'not the keys of the modules, which their rule checks', () {
+          'a key from the template of a role like a key of a module, and not '
+          'the keys of the modules, which their rule checks', () {
+        // A key that starts with the id of the role is what a module's is.
+        expect(
+          validate([
+            dataOf<EnvData>(
+              envRole,
+              const EnvKey('feed_url', description: ''),
+              module: 'feed',
+            ),
+            _ofTemplate(_boardRole, _boardToken),
+          ]),
+          isEmpty,
+        );
+
+        expect(
+          validate([
+            _ofTemplate(
+              _boardRole,
+              const EnvKey('SHOP_KEY', description: 'Of the board'),
+            ),
+            _ofTemplate(
+              _boardRole,
+              const EnvKey('BOARD_TEXT', description: 'First\nsecond'),
+            ),
+            _ofTemplate(
+              _otherUser,
+              const EnvKey('board_token', description: 'x'),
+            ),
+          ]),
+          [
+            equals(
+              'role:board: The key "SHOP_KEY" does not start with BOARD_, the '
+              'id of its owner in upper case and an underscore.',
+            ),
+            equals(
+              'role:board: The key "BOARD_TEXT" has a description that is not '
+              'one line of text without spaces around it.',
+            ),
+            equals(
+              'role:other_user: The key "board_token" needs a name in '
+              'UPPER_SNAKE_CASE of two words or more that starts with a '
+              'letter, such as REVENUECAT_APPLE_KEY.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'two keys of one template with one name or one getter, which the '
+          'rule of a module would report of a module', () {
+        expect(
+          validate([
+            _ofTemplate(_boardRole, _boardToken),
+            _ofTemplate(_boardRole, _boardToken),
+            _ofTemplate(
+              _boardRole,
+              const EnvKey('BOARD1_KEY', description: 'x'),
+            ),
+            _ofTemplate(
+              _boardRole,
+              const EnvKey('BOARD_1_KEY', description: 'x'),
+            ),
+          ]),
+          [
+            equals('role:board: Two keys are named "BOARD_TOKEN".'),
+            equals(
+              'role:board: The key "BOARD1_KEY" does not start with BOARD_, '
+              'the id of its owner in upper case and an underscore.',
+            ),
+            equals(
+              'role:board: The keys "BOARD1_KEY" and "BOARD_1_KEY" would both '
+              'be read as AppEnv.board1Key.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'a module with a key of the template of a role, which it answers '
+          'for: lenient mode can leave a module out, and no template', () {
         final issues = envRole.template.validate(
           inputOf(
             envRole,
             data: [
               dataOf<EnvData>(
                 envRole,
-                const EnvKey('feed_url', description: ''),
-                module: 'feed',
+                const EnvKey('BOARD_TOKEN', description: 'y'),
+                module: 'board',
+              ),
+              dataOf<EnvData>(
+                envRole,
+                const EnvKey('BOARD1_KEY', description: 'y'),
+                module: 'board1',
               ),
               _ofTemplate(_boardRole, _boardToken),
+              _ofTemplate(
+                _boardRole,
+                const EnvKey('BOARD_1_KEY', description: 'x'),
+              ),
             ],
           ),
         );
 
         expect(_messages(issues), [
           equals(
-            'role:board: The template of the board role gives the env role '
-            'the key BOARD_TOKEN, but only modules give the role '
-            'keys.',
+            'board: Both the module board and the template of the board role '
+            'give the env role the key BOARD_TOKEN.',
+          ),
+          equals(
+            'board1: The key BOARD1_KEY of the module board1 and the key '
+            'BOARD_1_KEY of the template of the board role would both be read '
+            'as AppEnv.board1Key.',
           ),
         ]);
-        expect(issues.single.hint, contains('module'));
+      });
+
+      test('the templates of two roles that give one key', () {
+        final second = TestRole<NoDsl>('board_x', requires: {envRole});
+        const key = EnvKey('BOARD_X_KEY', description: 'x');
+
+        final issue = envRole.template
+            .validate(
+              inputOf(
+                envRole,
+                data: [_ofTemplate(_boardRole, key), _ofTemplate(second, key)],
+              ),
+            )
+            .single;
+
+        expect(
+          issue.message,
+          'Both the template of the board role and the template of the board_x '
+          'role give the env role the key BOARD_X_KEY.',
+        );
+        expect(issue.origin, RoleTemplateOrigin(_boardRole));
       });
 
       test('the tool arguments of a template, which only a provider gives', () {

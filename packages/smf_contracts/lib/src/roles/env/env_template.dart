@@ -48,10 +48,19 @@ String _readmeSection(List<AppEnvKey> keys) {
   return '$buffer';
 }
 
-/// How the README of the app names [owner], the module that gave the app a
-/// key: an app that the pipeline renders has no key of another owner.
-String _readmeOwnerOf(ContributionOrigin owner) =>
-    'the module `${(owner as ModuleOrigin).module}`';
+/// How the README of the app names [owner], who gave the app a key: only
+/// modules and the templates of roles give the role keys.
+String _readmeOwnerOf(ContributionOrigin owner) => switch (owner) {
+      ModuleOrigin(:final module) => 'the module `$module`',
+      _ => 'the ${(owner as RoleTemplateOrigin).role}',
+    };
+
+/// Who answers for [key], which clashes with [earlier], a key before it in
+/// the order of [EnvRole.keysIn]: its owner, unless that is the template of a
+/// role, whose error stops the run. Lenient mode can leave out a module, which
+/// comes before every template in that order.
+ContributionOrigin _atFault(AppEnvKey earlier, AppEnvKey key) =>
+    key.owner is RoleTemplateOrigin ? earlier.owner : key.owner;
 
 /// The lines of [keys] in [EnvRole.dotEnvFile] and [EnvRole.exampleFile],
 /// after the comment at the top of each: for each key, after an empty line,
@@ -78,42 +87,43 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
         ),
       ];
 
-  /// Checks what the module rule `env.keys` cannot see from one module:
-  /// keys and tool arguments from the templates of roles, which only modules
-  /// and the provider give, and the keys of two modules with one name or one
-  /// getter.
+  /// Checks what the module rule `env.keys` cannot see from one module: the
+  /// keys of the templates of roles, which that rule does not read, tool
+  /// arguments from such a template, which only a provider gives, and the
+  /// keys of two owners with one name or one getter.
   @override
   List<SmfIssue> validate(RoleHookInput<EnvData> input) {
     final issues = <SmfIssue>[];
+    final ofTemplates = <RoleTemplateOrigin, List<EnvKey>>{};
     for (final data in input.data) {
       // Every data that a hook gets has an origin.
       if (data.origin case final RoleTemplateOrigin template) {
-        issues.add(
-          switch (data.value) {
-            EnvKey(:final name) => SmfIssue(
-                'The template of the ${template.role} gives the $envRole the '
-                'key $name, but only modules give the role keys.',
-                hint: 'Give the key from the module whose code reads the '
-                    'value.',
-                origin: template,
-              ),
-            EnvToolArguments() => SmfIssue(
+        switch (data.value) {
+          case final EnvKey key:
+            (ofTemplates[template] ??= []).add(key);
+          case EnvToolArguments():
+            issues.add(
+              SmfIssue(
                 'The template of the ${template.role} gives the $envRole tool '
                 'arguments, which only a provider of the role gives.',
                 origin: template,
               ),
-          },
-        );
+            );
+        }
+      }
+    }
+    for (final MapEntry(key: template, value: keys) in ofTemplates.entries) {
+      for (final problem in _keyProblems(keys, template.role.id)) {
+        issues.add(SmfIssue(problem, origin: template));
       }
     }
 
-    // A key starts with the id of its module, but the id of one module can
+    // A key starts with the id of its owner, but the id of one owner can
     // start another, as `shop` starts `shop_cart`, and keys whose words are
     // cut differently can have one getter.
     final byName = <String, AppEnvKey>{};
     final byGetter = <String, AppEnvKey>{};
     for (final key in envRole.keysIn(input)) {
-      if (key.owner is RoleTemplateOrigin) continue;
       final named = byName.putIfAbsent(key.name, () => key);
       final other = byGetter.putIfAbsent(key.getter, () => key);
       if (named.owner != key.owner) {
@@ -122,7 +132,7 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
             'Both ${_named(named.owner)} and ${_named(key.owner)} give the '
             '$envRole the key ${key.name}.',
             hint: 'Rename one of the keys.',
-            origin: key.owner,
+            origin: _atFault(named, key),
           ),
         );
       } else if (other.owner != key.owner) {
@@ -131,7 +141,7 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
             'The $other and the $key would both be read as '
             '$_appEnv.${key.getter}.',
             hint: 'Rename one of the keys.',
-            origin: key.owner,
+            origin: _atFault(other, key),
           ),
         );
       }
