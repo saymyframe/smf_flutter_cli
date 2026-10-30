@@ -307,6 +307,7 @@ void main() {
           'app_entry.native_keys',
           'app_entry.ios_entitlements_signed',
           'app_entry.ios_app_id_step',
+          'app_entry.flavors',
           'app_entry.agent_guide_paths',
           'app_entry.readme_generated_with',
         ],
@@ -319,6 +320,7 @@ void main() {
           'app_entry.launch_code_place',
           'app_entry.manifest_tag_places',
           'app_entry.tag_lines',
+          'app_entry.ios_deployment_target_tag',
         ],
       );
     });
@@ -2813,14 +2815,14 @@ See `lib/missing.dart`.
   });
 
   group('AppEntryRole native checks', () {
-    /// The structural problems of an app with [texts], whose steps by hand
-    /// are [steps]: by default the step that the entitlement of
-    /// [_entitlements] needs, as in the app of a module that adds it.
-    List<SmfIssue> checkTexts(
-      Map<String, String> texts, {
-      List<ManualStep> steps = const [AppEntryRole.iosAppIdStep],
-    }) =>
-        appEntryRole.checkStructure(
+    /// What the structural rules of [role] find in an app with [texts],
+    /// whose steps by hand are [steps].
+    List<SmfIssue> checkWith(
+      Role<NoDsl> role,
+      Map<String, String> texts,
+      List<ManualStep> steps,
+    ) =>
+        role.checkStructure(
           StructuralRuleRequest(
             hook: RoleHookRequest(
               data: const [],
@@ -2836,6 +2838,19 @@ See `lib/missing.dart`.
             },
           ),
         );
+
+    /// The structural problems of an app with [texts], whose steps by hand
+    /// are [steps]: by default the step that the entitlement of
+    /// [_entitlements] needs, as in the app of a module that adds it.
+    ///
+    /// The rule of the flavors has a group of its own: [texts] holds parts of
+    /// a native project, as short as the rule that a test looks at needs
+    /// them, and no flavor is among them.
+    List<SmfIssue> checkTexts(
+      Map<String, String> texts, {
+      List<ManualStep> steps = const [AppEntryRole.iosAppIdStep],
+    }) =>
+        checkWith(const _AppEntryWithoutFlavorRule(), texts, steps);
 
     List<String> messages(List<SmfIssue> issues) =>
         [for (final issue in issues) issue.message];
@@ -4057,6 +4072,801 @@ $components
       expect(issue.path, path);
     });
 
+    group('the rule of the flavors', () {
+      const pubspec = 'pubspec.yaml';
+      const gradle = AppEntryRole.gradleAppFile;
+      const project = AppEntryRole.xcodeProjectFile;
+      final dev = AppEntryRole.flavors.first;
+      final prod = AppEntryRole.flavors.last;
+
+      /// The messages of every structural rule over [texts].
+      List<String> check(Map<String, String> texts) => messages(
+            checkWith(appEntryRole, texts, const [AppEntryRole.iosAppIdStep]),
+          );
+
+      /// The messages over the flavored app, once [change] replaced the text
+      /// of the file at [path].
+      List<String> checkChanged(String path, String Function(String) change) {
+        final texts = _flavoredApp();
+        return check({...texts, path: change(texts[path]!)});
+      }
+
+      test('accepts an app with the flavors of the role', () {
+        expect(
+          _flavoredProject,
+          contains('name = "Debug-dev";'),
+          reason: 'A name with a hyphen is quoted in the project.',
+        );
+        expect(check(_flavoredApp()), isEmpty);
+      });
+
+      test('looks at no project that the app does not have', () {
+        expect(check(const {}), isEmpty);
+        expect(check({pubspec: 'name: my_app\n'}), isEmpty);
+      });
+
+      test('holds a provider with the project of one platform alone', () {
+        final texts = _flavoredApp();
+
+        expect(
+          check({pubspec: texts[pubspec]!, gradle: texts[gradle]!}),
+          isEmpty,
+        );
+        expect(
+          check({gradle: texts[gradle]!.replaceAll('.dev', '.other')}),
+          [
+            equals(_noDefaultFlavor),
+            contains('The flavor dev in $gradle builds the application id'),
+          ],
+        );
+        expect(
+          check({
+            project: texts[project]!,
+            AppEntryRole.iosEntitlementsFile: _entitlements,
+          }),
+          [
+            equals(_noDefaultFlavor),
+            for (final flavor in AppEntryRole.flavors)
+              equals(
+                '${flavor.xcodeSchemeFile} is missing: a build of the flavor '
+                '${flavor.name} selects the scheme of the flavor by its name.',
+              ),
+          ],
+        );
+      });
+
+      test('reports a pubspec without the default flavor', () {
+        final issues = checkWith(
+          appEntryRole,
+          {
+            ..._flavoredApp(),
+            pubspec: 'name: my_app\n\nflutter:\n  uses-material-design: true\n',
+          },
+          const [AppEntryRole.iosAppIdStep],
+        );
+
+        expect(messages(issues), [_noDefaultFlavor]);
+        expect(
+          issues.single.origin,
+          const ModuleOrigin(ModuleId('flutter_core')),
+        );
+        expect(issues.single.path, pubspec);
+        expect(issues.single.hint, contains('PubspecContribution.flutter'));
+      });
+
+      test('reads the default flavor from the flutter section alone', () {
+        String inPubspec(String text) => 'name: my_app\n$text';
+        for (final text in const [
+          // In another section, as a comment and in a key of the section.
+          'dependencies:\n  default-flavor: dev\n',
+          'flutter:\n  # default-flavor: dev\n  generate: true\n',
+          'flutter:\n  assets:\n    default-flavor: dev\n',
+          'flutter:\n  generate: true\ndefault-flavor: dev\n',
+          'default-flavor: dev\nflutter:\n  generate: true\n',
+          // A key of the section after a section that ended.
+          'flutter:\n  generate: true\nother:\n  default-flavor: dev\n',
+        ]) {
+          expect(
+            checkChanged(pubspec, (_) => inPubspec(text)),
+            [_noDefaultFlavor],
+            reason: text,
+          );
+        }
+        for (final text in const [
+          'flutter:\n  default-flavor: dev\n',
+          'flutter:\n  default-flavor: "dev"\n',
+          "flutter:\n  default-flavor: 'dev'\n",
+          'flutter:\n  default-flavor: dev # the plain build\n',
+          'flutter: # the section\n\n    # a comment\n    default-flavor: dev',
+          'flutter:\n  generate: true\n  default-flavor: dev\nother: 1\n',
+        ]) {
+          expect(
+            checkChanged(pubspec, (_) => inPubspec(text)),
+            isEmpty,
+            reason: text,
+          );
+        }
+      });
+
+      test('reports a default flavor that names no flavor of the role', () {
+        expect(
+          checkChanged(pubspec, (_) => 'flutter:\n  default-flavor: beta\n'),
+          [
+            equals(
+              'default-flavor in pubspec.yaml is "beta", which is no flavor of '
+              'the role: dev, staging, prod.',
+            ),
+          ],
+        );
+      });
+
+      test('leaves which flavor is the default to the test of a running app',
+          () {
+        // Only a run of the flutter tool shows what a plain command builds.
+        expect(
+          checkChanged(
+            pubspec,
+            (text) => text.replaceFirst('dev', prod.name),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('reports a flavor that Gradle lacks, and one that the role lacks',
+          () {
+        final block =
+            RegExp(r'create\("staging"\) \{.*?\n        \}\n', dotAll: true);
+
+        expect(
+          checkChanged(gradle, (text) => text.replaceFirst(block, '')),
+          ['$gradle has no flavor staging in productFlavors.'],
+        );
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceFirst('create("staging")', 'create("beta")'),
+          ),
+          [
+            '$gradle has no flavor staging in productFlavors.',
+            equals(
+              '$gradle has the flavor beta in productFlavors, which is no '
+              'flavor of the role: dev, staging, prod.',
+            ),
+          ],
+        );
+        // A block outside productFlavors is no flavor.
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceFirst(block, '').replaceFirst(
+                'android {',
+                'other {\n  create("staging") {}\n}'
+                    '\nandroid {'),
+          ),
+          ['$gradle has no flavor staging in productFlavors.'],
+        );
+      });
+
+      test('reports a Gradle file without product flavors', () {
+        expect(
+          check({..._flavoredApp(), gradle: _plainGradle}),
+          [
+            '$gradle has no flavorDimensions, which product flavors need.',
+            for (final flavor in AppEntryRole.flavors)
+              '$gradle has no flavor ${flavor.name} in productFlavors.',
+          ],
+        );
+      });
+
+      test('reads no flavor from a comment of Gradle', () {
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text
+                .replaceFirst(
+                  'flavorDimensions += "default"',
+                  '// flavorDimensions += "default"',
+                )
+                .replaceFirst(
+                  'applicationIdSuffix = ".dev"',
+                  '/* applicationIdSuffix = ".dev" */',
+                ),
+          ),
+          [
+            '$gradle has no flavorDimensions, which product flavors need.',
+            equals(
+              'The flavor dev in $gradle builds the application id '
+              'com.example.my_app, but the id of the flavor is '
+              'com.example.my_app.dev.',
+            ),
+          ],
+        );
+      });
+
+      test('reports a flavor without a dimension', () {
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceFirst(
+              '            dimension = "default"\n',
+              '',
+            ),
+          ),
+          ['The flavor dev in $gradle has no dimension.'],
+        );
+      });
+
+      test('reports each id of Android that is not that of the flavor', () {
+        String reported(String flavor, String id, String expected) =>
+            'The flavor $flavor in $gradle builds the application id $id, but '
+            'the id of the flavor is $expected.';
+
+        // A wrong suffix.
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceFirst(
+              'applicationIdSuffix = ".staging"',
+              'applicationIdSuffix = ".beta"',
+            ),
+          ),
+          [
+            reported(
+              'staging',
+              'com.example.my_app.beta',
+              'com.example.my_app.staging',
+            ),
+          ],
+        );
+        // No suffix on a flavor that has one.
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceFirst(
+              '            applicationIdSuffix = ".dev"\n',
+              '',
+            ),
+          ),
+          [reported('dev', 'com.example.my_app', 'com.example.my_app.dev')],
+        );
+        // A suffix on the flavor that has the id of the app.
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceFirst(
+              'create("prod") {',
+              'create("prod") {\n            applicationIdSuffix = ".prod"',
+            ),
+          ),
+          [reported('prod', 'com.example.my_app.prod', 'com.example.my_app')],
+        );
+        // Another id of the app, which each flavor adds its suffix to.
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceFirst(
+              'applicationId = "com.example.my_app"',
+              'applicationId = "com.other.app"',
+            ),
+          ),
+          [
+            reported('dev', 'com.other.app.dev', 'com.example.my_app.dev'),
+            reported(
+              'staging',
+              'com.other.app.staging',
+              'com.example.my_app.staging',
+            ),
+            reported('prod', 'com.other.app', 'com.example.my_app'),
+          ],
+        );
+        // An id of its own, without a suffix, is the id of the flavor too.
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceFirst(
+              'applicationIdSuffix = ".dev"',
+              'applicationId = "com.example.my_app.dev"',
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('leaves the form of the label of a flavor to its provider', () {
+        // A provider may have strings.xml for each flavor.
+        expect(
+          checkChanged(
+            gradle,
+            (text) => text.replaceAll(
+              RegExp(r' *manifestPlaceholders\[.*\n'),
+              '',
+            ),
+          ),
+          isEmpty,
+        );
+        expect(
+          checkChanged(
+            project,
+            (text) => text.replaceAll(RegExp(r'\t*APP_DISPLAY_NAME.*\n'), ''),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('reports a configuration that one list of the project lacks', () {
+        final id = _configurationId('C', 'Profile-staging');
+
+        expect(
+          checkChanged(
+            project,
+            (text) => text.replaceFirst(
+              RegExp('\t*$id /\\* Profile-staging \\*/,\n'),
+              '',
+            ),
+          ),
+          [
+            equals(
+              'The build configuration list ${_listId('C')} in $project lacks '
+              'Profile-staging.',
+            ),
+          ],
+        );
+      });
+
+      test('reads the name of a configuration from the object', () {
+        // The comment of the list and of the object say Debug-dev.
+        expect(
+          checkChanged(
+            project,
+            (text) => text.replaceFirst(
+              'name = "Debug-dev";',
+              'name = "Debug-other";',
+            ),
+          ),
+          [
+            equals(
+              'The build configuration list ${_listId('A')} in $project lacks '
+              'Debug-dev.',
+            ),
+          ],
+        );
+        // The first configuration in the file is that of the project. So that
+        // of the app target is the one after the last of the project.
+        final ofApp = _configurationId('B', 'Debug-dev');
+        expect(
+          checkChanged(
+            project,
+            (text) => text.replaceFirstMapped(
+              RegExp('$ofApp /\\*.*?name = "Debug-dev";', dotAll: true),
+              (match) =>
+                  match[0]!.replaceFirst('name = "Debug-dev"', 'name = Debug'),
+            ),
+          ),
+          [
+            equals(
+              'The build configuration list ${_listId('B')} in $project lacks '
+              'Debug-dev.',
+            ),
+            equals(
+              '$project has no build configuration Debug-dev of the app '
+              'target, with INFOPLIST_FILE = Runner/Info.plist.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'reports a configuration of the app target that has no id of its '
+          'flavor', () {
+        final other = prod.bundleIdIn(testContext.appIdentity);
+        final ofDev = dev.bundleIdIn(testContext.appIdentity);
+
+        expect(
+          checkChanged(
+            project,
+            (text) => text.replaceFirst(
+              'PRODUCT_BUNDLE_IDENTIFIER = $ofDev;',
+              'PRODUCT_BUNDLE_IDENTIFIER = $other;',
+            ),
+          ),
+          [
+            equals(
+              'The build configuration Debug-dev of the app target in $project '
+              'has the bundle id "$other", but the id of the flavor is '
+              '$ofDev.',
+            ),
+          ],
+        );
+        expect(
+          checkChanged(
+            project,
+            (text) => text.replaceFirst(
+              'PRODUCT_BUNDLE_IDENTIFIER = $ofDev;',
+              '',
+            ),
+          ),
+          [
+            equals(
+              'The build configuration Debug-dev of the app target in $project '
+              'has the bundle id "", but the id of the flavor is $ofDev.',
+            ),
+          ],
+        );
+        // In quotes it is the same id.
+        expect(
+          checkChanged(
+            project,
+            (text) => text.replaceFirst(
+              'PRODUCT_BUNDLE_IDENTIFIER = $ofDev;',
+              'PRODUCT_BUNDLE_IDENTIFIER = "$ofDev";',
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('reports a configuration of the app target without a base', () {
+        expect(
+          checkChanged(project, (text) {
+            final at = text.indexOf(
+              '${_configurationId('B', 'Release-staging')} /*',
+            );
+            return text.replaceRange(
+              at,
+              null,
+              text.substring(at).replaceFirst(
+                    RegExp(r'\t*baseConfigurationReference.*\n'),
+                    '',
+                  ),
+            );
+          }),
+          [
+            equals(
+              'The build configuration Release-staging of the app target in '
+              '$project has no baseConfigurationReference, so it reads no '
+              'ios/Flutter/Generated.xcconfig.',
+            ),
+          ],
+        );
+      });
+
+      test('reports flavors of a mode with different bases', () {
+        expect(
+          checkChanged(project, (text) {
+            final at =
+                text.indexOf('${_configurationId('B', 'Debug-prod')} /*');
+            return text.replaceRange(
+              at,
+              null,
+              text.substring(at).replaceFirst(
+                    'baseConfigurationReference = $_debugBase',
+                    'baseConfigurationReference = $_releaseBase',
+                  ),
+            );
+          }),
+          [
+            equals(
+              'The build configurations Debug-dev, Debug-staging, Debug-prod '
+              'of the app target in $project do not share one '
+              'baseConfigurationReference.',
+            ),
+          ],
+        );
+      });
+
+      test('reports a scheme that is missing', () {
+        final issues = checkWith(
+          appEntryRole,
+          _flavoredApp()..remove(dev.xcodeSchemeFile),
+          const [AppEntryRole.iosAppIdStep],
+        );
+
+        expect(messages(issues), [
+          equals(
+            '${dev.xcodeSchemeFile} is missing: a build of the flavor dev '
+            'selects the scheme of the flavor by its name.',
+          ),
+        ]);
+        expect(issues.single.path, dev.xcodeSchemeFile);
+        expect(
+          issues.single.origin,
+          const ModuleOrigin(ModuleId('flutter_core')),
+        );
+      });
+
+      test('reports each action of a scheme that takes another configuration',
+          () {
+        final file = dev.xcodeSchemeFile;
+        const actions = {
+          'TestAction': 'Debug-dev',
+          'LaunchAction': 'Debug-dev',
+          'AnalyzeAction': 'Debug-dev',
+          'ProfileAction': 'Profile-dev',
+          'ArchiveAction': 'Release-dev',
+        };
+        for (final MapEntry(key: action, value: configuration)
+            in actions.entries) {
+          // The configuration of another flavor, or of another mode.
+          expect(
+            checkChanged(
+              file,
+              (text) => text.replaceFirst(
+                RegExp('(?<=<$action\n *buildConfiguration = ")[^"]*'),
+                'Release-staging',
+              ),
+            ),
+            [
+              equals(
+                '$action of $file takes the build configuration '
+                '"Release-staging", but this flavor builds $configuration '
+                'there.',
+              ),
+            ],
+          );
+          // None at all.
+          expect(
+            checkChanged(
+              file,
+              (text) => text.replaceFirst(
+                RegExp('(?<=<$action)\n *buildConfiguration = "[^"]*"'),
+                '',
+              ),
+            ),
+            [
+              equals(
+                '$action of $file takes the build configuration "", but this '
+                'flavor builds $configuration there.',
+              ),
+            ],
+            reason: action,
+          );
+        }
+      });
+
+      test('reports a scheme without the action or with one in a comment', () {
+        final file = dev.xcodeSchemeFile;
+
+        expect(
+          checkChanged(
+            file,
+            (text) => text.replaceFirst(
+              RegExp('<ArchiveAction.*?</ArchiveAction>', dotAll: true),
+              '',
+            ),
+          ),
+          [
+            equals(
+              'ArchiveAction of $file takes the build configuration "", but '
+              'this flavor builds Release-dev there.',
+            ),
+          ],
+        );
+        expect(
+          checkChanged(
+            file,
+            (text) => text.replaceFirst(
+              RegExp('<ArchiveAction.*?</ArchiveAction>', dotAll: true),
+              (RegExp('<ArchiveAction.*?</ArchiveAction>', dotAll: true)
+                      .stringMatch(text)!)
+                  .replaceFirst('<ArchiveAction', '<!-- <ArchiveAction')
+                  .replaceFirst('</ArchiveAction>', '</ArchiveAction> -->'),
+            ),
+          ),
+          [
+            equals(
+              'ArchiveAction of $file takes the build configuration "", but '
+              'this flavor builds Release-dev there.',
+            ),
+          ],
+        );
+      });
+
+      test('reports a scheme without the pre-action of its build', () {
+        final file = dev.xcodeSchemeFile;
+        final reported =
+            'BuildAction of $file has no pre-action that runs xcode_backend.sh '
+            'prepare.';
+
+        // No pre-action at all.
+        expect(
+          checkChanged(
+            file,
+            (text) => text.replaceFirst(
+              RegExp('<PreActions>.*?</PreActions>', dotAll: true),
+              '',
+            ),
+          ),
+          [reported],
+        );
+        // The script of another step of the tool.
+        expect(
+          checkChanged(
+            file,
+            (text) => text.replaceFirst(' prepare', ' build'),
+          ),
+          [reported],
+        );
+        // After the build, where it comes too late.
+        expect(
+          checkChanged(
+            file,
+            (text) => text
+                .replaceFirst('<PreActions>', '<PostActions>')
+                .replaceFirst('</PreActions>', '</PostActions>'),
+          ),
+          [reported],
+        );
+        // Before another action than the build.
+        final preActions = RegExp('<PreActions>.*?</PreActions>', dotAll: true);
+        expect(
+          checkChanged(file, (text) {
+            final moved = preActions.stringMatch(text)!;
+            return text
+                .replaceFirst(preActions, '')
+                .replaceFirst('</TestAction>', '$moved</TestAction>');
+          }),
+          [reported],
+        );
+        // In a comment.
+        expect(
+          checkChanged(file, (text) {
+            final kept = preActions.stringMatch(text)!;
+            return text.replaceFirst(preActions, '<!-- $kept -->');
+          }),
+          [reported],
+        );
+      });
+
+      test('reads the attributes of a scheme in either quotes', () {
+        expect(
+          checkChanged(
+            dev.xcodeSchemeFile,
+            (text) => text.replaceAllMapped(
+              RegExp('buildConfiguration = "([^"]*)"'),
+              (match) => "buildConfiguration = '${match[1]}'",
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('the signing of the app holds for each of its configurations', () {
+        const signs = 'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;';
+        final names = [
+          for (final flavor in AppEntryRole.flavors)
+            ...flavor.xcodeConfigurations,
+        ];
+
+        expect(names, hasLength(9));
+        for (final name in names) {
+          final id = _configurationId('B', name);
+
+          expect(
+            checkChanged(project, (text) {
+              final at = text.indexOf('$id /*');
+              return text.replaceRange(
+                at,
+                null,
+                text.substring(at).replaceFirst(signs, ''),
+              );
+            }),
+            [
+              equals(
+                'The build configuration $name ($id) of the app target in '
+                '$project does not sign the app with '
+                '${AppEntryRole.iosEntitlementsFile}.',
+              ),
+            ],
+          );
+        }
+      });
+    });
+
+    group('the minimum iOS version in the templates of the Xcode project', () {
+      const path = AppEntryRole.xcodeProjectFile;
+      const tag = '{{{smf_app_entry__ios_deployment_target}}}';
+      final template = _flavoredProject.replaceAll(
+        'IPHONEOS_DEPLOYMENT_TARGET = 15.0;',
+        'IPHONEOS_DEPLOYMENT_TARGET = $tag;',
+      );
+
+      List<String> problems(String text) => [
+            for (final issue in checkModule({path: text})) issue.message,
+          ];
+
+      test('is the tag in every configuration of the project', () {
+        expect(
+          tag.allMatches(template),
+          hasLength(12),
+          reason: 'The twelve configurations of the project have the tag.',
+        );
+        expect(problems(template), isEmpty);
+      });
+
+      test('asks nothing of a provider without such a template', () {
+        expect(checkModule({'README.md': '# My app\n'}), isEmpty);
+      });
+
+      test('reports a configuration of the project with a version of its own',
+          () {
+        final id = _configurationId('A', 'Debug-dev');
+        final at = template.indexOf('$id /*');
+        final issues = checkModule({
+          path: template.replaceRange(
+            at,
+            null,
+            template.substring(at).replaceFirst(tag, '15.0'),
+          ),
+        });
+
+        expect(
+          [for (final issue in issues) issue.message],
+          [
+            equals(
+              'The build configuration Debug-dev ($id) in $path has '
+              'IPHONEOS_DEPLOYMENT_TARGET = 15.0 instead of the tag $tag, so '
+              'the version that a module raises does not reach it.',
+            ),
+          ],
+        );
+        expect(issues.single.origin, const ModuleOrigin(ModuleId('scaffold')));
+        expect(issues.single.path, path);
+      });
+
+      test('reports a configuration of the project without the setting', () {
+        final id = _configurationId('A', 'Release-prod');
+        final at = template.indexOf('$id /*');
+
+        expect(
+          problems(
+            template.replaceRange(
+              at,
+              null,
+              template
+                  .substring(at)
+                  .replaceFirst('IPHONEOS_DEPLOYMENT_TARGET = $tag;', ''),
+            ),
+          ),
+          [
+            equals(
+              'The build configuration Release-prod ($id) in $path has no '
+              'IPHONEOS_DEPLOYMENT_TARGET, though the targets inherit it '
+              'from there, so the version that a module raises does not '
+              'reach it.',
+            ),
+          ],
+        );
+      });
+
+      test('reports a target that sets a version of its own', () {
+        final id = _configurationId('B', 'Debug-prod');
+        final at = template.indexOf('$id /*');
+        const setting = 'INFOPLIST_FILE = Runner/Info.plist;';
+
+        expect(
+          problems(
+            template.replaceRange(
+              at,
+              null,
+              template.substring(at).replaceFirst(
+                    setting,
+                    '$setting\n\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = "16.0";',
+                  ),
+            ),
+          ),
+          [
+            equals(
+              'The build configuration Debug-prod ($id) in $path has '
+              'IPHONEOS_DEPLOYMENT_TARGET = 16.0 instead of the tag $tag, so '
+              'the version that a module raises does not reach it.',
+            ),
+          ],
+        );
+        // A target may leave the setting to the project.
+        expect(problems(template), isEmpty);
+      });
+    });
+
     test('the Gradle sockets refuse the plugins every app declares', () {
       expect(
         AppEntryRole.gradleAppPlugins.problemsWith(
@@ -4309,6 +5119,236 @@ const _xcodeProject = r'''
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }
+''';
+
+/// The app entry role with every structural rule but that of the flavors, for
+/// tests that look at the other rules.
+final class _AppEntryWithoutFlavorRule extends Role<NoDsl> {
+  const _AppEntryWithoutFlavorRule();
+
+  @override
+  String get id => appEntryRole.id;
+
+  @override
+  String get description => appEntryRole.description;
+
+  @override
+  RoleCardinality get cardinality => appEntryRole.cardinality;
+
+  @override
+  bool get openToAllModules => appEntryRole.openToAllModules;
+
+  @override
+  List<StructuralRule<NoDsl>> get structuralRules => [
+        for (final rule in appEntryRole.structuralRules)
+          if (rule.id != 'app_entry.flavors') rule,
+      ];
+}
+
+/// What the rule of the flavors says of a pubspec without the default flavor.
+const _noDefaultFlavor = 'pubspec.yaml has no default-flavor in its flutter '
+    'section, so a command of the flutter tool without --flavor cannot tell '
+    'which flavor to build.';
+
+/// The files that the rule of the flavors reads in an app with the flavors of
+/// the role, shortened.
+Map<String, String> _flavoredApp() => {
+      'pubspec.yaml': 'name: my_app\n\nflutter:\n  default-flavor: "dev"\n'
+          '  uses-material-design: true\n',
+      AppEntryRole.gradleAppFile: _flavoredGradle,
+      AppEntryRole.xcodeProjectFile: _flavoredProject,
+      AppEntryRole.iosEntitlementsFile: _entitlements,
+      for (final flavor in AppEntryRole.flavors)
+        flavor.xcodeSchemeFile: _schemeOf(flavor.name),
+    };
+
+/// The build script of the app module without flavors.
+const _plainGradle = '''
+android {
+    defaultConfig {
+        applicationId = "com.example.my_app"
+    }
+}
+''';
+
+/// The build script of the app module with the flavors of the role.
+const _flavoredGradle = '''
+android {
+    defaultConfig {
+        // The id that each flavor adds to.
+        applicationId = "com.example.my_app"
+    }
+
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "My App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "My App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "My App"
+        }
+    }
+}
+''';
+
+/// The base of the configurations of the debug mode in [_flavoredProject].
+const _debugBase = '9740EEB21CF90195004384FC';
+
+/// The base of the configurations of the other modes.
+const _releaseBase = '7AFA3C8E1D35360C0083082E';
+
+/// The names of the build configurations of a list of [_flavoredProject].
+final List<String> _configurationNames = [
+  'Debug',
+  'Release',
+  'Profile',
+  for (final flavor in AppEntryRole.flavors) ...flavor.xcodeConfigurations,
+];
+
+/// The id of the configuration [name] of the list [owner]: `A` for that of
+/// the project, `B` for that of the app target and `C` for that of its tests.
+String _configurationId(String owner, String name) => [
+      owner,
+      _configurationNames.indexOf(name).toString().padLeft(23, '0'),
+    ].join();
+
+/// The id of the configuration list of [owner].
+String _listId(String owner) => '$owner${'F' * 23}';
+
+/// An Xcode project with the flavors of the role, shortened from that of
+/// `flutter create`: each configuration of the project and of its two targets
+/// has only what the rules read.
+final String _flavoredProject = () {
+  String quoted(String name) => name.contains('-') ? '"$name"' : name;
+
+  String configuration(String owner, String name, String settings) {
+    final base = name.startsWith('Debug') ? _debugBase : _releaseBase;
+    return '''
+		${_configurationId(owner, name)} /* $name */ = {
+			isa = XCBuildConfiguration;
+			${owner == 'B' ? 'baseConfigurationReference = $base /* xcconfig */;' : ''}
+			buildSettings = {
+$settings
+			};
+			name = ${quoted(name)};
+		};
+''';
+  }
+
+  String idOfFlavor(String name) {
+    final flavors = AppEntryRole.flavors.where(
+      (flavor) => flavor.xcodeConfigurations.contains(name),
+    );
+    final identity = testContext.appIdentity;
+    return flavors.isEmpty
+        ? identity.iosBundleId
+        : flavors.single.bundleIdIn(identity);
+  }
+
+  String list(String owner) => '''
+		${_listId(owner)} /* Build configuration list of $owner */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+${[
+        for (final name in _configurationNames)
+          '\t\t\t\t${_configurationId(owner, name)} /* $name */,',
+      ].join('\n')}
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+''';
+
+  return '''
+// !\$*UTF8*\$!
+{
+	objects = {
+
+/* Begin PBXProject section */
+		97C146E61CF9000F007C117D /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = ${_listId('A')} /* Build configuration list of A */;
+		};
+/* End PBXProject section */
+
+/* Begin XCBuildConfiguration section */
+${[
+    for (final name in _configurationNames)
+      configuration('A', name, '\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 15.0;'),
+    for (final name in _configurationNames)
+      configuration(
+        'B',
+        name,
+        '''
+				APP_DISPLAY_NAME = "My App";
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				INFOPLIST_FILE = Runner/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = ${idOfFlavor(name)};''',
+      ),
+    for (final name in _configurationNames)
+      configuration(
+        'C',
+        name,
+        '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = com.example.my-app.RunnerTests;',
+      ),
+  ].join()}/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+${['A', 'B', 'C'].map(list).join()}/* End XCConfigurationList section */
+	};
+	rootObject = 97C146E61CF9000F007C117D /* Project object */;
+}
+''';
+}();
+
+/// The Xcode scheme of the flavor [name], shortened from that of Flutter's
+/// template, with the attributes on lines of their own as Xcode writes them.
+String _schemeOf(String name) => '''
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+   LastUpgradeVersion = "1510"
+   version = "1.3">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES">
+      <PreActions>
+         <ExecutionAction
+            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+            <ActionContent
+               title = "Run Prepare Flutter Framework Script"
+               scriptText = "/bin/sh &quot;\$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh&quot; prepare&#10;">
+            </ActionContent>
+         </ExecutionAction>
+      </PreActions>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug-$name"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug-$name"
+      launchStyle = "0">
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Profile-$name"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug-$name">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release-$name"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>
 ''';
 
 /// An Android manifest like the one of `flutter create`, shortened.
