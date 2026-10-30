@@ -460,6 +460,7 @@ void main() {
     // provider of the app entry builds, follows the theme mode.
     expect(named('theme_role').roles, {themeRole, appEntryRole});
     expect(named('theme_setting').roles, {themeRole});
+    expect(named('flavors').roles, {appEntryRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('language_setting').roles, {localizationRole});
 
@@ -1963,7 +1964,8 @@ void main() {
 
   test(
       'the start check runs the probes of the tests that go into an app '
-      'with it, the walk of the routes, the services of the DI role, the '
+      'with it, the flavor of the app, the walk of the routes, the services '
+      'of the DI role, the '
       'preferences of the role, those of shared_preferences once they are '
       'opened again, the user of Firebase Authentication, the onboarding '
       'of a first launch, the languages of the localization role, the '
@@ -1980,6 +1982,7 @@ void main() {
             p.basename(test.directory): '${probe.path} ${probe.function}',
       },
       {
+        'flavors': 'integration_test/flavors/probe.dart probeFlavor',
         'firebase_auth':
             'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
@@ -2976,6 +2979,50 @@ void main() {
       ],
       _everyModule,
     );
+  });
+
+  test(
+      'the test of the flavor of a running app applies to the apps with every '
+      'module, whichever module provides the app entry, or to those of them '
+      'that it is given, and gets the flavor of a command without --flavor '
+      'from the role, and a probe that a release start of CI tells the flavor '
+      'it asked for', () async {
+    final flavors = named('flavors');
+    bool everyModule(MatrixApp app) => app.everyModuleWith != null;
+
+    expect(
+      [
+        for (final app in apps)
+          if (flavors.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (everyModule(app)) app.name,
+      ],
+    );
+    for (final app in apps.where(flavors.appliesTo)) {
+      expect(
+        flavors.values!(app),
+        {
+          'default_flavor': AppEntryRole.defaultFlavor.name,
+          'flavor_define': startFlavorDefine,
+        },
+        reason: app.name,
+      );
+    }
+    expect(
+      flavors.startProbe?.path,
+      'integration_test/flavors/probe.dart',
+    );
+    expect(flavors.startProbe?.function, 'probeFlavor');
+    expect(flavors.startProbe?.answer, isNull);
+    expect(flavors.mocks, isNull);
+    expect(flavors.generatedFiles, isNull);
+
+    final none = await flavorsAppTest(among: (app) => false);
+    expect(apps.where(none.appliesTo), isEmpty);
+    final all = await flavorsAppTest();
+    expect(apps.where(all.appliesTo), hasLength(apps.length));
   });
 
   test(

@@ -35,6 +35,18 @@ final class _Shop extends SmfModule {
 
 void main() {
   test(
+      'a release that CI starts takes the flavor that the app entry role '
+      'names for a release, and tells the probe of the flavor so', () {
+    final flavor = AppEntryRole.releaseFlavor.name;
+
+    expect(startReleaseBuildArguments, [
+      '--flavor',
+      flavor,
+      '--dart-define=$startFlavorDefine=$flavor',
+    ]);
+  });
+
+  test(
       'gives the keys of an app with the module that gives each, and the '
       'arguments of the provider of the role, as the role has them', () async {
     final (:apps, :failed) = await matrixOf(const [

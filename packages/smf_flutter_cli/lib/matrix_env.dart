@@ -1,6 +1,7 @@
 /// How the apps of the matrices of SMF get the values that their modules
 /// read, which a developer fills in after generating an app: from the env
-/// role ([matrixEnv]).
+/// role ([matrixEnv]). It also has the arguments with which CI starts an app
+/// as a release, from the app entry role ([startReleaseBuildArguments]).
 ///
 /// It imports, of the packages of SMF, only the module model and the
 /// matrix, so that the tools of the matrices of the fixtures take it
@@ -10,6 +11,24 @@ library;
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+
+/// The name of the value of the build with which the start of an app on a
+/// device tells the probe of the flavor of the app that it asked for a flavor
+/// (`app_tests/flavors`). A build without it asks for none.
+const startFlavorDefine = 'SMF_START_FLAVOR';
+
+/// The arguments of the `flutter` tool that a build of an app as a release
+/// takes too when CI starts it on a device, which the script of CI reads
+/// (`startReleaseArgumentsFile`): the flavor that the app entry role names
+/// for a release, since a command without `--flavor` builds its default
+/// flavor in release mode too, and the same flavor for the probe of the
+/// flavor, which sees whether it reached the app. So the script names no
+/// flavor, and the release app that it starts is the one that a user gets.
+final List<String> startReleaseBuildArguments = [
+  '--flavor',
+  AppEntryRole.releaseFlavor.name,
+  '--dart-define=$startFlavorDefine=${AppEntryRole.releaseFlavor.name}',
+];
 
 /// How the apps of the matrices of SMF get their values, from the env
 /// role: its file of the values, `.env`, into which the matrix writes the
