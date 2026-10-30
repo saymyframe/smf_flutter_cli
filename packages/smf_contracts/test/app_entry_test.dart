@@ -4179,6 +4179,7 @@ $components
           'flutter:\n  default-flavor: dev # the plain build\n',
           'flutter: # the section\n\n    # a comment\n    default-flavor: dev',
           'flutter:\n  generate: true\n  default-flavor: dev\nother: 1\n',
+          'flutter:\n  assets:\n    - assets/\n  default-flavor: dev\n',
         ]) {
           expect(
             checkChanged(pubspec, (_) => inPubspec(text)),
