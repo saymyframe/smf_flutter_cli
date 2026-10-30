@@ -1511,8 +1511,8 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
     );
 
 /// The test of the env role that the CLI keeps in its `app_tests/env_role`,
-/// for the apps with the role whose modules give it keys, whichever module
-/// provides the role, that [among] accepts, or all of them: for each key of
+/// for the apps with the role that have keys, whichever module provides the
+/// role, that [among] accepts, or all of them: for each key of
 /// the app, the getter of `AppEnv` returns the value that `.env` gives the
 /// key, and `null` when `.env` leaves the value empty or lacks the key.
 ///

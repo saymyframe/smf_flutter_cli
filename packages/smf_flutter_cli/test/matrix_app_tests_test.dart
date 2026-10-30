@@ -379,11 +379,16 @@ void main() {
     );
     expect(matrixEnv.keys(const MatrixApp('outside', [])), isEmpty);
     // The keys of an app are those of the role, each with the module that
-    // gives it, such as the keys of revenuecat.
+    // gives it, such as the keys of revenuecat, or the role whose template
+    // gives it.
+    const MatrixEnvKeyOwner ofRevenueCat = (
+      module: RevenueCatModule.id,
+      role: null,
+    );
     expect(matrixEnv.keys(app(_rc)), {
-      'REVENUECAT_APPLE_KEY': RevenueCatModule.id,
-      'REVENUECAT_GOOGLE_KEY': RevenueCatModule.id,
-      'REVENUECAT_TEST_KEY': RevenueCatModule.id,
+      'REVENUECAT_APPLE_KEY': ofRevenueCat,
+      'REVENUECAT_GOOGLE_KEY': ofRevenueCat,
+      'REVENUECAT_TEST_KEY': ofRevenueCat,
     });
     for (final app in apps) {
       expect(
@@ -391,7 +396,13 @@ void main() {
         app.hook!.presentRoles.contains(envRole)
             ? {
                 for (final key in envRole.keysIn(envRole.hookInput(app.hook!)))
-                  key.name: (key.owner as ModuleOrigin).module,
+                  key.name: switch (key.owner) {
+                    ModuleOrigin(:final module) => (module: module, role: null),
+                    final owner => (
+                        module: null,
+                        role: (owner as RoleTemplateOrigin).role.id,
+                      ),
+                  },
               }
             : isEmpty,
         reason: app.name,

@@ -9,6 +9,7 @@ export 'core.dart';
 export 'src/module_kinds.dart';
 export 'src/refs.dart';
 export 'src/roles/app_entry.dart';
+export 'src/roles/ci.dart';
 export 'src/roles/di.dart';
 export 'src/roles/env.dart';
 export 'src/roles/layout.dart';
