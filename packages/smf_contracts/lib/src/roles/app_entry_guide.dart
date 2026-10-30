@@ -216,8 +216,9 @@ const _statusBarIcons = Fragment.wrap(
 /// The template of the [AppEntryRole], for what an app has whichever module
 /// provides the role: the guide for coding agents, with the note of the
 /// role itself, the icons of the status bar that suit the theme of the
-/// app, on every screen, with a widget test of them, and in an app with
-/// steps by hand the section of the README that lists them.
+/// app, on every screen, with a widget test of them, the section of the
+/// README on the flavors of the app, and in an app with steps by hand the
+/// section of the README that lists them.
 final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
   const _AppEntryTemplate();
 
@@ -232,6 +233,10 @@ final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
         // What the widget of the icons of the status bar and its test import.
         const PubspecContribution.sdk('flutter'),
         const PubspecContribution.sdk('flutter_test', dev: true),
+        AppEntryRole.readmeSections.entry(
+          AppEntryRole.flavorsHeading,
+          _flavorsSection(context.appIdentity),
+        ),
       ];
 
   /// The section [AppEntryRole.setupHeading] of the README, with the note
@@ -258,8 +263,8 @@ final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
 
 /// The section [AppEntryRole.setupHeading] of the README of an app with
 /// the steps of [setup]: that no command can do them, the link to their
-/// guide when [setup] has one, and the titles of the steps as they are, in
-/// a numbered list in their order.
+/// guide when [setup] has one, the titles of the steps as they are, in a
+/// numbered list in their order, and that a step may repeat for a flavor.
 String _setupSection(ManualSetup setup) {
   final link = setup.link;
   const intro = 'Once any commands of the sections below have run, the setup '
@@ -272,8 +277,14 @@ String _setupSection(ManualSetup setup) {
     '',
     for (final (index, step) in setup.steps.indexed)
       '${index + 1}. ${step.title}',
+    '',
+    _repeatStepOfFlavors,
   ].join('\n');
 }
+
+/// What the section of the steps by hand says below the list of the steps.
+const _repeatStepOfFlavors = 'Repeat a step for each flavor that needs it: a '
+    'service knows each id as an app of its own.';
 
 /// The note of the app entry role in the guide for coding agents of an app
 /// with steps by hand: they are for the developer of the app, whom an agent
@@ -293,6 +304,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `${AppEntryRole.bootstrap.name}()` in `${AppEntryRole.bootstrapFile}` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `${AppEntryRole.statusBarIconsFile}`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `${_devFlavor.name}`, `${_stagingFlavor.name}` and `${_prodFlavor.name}`. A `flutter` command without `--flavor` builds `${AppEntryRole.defaultFlavor.name}`, in release mode too, so a build for a store takes `--flavor ${AppEntryRole.releaseFlavor.name}`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
 ''';
 
 /// The characters of a path of the app: those of the names of its files and

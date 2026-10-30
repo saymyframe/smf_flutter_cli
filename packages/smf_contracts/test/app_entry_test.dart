@@ -14,6 +14,10 @@ import 'support.dart';
 /// The file of the provider with the root widget of the app.
 const _appFile = 'lib/app.dart';
 
+/// What the section of the steps by hand says below the list of the steps.
+const _repeatStep = 'Repeat a step for each flavor that needs it: a service '
+    'knows each id as an app of its own.';
+
 /// A method `build` with the positional [parameters], each a name and a
 /// type: by default `build(BuildContext context)`, as that of a widget.
 IndexedMember _build([
@@ -1653,8 +1657,11 @@ void main() {
       expect(rendered.files.keys, appEntryRole.interface.files);
       expect(rendered.files[AppEntryRole.claudeFile], '@AGENTS.md\n');
       // The widget for the icons of the status bar goes into the builder of
-      // the root, in a file of the provider.
-      expect(rendered.elsewhere.single.socket, AppEntryRole.appBuilder);
+      // the root, and the flavors into the README, both files of the provider.
+      expect(
+        [for (final fragment in rendered.elsewhere) fragment.socket],
+        [AppEntryRole.appBuilder, AppEntryRole.readmeSections],
+      );
       final [title, empty, introduction, ...sections] = guide.split('\n');
       expect(title, '# AGENTS.md');
       expect(empty, isEmpty);
@@ -1899,6 +1906,121 @@ void main() {
     });
   });
 
+  group('the flavors of the app', () {
+    final identity = testContext.appIdentity;
+
+    /// The rows of the table of the section of the README, each as its cells.
+    List<List<String>> rowsOf(String section) => [
+          for (final line in section.split('\n'))
+            if (line.startsWith('| `'))
+              [
+                for (final cell in line.split('|').skip(1).take(3)) cell.trim(),
+              ],
+        ];
+
+    test('are dev, staging and prod, of which prod has the id of the app', () {
+      expect(
+        [
+          for (final flavor in AppEntryRole.flavors)
+            (flavor.name, flavor.idSuffix),
+        ],
+        [('dev', '.dev'), ('staging', '.staging'), ('prod', '')],
+      );
+    });
+
+    test(
+        'build dev without --flavor, and prod for a store, both among the '
+        'flavors', () {
+      expect(AppEntryRole.defaultFlavor.name, 'dev');
+      expect(AppEntryRole.releaseFlavor.name, 'prod');
+      expect(AppEntryRole.flavors, contains(AppEntryRole.defaultFlavor));
+      expect(AppEntryRole.flavors, contains(AppEntryRole.releaseFlavor));
+    });
+
+    test('have no hyphen, on which Flutter splits a build configuration', () {
+      for (final flavor in AppEntryRole.flavors) {
+        expect(flavor.name, isNot(contains('-')));
+      }
+    });
+
+    test('give the ids of the app with their suffixes', () {
+      expect(
+        [
+          for (final flavor in AppEntryRole.flavors)
+            (flavor.applicationIdIn(identity), flavor.bundleIdIn(identity)),
+        ],
+        [
+          ('com.example.my_app.dev', 'com.example.my-app.dev'),
+          ('com.example.my_app.staging', 'com.example.my-app.staging'),
+          ('com.example.my_app', 'com.example.my-app'),
+        ],
+      );
+    });
+
+    test('name a build configuration for each mode, and a scheme', () {
+      expect(
+        AppEntryRole.flavors.first.xcodeConfigurations,
+        ['Debug-dev', 'Profile-dev', 'Release-dev'],
+      );
+      expect(
+        AppEntryRole.releaseFlavor.xcodeSchemeFile,
+        'ios/Runner.xcodeproj/xcshareddata/xcschemes/prod.xcscheme',
+      );
+    });
+
+    test(
+        'are told of in the README of every app, with the ids of the app, '
+        'what a plain command builds and how a store build names its flavor',
+        () {
+      final section = appEntryRole.template
+          .contribute(testContext)
+          .whereType<SocketContribution>()
+          .singleWhere(
+            (contribution) =>
+                contribution.socket == AppEntryRole.readmeSections,
+          );
+      final text = section.entryValue! as String;
+
+      expect(section.entryKey, AppEntryRole.flavorsHeading);
+      expect(section.when, isEmpty);
+      expect(
+        rowsOf(text),
+        [
+          ['`dev`', '`com.example.my_app.dev`', '`com.example.my-app.dev`'],
+          [
+            '`staging`',
+            '`com.example.my_app.staging`',
+            '`com.example.my-app.staging`',
+          ],
+          ['`prod`', '`com.example.my_app`', '`com.example.my-app`'],
+        ],
+      );
+      expect(text, contains('without `--flavor` builds `dev`'));
+      expect(text, contains('in release mode too'));
+      final commands = RegExp(r'```bash\n([^`]+)```').firstMatch(text)![1]!;
+      expect(commands.trim().split('\n'), [
+        'flutter run --flavor staging',
+        'flutter build appbundle --flavor prod',
+        'flutter build ipa --flavor prod',
+      ]);
+      expect(
+        AppEntryRole.readmeSections.problemsWith(
+          section.withOrigin(const RoleTemplateOrigin(appEntryRole)),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('are told of in the note of the role, with where code reads them', () {
+      final note = agentNoteOf(appEntryRole).text;
+
+      expect(note, contains('flavors `dev`, `staging` and `prod`'));
+      expect(note, contains('`--flavor prod`'));
+      expect(note, contains('`appFlavor` of `package:flutter/services.dart`'));
+      expect(note, contains('`main_<flavor>.dart`'));
+    });
+  });
+
   group('the steps by hand', () {
     const readme = AppEntryRole.readmeSections;
     const guide = AppEntryRole.agentSections;
@@ -1939,7 +2061,9 @@ void main() {
         'shows each one click by click:\n'
         '\n'
         '1. Register the App ID of the iOS app\n'
-        '2. Give Firebase your Apple push key (APNs key)',
+        '2. Give Firebase your Apple push key (APNs key)\n'
+        '\n'
+        '$_repeatStep',
       );
       // The template may write the section, which comes before those of
       // the modules.
@@ -1960,6 +2084,8 @@ void main() {
         readme.render([firebase, ofTemplate])[readme.tag],
         endsWith(
           '2. Give Firebase your Apple push key (APNs key)\n'
+          '\n'
+          '$_repeatStep\n'
           '\n## Firebase\n\nRun `flutterfire configure`.',
         ),
       );
@@ -1971,7 +2097,9 @@ void main() {
         'Once any commands of the sections below have run, the setup still '
         'needs these steps, which no command can do:\n'
         '\n'
-        '1. Give Firebase your Apple push key (APNs key)',
+        '1. Give Firebase your Apple push key (APNs key)\n'
+        '\n'
+        '$_repeatStep',
       );
     });
 
