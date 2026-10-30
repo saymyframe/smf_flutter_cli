@@ -680,13 +680,17 @@ void main() {
         reason: '${module.descriptor.id}',
       );
     }
-    final appEntry = broken.singleWhere(
+    final appEntries = broken.where(
       (module) => module.descriptor.provides.contains(appEntryRole),
     );
-    expect(
-      [for (final [_, chosen] in bricksOf(appEntry)) ...chosen],
-      [RouterRole.noStartRoute],
-    );
+    expect(appEntries, isNotEmpty);
+    for (final appEntry in appEntries) {
+      expect(
+        [for (final [_, chosen] in bricksOf(appEntry)) ...chosen],
+        [RouterRole.noStartRoute],
+        reason: '${appEntry.descriptor.id}',
+      );
+    }
   });
 
   test(

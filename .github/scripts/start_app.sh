@@ -37,7 +37,14 @@
 # and Kotlin code and renames the classes that no rule keeps, so a plugin
 # that looks a class up by its name, as through JNI, may work in a debug
 # app and fail in a release one. It is built for the ABI of the device
-# only, since the machine code of each ABI takes a build of its own. A
+# only, since the machine code of each ABI takes a build of its own. It is
+# built with the arguments of integration_test/start_release_arguments too,
+# which the matrix tool writes next to the start check, one on each line, from
+# the flavor that the app entry role names for a release, since a command
+# without --flavor builds the default flavor of the app in release mode too.
+# So the release app is what a user ships, and the script names no flavor. A
+# debug app gets none of them, so the start of a debug app shows what a
+# command without --flavor builds. A
 # release app is not debuggable, so run-as cannot read its files: the
 # script reads the line that the check prints after `SMF_START_CHECK: ` to
 # the log of the device instead, from the process that it launched, so
@@ -129,25 +136,37 @@ limit=
 purpose=
 deadline=
 
-# The arguments of the flutter tool that build the app, and the answers
-# that the probes of the app ask for, which --add-app-tests writes next to
-# the start check.
+# The arguments of the flutter tool that build the app, those that a release
+# build takes too, and the answers that the probes of the app ask for, which
+# --add-app-tests writes next to the start check.
 build_arguments_file=integration_test/start_build_arguments
+release_arguments_file=integration_test/start_release_arguments
 answers_file=integration_test/start_answers
-for file in "$check" "$build_arguments_file"; do
+needed=("$check" "$build_arguments_file")
+if [ "$mode" = release ]; then
+  needed+=("$release_arguments_file")
+fi
+for file in "${needed[@]}"; do
   if [ ! -f "$file" ]; then
     echo "::error::$PWD has no $file: add the start check with the --add-app-tests of packages/smf_flutter_cli/tool/matrix.dart."
     exit 1
   fi
 done
 # The arguments of the builds of the app: the start check as its entry,
-# and those of the list.
+# those of the list, and those of the list of a release build in that mode.
 build_arguments=(-t "$check")
-while IFS= read -r argument || [ -n "$argument" ]; do
-  if [ -n "$argument" ]; then
-    build_arguments+=("$argument")
-  fi
-done < "$build_arguments_file"
+add_build_arguments() {
+  local argument
+  while IFS= read -r argument || [ -n "$argument" ]; do
+    if [ -n "$argument" ]; then
+      build_arguments+=("$argument")
+    fi
+  done < "$1"
+}
+add_build_arguments "$build_arguments_file"
+if [ "$mode" = release ]; then
+  add_build_arguments "$release_arguments_file"
+fi
 if [ ${#answers[@]} -gt 0 ]; then
   if [ ! -f "$answers_file" ]; then
     echo "::error::$PWD has no $answers_file, which lists the answers that the probes of the app ask for: add the start check with the --add-app-tests of packages/smf_flutter_cli/tool/matrix.dart."
