@@ -50,8 +50,9 @@
 // that the server deleted is user-not-found too. A revocation takes an
 // authorization code once, and like the Firebase SDK it never answers one
 // while nobody is signed in. Each user has an ID token, which a read gives
-// and a read that forces a refresh replaces, and a forced read of a user
-// that the server deleted is user-not-found.
+// and a read that forces a refresh replaces. A forced read of a user that the
+// server deleted is answered as Android does, with an unknown error whose
+// message says so, since the plugin there gives no code for this call.
 //
 // It differs from Firebase in this:
 // - The platform tells the plugin of each change of the user through a
@@ -481,7 +482,7 @@ final class MockFirebaseAuth {
       if (forceRefresh) {
         if (user.deleted) {
           throw const _Failure(
-            'ERROR_USER_NOT_FOUND',
+            'UNKNOWN',
             'There is no user record corresponding to this identifier. The '
                 'user may have been deleted.',
           );

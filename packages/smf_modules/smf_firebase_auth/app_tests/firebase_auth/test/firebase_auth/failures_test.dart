@@ -16,8 +16,10 @@
 // Firebase tells so. An empty address or password fails before Firebase is
 // asked, with the same reason on every platform. A call that failed leaves
 // the user. A call for a user whose session has ended on the server signs
-// that user out. And a read of the token of the user gets the reason of the
-// code of Firebase and leaves the user, but for such a session.
+// that user out. A read of the token of the user gets the reason of the code
+// of Firebase and leaves the user, but for such a session. The plugin on
+// Android answers that read with an unknown error, so the code comes from a
+// reload of the user then.
 //
 // A call with a credential of Google or Apple gets the reason of its own
 // call: a link that Firebase refuses because the identity, or its email
@@ -920,8 +922,16 @@ void main() {
     firebase.deleteUserOnServer();
 
     final read = await service.userToken();
+    firebase.calls.clear();
     final forced = await errorOf(() => service.userToken(forceRefresh: true));
 
+    expect(
+      [for (final call in firebase.calls) call.first],
+      ['getIdToken', 'reload', 'signOut'],
+      reason: 'The plugin on Android answers the read with an unknown error '
+          'whose message says that the user is gone, so the service asks a '
+          'reload, which answers with the code.',
+    );
     expect(
       read,
       isNotEmpty,
@@ -954,8 +964,6 @@ void main() {
     for (final code in const [
       'ERROR_NETWORK_REQUEST_FAILED',
       'network-request-failed',
-      'ERROR_USER_DISABLED',
-      'user-disabled',
       'ERROR_TOO_MANY_REQUESTS',
       'too-many-requests',
     ]) {
@@ -977,8 +985,6 @@ void main() {
       {
         'ERROR_NETWORK_REQUEST_FAILED': AuthFailureReason.network.name,
         'network-request-failed': AuthFailureReason.network.name,
-        'ERROR_USER_DISABLED': AuthFailureReason.userDisabled.name,
-        'user-disabled': AuthFailureReason.userDisabled.name,
         'ERROR_TOO_MANY_REQUESTS': AuthFailureReason.tooManyAttempts.name,
         'too-many-requests': AuthFailureReason.tooManyAttempts.name,
       },
@@ -995,6 +1001,79 @@ void main() {
       [userOf(service.currentUser), heard],
       [before, isEmpty],
       reason: 'A read that failed leaves the user, and tells nobody.',
+    );
+  });
+
+  test(
+      'a read of the token that the plugin on Android answers with an unknown '
+      'error gets its reason from a reload of the user', () async {
+    // What a read ends with when the platform answers it with an unknown
+    // error and a reload of the user with each code, or not at all, the user
+    // of the service then and whether a listener heard of nobody.
+    final found = <String, List<Object?>>{};
+    final heard = <String>[];
+    final subscription = service.userChanges.listen(
+      (user) => heard.add(userOf(user)),
+    );
+    addTearDown(subscription.cancel);
+    final email = addressOf('token-unknown');
+    await service.signOut();
+    await service.signUp(email: email, password: password);
+    for (final code in const [
+      'ERROR_USER_DISABLED',
+      'user-disabled',
+      'ERROR_USER_NOT_FOUND',
+      'ERROR_USER_TOKEN_EXPIRED',
+      'NO_CURRENT_USER',
+      'ERROR_NETWORK_REQUEST_FAILED',
+      null,
+    ]) {
+      await service.signOut();
+      await service.signIn(email: email, password: password);
+      await pumpEventQueue();
+      heard.clear();
+      firebase.failNext(
+        'getIdToken',
+        code: 'UNKNOWN',
+        message: 'The server said no.',
+      );
+      if (code != null) firebase.failNext('reload', code: code);
+      final failure = await errorOf(
+        () => service.userToken(forceRefresh: true),
+      );
+      await pumpEventQueue();
+      found['$code'] = [
+        outcomeOf(failure),
+        service.currentUser == null,
+        heard.contains('nobody'),
+      ];
+    }
+
+    expect(
+      found,
+      {
+        for (final code in const ['ERROR_USER_DISABLED', 'user-disabled'])
+          code: [AuthFailureReason.userDisabled.name, true, true],
+        for (final code in const [
+          'ERROR_USER_NOT_FOUND',
+          'ERROR_USER_TOKEN_EXPIRED',
+          'NO_CURRENT_USER',
+        ])
+          code: [AuthFailureReason.recentSignInRequired.name, true, true],
+        'ERROR_NETWORK_REQUEST_FAILED': [
+          AuthFailureReason.network.name,
+          false,
+          false,
+        ],
+        'null': [
+          '${AuthFailureReason.unknown.name} (unknown: The server said no.)',
+          false,
+          false,
+        ],
+      },
+      reason: 'When the server no longer takes the user, the service signs '
+          'the user out and tells so, whatever the code. A reload that '
+          'completes leaves the unknown error with what the plugin said.',
     );
   });
 

@@ -660,7 +660,6 @@ Future<void> main(List<String> arguments, SendPort port) async {
   tokens['heard'] = [...heard];
   for (final code in const [
     'network-request-failed',
-    'user-disabled',
     'too-many-requests',
   ]) {
     failNext['getIdToken'] = FirebaseAuthException(code: code);
@@ -676,6 +675,32 @@ Future<void> main(List<String> arguments, SendPort port) async {
     endedRead[code] = await step(() => service.userToken(forceRefresh: true));
   }
   tokens['ended session'] = endedRead;
+  // The plugin on Android answers such a read with the code `unknown`.
+  final unknownRead = <String, Object?>{};
+  for (final code in [..._endedSessionCodes, 'user-disabled']) {
+    await signIn();
+    failNext['getIdToken'] = FirebaseAuthException(
+      code: 'unknown',
+      message: 'The server said no.',
+    );
+    failNext['reload'] = FirebaseAuthException(code: code);
+    unknownRead[code] = await step(
+      () => service.userToken(forceRefresh: true),
+    );
+  }
+  await signIn();
+  failNext['getIdToken'] = FirebaseAuthException(
+    code: 'unknown',
+    message: 'The server said no.',
+  );
+  unknownRead['a reload that completes'] = await step(
+    () => service.userToken(forceRefresh: true),
+  );
+  failNext['getIdToken'] = FirebaseAuthException(code: 'user-disabled');
+  unknownRead['disabled at once'] = await step(
+    () => service.userToken(forceRefresh: true),
+  );
+  tokens['unknown read'] = unknownRead;
   result['tokens'] = tokens;
 
   await signIn();
@@ -2024,7 +2049,6 @@ void main() {
           {
             for (final code in const [
               'network-request-failed',
-              'user-disabled',
               'too-many-requests',
             ])
               code: tokens['refused: $code'],
@@ -2032,7 +2056,6 @@ void main() {
           {
             for (final (code, reason) in const [
               ('network-request-failed', 'network'),
-              ('user-disabled', 'userDisabled'),
               ('too-many-requests', 'tooManyAttempts'),
             ])
               code: [
@@ -2062,6 +2085,41 @@ void main() {
               ['getIdToken(true)', 'signOut()'],
               ['nobody'],
             ],
+        });
+      });
+
+      test(
+          'takes the reason of a read that the plugin on Android answers with '
+          'the code unknown from a reload of the user, and signs out a user '
+          'whom the server no longer takes', () {
+        final tokens = sent['tokens']! as Map<Object?, Object?>;
+        const reload = ['getIdToken(true)', 'reload()', 'signOut()'];
+        expect(tokens['unknown read'], {
+          for (final code in _endedSession)
+            code: [
+              'recentSignInRequired',
+              'nobody',
+              reload,
+              ['nobody'],
+            ],
+          'user-disabled': [
+            'userDisabled',
+            'nobody',
+            reload,
+            ['nobody'],
+          ],
+          'a reload that completes': [
+            'unknown: unknown: The server said no.',
+            'uid of a@x.dev <a@x.dev>',
+            ['getIdToken(true)', 'reload()'],
+            <Object?>[],
+          ],
+          'disabled at once': [
+            'userDisabled',
+            'nobody',
+            ['getIdToken(true)', 'signOut()'],
+            ['nobody'],
+          ],
         });
       });
 

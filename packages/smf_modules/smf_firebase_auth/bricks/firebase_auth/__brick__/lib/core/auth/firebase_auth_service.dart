@@ -259,7 +259,13 @@ final class FirebaseAuthService implements AuthService {
 
   /// It reads past [_run], which tells of the user after each call, since an
   /// app may read the token for each of its requests. It tells of the user
-  /// only when the session of that user has ended on the server.
+  /// only when the server no longer takes that user, and signs that user out
+  /// first, as the Firebase SDK does a moment later.
+  ///
+  /// On Android the plugin answers this call with the code `unknown` for each
+  /// answer of the server but a network failure, also for a user whom the
+  /// server deleted or disabled, with the code only in a text. A reload of the
+  /// user answers with the code, so the service asks that.
   @override
   Future<String?> userToken({bool forceRefresh = false}) async {
     final user = _auth.currentUser;
@@ -267,16 +273,35 @@ final class FirebaseAuthService implements AuthService {
     try {
       return await user.getIdToken(forceRefresh);
     } on Object catch (error, stackTrace) {
-      if (error is FirebaseAuthException &&
-          _endedSession.contains(error.code)) {
-        await _auth.signOut();
-        _changes.add(null);
-        throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+      final answer = error is FirebaseAuthException && error.code == 'unknown'
+          ? await _answerToReload(user) ?? error
+          : error;
+      if (answer is FirebaseAuthException) {
+        final disabled = answer.code == 'user-disabled';
+        if (disabled || _endedSession.contains(answer.code)) {
+          await _auth.signOut();
+          _changes.add(null);
+          throw AuthFailure(
+            disabled
+                ? AuthFailureReason.userDisabled
+                : AuthFailureReason.recentSignInRequired,
+          );
+        }
       }
       Error.throwWithStackTrace(
-        _failureOf(error, null, const {}),
+        _failureOf(answer, null, const {}),
         stackTrace,
       );
+    }
+  }
+
+  /// What a reload of [user] fails with, or `null` if it completes.
+  Future<Object?> _answerToReload(User user) async {
+    try {
+      await user.reload();
+      return null;
+    } on Object catch (error) {
+      return error;
     }
   }
 
