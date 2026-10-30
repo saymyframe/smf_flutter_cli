@@ -250,25 +250,31 @@ void main() {
     });
 
     test(
-        'starts the checks with a command that gives a fresh copy of the app '
-        'its .env and keeps the values of a developer', () {
-      final first = ciRole.pipelineIn(_withEnv()).checks.first.command;
-      final directory = Directory.systemTemp.createTempSync('ci_first_check');
-      addTearDown(() => directory.deleteSync(recursive: true));
-      final example = File('${directory.path}/${EnvRole.exampleFile}')
-        ..writeAsStringSync('SHOP_KEY=\n');
-      final env = File('${directory.path}/${EnvRole.dotEnvFile}');
+      'starts the checks with a command that gives a fresh copy of the app '
+      'its .env and keeps the values of a developer',
+      () {
+        final first = ciRole.pipelineIn(_withEnv()).checks.first.command;
+        final directory = Directory.systemTemp.createTempSync('ci_first_check');
+        addTearDown(() => directory.deleteSync(recursive: true));
+        final example = File('${directory.path}/${EnvRole.exampleFile}')
+          ..writeAsStringSync('SHOP_KEY=\n');
+        final env = File('${directory.path}/${EnvRole.dotEnvFile}');
 
-      ProcessResult run() => Process.runSync('sh', ['-c', first],
-          workingDirectory: directory.path);
+        ProcessResult run() => Process.runSync(
+              'sh',
+              ['-c', first],
+              workingDirectory: directory.path,
+            );
 
-      expect(run().exitCode, 0);
-      expect(env.readAsStringSync(), example.readAsStringSync());
+        expect(run().exitCode, 0);
+        expect(env.readAsStringSync(), example.readAsStringSync());
 
-      env.writeAsStringSync('SHOP_KEY=mine\n');
-      expect(run().exitCode, 0);
-      expect(env.readAsStringSync(), 'SHOP_KEY=mine\n');
-    }, testOn: '!windows');
+        env.writeAsStringSync('SHOP_KEY=mine\n');
+        expect(run().exitCode, 0);
+        expect(env.readAsStringSync(), 'SHOP_KEY=mine\n');
+      },
+      testOn: '!windows',
+    );
 
     test('in an app without the env role, has nothing of its files', () {
       final pipeline = ciRole.pipelineIn(inputOf(ciRole));
@@ -332,7 +338,9 @@ void main() {
       );
 
       expect(
-          pipeline.checks.first.command, '[ -f .env ] || cp .env.example .env');
+        pipeline.checks.first.command,
+        '[ -f .env ] || cp .env.example .env',
+      );
       expect(pipeline.checks.last.command, 'flutter test');
       expect(
         pipeline.build.command.of('dev'),
@@ -390,6 +398,19 @@ void main() {
         ),
         [_noLineWith('flutter analyze')],
       );
+    });
+
+    test('reports another program whose name only ends like the command', () {
+      for (final other in ['myflutter analyze', './flutter analyze']) {
+        expect(
+          _problemsAfter(
+            (text) =>
+                text.replaceAll('    - "flutter analyze"', '    - $other'),
+          ),
+          [_noLineWith('flutter analyze')],
+          reason: other,
+        );
+      }
     });
 
     test('reports a command in a comment only: it never runs', () {
