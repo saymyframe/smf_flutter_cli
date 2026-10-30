@@ -9,9 +9,17 @@ import 'package:test/test.dart';
 import 'role_support.dart';
 import 'support.dart';
 
-/// The two roles, which have one shape, each with the rule of its step, the
-/// images that its providers generate and the heading of its section.
-const _roles = [
+/// A role of images, with the rule of its step, the images that its providers
+/// generate and the heading of its section.
+typedef _ImageRole = ({
+  Role<NoDsl> role,
+  String rule,
+  List<String> sources,
+  String heading,
+});
+
+/// The two roles, which have one shape, each of them.
+const List<_ImageRole> _roles = [
   (
     role: appIconRole,
     rule: 'app_icon.step',
@@ -38,17 +46,17 @@ const _drawImages = PostGenStep(
 );
 
 /// A small provider of [role], under the id [_standIn].
-ModuleDescriptor _providerOf(Role role) => ModuleDescriptor(
+ModuleDescriptor _providerOf(Role<NoDsl> role) => ModuleDescriptor(
       id: _standIn,
       description: 'A provider of a test',
       kind: plainKind,
-      providers: [RoleProvider<NoDsl>.plain(role as Role<NoDsl>)],
+      providers: [RoleProvider<NoDsl>.plain(role)],
     );
 
 /// The issues of the rule of [role] for [module] with [contributions], in an
 /// app with [role] and the roles in [present].
 List<SmfIssue> _stepIssues(
-  Role role,
+  Role<NoDsl> role,
   ModuleDescriptor module,
   List<Contribution> contributions, {
   Set<Role> present = const {},
@@ -63,7 +71,7 @@ List<SmfIssue> _stepIssues(
 
 /// The issues of [role] in an app with [modules], whose files have [owners].
 List<SmfIssue> _sourceIssues(
-  Role role,
+  Role<NoDsl> role,
   Map<String, ContributionOrigin> owners, {
   List<ModuleDescriptor>? modules,
 }) =>
@@ -184,7 +192,9 @@ void main() {
           );
 
           expect(
-              _stepIssues(role, _providerOf(role), const [step]), hasLength(1));
+            _stepIssues(role, _providerOf(role), const [step]),
+            hasLength(1),
+          );
           expect(
             _stepIssues(
               role,
@@ -284,7 +294,9 @@ void main() {
           expect(section.entryKey, heading);
           expect(socket.problemsWith(section), isEmpty);
           expect(
-              codeSpansOf(section.entryValue! as String), containsAll(sources));
+            codeSpansOf(section.entryValue! as String),
+            containsAll(sources),
+          );
         });
 
         test('writes the note of the role, which names the images', () {

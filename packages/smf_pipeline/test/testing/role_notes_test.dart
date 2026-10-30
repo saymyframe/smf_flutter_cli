@@ -892,8 +892,7 @@ void main() {
         () {
       expect(problems('The frame is `${_ShellRole.frameImage}`.'), isEmpty);
       expect(problems('The other one is `assets/shell/other.png`.'), [
-        '`assets/shell/other.png`, which only tabs generates and no role '
-            'guarantees',
+        '`assets/shell/other.png`, which only tabs generates and no role guarantees',
       ]);
     });
 

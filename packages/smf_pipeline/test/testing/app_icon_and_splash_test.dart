@@ -19,10 +19,9 @@ MasonBundle _images(List<String> paths) => MasonBundle(
       files: [
         for (final path in paths) MasonBundledFile(path, _image, 'binary'),
       ],
-      hooks: const [],
     );
 
-const _sources = [
+const List<String> _sources = [
   AppIconRole.imageFile,
   AppIconRole.foregroundFile,
   SplashRole.lightImageFile,
