@@ -46,7 +46,8 @@ const _implementation = 'lib/core/auth/firebase_auth_service.dart';
 
 /// The statement of firebase_core that initializes Firebase in
 /// `bootstrap()`.
-const _initializeFirebase = 'await Firebase.initializeApp(options: firebaseOptionsOfFlavor);';
+const _initializeFirebase =
+    'await Firebase.initializeApp(options: firebaseOptionsOfFlavor);';
 
 /// The owners of the code of sign-in: this module and the template of its
 /// role.
