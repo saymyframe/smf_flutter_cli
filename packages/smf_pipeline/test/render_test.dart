@@ -14,6 +14,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/src/render.dart';
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
 import 'support.dart';
 
@@ -330,6 +331,24 @@ flutter:
   assets:
     - "assets/"
 ''');
+  });
+
+  test('pubspec.yaml has the default flavor under flutter', () {
+    final app = _render([
+      scaffold(
+        contributions: [
+          const PubspecContribution.flutter(defaultFlavor: 'dev'),
+          const PubspecContribution.flutter(usesMaterialDesign: true),
+        ],
+      ),
+    ]);
+
+    final pubspec = loadYaml(app.files['pubspec.yaml']!.text) as YamlMap;
+    expect((pubspec['flutter'] as YamlMap).keys, [
+      'default-flavor',
+      'uses-material-design',
+    ]);
+    expect((pubspec['flutter'] as YamlMap)['default-flavor'], 'dev');
   });
 
   test('a line with nothing but the tag of an empty socket goes away', () {
