@@ -93,10 +93,10 @@ final class CiRole extends Role<NoDsl> {
           description: 'The files of the provider of the role, other than '
               'Dart files, have outside their comments each command of the '
               'checks and of the preparation of a build at the end of a line, '
-              'the command of the build at the end of a line, with the name '
-              'of an environment or something that stands for it, the file '
-              'that the build keeps, and each environment and each key as a '
-              'whole word.',
+              'the command of the build at the end of a line and the file '
+              'that the build keeps, each with something that stands for the '
+              'environment or once for every environment, and each '
+              'environment and each key as a whole word.',
           check: _checkPipelineRendered,
         ),
       ];

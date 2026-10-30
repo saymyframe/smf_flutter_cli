@@ -150,6 +150,12 @@ const _noBuildCommand = '$_prefix no line that ends with the command of the '
     'build, `flutter build apk --release --flavor <environment> '
     '--dart-define-from-file=.env`.';
 
+/// What the rule says of [what] in the files of a provider, which has a place
+/// for the environments [written] and none for the environments [left].
+String _onlyFor(String what, String written, String left) =>
+    '$_prefix $what only for $written, and none for $left, so a choice of one '
+    'of those would not give what it asks for.';
+
 /// What the rule says of the files of a provider without the file of the
 /// build.
 const _noArtifact = '$_prefix no line with the file of the build, '
@@ -513,6 +519,85 @@ void main() {
       }
     });
 
+    group('reports a build written for some of the environments:', () {
+      /// What the rule says once [from] has become [to] in the file.
+      List<String> problemsWith(String from, String to) =>
+          _problemsAfter((text) => text.replaceAll(from, to));
+
+      const command = r'--flavor $ENVIRONMENT';
+      const artifact = r'app-$ENVIRONMENT-release';
+
+      test('a command for one, which every choice would build', () {
+        expect(
+          problemsWith(command, '--flavor dev'),
+          [_onlyFor('the command of the build', 'dev', 'staging, prod')],
+        );
+      });
+
+      test('the same command in quotes', () {
+        expect(
+          problemsWith(command, '--flavor "dev"'),
+          [_onlyFor('the command of the build', 'dev', 'staging, prod')],
+        );
+      });
+
+      test('a command for one in an app without tool arguments', () {
+        expect(
+          _problemsOf(
+            (pipeline) => _listsOfCommands(pipeline).replaceAll(
+              r'--flavor $ENVIRONMENT',
+              '--flavor "prod"',
+            ),
+            inputOf(ciRole),
+            hasEnv: false,
+          ),
+          [_onlyFor('the command of the build', 'prod', 'dev, staging')],
+        );
+      });
+
+      test('a file for one, which the other builds would not have', () {
+        expect(
+          problemsWith(artifact, 'app-dev-release'),
+          [_onlyFor('the file of the build', 'dev', 'staging, prod')],
+        );
+      });
+
+      test('commands for two of the three', () {
+        expect(
+          problemsWith(
+            '    - flutter build apk --release $command '
+                '--dart-define-from-file=.env\n',
+            '    - flutter build apk --release --flavor dev '
+                '--dart-define-from-file=.env\n'
+                '    - flutter build apk --release --flavor prod '
+                '--dart-define-from-file=.env\n',
+          ),
+          [_onlyFor('the command of the build', 'dev, prod', 'staging')],
+        );
+      });
+
+      test('but takes a reference of the host next to a line for one', () {
+        expect(
+          problemsWith(
+            '    - flutter build apk --release $command '
+                '--dart-define-from-file=.env\n',
+            '    - flutter build apk --release --flavor dev '
+                '--dart-define-from-file=.env\n'
+                '    - flutter build apk --release $command '
+                '--dart-define-from-file=.env\n',
+          ),
+          isEmpty,
+        );
+      });
+
+      test('but takes a reference of another syntax, with spaces', () {
+        expect(
+          problemsWith(r'$ENVIRONMENT', r'$[[ inputs.environment ]]'),
+          isEmpty,
+        );
+      });
+    });
+
     test('reports an environment that the file lacks: it cannot be built', () {
       expect(
         _problemsAfter(
@@ -718,8 +803,8 @@ The section of the module that provides CI tells how to start a build.
     });
 
     test(
-        'says in the guide that CI runs nothing but the commands of the '
-        'README, in every app with the role', () {
+        'says in the guide that CI runs the commands of the README, in every '
+        'app with the role', () {
       final note = agentNoteOf(ciRole);
 
       expect(note.isOfRole, isTrue);
