@@ -373,7 +373,7 @@ flutter build appbundle --flavor prod --dart-define-from-file=.env
 flutter build ipa --flavor prod --dart-define-from-file=.env
 ```
 
-A build without `--flavor` is a release of `dev`, so name the flavor; the section "Flavors" has more.
+A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
 
 A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
@@ -419,10 +419,10 @@ The keys of the app:
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
 
-The app has a run configuration for each flavor, which passes the flavor and the arguments that the values need:
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
 
-- In VS Code, `.vscode/launch.json` has them. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, since it alone is the template of those launches (`templateFor`).
-- In Android Studio, `.run/<flavor>.run.xml` has the one of each flavor. A test that you run there gets none of these arguments.
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
 
 ## RevenueCat
 

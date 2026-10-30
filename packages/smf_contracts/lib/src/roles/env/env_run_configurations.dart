@@ -9,10 +9,10 @@ final String _runConfigurationsNote = '''
 /// What the section of the role in the README of the app says of the run
 /// configurations of the template.
 final String _runConfigurationsReadme = '''
-The app has a run configuration for each flavor, which passes the flavor and the arguments that the values need:
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
 
-- In VS Code, `${EnvRole.vscodeLaunchFile}` has them. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `${AppEntryRole.defaultFlavor.name}`, since it alone is the template of those launches (`templateFor`).
-- In Android Studio, `.run/<flavor>.run.xml` has the one of each flavor. A test that you run there gets none of these arguments.
+- In VS Code, they are in `${EnvRole.vscodeLaunchFile}`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `${AppEntryRole.defaultFlavor.name}`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
 ''';
 
 /// The run configurations of the IDEs of an app named [appName], by their

@@ -87,7 +87,7 @@ flutter build appbundle --flavor $_storeFlavor $_toolArgument
 flutter build ipa --flavor $_storeFlavor $_toolArgument
 ```
 
-A build without `--flavor` is a release of `${AppEntryRole.defaultFlavor.name}`, so name the flavor; the section "${AppEntryRole.flavorsHeading}" has more.
+A build without `--flavor` is a release of `${AppEntryRole.defaultFlavor.name}`, under its id, so a build for a store names its flavor. The section "${AppEntryRole.flavorsHeading}" tells more.
 
 A command reads the values only when it starts: after you change `${EnvRole.dotEnvFile}`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
