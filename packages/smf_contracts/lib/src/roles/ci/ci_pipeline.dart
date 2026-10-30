@@ -1,5 +1,15 @@
 part of '../ci.dart';
 
+/// The characters of an argument that a POSIX shell takes as they are, in any
+/// place of a word but the first of a command.
+final RegExp _plainWord = RegExp(r'^[A-Za-z0-9_@%+=:,./-]+$');
+
+/// [argument] as one word of a POSIX shell: as it is, or in single quotes,
+/// inside which the shell reads every character as it is but a single quote.
+String _shellWord(String argument) => _plainWord.hasMatch(argument)
+    ? argument
+    : "'${argument.replaceAll("'", r"'\''")}'";
+
 /// A command of CI: the text of a line of a POSIX shell, and a [name] that a
 /// provider may show for its step.
 @immutable

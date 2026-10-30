@@ -105,7 +105,8 @@ final class CiRole extends Role<NoDsl> {
   /// or of its provider.
   ///
   /// The arguments of [EnvRole.toolArgumentsIn] go on `flutter test` and on
-  /// `flutter build` as they are. With the env role, the checks start by
+  /// `flutter build`, each as one word of the shell, in quotes when it needs
+  /// them. With the env role, the checks start by
   /// copying [EnvRole.exampleFile] when [EnvRole.dotEnvFile] is missing: every
   /// value is empty in a fresh copy of the repository, and the command keeps
   /// the values of a developer who runs it. A build starts from [writeEnvFile].
@@ -115,7 +116,10 @@ final class CiRole extends Role<NoDsl> {
   /// are not formatted. `flutter analyze` takes no tool arguments.
   CiPipeline pipelineIn(RoleHookInput<Object> input) {
     final hasEnv = input.has(envRole);
-    final arguments = envRole.toolArgumentsIn(input).join(' ');
+    final arguments = [
+      for (final argument in envRole.toolArgumentsIn(input))
+        _shellWord(argument),
+    ].join(' ');
     String withArguments(String command) =>
         arguments.isEmpty ? command : '$command $arguments';
     const packages = CiCommand._('Get the packages', 'flutter pub get');

@@ -107,13 +107,14 @@ List<String> _problemsOf(
   String Function(CiPipeline pipeline)? write,
   RoleHookInput<NoDsl> input, {
   required bool hasEnv,
+  List<RoleData<Object>>? data,
 }) {
   final provider = _Provider(write);
   final files = provider.render(input).files;
   final issues = ciRole.checkStructure(
     StructuralRuleRequest(
       hook: RoleHookRequest(
-        data: hasEnv ? _envData : const [],
+        data: data ?? (hasEnv ? _envData : const []),
         presentRoles: {ciRole, if (hasEnv) envRole},
         context: testContext,
       ),
@@ -336,6 +337,86 @@ void main() {
         '.env',
       );
       expect(pipeline.build.keys, isEmpty);
+    });
+
+    group('gives an argument with a character of the shell as one word:', () {
+      const arguments = [
+        '--plain=a,b/c:d@e%f+g.h',
+        '--dart-define=GREETING=hello world',
+        r"--name=it's $HOME",
+        '--mark=#1;`x`&*',
+      ];
+
+      RoleHookInput<NoDsl> input() => inputOf(
+            ciRole,
+            data: [
+              dataOf<EnvData>(
+                envRole,
+                const EnvToolArguments(arguments),
+                module: 'env_provider',
+              ),
+            ],
+            present: {envRole},
+          );
+
+      test('in quotes, and only where it needs them', () {
+        const quoted = '--plain=a,b/c:d@e%f+g.h '
+            "'--dart-define=GREETING=hello world' "
+            r"'--name=it'\''s $HOME' "
+            "'--mark=#1;`x`&*'";
+        final pipeline = ciRole.pipelineIn(input());
+
+        expect(pipeline.checks.last.command, 'flutter test $quoted');
+        expect(
+          pipeline.build.command.of('dev'),
+          'flutter build apk --release --flavor dev $quoted',
+        );
+      });
+
+      test(
+        'which a shell reads back as the argument',
+        () {
+          final pipeline = ciRole.pipelineIn(input());
+          for (final (line, words) in [
+            (pipeline.checks.last.command, ['test']),
+            (
+              pipeline.build.command.of('dev'),
+              ['build', 'apk', '--release', '--flavor', 'dev'],
+            ),
+          ]) {
+            final result = Process.runSync(
+              'sh',
+              ['-c', 'flutter() { printf "%s\\n" "\$@"; }; $line'],
+              environment: const {'HOME': '/expanded'},
+            );
+
+            expect(result.exitCode, 0, reason: '${result.stderr}');
+            expect(
+              (result.stdout as String).trimRight().split('\n'),
+              [...words, ...arguments],
+            );
+          }
+        },
+        testOn: '!windows',
+      );
+
+      test('which the rule finds in the files of a provider', () {
+        expect(
+          _problemsOf(
+            _listsOfCommands,
+            input(),
+            hasEnv: true,
+            data: [
+              dataOf<EnvData>(
+                envRole,
+                const EnvToolArguments(arguments),
+                module: 'env_provider',
+              ),
+            ],
+          ),
+          isEmpty,
+        );
+      });
     });
 
     test('takes an env role whose provider needs no tool arguments', () {
