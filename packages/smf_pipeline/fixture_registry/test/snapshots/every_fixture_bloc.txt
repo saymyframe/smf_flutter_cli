@@ -87,6 +87,73 @@ app.*.map.json
 # The values of the fixture that each developer keeps
 # What the fixture keeps on one machine
 /fixture.local
+=== .run/dev.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="fixture_app dev" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor dev --dart-define-from-file .env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/prod.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="fixture_app prod" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor prod --dart-define-from-file .env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/staging.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="fixture_app staging" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor staging --dart-define-from-file .env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .vscode/launch.json (role:env) ===
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "fixture_app dev",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "dev",
+        "--dart-define-from-file",
+        ".env"
+      ],
+      "templateFor": ""
+    },
+    {
+      "name": "fixture_app staging",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "staging",
+        "--dart-define-from-file",
+        ".env"
+      ]
+    },
+    {
+      "name": "fixture_app prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "prod",
+        "--dart-define-from-file",
+        ".env"
+      ]
+    }
+  ]
+}
 === AGENTS.md (role:app_entry) ===
 # AGENTS.md
 
@@ -242,6 +309,7 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
 - Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
 - `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+- `.vscode/launch.json` and `.run/<flavor>.run.xml` are the run configurations of VS Code and Android Studio, one for each flavor. Each passes the flavor and the arguments that the values need. In VS Code, F5 starts the selected configuration, while the links above `main()` and above a test and the Testing view always use `dev`, whose configuration alone has `templateFor`. In Android Studio, a test gets none of these arguments.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -322,6 +390,8 @@ A screen of sign-in shows the button of a way to sign in only on the platforms t
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
+`.env` is not tied to a flavor: a build of any flavor takes what `.env` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
+
 The keys of the app:
 
 - `FAKE_ENV_USER_FIRST`, read as `AppEnv.fakeEnvUserFirst`, from the module `fake_env_user`: The first value of the fixture
@@ -329,6 +399,11 @@ The keys of the app:
 - `FAKE_ENV_USER_THIRD`, read as `AppEnv.fakeEnvUserThird`, from the module `fake_env_user`: The third value of the fixture
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
+
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
 
 ## Languages
 

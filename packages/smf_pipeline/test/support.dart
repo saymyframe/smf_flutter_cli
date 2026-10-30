@@ -208,8 +208,8 @@ const plainKind = ModuleKind(id: 'plain', label: 'Plain modules');
 
 /// The module that provides the app entry in tests, with the base value of
 /// the minimum iOS version, the Dart SDK constraint and the dependency on
-/// Flutter, as flutter_core contributes them, and the files of
-/// [entryBrick] and [fallbackBrick] unless [bricks] is `false`.
+/// Flutter, as flutter_core contributes them, and the files of [entryBrick]
+/// and [fallbackBrick] with the default flavor unless [bricks] is `false`.
 TestModule scaffold({
   List<Contribution> contributions = const [],
   bool bricks = true,
@@ -219,7 +219,13 @@ TestModule scaffold({
       kind: ModuleKinds.scaffold,
       providers: [const RoleProvider.plain(appEntryRole)],
       contributions: [
-        if (bricks) ...[entryBrick(), fallbackBrick()],
+        if (bricks) ...[
+          entryBrick(),
+          fallbackBrick(),
+          PubspecContribution.flutter(
+            defaultFlavor: AppEntryRole.defaultFlavor.name,
+          ),
+        ],
         AppEntryRole.iosDeploymentTarget.value('13.0'),
         const PubspecContribution.environment(sdk: '^3.8.1'),
         const PubspecContribution.sdk('flutter'),
@@ -307,6 +313,25 @@ plugins {
 android {
     compileOptions {
 {{{smf_app_entry__android_core_library_desugaring_enabled}}}
+    }
+
+    defaultConfig {
+        applicationId = "{{org_name}}.{{app_name}}"
+    }
+
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+        }
+        create("prod") {
+            dimension = "default"
+        }
     }
 }
 

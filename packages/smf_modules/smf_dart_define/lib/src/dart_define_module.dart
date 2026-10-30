@@ -6,6 +6,9 @@ import 'package:smf_dart_define/src/agents.dart';
 /// values of [EnvRole.dotEnvFile].
 const _toolArgument = '--dart-define-from-file=${EnvRole.dotEnvFile}';
 
+/// The flavor that a build for a store names.
+final String _storeFlavor = AppEntryRole.releaseFlavor.name;
+
 /// The module that gives the app the values of `.env` through
 /// `--dart-define-from-file` of the `flutter` tool, and so provides the env
 /// role.
@@ -24,24 +27,17 @@ const _toolArgument = '--dart-define-from-file=${EnvRole.dotEnvFile}';
 ///   the app analyzes and builds;
 /// - its argument for the role ([EnvToolArguments]), which code that runs
 ///   such a command for the app takes from [EnvRole.toolArgumentsIn], such
-///   as the tests of the apps of SMF;
-/// - `.vscode/launch.json` and `.run/main.run.xml`, the run configurations
-///   of VS Code and of Android Studio, each named after the app, which pass
-///   the argument to `flutter run`. Dart-Code takes the configuration of
-///   VS Code as the template of every launch of a file of the app
-///   (`templateFor`), with that file as its program, so the links above
-///   `main()` and above a test and the Testing view pass the argument too.
-///   Android Studio shares a configuration from `.run/`, since the `.idea/`
-///   of a project belongs to one machine, and passes the argument only to
-///   that configuration;
+///   as the run configurations that the template of the role writes and the
+///   tests of the apps of SMF;
 /// - the section [readmeHeading] of the README of the app, which gives the
-///   commands with the argument, tells that the values are read when a
-///   command starts, so `flutter run` starts again after an edit of `.env`,
+///   commands with the argument, a build for a store with the flavor of a
+///   store ([AppEntryRole.releaseFlavor]), tells that the values are read when
+///   a command starts, so `flutter run` starts again after an edit of `.env`,
 ///   and shows how a getter of a new key reads its value;
 /// - a note in the section of the role in the guide for coding agents of
 ///   the app, after what the role says there: the commands with the
-///   argument, the run configurations, the restart after an edit of
-///   `.env`, and how a getter reads its value.
+///   argument, the restart after an edit of `.env`, and how a getter reads
+///   its value.
 ///
 /// The last line of `smf create` stays `flutter run`: right after the app
 /// is generated, every value of `.env` is empty, so the app is the same
@@ -77,21 +73,21 @@ final class DartDefineModule extends SmfModule {
 }
 
 /// The section of the module in the README of the app: the commands with
-/// the argument, the run configurations that pass it, when the values are
-/// read, and the getter of a new key. What `.env` is for, and its keys, are
-/// in the section of the role.
-const _readmeSection = '''
+/// the argument, when the values are read, and the getter of a new key. What
+/// `.env` is for, its keys and the run configurations that pass the argument
+/// are in the section of the role.
+final String _readmeSection = '''
 `AppEnv` in `${EnvRole.readerFile}` reads each value of `${EnvRole.dotEnvFile}` with `String.fromEnvironment`. The `flutter` tool reads `${EnvRole.dotEnvFile}` when a command that builds, runs or tests the app starts, given `$_toolArgument`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
 
 ```bash
 flutter run $_toolArgument
 flutter test $_toolArgument
-flutter build apk $_toolArgument
-flutter build appbundle $_toolArgument
-flutter build ipa $_toolArgument
+flutter build apk --flavor $_storeFlavor $_toolArgument
+flutter build appbundle --flavor $_storeFlavor $_toolArgument
+flutter build ipa --flavor $_storeFlavor $_toolArgument
 ```
 
-In VS Code, `.vscode/launch.json` passes the argument to Run and Debug (F5), to the Run and Debug links above `main()`, and to the tests that you run from the links above them or from the Testing view: its configuration is the template of every launch of the app (`templateFor`). In Android Studio, `.run/main.run.xml` passes it to the run configuration named after the app, and a test that you run there gets no argument.
+A build without `--flavor` is a release of `${AppEntryRole.defaultFlavor.name}`, under its id, so a build for a store names its flavor. The section "${AppEntryRole.flavorsHeading}" tells more.
 
 A command reads the values only when it starts: after you change `${EnvRole.dotEnvFile}`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
@@ -104,7 +100,7 @@ static String? get myServiceKey {
 }
 ```
 
-The section "${EnvRole.readmeHeading}" tells what goes into `${EnvRole.dotEnvFile}` and lists the keys of the app.
+The section "${EnvRole.readmeHeading}" tells what goes into `${EnvRole.dotEnvFile}`, lists the keys of the app and names the run configurations that pass the argument.
 ''';
 
 /// The provider of the env role: its render hook writes a getter of

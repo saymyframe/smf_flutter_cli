@@ -92,25 +92,67 @@ app.*.map.json
 
 # The values of the app, which each developer fills in from .env.example
 .env
-=== .run/main.run.xml (dart_define) ===
+=== .run/dev.run.xml (role:env) ===
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="fixture_app" type="FlutterRunConfigurationType" factoryName="Flutter">
-    <option name="additionalArgs" value="--dart-define-from-file=.env" />
+  <configuration default="false" name="fixture_app dev" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor dev --dart-define-from-file=.env" />
     <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
     <method v="2" />
   </configuration>
 </component>
-=== .vscode/launch.json (dart_define) ===
+=== .run/prod.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="fixture_app prod" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor prod --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/staging.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="fixture_app staging" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor staging --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .vscode/launch.json (role:env) ===
 {
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "fixture_app",
+      "name": "fixture_app dev",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
-      "toolArgs": ["--dart-define-from-file=.env"],
+      "toolArgs": [
+        "--flavor",
+        "dev",
+        "--dart-define-from-file=.env"
+      ],
       "templateFor": ""
+    },
+    {
+      "name": "fixture_app staging",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "staging",
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "fixture_app prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "prod",
+        "--dart-define-from-file=.env"
+      ]
     }
   ]
 }
@@ -434,11 +476,11 @@ With `flutter_bloc`:
 - Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
 - Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
 - `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+- `.vscode/launch.json` and `.run/<flavor>.run.xml` are the run configurations of VS Code and Android Studio, one for each flavor. Each passes the flavor and the arguments that the values need. In VS Code, F5 starts the selected configuration, while the links above `main()` and above a test and the Testing view always use `dev`, whose configuration alone has `templateFor`. In Android Studio, a test gets none of these arguments.
 
 With `--dart-define-from-file`:
 
 - Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`.
-- In VS Code, `.vscode/launch.json` passes it to Run and Debug (F5), to the Run and Debug links above `main()` and to the tests run from their links or from the Testing view, since its configuration is the template of every launch (`templateFor`). In Android Studio, `.run/main.run.xml` passes it only to the run configuration named after the app, not to a test that you run there.
 - A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
 - The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
 === CLAUDE.md (role:app_entry) ===
@@ -506,12 +548,12 @@ In Xcode, select the scheme of a flavor, not `Runner`, which builds the id and t
 ```bash
 flutter run --dart-define-from-file=.env
 flutter test --dart-define-from-file=.env
-flutter build apk --dart-define-from-file=.env
-flutter build appbundle --dart-define-from-file=.env
-flutter build ipa --dart-define-from-file=.env
+flutter build apk --flavor prod --dart-define-from-file=.env
+flutter build appbundle --flavor prod --dart-define-from-file=.env
+flutter build ipa --flavor prod --dart-define-from-file=.env
 ```
 
-In VS Code, `.vscode/launch.json` passes the argument to Run and Debug (F5), to the Run and Debug links above `main()`, and to the tests that you run from the links above them or from the Testing view: its configuration is the template of every launch of the app (`templateFor`). In Android Studio, `.run/main.run.xml` passes it to the run configuration named after the app, and a test that you run there gets no argument.
+A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
 
 A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
@@ -524,7 +566,7 @@ static String? get myServiceKey {
 }
 ```
 
-The section "Values in .env" tells what goes into `.env` and lists the keys of the app.
+The section "Values in .env" tells what goes into `.env`, lists the keys of the app and names the run configurations that pass the argument.
 
 ## Firebase
 
@@ -674,6 +716,8 @@ The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_si
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
+`.env` is not tied to a flavor: a build of any flavor takes what `.env` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
+
 The keys of the app:
 
 - `REVENUECAT_APPLE_KEY`, read as `AppEnv.revenuecatAppleKey`, from the module `revenuecat`: The public API key of the App Store app in RevenueCat, which starts with appl_
@@ -683,6 +727,11 @@ The keys of the app:
 - `PAYWALL_PRIVACY_URL`, read as `AppEnv.paywallPrivacyUrl`, from the module `paywall`: The address of the privacy policy that the paywall links to
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
+
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
 
 ## RevenueCat
 
