@@ -62,11 +62,13 @@ const List<SmfModule> _modules = [
 
 const _module = ModuleOrigin(DartDefineModule.id);
 
-/// The path of the run configuration of VS Code.
-const _launch = '.vscode/launch.json';
-
-/// The path of the run configuration of Android Studio.
-const _runConfiguration = '.run/main.run.xml';
+/// The paths of the run configurations of the IDEs, which the template of the
+/// role writes.
+final _runConfigurations = [
+  EnvRole.vscodeLaunchFile,
+  for (final flavor in AppEntryRole.flavors)
+    EnvRole.androidStudioRunFileOf(flavor),
+];
 
 /// What the contract harness finds for the app of [modules].
 Future<ContractResult> _check(List<ModuleId> modules) =>
@@ -98,16 +100,6 @@ List<(String, String)> _putInto(ContractResult result, SocketRef socket) => [
         if (collected.contribution case final SocketContribution contribution)
           ('${collected.origin}', contribution.entryKey!),
     ];
-
-/// The entry of [app]: the Dart file of `lib/` that declares the function
-/// `main`, which the provider of the app entry renders.
-String _entryOf(RenderedApp app) => [
-      for (final file in app.files.values)
-        if (file.path.startsWith('lib/') && file.path.endsWith('.dart'))
-          if (DartFileIndexer.index(file.path, file.text).declaration('main')
-              case IndexedDeclaration(kind: DeclarationKind.function))
-            file.path,
-    ].single;
 
 /// The section of the module in the README of the app.
 String _readmeSection() => const DartDefineModule()
@@ -156,7 +148,7 @@ void main() {
       expect(brick.hooks, isEmpty);
       expect(
         [for (final file in brick.files) file.path],
-        unorderedEquals([_launch, _runConfiguration, EnvRole.readerFile]),
+        [EnvRole.readerFile],
       );
       final data = contributions[1] as RoleData<Object>;
       expect(data.role, envRole);
@@ -383,60 +375,39 @@ void main() => print(
     });
 
     test(
-        'of VS Code launch the entry of the app under the name of the app, '
-        'with the tool arguments of the role, and are the template of every '
-        'launch of a file of the app, as the links above main() and the '
-        'tests', () {
-      expect(app.files[_launch]!.owner, _module);
-      expect(jsonDecode(app.files[_launch]!.text), {
-        'version': '0.2.0',
-        'configurations': [
-          {
-            'name': ContractHarness.defaultContext.appName,
-            'request': 'launch',
-            'type': 'dart',
-            'program': _entryOf(app),
-            'toolArgs': _toolArgumentsOf(result),
-            // Dart-Code takes the configuration as the template of the
-            // launches of every file of the app, and puts the file in place
-            // of the program.
-            'templateFor': '',
-          },
-        ],
-      });
-      expect(_toolArgumentsOf(result), isNotEmpty);
-    });
+        'come from the template of the role, which this module leaves to it, '
+        'and pass the argument of the module for each flavor', () {
+      final argument = _toolArgumentsOf(result).single;
+      expect(argument, '--dart-define-from-file=${EnvRole.dotEnvFile}');
 
-    test(
-        'of Android Studio run the entry of the app with the tool arguments '
-        'of the role, in a configuration that the project shares', () {
-      expect(app.files[_runConfiguration]!.owner, _module);
-      final component =
-          XmlDocument.parse(app.files[_runConfiguration]!.text).rootElement;
-      expect(component.name.local, 'component');
+      for (final path in _runConfigurations) {
+        expect(app.files[path]!.owner, const RoleTemplateOrigin(envRole));
+      }
+      final launch = jsonDecode(app.files[EnvRole.vscodeLaunchFile]!.text)
+          as Map<String, Object?>;
       expect(
-        component.getAttribute('name'),
-        'ProjectRunConfigurationManager',
+        [
+          for (final configuration
+              in launch['configurations']! as List<Object?>)
+            (configuration! as Map<String, Object?>)['toolArgs'],
+        ],
+        [
+          for (final flavor in AppEntryRole.flavors)
+            ['--flavor', flavor.name, argument],
+        ],
       );
-      final configuration = component.childElements.single;
-      expect(configuration.name.local, 'configuration');
-      expect(configuration.getAttribute('type'), 'FlutterRunConfigurationType');
-      expect(configuration.getAttribute('factoryName'), 'Flutter');
-      expect(configuration.getAttribute('default'), 'false');
-      expect(
-        configuration.getAttribute('name'),
-        ContractHarness.defaultContext.appName,
-      );
-      expect(
-        {
-          for (final option in configuration.findElements('option'))
-            option.getAttribute('name'): option.getAttribute('value'),
-        },
-        {
-          'additionalArgs': _toolArgumentsOf(result).join(' '),
-          'filePath': '\$PROJECT_DIR\$/${_entryOf(app)}',
-        },
-      );
+      for (final flavor in AppEntryRole.flavors) {
+        final configuration = XmlDocument.parse(
+          app.files[EnvRole.androidStudioRunFileOf(flavor)]!.text,
+        ).rootElement.childElements.single;
+        expect(
+          {
+            for (final option in configuration.findElements('option'))
+              option.getAttribute('name'): option.getAttribute('value'),
+          }['additionalArgs'],
+          '--flavor ${flavor.name} $argument',
+        );
+      }
     });
 
     test(
@@ -459,8 +430,7 @@ void main() => print(
         'check-ignore',
         '--no-index',
         '--',
-        _launch,
-        _runConfiguration,
+        ..._runConfigurations,
         EnvRole.readerFile,
         EnvRole.dotEnvFile,
       ]);
@@ -507,33 +477,35 @@ void main() => print(
 
     test(
         'gives each command of the flutter tool that builds, runs or tests '
-        'the app with the tool arguments of the role', () {
+        'the app with the tool arguments of the role, and each build for a '
+        'store with the flavor of a store, since a build without one is a '
+        'release of the default flavor', () {
       final commands = [
         for (final line in const LineSplitter().convert(section))
           if (line.startsWith('flutter ')) line,
       ];
 
+      final arguments = _toolArgumentsOf(result);
+      final store = ['--flavor', AppEntryRole.releaseFlavor.name, ...arguments];
       expect(commands, [
-        for (final command in [
-          'run',
-          'test',
-          'build apk',
-          'build appbundle',
-          'build ipa',
-        ])
-          ['flutter', command, ..._toolArgumentsOf(result)].join(' '),
+        for (final command in ['run', 'test'])
+          ['flutter', command, ...arguments].join(' '),
+        for (final command in ['build apk', 'build appbundle', 'build ipa'])
+          ['flutter', command, ...store].join(' '),
       ]);
+      expect(section, contains('"${AppEntryRole.flavorsHeading}"'));
     });
 
     test(
-        'names the files of the app that read the values and pass the '
-        'argument, and the class through which code reads a value', () {
+        'names the file of the app that reads the values, the class through '
+        'which code reads a value, and no run configuration, which the section '
+        'of the role names', () {
       final paths = {
         for (final code in _inlineCodeOf(section))
           if (code.contains('/')) code,
       };
 
-      expect(paths, {_launch, _runConfiguration, EnvRole.readerFile});
+      expect(paths, {EnvRole.readerFile});
       for (final path in paths) {
         expect(result.app!.files, contains(path));
       }
@@ -609,20 +581,14 @@ void main() => print(
         'flutter test',
         'flutter build',
         EnvRole.appEnv.name,
-        'main()',
-        'templateFor',
         'null',
-        _launch,
-        _runConfiguration,
         EnvRole.dotEnvFile,
         'flutter run',
         EnvRole.readerFile,
         "const String.fromEnvironment('MY_SERVICE_KEY')",
         'MY_SERVICE_KEY',
       });
-      for (final path in [_launch, _runConfiguration, EnvRole.readerFile]) {
-        expect(app.files, contains(path));
-      }
+      expect(app.files, contains(EnvRole.readerFile));
       final index = DartFileIndexer.index(
         EnvRole.readerFile,
         app.files[EnvRole.readerFile]!.text,
