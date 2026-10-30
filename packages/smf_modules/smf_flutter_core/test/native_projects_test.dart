@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_flutter_core/src/agents.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
@@ -528,6 +529,24 @@ void main() {
           'ArchiveAction': 'Release-${flavor.name}',
         });
       }
+    });
+
+    test('tell coding agents where each flavor is, in files that the app has',
+        () {
+      for (final flavor in AppEntryRole.flavors) {
+        expect(texts.keys, contains(flavor.xcodeSchemeFile));
+        expect(
+          agentNote,
+          contains('`${flavor.xcodeSchemeFile.replaceFirst(
+            '${flavor.name}.xcscheme',
+            '<flavor>.xcscheme',
+          )}`'),
+        );
+      }
+      expect(texts.keys, containsAll([appGradle, pbxproj]));
+      expect(agentNote, contains('`productFlavors` of `$appGradle`'));
+      expect(agentNote, contains('`$pbxproj`'));
+      expect(agentNote, contains('`Debug-<flavor>`'));
     });
 
     test('tell in the README where each flavor is in the native projects', () {
