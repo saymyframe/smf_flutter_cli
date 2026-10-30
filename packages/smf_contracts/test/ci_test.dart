@@ -726,8 +726,8 @@ The section of the module that provides CI tells how to start a build.
       expect(
         note.text,
         allOf(
-          contains('"${CiRole.readmeHeading}" of `README.md`'),
-          contains('`flutter pub get`'),
+          contains('"${CiRole.readmeHeading}" of `README.md`, in a fresh'),
+          contains('`flutter pub get`, since no other of these commands'),
         ),
       );
       expect(note.text, isNot(contains('.env')));
@@ -746,6 +746,7 @@ The section of the module that provides CI tells how to start a build.
           contains('`${EnvRole.exampleFile}`'),
           contains('A new key also needs its variable where CI runs.'),
           contains('stops when `.env` has a value'),
+          contains('only when `.env` is missing'),
           contains('never give a build of CI a secret'),
         ),
       );
@@ -880,6 +881,7 @@ The section of the module that provides CI tells how to start a build.
         envOf(directory).readAsStringSync(),
         '$key=from_the_example\nFEED_URL=new\n',
       );
+      expect(result.stdout, isNot(contains('No value')));
     });
 
     test('keeps comments and empty lines, also a key that is commented out',

@@ -3,13 +3,14 @@ part of '../ci.dart';
 /// The note of the CI role in the guide for coding agents, whichever module
 /// provides the role and wherever it runs.
 const _agentNote = '''
-- CI runs the commands of the section "${CiRole.readmeHeading}" of `README.md` and nothing else, in a fresh copy of the repository. Keep them passing, and run them before you finish a change.
-- A generated file that the app needs stays in git, or comes from `flutter pub get`: no other step of CI writes it.
+- CI runs the commands of the section "${CiRole.readmeHeading}" of `README.md`, in a fresh copy of the repository. Keep them passing, and run them before you finish a change.
+- A generated file that the app needs stays in git, or comes from `flutter pub get`, since no other of these commands writes it.
 ''';
 
 /// The note of the CI role in an app with the env role.
 const _envAgentNote = '''
 - `${CiRole.writeEnvFile}` writes `${EnvRole.dotEnvFile}` for a build of CI, from the keys of `${EnvRole.exampleFile}` and the variables of the process. A new key also needs its variable where CI runs. The script stops when `${EnvRole.dotEnvFile}` has a value, and never replaces one.
+- The first check copies `${EnvRole.exampleFile}` only when `${EnvRole.dotEnvFile}` is missing, so running it keeps the values on your machine.
 - A value of `${EnvRole.dotEnvFile}` ends up in the app, so never give a build of CI a secret through it.
 ''';
 

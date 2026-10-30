@@ -51,7 +51,7 @@ void main() {
     }
     final value = Platform.environment[key] ?? '';
     if (value.isEmpty) {
-      empty.add(key);
+      if (_withoutValue.hasMatch(line)) empty.add(key);
       lines.add(line);
     } else if (_unsafe.hasMatch(value)) {
       refused.add(key);

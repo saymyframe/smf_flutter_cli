@@ -208,10 +208,11 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 
 ## CI
 
-- CI runs the commands of the section "Continuous integration" of `README.md` and nothing else, in a fresh copy of the repository. Keep them passing, and run them before you finish a change.
-- A generated file that the app needs stays in git, or comes from `flutter pub get`: no other step of CI writes it.
+- CI runs the commands of the section "Continuous integration" of `README.md`, in a fresh copy of the repository. Keep them passing, and run them before you finish a change.
+- A generated file that the app needs stays in git, or comes from `flutter pub get`, since no other of these commands writes it.
 
 - `tool/write_env.dart` writes `.env` for a build of CI, from the keys of `.env.example` and the variables of the process. A new key also needs its variable where CI runs. The script stops when `.env` has a value, and never replaces one.
+- The first check copies `.env.example` only when `.env` is missing, so running it keeps the values on your machine.
 - A value of `.env` ends up in the app, so never give a build of CI a secret through it.
 
 ## Crash reporting
@@ -8527,7 +8528,7 @@ void main() {
     }
     final value = Platform.environment[key] ?? '';
     if (value.isEmpty) {
-      empty.add(key);
+      if (_withoutValue.hasMatch(line)) empty.add(key);
       lines.add(line);
     } else if (_unsafe.hasMatch(value)) {
       refused.add(key);
