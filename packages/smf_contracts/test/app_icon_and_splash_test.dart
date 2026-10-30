@@ -108,8 +108,9 @@ void main() {
           expect(issue.severity, IssueSeverity.error);
           expect(
             issue.message,
-            'The module stand_in provides the $role, which needs a step after generation that runs in every '
-            'run of smf create, but it has no step.',
+            'The module stand_in provides the $role, which needs a step after '
+            'generation that a run without a terminal runs too, but it has no '
+            'step.',
           );
           expect(issue.hint, contains('PostGenStep'));
         });

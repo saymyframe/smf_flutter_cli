@@ -16,8 +16,8 @@ const appIconRole = AppIconRole._();
 /// the icon from them.
 ///
 /// The native projects are files of the provider of the [AppEntryRole], so
-/// the provider makes the icon in a [PostGenStep], which every run of
-/// `smf create` runs (the rule `app_icon.step`). Its README section and its
+/// the provider makes the icon in a [PostGenStep] that a run without a
+/// terminal runs too (the rule `app_icon.step`). Its README section and its
 /// note for coding agents give the command that makes the icon again after a
 /// change of an image, and tell what the images show.
 ///
@@ -61,10 +61,10 @@ final class AppIconRole extends Role<NoDsl> {
   List<ModuleRule<NoDsl>> get moduleRules => const [
         ModuleRule(
           id: 'app_icon.step',
-          description: 'A provider has a PostGenStep that makes the icon in '
-              'every run of smf create: one that is neither external nor '
-              'interactive, has no notice and no hosts, and continues no '
-              'other step.',
+          description: 'A provider has a PostGenStep that makes the icon and '
+              'that a run without a terminal runs too: one that is neither '
+              'external nor interactive, has no notice and no hosts, and '
+              'continues no other step.',
           check: imageStepProblems,
         ),
       ];

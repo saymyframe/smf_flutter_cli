@@ -17,8 +17,8 @@ const splashRole = SplashRole._();
 /// tool that makes the screen from them.
 ///
 /// The native projects are files of the provider of the [AppEntryRole], so
-/// the provider makes the screen in a [PostGenStep], which every run of
-/// `smf create` runs (the rule `splash.step`). Its README section and its
+/// the provider makes the screen in a [PostGenStep] that a run without a
+/// terminal runs too (the rule `splash.step`). Its README section and its
 /// note for coding agents give the command that makes the screen again after
 /// a change of an image, and tell what the images show and which colours are
 /// behind them.
@@ -63,10 +63,10 @@ final class SplashRole extends Role<NoDsl> {
   List<ModuleRule<NoDsl>> get moduleRules => const [
         ModuleRule(
           id: 'splash.step',
-          description: 'A provider has a PostGenStep that makes the screen in '
-              'every run of smf create: one that is neither external nor '
-              'interactive, has no notice and no hosts, and continues no '
-              'other step.',
+          description: 'A provider has a PostGenStep that makes the screen and '
+              'that a run without a terminal runs too: one that is neither '
+              'external nor interactive, has no notice and no hosts, and '
+              'continues no other step.',
           check: imageStepProblems,
         ),
       ];

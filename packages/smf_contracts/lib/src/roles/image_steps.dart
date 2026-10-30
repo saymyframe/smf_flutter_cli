@@ -1,8 +1,8 @@
 import 'package:smf_contracts/core.dart';
 
 /// The problem of a module that provides a role of images in the native
-/// projects of the app, such as its icon, without a step that makes them in
-/// every run: the module rule of such a role.
+/// projects of the app, such as its icon, without a step that a run without
+/// a terminal runs too: the module rule of such a role.
 ///
 /// The native projects are files of the provider of the app entry, and two
 /// bricks cannot generate one file, so only a [PostGenStep] can change them.
@@ -27,7 +27,7 @@ List<SmfIssue> imageStepProblems(ModuleRuleInput<NoDsl> input) {
   return [
     SmfIssue(
       'The module ${module.id} provides the $role, which needs a step after '
-      'generation that runs in every run of smf create, but $found.',
+      'generation that a run without a terminal runs too, but $found.',
       hint: 'The native projects belong to the provider of the app entry, so '
           'a brick cannot write these images there. Add a PostGenStep that '
           'needs nothing outside the app, does not talk to the user, has no '
