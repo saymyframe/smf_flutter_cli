@@ -12,8 +12,8 @@ const flutterfireVersion = '1.4.1';
 
 /// The lowest version of flutterfire_cli that the check accepts.
 ///
-/// It writes `lib/firebase_options.dart` in the form of the placeholder, as
-/// 1.4.0 does. For some Firebase packages, flutterfire adds a build phase to
+/// It fills the placeholders of the options of each flavor in place, as 1.4.0
+/// does. For some Firebase packages, flutterfire adds a build phase to
 /// the Xcode project that runs a script of the package from the Swift
 /// packages of the app. With Swift Package Manager, Flutter puts them in
 /// `build/ios/SourcePackages`, where the phases of 1.4.0 do not look, so the

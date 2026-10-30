@@ -1,22 +1,27 @@
+import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_firebase_core/src/configure.dart';
 import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 
 /// The heading of the section of the module in the README of the app.
 const readmeHeading = 'Firebase';
 
-/// The section of the module in the README of the app, which gives
-/// [configure], the command that configures the app.
-String readmeSection(String configure) => '''
-The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with the options of `DefaultFirebaseOptions` in `lib/firebase_options.dart`. `flutterfire configure` of the FlutterFire CLI writes these options when it registers the app in a Firebase project, together with `android/app/google-services.json`, `firebase.json` and, on macOS, `ios/Runner/GoogleService-Info.plist`. Until then, the options are a placeholder, and the app stops at start-up with an `UnsupportedError`.
+/// The section of the module in the README of the app.
+final String readmeSection = '''
+The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below.
 
-To configure the app, or to configure it again, such as for another Firebase project or on another machine, run in its directory:
+`smf create` configures `${AppEntryRole.defaultFlavor.name}`. To configure a flavor, or to configure it again, such as for another project or on another machine, run in the directory of the app:
 
 ```bash
 dart pub global activate flutterfire_cli $flutterfireVersion
 firebase login
-$configure
+dart $configureScriptPath staging --project=<id>
 ```
 
-The command gives flutterfire the ids of the Android and iOS apps that SMF generated; if you change them, change them in the command too. `flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli), and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated too.
+Use this script rather than `flutterfire configure`, which would write files that no flavor reads. It registers the Android and iOS apps of the flavor in the project and writes its options, `android/app/src/<flavor>/google-services.json`, `firebase.json` and, on macOS, `ios/flavors/<flavor>/GoogleService-Info.plist`. Commit them. In a terminal you may leave `--project` out, and flutterfire then asks. Other arguments, such as `--account=<email>`, go to flutterfire. The ids of each flavor are at the top of the script: if you change them in the projects, change them there too.
 
-Configure the app with flutterfire_cli $minimumFlutterfireVersion or a later 1.x; if `dart pub global list` shows one already, skip its activation above.
+Once one flavor is configured, a build of a flavor that is not fails on Android, with `File google-services.json is missing`. On iOS it builds and stops at start-up, but with Crashlytics it fails in the build too (see that section).
+
+A run from Xcode reads the flavor from `ios/Flutter/Generated.xcconfig`, not from the scheme. After a fresh `flutter pub get` that file has no flavor, so `appFlavor` is `null` under any scheme and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. Run `flutter build ios --config-only --flavor <flavor>` once before you run the app from Xcode.
+
+The script changes the Xcode project only on macOS, and adds a build phase that runs `flutterfire` from `~/.pub-cache/bin`. So every Mac that builds the app for iOS needs the FlutterFire CLI activated, flutterfire_cli $minimumFlutterfireVersion or a later 1.x; if `dart pub global list` shows one already, skip its activation above. flutterfire needs the [Firebase CLI](https://firebase.google.com/docs/cli).
 ''';

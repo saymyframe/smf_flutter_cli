@@ -323,3 +323,41 @@ bool fillsOptionsInPlace(String options, String platform) {
   );
   return error != -1 && lines.indexWhere((l) => l.contains(');'), error) != -1;
 }
+
+/// [options] with the options of [platforms] filled in, as
+/// `flutterfire configure --overwrite-firebase-options` does for a project
+/// with the id [project]: the throw of each platform becomes a return, and the
+/// file gets the constant of the platform.
+///
+/// It follows `lib/src/firebase/firebase_dart_configuration_write.dart` of
+/// flutterfire_cli 1.4.1, as [fillsOptionsInPlace] does.
+String fillOptions(
+  String options,
+  String project, {
+  List<String> platforms = const ['android', 'ios'],
+}) {
+  final lines = options.split('\n');
+  for (final platform in platforms) {
+    final label = platform == 'ios' ? 'iOS' : platform;
+    final start = lines
+        .indexWhere((line) => line.contains('case TargetPlatform.$label:'));
+    final error = lines.indexWhere(
+      (line) => line.contains('throw UnsupportedError('),
+      start,
+    );
+    final end = lines.indexWhere((line) => line.contains(');'), error);
+    lines
+      ..removeRange(error, end + 1)
+      ..insert(error, '        return $platform;')
+      ..insertAll(lines.lastIndexOf('}'), [
+        '',
+        '  static const FirebaseOptions $platform = FirebaseOptions(',
+        "    apiKey: '$project-$platform-key',",
+        "    appId: '1:1:$platform:$project',",
+        "    messagingSenderId: '1',",
+        "    projectId: '$project',",
+        '  );',
+      ]);
+  }
+  return lines.join('\n');
+}
