@@ -473,14 +473,13 @@ void main() {
       );
       for (final flavor in AppEntryRole.flavors) {
         final name = flavor.name;
+        final prefix = '${name}_options';
+        const options = 'DefaultFirebaseOptions.currentPlatform';
         expect(
           selector,
           allOf(
-            contains(
-                "import 'firebase_options_$name.dart' as ${name}_options;"),
-            contains(
-              "'$name' => ${name}_options.DefaultFirebaseOptions.currentPlatform",
-            ),
+            contains("import 'firebase_options_$name.dart' as $prefix;"),
+            contains("'$name' => $prefix.$options"),
           ),
         );
       }
