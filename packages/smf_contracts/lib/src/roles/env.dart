@@ -180,9 +180,9 @@ final class EnvRole extends Role<EnvData> {
               'read from AppEnv only the getters of its own keys and of the '
               'keys of the modules it depends on, the files of the template '
               'of a role only those of its own keys, and the files of the '
-              'pipeline none. The rule sees what a file reads from AppEnv, with or without the '
-              'prefix of an import, and no value that it reads through '
-              'another expression.',
+              'pipeline none. The rule sees what a file reads from AppEnv, '
+              'with or without the prefix of an import, and no value that it '
+              'reads through another expression.',
           check: _checkKeyAccess,
         ),
       ];

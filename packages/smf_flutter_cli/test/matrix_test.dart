@@ -1720,8 +1720,8 @@ Type type() => Types;
       toolArguments: (app) => const [],
       keys: (app) => {
         if (app.modules.contains(HomeModule.id))
-          'HOME_URL': const MatrixEnvKeyOwner.module(HomeModule.id),
-        'ROLE_KEY': const MatrixEnvKeyOwner.role('board'),
+          'HOME_URL': (module: HomeModule.id, role: null),
+        'ROLE_KEY': (module: null, role: 'board'),
       },
     );
     final tests = [

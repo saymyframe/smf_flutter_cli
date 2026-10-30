@@ -51,6 +51,6 @@ Map<String, MatrixEnvKeyOwner> _envKeysOf(MatrixApp app) => switch (app.hook) {
 /// The owner of a key whose origin is [origin]: only modules and the
 /// templates of roles give the role keys.
 MatrixEnvKeyOwner _ownerOf(ContributionOrigin origin) => switch (origin) {
-      ModuleOrigin(:final module) => MatrixEnvKeyOwner.module(module),
-      _ => MatrixEnvKeyOwner.role((origin as RoleTemplateOrigin).role.id),
+      ModuleOrigin(:final module) => (module: module, role: null),
+      _ => (module: null, role: (origin as RoleTemplateOrigin).role.id),
     };

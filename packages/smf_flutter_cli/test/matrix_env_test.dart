@@ -97,8 +97,8 @@ void main() {
     final shop = apps.singleWhere((app) => app.modules.contains(_Shop.id));
     expect(matrixEnv.file, EnvRole.dotEnvFile);
     expect(matrixEnv.keys(shop), {
-      'SHOP_KEY': const MatrixEnvKeyOwner.module(_Shop.id),
-      'SHOP_URL': const MatrixEnvKeyOwner.module(_Shop.id),
+      'SHOP_KEY': (module: _Shop.id, role: null),
+      'SHOP_URL': (module: _Shop.id, role: null),
     });
     expect(matrixEnv.toolArguments(shop), [
       '--dart-define-from-file=${EnvRole.dotEnvFile}',
@@ -124,12 +124,9 @@ void main() {
           app.modules.contains(_Boards.id) && app.modules.contains(_Shop.id),
     );
     expect(matrixEnv.keys(boards), {
-      'SHOP_KEY': const MatrixEnvKeyOwner.module(_Shop.id),
-      'SHOP_URL': const MatrixEnvKeyOwner.module(_Shop.id),
-      'BOARD_TOKEN': const MatrixEnvKeyOwner.role('board'),
+      'SHOP_KEY': (module: _Shop.id, role: null),
+      'SHOP_URL': (module: _Shop.id, role: null),
+      'BOARD_TOKEN': (module: null, role: 'board'),
     });
-    // A failure of a test names the owner.
-    expect('${matrixEnv.keys(boards)['BOARD_TOKEN']}', 'role board');
-    expect('${matrixEnv.keys(boards)['SHOP_KEY']}', 'module shop');
   });
 }

@@ -1094,9 +1094,10 @@ final class MatrixAppTest {
   /// keeps, such as a key that the mocks of the service take, so that the
   /// code of the module runs in the tests as with the values of a
   /// developer. A test of a role gives values for the keys of the template
-  /// of that role ([roles]) in the same way. A value takes the place of the value in the line of its
-  /// key, and `null` removes the line, as for a key that the developer left
-  /// out of the file, which only the tests of the values themselves need.
+  /// of that role ([roles]) in the same way. A value takes the place of the
+  /// value in the line of its key, and `null` removes the line, as for a key
+  /// that the developer left out of the file, which only the tests of the
+  /// values themselves need.
   ///
   /// The matrix writes them in its runs, [runMatrix] and [runFailingApps],
   /// before `flutter test`, which it runs with the arguments of
@@ -1287,34 +1288,10 @@ final class MatrixEnv {
   final Map<String, MatrixEnvKeyOwner> Function(MatrixApp app) keys;
 }
 
-/// Who gives an app a key of its values ([MatrixEnv.keys]): a module, or the
-/// template of a role, named by its id, since this library knows no role.
-final class MatrixEnvKeyOwner {
-  /// The owner of a key that the module [module] gives.
-  const MatrixEnvKeyOwner.module(ModuleId this.module) : role = null;
-
-  /// The owner of a key that the template of the role with the id [role]
-  /// gives.
-  const MatrixEnvKeyOwner.role(String this.role) : module = null;
-
-  /// The id of the module, or `null` for the key of the template of a role.
-  final ModuleId? module;
-
-  /// The id of the role, or `null` for the key of a module.
-  final String? role;
-
-  @override
-  bool operator ==(Object other) =>
-      other is MatrixEnvKeyOwner &&
-      other.module == module &&
-      other.role == role;
-
-  @override
-  int get hashCode => Object.hash(module, role);
-
-  @override
-  String toString() => role == null ? 'module $module' : 'role $role';
-}
+/// Who gives an app a key of its values ([MatrixEnv.keys]): the module with
+/// the id `module`, or else the template of the role with the id `role`, since
+/// this library knows no role.
+typedef MatrixEnvKeyOwner = ({ModuleId? module, String? role});
 
 /// The tests that a matrix adds to its apps, and the roles whose contract
 /// they must check with every provider.
