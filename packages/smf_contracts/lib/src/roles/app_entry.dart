@@ -166,6 +166,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// the role tells of the [flavors] of the app.
   static const flavorsHeading = 'Flavors';
 
+  /// The heading of the section of [readmeFile] in which the provider tells
+  /// where each flavor is in its native projects, for a developer who renames,
+  /// adds or removes one. It follows the section [flavorsHeading].
+  static const flavorProjectsHeading = 'Flavors in the native projects';
+
   /// The path of the guide for coding agents that work on the app; see
   /// [agentSections].
   static const agentsFile = 'AGENTS.md';
@@ -659,8 +664,9 @@ final class AppEntryRole extends Role<NoDsl> {
   ///
   /// They follow the description of the app as `## <heading>` sections, in
   /// the order of the contributions (see [SocketContribution]), but for the
-  /// section [setupHeading] of the steps by hand, which comes first. A
-  /// heading is one line without spaces around it, a section has text, and
+  /// section [setupHeading] of the steps by hand, which comes first, and the
+  /// sections [flavorsHeading] and [flavorProjectsHeading], which come next.
+  /// A heading is one line without spaces around it, a section has text, and
   /// two different texts under one heading conflict. Only the template of
   /// the role contributes the section [setupHeading].
   static const readmeSections = SocketRef<KeyedSocket<String>>.role(

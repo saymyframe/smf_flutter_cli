@@ -486,7 +486,10 @@ void main() {
         'flutter_test': {'sdk': 'flutter'},
         'flutter_lints': '^6.0.0',
       });
-      expect(pubspec['flutter'], {'uses-material-design': true});
+      expect(pubspec['flutter'], {
+        'default-flavor': AppEntryRole.defaultFlavor.name,
+        'uses-material-design': true,
+      });
     });
 
     test(
@@ -506,14 +509,24 @@ void main() {
 
     test(
         'names the app, and Say My Frame as what generated it, in a README '
-        'without sections', () {
+        'whose sections are the two on the flavors', () {
       expect(
         texts['README.md'],
-        '# contract_app\n'
-        '\n'
-        'A new Flutter project.\n'
-        '\n'
-        '${AppEntryRole.generatedWith}\n',
+        startsWith(
+          '# contract_app\n'
+          '\n'
+          'A new Flutter project.\n'
+          '\n'
+          '${AppEntryRole.generatedWith}\n'
+          '\n'
+          '## ${AppEntryRole.flavorsHeading}\n',
+        ),
+      );
+      expect(
+        RegExp(r'^## (.+)$', multiLine: true)
+            .allMatches(texts['README.md']!)
+            .map((match) => match[1]),
+        [AppEntryRole.flavorsHeading, AppEntryRole.flavorProjectsHeading],
       );
     });
 
@@ -625,13 +638,13 @@ void main() {
 
       expect(agentNote, contains('`$path`'));
       expect(texts.keys, contains(path));
-      // The file is the provider's, and each of the three build
+      // The file is the provider's, and each of the twelve build
       // configurations of the app target signs with it.
       expect(app.files[path]!.owner, const ModuleOrigin(FlutterCoreModule.id));
       expect(
         'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'
             .allMatches(texts[AppEntryRole.xcodeProjectFile]!),
-        hasLength(3),
+        hasLength(12),
       );
     });
 
@@ -903,24 +916,42 @@ void main() {
     test(
         'has the sections of the modules in its README, after the steps by '
         'hand that its entitlement of the iOS app needs', () {
+      final readme = texts['README.md']!;
       expect(
-        texts['README.md'],
-        '# contract_app\n'
-        '\n'
-        'A new Flutter project.\n'
-        '\n'
-        '${AppEntryRole.generatedWith}\n'
-        '\n'
-        '## ${AppEntryRole.setupHeading}\n'
-        '\n'
-        'Once any commands of the sections below have run, the setup still '
-        'needs these steps, which no command can do:\n'
-        '\n'
-        '1. ${AppEntryRole.iosAppIdStep.title}\n'
-        '\n'
-        '## Every socket\n'
-        '\n'
-        'The app has something in every socket of its entry.\n',
+        readme,
+        startsWith(
+          '# contract_app\n'
+          '\n'
+          'A new Flutter project.\n'
+          '\n'
+          '${AppEntryRole.generatedWith}\n'
+          '\n'
+          '## ${AppEntryRole.setupHeading}\n'
+          '\n'
+          'Once any commands of the sections below have run, the setup still '
+          'needs these steps, which no command can do:\n'
+          '\n'
+          '1. ${AppEntryRole.iosAppIdStep.title}\n',
+        ),
+      );
+      expect(
+        RegExp(r'^## (.+)$', multiLine: true)
+            .allMatches(readme)
+            .map((match) => match[1]),
+        [
+          AppEntryRole.setupHeading,
+          AppEntryRole.flavorsHeading,
+          AppEntryRole.flavorProjectsHeading,
+          'Every socket',
+        ],
+      );
+      expect(
+        readme,
+        endsWith(
+          '\n## Every socket\n'
+          '\n'
+          'The app has something in every socket of its entry.\n',
+        ),
       );
     });
 

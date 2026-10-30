@@ -312,7 +312,11 @@ void main() {
 
       expect(
         pubspec['flutter'],
-        {'uses-material-design': true, 'generate': true},
+        {
+          'default-flavor': AppEntryRole.defaultFlavor.name,
+          'uses-material-design': true,
+          'generate': true,
+        },
       );
       final others =
           _yamlOf(without.files['pubspec.yaml']!.text)! as Map<String, Object?>;

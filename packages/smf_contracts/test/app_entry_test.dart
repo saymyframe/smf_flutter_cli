@@ -2011,6 +2011,29 @@ void main() {
       );
     });
 
+    test('come first among the sections of the README, after the steps by hand',
+        () {
+      const socket = AppEntryRole.readmeSections;
+      final rendered = _render(socket, const [
+        ('Firebase', 'Run `flutterfire configure`.'),
+        (AppEntryRole.flavorProjectsHeading, 'Where they are.'),
+        (AppEntryRole.flavorsHeading, 'Three flavors.'),
+        (AppEntryRole.setupHeading, 'By hand.'),
+      ]);
+
+      expect(
+        RegExp(r'^## (.+)$', multiLine: true)
+            .allMatches(rendered[socket.tag]!)
+            .map((match) => match[1]),
+        [
+          AppEntryRole.setupHeading,
+          AppEntryRole.flavorsHeading,
+          AppEntryRole.flavorProjectsHeading,
+          'Firebase',
+        ],
+      );
+    });
+
     test('are told of in the note of the role, with where code reads them', () {
       final note = agentNoteOf(appEntryRole).text;
 

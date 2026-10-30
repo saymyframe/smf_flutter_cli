@@ -283,13 +283,18 @@ String _renderGitignore(List<MapEntry<String, String>> entries) =>
 String _renderString(String value) => value;
 
 /// Each section under its heading, after an empty line: the section of the
-/// steps by hand first, then the others in the order of the contributions.
+/// steps by hand first, then the two of the flavors, which hold for all that
+/// follows, then the others in the order of the contributions.
 String _renderReadmeSections(List<MapEntry<String, String>> entries) {
-  bool isSetup(MapEntry<String, String> entry) =>
-      entry.key == AppEntryRole.setupHeading;
-  return [...entries.where(isSetup), ...entries.where((e) => !isSetup(e))]
-      .map((entry) => '\n## ${entry.key}\n\n${entry.value.trim()}')
-      .join('\n');
+  const first = [
+    AppEntryRole.setupHeading,
+    AppEntryRole.flavorsHeading,
+    AppEntryRole.flavorProjectsHeading,
+  ];
+  return [
+    for (final heading in first) ...entries.where((e) => e.key == heading),
+    ...entries.where((e) => !first.contains(e.key)),
+  ].map((entry) => '\n## ${entry.key}\n\n${entry.value.trim()}').join('\n');
 }
 
 List<SmfIssue> _checkReadmeGeneratedWith(StructuralRuleInput<NoDsl> input) {
