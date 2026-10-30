@@ -139,6 +139,14 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`.
 - A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
 
+## CI
+
+- CI runs the commands of the section "Continuous integration" of `README.md` and nothing else, in a fresh copy of the repository. Keep them passing, and run them before you finish a change.
+- A generated file that the app needs stays in git, or comes from `flutter pub get`: no other step of CI writes it.
+
+- `tool/write_env.dart` writes `.env` for a build of CI, from the keys of `.env.example` and the variables of the process. A new key also needs its variable where CI runs.
+- A value of `.env` ends up in the app, so never give a build of CI a secret through it.
+
 ## Crash reporting
 
 - `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
@@ -317,6 +325,32 @@ Besides an email address and a password, the app signs in with these identity pr
 - Continue with the fixture, on Android and iOS. Deleting an account that signs in this way asks the identity provider for a credential again first, so that the provider of sign-in can revoke the tokens that it gave the app. If the user closes its sheet, nothing is deleted.
 
 A screen of sign-in shows the button of a way to sign in only on the platforms that it works on. When an anonymous user signs in this way and no account has the identity yet, the user gets the identity and keeps the id. Otherwise the user signs in to that account, as with a password, and `takeGuestData()` moves what the anonymous user had. The sign-in may also fail, because the address of the identity has an account that signs in in another way: the provider of sign-in decides which.
+
+## Continuous integration
+
+On each push, CI of this app runs these commands in a fresh copy of the repository:
+
+```bash
+cp .env.example .env
+flutter pub get
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test --dart-define-from-file .env
+```
+
+On request, it builds a release APK for one of the environments `dev`, `staging` and `prod`:
+
+```bash
+dart tool/write_env.dart
+flutter pub get
+flutter build apk --release --flavor <environment> --dart-define-from-file .env
+```
+
+The APK is `build/app/outputs/flutter-apk/app-<environment>-release.apk`. The build signs it as the Android project of the app does, so it is for testers: uploading to a store, a signing key of your own and iOS are not part of it.
+
+CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build. Every value ends up in the app, so none is a secret.
+
+The section of the module that provides CI tells how to start a build.
 
 ## Values in .env
 
@@ -570,6 +604,38 @@ plugins {
 include(":app")
 === assets/fixture/readme.txt (fake_sockets) ===
 An asset of the fixture that uses every socket.
+=== ci/pipeline.conf (fake_ci) ===
+# The CI of a fixture.
+on push
+  run Copy .env.example to .env = cp .env.example .env
+  run Get the packages = flutter pub get
+  run Check the format = dart format --output=none --set-exit-if-changed lib test
+  run Analyze = flutter analyze
+  run Test = flutter test --dart-define-from-file .env
+on request dev
+  variable FAKE_ENV_USER_FIRST
+  variable FAKE_ENV_USER_SECOND
+  variable FAKE_ENV_USER_THIRD
+  run Write .env from the variables of the environment = dart tool/write_env.dart
+  run Get the packages = flutter pub get
+  run Build the Android app = flutter build apk --release --flavor dev --dart-define-from-file .env
+  keep build/app/outputs/flutter-apk/app-dev-release.apk
+on request staging
+  variable FAKE_ENV_USER_FIRST
+  variable FAKE_ENV_USER_SECOND
+  variable FAKE_ENV_USER_THIRD
+  run Write .env from the variables of the environment = dart tool/write_env.dart
+  run Get the packages = flutter pub get
+  run Build the Android app = flutter build apk --release --flavor staging --dart-define-from-file .env
+  keep build/app/outputs/flutter-apk/app-staging-release.apk
+on request prod
+  variable FAKE_ENV_USER_FIRST
+  variable FAKE_ENV_USER_SECOND
+  variable FAKE_ENV_USER_THIRD
+  run Write .env from the variables of the environment = dart tool/write_env.dart
+  run Get the packages = flutter pub get
+  run Build the Android app = flutter build apk --release --flavor prod --dart-define-from-file .env
+  keep build/app/outputs/flutter-apk/app-prod-release.apk
 === fonts/FixtureSans.ttf (fake_sockets) ===
 <58 bytes>
 === ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
@@ -8317,4 +8383,62 @@ void main() {
     expect(style.systemNavigationBarColor, isNull);
     expect(style.systemNavigationBarIconBrightness, isNull);
   });
+}
+=== tool/write_env.dart (role:ci) ===
+// Writes `.env` for a job of CI, from `.env.example` and the variables of the
+// process. No value in the file is a secret: every value ends up in the app.
+//
+// A key whose variable has a value gets it, in one of the two forms of a value
+// of `.env`: as it is, or in double quotes when it has white space, `#` or a
+// quote. Any other line stays as `.env.example` has it. A value with a double
+// quote or a control character fits neither form, and could add a line of its
+// own, so the script stops and writes nothing. It never prints a value.
+//
+// It replaces the `.env` that it finds, so a developer who wants to keep the
+// values in `.env` does not run it.
+import 'dart:io';
+
+final _key = RegExp(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=');
+final _unsafe = RegExp(r'["\x00-\x1F\x7F]');
+final _quoted = RegExp(r"[\s#'`]");
+
+void main() {
+  final example = File('.env.example');
+  if (!example.existsSync()) {
+    stderr.writeln('.env.example is missing.');
+    exitCode = 1;
+    return;
+  }
+  final lines = <String>[];
+  final empty = <String>[];
+  final refused = <String>[];
+  for (final line in example.readAsLinesSync()) {
+    final key = _key.firstMatch(line)?[1];
+    if (key == null) {
+      lines.add(line);
+      continue;
+    }
+    final value = Platform.environment[key] ?? '';
+    if (value.isEmpty) {
+      empty.add(key);
+      lines.add(line);
+    } else if (_unsafe.hasMatch(value)) {
+      refused.add(key);
+    } else {
+      lines.add('$key=${_quoted.hasMatch(value) ? '"$value"' : value}');
+    }
+  }
+  if (refused.isNotEmpty) {
+    stderr.writeln(
+      'The values of ${refused.join(', ')} have a double quote or a control '
+      'character, which .env cannot hold.',
+    );
+    exitCode = 1;
+    return;
+  }
+  File('.env').writeAsStringSync('${lines.join('\n')}\n');
+  stdout.writeln('Wrote .env.');
+  if (empty.isNotEmpty) {
+    stdout.writeln('No value for: ${empty.join(', ')}.');
+  }
 }

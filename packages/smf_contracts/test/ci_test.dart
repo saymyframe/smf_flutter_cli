@@ -539,8 +539,8 @@ void main() {
       }) =>
           ciRole.checkStructure(
             StructuralRuleRequest(
-              hook: RoleHookRequest(
-                data: const [],
+              hook: const RoleHookRequest(
+                data: [],
                 presentRoles: {ciRole},
                 context: testContext,
               ),
