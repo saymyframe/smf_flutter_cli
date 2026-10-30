@@ -831,7 +831,7 @@ void main() {
               // it, by the names of the two modules, and runs whatever
               // becomes of this one.
               contains(
-                '--android-package-name=com.example.my_app (firebase_core)\n'
+                'dart tool/configure_firebase.dart dev (firebase_core)\n'
                 '    then dart tool/enable_firebase_sign_in.dart '
                 '(firebase_auth)\n'
                 '      If the app signs in with Google, it also gives '
