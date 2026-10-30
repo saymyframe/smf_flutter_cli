@@ -20,7 +20,7 @@ The module adds firebase_messaging to the `pubspec.yaml` of the app, and `lib/co
 
 ```dart
 Future<void> bootstrap() async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(options: firebaseOptionsOfFlavor);
   await initPreferences();
   await initNotifications();
   await initPush();

@@ -18,7 +18,7 @@ The module adds firebase_crashlytics to the `pubspec.yaml` of the app, and `lib/
 
 ```dart
 Future<void> bootstrap() async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(options: firebaseOptionsOfFlavor);
   installCrashReporting();
 }
 ```

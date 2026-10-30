@@ -89,13 +89,6 @@ String _fakeSdk(Directory directory) {
   return bin;
 }
 
-/// The option of the platforms of `flutterfire configure` as the CLI prints
-/// a command for later: in double quotes on Windows, since PowerShell reads
-/// a comma as its own.
-final _platforms = Platform.isWindows
-    ? '"--platforms=android,ios"'
-    : '--platforms=android,ios';
-
 /// The executable [name] of the Flutter SDK of [_fakeSdk] in its [bin].
 String _sdkExecutable(String bin, String name) =>
     p.join(bin, Platform.isWindows ? '$name.bat' : name);
@@ -637,10 +630,7 @@ void main() {
               // depend on firebase_core.
               contains(
                 'After generation\n'
-                '  dart pub global run flutterfire_cli:flutterfire configure '
-                '$_platforms --overwrite-firebase-options '
-                '--ios-bundle-id=com.example.my-app '
-                '--android-package-name=com.example.my_app (firebase_core)\n'
+                '  dart tool/configure_firebase.dart dev (firebase_core)\n'
                 '\n'
                 'Machine\n',
               ),
@@ -725,10 +715,7 @@ void main() {
                 '  ✗ Firebase CLI (for firebase_core): missing\n',
               ),
               contains(
-                '  dart pub global run flutterfire_cli:flutterfire configure '
-                '$_platforms --overwrite-firebase-options '
-                '--ios-bundle-id=com.example.my-app '
-                '--android-package-name=com.example.my_app (firebase_core)\n'
+                '  dart tool/configure_firebase.dart dev (firebase_core)\n'
                 // Once it succeeded, on macOS, the fix of the phase for
                 // Crashlytics, which continues it, quoted for a shell of
                 // macOS on any system.
@@ -787,10 +774,7 @@ void main() {
                 '  ✗ Firebase CLI (for firebase_core): missing\n',
               ),
               contains(
-                '  dart pub global run flutterfire_cli:flutterfire configure '
-                '$_platforms --overwrite-firebase-options '
-                '--ios-bundle-id=com.example.my-app '
-                '--android-package-name=com.example.my_app (firebase_core)\n',
+                '  dart tool/configure_firebase.dart dev (firebase_core)\n',
               ),
             ]),
           );
