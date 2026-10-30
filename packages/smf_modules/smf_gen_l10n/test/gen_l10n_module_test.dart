@@ -886,7 +886,9 @@ void main() {
       expect(
         _putInto(result, AppEntryRole.readmeSections),
         [
+          ('flutter_core', AppEntryRole.flavorProjectsHeading),
           ('gen_l10n', GenL10nModule.readmeHeading),
+          ('role:app_entry', AppEntryRole.flavorsHeading),
           ('role:localization', LocalizationRole.readmeHeading),
         ],
       );

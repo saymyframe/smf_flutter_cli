@@ -935,7 +935,7 @@ flutter:
     );
     expect(entries.first.$3, AgentNote('Change the colors in the theme.'));
     // A socket that got nothing has no entries.
-    expect(app.entriesOf(AppEntryRole.readmeSections), isEmpty);
+    expect(app.entriesOf(AppEntryRole.gitignore), isEmpty);
   });
 
   test('a cycle that only a fragment of a render hook meets stops rendering',

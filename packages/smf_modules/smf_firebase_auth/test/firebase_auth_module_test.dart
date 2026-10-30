@@ -2413,8 +2413,8 @@ void main() {
         contains("const _appName = 'Contract App';"),
       );
       expect(
-        withBoth.files['ios/Runner/Info.plist']!.text,
-        contains('<string>Contract App</string>'),
+        withBoth.files[AppEntryRole.xcodeProjectFile]!.text,
+        contains('APP_DISPLAY_NAME = "Contract App";'),
       );
     });
 

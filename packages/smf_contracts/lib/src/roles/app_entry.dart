@@ -668,7 +668,10 @@ final class AppEntryRole extends Role<NoDsl> {
   /// sections [flavorsHeading] and [flavorProjectsHeading], which come next.
   /// A heading is one line without spaces around it, a section has text, and
   /// two different texts under one heading conflict. Only the template of
-  /// the role contributes the section [setupHeading].
+  /// the role contributes the section [setupHeading]. The template puts the
+  /// section [flavorsHeading] here in every app, so the template of every
+  /// provider's README has the tag of this socket, and the pipeline reports a
+  /// provider without it.
   static const readmeSections = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'readme_sections',
