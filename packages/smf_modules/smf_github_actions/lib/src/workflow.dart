@@ -34,6 +34,11 @@ const _flutterStep = '''
 /// asks for it. The `env:` of the step that runs [CiRole.writeEnvFile] gives
 /// the script the value of each key from the variable of the environment on
 /// GitHub, and no `run:` has an expression, so that no value runs as code.
+///
+/// A new push cancels the run of an older push of its branch. The group of a
+/// build has its environment, since GitHub keeps one run waiting in a group and
+/// cancels the run that waited before: otherwise, of three builds started one
+/// after another, the second would never run.
 String workflowOf(CiPipeline pipeline) {
   final build = pipeline.build;
   return '''
@@ -58,7 +63,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: \${{ github.workflow }}-\${{ github.ref }}-\${{ github.event_name }}
+  group: \${{ github.workflow }}-\${{ github.ref }}-\${{ github.event_name }}-$_chosenEnvironment
   cancel-in-progress: \${{ github.event_name == 'push' }}
 
 jobs:

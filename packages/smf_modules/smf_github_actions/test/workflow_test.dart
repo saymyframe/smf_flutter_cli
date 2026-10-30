@@ -195,11 +195,14 @@ void main() {
         });
       });
 
-      test('cancels the run of an older push, and no build', () {
+      test(
+          'cancels the run of an older push, and keeps a build from taking '
+          'the place of a build of another environment that waits', () {
         final concurrency = workflow['concurrency'] as YamlMap;
 
         expect(concurrency['group'], contains(r'${{ github.ref }}'));
         expect(concurrency['group'], contains(r'${{ github.event_name }}'));
+        expect(concurrency['group'], contains(_chosen));
         expect(
           concurrency['cancel-in-progress'],
           r"${{ github.event_name == 'push' }}",
