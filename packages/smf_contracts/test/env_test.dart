@@ -125,7 +125,7 @@ void main() {
       expect(
         [
           for (final flavor in AppEntryRole.flavors)
-            EnvRole.androidStudioRunFileOf(flavor)
+            EnvRole.androidStudioRunFileOf(flavor),
         ],
         ['.run/dev.run.xml', '.run/staging.run.xml', '.run/prod.run.xml'],
       );
@@ -1223,9 +1223,12 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
           expect(configuration.getAttribute('factoryName'), 'Flutter');
           expect(configuration.getAttribute('default'), 'false');
           expect(
-            _androidStudioOptions([
-              _toolArguments(const ['--dart-define-from-file', '.env']),
-            ], flavor),
+            _androidStudioOptions(
+              [
+                _toolArguments(const ['--dart-define-from-file', '.env']),
+              ],
+              flavor,
+            ),
             {
               'additionalArgs':
                   '--flavor ${flavor.name} --dart-define-from-file .env',
@@ -1243,7 +1246,9 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
         );
         expect(
           _androidStudioOptions(
-              const [], AppEntryRole.releaseFlavor)['additionalArgs'],
+            const [],
+            AppEntryRole.releaseFlavor,
+          )['additionalArgs'],
           '--flavor prod',
         );
       });
@@ -1252,7 +1257,7 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
           'keep an argument whole: as it is for VS Code, and for Android '
           'Studio in double quotes when it has a space or a quote, which '
           'the settings of a run take as one argument', () {
-        const arguments = ['--plain', '--name=a b', r'c"d&e<f>g'];
+        const arguments = ['--plain', '--name=a b', 'c"d&e<f>g'];
         final data = [_toolArguments(arguments)];
 
         expect(
@@ -1262,7 +1267,9 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
         );
         expect(
           _androidStudioOptions(
-              data, AppEntryRole.defaultFlavor)['additionalArgs'],
+            data,
+            AppEntryRole.defaultFlavor,
+          )['additionalArgs'],
           r'--flavor dev --plain "--name=a b" "c\"d&e<f>g"',
         );
       });
@@ -1270,10 +1277,10 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
       test('have the name of the app as it is written, escaped for XML', () {
         final output = envRole.template.render(
           envRole.hookInput(
-            RoleHookRequest(
-              data: const [],
+            const RoleHookRequest(
+              data: [],
               presentRoles: {envRole},
-              context: const ModuleContext(
+              context: ModuleContext(
                 appName: 'a&"b',
                 orgName: 'com.example',
                 appIdentity: AppIdentity(
@@ -1283,7 +1290,6 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
                   androidNamespace: 'com.example.a',
                 ),
               ),
-              choices: const {},
             ),
           ),
         );

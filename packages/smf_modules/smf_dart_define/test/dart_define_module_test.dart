@@ -64,7 +64,7 @@ const _module = ModuleOrigin(DartDefineModule.id);
 
 /// The paths of the run configurations of the IDEs, which the template of the
 /// role writes.
-final _runConfigurations = [
+final List<String> _runConfigurations = [
   EnvRole.vscodeLaunchFile,
   for (final flavor in AppEntryRole.flavors)
     EnvRole.androidStudioRunFileOf(flavor),

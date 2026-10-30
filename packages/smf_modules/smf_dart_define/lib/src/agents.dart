@@ -4,8 +4,8 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// section of the env role, after what the role says there: the commands of
 /// the `flutter` tool with the argument that gives the app the values of
 /// `.env`, the restart of `flutter run` after an edit of `.env`, and how the
-/// getter of a new key reads its value. Its first line names the argument, as the note of a
-/// provider that wraps a package names the package.
+/// getter of a new key reads its value. Its first line names the argument, as
+/// the note of a provider that wraps a package names the package.
 const agentNote = '''
 With `--dart-define-from-file`:
 

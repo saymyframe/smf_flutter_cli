@@ -31,8 +31,8 @@ final String _storeFlavor = AppEntryRole.releaseFlavor.name;
 ///   tests of the apps of SMF;
 /// - the section [readmeHeading] of the README of the app, which gives the
 ///   commands with the argument, a build for a store with the flavor of a
-///   store ([AppEntryRole.releaseFlavor]), tells that the values are read when a
-///   command starts, so `flutter run` starts again after an edit of `.env`,
+///   store ([AppEntryRole.releaseFlavor]), tells that the values are read when
+///   a command starts, so `flutter run` starts again after an edit of `.env`,
 ///   and shows how a getter of a new key reads its value;
 /// - a note in the section of the role in the guide for coding agents of
 ///   the app, after what the role says there: the commands with the
