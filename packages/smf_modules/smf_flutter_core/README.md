@@ -2,7 +2,7 @@
 
 The SMF module that creates the Flutter app every SMF app starts from. It provides the app entry role of SMF, which every app has exactly one provider of:
 
-- the Android and iOS projects of `flutter create`;
+- the Android and iOS projects of `flutter create`, with the flavors `dev`, `staging` and `prod` as plain text, which install next to each other on a device;
 - `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs the root widget inside the wrappers of other modules;
 - `lib/bootstrap.dart`, where modules put their start-up code, phase by phase;
 - `lib/app.dart`, the root `MaterialApp`, which becomes `MaterialApp.router` when the app has a router;
@@ -27,7 +27,11 @@ SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is teste
 
 The files in `bricks/flutter_core/__brick__` are those that `flutter create --platforms=android,ios --org com.example --no-pub my_app` writes with Flutter 3.44.2, with these changes:
 
-- The names and ids come from the app. `android:label` and `CFBundleDisplayName` are its name in title case, and `CFBundleName` in Pascal case. The Android namespace, application id and Kotlin package path, and the iOS bundle id are variables of the brick.
+- The names and ids come from the app. `CFBundleName` is its name in Pascal case. The Android namespace, application id and Kotlin package path, and the iOS bundle id are variables of the brick.
+- `android:label` is the placeholder `${appName}` and `CFBundleDisplayName` is `$(APP_DISPLAY_NAME)`, so each flavor has a name of its own on the device, the name of the app in title case with `Dev` or `Staging` after it, and without either for `prod`.
+- The Gradle file of the app has `flavorDimensions` and `productFlavors` after `defaultConfig`, with the id suffix and the name of each flavor.
+- `project.pbxproj` has the setting `APP_DISPLAY_NAME` on the three plain configurations of the Runner target, and nine more build configurations in each of its three configuration lists. They are copies of the plain ones, whose object ids start with `F1A5`, unlike those of `flutter create`.
+- `xcshareddata/xcschemes/` has a scheme for each flavor, a copy of `Runner.xcscheme` with the names of the configurations replaced, including its pre-action.
 - `IPHONEOS_DEPLOYMENT_TARGET`, in each build configuration of `project.pbxproj`, is the tag of the minimum iOS version, and the project has no `DEVELOPMENT_TEAM`.
 - The Android manifest, `Info.plist` and the Gradle files hold the tags of the native sockets of the app entry role, each alone on its line. The Gradle file of the app ends with a `dependencies` block for the dependencies of the modules. `flutter create` does not write that block, and it stays empty when no module adds one. The file also has the two tags of core library desugaring, the switch in `compileOptions` and the library in `dependencies`. A tag that gets nothing leaves no line, so an app without a module that needs desugaring has the `compileOptions` of `flutter create`.
 - The `.gitignore` at the root of the app ends with the tag of the patterns that the modules keep out of git, on a line of its own. A tag that gets nothing leaves no line, so an app without such a pattern has the `.gitignore` of `flutter create`.
@@ -41,12 +45,12 @@ To move to a newer Flutter:
 
 1. Run `flutter create` as above with it.
 2. Copy every file it writes over those of the brick, but for the files that SMF owns or leaves out. The files to copy include `.metadata`, which names the commit of Flutter, and both `.gitignore` files.
-3. Make the changes above again.
+3. Make the changes above again. Bring every setting of a plain build configuration into its flavored copies, and every change of `Runner.xcscheme` into the schemes of the flavors: `test/native_projects_test.dart` names any that differs.
 4. Compare `pubspec.yaml` and `analysis_options.yaml` of the new app with the brick's. Their SDK constraint, the version of `flutter_lints` and the lints follow Flutter's template, but no test compares these files. The brick's `analysis_options.yaml` keeps leaving `build/` out.
 5. Update the minimum Flutter and iOS versions of `FlutterCoreModule`, and the Flutter of the CI workflow with the SHA-256 of its archive.
 6. Bundle the bricks with `melos bootstrap`.
 
-`test/flutter_create_test.dart` compares the brick with the app of `flutter create`, allowing only the changes above, and fails when Flutter asks for a later iOS than the brick. It runs when `SMF_FLUTTER_CREATE_APP` names that app, as the CI job `Generated apps (real)` does with the Flutter it pins:
+`test/flutter_create_test.dart` takes the flavors out of the brick and compares the rest with the app of `flutter create`, allowing only the changes above, and fails when Flutter asks for a later iOS than the brick. It runs when `SMF_FLUTTER_CREATE_APP` names that app, as the CI job `Generated apps (real)` does with the Flutter it pins:
 
 ```bash
 flutter create --platforms=android,ios --org com.example --no-pub my_app

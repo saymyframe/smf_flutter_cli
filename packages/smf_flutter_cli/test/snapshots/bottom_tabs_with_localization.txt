@@ -159,7 +159,7 @@ flutter build appbundle --flavor prod
 flutter build ipa --flavor prod
 ```
 
-Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so a step of its setup is repeated for each flavor that needs it.
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so you repeat a step of its setup for each flavor that needs it.
 
 ## Flavors in the native projects
 
