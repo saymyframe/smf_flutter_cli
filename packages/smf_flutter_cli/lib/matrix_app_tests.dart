@@ -600,6 +600,14 @@ Future<MatrixAppTests> smfAppTests() async {
       // choice is saved and restored. Its probe goes through the languages
       // on a device.
       await localizationRoleAppTest(),
+      // The flavor of a running app, whichever module provides the app
+      // entry: a command without --flavor builds the default flavor of the
+      // role, which only a run of the flutter tool shows. Its probe sees on
+      // a device the flavor that the build asked for: the default flavor in
+      // the debug start of CI, and the one for a release in its release
+      // start. Only in the apps with every module, which run flutter test
+      // for other tests already.
+      await flavorsAppTest(among: (app) => app.everyModuleWith != null),
       // The setting of the language on the settings screen of the apps
       // with the localization role and the settings screen role, whichever
       // modules provide them: its sheet chooses a language of the app,
@@ -1703,6 +1711,61 @@ $texts};
 ''',
   };
 }
+
+/// The name of the value of the build with which the start of an app on a
+/// device tells the probe of `app_tests/flavors` that it asked for a flavor. A
+/// build without it asks for none.
+const startFlavorDefine = 'SMF_START_FLAVOR';
+
+/// The arguments of the `flutter` tool that a build of an app as a release
+/// takes too when CI starts it on a device, which the script of CI reads
+/// ([startReleaseArgumentsFile]): the flavor that the app entry role names
+/// for a release, since a command without `--flavor` builds its default
+/// flavor in release mode too, and the same flavor for the probe of the
+/// flavor, which sees whether it reached the app. So the script names no
+/// flavor, and the release app that it starts is the one that a user gets.
+final List<String> startReleaseBuildArguments = [
+  '--flavor',
+  AppEntryRole.releaseFlavor.name,
+  '--dart-define=$startFlavorDefine=${AppEntryRole.releaseFlavor.name}',
+];
+
+/// The test of the flavor of a running app that the CLI keeps in its
+/// `app_tests/flavors`, for the apps that [among] accepts, or all of them,
+/// whichever module provides the app entry: `appFlavor` of Flutter is the
+/// default flavor that the role names ([AppEntryRole.defaultFlavor]), since
+/// `flutter test` is a command without `--flavor`.
+///
+/// Only a run of the `flutter` tool shows what such a command builds, so the
+/// rules of the role leave that value to this test, and a provider that names
+/// another flavor of the role fails it.
+///
+/// Its probe, which the start check runs on a device, compares `appFlavor`
+/// with the flavor that the build asked for, which a build tells it with a
+/// value of the build ([startFlavorDefine]) and is the default flavor without
+/// one. So the debug start of CI shows the default flavor on a device, on each
+/// version of Flutter of the nightly run, and its release start the one in
+/// [startReleaseBuildArguments]. The id and the name of the app on a device
+/// are native, so no running app shows them.
+///
+/// The test knows only the role, and has no mocks. The matrix fills in the
+/// flavor and the name of the value.
+Future<MatrixAppTest> flavorsAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/flavors',
+      appliesTo: among ?? (_) => true,
+      values: (_) => {
+        'default_flavor': AppEntryRole.defaultFlavor.name,
+        'flavor_define': startFlavorDefine,
+      },
+      roles: {appEntryRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/flavors/probe.dart',
+        'probeFlavor',
+      ),
+    );
 
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module

@@ -88,12 +88,14 @@ import 'package:yaml/yaml.dart';
 /// probe that apply to the app too, such as the walk of its routes; see
 /// `appTestsFor`. Next to the list of the probes, it writes what
 /// `.github/scripts/start_app.sh`, which starts the app on a device, reads:
-/// the answers of CI that the probes ask for, `startAnswersFile`, and the
+/// the answers of CI that the probes ask for, `startAnswersFile`; the
 /// arguments of the `flutter` tool that build the app with its values, from
-/// the provider of the env role of the app, `startBuildArgumentsFile`.
+/// the provider of the env role of the app, `startBuildArgumentsFile`; and
+/// those that a build of the app as a release takes too, from the app entry
+/// role, `startReleaseArgumentsFile`.
 /// Without `--app`, a test that needs an app of the matrix, such as one
 /// that generates files, fails, and the start check gets no probes, no
-/// answers and no build arguments.
+/// answers and no build arguments but those of a release.
 ///
 /// With `--env-values` and a file after `--app` and the other options of
 /// `--add-app-tests`, it writes the values of that file, lines `KEY=value`
@@ -329,6 +331,7 @@ Future<int> _addAppTests(
     tests,
     app: matrixApp,
     env: matrixEnv,
+    releaseBuildArguments: startReleaseBuildArguments,
     envValues: envValues == null
         ? null
         : (

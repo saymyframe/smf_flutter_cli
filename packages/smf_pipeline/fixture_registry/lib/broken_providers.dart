@@ -67,6 +67,49 @@ const _appEntryBuildingRootOnce = BrokenModule(
   ],
 );
 
+/// The app entry whose line `default-flavor` of the pubspec names the flavor
+/// for a release: flutter_core, the app entry of the fixtures, with
+/// [_releaseAsDefaultFlavor]. So a command without `--flavor`, such as
+/// `flutter run` on the phone of a developer, builds the app of the users,
+/// under its id.
+///
+/// The line names a flavor of the role, and the app builds and has every
+/// flavor in its native projects: only a run of the `flutter` tool shows what
+/// such a command builds. It is made here for the reason that the app entry
+/// above is.
+const _appEntryDefaultingToRelease = BrokenModule.contributing(
+  FlutterCoreModule(),
+  id: ModuleId('broken_app_entry_defaults_to_release'),
+  description: 'Flutter app whose default flavor is that of a release '
+      '(fixture)',
+  contributions: _releaseAsDefaultFlavor,
+);
+
+/// [contributions] with [AppEntryRole.releaseFlavor] as the default flavor of
+/// the `flutter:` section of the pubspec.
+List<Contribution> _releaseAsDefaultFlavor(List<Contribution> contributions) =>
+    [
+      for (final contribution in contributions)
+        if (contribution
+            case PubspecFlutter(
+              :final assets,
+              :final fonts,
+              :final generate,
+              :final usesMaterialDesign,
+              when: final roles,
+            ))
+          PubspecContribution.flutter(
+            assets: assets,
+            fonts: fonts,
+            generate: generate,
+            usesMaterialDesign: usesMaterialDesign,
+            defaultFlavor: AppEntryRole.releaseFlavor.name,
+            when: roles,
+          )
+        else
+          contribution,
+    ];
+
 /// The router of go_router whose redirect asks the guards of the routes
 /// within the calls of the router too: it reads the counter of those calls
 /// the wrong way round. The router of a fixture has no redirect that runs
@@ -1333,6 +1376,27 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        _appEntryDefaultingToRelease,
+        role: appEntryRole,
+        bug: 'The line default-flavor of its pubspec names the flavor for a '
+            'release, so a command without --flavor builds the app of the '
+            'users, under its id.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _flavorTests,
+            'a command without --flavor builds the default flavor of the app',
+            'A command without --flavor builds the default flavor of the app '
+                'that the app entry role names.',
+          ),
+          MatrixExpectedFailure(
+            _flavorTests,
+            'the probe of the flavor finds no problem',
+            'The app has the flavor that its build asked for.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.authRestoringUserLate,
         role: authRole,
         bug: 'Its function returns the service before it has read who is '
@@ -1905,6 +1969,9 @@ const _noToken = 'With nobody signed in, the service has no token to give: a '
 /// The reason of the test of the session after a sign-out.
 const _noTokenAfterSignOut = 'After a sign-out the session has no token, and '
     'in the mode anonymous the token of the new anonymous user.';
+
+/// The file of the test of the flavor of a running app.
+const _flavorTests = 'test/flavors/default_flavor_test.dart';
 
 /// The file of the tests of the next start of the auth role, and the
 /// reason of the expectation of each of them that a start of the app has

@@ -226,6 +226,8 @@ void main() {
     // The test of the look of the fixture theme checks that the root
     // follows a widget that the themes of a provider read from its context.
     expect(named('theme_look').roles, {appEntryRole});
+    // Which flavor a command without --flavor builds only a run shows.
+    expect(named('flavors').roles, {appEntryRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -311,6 +313,8 @@ void main() {
       'preferences_restorers',
       'theme_role',
       'theme_look',
+      // The test of the flavor of a running app that the CLI keeps.
+      'flavors',
       // The test of the notifications that the CLI keeps, for the fixture
       // notifications, which every such app has, and its test of the step
       // that the template of their role gives the fixture onboarding.
@@ -1982,6 +1986,7 @@ void main() {
           'settings_screen_role',
           'theme_role',
           'theme_setting',
+          'flavors',
           'fake_crash',
           'fake_analytics',
           'analytics_role',
