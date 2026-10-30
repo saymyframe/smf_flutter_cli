@@ -225,7 +225,7 @@ void main() {
         );
         final config = File('$app/firebase.json');
         final configured = config.readAsBytesSync();
-        final entries = _entriesOf(app!);
+        final entries = _entriesOf(app);
         final files = _filesOf(app);
         // What the ways to sign in of the app need of the project, for its
         // apps in the project.
