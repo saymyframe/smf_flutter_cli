@@ -49,7 +49,9 @@
 // one of an identity without a user user-not-found. A reload of a user
 // that the server deleted is user-not-found too. A revocation takes an
 // authorization code once, and like the Firebase SDK it never answers one
-// while nobody is signed in.
+// while nobody is signed in. Each user has an ID token, which a read gives
+// and a read that forces a refresh replaces, and a forced read of a user
+// that the server deleted is user-not-found.
 //
 // It differs from Firebase in this:
 // - The platform tells the plugin of each change of the user through a
@@ -66,6 +68,8 @@
 //   Firebase keeps an address in lower case.
 // - It deletes whoever is signed in. Firebase deletes an account only for
 //   a user who signed in a short while ago.
+// - The ID token of a user is no JSON Web Token: it names the user and how
+//   many tokens that user got, and it never expires.
 // - It checks no signature, audience or expiry of a token, takes the nonce
 //   of a token of Google once too, though Firebase takes such a token again
 //   while it is valid, and takes the raw nonce itself as the nonce of the
@@ -84,7 +88,11 @@ import 'package:firebase_auth_platform_interface/firebase_auth_platform_interfac
 // of a credential that the platform keeps.
 // ignore: implementation_imports
 import 'package:firebase_auth_platform_interface/src/pigeon/messages.pigeon.dart'
-    show FirebaseAuthHostApi, InternalAuthCredential, InternalUserCredential;
+    show
+        FirebaseAuthHostApi,
+        InternalAuthCredential,
+        InternalIdTokenResult,
+        InternalUserCredential;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -133,6 +141,9 @@ final class _User {
 
   /// Whether the server deleted the user, on this device or on another.
   bool deleted = false;
+
+  /// How many ID tokens the user got.
+  int tokens = 1;
 
   bool get isAnonymous => email == null && identities.isEmpty;
 
@@ -463,6 +474,23 @@ final class MockFirebaseAuth {
         );
       }
       return user.details;
+    });
+    answer('FirebaseAuthUserHostApi', 'getIdToken', (arguments) {
+      final user = _signedIn();
+      final [forceRefresh as bool] = arguments;
+      if (forceRefresh) {
+        if (user.deleted) {
+          throw const _Failure(
+            'ERROR_USER_NOT_FOUND',
+            'There is no user record corresponding to this identifier. The '
+                'user may have been deleted.',
+          );
+        }
+        user.tokens++;
+      }
+      return InternalIdTokenResult(
+        token: 'firebase-token-${user.uid}-${user.tokens}',
+      );
     });
     answer('FirebaseAuthUserHostApi', 'delete', (_) {
       _delete(_signedIn());

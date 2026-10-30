@@ -15,8 +15,9 @@
 // password reset completes for an address without an account also when
 // Firebase tells so. An empty address or password fails before Firebase is
 // asked, with the same reason on every platform. A call that failed leaves
-// the user. And a call for a user whose session has ended on the server
-// signs that user out.
+// the user. A call for a user whose session has ended on the server signs
+// that user out. And a read of the token of the user gets the reason of the
+// code of Firebase and leaves the user, but for such a session.
 //
 // A call with a credential of Google or Apple gets the reason of its own
 // call: a link that Firebase refuses because the identity, or its email
@@ -851,6 +852,150 @@ void main() {
           'recentSignInRequired: $found',
     );
     expect(found, hasLength(14));
+  });
+
+  test(
+      'a read of the token that Firebase refuses for a session that has ended '
+      'signs the user out and fails with recentSignInRequired', () async {
+    // What a read that Firebase answers with each code ends with, with a
+    // forced read and with one that the device could answer, the user of the
+    // service then, the calls that reached Firebase, and what a listener of
+    // the service heard.
+    final found = <String, List<Object?>>{};
+    final heard = <String>[];
+    final subscription = service.userChanges.listen(
+      (user) => heard.add(userOf(user)),
+    );
+    addTearDown(subscription.cancel);
+    for (final forceRefresh in const [true, false]) {
+      for (final code in const [
+        'ERROR_USER_TOKEN_EXPIRED',
+        'user-token-expired',
+        'ERROR_INVALID_USER_TOKEN',
+        'ERROR_USER_NOT_FOUND',
+        'user-not-found',
+        'NO_CURRENT_USER',
+        'no-current-user',
+      ]) {
+        await service.signOut();
+        await service.signInAnonymously();
+        await pumpEventQueue();
+        firebase
+          ..calls.clear()
+          ..failNext('getIdToken', code: code);
+        heard.clear();
+        final ended = await errorOf(
+          () => service.userToken(forceRefresh: forceRefresh),
+        );
+        await pumpEventQueue();
+        found['$code, forced $forceRefresh'] = [
+          outcomeOf(ended),
+          userOf(service.currentUser),
+          [for (final call in firebase.calls) call.first],
+          heard.toSet(),
+        ];
+      }
+    }
+
+    expect(
+      found.values,
+      everyElement([
+        AuthFailureReason.recentSignInRequired.name,
+        'nobody',
+        ['getIdToken', 'signOut'],
+        {'nobody'},
+      ]),
+      reason: 'When Firebase answers a read of the token that the session of '
+          'the user has ended, the service signs the user out on this device, '
+          'tells its listeners, and fails with recentSignInRequired: $found',
+    );
+    expect(found, hasLength(14));
+  });
+
+  test(
+      'a read of the token of a user whom the server deleted signs that user '
+      'out when it forces a refresh', () async {
+    await service.signOut();
+    await service.signUp(email: addressOf('token-gone'), password: password);
+    firebase.deleteUserOnServer();
+
+    final read = await service.userToken();
+    final forced = await errorOf(() => service.userToken(forceRefresh: true));
+
+    expect(
+      read,
+      isNotEmpty,
+      reason: 'The Firebase SDK answers from the device while the token is '
+          'valid, whatever happened on the server.',
+    );
+    expect(
+      (outcomeOf(forced), userOf(service.currentUser)),
+      (AuthFailureReason.recentSignInRequired.name, 'nobody'),
+      reason: 'A forced read asks the server, whose answer ends the session '
+          'of the user on this device.',
+    );
+  });
+
+  test(
+      'a read of the token that Firebase refuses gets the reason of the code, '
+      'and leaves the user', () async {
+    await service.signOut();
+    await service.signUp(email: addressOf('token-refused'), password: password);
+    final before = userOf(service.currentUser);
+    final heard = <String>[];
+    final subscription = service.userChanges.listen(
+      (user) => heard.add(userOf(user)),
+    );
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+    heard.clear();
+    final found = <String, String>{};
+
+    for (final code in const [
+      'ERROR_NETWORK_REQUEST_FAILED',
+      'network-request-failed',
+      'ERROR_USER_DISABLED',
+      'user-disabled',
+      'ERROR_TOO_MANY_REQUESTS',
+      'too-many-requests',
+    ]) {
+      firebase.failNext('getIdToken', code: code);
+      found[code] = outcomeOf(
+        await errorOf(() => service.userToken(forceRefresh: true)),
+      );
+    }
+    firebase.failNext(
+      'getIdToken',
+      code: 'some-other-code',
+      message: 'Firebase says so.',
+    );
+    final other = outcomeOf(await errorOf(service.userToken));
+    await pumpEventQueue();
+
+    expect(
+      found,
+      {
+        'ERROR_NETWORK_REQUEST_FAILED': AuthFailureReason.network.name,
+        'network-request-failed': AuthFailureReason.network.name,
+        'ERROR_USER_DISABLED': AuthFailureReason.userDisabled.name,
+        'user-disabled': AuthFailureReason.userDisabled.name,
+        'ERROR_TOO_MANY_REQUESTS': AuthFailureReason.tooManyAttempts.name,
+        'too-many-requests': AuthFailureReason.tooManyAttempts.name,
+      },
+      reason: 'A read that Firebase refuses gets the reason of the code, as '
+          'any other call of the service.',
+    );
+    expect(
+      other,
+      '${AuthFailureReason.unknown.name} (some-other-code: Firebase says so.)',
+      reason: 'A code that the service does not know is unknown, with what '
+          'Firebase answered as the hint.',
+    );
+    expect(
+      [userOf(service.currentUser), heard],
+      [before, isEmpty],
+      reason: 'A read that failed leaves the user, and tells nobody.',
+    );
   });
 
   test(

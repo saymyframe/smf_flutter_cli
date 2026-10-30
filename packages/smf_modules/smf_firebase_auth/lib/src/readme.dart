@@ -57,6 +57,8 @@ You can also enable the methods in the Firebase console, under [Authentication >
 
 Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
 
+`appSession.userToken()` is a Firebase ID token. A server of the app verifies it with the [Firebase Admin SDK](https://firebase.google.com/docs/auth/admin/verify-id-tokens). The Admin SDK takes only a token of its own Firebase project, so a token of another project fails there.
+
 When an anonymous user signs in to an account that exists already, the anonymous user stays in the project, and nobody can sign in as that user again. A project that is upgraded to Firebase Authentication with Identity Platform can delete anonymous users that are older than 30 days automatically. See [Automatic clean-up](https://firebase.google.com/docs/auth/android/anonymous-auth#auto-cleanup) in the documentation of Firebase.
 ''';
 }

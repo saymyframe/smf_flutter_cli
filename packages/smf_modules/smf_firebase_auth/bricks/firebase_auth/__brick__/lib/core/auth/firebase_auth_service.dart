@@ -101,6 +101,11 @@ const _linkReasons = {
 /// the Services ID and the OAuth code flow configuration of the Apple
 /// sign-in method in the Firebase console: without them it fails with
 /// [AuthFailureReason.notConfigured], and the account stays.
+///
+/// [userToken] is the Firebase ID token of the user, which the Firebase SDK
+/// keeps on the device and renews by itself when it is about to expire. A
+/// server verifies it with the Firebase Admin SDK, as a token of the Firebase
+/// project that the app is configured with.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
@@ -251,6 +256,29 @@ final class FirebaseAuthService implements AuthService {
         },
         credential: fresh,
       );
+
+  /// It reads past [_run], which tells of the user after each call, since an
+  /// app may read the token for each of its requests. It tells of the user
+  /// only when the session of that user has ended on the server.
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    try {
+      return await user.getIdToken(forceRefresh);
+    } on Object catch (error, stackTrace) {
+      if (error is FirebaseAuthException &&
+          _endedSession.contains(error.code)) {
+        await _auth.signOut();
+        _changes.add(null);
+        throw const AuthFailure(AuthFailureReason.recentSignInRequired);
+      }
+      Error.throwWithStackTrace(
+        _failureOf(error, null, const {}),
+        stackTrace,
+      );
+    }
+  }
 
   /// Signs [user] in again with [fresh], so that Firebase deletes the
   /// account without asking for a recent sign-in, and revokes the tokens of

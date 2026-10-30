@@ -17,8 +17,9 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// dependencies of the app and implements the service in
 /// `lib/core/auth/firebase_auth_service.dart` on `FirebaseAuth`, with an
 /// email address and a password, for anonymous users, and with the
-/// credentials of Google and Apple. The service is the same in every mode
-/// of the role.
+/// credentials of Google and Apple. It gives the Firebase ID token of the
+/// user as the token of the role. The service is the same in every mode of
+/// the role.
 ///
 /// Firebase Authentication works on the Firebase app, so the module depends
 /// on [FirebaseCoreModule], which initializes Firebase in `bootstrap()`, and

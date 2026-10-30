@@ -16,8 +16,10 @@
 // nothing when the revocation fails. A password reset asks for the message
 // in the language that the app is in, and for none in an app without
 // languages of its own. The service tells of a sign-out that Firebase makes
-// without a call of the app. And a credential of another identity provider
-// reaches nothing of Firebase.
+// without a call of the app. A credential of another identity provider
+// reaches nothing of Firebase. And a read of the token of the user asks
+// Firebase for a new token only when it forces a refresh, and tells nobody of
+// a change.
 //
 // It uses the service of the module and runs none of the start-up of the
 // app but the start of Firebase (service.dart). The matrix sets up the
@@ -575,6 +577,57 @@ void main() {
           'prefers among those of the app, and the first of them when it '
           'prefers none. An app without languages of its own sets none, '
           'and Firebase sends the message in the language of its template.',
+    );
+  });
+
+  test(
+      'a read of the token reaches Firebase with what it asks for, and tells '
+      'the listeners of the service nothing', () async {
+    final heard = <String>[];
+    final subscription = service.userChanges.listen(
+      (user) => heard.add(userOf(user)),
+    );
+    addTearDown(subscription.cancel);
+    final nobody = await service.userToken();
+    final nobodyForced = await service.userToken(forceRefresh: true);
+    final callsOfNobody = [...firebase.calls];
+    await service.signUp(email: addressOf('token'), password: password);
+    await pumpEventQueue();
+    heard.clear();
+    firebase.calls.clear();
+
+    final read = await service.userToken();
+    final again = await service.userToken();
+    final forced = await service.userToken(forceRefresh: true);
+    await pumpEventQueue();
+
+    expect(
+      [nobody, nobodyForced, callsOfNobody],
+      [null, null, isEmpty],
+      reason: 'With nobody signed in, the service answers null without a '
+          'call of Firebase.',
+    );
+    expect(
+      firebase.calls,
+      [
+        ['getIdToken', false],
+        ['getIdToken', false],
+        ['getIdToken', true],
+      ],
+      reason: 'A read leaves the token to the Firebase SDK, which keeps it on '
+          'the device, and only a forced read asks for a new one.',
+    );
+    expect(
+      [read, again == read, forced == read],
+      [isNotEmpty, true, false],
+      reason: 'The token is what Firebase answers.',
+    );
+    expect(
+      heard,
+      isEmpty,
+      reason: 'A read of the token changes nobody, and an app may read it '
+          'for each of its requests, so the service tells its listeners '
+          'nothing.',
     );
   });
 
