@@ -1404,6 +1404,14 @@ List<BrokenProvider> brokenProviders() => const [
             _leftOnDeviceTest,
             _linkKeptOnDevice,
           ),
+          // The token of the account is that of another user.
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'an anonymous user has a token, and keeps the id with a refresh '
+            'and with an account',
+            'The account that linkPassword() gave an anonymous user has a '
+                'token, with the id of that user.',
+          ),
         ],
       ),
       BrokenProvider(
