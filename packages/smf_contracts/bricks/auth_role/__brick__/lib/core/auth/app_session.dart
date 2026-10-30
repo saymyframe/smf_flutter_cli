@@ -381,17 +381,19 @@ final class AppSessionController extends ChangeNotifier
   /// answers `null` once that wait is over, if there is no service by then.
   ///
   /// It is not one of the calls that run one after another, and tells the
-  /// listeners of the session nothing, unless the provider found that the
-  /// session of the user has ended on the server: the session then has nobody
-  /// when the call fails, with [AuthFailureReason.recentSignInRequired].
+  /// listeners of the session nothing, also when the provider tells of the
+  /// same user again, unless the provider found that the session of the user
+  /// has ended on the server: the session then has nobody when the call fails,
+  /// with [AuthFailureReason.recentSignInRequired].
   Future<String?> userToken() => _token((service) => service.userToken());
 
   /// A token to use in place of [rejected], which a server refused, or `null`
   /// when nobody is signed in.
   ///
-  /// Reads at the same time share one refresh. A read that comes later with
-  /// the same [rejected] takes the token of that refresh, and asks the server
-  /// of the provider for nothing. It waits and fails as [userToken] does.
+  /// Reads at the same time share one refresh. A read that starts after that
+  /// refresh, with the same [rejected], takes its token and needs no other. A
+  /// read that was on its way during the refresh may still answer [rejected],
+  /// which costs one more refresh. It waits and fails as [userToken] does.
   Future<String?> userTokenAfter(String rejected) async {
     final current = await userToken();
     if (current != rejected) return current;

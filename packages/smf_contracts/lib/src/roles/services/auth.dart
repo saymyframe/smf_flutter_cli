@@ -100,8 +100,8 @@ enum AuthMode {
 /// wait for ever.
 /// `appSession.userTokenAfter(rejected)` gives the token to use in place of
 /// one that a server refused: reads at the same time share one refresh for a
-/// user, and a read that comes later with the same token takes the token of
-/// that refresh.
+/// user, and a read that starts after that refresh with the same token takes
+/// its token. A read tells the listeners of the session nothing.
 ///
 /// ## The mode
 ///
@@ -292,11 +292,14 @@ enum AuthMode {
 /// - a call for a user whose session has ended on the server signs that
 ///   user out on the device and fails with `recentSignInRequired`;
 /// - `userToken` answers `null` when nobody is signed in, an anonymous user
-///   has a token too, and it tells `userChanges` nothing unless the user
-///   changed. With `forceRefresh` it gives a new token, which differs from
-///   the one before and which the reads after it give, and the user stays.
-///   The next start of the app has a token for the user of the device. No
-///   hint of a failure has a token.
+///   has a token too, and two users have different tokens. A read changes no
+///   user: `userChanges` may tell of the same user again after it, which the
+///   session ignores. With `forceRefresh` it gives a new token, which differs
+///   from the one before and which the reads after it give, and the user
+///   stays. When the session of the user has ended on the server, it signs
+///   that user out while that user is still signed in, and a read that fails
+///   late leaves the next user. The next start of the app has a token for the
+///   user of the device. No hint of a failure has a token.
 ///
 /// Only a running app shows whether a provider keeps to it.
 ///

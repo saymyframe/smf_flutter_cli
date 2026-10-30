@@ -463,7 +463,11 @@ final class FakeAuth implements AuthService {
     await _enter(forceRefresh ? 'refreshToken' : 'userToken');
     if (user == null) return null;
     final uid = user.uid;
-    if (forceRefresh) tokens[uid] = (tokens[uid] ?? 1) + 1;
+    if (forceRefresh) {
+      tokens[uid] = (tokens[uid] ?? 1) + 1;
+      // As a provider that tells of each change of the token.
+      _changes.add(user);
+    }
     return 'token-$uid-${tokens[uid] ?? 1}';
   }
 }
@@ -1629,6 +1633,15 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['an account'] = await read();
   await initAuth();
   result['the next launch'] = await read();
+  // The provider tells of the same user again, which the session ignores.
+  heard.clear();
+  takeCalls();
+  result['a refresh'] = {
+    'token': await appSession.userTokenAfter('token-user-1-1'),
+    'calls': takeCalls(),
+  };
+  await pump();
+  result['a refresh is heard'] = [...heard];
   await appSession.signOut();
   result['after a sign-out'] = await read();
   port.send(result);
@@ -1649,6 +1662,11 @@ Map<String, Object?> _tokenLifeIn(AuthMode mode) {
     // An anonymous user keeps the id with the account.
     'an account': read('token-user-1-1'),
     'the next launch': read('token-user-1-1'),
+    'a refresh': {
+      'token': 'token-user-1-2',
+      'calls': ['userToken', 'refreshToken'],
+    },
+    'a refresh is heard': <Object?>[],
     'after a sign-out': read(anonymous ? 'token-user-2-1' : null),
   };
 }
@@ -1982,6 +2000,38 @@ Future<void> main(List<String> arguments, SendPort port) async {
   await pump();
   await pump();
   result['once it came'] = await session.userToken();
+  takeCalls();
+  session.dispose();
+
+  // The same for an anonymous sign-in that follows a sign-out, long after the
+  // first start.
+  onDevice = null;
+  session = sessionOf(AuthMode.anonymous);
+  await session.start(FakeAuth());
+  await pump();
+  final afterSignOut = holds['signInAnonymously'] = Completer<void>();
+  late Future<void> leaving;
+  String? ofNextUser = 'none yet';
+  timed(() {
+    leaving = session.signOut();
+  });
+  await pump();
+  await pump();
+  timed(() {
+    unawaited(session.userToken().then((value) => ofNextUser = value));
+  });
+  await pump();
+  await pump();
+  final beforeTheNextUser = ofNextUser;
+  afterSignOut.complete();
+  holds.clear();
+  await leaving;
+  await pump();
+  await pump();
+  result['a read during an anonymous sign-in after a sign-out'] = {
+    'the answer while it is on its way': beforeTheNextUser,
+    'the answer': ofNextUser == '${await session.userToken()}',
+  };
   takeCalls();
   session.dispose();
 
@@ -3653,6 +3703,10 @@ void main() {
             'the token': null,
           },
           'once it came': 'token-user-2-1',
+          'a read during an anonymous sign-in after a sign-out': {
+            'the answer while it is on its way': 'none yet',
+            'the answer': true,
+          },
           'next to a call on its way': {
             'the token': 'token-ann-1',
             'the calls': ['userToken'],

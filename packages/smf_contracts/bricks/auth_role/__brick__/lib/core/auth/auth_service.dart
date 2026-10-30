@@ -313,12 +313,18 @@ abstract interface class AuthService {
   /// [forceRefresh] it asks the server of the provider for a new token, which
   /// differs from the one before and which the reads after it give.
   ///
+  /// A read changes no user, and leaves whoever is signed in, but in the case
+  /// below. [userChanges] may tell of the same user again after it, as after
+  /// any change of the token, which the session ignores.
+  ///
   /// It fails with [AuthFailureReason.network] when it needs the server and
-  /// does not reach it, and with [AuthFailureReason.recentSignInRequired] for
-  /// a user whose session has ended on the server, whom the service signs out
-  /// on the device first. A user whom the server disabled is signed out too,
-  /// and may fail with [AuthFailureReason.userDisabled] instead. A read tells
-  /// [userChanges] nothing unless the user changed, since the session reads
-  /// the token often. No hint of a failure has the token.
+  /// does not reach it, and with [AuthFailureReason.tooManyAttempts] when the
+  /// server refuses for now. It fails with
+  /// [AuthFailureReason.recentSignInRequired] for a user whose session has
+  /// ended on the server, or may fail with [AuthFailureReason.userDisabled]
+  /// for one whom the server disabled: the service signs that user out on the
+  /// device first, while that user is still signed in. Anything else is
+  /// [AuthFailureReason.unknown], with what the provider answered as its
+  /// [AuthFailure.developerHint]. No hint of a failure has the token.
   Future<String?> userToken({bool forceRefresh = false});
 }
