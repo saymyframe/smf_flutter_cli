@@ -1935,10 +1935,6 @@ void main() {
     final result = _validate([
       entry,
       TestModule(
-        'first',
-        contributions: const [PubspecContribution.flutter(defaultFlavor: 'a')],
-      ),
-      TestModule(
         'second',
         contributions: const [PubspecContribution.flutter(defaultFlavor: 'b')],
       ),
@@ -1947,7 +1943,7 @@ void main() {
     expect(result.issues.single.origin, const ModuleOrigin(ModuleId('second')));
     expect(
       result.issues.single.message,
-      'The default flavors "a" (from first) and "b" (from second) differ.',
+      'The default flavors "dev" (from scaffold) and "b" (from second) differ.',
     );
   });
 

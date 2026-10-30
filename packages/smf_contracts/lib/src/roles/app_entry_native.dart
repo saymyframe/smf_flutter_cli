@@ -967,7 +967,6 @@ List<String> _plistKeys(String text) {
 /// first element [parent] in the XML [text], in order.
 List<String> _childNames(String text, String parent, String element) {
   final names = <String>[];
-  final name = RegExp(r'''android:name\s*=\s*(?:"([^"]*)"|'([^']*)')''');
   // The tags after the one that opens the parent, if any.
   final inParent = _xmlTags
       .allMatches(_withoutXmlComments(text))
@@ -982,13 +981,22 @@ List<String> _childNames(String text, String parent, String element) {
       continue;
     }
     if (depth == 0 && match[2] == element) {
-      if (name.firstMatch(match[3]!) case final attribute?) {
-        names.add(_unescapeXml(attribute[1] ?? attribute[2]!));
+      if (_xmlAttribute(match[3]!, 'android:name') case final value?) {
+        names.add(_unescapeXml(value));
       }
     }
     if (match[4] != '/') depth++;
   }
   return names;
+}
+
+/// The value of the attribute [name] among the [attributes] of a tag of XML,
+/// in either quotes, as it is written there, if any.
+String? _xmlAttribute(String attributes, String name) {
+  final attribute = RegExp(
+    '(?:^|\\s)${RegExp.escape(name)}\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\')',
+  ).firstMatch(attributes);
+  return attribute == null ? null : attribute[1] ?? attribute[2];
 }
 
 /// The start tags, end tags and empty-element tags of XML: whether it is an
