@@ -57,6 +57,7 @@ BrickContribution _root() => BrickContribution(
         files: {
           'lib/app.dart': '{{{smf_app_entry__app_builder_open}}}child'
               '{{{smf_app_entry__app_builder_close}}}',
+          'README.md': '{{{smf_app_entry__readme_sections}}}',
         },
       ),
     );
@@ -79,14 +80,15 @@ void main() {
 
     expect(result.issues, isEmpty);
     expect(result.hasErrors, isFalse);
-    // The last two are what the template of the app entry role gives every
-    // app: its note for coding agents, and the widget for the icons of the
-    // status bar.
+    // The last three are what the template of the app entry role gives every
+    // app: its note for coding agents, the widget for the icons of the status
+    // bar, and the section of the README on the flavors.
     expect(result.socketOrders.keys, [
       AppEntryRole.iosDeploymentTarget,
       AppEntryRole.bootstrapEarly,
       AppEntryRole.agentSections,
       AppEntryRole.appBuilder,
+      AppEntryRole.readmeSections,
     ]);
     expect(result.pubspec.dependencies.keys, ['flutter']);
     expect(result.postGenOrder.contributions, isEmpty);

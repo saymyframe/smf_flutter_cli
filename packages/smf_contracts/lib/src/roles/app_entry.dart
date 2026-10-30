@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/app_entry_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
+part 'app_entry_flavors.dart';
 part 'app_entry_guide.dart';
 part 'app_entry_native.dart';
 
@@ -27,6 +28,9 @@ const appEntryRole = AppEntryRole._();
 ///   [xcodeProjectFile]; the iOS project also has [iosEntitlementsFile],
 ///   which the app target signs with, and its app delegate in Swift,
 ///   [appDelegateFile];
+/// - the three native flavors of [flavors], in the project of each platform,
+///   of which `default-flavor` in the pubspec names [defaultFlavor], so that
+///   a command of the `flutter` tool without `--flavor` builds that one;
 /// - [readmeFile], the README of the app, which says under its title that
 ///   Say My Frame generated the app, with the line [generatedWith];
 /// - [gitignoreFile], which keeps out of git what Flutter and its tools
@@ -158,6 +162,15 @@ final class AppEntryRole extends Role<NoDsl> {
   /// lists.
   static const setupHeading = 'Finish the setup';
 
+  /// The heading of the section of [readmeFile] in which the template of
+  /// the role tells of the [flavors] of the app.
+  static const flavorsHeading = 'Flavors';
+
+  /// The heading of the section of [readmeFile] in which the provider tells
+  /// where each flavor is in its native projects, for a developer who renames,
+  /// adds or removes one. It follows the section [flavorsHeading].
+  static const flavorProjectsHeading = 'Flavors in the native projects';
+
   /// The path of the guide for coding agents that work on the app; see
   /// [agentSections].
   static const agentsFile = 'AGENTS.md';
@@ -178,6 +191,23 @@ final class AppEntryRole extends Role<NoDsl> {
   /// modules bring none.
   static const statusBarIconsTestFile =
       'test/core/app/status_bar_icons_test.dart';
+
+  /// The native flavors of every app, in the order from development to the
+  /// stores: a constant of the role rather than an option, so that every
+  /// app has the same ones.
+  static const List<AppFlavor> flavors = [
+    _devFlavor,
+    _stagingFlavor,
+    _prodFlavor,
+  ];
+
+  /// The flavor that a command of the `flutter` tool without `--flavor`
+  /// builds, also in release mode.
+  static const AppFlavor defaultFlavor = _devFlavor;
+
+  /// The flavor that a build for the stores names, which has the id of the
+  /// app itself.
+  static const AppFlavor releaseFlavor = _prodFlavor;
 
   /// The screen that an app starts on when no route starts it, created as
   /// `const FallbackStartScreen()`; import it with
@@ -634,11 +664,14 @@ final class AppEntryRole extends Role<NoDsl> {
   ///
   /// They follow the description of the app as `## <heading>` sections, in
   /// the order of the contributions (see [SocketContribution]), but for the
-  /// section [setupHeading] of the steps by hand, which comes first. A
-  /// heading is one line without spaces around it, a section has text, and
+  /// section [setupHeading] of the steps by hand, which comes first, and the
+  /// sections [flavorsHeading] and [flavorProjectsHeading], which come next.
+  /// A heading is one line without spaces around it, a section has text, and
   /// two different texts under one heading conflict. Only the template of
-  /// the role contributes the section [setupHeading]. Without sections, the
-  /// README is that of the provider's template.
+  /// the role contributes the section [setupHeading]. The template puts the
+  /// section [flavorsHeading] here in every app, so the template of every
+  /// provider's README has the tag of this socket, and the pipeline reports a
+  /// provider without it.
   static const readmeSections = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'readme_sections',

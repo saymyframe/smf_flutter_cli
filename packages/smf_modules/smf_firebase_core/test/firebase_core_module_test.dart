@@ -347,7 +347,9 @@ void main() {
       // Nothing of the build phases that flutterfire adds for other
       // packages, which the modules of those packages tell of.
       expect(
-        readme.text,
+        readme.text.substring(
+          without.files[AppEntryRole.readmeFile]!.text.length,
+        ),
         isNot(anyOf(contains('ruby -e'), contains('flutter build ipa'))),
       );
     });

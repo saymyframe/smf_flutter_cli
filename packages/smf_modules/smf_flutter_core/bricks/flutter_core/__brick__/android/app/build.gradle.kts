@@ -27,6 +27,24 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "{{app_name.titleCase()}} Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "{{app_name.titleCase()}} Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "{{app_name.titleCase()}}"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.

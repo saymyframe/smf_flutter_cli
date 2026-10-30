@@ -120,11 +120,13 @@ void main() {
     expect(plan.collection.roleData.single.value, '/home');
     // The base value of the minimum iOS version, from the scaffold, and
     // what the template of the app entry role gives every app: its note for
-    // coding agents, and the widget for the icons of the status bar.
+    // coding agents, the widget for the icons of the status bar, and the
+    // section of the README on the flavors.
     expect(plan.socketOrders.keys, [
       AppEntryRole.iosDeploymentTarget,
       AppEntryRole.agentSections,
       AppEntryRole.appBuilder,
+      AppEntryRole.readmeSections,
     ]);
     expect(plan.postGenOrder.contributions, isEmpty);
     expect(plan.pubspec.dependencies.keys, ['flutter']);
