@@ -100,6 +100,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
 
 - The section "Finish the setup" of the README lists the steps of the setup that no command can do, such as a step in the web console of a service that the app uses. Only the developer of the app does them: when a task depends on one of them, point the developer to that section, and do not try to do the step yourself.
 
@@ -118,6 +119,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
 - The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
 
 ## Analytics
 
@@ -261,6 +263,37 @@ Once any commands of the sections below have run, the setup still needs these st
 2. Set up payments in App Store Connect and Google Play Console
 3. Create the products of your plans in App Store Connect and Google Play Console
 
+Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
+
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.fixture_app.dev` | `com.example.fixture-app.dev` |
+| `staging` | `com.example.fixture_app.staging` | `com.example.fixture-app.staging` |
+| `prod` | `com.example.fixture_app` | `com.example.fixture-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so a step of its setup is repeated for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`. That scheme builds the id and the name of `prod` with whichever flavor the last `flutter` command left in `ios/Flutter/Generated.xcconfig`.
+
 ## Fixture
 
 The app has something in every socket of its entry, with `code` and a [link](https://example.com).
@@ -380,6 +413,24 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "Fixture App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "Fixture App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "Fixture App"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -408,7 +459,7 @@ dependencies {
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <application
-        android:label="Fixture App"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -525,6 +576,15 @@ An asset of the fixture that uses every socket.
 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 === ios/Runner/AppDelegate.swift (flutter_core) ===
 import Flutter
 import UIKit
@@ -553,7 +613,7 @@ import UIKit
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Fixture App</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -8194,6 +8254,7 @@ dev_dependencies:
   json_serializable: "^6.9.0"
 
 flutter:
+  default-flavor: "dev"
   uses-material-design: true
   assets:
     - "assets/fixture/"

@@ -57,6 +57,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
 
 After a change, run:
 
@@ -73,6 +74,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
 - The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
 
 ## Layout
 
@@ -139,6 +141,35 @@ A new Flutter project.
 
 Generated with [Say My Frame](https://doc.saymyframe.com).
 
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.my_app.dev` | `com.example.my-app.dev` |
+| `staging` | `com.example.my_app.staging` | `com.example.my-app.staging` |
+| `prod` | `com.example.my_app` | `com.example.my-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so a step of its setup is repeated for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`. That scheme builds the id and the name of `prod` with whichever flavor the last `flutter` command left in `ios/Flutter/Generated.xcconfig`.
+
 ## Texts
 
 The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
@@ -188,6 +219,24 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "My App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "My App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "My App"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -212,7 +261,7 @@ dependencies {
 === android/app/src/main/AndroidManifest.xml (flutter_core) ===
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="My App"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -286,6 +335,15 @@ include(":app")
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 === ios/Runner/AppDelegate.swift (flutter_core) ===
 import Flutter
 import UIKit
@@ -313,7 +371,7 @@ import UIKit
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>My App</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -1738,6 +1796,7 @@ dev_dependencies:
   flutter_lints: "^6.0.0"
 
 flutter:
+  default-flavor: "dev"
   uses-material-design: true
   generate: true
 === test/core/app/fallback_start_screen_test.dart (flutter_core) ===
