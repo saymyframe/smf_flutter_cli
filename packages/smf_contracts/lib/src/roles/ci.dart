@@ -105,9 +105,10 @@ final class CiRole extends Role<NoDsl> {
   /// or of its provider.
   ///
   /// The arguments of [EnvRole.toolArgumentsIn] go on `flutter test` and on
-  /// `flutter build` as they are. With the env role, the checks start from a
-  /// copy of [EnvRole.exampleFile], so every value is empty there, and a
-  /// build starts from [writeEnvFile].
+  /// `flutter build` as they are. With the env role, the checks start by
+  /// copying [EnvRole.exampleFile] when [EnvRole.dotEnvFile] is missing: every
+  /// value is empty in a fresh copy of the repository, and the command keeps
+  /// the values of a developer who runs it. A build starts from [writeEnvFile].
   ///
   /// The format check names `lib` and `test`, which every app has, since
   /// `flutter pub get` may write Dart files of tools below `build/`, which
@@ -123,7 +124,8 @@ final class CiRole extends Role<NoDsl> {
         if (hasEnv)
           const CiCommand._(
             'Copy ${EnvRole.exampleFile} to ${EnvRole.dotEnvFile}',
-            'cp ${EnvRole.exampleFile} ${EnvRole.dotEnvFile}',
+            '[ -f ${EnvRole.dotEnvFile} ] || '
+                'cp ${EnvRole.exampleFile} ${EnvRole.dotEnvFile}',
           ),
         packages,
         const CiCommand._(

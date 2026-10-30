@@ -352,7 +352,7 @@ void main() {
           startsWith('''
 # The CI of a fixture.
 on push
-  run Copy .env.example to .env = cp .env.example .env
+  run Copy .env.example to .env = [ -f .env ] || cp .env.example .env
   run Get the packages = flutter pub get
   run Check the format = dart format --output=none --set-exit-if-changed lib test
   run Analyze = flutter analyze

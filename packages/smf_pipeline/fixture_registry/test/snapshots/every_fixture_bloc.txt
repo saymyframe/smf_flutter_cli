@@ -393,7 +393,7 @@ A screen of sign-in shows the button of a way to sign in only on the platforms t
 On each push, CI of this app runs these commands in a fresh copy of the repository:
 
 ```bash
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 flutter pub get
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze
@@ -410,7 +410,7 @@ flutter build apk --release --flavor <environment> --dart-define-from-file .env
 
 The APK is `build/app/outputs/flutter-apk/app-<environment>-release.apk`. The build signs it as the Android project of the app does, so it is for testers: uploading to a store, a signing key of your own and iOS are not part of it.
 
-CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `.env` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
+CI writes its own `.env`, since that file is not in git. The checks copy `.env.example` when `.env` is missing, so in a fresh copy every value is empty, and on your machine your values stay. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `.env` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
 
 The section of the module that provides CI tells how to start a build.
 
@@ -676,7 +676,7 @@ An asset of the fixture that uses every socket.
 === ci/pipeline.conf (fake_ci) ===
 # The CI of a fixture.
 on push
-  run Copy .env.example to .env = cp .env.example .env
+  run Copy .env.example to .env = [ -f .env ] || cp .env.example .env
   run Get the packages = flutter pub get
   run Check the format = dart format --output=none --set-exit-if-changed lib test
   run Analyze = flutter analyze

@@ -225,7 +225,7 @@ void main() {
       final pipeline = ciRole.pipelineIn(_withEnv());
 
       expect(_commandsOf(pipeline.checks), [
-        'cp .env.example .env',
+        '[ -f .env ] || cp .env.example .env',
         'flutter pub get',
         'dart format --output=none --set-exit-if-changed lib test',
         'flutter analyze',
@@ -248,6 +248,27 @@ void main() {
         'build/app/outputs/flutter-apk/app-staging-release.apk',
       );
     });
+
+    test(
+        'starts the checks with a command that gives a fresh copy of the app '
+        'its .env and keeps the values of a developer', () {
+      final first = ciRole.pipelineIn(_withEnv()).checks.first.command;
+      final directory = Directory.systemTemp.createTempSync('ci_first_check');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      final example = File('${directory.path}/${EnvRole.exampleFile}')
+        ..writeAsStringSync('SHOP_KEY=\n');
+      final env = File('${directory.path}/${EnvRole.dotEnvFile}');
+
+      ProcessResult run() => Process.runSync('sh', ['-c', first],
+          workingDirectory: directory.path);
+
+      expect(run().exitCode, 0);
+      expect(env.readAsStringSync(), example.readAsStringSync());
+
+      env.writeAsStringSync('SHOP_KEY=mine\n');
+      expect(run().exitCode, 0);
+      expect(env.readAsStringSync(), 'SHOP_KEY=mine\n');
+    }, testOn: '!windows');
 
     test('in an app without the env role, has nothing of its files', () {
       final pipeline = ciRole.pipelineIn(inputOf(ciRole));
@@ -310,7 +331,8 @@ void main() {
         inputOf(ciRole, present: {envRole}),
       );
 
-      expect(pipeline.checks.first.command, 'cp .env.example .env');
+      expect(
+          pipeline.checks.first.command, '[ -f .env ] || cp .env.example .env');
       expect(pipeline.checks.last.command, 'flutter test');
       expect(
         pipeline.build.command.of('dev'),
@@ -630,7 +652,7 @@ void main() {
 On each push, CI of this app runs these commands in a fresh copy of the repository:
 
 ```bash
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 flutter pub get
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze
@@ -647,7 +669,7 @@ flutter build apk --release --flavor <environment> --dart-define-from-file=.env
 
 The APK is `build/app/outputs/flutter-apk/app-<environment>-release.apk`. The build signs it as the Android project of the app does, so it is for testers: uploading to a store, a signing key of your own and iOS are not part of it.
 
-CI writes its own `.env`, since that file is not in git. The checks copy `.env.example`, so every value is empty there. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `.env` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
+CI writes its own `.env`, since that file is not in git. The checks copy `.env.example` when `.env` is missing, so in a fresh copy every value is empty, and on your machine your values stay. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `.env` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
 
 The section of the module that provides CI tells how to start a build.
 ''');
