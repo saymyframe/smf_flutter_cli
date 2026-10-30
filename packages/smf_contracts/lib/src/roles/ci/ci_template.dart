@@ -43,7 +43,7 @@ The APK is `${build.artifact.of(placeholder)}`. The build signs it as the Androi
   if (hasEnv) {
     buffer.write('''
 
-CI writes its own `${EnvRole.dotEnvFile}`, since that file is not in git. The checks copy `${EnvRole.exampleFile}`, so every value is empty there. A build takes the values of the chosen environment with `${CiRole.writeEnvFile}`, and lists the keys it found no value for. A value with a double quote or a line break stops the build. Every value ends up in the app, so none is a secret.
+CI writes its own `${EnvRole.dotEnvFile}`, since that file is not in git. The checks copy `${EnvRole.exampleFile}`, so every value is empty there. A build takes the values of the chosen environment with `${CiRole.writeEnvFile}`, and lists the keys it found no value for. A value with a double quote or a line break stops the build. Every value ends up in the app, so never use one for a secret.
 ''');
   }
   buffer.write('''
