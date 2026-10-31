@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:mason/mason.dart';
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/matrix_env.dart';
@@ -116,6 +117,66 @@ final class SignInOfTest implements AuthService {
           const AuthImplementation(
             type: TypeRef('SignInOfTest', import: _file),
             create: FactoryRef('createSignInOfTest', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the REST role for the test of the app tests of the role,
+/// which apply to the apps with the role whichever module provides it: a
+/// transport that reaches no server.
+final class _RestOfTest extends SmfModule {
+  const _RestOfTest();
+
+  /// The id of the module.
+  static const id = ModuleId('rest_of_test');
+
+  static const _path = 'core/rest_of_test/rest_of_test.dart';
+
+  static const _file = ImportRef.app(_path);
+
+  static const _source = '''
+import '../rest/rest_transport.dart';
+
+RestTransport createRestOfTest() => const RestOfTest();
+
+final class RestOfTest implements RestTransport {
+  const RestOfTest();
+
+  @override
+  Future<RestReply> send(RestExchange exchange) async =>
+      throw const RestConnectionFailed('No server of the test.');
+}
+''';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'REST that reaches no server',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(restRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          MasonBundle(
+            name: id.value,
+            description: 'The transport of the provider',
+            version: '0.1.0',
+            files: [
+              MasonBundledFile(
+                'lib/$_path',
+                base64.encode(utf8.encode(_source)),
+                'text',
+              ),
+            ],
+          ),
+        ),
+        restRole.data(
+          const RoleImplementation(
+            type: TypeRef('RestOfTest', import: _file),
+            create: FactoryRef('createRestOfTest', import: _file),
           ),
         ),
       ];
@@ -3708,6 +3769,78 @@ void main() {
         for (final app in _everyModule) app: 'home.home',
       },
     );
+  });
+
+  test(
+      'the tests of the REST role apply to the apps with the role, whichever '
+      'module provides it, and that of the session to those with sign-in too, '
+      'and the first gives the key of the role a value', () async {
+    final roleTest = await restRoleAppTest();
+    final sessionTest = await restSessionAppTest();
+    // No module of the CLI provides the role in the apps of its matrix yet, so
+    // the registry has a provider of the test, with the provider of the env
+    // role, which the role requires.
+    const modules = <SmfModule>[
+      FlutterCoreModule(),
+      DartDefineModule(),
+      _SignInOfTest(),
+      _RestOfTest(),
+    ];
+    final (apps: ofRole, :failed) = await matrixOf(modules);
+    expect(
+      [
+        for (final result in failed)
+          '${result.contractCase}: ${result.errors.join('; ')}',
+      ],
+      isEmpty,
+    );
+    final key = RestRole.baseAddressKey.name;
+    final withRole = [
+      for (final app in ofRole)
+        if (app.modules.contains(_RestOfTest.id)) app,
+    ];
+
+    expect(p.basename(roleTest.directory), 'rest_role');
+    expect(Directory(roleTest.directory).existsSync(), isTrue);
+    expect(p.basename(sessionTest.directory), 'rest_session');
+    expect(Directory(sessionTest.directory).existsSync(), isTrue);
+    expect(roleTest.roles, {restRole});
+    expect(sessionTest.roles, {restRole});
+    expect(roleTest.mocks, isNull);
+    expect(roleTest.startProbe!.function, 'probeRest');
+    expect(sessionTest.startProbe, isNull);
+    expect(withRole, isNotEmpty);
+    expect(
+      [
+        for (final app in ofRole)
+          (app.name, roleTest.appliesTo(app), sessionTest.appliesTo(app)),
+      ],
+      [
+        for (final app in ofRole)
+          (
+            app.name,
+            app.modules.contains(_RestOfTest.id),
+            app.modules.contains(_RestOfTest.id) &&
+                app.modules.contains(_SignInOfTest.id),
+          ),
+      ],
+    );
+    expect(
+      withRole.where((app) => sessionTest.appliesTo(app)),
+      isNotEmpty,
+      reason: 'The role uses the auth role, so a provider has an app with it.',
+    );
+    for (final app in withRole) {
+      expect(roleTest.envValues!(app),
+          {key: roleTest.values!(app)['base_address']});
+      expect(roleTest.values!(app)['base_key'], key);
+    }
+
+    // A matrix chooses among them.
+    final none = await restRoleAppTest(among: (_) => false);
+    expect(withRole.where(none.appliesTo), isEmpty);
+    final noSession = await restSessionAppTest(among: (_) => false);
+    expect(withRole.where(noSession.appliesTo), isEmpty);
   });
 
   test(

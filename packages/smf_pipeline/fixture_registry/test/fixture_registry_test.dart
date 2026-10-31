@@ -364,6 +364,7 @@ on request staging
   variable FAKE_ENV_USER_FIRST
   variable FAKE_ENV_USER_SECOND
   variable FAKE_ENV_USER_THIRD
+  variable REST_BASE_URL
   run Write .env from the variables of the environment = dart tool/write_env.dart
   run Get the packages = flutter pub get
   run Build the Android app = flutter build apk --release --flavor staging --dart-define-from-file .env
@@ -2016,14 +2017,15 @@ on request staging
       // the two, with the texts of the app and without them, the apps of
       // the fixture way to sign in, with the texts and without them, the
       // apps of the fixture purchases with the fixture sign-in, with the
-      // texts and without them, and each app with every module, with a
-      // clock of 24 hours and with one of 12.
+      // texts and without them, the app of the fixture REST with the fixture
+      // sign-in, and each app with every module, with a clock of 24 hours and
+      // with one of 12.
       expect(withoutMode, contains(named('fake_auth')));
       expect(
         named('fake_auth').hook!.presentRoles,
         isNot(contains(routerRole)),
       );
-      expect(withoutMode, hasLength(26));
+      expect(withoutMode, hasLength(27));
       for (final app in withoutMode) {
         expect(
           app.createArguments('app_1', '/apps'),
@@ -2579,6 +2581,12 @@ const _cases = [
   'fake_env',
   'fake_env_user with env',
   'fake_env_user',
+  // The fixture REST with the fixture sign-in and without it, and the module
+  // that makes requests through it: the role uses the auth role, and the
+  // module only requires the role.
+  'fake_rest with auth',
+  'fake_rest',
+  'fake_rest_user',
   'fake_ci with env',
   'fake_ci',
   'fake_registrations (fake_di)',
