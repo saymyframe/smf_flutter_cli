@@ -28,8 +28,8 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
-import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_settings/smf_settings.dart';
 
 /// The app entry that builds its root once: flutter_core, the app entry of

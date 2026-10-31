@@ -651,8 +651,8 @@ Future<MatrixAppTests> smfAppTests() async {
     // role, of the env role, of the auth role, of the notifications role,
     // of the push role, of the purchases role, of the settings screen role,
     // of the theme role, of the localization role and of the app icon role
-    // gets the tests of its role. Each provider of the app entry role gets the test of the theme
-    // role, which checks that its root rebuilds.
+    // gets the tests of its role. Each provider of the app entry role gets
+    // the test of the theme role, which checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
