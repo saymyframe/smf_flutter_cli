@@ -876,7 +876,7 @@ final class BrokenModule extends SmfModule {
             "      _kept ??= exchange.headers['authorization'];\n"
             '      final kept = _kept;\n'
             '      if (kept != null) '
-                "request.headers.set('authorization', kept);\n",
+            "request.headers.set('authorization', kept);\n",
       ),
     ],
   );
