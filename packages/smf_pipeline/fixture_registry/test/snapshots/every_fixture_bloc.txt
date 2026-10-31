@@ -6738,10 +6738,12 @@ final class RestResponse {
   /// The status of the answer.
   final int status;
 
-  /// The headers, each name in lower case.
+  /// The headers, each name in lower case. [bytes] are always decoded, so a
+  /// reply with a `content-encoding` has neither that header here nor its
+  /// `content-length`, which would count the coded body.
   final Map<String, String> headers;
 
-  /// The body.
+  /// The body, decoded of its `content-encoding`.
   final List<int> bytes;
 
   /// The body as UTF-8.
@@ -7298,7 +7300,7 @@ final class _Call {
       final status = reply.status;
       final response = RestResponse(
         status: status,
-        headers: reply.headers,
+        headers: _ofDecodedBody(reply.headers),
         bytes: reply.bytes,
       );
       if (status == 401 && _sent != null && !_didRefresh) {
@@ -7370,6 +7372,15 @@ final class _Call {
         );
       }
     }
+  }
+
+  /// [headers] without what no longer holds of a body that the provider decoded;
+  /// see [RestResponse.headers].
+  static Map<String, String> _ofDecodedBody(Map<String, String> headers) {
+    if (!headers.containsKey('content-encoding')) return headers;
+    return {...headers}
+      ..remove('content-encoding')
+      ..remove('content-length');
   }
 
   /// The token for the next attempt, or `null` for none: an attempt to

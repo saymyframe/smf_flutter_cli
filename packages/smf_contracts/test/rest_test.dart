@@ -834,12 +834,12 @@ Future<void> main(List<String> arguments, SendPort port) async {
               .post('notes'))
           .headers;
   result['the headers of a body'] = {
-    'decoded': await headersOf(const {
+    'decoded': await headersOf({
       'content-encoding': 'gzip',
       'content-length': '27',
       'x-kept': 'yes',
     }),
-    'as it came': await headersOf(const {
+    'as it came': await headersOf({
       'content-length': '27',
       'x-kept': 'yes',
     }),
@@ -2370,14 +2370,17 @@ void main() {
       final result =
           (await app.run('$_prelude$_failures'))! as Map<Object?, Object?>;
 
+      final headersOfBody =
+          result['the headers of a body']! as Map<Object?, Object?>;
       expect(
-        result['the headers of a body'],
-        {
-          'decoded': {'x-kept': 'yes'},
-          'as it came': {'content-length': '27', 'x-kept': 'yes'},
-        },
+        headersOfBody['decoded'],
+        {'x-kept': 'yes'},
         reason: 'The bytes of a response are always decoded, so the headers '
             'that describe a coded body stay out of it.',
+      );
+      expect(
+        headersOfBody['as it came'],
+        {'content-length': '27', 'x-kept': 'yes'},
       );
 
       expect(result['what a request carries'], [
