@@ -387,8 +387,9 @@ void main() {
         '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
         'event_bus, shared_preferences, firebase_core, firebase_messaging, '
-        'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, revenuecat, '
-        'paywall, dart_define, firebase_crashlytics, firebase_analytics, '
+        'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
+        'revenuecat, paywall, dart_define, firebase_crashlytics, '
+        'firebase_analytics, '
         'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has

@@ -2029,13 +2029,14 @@ void main() {
     // is a choice of the role, which it asks for once the modules of the app
     // are known, with the default first.
     final messages = [for (final question in run.asked) question.message];
-    final provider = run.asked[
-        messages.indexOf('Authentication: which module provides it?') //
-        ];
+    final authentication = messages.indexOf(
+      'Authentication: which module provides it?',
+    );
     expect(
-      messages.indexOf('Authentication: which module provides it?'),
+      authentication,
       messages.indexOf('Events: which module provides it?') + 1,
     );
+    final provider = run.asked[authentication];
     final mode = run.asked.last;
     expect(provider.shown, [
       'firebase_auth — Firebase Authentication with firebase_auth',
