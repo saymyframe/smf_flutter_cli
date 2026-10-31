@@ -572,11 +572,12 @@ final class FirebaseAuthService implements AuthService {
       IdTokenCredential(:final issuer) => _providers[issuer]?.name,
       null => null,
     };
-    const script = 'run `dart tool/enable_firebase_sign_in.dart` in the '
-        'directory of the app';
+    final script = 'run `dart tool/enable_firebase_sign_in.dart --project '
+        '$project` in the directory of the app';
     // The way to sign in, after "sign-in", and what enables it: the script
-    // of the app enables Email/Password, Anonymous and Google, and the
-    // Firebase console every way to sign in.
+    // of the app enables Email/Password, Anonymous and Google, in the project
+    // of this flavor of the app, and the Firebase console every way to sign
+    // in.
     final (withMethod, enable) = switch (method) {
       null => (
           '',

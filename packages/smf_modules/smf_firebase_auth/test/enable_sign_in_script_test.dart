@@ -325,6 +325,65 @@ String _configuredByBuild({
       },
     });
 
+/// The command with which the script tells to configure a flavor of the app.
+const _configure =
+    'dart ${FirebaseCoreModule.configureScript} <flavor> --project=<id>';
+
+/// The Firebase apps of the flavor [flavor] of the tests on each platform.
+String _androidAppOf(String flavor) => '1:1234567890:android:$flavor';
+String _iosAppOf(String flavor) => '1:1234567890:ios:$flavor';
+
+/// `firebase.json` as `tool/configure_firebase.dart` leaves it, with
+/// flutterfire_cli 1.4.1, in an app whose flavors are configured for the
+/// projects of [projects], by the name of each flavor: an iOS app that three
+/// build configurations name, and an Android app under a key that depends on
+/// the machine, `src/<flavor>`, `android/app/src/<flavor>` for an app in a
+/// directory called `app`, or `src\<flavor>` on Windows
+/// (`firebase_android_writes.dart` there), so nothing reads that key.
+String _configuredByFlavors(Map<String, String> projects) {
+  const androidKeys = ['src/', 'android/app/src/', r'src\'];
+  return jsonEncode({
+    'flutter': {
+      'platforms': {
+        'android': {
+          'buildConfigurations': {
+            for (final (index, MapEntry(key: flavor, value: project))
+                in projects.entries.indexed)
+              '${androidKeys[index % androidKeys.length]}$flavor': {
+                'projectId': project,
+                'appId': _androidAppOf(flavor),
+                'fileOutput': 'android/app/src/$flavor/google-services.json',
+              },
+          },
+        },
+        'ios': {
+          'buildConfigurations': {
+            for (final MapEntry(key: flavor, value: project)
+                in projects.entries)
+              for (final mode in const ['Debug', 'Profile', 'Release'])
+                '$mode-$flavor': {
+                  'projectId': project,
+                  'appId': _iosAppOf(flavor),
+                  'uploadDebugSymbols': true,
+                  'fileOutput': 'ios/flavors/$flavor/GoogleService-Info.plist',
+                },
+          },
+        },
+        'dart': {
+          for (final MapEntry(key: flavor, value: project) in projects.entries)
+            'lib/firebase_options_$flavor.dart': {
+              'projectId': project,
+              'configurations': {
+                'android': _androidAppOf(flavor),
+                'ios': _iosAppOf(flavor),
+              },
+            },
+        },
+      },
+    },
+  });
+}
+
 /// The configuration that the script gives the Firebase CLI for an app
 /// that signs in with an address and a password, and for one that also
 /// signs in anonymous users.
@@ -1102,8 +1161,8 @@ void main() {
     });
 
     test(
-        'stops when the app is configured for several projects, and tells '
-        'how to name one', () async {
+        'stops when the app is configured for several projects, and gives '
+        'the command for each', () async {
       File(configOf(app)).writeAsStringSync(
         _configuredByBuild(
           android: 'smf-staging',
@@ -1119,7 +1178,12 @@ void main() {
       expect(
         result.errors,
         '${configOf(app)} has several Firebase projects (smf-staging, '
-        'smf-dev, smf-app). Name one: $enableSignInCommand --project <id>\n',
+        'smf-dev, smf-app), since flavors of the app may have projects of '
+        'their own. A run of this script enables the methods in one project, '
+        'so run it once for each:\n'
+        '$enableSignInCommand --project smf-staging\n'
+        '$enableSignInCommand --project smf-dev\n'
+        '$enableSignInCommand --project smf-app\n',
       );
       expect(result.calls, isEmpty);
 
@@ -1138,8 +1202,8 @@ void main() {
     });
 
     test(
-        'stops in an app that flutterfire has not configured, and tells to '
-        'run it or to name the project', () async {
+        'stops in an app with no configured flavor, and tells to configure '
+        'one or to name the project', () async {
       const orName = 'or name the project: $enableSignInCommand --project '
           '<id>';
       final config = File(configOf(app));
@@ -1149,8 +1213,8 @@ void main() {
       expect(missing.code, 1);
       expect(
         missing.errors,
-        '${config.path} is missing, so the app is not configured for '
-        'Firebase yet. Run "flutterfire configure" first (see README.md), '
+        '${config.path} is missing, so no flavor of the app is configured for '
+        'Firebase yet. Configure one first with "$_configure" (see README.md), '
         '$orName\n',
       );
       expect(missing.output, isEmpty);
@@ -1174,8 +1238,8 @@ void main() {
         expect(result.code, 1, reason: text);
         expect(
           result.errors,
-          '${config.path} has no Firebase project of "flutterfire '
-          'configure". Run it first (see README.md), $orName\n',
+          '${config.path} names no Firebase project. Configure a flavor first '
+          'with "$_configure" (see README.md), $orName\n',
           reason: text,
         );
         expect(result.calls, isEmpty, reason: text);
@@ -1187,8 +1251,9 @@ void main() {
         'stops at a firebase.json that is not JSON, that is no text in '
         'UTF-8, or whose project is no id of a project, and passes nothing '
         'of it to the Firebase CLI', () async {
-      const again = 'Run "flutterfire configure" again (see README.md), or '
-          'name the project: $enableSignInCommand --project <id>';
+      const again = 'Configure a flavor again with "$_configure" (see '
+          'README.md), or name the project: $enableSignInCommand --project '
+          '<id>';
       final config = File(configOf(app))..writeAsStringSync('{"flutter": ');
 
       final broken = await run();
@@ -1508,6 +1573,33 @@ void main() {
         ],
       });
       expect(File(configOf(app)).readAsStringSync(), _configuredFor('smf-app'));
+    });
+
+    test(
+        'after a failure for a project that its arguments name, gives the '
+        'commands with that project, since without it an app with several '
+        'projects stops', () async {
+      File(configOf(app)).writeAsStringSync(
+        _configuredByFlavors(const {'dev': 'smf-dev', 'prod': 'smf-prod'}),
+      );
+
+      final result = await run(
+        arguments: ['--project', 'smf-prod'],
+        standIn: {'STAND_IN_DEPLOY_CODE': '2'},
+      );
+
+      expect(result.code, 2);
+      expect(
+        result.errors.split('\n'),
+        containsAll([
+          _failed(2),
+          _maybeAnotherAccount.replaceFirst(
+            '--account <email>',
+            '--project smf-prod --account <email>',
+          ),
+          _withDebug.replaceFirst('--debug', '--project smf-prod --debug'),
+        ]),
+      );
     });
 
     test(
@@ -2412,8 +2504,8 @@ void main() {
 
     test(
         'enables the methods in a project that its arguments name, and sets '
-        'up nothing there for Google, which is for the project of '
-        'flutterfire configure', () async {
+        'up nothing there for Google, since firebase.json names no app of '
+        'that project', () async {
       useAppWith('google');
       final plist = fileOf(_infoPlist).readAsStringSync();
 
@@ -2431,14 +2523,250 @@ void main() {
       ]);
       expect(
         result.output.split('\n').skip(3).join('\n'),
-        'firebase.json of the app names no app of the project other-app that '
-        '"flutterfire configure" configured the app for, so this run registers '
-        'no debug key, downloads no Firebase file and writes no URL scheme '
-        'there. To set the app up for that project, run "flutterfire '
-        'configure" for it first, and then this script again.\n',
+        'firebase.json of the app names no app of the project other-app, so '
+        'this run registers no debug key, downloads no Firebase file and '
+        'writes no URL scheme there. To set up a flavor of the app in that '
+        'project, run "dart ${FirebaseCoreModule.configureScript} <flavor> '
+        '--project=other-app" first, and then this script again.\n',
       );
       expect(keytoolCallsSoFar(), isEmpty);
       expect(fileOf(_infoPlist).readAsStringSync(), plist);
+    });
+
+    group('in an app whose flavors are configured', () {
+      /// The URL scheme of the client of Google of an iOS app of the project
+      /// `smf-dev`, next to [_scheme].
+      const devScheme = 'com.googleusercontent.apps.1234567890-dev';
+
+      /// The Firebase file of the iOS app in `smf-dev`.
+      String devServiceInfo() =>
+          _serviceInfo(withClient: true).replaceAll(_scheme, devScheme);
+
+      /// [path] of the Firebase file of a flavor, and whether the app has it.
+      String androidFileOf(String flavor) =>
+          'android/app/src/$flavor/google-services.json';
+      String iosFileOf(String flavor) =>
+          'ios/flavors/$flavor/GoogleService-Info.plist';
+
+      /// The options of the calls of the Firebase CLI for [project].
+      String jsonFor(String project) =>
+          '--project=$project --non-interactive --json';
+
+      setUp(() {
+        useAppWith('google');
+        File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+      });
+
+      test(
+          'stops at several projects and names each, also with an account, '
+          'and changes nothing', () async {
+        final config = _configuredByFlavors(const {
+          'dev': 'smf-dev',
+          'staging': 'smf-staging',
+          'prod': 'smf-prod',
+        });
+        File(configOf(app)).writeAsStringSync(config);
+
+        final result = await run(arguments: ['--account', 'dev@example.com']);
+
+        expect(result.code, 1);
+        expect(
+          result.errors,
+          '${configOf(app)} has several Firebase projects (smf-dev, '
+          'smf-staging, smf-prod), since flavors of the app may have projects '
+          'of their own. A run of this script enables the methods in one '
+          'project, so run it once for each:\n'
+          '$enableSignInCommand --project smf-dev\n'
+          '$enableSignInCommand --project smf-staging\n'
+          '$enableSignInCommand --project smf-prod\n',
+        );
+        expect(result.calls, isEmpty);
+        expect(File(configOf(app)).readAsStringSync(), config);
+      });
+
+      test(
+          'reads the one project of the flavors that are configured, under '
+          'any key of the Android app', () async {
+        for (final flavors in const [
+          {'dev': 'smf-dev'},
+          {'first': 'smf-dev', 'dev': 'smf-dev'},
+          {'first': 'smf-dev', 'second': 'smf-dev', 'dev': 'smf-dev'},
+        ]) {
+          File(configOf(app)).writeAsStringSync(_configuredByFlavors(flavors));
+          serveFiles();
+
+          final result = await run(
+            keytools: ['jdk/bin'],
+            standIn: {
+              'STAND_IN_ACCOUNT': 'dev@example.com',
+              'STAND_IN_SHAS': registered.join(','),
+            },
+          );
+
+          expect(result.code, 0, reason: result.errors);
+          expect(
+            commandsOf(result),
+            contains(
+              'apps:sdkconfig ANDROID ${_androidAppOf('dev')} '
+              '${jsonFor('smf-dev')}',
+            ),
+            reason: '$flavors',
+          );
+        }
+      });
+
+      test(
+          'with --project, registers the debug key, downloads each Firebase '
+          'file once and writes the URL scheme for the flavor of that project '
+          'alone, next to the scheme of the other project', () async {
+        File(configOf(app)).writeAsStringSync(
+          _configuredByFlavors(const {
+            'dev': 'smf-dev',
+            'staging': 'smf-staging',
+          }),
+        );
+        serveFiles();
+        File(inMachine('files/IOS')).writeAsStringSync(devServiceInfo());
+
+        final dev = await run(
+          arguments: ['--project', 'smf-dev'],
+          keytools: ['jdk/bin'],
+          standIn: {
+            'STAND_IN_ACCOUNT': 'dev@example.com',
+            'STAND_IN_SHAS': registered.join(','),
+          },
+        );
+
+        expect(dev.code, 0, reason: dev.errors);
+        expect(
+          _urlSchemesOf(fileOf(_infoPlist).readAsStringSync()),
+          [
+            [devScheme],
+          ],
+        );
+        expect(fileOf(androidFileOf('dev')).existsSync(), isTrue);
+        expect(fileOf(iosFileOf('dev')).readAsStringSync(), devServiceInfo());
+        expect(fileOf(androidFileOf('staging')).existsSync(), isFalse);
+        expect(fileOf(iosFileOf('staging')).existsSync(), isFalse);
+
+        File(inMachine('files/IOS'))
+            .writeAsStringSync(_serviceInfo(withClient: true));
+
+        final staging = await run(
+          arguments: ['--project', 'smf-staging'],
+          keytools: ['jdk/bin'],
+          standIn: {'STAND_IN_ACCOUNT': 'dev@example.com'},
+        );
+
+        expect(staging.code, 0, reason: staging.errors);
+        final android = _androidAppOf('staging');
+        final options = jsonFor('smf-staging');
+        expect(commandsOf(staging), [
+          '--version',
+          'login:list',
+          'deploy --only auth --project=smf-staging --non-interactive',
+          'apps:android:sha:list $android $options',
+          'apps:android:sha:create $android $_sha1 $options',
+          'apps:android:sha:create $android $_sha256 $options',
+          'apps:sdkconfig ANDROID $android $options',
+          // Once, though three build configurations name the iOS app.
+          'apps:sdkconfig IOS ${_iosAppOf('staging')} $options',
+        ]);
+        expect(
+          fileOf(iosFileOf('staging')).readAsStringSync(),
+          _serviceInfo(withClient: true),
+        );
+        expect(fileOf(androidFileOf('staging')).existsSync(), isTrue);
+        // The file of the other flavor stays as it was.
+        expect(fileOf(iosFileOf('dev')).readAsStringSync(), devServiceInfo());
+        // One Info.plist for all the flavors, with a scheme for each.
+        expect(
+          _urlSchemesOf(fileOf(_infoPlist).readAsStringSync()),
+          [
+            [devScheme],
+            [_scheme],
+          ],
+        );
+      });
+
+      test(
+          'with two flavors in the project, sets up the apps of both, with '
+          'a URL scheme for each iOS app', () async {
+        File(configOf(app)).writeAsStringSync(
+          _configuredByFlavors(const {
+            'dev': 'smf-app',
+            'staging': 'smf-app',
+            'prod': 'smf-prod',
+          }),
+        );
+        serveFiles();
+        File(inMachine('files/IOS.1')).writeAsStringSync(devServiceInfo());
+        File(inMachine('files/IOS.2'))
+            .writeAsStringSync(_serviceInfo(withClient: true));
+
+        final result = await run(
+          arguments: ['--project', 'smf-app'],
+          keytools: ['jdk/bin'],
+          standIn: {
+            'STAND_IN_ACCOUNT': 'dev@example.com',
+            'STAND_IN_SHAS': registered.join(','),
+          },
+        );
+
+        expect(result.code, 0, reason: result.errors);
+        expect(
+          commandsOf(result).skip(3),
+          [
+            'apps:android:sha:list ${_androidAppOf('dev')} $json',
+            'apps:android:sha:list ${_androidAppOf('staging')} $json',
+            'apps:sdkconfig ANDROID ${_androidAppOf('dev')} $json',
+            'apps:sdkconfig ANDROID ${_androidAppOf('staging')} $json',
+            'apps:sdkconfig IOS ${_iosAppOf('dev')} $json',
+            'apps:sdkconfig IOS ${_iosAppOf('staging')} $json',
+          ],
+        );
+        expect(
+          _urlSchemesOf(fileOf(_infoPlist).readAsStringSync()),
+          [
+            [devScheme],
+            [_scheme],
+          ],
+        );
+        expect(fileOf(androidFileOf('prod')).existsSync(), isFalse);
+      });
+
+      test('a step that fails tells to run the script again for that project',
+          () async {
+        File(configOf(app)).writeAsStringSync(
+          _configuredByFlavors(const {'dev': 'smf-dev', 'prod': 'smf-prod'}),
+        );
+        serveFiles();
+
+        final result = await run(
+          arguments: ['--project', 'smf-prod'],
+          keytools: ['jdk/bin'],
+          standIn: {
+            'STAND_IN_ACCOUNT': 'dev@example.com',
+            'STAND_IN_FAILS': 'apps:android:sha:list',
+          },
+        );
+
+        expect(result.code, 1);
+        expect(
+          result.errors,
+          allOf(
+            contains(
+              'To name the account, run: $enableSignInCommand --project '
+              'smf-prod --account <email>\n',
+            ),
+            endsWith(
+              'What this script did before that stays done, and running it '
+              'again does the rest: $enableSignInCommand --project '
+              'smf-prod\n',
+            ),
+          ),
+        );
+      });
     });
 
     test(
