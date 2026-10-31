@@ -2008,6 +2008,8 @@ void main() {
           'purchases_session',
           'purchases_setting',
           'paywall',
+          'app_icon_role',
+          'launcher_icons',
         ]),
       );
       // The test of the purchases of the user of the device is for an app

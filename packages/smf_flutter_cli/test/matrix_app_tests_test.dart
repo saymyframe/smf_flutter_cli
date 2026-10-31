@@ -474,6 +474,9 @@ void main() {
     expect(named('flavors').roles, {appEntryRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('language_setting').roles, {localizationRole});
+    expect(named('app_icon_role').roles, {appIconRole});
+    // And the test of the provider of the app icon role.
+    expect(named('launcher_icons').roles, isEmpty);
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
   });
