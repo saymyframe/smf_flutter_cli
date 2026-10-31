@@ -39,12 +39,17 @@ const _flutterStep = '''
 /// build has its environment, since GitHub keeps one run waiting in a group and
 /// cancels the run that waited before: otherwise, of three builds started one
 /// after another, the second would never run.
+///
+/// GitHub shows a job that it skips with the name as it is written, expressions
+/// included, so the name of the build has none: the title of the run tells the
+/// environment. An empty title leaves a push the line of its commit.
 String workflowOf(CiPipeline pipeline) {
   final build = pipeline.build;
   return '''
 # The CI of this app. The section "GitHub Actions" of README.md tells what it
 # runs and where its values come from.
 name: CI
+run-name: \${{ inputs.environment && format('Build for Android ({0})', inputs.environment) || '' }}
 
 on:
   push:
@@ -78,7 +83,7 @@ $_flutterStep
 ${pipeline.checks.map(_stepOf).join('\n')}
 
   build:
-    name: Build for Android ($_chosenEnvironment)
+    name: Build for Android
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
