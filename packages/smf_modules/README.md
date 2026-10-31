@@ -12,6 +12,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_onboarding` | `onboarding`, the onboarding of the first launch |
 | `smf_material_theme` | `material_theme`, a light and a dark Material 3 theme |
 | `smf_launcher_icons` | `launcher_icons`, the app icon with flutter_launcher_icons |
+| `smf_native_splash` | `native_splash`, the splash screen with flutter_native_splash |
 | `smf_bloc`, `smf_riverpod` | `bloc` and `riverpod`, state management |
 | `smf_gen_l10n` | `gen_l10n`, localization with gen-l10n of Flutter |
 | `smf_get_it` | `get_it`, dependency injection |

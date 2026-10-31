@@ -49,6 +49,7 @@ dependencies:
   smf_launcher_icons: ^0.7.0
   smf_local_notifications: ^0.6.1
   smf_material_theme: ^0.4.3
+  smf_native_splash: ^0.7.0
   smf_onboarding: ^0.6.0
   smf_paywall: ^0.7.0
   smf_pipeline: ^0.7.1

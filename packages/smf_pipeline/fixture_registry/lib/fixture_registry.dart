@@ -41,6 +41,7 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
+import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
@@ -166,7 +167,9 @@ List<ModuleId> everyFixture({
 /// provider that must work; material_theme, a provider of the theme role,
 /// for the tests of that role that the CLI keeps: the theme mode, which
 /// shared_preferences remembers, and its entry, which the settings screen
-/// shows below those of the two fixtures; the fixture texts, a provider of
+/// shows below those of the two fixtures; native_splash, a provider of the
+/// splash role, for the test of its module and the test of the role that the
+/// CLI keeps; the fixture texts, a provider of
 /// the localization role, for the two tests of that role that the CLI
 /// keeps: the test of the role itself, with the texts of the fixture
 /// feature in two languages, and the test of the setting of the language,
@@ -243,6 +246,7 @@ List<SmfModule> severalProvidersModules() => const [
       FakeScreenLogModule(),
       SettingsModule(),
       MaterialThemeModule(),
+      NativeSplashModule(),
       FakeL10nModule(),
       OnboardingModule(),
       FakeStepsModule(),

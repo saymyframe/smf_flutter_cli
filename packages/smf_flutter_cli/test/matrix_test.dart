@@ -385,9 +385,10 @@ void main() {
         '($module, gen_l10n, flutter_core, go_router, shared_preferences)';
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, material_theme, launcher_icons, gen_l10n, get_it, '
-        'event_bus, '
-        'shared_preferences, dart_define, onboarding, local_notifications, '
+        'bottom_tabs, material_theme, launcher_icons, native_splash, gen_l10n, '
+        'get_it, '
+        'event_bus, shared_preferences, dart_define, onboarding, '
+        'local_notifications, '
         'firebase_core, firebase_crashlytics, firebase_analytics, '
         'firebase_messaging, firebase_auth, google_sign_in, apple_sign_in, '
         'sign_in, revenuecat, paywall, github_actions)';
@@ -446,6 +447,7 @@ void main() {
       ),
       'material_theme (material_theme, flutter_core, shared_preferences)',
       'launcher_icons (launcher_icons, flutter_core)',
+      'native_splash (native_splash, flutter_core)',
       'get_it (get_it, flutter_core)',
       'event_bus with di (event_bus, get_it, flutter_core)',
       'event_bus (event_bus, flutter_core)',
@@ -864,10 +866,10 @@ void main() {
     expect(failed, isEmpty);
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, material_theme, launcher_icons, gen_l10n, get_it, '
-        'event_bus, '
-        'shared_preferences, dart_define, onboarding, local_notifications, '
-        'revenuecat, paywall, github_actions, local)';
+        'bottom_tabs, material_theme, launcher_icons, native_splash, gen_l10n, '
+        'get_it, '
+        'event_bus, shared_preferences, dart_define, onboarding, '
+        'local_notifications, revenuecat, paywall, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2668,6 +2670,7 @@ Type type() => Types;
               'bottom_tabs',
               'material_theme',
               'launcher_icons',
+              'native_splash',
               'gen_l10n',
               'get_it',
               'event_bus',

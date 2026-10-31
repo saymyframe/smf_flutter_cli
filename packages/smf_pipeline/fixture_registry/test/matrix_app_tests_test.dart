@@ -2010,6 +2010,8 @@ void main() {
           'paywall',
           'app_icon_role',
           'launcher_icons',
+          'splash_role',
+          'native_splash',
         ]),
       );
       // The test of the purchases of the user of the device is for an app

@@ -19,6 +19,7 @@ import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
+import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
@@ -52,6 +53,7 @@ const List<SmfModule> smfModules = [
   BottomTabsModule(),
   MaterialThemeModule(),
   LauncherIconsModule(),
+  NativeSplashModule(),
   GenL10nModule(),
   GetItModule(),
   EventBusModule(),
