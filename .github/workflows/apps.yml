@@ -315,8 +315,8 @@ jobs:
     name: Generated apps (broken providers)
     if: inputs.broken_providers
     runs-on: ubuntu-latest
-    # Its small apps run one after another, each in about half a minute;
-    # the timeout leaves room for many more.
+    # Its small apps run one after another, about 60 of them at about 20 seconds
+    # each, so this timeout leaves little room for more.
     timeout-minutes: 30
     env: *linux_env
 

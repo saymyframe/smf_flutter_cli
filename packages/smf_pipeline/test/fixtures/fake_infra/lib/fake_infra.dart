@@ -17,6 +17,8 @@ import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_purchases_bundle.dart';
 import 'package:fake_infra/bundles/fake_push_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
+import 'package:fake_infra/bundles/fake_rest_bundle.dart';
+import 'package:fake_infra/bundles/fake_rest_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
@@ -1348,6 +1350,68 @@ final class FakeEnvUserModule extends SmfModule {
           vars: envRole.varsOf(id, keys),
         ),
         for (final key in keys) envRole.data(key),
+      ];
+}
+
+/// A provider of the REST role on `HttpClient` of `dart:io`, with no package:
+/// one exchange on the wire and nothing else, as the contract of
+/// `RestTransport` asks. The template of the role does the rest, whichever
+/// module provides it: `appRest`, its guarantees and its test server.
+final class FakeRestModule extends SmfModule {
+  /// Creates the module.
+  const FakeRestModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_rest');
+
+  static const _file = ImportRef.app(
+    'core/fixture_rest/fixture_rest_transport.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'REST on dart:io (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(restRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeRestBundle),
+        restRole.data(
+          const RoleImplementation(
+            type: TypeRef('FixtureRestTransport', import: _file),
+            create: FactoryRef('createFixtureRestTransport', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A module that makes requests through the REST role, as no module of the CLI
+/// does yet: the state of a screen with the notes of a server. It names no
+/// provider of the role, no router and no DI container, so it shows that one
+/// import is all that such a module needs. It works in an app with sign-in and
+/// in one without, a body of another shape is a reason of the role and not a
+/// `TypeError`, and it cancels each call on its way when it is disposed of.
+final class FakeRestUserModule extends SmfModule {
+  /// Creates the module.
+  const FakeRestUserModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_rest_user');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'The notes of a server over REST (fixture)',
+        kind: ModuleKinds.infrastructure,
+        requires: {restRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeRestUserBundle),
       ];
 }
 

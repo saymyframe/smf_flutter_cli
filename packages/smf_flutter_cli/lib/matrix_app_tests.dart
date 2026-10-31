@@ -1816,6 +1816,91 @@ final List<String> startReleaseBuildArguments = [
   '--dart-define=$startFlavorDefine=${AppEntryRole.releaseFlavor.name}',
 ];
 
+/// The address of the REST API that the test of the REST role gives the role
+/// in `.env`: a port with no listener, since the files of tests run at once
+/// and no test binds a fixed port.
+const _restBaseAddress = 'http://127.0.0.1:9/api/v1';
+
+/// The test of the REST role that the CLI keeps in its `app_tests/rest_role`,
+/// for the apps with the role, whichever module provides it, that [among]
+/// accepts, or all of them. Each test but one makes a client of its own over
+/// `createRestTransport()` and runs in real time, against a local server, so
+/// it needs neither the start-up of the app nor a session:
+/// - `appRest` takes its address from `.env`, a request reaches the server as
+///   the code asked it, with no credential that the code did not give, and a
+///   relative path without an address fails with `notConfigured` before
+///   anything is sent;
+/// - any status is a reply, which comes back as a response or a failure of a
+///   closed set of reasons, and a connection that fails or breaks, also in a
+///   TLS handshake, is the reason `network`, with no query in its hint;
+/// - the token goes only to the origin of the address, also after a redirect,
+///   which a provider leaves to the client;
+/// - a 401 gets a new token once and repeats once;
+/// - `GET` and `HEAD` repeat as the role says, keeping to `Retry-After`, and
+///   other methods never do;
+/// - a timeout covers a whole attempt, a cancel ends a call at once, and each
+///   closes the connection;
+/// - a debug build prints one line for each attempt, and neither the client nor
+///   the provider prints or says a token, a query or a body.
+///
+/// The test knows only the role. It gives [RestRole.baseAddressKey] a value in
+/// `.env`, so it names the role. Its probe, `probeRest()` of
+/// `integration_test/rest_role/probe.dart`, reaches no machine off the device: a
+/// `GET` and a `POST` reach a server of its own on the device, an exchange that
+/// has to stop closes its connection, a request over `http://` fails as a
+/// connection fails, and an app with an empty `.env`, as an app of CI has,
+/// says so through the client of the app. The test runs the probe too.
+Future<MatrixAppTest> restRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/rest_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(restRole) &&
+          (among?.call(app) ?? true),
+      values: (app) => {
+        'base_address': _restBaseAddress,
+        'base_key': RestRole.baseAddressKey.name,
+      },
+      envValues: (app) => {RestRole.baseAddressKey.name: _restBaseAddress},
+      roles: {restRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/rest_role/probe.dart',
+        'probeRest',
+      ),
+    );
+
+/// The test of the requests of the users of the session that the CLI keeps in
+/// its `app_tests/rest_session`, for the apps with the REST role and the auth
+/// role, whichever modules provide them, that [among] accepts, or all of them,
+/// in each mode of the auth role. It runs the start-up of the app, and each
+/// request in real time in a widget test:
+/// - a request of the user of an account carries the token of the session, and
+///   one without an account what the mode of the app says;
+/// - after a sign-out, a request carries no token of the user who left;
+/// - requests that a server refuses at the same time share one refresh, and
+///   each repeats once;
+/// - a refresh that fails for the network is the reason `network`, and a
+///   session that ended on the server is `unauthorized`, with nobody signed in;
+/// - a request of one user does not repeat as the next user;
+/// - a second 401 is `unauthorized`, and signs nobody out.
+///
+/// It is a test of the REST role, whose template reads the token of the
+/// session. It reads the mode of the app from `authMode` of the app, so the
+/// matrix fills in nothing, and it uses the helpers of the test of the auth
+/// role, which every such app has. It has no probe for the start check: nobody
+/// can sign in on a device.
+Future<MatrixAppTest> restSessionAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/rest_session',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.containsAll({restRole, authRole}) &&
+          (among?.call(app) ?? true),
+      roles: {restRole},
+    );
+
 /// The test of the flavor of a running app that the CLI keeps in its
 /// `app_tests/flavors`, for the apps that [among] accepts, or all of them,
 /// whichever module provides the app entry: `appFlavor` of Flutter is the

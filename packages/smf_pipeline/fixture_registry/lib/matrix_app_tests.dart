@@ -16,7 +16,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// events role, the preferences role, the localization role, the theme
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode, the auth role, the onboarding screen role, the
-/// notifications role, the push role, the purchases role and the env role.
+/// notifications role, the push role, the purchases role, the env role and the
+/// REST role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -28,7 +29,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// fixture theme, whose colour a test changes, the module that uses the
 /// fixture clock, which shows an hour on a clock of 24 hours or of 12, and
 /// the fixture steps of the onboarding, whose actions note their calls, and
-/// the module that reads values of .env, whose keys a test gives values.
+/// the module that reads values of .env, whose keys a test gives values, and
+/// the module that makes requests through the REST role.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -455,6 +457,26 @@ Future<MatrixAppTests> fixtureAppTests() async {
             app.modules.contains(FakeEnvUserModule.id),
         envValues: (app) => _fixtureValues,
       ),
+      // The requests of the apps with the REST role, whichever module provides
+      // it, the test that the CLI keeps: only in the apps with every module,
+      // which run flutter test for other tests already. There the fixture
+      // REST provides the role on dart:io, next to the fixture sign-in, which
+      // the role uses.
+      await restRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The requests of the users of the session in the apps with the REST
+      // role and the auth role, whichever modules provide them, the test that
+      // the CLI keeps: only in the apps with every module, which the matrix
+      // has once more for each other mode of the auth role.
+      await restSessionAppTest(among: (app) => app.everyModuleWith != null),
+      // The module that makes requests through the REST role, fake_rest_user:
+      // it loads the notes of a server, a body of another shape is a reason of
+      // the role, and it cancels its call when it is disposed of, whichever
+      // module provides the role. In every app with the module. It tests a
+      // module, so it names no role.
+      MatrixAppTest(
+        '$appTests/rest_consumer',
+        appliesTo: (app) => app.modules.contains(FakeRestUserModule.id),
+      ),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -485,6 +507,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       pushRole,
       purchasesRole,
       envRole,
+      restRole,
     },
   );
 }

@@ -771,6 +771,228 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture REST that sends the query of an address decoded, as a stack
+  /// does that takes the query apart and puts it together again: a value with
+  /// an `&` or an `=` reaches the server as something else.
+  static const restDecodingQuery = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_decodes_query'),
+    'REST that sends the query of an address decoded (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        '        exchange.uri,\n',
+        '        exchange.uri.replace(\n'
+            '          query: Uri.decodeComponent(exchange.uri.query),\n'
+            '        ),\n',
+      ),
+    ],
+  );
+
+  /// The fixture REST that lets a failure to connect through as an error of
+  /// another kind: the code gets the reason `unknown` where the network is at
+  /// fault, and a `GET` does not repeat.
+  static const restLeakingErrors = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_leaks_errors'),
+    'REST whose failures to connect are unknown errors (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        _catchesFailures,
+        '    } on SocketException {\n      rethrow;\n$_catchesFailures',
+      ),
+    ],
+  );
+
+  /// The fixture REST that lets a failed TLS handshake through as an error of
+  /// another kind, as a stack does that reports the failures of its sockets
+  /// alone: the code gets the reason `unknown` for a certificate that the
+  /// device does not trust.
+  static const restLeakingTlsFailures = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_leaks_tls_failures'),
+    'REST whose failed TLS handshakes are unknown errors (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        _catchesFailures,
+        '    } on TlsException {\n      rethrow;\n$_catchesFailures',
+      ),
+    ],
+  );
+
+  /// How the fixture REST takes the failures of a connection.
+  static const _catchesFailures = '    } on IOException catch (error) {\n';
+
+  /// The fixture REST that says the text of an error in its hint, as is
+  /// natural to write: the text of an error of `dart:io` may quote the address
+  /// with its query, which may have a key.
+  static const restQuotingErrors = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_quotes_errors'),
+    'REST whose hints quote the text of an error (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        r"        'The connection failed with a ${error.runtimeType}.',"
+            '\n',
+        r"        'The connection failed: $error.',"
+            '\n',
+      ),
+    ],
+  );
+
+  /// The fixture REST that follows a redirect itself, with every header of the
+  /// exchange, as a stack does by default: the token of the user goes to the
+  /// host that a server names.
+  static const restFollowingRedirects = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_follows_redirects'),
+    'REST that follows a redirect with every header (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        '      final response = await request.close();\n',
+        '      var response = await request.close();\n'
+            '      for (var hop = 0; response.isRedirect && hop < 5; hop++) {\n'
+            '        await response.drain<void>();\n'
+            '        final next = await client.openUrl(\n'
+            '          exchange.method,\n'
+            '          exchange.uri.resolve(\n'
+            "            response.headers.value('location')!,\n"
+            '          ),\n'
+            '        );\n'
+            '        opened = next;\n'
+            '        next.followRedirects = false;\n'
+            '        exchange.headers.forEach(next.headers.set);\n'
+            '        response = await next.close();\n'
+            '      }\n',
+      ),
+    ],
+  );
+
+  /// The fixture REST that keeps the first `authorization` that it sent as a
+  /// default of its later calls, as a client does whose headers live in one
+  /// object: a repeat after a refresh has the token that the server refused,
+  /// and every other request has the token too.
+  static const restKeepingHeaders = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_keeps_headers'),
+    'REST that keeps the first token as a default (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        '  const FixtureRestTransport();\n',
+        '  const FixtureRestTransport();\n'
+            '\n'
+            '  /// The first token that it sent.\n'
+            '  static String? _kept;\n',
+      ),
+      (
+        '      exchange.headers.forEach(request.headers.set);\n',
+        '      exchange.headers.forEach(request.headers.set);\n'
+            "      _kept ??= exchange.headers['authorization'];\n"
+            '      final kept = _kept;\n'
+            '      if (kept != null) '
+            "request.headers.set('authorization', kept);\n",
+      ),
+    ],
+  );
+
+  /// The fixture REST that repeats a failed exchange itself, as a stack with a
+  /// retry of its own does: a server gets a `POST` twice, which may have done
+  /// what it asked, and a `GET` more often than the role says.
+  static const restRepeatingRequests = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_repeats_requests'),
+    'REST that repeats a failed exchange itself (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        '  Future<RestReply> send(RestExchange exchange) async {\n',
+        '  Future<RestReply> send(RestExchange exchange) async {\n'
+            '    try {\n'
+            '      final reply = await _send(exchange);\n'
+            '      return reply.status < 500 ? reply : await _send(exchange);\n'
+            '    } on RestConnectionFailed {\n'
+            '      return _send(exchange);\n'
+            '    }\n'
+            '  }\n'
+            '\n'
+            '  Future<RestReply> _send(RestExchange exchange) async {\n',
+      ),
+    ],
+  );
+
+  /// The fixture REST that gives a reply without its headers: the client reads
+  /// no `Retry-After` and no location of a redirect.
+  static const restLosingReplyHeaders = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_loses_reply_headers'),
+    'REST that gives a reply without its headers (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        '      final headers = <String, String>{};\n'
+            '      response.headers.forEach(\n'
+            "        (name, values) => headers[name] = values.join(', '),\n"
+            '      );\n',
+        '',
+      ),
+      ('        headers: headers,\n', '        headers: const {},\n'),
+    ],
+  );
+
+  /// The fixture REST that does not stop an exchange: the call ends at its
+  /// timeout or its cancel, since the client answers it, but the connection
+  /// stays open, and with it what the server sends.
+  static const restIgnoringStop = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_ignores_stop'),
+    'REST that does not close a connection that has to stop (fixture)',
+    _fixtureRestFile,
+    [
+      ("import 'dart:async';\n", ''),
+      (
+        '    HttpClientRequest? opened;\n'
+            '    unawaited(\n'
+            '      exchange.stop.then((_) {\n'
+            '        opened?.abort();\n'
+            '        // This also closes a connection that is being made, or '
+            'that is in the\n'
+            '        // middle of the body of a reply, which a request can no '
+            'longer abort.\n'
+            '        client.close(force: true);\n'
+            '      }),\n'
+            '    );\n',
+        '',
+      ),
+      (
+        '      final request = opened = await client.openUrl(\n',
+        '      final request = await client.openUrl(\n',
+      ),
+    ],
+  );
+
+  /// The fixture REST that prints the headers of each exchange, as a logger of
+  /// a stack does while someone looks for a bug: the token of the user is in
+  /// the log of the device.
+  static const restLoggingHeaders = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_logs_headers'),
+    'REST that prints the headers of an exchange (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        '      exchange.headers.forEach(request.headers.set);\n',
+        '      exchange.headers.forEach(request.headers.set);\n'
+            r"      Zone.current.print('${exchange.headers}');"
+            '\n',
+      ),
+    ],
+  );
+
   /// The fixture sign-in that keeps the token of the first user in a field of
   /// its own and gives it to every next user, as a provider does that reads
   /// the token once: a server takes the next person on the device for the
@@ -790,6 +1012,10 @@ final class BrokenModule extends SmfModule {
 
   /// The file of the fixture sign-in.
   static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
+
+  /// The file of the fixture REST.
+  static const _fixtureRestFile =
+      'lib/core/fixture_rest/fixture_rest_transport.dart';
 
   /// The fixture notifications whose function forgets the notifications
   /// that are scheduled each time it opens them, as a provider does that
