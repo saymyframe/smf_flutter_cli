@@ -19,13 +19,13 @@ final class Note {
   final String text;
 }
 
-Future<Note> firstNote() async {
-  final response = await appRest.get('notes/1');
+Future<Note> firstNote(RestCancel cancel) async {
+  final response = await appRest.get('notes/1', cancel: cancel);
   return response.decoded(Note.fromJson);
 }
 ```
 
-The path joins `REST_BASE_URL` in `.env`, the address of your API. A call fails only with a `RestFailure`, so the state of a screen shows a text of the app for its `reason`.
+The path joins `REST_BASE_URL` in `.env`, the address of your API. A call fails only with a `RestFailure`, so the state of a screen shows a text of the app for its `reason`. That state gives each call a `RestCancel` of its own, and cancels the calls on their way when it is disposed of.
 
 In an app with a provider of sign-in, each request to that address carries the token of the user, and a 401 gets a new token once and repeats once.
 
