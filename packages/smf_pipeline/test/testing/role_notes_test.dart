@@ -16,6 +16,8 @@ final class _ShellRole extends Role<NoDsl> {
 
   static const shellFile = 'lib/core/shell/shell.dart';
 
+  static const frameImage = 'assets/shell/frame.png';
+
   @override
   String get id => 'shell';
 
@@ -27,6 +29,7 @@ final class _ShellRole extends Role<NoDsl> {
 
   @override
   RoleInterface get interface => const RoleInterface(
+        providerFiles: [frameImage],
         symbols: [
           RequiredClass(
             'Shell',
@@ -857,6 +860,8 @@ void main() {
         'final extra = TabKit();\n',
       ),
       file('lib/core/shell/tabs.dart', ofTabs, 'const tabs = 1;\n'),
+      file(_ShellRole.frameImage, ofTabs, ''),
+      file('assets/shell/other.png', ofTabs, ''),
     ];
     List<String> problems(String text) => problemsOf(
           text,
@@ -881,6 +886,14 @@ void main() {
         ),
         isEmpty,
       );
+    });
+
+    test('is free to name a file that every provider generates, and no other',
+        () {
+      expect(problems('The frame is `${_ShellRole.frameImage}`.'), isEmpty);
+      expect(problems('The other one is `assets/shell/other.png`.'), [
+        '`assets/shell/other.png`, which only tabs generates and no role guarantees',
+      ]);
     });
 
     test(
