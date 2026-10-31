@@ -449,6 +449,16 @@ With `sign_in_with_apple`:
 - The state of each screen is a cubit in a file next to it: `SignInCubit`, `SignUpCubit`, `ResetPasswordCubit` and `AccountCubit`. The screen provides its cubit and builds its view from the state. A cubit takes the session through its constructor, so a test creates one with an `AppSessionController` of its own. `lib/features/sign_in/sign_in_composition.dart` creates the cubits with `appSession`, and apart from the file of the guards, no other file of the feature names `appSession`.
 - A widget reads who uses the app with `context.watch<SessionCubit>().state`, an `AppSession`. The root of the app provides the `SessionCubit` of `lib/features/sign_in/session_cubit.dart`, which follows `appSession`.
 
+## Splash screen
+
+- The sources of the splash screen are `assets/branding/splash_light.png` and `assets/branding/splash_dark.png`, a logo for each mode of the device on a transparent background. Do not edit the images made from them in the Android and iOS projects. Change a source and run the command that the note of the provider below gives.
+
+With `flutter_native_splash`:
+
+- `flutter_native_splash.yaml` has the images and the colours of the screen. After a change of that file or of an image, run `dart run flutter_native_splash:create` and commit what it changed under `android/` and `ios/`.
+- Never set `android_min_sdk` in `flutter_native_splash.yaml`. The tool then leaves `android/app/src/main/res/drawable-v21/launch_background.xml` as it is, and that file wins on Android below 12, so the screen there has no image.
+- The package is a dev dependency, so no code of the app imports it.
+
 ## State management
 
 With `flutter_bloc`:
@@ -658,6 +668,20 @@ Every notification goes to the channel `default`, with a high importance, which 
 
 The app does not set up the actions of a notification, its buttons. They need the receiver `ActionBroadcastReceiver` on Android and, on iOS, a callback that registers the plugins for the isolate in which an action runs: see the README of the package.
 
+## Native splash
+
+`assets/branding/splash_light.png` and `assets/branding/splash_dark.png` show the mark of Say My Frame, in green for the light mode and in cream for the dark one. Replace them with your own before you release the app. The colours behind them are in `flutter_native_splash.yaml`: `color` and `color_dark`, and the same two under `android_12` for Android 12 and later.
+
+After you change an image or that file, make the screen again and commit what changed under `android/` and `ios/`:
+
+```bash
+dart run flutter_native_splash:create
+```
+
+The command rewrites `ios/Runner/Info.plist` with one more level of indentation. Keep `android_min_sdk` out of `flutter_native_splash.yaml`: with it, the tool leaves the launch background of Android below 12 as it is, and the screen there has no image.
+
+A file `flutter_native_splash-<flavor>.yaml` does not give a flavor its own screen on iOS: the tool writes one, and the app keeps showing the screen of `flutter_native_splash.yaml`.
+
 ## Sign-in
 
 The sign-in mode of the app says who may use it without an account. This app was generated in the mode `required`: `authMode` in `lib/core/auth/app_session.dart` is `AuthMode.required`.
@@ -846,6 +870,12 @@ A message that arrives while the app is in the foreground reaches `appPush.messa
 `appPush.taps` tells of each tap on a message while the app runs, and `appPush.launchMessage` is the message whose tap launched the app. Read both once the first screen is shown, and navigate as the rest of the app does. A tap on a message does not reach `appNotifications.taps`, so the code of the app sees each tap once.
 
 A message with data and no title or body reaches the app only while it is in the foreground. In the background, or when the app is closed, it runs no code of the app. Images in a message do not show on iOS, which needs an extension of the app for them.
+
+## Splash screen
+
+The screen that the system shows while the app starts is made from two images, which the app does not bundle: `assets/branding/splash_light.png` for the light mode of the device and `assets/branding/splash_dark.png` for the dark one. Each is 1152 by 1152, a logo on a transparent background. Keep the logo inside a circle of two thirds of the width of the image, since Android 12 and later cut the rest.
+
+All flavors share the screen. The section of the module that provides the screen says what the images show now, where the colours behind them are, and which command to run after a change.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -1032,6 +1062,10 @@ plugins {
 }
 
 include(":app")
+=== assets/branding/splash_dark.png (native_splash) ===
+<22152 bytes>
+=== assets/branding/splash_light.png (native_splash) ===
+<22152 bytes>
 === assets/fonts/geist/Geist-Medium.ttf (material_theme) ===
 <66576 bytes>
 === assets/fonts/geist/Geist-Regular.ttf (material_theme) ===
@@ -1132,6 +1166,22 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+=== flutter_native_splash.yaml (native_splash) ===
+# How `dart run flutter_native_splash:create` makes the splash screen of the
+# app. Run that command after you change this file or one of the images.
+flutter_native_splash:
+  color: "#F1F1E8"
+  color_dark: "#0F3326"
+  image: "assets/branding/splash_light.png"
+  image_dark: "assets/branding/splash_dark.png"
+  android: true
+  ios: true
+  web: false
+  android_12:
+    color: "#F1F1E8"
+    color_dark: "#0F3326"
+    image: "assets/branding/splash_light.png"
+    image_dark: "assets/branding/splash_dark.png"
 === ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -18577,6 +18627,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: "^6.0.0"
+  flutter_native_splash: "^2.4.8"
 
 flutter:
   default-flavor: "dev"

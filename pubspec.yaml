@@ -42,6 +42,7 @@ workspace:
   - packages/smf_modules/smf_home_flutter
   - packages/smf_modules/smf_local_notifications
   - packages/smf_modules/smf_material_theme
+  - packages/smf_modules/smf_native_splash
   - packages/smf_modules/smf_onboarding
   - packages/smf_modules/smf_paywall
   - packages/smf_modules/smf_revenuecat
