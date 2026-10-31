@@ -5,7 +5,6 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_core/src/agents.dart';
 import 'package:smf_firebase_core/src/configure.dart';
-import 'package:smf_firebase_core/src/preflight/flutterfire_cli.dart';
 import 'package:smf_firebase_core/src/readme.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -19,8 +18,16 @@ import 'support/flutterfire.dart';
 /// module.
 const List<SmfModule> _modules = [FlutterCoreModule(), FirebaseCoreModule()];
 
-/// The path of the options of the Firebase apps.
-const _options = 'lib/firebase_options.dart';
+/// The path of the options of the Firebase apps of [flavor].
+String _optionsOf(AppFlavor flavor) =>
+    'lib/firebase_options_${flavor.name}.dart';
+
+/// The files that the module adds to an app.
+final Set<String> _files = {
+  FirebaseCoreModule.optionsSelectorFile,
+  FirebaseCoreModule.configureScript,
+  for (final flavor in AppEntryRole.flavors) _optionsOf(flavor),
+};
 
 /// What the contract harness finds for the app of [modules], which has no
 /// errors and is rendered.
@@ -95,12 +102,11 @@ void main() {
           .single;
       expect(
         start.fragment!.code,
-        'await Firebase.initializeApp(options: '
-        'DefaultFirebaseOptions.currentPlatform);',
+        'await Firebase.initializeApp(options: firebaseOptionsOfFlavor);',
       );
       expect(start.fragment!.imports, const [
         ImportRef('package:firebase_core/firebase_core.dart'),
-        ImportRef.app('firebase_options.dart'),
+        ImportRef.app('firebase_options_of_flavor.dart'),
       ]);
       expect(start.when, isEmpty);
       final ios = sockets
@@ -111,8 +117,8 @@ void main() {
     });
 
     test(
-        'configures Firebase with flutterfire after generation, for the '
-        'platforms of the app, in a step that the modules which depend on it '
+        'configures Firebase for the default flavor after generation, with '
+        'the script of the app, in a step that the modules which depend on it '
         'may continue', () {
       final step = module
           .contribute(ContractHarness.defaultContext)
@@ -121,24 +127,12 @@ void main() {
 
       expect(step.id, FirebaseCoreModule.configureStep);
       expect(FirebaseCoreModule.configureStep.module, FirebaseCoreModule.id);
-      expect(step.tool, same(flutterfireTool));
       expect(step.tool.executable, 'dart');
-      expect(
-        step.tool.prefixArgs,
-        ['pub', 'global', 'run', 'flutterfire_cli:flutterfire'],
-      );
+      expect(step.tool.prefixArgs, isEmpty);
       expect(step.arguments, [
-        'configure',
-        '--platforms=android,ios',
-        '--overwrite-firebase-options',
-        // So that flutterfire does not ask for them.
-        '--ios-bundle-id=com.example.contract-app',
-        '--android-package-name=com.example.contract_app',
+        'tool/configure_firebase.dart',
+        AppEntryRole.defaultFlavor.name,
       ]);
-      expect(
-        ContractHarness.defaultContext.appIdentity.platforms,
-        ['android', 'ios'],
-      );
       expect(step.description, 'Configuring Firebase with flutterfire');
       // It asks for the Firebase project, reaches the account of the user,
       // and the app compiles without it.
@@ -169,55 +163,40 @@ void main() {
     });
   });
 
-  group('flutterfire configure gets the ids of the app', () {
-    /// The options of `flutterfire configure` with the ids of the Android
-    /// app [android] and the iOS app [ios].
-    List<String> idsFor({required String android, required String ios}) => [
-          for (final argument in configureArguments(
-            AppIdentity(
-              platforms: const ['android', 'ios'],
-              androidApplicationId: android,
-              iosBundleId: ios,
-              androidNamespace: android,
-            ),
-          ))
-            if (argument.startsWith('--ios-bundle-id=') ||
-                argument.startsWith('--android-package-name='))
-              argument,
-        ];
-
-    test('after the platforms and the options', () {
-      expect(
-        configureArguments(ContractHarness.defaultContext.appIdentity),
-        [
-          'configure',
-          '--platforms=android,ios',
-          '--overwrite-firebase-options',
-          '--ios-bundle-id=com.example.contract-app',
-          '--android-package-name=com.example.contract_app',
-        ],
+  group('the script gets the ids of each flavor', () {
+    /// The value of the constant map that the module gives the script for the
+    /// app with [identity], as data.
+    Map<String, Object?> flavorsOf(AppIdentity identity) {
+      final code = flavorIdsCode(identity);
+      // It has to be code that the script can hold in a constant.
+      final index = DartFileIndexer.index(
+        'tool/x.dart',
+        'const Object flavors = $code;\n',
       );
+      expect(index.declarations.single.name, 'flavors');
+      return {
+        for (final match
+            in RegExp(r"'(\w+)': \(android: ([^,]+), ios: ([^,]+), "
+                    r'configurations: \[([^\]]*)\]\)')
+                .allMatches(code))
+          match[1]!: [match[2], match[3], match[4]],
+      };
+    }
+
+    test('for each flavor of the role, and its build configurations', () {
+      final identity = ContractHarness.defaultContext.appIdentity;
+
+      expect(flavorsOf(identity), {
+        for (final flavor in AppEntryRole.flavors)
+          flavor.name: [
+            "'${flavor.applicationIdIn(identity)}'",
+            "'${flavor.bundleIdIn(identity)}'",
+            flavor.xcodeConfigurations.map((name) => "'$name'").join(', '),
+          ],
+      });
     });
 
-    test('but those that flutterfire would stop at, which it reads itself', () {
-      // As for --org my-org: flutterfire takes no underscore in the first
-      // part of an application id.
-      expect(idsFor(android: 'my_org.my_app', ios: 'my-org.my-app'), [
-        '--ios-bundle-id=my-org.my-app',
-      ]);
-      // As for --org com.acme_: nor a hyphen at the end of a part of a bundle
-      // id, nor a part of more than 63 characters.
-      expect(idsFor(android: 'com.acme_.my_app', ios: 'com.acme-.my-app'), [
-        '--android-package-name=com.acme_.my_app',
-      ]);
-      final long = 'a' * 64;
-      expect(idsFor(android: 'com.$long', ios: 'com.$long'), [
-        '--android-package-name=com.$long',
-      ]);
-      expect(idsFor(android: 'com.a.b2_c', ios: 'com.a.b2-c'), hasLength(2));
-    });
-
-    test('only for the platforms of the identity, the ones it configures', () {
+    test('with null for a platform that the app does not have', () {
       AppIdentity onlyOn(String platform) => AppIdentity(
             platforms: [platform],
             androidApplicationId: 'com.example.my_app',
@@ -225,18 +204,10 @@ void main() {
             androidNamespace: 'com.example.my_app',
           );
 
-      expect(configureArguments(onlyOn('android')), [
-        'configure',
-        '--platforms=android',
-        '--overwrite-firebase-options',
-        '--android-package-name=com.example.my_app',
-      ]);
-      expect(configureArguments(onlyOn('ios')), [
-        'configure',
-        '--platforms=ios',
-        '--overwrite-firebase-options',
-        '--ios-bundle-id=com.example.my-app',
-      ]);
+      final android = flavorsOf(onlyOn('android'))['dev']! as List<Object?>;
+      expect(android.take(2), ["'com.example.my_app.dev'", 'null']);
+      final ios = flavorsOf(onlyOn('ios'))['dev']! as List<Object?>;
+      expect(ios.take(2), ['null', "'com.example.my-app.dev'"]);
     });
   });
 
@@ -278,16 +249,19 @@ void main() {
     });
 
     test(
-        'is the app without Firebase but for its options, start-up, README, '
-        'guide for coding agents and firebase_core', () {
+        'is the app without Firebase but for its options, script, start-up, '
+        'README, guide for coding agents and firebase_core', () {
       expect(
         withFirebase.files.keys.toSet(),
-        {...without.files.keys, _options},
+        {...without.files.keys, ..._files},
       );
-      expect(
-        withFirebase.files[_options]!.owner,
-        const ModuleOrigin(FirebaseCoreModule.id),
-      );
+      for (final path in _files) {
+        expect(
+          withFirebase.files[path]!.owner,
+          const ModuleOrigin(FirebaseCoreModule.id),
+          reason: path,
+        );
+      }
       for (final MapEntry(key: path, value: file) in without.files.entries) {
         // The file that starts Firebase, which the tests below check.
         if (path == 'pubspec.yaml' ||
@@ -321,10 +295,7 @@ void main() {
         '\n'
         '## Firebase\n'
         '\n'
-        '${readmeSection('flutterfire configure --platforms=android,ios '
-            '--overwrite-firebase-options '
-            '--ios-bundle-id=com.example.contract-app '
-            '--android-package-name=com.example.contract_app')}',
+        '$readmeSection',
       );
       expect(
         readme.text,
@@ -333,16 +304,29 @@ void main() {
             '```bash\n'
             'dart pub global activate flutterfire_cli 1.4.1\n'
             'firebase login\n'
-            'flutterfire configure --platforms=android,ios '
-            '--overwrite-firebase-options '
-            '--ios-bundle-id=com.example.contract-app '
-            '--android-package-name=com.example.contract_app\n'
+            'dart tool/configure_firebase.dart staging --project=<id>\n'
             '```\n',
           ),
+          contains('`smf create` offers to configure `dev`'),
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
-          contains('run `flutterfire` from `~/.pub-cache/bin`'),
-          contains('if you change them, change them in the command too'),
+          contains('`lib/firebase_options_of_flavor.dart`'),
         ),
+      );
+      expect(
+        readme.text,
+        allOf(
+          contains('runs `flutterfire` from `~/.pub-cache/bin`'),
+          contains('rather than `flutterfire configure`'),
+          contains('one configuration that every flavor then shares'),
+          isNot(contains('no flavor reads')),
+          // A run from Xcode, whose flavor the file of Flutter tells.
+          contains('`ios/Flutter/Generated.xcconfig`'),
+          contains('`flutter build ios --config-only --flavor <flavor>`'),
+        ),
+      );
+      expect(
+        AppEntryRole.flavors.map((flavor) => flavor.name),
+        contains('staging'),
       );
       // Nothing of the build phases that flutterfire adds for other
       // packages, which the modules of those packages tell of.
@@ -382,21 +366,39 @@ void main() {
         withFirebase.files[AppEntryRole.agentsFile]!.text,
         endsWith('\n## Firebase\n\n$agentNote'),
       );
-      // The class of the options in their file, which is a placeholder,
-      // and the section of the README with the command.
-      final options = withFirebase.files[_options]!.text;
+      // The selector of the options in its file, the placeholders of each
+      // flavor, and the section of the README with the command.
+      const selector = FirebaseCoreModule.optionsSelectorFile;
       expect(
-        DartFileIndexer.index(_options, options)
-            .declaration('DefaultFirebaseOptions')
+        DartFileIndexer.index(selector, withFirebase.files[selector]!.text)
+            .declaration('firebaseOptionsOfFlavor')
             ?.kind,
-        DeclarationKind.classType,
+        isNotNull,
       );
-      expect(options, contains('throw UnsupportedError('));
       expect(
         agentNote,
-        contains('with `DefaultFirebaseOptions` of `$_options`.'),
+        contains('with `firebaseOptionsOfFlavor` of `$selector`'),
       );
-      expect(agentNote, contains('with an `UnsupportedError` until then'));
+      for (final flavor in AppEntryRole.flavors) {
+        final options = withFirebase.files[_optionsOf(flavor)]!.text;
+        expect(options, contains('throw UnsupportedError('));
+        expect(agentNote, contains('`${_optionsOf(flavor)}`'));
+      }
+      expect(
+        agentNote,
+        contains('`${FirebaseCoreModule.configureScript}` needs a Firebase'),
+      );
+      expect(
+        agentNote,
+        allOf(
+          contains('one configuration that every flavor then shares'),
+          isNot(contains('no flavor reads')),
+        ),
+      );
+      expect(
+        agentNote,
+        contains('stops at start-up with an `UnsupportedError`'),
+      );
       expect(
         withFirebase.files[AppEntryRole.readmeFile]!.text,
         contains('\n## $readmeHeading\n'),
@@ -409,7 +411,7 @@ void main() {
       );
     });
 
-    test('initializes Firebase with the options of the platform in bootstrap()',
+    test('initializes Firebase with the options of the flavor in bootstrap()',
         () {
       // The platform phase of start-up, which the provider of the app entry
       // runs in bootstrap(), whichever module it is.
@@ -419,8 +421,7 @@ void main() {
       final code = (start.contribution as SocketContribution).fragment!.code;
       expect(
         code,
-        'await Firebase.initializeApp(options: '
-        'DefaultFirebaseOptions.currentPlatform);',
+        'await Firebase.initializeApp(options: firebaseOptionsOfFlavor);',
       );
       // One statement that awaits the call, as code.
       final call = DartFileIndexer.index(
@@ -444,26 +445,53 @@ void main() {
         ],
         [
           ('$entry', 'package:firebase_core/firebase_core.dart'),
-          ('$entry', 'package:contract_app/firebase_options.dart'),
+          ('$entry', 'package:contract_app/firebase_options_of_flavor.dart'),
         ],
       );
     });
 
     test(
-        'has the options that flutterfire writes for no platform, which name '
-        'no Firebase project', () {
-      final options = withFirebase.files[_options]!.text;
+        'has for each flavor the options that flutterfire writes for no '
+        'platform, which name no Firebase project', () {
+      for (final flavor in AppEntryRole.flavors) {
+        final path = _optionsOf(flavor);
+        final options = withFirebase.files[path]!.text;
 
-      expect(options, flutterfirePlaceholder);
-      final index = DartFileIndexer.index(_options, options);
-      final declarations = index.declarations;
-      expect(declarations.map((d) => d.name), ['DefaultFirebaseOptions']);
-      expect(options, isNot(contains('static const FirebaseOptions')));
+        expect(options, flutterfirePlaceholderOf(flavor.name));
+        final index = DartFileIndexer.index(path, options);
+        expect(
+          index.declarations.map((d) => d.name),
+          ['DefaultFirebaseOptions'],
+        );
+        expect(options, isNot(contains('static const FirebaseOptions')));
+        expect(
+          'throw UnsupportedError('.allMatches(options),
+          // The web, each of the five platforms of the switch, and the rest.
+          hasLength(7),
+        );
+      }
+    });
+
+    test('has the selector, with a case for each flavor of the role', () {
+      const path = FirebaseCoreModule.optionsSelectorFile;
+      final selector = withFirebase.files[path]!.text;
+
       expect(
-        'throw UnsupportedError('.allMatches(options),
-        // The web, each of the five platforms of the switch, and the rest.
-        hasLength(7),
+        DartFileIndexer.index(path, selector).declarations.map((d) => d.name),
+        ['firebaseOptionsOfFlavor'],
       );
+      for (final flavor in AppEntryRole.flavors) {
+        final name = flavor.name;
+        final prefix = '${name}_options';
+        const options = 'DefaultFirebaseOptions.currentPlatform';
+        expect(
+          selector,
+          allOf(
+            contains("import 'firebase_options_$name.dart' as $prefix;"),
+            contains("'$name' => $prefix.$options"),
+          ),
+        );
+      }
     });
   });
 }

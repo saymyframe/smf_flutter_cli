@@ -235,6 +235,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -258,6 +259,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
@@ -283,6 +285,10 @@ void main() {
     // notifications that their role requires, and then the preferences of
     // the localization, the theme and the notifications and the DI
     // container, all before the state managers.
+    expect(run.asked.last.shown, [
+      'github_actions — CI on GitHub Actions',
+      'None',
+    ]);
     expect(run.asked[11].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
@@ -341,6 +347,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -364,6 +371,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -422,6 +430,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -518,6 +527,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -575,6 +585,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -598,6 +609,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -646,6 +658,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -670,6 +683,7 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Authentication: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(run.asked[5].shown, [
       'go_router — Routes and navigation with go_router',
@@ -709,6 +723,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -848,6 +863,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -920,6 +936,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -992,6 +1009,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1085,6 +1103,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1177,6 +1196,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1296,6 +1316,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1307,13 +1328,13 @@ void main() {
       'Layout: which module provides it?',
     ]);
     final app = run.files.directory('/work/my_app');
-    expect(app.childFile('lib/firebase_options.dart').existsSync(), isTrue);
+    expect(
+      app.childFile('lib/firebase_options_of_flavor.dart').existsSync(),
+      isTrue,
+    );
     expect(
       app.childFile('lib/bootstrap.dart').readAsStringSync(),
-      contains(
-        'Firebase.initializeApp(options: '
-        'DefaultFirebaseOptions.currentPlatform)',
-      ),
+      contains('Firebase.initializeApp(options: firebaseOptionsOfFlavor)'),
     );
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
@@ -1333,10 +1354,7 @@ void main() {
         '  Configuring Firebase with flutterfire (the run skips external '
         'setup, and Firebase CLI, Firebase login, FlutterFire CLI 1.4.1 or a '
         'later 1.x and Xcode project tools of flutterfire are missing):\n'
-        '    dart pub global run flutterfire_cli:flutterfire configure '
-        '--platforms=android,ios --overwrite-firebase-options '
-        '--ios-bundle-id=com.example.my-app '
-        '--android-package-name=com.example.my_app',
+        '    dart tool/configure_firebase.dart dev',
       ),
       'Then run the app:\n  cd /work/my_app\n  flutter run',
     ]);
@@ -1375,6 +1393,7 @@ void main() {
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1417,7 +1436,10 @@ void main() {
           .readAsStringSync(),
       contains('FirebaseCrashlytics.instance'),
     );
-    expect(app.childFile('lib/firebase_options.dart').existsSync(), isTrue);
+    expect(
+      app.childFile('lib/firebase_options_of_flavor.dart').existsSync(),
+      isTrue,
+    );
     // Firebase starts first, then the crash reporting, then the services
     // of the app.
     const bootstrap = 'lib/bootstrap.dart';
@@ -1451,7 +1473,7 @@ void main() {
         '  1. Configuring Firebase with flutterfire (the run skips external '
         'setup, and ';
     const itsCommand = 'are missing):\n'
-        '     dart pub global run flutterfire_cli:flutterfire configure ';
+        '     dart tool/configure_firebase.dart dev';
     const fix = '\n  2. Fixing the Crashlytics phase of flutterfire for '
         'flutter build ipa (it runs after step 1):\n'
         "     ruby -e 'f = ARGV[0]; ";
@@ -1492,6 +1514,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1619,6 +1642,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1717,6 +1741,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1812,6 +1837,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1846,8 +1872,8 @@ void main() {
   });
 
   test(
-      'a run in a terminal asks last which module provides the '
-      'authentication, offers Firebase Authentication, which brings '
+      'a run in a terminal asks which module provides the authentication '
+      'after the analytics, offers Firebase Authentication, which brings '
       'Firebase, and then asks who may use the app without an account',
       () async {
     final run = await _create(
@@ -1873,16 +1899,17 @@ void main() {
         'Analytics': [],
         'Authentication': ['firebase_auth'],
         'Who may use the app': ['Everyone, as an anonymous user'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
 
     expect(run.code, 0, reason: run.lines.join('\n'));
     // The roles come in the order of the list of modules, and firebase_auth
-    // is last. An app has one provider of sign-in, or none. The mode of the
-    // auth role is a choice of the role, which it asks for once the modules
-    // of the app are known, with the default first.
-    final [..., provider, mode] = run.asked;
+    // is the last but CI. An app has one provider of sign-in, or none. The
+    // mode of the auth role is a choice of the role, which it asks for once
+    // the modules of the app are known, with the default first.
+    final [..., provider, _, mode] = run.asked;
     expect(provider.message, 'Authentication: which module provides it?');
     expect(provider.shown, [
       'firebase_auth — Firebase Authentication with firebase_auth',
@@ -2061,6 +2088,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Who may use the app': ['Nobody'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2183,6 +2211,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Who may use the app': ['Nobody'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2300,6 +2329,7 @@ void main() {
       'paywall',
       'firebase_crashlytics',
       'firebase_analytics',
+      'github_actions',
     ];
     final run = await _create(
       {
@@ -2318,6 +2348,7 @@ void main() {
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': ['firebase_analytics'],
         'Who may use the app': ['Nobody'],
+        'CI': ['github_actions'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2332,9 +2363,9 @@ void main() {
     // notifications role adds to; what is under the hood, the preferences
     // that the localization, the theme, the onboarding and the
     // notifications require, the DI container, the state manager and the
-    // events; and last the services of crash reporting, analytics and
-    // authentication. The choices of the roles come once the modules are
-    // known.
+    // events; then the services of crash reporting, analytics and
+    // authentication; and last CI. The choices of the roles come once the
+    // modules are known.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
       'Infrastructure: which do you want?',
@@ -2352,6 +2383,7 @@ void main() {
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'CI: which module provides it?',
       'Who may use the app without an account?',
     ]);
     // The answers before the questions of the settings screen, the router,

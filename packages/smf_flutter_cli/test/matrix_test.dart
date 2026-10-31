@@ -357,8 +357,8 @@ void main() {
       'localization and without each, which all get the values of .env, the '
       'apps of the paywall for each state manager with the localization, '
       'the settings screen and the onboarding screen and without each, which '
-      'get RevenueCat, the values of .env and the router, the apps of the '
-      'onboarding with the '
+      'get RevenueCat, the values of .env and the router, the apps of CI with '
+      'the values of .env and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
       'onboarding screen and the localization and without each, which all '
@@ -390,7 +390,7 @@ void main() {
         'shared_preferences, dart_define, onboarding, local_notifications, '
         'firebase_core, firebase_crashlytics, firebase_analytics, '
         'firebase_messaging, firebase_auth, google_sign_in, apple_sign_in, '
-        'sign_in, revenuecat, paywall)';
+        'sign_in, revenuecat, paywall, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -633,6 +633,9 @@ void main() {
             'paywall ($stateManager)$uses (paywall,',
             '${others.replaceFirst('%', stateManager)})',
           ].join(' '),
+      // CI with the values of .env, which its build writes, and without.
+      'github_actions with env (github_actions, dart_define, flutter_core)',
+      'github_actions (github_actions, flutter_core)',
       inMode('guest'),
       inMode('anonymous'),
       everyModule('bloc'),
@@ -864,7 +867,7 @@ void main() {
         'bottom_tabs, material_theme, launcher_icons, gen_l10n, get_it, '
         'event_bus, '
         'shared_preferences, dart_define, onboarding, local_notifications, '
-        'revenuecat, paywall, local)';
+        'revenuecat, paywall, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2674,6 +2677,7 @@ Type type() => Types;
               'local_notifications',
               'revenuecat',
               'paywall',
+              'github_actions',
             ].join(','),
             '-o',
             '/apps',

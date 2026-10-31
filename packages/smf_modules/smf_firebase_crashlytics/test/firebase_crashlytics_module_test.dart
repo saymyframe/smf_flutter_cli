@@ -37,8 +37,8 @@ const _implementation =
 
 /// The statement of firebase_core that initializes Firebase in
 /// `bootstrap()`.
-const _initializeFirebase = 'await Firebase.initializeApp(options: '
-    'DefaultFirebaseOptions.currentPlatform);';
+const _initializeFirebase =
+    'await Firebase.initializeApp(options: firebaseOptionsOfFlavor);';
 
 /// The text of the file of [_OtherReporterModule]: a reporter that reports
 /// nowhere.

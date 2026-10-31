@@ -29,12 +29,11 @@ jobs:
   checks:
     name: Format, analyze, test
     runs-on: ubuntu-latest
-    # The tests of every package and of tools/ run one package after another
-    # and take about 40 minutes on a hosted runner now, and the job about 50
-    # with the analysis, the banlist, coverage and the scan of SonarCloud,
-    # which a limit of 45 cut off. 70 leaves room for the tests that the next
-    # modules add.
-    timeout-minutes: 70
+    # The tests of the packages run three at a time, and those of tools/ after
+    # them, in about 25 minutes on a hosted runner, and the job takes about 30
+    # with the analysis, the banlist, coverage and the scan of SonarCloud. 60
+    # leaves room for the tests that the next modules add.
+    timeout-minutes: 60
     env:
       PUB_ENVIRONMENT: ci
 

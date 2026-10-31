@@ -479,12 +479,13 @@ const _refused = <(Role, String, List<String>)>[
   ),
   (
     crashReportingRole,
-    '- It needs `firebase_core`: `DefaultFirebaseOptions` of '
-        '`lib/firebase_options.dart`, which `flutterfire configure` writes.',
+    '- It needs `firebase_core`: `firebaseOptionsOfFlavor` of '
+        '`lib/firebase_options_of_flavor.dart`, which `flutterfire configure` '
+        'writes.',
     [
       '`firebase_core`',
-      '`DefaultFirebaseOptions`',
-      '`lib/firebase_options.dart`',
+      '`firebaseOptionsOfFlavor`',
+      '`lib/firebase_options_of_flavor.dart`',
     ],
   ),
   // A name that the file of another module has too, in the fragment of the

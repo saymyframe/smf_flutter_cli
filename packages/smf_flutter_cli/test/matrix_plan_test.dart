@@ -1302,6 +1302,18 @@ void main() {
       expect(add.selection, isA<NamedEveryModuleApp>());
       expect(add.problem, isNull);
 
+      // The app of the matrix whose commands of CI --ci-commands runs.
+      final ci = MatrixToolOptions.parse([
+        '--ci-commands',
+        '--app',
+        'every module (bloc)',
+        '--build',
+        '/apps/android_app',
+      ]);
+      expect(ci.arguments, ['--ci-commands', '--build', '/apps/android_app']);
+      expect(ci.selection, isA<NamedEveryModuleApp>());
+      expect(ci.problem, isNull);
+
       expect(
         MatrixToolOptions.parse(['--combinations', '3-wise', '/apps'])
             .selection,

@@ -29,6 +29,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_sign_in` | `sign_in`, the screens of sign-in and of the account |
 | `smf_revenuecat` | `revenuecat`, premium access sold with RevenueCat |
 | `smf_paywall` | `paywall`, the paywall and the screen of the subscription |
+| `smf_github_actions` | `github_actions`, CI on GitHub Actions |
 
 `smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.
 
