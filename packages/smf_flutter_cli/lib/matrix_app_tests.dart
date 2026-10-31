@@ -1848,16 +1848,16 @@ Future<MatrixAppTest> restRoleAppTest({
 /// - after a sign-out, a request carries no token of the user who left;
 /// - requests that a server refuses at the same time share one refresh, and
 ///   each repeats once;
-/// - a refresh that fails for the network is the reason `network`, and a session
-///   that ended on the server is `unauthorized`, with nobody signed in;
+/// - a refresh that fails for the network is the reason `network`, and a
+///   session that ended on the server is `unauthorized`, with nobody signed in;
 /// - a request of one user does not repeat as the next user;
 /// - a second 401 is `unauthorized`, and signs nobody out.
 ///
-/// It is a test of the REST role, whose template reads the token of the session.
-/// It reads the mode of the app from `authMode` of the app, so the matrix fills
-/// in nothing, and it uses the helpers of the test of the auth role, which every
-/// such app has. It has no probe for the start check: nobody can sign in on a
-/// device.
+/// It is a test of the REST role, whose template reads the token of the
+/// session. It reads the mode of the app from `authMode` of the app, so the
+/// matrix fills in nothing, and it uses the helpers of the test of the auth
+/// role, which every such app has. It has no probe for the start check: nobody
+/// can sign in on a device.
 Future<MatrixAppTest> restSessionAppTest({
   bool Function(MatrixApp app)? among,
 }) async =>

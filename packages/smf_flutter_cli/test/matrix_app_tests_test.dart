@@ -3826,7 +3826,7 @@ void main() {
       ],
     );
     expect(
-      withRole.where((app) => sessionTest.appliesTo(app)),
+      withRole.where(sessionTest.appliesTo),
       isNotEmpty,
       reason: 'The role uses the auth role, so a provider has an app with it.',
     );
