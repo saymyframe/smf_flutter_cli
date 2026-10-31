@@ -80,6 +80,24 @@ jobs:
       - name: Install coverage tool
         run: dart pub global activate coverage
 
+      # For the test that checks the workflow that SMF generates for an app,
+      # since a developer meets a mistake in it only on the first push of the
+      # app, as an invalid workflow. That test skips where SMF_ACTIONLINT is
+      # not set.
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          directory="$RUNNER_TEMP/actionlint"
+          archive="$directory/actionlint.tar.gz"
+          mkdir -p "$directory"
+          curl -fsSL --retry 3 -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$directory" actionlint
+          echo "SMF_ACTIONLINT=$directory/actionlint" >> "$GITHUB_ENV"
+
       - name: Test
         id: test
         run: melos run test:coverage
