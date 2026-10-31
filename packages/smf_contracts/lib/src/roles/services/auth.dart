@@ -91,6 +91,18 @@ enum AuthMode {
 /// those of the session, so no listener sees one of them changed and the
 /// other not.
 ///
+/// `appSession.userToken()` gives the token with which a server of the app
+/// tells who the user is, and `null` when nobody is signed in. It is a read
+/// and not one of those calls: it waits for the first start and for an
+/// anonymous sign-in on its way, at most `anonymousWait` in all, and for no
+/// other call, and with no service after that wait it answers `null`. So a
+/// request made before `initAuth()` is over goes without a token rather than
+/// wait for ever.
+/// `appSession.userTokenAfter(rejected)` gives the token to use in place of
+/// one that a server refused: reads at the same time share one refresh for a
+/// user, and a read that starts after that refresh with the same token takes
+/// its token. A read tells the listeners of the session nothing.
+///
 /// ## The mode
 ///
 /// [modeOption], `--auth-mode`, says who may use the app without an
@@ -278,7 +290,16 @@ enum AuthMode {
 ///   the password again;
 /// - `currentUser` lists the issuers of the identities of the user;
 /// - a call for a user whose session has ended on the server signs that
-///   user out on the device and fails with `recentSignInRequired`.
+///   user out on the device and fails with `recentSignInRequired`;
+/// - `userToken` answers `null` when nobody is signed in, an anonymous user
+///   has a token too, and two users have different tokens. A read changes no
+///   user: `userChanges` may tell of the same user again after it, which the
+///   session ignores. With `forceRefresh` it gives a new token, which differs
+///   from the one before and which the reads after it give, and the user
+///   stays. When the session of the user has ended on the server, it signs
+///   that user out while that user is still signed in, and a read that fails
+///   late leaves the next user. The next start of the app has a token for the
+///   user of the device. No hint of a failure has a token.
 ///
 /// Only a running app shows whether a provider keeps to it.
 ///
@@ -1209,8 +1230,8 @@ List<SmfIssue> _openAccountRoutes(RoleHookInput<AuthData> input) {
 /// the app and where it is written, what each mode means, that the mode
 /// gates nothing on its own, which guard keeps a user from the whole app
 /// and which from the screens that need an account, how to change the
-/// mode, and where the data of a guest moves. It holds with every provider
-/// and names none.
+/// mode, how a server of the app tells who the user is, and where the data
+/// of a guest moves. It holds with every provider and names none.
 ///
 /// It is the same in an app with a guard for [AuthRole.account] and in one
 /// without: the warning of [_openAccountRoutes] names the routes that are
@@ -1228,6 +1249,8 @@ The sign-in mode of the app says who may use it without an account. This app was
 The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `${AuthMode.required.name}` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
 
 To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `${AuthMode.anonymous.name}`. Where the provider has a section in this README, that section tells how.
+
+A server of the app tells who the user is by a token. `appSession.userToken()` gives the token of the user, and `null` when nobody is signed in. An anonymous user has one too. The provider of sign-in keeps it and renews it, so read it for each request rather than keep it. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead. The server has to check the token itself: where the provider has a section in this README, that section tells how.
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `${AuthRole.guestDataFile}` says what moves to the account. As generated it moves nothing.
 
@@ -1435,6 +1458,8 @@ final class _AuthTemplate extends _ServiceTemplate<AuthData> {
 - On a tap, the state of the screen awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. `credential()` returns `null` when the user closed the sheet of the identity provider, which is no failure: the screen goes back to how it was. Call `credential()` from the state of a screen, never within a call of `appSession`.
 - `appSession.signInWith` gives an anonymous user the identity with the same id, or signs in to the account that has the identity already, and `takeGuestData()` moves what the anonymous user had. `appSession.deleteAccount()` asks a way to sign in with `revokesOnDeletion` for a credential again itself, and deletes nothing when the user closes its sheet.
 - `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `${AuthRole.signInMethod.name}`.
+- `appSession.userToken()` gives the token with which a server of the app tells who the user is, and `null` when nobody is signed in. An anonymous user has one too. The provider keeps and renews it, so read it for each request and keep it nowhere. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead: reads at the same time share one refresh, and `null` means that nobody is signed in any more.
+- A read of the token waits for the start of the session and for an anonymous sign-in on its way, at most 3 seconds in all, and for no other call. So a request made before `$initFunction()` is over, as in `bootstrap()`, may find no token. A read fails only with an `AuthFailure`: `network` leaves the user signed in, and after `recentSignInRequired` the session of the user has ended on the server and the user is signed out.
 - A new provider implements `$service` of `${AuthRole.serviceFile}`, and only the file of that implementation imports it. The code of the app imports `$file`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `$initFunction()` nor `$factory()` nor `appSession.start()`.
 ''';
 
