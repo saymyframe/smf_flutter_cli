@@ -34,9 +34,8 @@ import 'package:smf_firebase_crashlytics/src/readme.dart';
 /// Crashlytics where Flutter puts it, so that `flutter build ipa` finds it for
 /// every flavor. The README of the app tells how to fix the phase after
 /// `flutterfire configure` by hand, and its guide for coding agents names the
-/// script. The guide also
-/// says to report through the reporter of the app rather than through
-/// Crashlytics itself.
+/// script. The guide also says to report through the reporter of the app
+/// rather than through Crashlytics itself.
 final class FirebaseCrashlyticsModule extends SmfModule {
   /// Creates the module.
   const FirebaseCrashlyticsModule();
