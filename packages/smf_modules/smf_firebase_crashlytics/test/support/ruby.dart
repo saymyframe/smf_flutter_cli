@@ -1,7 +1,6 @@
 /// The Ruby of the machine and its gem xcodeproj, with which
 /// `flutterfire configure` adds the build phase for Crashlytics to the Xcode
-/// project of the app on macOS, and with which the module fixes the phase,
-/// for the tests that run them.
+/// project of the app on macOS, for the tests that run them.
 library;
 
 import 'dart:convert';
@@ -23,15 +22,6 @@ String? rubyOnPath() {
   final path = result.stdout.toString().trim();
   return result.exitCode == 0 && path.isNotEmpty ? path : null;
 }
-
-/// The Rubies that a user of this machine may run a command of SMF with:
-/// the one on the `PATH` and, on macOS, the Ruby of macOS in `/usr/bin`,
-/// which is the one on the `PATH` unless another Ruby is installed.
-List<String> rubiesOfMachine() => {
-      if (rubyOnPath() case final ruby?) ruby,
-      if (Platform.isMacOS && File('/usr/bin/ruby').existsSync())
-        '/usr/bin/ruby',
-    }.toList();
 
 /// The version of the gem xcodeproj that [ruby] loads, or `null` if it
 /// loads none.
@@ -79,7 +69,24 @@ String _runRuby(
 /// name of the phase, gives it its script and saves the project. The phase
 /// comes last in the target, where flutterfire leaves it in an app without
 /// its phase for `GoogleService-Info.plist`.
-void addCrashlyticsPhase(String ruby, String app, String version) {
+void addCrashlyticsPhase(String ruby, String app, String version) =>
+    _addPhase(ruby, app, crashlyticsPhaseName, crashlyticsPhaseScript(version));
+
+/// Adds the phase with which flutterfire_cli 1.4.1 adds the
+/// `GoogleService-Info.plist` of the build configuration to the app, to the
+/// target Runner of the Xcode project in [app], with the gem xcodeproj of
+/// [ruby]. flutterfire adds it before its phase for Crashlytics.
+void addBundleServiceFilePhase(String ruby, String app) => _addPhase(
+      ruby,
+      app,
+      bundleServiceFilePhaseName,
+      bundleServiceFilePhaseScript,
+    );
+
+/// Adds a phase of shell scripts named [name] with [script] to the target
+/// Runner of the Xcode project in [app], with the gem xcodeproj of [ruby], and
+/// saves the project.
+void _addPhase(String ruby, String app, String name, String script) {
   _runRuby(
     ruby,
     app,
@@ -91,8 +98,8 @@ phase = target.new_shell_script_build_phase(ARGV[1])
 phase.shell_script = ENV.fetch('SMF_TEST_SCRIPT')
 project.save
 ''',
-    [_xcodeProject, crashlyticsPhaseName],
-    environment: {'SMF_TEST_SCRIPT': crashlyticsPhaseScript(version)},
+    [_xcodeProject, name],
+    environment: {'SMF_TEST_SCRIPT': script},
   );
 }
 

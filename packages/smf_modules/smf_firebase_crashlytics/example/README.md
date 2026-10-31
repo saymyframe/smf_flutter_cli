@@ -25,6 +25,6 @@ Future<void> bootstrap() async {
 
 From then on, the errors of the main isolate that the app does not handle go to Crashlytics. The code of the app reports other errors with `createCrashReporter().recordError(error, stackTrace)`.
 
-After `flutterfire configure`, SMF on macOS fixes the Crashlytics build phase that the FlutterFire CLI adds, so that `flutter build ipa` works when the app uses Swift Package Manager.
+On macOS, `tool/configure_firebase.dart` fixes the Crashlytics build phase that the FlutterFire CLI adds for each flavor, so that `flutter build ipa` works when the app uses Swift Package Manager.
 
 The documentation has more on [the firebase_crashlytics module](https://doc.saymyframe.com/modules/firebase-crashlytics) and on [Crashlytics and flutter build ipa](https://doc.saymyframe.com/guides/firebase#crashlytics-and-flutter-build-ipa).

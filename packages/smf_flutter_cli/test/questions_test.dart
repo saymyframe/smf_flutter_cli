@@ -1442,24 +1442,19 @@ void main() {
         contains('  firebase_core: '),
       ),
     );
-    // The fix of the phase for Crashlytics that flutterfire adds is left
-    // for later with the configuration, which it continues: the second
-    // step of the list, after the first, and no warning.
-    const configuration = '2 steps are left for later. Run them in the app, '
-        'in this order:\n'
-        '  1. Configuring Firebase with flutterfire (the run skips external '
+    // The script that configures a flavor fixes the phase for Crashlytics that
+    // flutterfire adds, so the run has one step to leave for later, and no
+    // warning.
+    const configuration = 'One step is left for later. Run it in the app:\n'
+        '  Configuring Firebase with flutterfire (the run skips external '
         'setup, and ';
     const itsCommand = 'are missing):\n'
-        '     dart tool/configure_firebase.dart dev';
-    const fix = '\n  2. Fixing the Crashlytics phase of flutterfire for '
-        'flutter build ipa (it runs after step 1):\n'
-        "     ruby -e 'f = ARGV[0]; ";
+        '    dart tool/configure_firebase.dart dev';
     expect(
       run.lines[run.lines.length - 2],
-      stringContainsInOrder([configuration, itsCommand, fix]),
+      stringContainsInOrder([configuration, itsCommand]),
     );
     expect(run.warnings, isNot(contains(contains('flutterfire is not done'))));
-    expect(run.warnings, isNot(contains(contains('Crashlytics phase'))));
     expect(
       app.childFile('README.md').readAsStringSync(),
       allOf(contains('\n## Firebase\n'), contains('\n## Crashlytics\n')),
