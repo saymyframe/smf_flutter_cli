@@ -156,6 +156,8 @@ Each flavor is in two places, so change both when you rename, add or remove one:
 
 In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
 
+On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
+
 ## Texts
 
 The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.

@@ -189,6 +189,8 @@ Each flavor is in two places, so change both when you rename, add or remove one:
 
 In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
 
+On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
+
 ## Firebase
 
 The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below.
