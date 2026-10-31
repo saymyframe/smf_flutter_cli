@@ -1,0 +1,16 @@
+# How `dart tool/update_app_icon.dart` makes the icon of the app. Run it after
+# you change this file or an image in assets/branding/.
+flutter_launcher_icons:
+  image_path: "assets/branding/icon.png"
+  android: true
+  ios: true
+  # An image with alpha gets this background on iOS, since the App Store
+  # refuses an icon with alpha.
+  remove_alpha_ios: true
+  background_color_ios: "{{{icon_background}}}"
+  # The adaptive icon of Android, and its themed variant, of which Android
+  # reads only the alpha.
+  adaptive_icon_background: "{{{icon_background}}}"
+  adaptive_icon_foreground: "assets/branding/icon_foreground.png"
+  adaptive_icon_foreground_inset: 16
+  adaptive_icon_monochrome: "assets/branding/icon_foreground.png"
