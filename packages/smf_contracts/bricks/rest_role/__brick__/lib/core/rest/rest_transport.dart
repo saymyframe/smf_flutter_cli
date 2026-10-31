@@ -15,7 +15,8 @@ final class RestExchange {
   /// The whole address, with its query.
   final Uri uri;
 
-  /// The headers, each name in lower case. They may hold a token.
+  /// The headers, each name in lower case, with `content-length` for a body.
+  /// They may hold a token.
   final Map<String, String> headers;
 
   /// The body, or `null` for none.
@@ -45,7 +46,7 @@ final class RestReply {
   /// joined by `, `.
   final Map<String, String> headers;
 
-  /// The body.
+  /// The body, decoded of its `content-encoding`.
   final List<int> bytes;
 }
 
@@ -71,14 +72,18 @@ final class RestConnectionFailed implements Exception {
 /// - It follows no redirect: a 3xx is a reply. `appRest` follows them, since
 ///   it knows which header may go where.
 /// - Any status is a reply, and it keeps the headers of the reply, with their
-///   names in lower case.
-/// - A failure to connect, or a connection that breaks, is
-///   [RestConnectionFailed]. Any other error is a bug of the provider, which
-///   reaches the caller as the reason `unknown`.
+///   names in lower case. [RestReply.bytes] are decoded of `content-encoding`,
+///   so a stack that asks for gzip decodes what it gets.
+/// - A failure to connect, a TLS handshake or a certificate that fails, and a
+///   connection that breaks are [RestConnectionFailed]. On `dart:io` those are
+///   `SocketException`, `HttpException` and `TlsException`. Any other error is
+///   a bug of the provider, which reaches the caller as the reason `unknown`.
 /// - When [RestExchange.stop] completes, it closes the connection at once. It
 ///   needs no timeout of its own: `appRest` stops every exchange.
-/// - It sends [RestExchange.uri] as it is, with exactly those headers and that
-///   body, adds no credential or cookie, and keeps none between two calls.
+/// - It sends [RestExchange.uri] as it is, with those headers and that body.
+///   Its stack may add the headers of the transport itself, such as `host`,
+///   `user-agent` and `accept-encoding`. It adds no credential or cookie, and
+///   keeps none between two calls.
 /// - It writes no header, no query and no body to a log or a hint.
 /// - Its function takes no arguments, never throws and does not wait, and the
 ///   implementation works from the first call.

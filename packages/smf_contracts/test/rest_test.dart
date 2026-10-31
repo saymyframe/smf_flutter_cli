@@ -93,14 +93,14 @@ final class FakeRest implements RestTransport {
   /// How many exchanges saw their stop complete.
   int stops = 0;
 
-  /// What happens once, when the first exchange reaches the transport.
-  void Function()? onFirstExchange;
+  /// What happens when an exchange reaches the transport, by its number,
+  /// from 1.
+  final Map<int, void Function()> onExchange = {};
 
   @override
   Future<RestReply> send(RestExchange exchange) {
     exchanges.add(exchange);
-    onFirstExchange?.call();
-    onFirstExchange = null;
+    onExchange[exchanges.length]?.call();
     unawaited(exchange.stop.then((_) => stops++));
     final answer = answers.isEmpty ? reply(200) : answers.removeAt(0);
     switch (answer) {
@@ -223,6 +223,14 @@ final class Note {
       ];
 }
 
+/// As the README of the app shows it.
+Future<List<Note>> notes() async =>
+    (await appRest.get('notes', query: {'page': '1'})).decoded(
+      (List<dynamic> json) => [
+        for (final item in json) Note.fromJson(item as Map<String, dynamic>),
+      ],
+    );
+
 Future<String> firstNote() async {
   try {
     final List<Note> notes =
@@ -240,11 +248,25 @@ Future<String> firstNote() async {
 ''';
 
 /// A stand-in for the part of `flutter_test` that the generated tests use, so
-/// that the analyzer checks them against the real signatures.
+/// that the analyzer checks them against the real signatures: it exports what
+/// the real library exports of `dart:async`, and its binding gives every
+/// `HttpClient` a stand-in, once.
 const _flutterTest = '''
+import 'dart:io';
+
+export 'dart:async' show Future, Stream;
+
+final class StandInOfTheBinding extends HttpOverrides {}
+
 class TestWidgetsFlutterBinding {
-  static TestWidgetsFlutterBinding ensureInitialized() =>
-      TestWidgetsFlutterBinding();
+  static TestWidgetsFlutterBinding? _instance;
+
+  static TestWidgetsFlutterBinding ensureInitialized() {
+    final instance = _instance;
+    if (instance != null) return instance;
+    HttpOverrides.global = StandInOfTheBinding();
+    return _instance = TestWidgetsFlutterBinding();
+  }
 }
 
 void setUp(dynamic Function() body) {}
@@ -271,6 +293,115 @@ class TypeMatcher<T> extends Matcher {
 TypeMatcher<T> isA<T>() => TypeMatcher<T>();
 
 Matcher throwsA(Object? matcher) => Matcher();
+''';
+
+/// The analysis options of an app, in the form that needs no package here: the
+/// rules of `package:flutter_lints/flutter.yaml` 6.0.0, which an app includes.
+const _analysisOptions = '''
+linter:
+  rules:
+    - annotate_overrides
+    - avoid_empty_else
+    - avoid_function_literals_in_foreach_calls
+    - avoid_init_to_null
+    - avoid_print
+    - avoid_relative_lib_imports
+    - avoid_renaming_method_parameters
+    - avoid_return_types_on_setters
+    - avoid_returning_null_for_void
+    - avoid_shadowing_type_parameters
+    - avoid_single_cascade_in_expression_statements
+    - avoid_types_as_parameter_names
+    - avoid_unnecessary_containers
+    - avoid_web_libraries_in_flutter
+    - await_only_futures
+    - camel_case_extensions
+    - camel_case_types
+    - collection_methods_unrelated_type
+    - constant_identifier_names
+    - control_flow_in_finally
+    - curly_braces_in_flow_control_structures
+    - dangling_library_doc_comments
+    - depend_on_referenced_packages
+    - empty_catches
+    - empty_constructor_bodies
+    - empty_statements
+    - exhaustive_cases
+    - file_names
+    - hash_and_equals
+    - implementation_imports
+    - implicit_call_tearoffs
+    - invalid_runtime_check_with_js_interop_types
+    - library_annotations
+    - library_prefixes
+    - library_private_types_in_public_api
+    - no_duplicate_case_values
+    - no_leading_underscores_for_library_prefixes
+    - no_leading_underscores_for_local_identifiers
+    - no_logic_in_create_state
+    - no_wildcard_variable_uses
+    - non_constant_identifier_names
+    - null_check_on_nullable_type_parameter
+    - null_closures
+    - overridden_fields
+    - package_names
+    - prefer_adjacent_string_concatenation
+    - prefer_collection_literals
+    - prefer_conditional_assignment
+    - prefer_const_constructors_in_immutables
+    - prefer_contains
+    - prefer_final_fields
+    - prefer_for_elements_to_map_fromIterable
+    - prefer_function_declarations_over_variables
+    - prefer_generic_function_type_aliases
+    - prefer_if_null_operators
+    - prefer_initializing_formals
+    - prefer_inlined_adds
+    - prefer_interpolation_to_compose_strings
+    - prefer_is_empty
+    - prefer_is_not_empty
+    - prefer_is_not_operator
+    - prefer_iterable_whereType
+    - prefer_null_aware_operators
+    - prefer_spread_collections
+    - prefer_typing_uninitialized_variables
+    - provide_deprecation_message
+    - recursive_getters
+    - secure_pubspec_urls
+    - sized_box_for_whitespace
+    - slash_for_doc_comments
+    - sort_child_properties_last
+    - strict_top_level_inference
+    - type_init_formals
+    - type_literal_in_constant_pattern
+    - unintended_html_in_doc_comment
+    - unnecessary_brace_in_string_interps
+    - unnecessary_const
+    - unnecessary_constructor_name
+    - unnecessary_getters_setters
+    - unnecessary_late
+    - unnecessary_library_name
+    - unnecessary_new
+    - unnecessary_null_aware_assignments
+    - unnecessary_null_in_if_null_operators
+    - unnecessary_nullable_for_final_variable_declarations
+    - unnecessary_overrides
+    - unnecessary_string_escapes
+    - unnecessary_string_interpolations
+    - unnecessary_this
+    - unnecessary_to_list_in_spreads
+    - unnecessary_underscores
+    - unrelated_type_equality_checks
+    - use_build_context_synchronously
+    - use_full_hex_values_for_flutter_colors
+    - use_function_type_syntax_for_parameters
+    - use_key_in_widget_constructors
+    - use_null_aware_elements
+    - use_rethrow_when_possible
+    - use_string_in_part_of_directives
+    - use_super_parameters
+    - valid_regexps
+    - void_checks
 ''';
 
 /// The class that a provider of the env role generates, with the key of the
@@ -326,6 +457,7 @@ Future<DartFiles> _app({
       'widgets.dart': sessionWidgets,
     },
     packages: {'flutter_test': _flutterTest},
+    analysisOptions: _analysisOptions,
   );
 }
 
@@ -368,6 +500,12 @@ final class FakeTokens implements RestTokens {
   /// Runs while the first read waits, as a sign-in that lands then.
   void Function()? duringRead;
 
+  /// Runs while the second read waits, as a sign-in that lands then.
+  void Function()? duringSecondRead;
+
+  /// How long each read takes.
+  Duration? readTime;
+
   /// Runs while the refresh waits.
   void Function()? duringAfter;
 
@@ -377,8 +515,10 @@ final class FakeTokens implements RestTokens {
   Future<String?> current() async {
     calls.add('current');
     await currentHold;
+    if (readTime case final time?) await Future<void>.delayed(time);
     duringRead?.call();
-    duringRead = null;
+    duringRead = duringSecondRead;
+    duringSecondRead = null;
     if (currentFailure case final failure?) throw failure;
     return token;
   }
@@ -522,6 +662,51 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['a full address with a query'] =
       await uriOf('http://other.example:8080/a?b=1', query: {'c': '2'});
 
+  // A path that climbs out of the address, and one that stays in it.
+  const gateway = 'https://api.example.com/gw/v1';
+  final climbs = <String, Object?>{};
+  for (final (path, base) in [
+    ('../../admin', gateway),
+    ('/../admin', gateway),
+    ('%2e%2e/%2e%2e/admin', gateway),
+    ('%2E%2E/admin', gateway),
+    ('.%2e/admin', gateway),
+    ('..%2f..%2fadmin', gateway),
+    ('..%2F..%2Fadmin', gateway),
+    (r'..\..\admin', gateway),
+    ('..%5c..%5cadmin', gateway),
+    ('notes/../../admin?key=secret#top', gateway),
+    ('notes/./../../admin', gateway),
+    ('../admin', 'https://api.example.com'),
+  ]) {
+    final fake = FakeRest();
+    final tokens = FakeTokens();
+    final failure =
+        await failureOf(() => clientOf(fake, base: base, tokens: tokens).get(path));
+    climbs[path] = {
+      'failure': failure,
+      'exchanges': fake.exchanges.length,
+      'reads': tokens.calls,
+    };
+  }
+  result['paths that climb out'] = climbs;
+  result['paths that stay in'] = {
+    for (final path in [
+      'notes/../other',
+      'notes/%2e%2e/other',
+      'a/b/../../c',
+      './notes',
+      '..notes',
+      'a..b/c..',
+      'a%2Fb',
+      'notes?next=../../admin',
+      'notes#../../admin',
+    ])
+      path: await uriOf(path, base: gateway),
+  };
+  result['a full address with dots'] =
+      await uriOf('https://api.example.com/gw/../admin', base: gateway);
+
   final problems = <String, Object?>{};
   for (final base in [
     null,
@@ -561,6 +746,13 @@ Future<void> main(List<String> arguments, SendPort port) async {
   appRest.use(transport: other);
   await appRest.get('notes');
   result['after use of a transport'] = '${other.exchanges.single.uri}';
+  appRest.use(noBaseAddress: true);
+  result['after use without an address'] =
+      await failureOf(() => appRest.get('notes'))
+          .then((failure) => failure.split(' ').first);
+  appRest.use(baseAddress: 'https://again.example.com');
+  await appRest.get('notes');
+  result['after use of an address again'] = '${other.exchanges.last.uri}';
   port.send(result);
 }
 ''';
@@ -581,6 +773,11 @@ Future<void> main(List<String> arguments, SendPort port) async {
   );
   await client.delete('notes');
   await client.delete('notes', json: 1);
+  await client.post(
+    'notes',
+    bytes: const [],
+    headers: {'Content-Length': '99'},
+  );
   await client.head('notes');
   await client.get('notes');
   result['what a request carries'] = [
@@ -677,6 +874,27 @@ Future<void> main(List<String> arguments, SendPort port) async {
       (Map<String, dynamic> json) => json['a']! as String,
     ),
   );
+  result['a typed list'] = await decodeFailure(
+    '[{"a":1}]',
+    (response) => response.decoded(
+      (List<Map<String, dynamic>> json) => json.length,
+    ),
+  );
+  result['a list that the function casts'] = answer('[{"a":1}]').decoded(
+    (List<dynamic> json) => [
+      for (final item in json) (item as Map<String, dynamic>)['a'],
+    ],
+  );
+  final Future<int> later = answer('1').decoded((int json) async => json + 1);
+  result['an async parse'] = await later;
+  result['an async parse that fails'] = await failureOf(
+    () => answer('{"a":1}').decoded(
+      (Map<String, dynamic> json) async {
+        await Future<void>.delayed(Duration.zero);
+        return json['a']! as String;
+      },
+    ),
+  );
   result['the failure of a parse has the answer'] = (await caught(
     () async => answer('nope').decoded((json) => json),
   ))!
@@ -763,6 +981,20 @@ Future<void> main(List<String> arguments, SendPort port) async {
     answers: [goTo(other, 301), goTo('$home/back', 307)],
     headers: mine,
   );
+  // The header of the caller was given for that origin, not for the app.
+  result['a redirect of a full address with headers, to the app'] = await call(
+    other,
+    answers: [goTo('$home/back')],
+    headers: const {...mine, 'authorization': 'Bearer of other'},
+  );
+  result['a redirect in another origin'] = await call(
+    other,
+    answers: [goTo('/there')],
+    headers: mine,
+  );
+  // That origin refuses a token that it did not get.
+  result['a 401 of another origin after a redirect'] =
+      await call('notes', answers: [goTo(other), reply(401)]);
   result['a redirect to a subdomain'] = await call(
     'notes',
     answers: [goTo('https://sub.api.example.com/x', 308)],
@@ -875,7 +1107,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   Future<Map<String, Object?>> repeat(FakeTokens tokens, void Function() now) async {
     final fake = FakeRest()
       ..answers.add(reply(503))
-      ..onFirstExchange = now;
+      ..onExchange[1] = now;
     final failure = await fast(
       Waits(),
       () => failureOf(() => clientOf(fake, tokens: tokens).get('notes')),
@@ -903,6 +1135,35 @@ Future<void> main(List<String> arguments, SendPort port) async {
     signedOut.token = null;
   });
 
+  // After a refresh, a repeat reads the token again, for the same user.
+  Future<Map<String, Object?>> afterRefresh(
+    FakeTokens tokens, {
+    void Function()? then,
+  }) async {
+    final fake = FakeRest()
+      ..answers.addAll([reply(401), reply(503)])
+      ..onExchange[2] = then ?? () {};
+    final failure = await fast(
+      Waits(),
+      () => failureOf(() => clientOf(fake, tokens: tokens).get('notes')),
+    );
+    return {
+      'sent': [for (final e in fake.exchanges) authorizationOf(e)],
+      'reads': tokens.calls,
+      'failure': failure,
+    };
+  }
+
+  result['a 401, a 503 and the same user'] = await afterRefresh(FakeTokens());
+  final changed = FakeTokens();
+  result['a 401, a 503 and another user'] = await afterRefresh(
+    changed,
+    then: () {
+      changed.owner = 'grace';
+      changed.token = 'of grace';
+    },
+  );
+
   // A user who comes during the first read, as when the app starts: the token
   // that the read gives may be of the user before.
   final starting = FakeTokens(owner: null, token: 'of nobody');
@@ -912,6 +1173,26 @@ Future<void> main(List<String> arguments, SendPort port) async {
   };
   result['a user who comes during the first read'] =
       await call(starting, const []);
+  final twice = FakeTokens(owner: null, token: 'of nobody');
+  twice.duringRead = () => twice.owner = 'ada';
+  twice.duringSecondRead = () => twice.owner = 'grace';
+  result['a user who changes in both reads'] =
+      await call(twice, const []);
+  // The two reads have one wait.
+  final slowly = FakeTokens(owner: null)
+    ..readTime = const Duration(milliseconds: 20);
+  slowly.duringRead = () => slowly.owner = 'ada';
+  result['two reads that take longer than the wait together'] = await call(
+    slowly,
+    const [],
+    tokenWait: const Duration(milliseconds: 30),
+  );
+
+  // A test takes the tokens away.
+  final used = FakeRest();
+  final client = clientOf(used, tokens: FakeTokens())..use(noTokens: true);
+  await client.get('notes');
+  result['after use without tokens'] = authorizationOf(used.exchanges.single);
   port.send(result);
 }
 ''';
@@ -981,6 +1262,14 @@ Future<void> main(List<String> arguments, SendPort port) async {
       await run('GET', [wait('Sun, 06 Nov 1994 08:49:37 GMT'), reply(200)]);
   result['Retry-After in a form of no use'] =
       await run('GET', [wait('soon'), reply(200)]);
+  result['Retry-After in hexadecimal'] =
+      await run('GET', [wait('0x10'), reply(200)]);
+  result['Retry-After with a sign'] =
+      await run('GET', [wait('+5'), reply(200)]);
+  result['Retry-After of the largest integer'] =
+      await run('GET', [wait('9223372036854775807')]);
+  result['Retry-After over the largest integer'] =
+      await run('GET', [wait('99999999999999999999')]);
   result['Retry-After below zero'] = await run('GET', [wait('-1'), reply(200)]);
   result['Retry-After with a month of no use'] =
       await run('GET', [wait('Sun, 06 Non 2094 08:49:37 GMT'), reply(200)]);
@@ -1076,6 +1365,17 @@ Future<void> main(List<String> arguments, SendPort port) async {
         tokens: FakeTokens(),
       );
       result['the timers of a failure'] = await timers([reply(404)]);
+
+      // A wait for a refresh is within the timeout of the call, also when the
+      // wait for a token is longer.
+      final refusing = FakeRest()..answers.add(reply(401));
+      result['a refresh that takes longer than the timeout'] = await failureOf(
+        () => clientOf(
+          refusing,
+          timeout: short,
+          tokens: FakeTokens()..afterHold = Completer<void>().future,
+        ).get('notes'),
+      );
 
       // A cancel.
       final before = RestCancel()..cancel();
@@ -1197,6 +1497,89 @@ Future<void> main(List<String> arguments, SendPort port) async {
     for (final text in [...seen, ...hints, for (final e in fake.exchanges) '$e'])
       if (text.contains('secret')) text,
   ];
+  port.send(result);
+}
+''';
+
+/// `RestTestServer` over real sockets on this machine: what two servers do to
+/// the stand-in of the binding, a request, and a client that leaves during its
+/// upload, in a zone that hears of what goes uncaught.
+const _server = r'''
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
+
+import 'app/test/core/rest/rest_test_server.dart';
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  final uncaught = <String>[];
+  final done = Completer<void>();
+  runZonedGuarded(
+    () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final standIn = HttpOverrides.current;
+      result['the binding has its stand-in'] = standIn != null;
+
+      final first = await RestTestServer.start();
+      final second = await RestTestServer.start();
+      result['with two servers'] = HttpOverrides.current == null;
+      await first.close();
+      await first.close();
+      result['after the first close, twice'] = HttpOverrides.current == null;
+
+      second.answerJson('POST', '/notes', const {'count': 1}, status: 201);
+      final client = HttpClient();
+      final request = await client.postUrl(
+        Uri.parse('${second.address}/notes?page=1'),
+      );
+      request
+        ..headers.set('x-mine', 'a')
+        ..write('body');
+      final response = await request.close();
+      result['a request'] = {
+        'status': response.statusCode,
+        'answer': await response.transform(utf8.decoder).join(),
+        'method': second.requests.single.method,
+        'uri': '${second.requests.single.uri}',
+        'header': second.requests.single.headers['x-mine'],
+        'body': second.requests.single.body,
+      };
+      final unknown = await client.getUrl(Uri.parse('${second.address}/none'));
+      final notFound = await unknown.close();
+      await notFound.drain<void>();
+      result['a request that no answer is for'] = notFound.statusCode;
+      client.close(force: true);
+      await second.close();
+      result['after the last close'] = identical(HttpOverrides.current, standIn);
+
+      final third = await RestTestServer.start();
+      final socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        Uri.parse(third.address).port,
+      );
+      socket.write(
+        'POST /notes HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\nabc',
+      );
+      await socket.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      socket.destroy();
+      for (var look = 0; look < 200 && third.errors.isEmpty; look++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      result['a client that left during its upload'] = {
+        'errors': third.errors.length,
+        'requests': third.requests.length,
+      };
+      await third.close();
+      done.complete();
+    },
+    (error, stackTrace) {
+      uncaught.add('$error');
+      if (!done.isCompleted) done.complete();
+    },
+  );
+  await done.future;
+  result['uncaught'] = uncaught;
   port.send(result);
 }
 ''';
@@ -1858,6 +2241,18 @@ void main() {
     });
 
     test(
+        'has no info of the analyzer or of the rules of an app in its files, '
+        'as flutter analyze of the apps of CI fails on one', () async {
+      expect(
+        await app.analysisProblems(
+          infos: true,
+          only: (file) => !file.startsWith('lib/fakes/'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
         'joins a relative path to the address, keeps a full address, and '
         'fails with notConfigured and the key without a usable address',
         () async {
@@ -1909,6 +2304,46 @@ void main() {
         'the client of the app': 'https://env.example.com/v1/notes',
         'after use': 'https://test.example.com/notes',
         'after use of a transport': 'https://test.example.com/notes',
+        'after use without an address': 'notConfigured',
+        'after use of an address again': 'https://again.example.com/notes',
+        'paths that climb out': {
+          for (final (path, named) in [
+            ('../../admin', '../../admin'),
+            ('/../admin', '../admin'),
+            ('%2e%2e/%2e%2e/admin', '%2e%2e/%2e%2e/admin'),
+            ('%2E%2E/admin', '%2E%2E/admin'),
+            ('.%2e/admin', '.%2e/admin'),
+            ('..%2f..%2fadmin', '..%2f..%2fadmin'),
+            ('..%2F..%2Fadmin', '..%2F..%2Fadmin'),
+            (r'..\..\admin', r'..\..\admin'),
+            ('..%5c..%5cadmin', '..%5c..%5cadmin'),
+            // The hint has no query, where a key may be.
+            ('notes/../../admin?key=secret#top', 'notes/../../admin'),
+            ('notes/./../../admin', 'notes/./../../admin'),
+            ('../admin', '../admin'),
+          ])
+            path: {
+              'failure': 'rejected (The path "$named" climbs out of the '
+                  'address of the API, so nothing was sent. Keep what a user '
+                  'types out of a path, or encode it with '
+                  'Uri.encodeComponent.)',
+              'exchanges': 0,
+              'reads': <Object?>[],
+            },
+        },
+        'paths that stay in': {
+          'notes/../other': 'https://api.example.com/gw/v1/other',
+          'notes/%2e%2e/other': 'https://api.example.com/gw/v1/other',
+          'a/b/../../c': 'https://api.example.com/gw/v1/c',
+          './notes': 'https://api.example.com/gw/v1/notes',
+          '..notes': 'https://api.example.com/gw/v1/..notes',
+          'a..b/c..': 'https://api.example.com/gw/v1/a..b/c..',
+          'a%2Fb': 'https://api.example.com/gw/v1/a%2Fb',
+          'notes?next=../../admin':
+              'https://api.example.com/gw/v1/notes?next=../../admin',
+          'notes#../../admin': 'https://api.example.com/gw/v1/notes',
+        },
+        'a full address with dots': 'https://api.example.com/admin',
       });
     });
 
@@ -1921,24 +2356,40 @@ void main() {
       expect(result['what a request carries'], [
         {
           'method': 'POST',
-          'headers': {'x-mixed': 'a', 'content-type': 'application/json'},
+          'headers': {
+            'x-mixed': 'a',
+            'content-type': 'application/json',
+            'content-length': '13',
+          },
           'body': [123, 34, 116, 101, 120, 116, 34, 58, 34, 195, 169, 34, 125],
         },
         {
           'method': 'PUT',
-          'headers': <String, String>{},
+          'headers': {'content-length': '2'},
           'body': [1, 2],
         },
         {
           'method': 'PATCH',
-          'headers': {'content-type': 'application/vnd.note+json'},
+          'headers': {
+            'content-type': 'application/vnd.note+json',
+            'content-length': '2',
+          },
           'body': [123, 125],
         },
         {'method': 'DELETE', 'headers': <String, String>{}, 'body': null},
         {
           'method': 'DELETE',
-          'headers': {'content-type': 'application/json'},
+          'headers': {
+            'content-type': 'application/json',
+            'content-length': '1',
+          },
           'body': [49],
+        },
+        // The length of the body, whatever a caller said.
+        {
+          'method': 'POST',
+          'headers': {'content-length': '0'},
+          'body': <Object?>[],
         },
         {'method': 'HEAD', 'headers': <String, String>{}, 'body': null},
         {'method': 'GET', 'headers': <String, String>{}, 'body': null},
@@ -2009,7 +2460,25 @@ void main() {
         result['a body that is no JSON'],
         'invalidResponse 200 (The body does not fit: FormatException.)',
       );
-      expect(result['a body of another type'], startsWith('invalidResponse'));
+      const typed = 'invalidResponse 200 (The JSON of the body is no ';
+      const cast = '. A list of JSON is a List<dynamic> and an object a '
+          'Map<String, dynamic>, so a typed list needs a cast: take one of '
+          'those, and cast inside.)';
+      expect(
+        result['a body of another type'],
+        '${typed}Map<String, dynamic>$cast',
+      );
+      // The body fits, as it never does for this function.
+      expect(
+        result['a typed list'],
+        '${typed}List<Map<String, dynamic>>$cast',
+      );
+      expect(result['a list that the function casts'], [1]);
+      expect(result['an async parse'], 2);
+      expect(
+        result['an async parse that fails'],
+        startsWith('invalidResponse 200 (The body does not fit: '),
+      );
       expect(result['a parse that fails'], startsWith('invalidResponse'));
       expect(result['the failure of a parse has the answer'], 'nope');
       expect(result['a body that is no UTF-8'], '�');
@@ -2086,6 +2555,35 @@ void main() {
             '$app_ Bearer t0 null null m',
           ],
           reads: const ['current', 'current'],
+        ),
+      );
+      // The token of the call stays away too, since a header of the caller
+      // takes its place, and that header does not reach the app.
+      expect(
+        result['a redirect of a full address with headers, to the app'],
+        sent(
+          [
+            'https://other.example Bearer of other c p m',
+            '$app_ null null null m',
+          ],
+          reads: const [],
+        ),
+      );
+      expect(
+        result['a redirect in another origin'],
+        sent(
+          [
+            'https://other.example null c p m',
+            'https://other.example null c p m',
+          ],
+          reads: const [],
+        ),
+      );
+      expect(
+        result['a 401 of another origin after a redirect'],
+        sent(
+          ['$app_ $token', 'https://other.example $none'],
+          failure: 'unauthorized 401',
         ),
       );
       expect(
@@ -2225,6 +2723,27 @@ void main() {
         'sent': [null, 'Bearer of ada'],
         'failure': 'no failure',
       });
+      expect(result['a 401, a 503 and the same user'], {
+        'sent': ['Bearer t0', 'Bearer t1', 'Bearer t0'],
+        'reads': ['current', 'after t0', 'current'],
+        'failure': 'no failure',
+      });
+      expect(result['a 401, a 503 and another user'], {
+        'sent': ['Bearer t0', 'Bearer t1'],
+        'reads': ['current', 'after t0', 'current'],
+        'failure': otherUser.replaceFirst(' 401', ''),
+      });
+      expect(result['a user who changes in both reads'], {
+        'sent': <Object?>[],
+        'reads': ['current', 'current'],
+        'failure': otherUser.replaceFirst(' 401', ''),
+      });
+      expect(result['two reads that take longer than the wait together'], {
+        'sent': <Object?>[],
+        'reads': ['current', 'current'],
+        'failure': 'timeout (The token of the user did not come within 30 ms.)',
+      });
+      expect(result['after use without tokens'], isNull);
       expect(result['a user who comes during the first read'], {
         'sent': ['Bearer of ada "body"'],
         'reads': ['current', 'current'],
@@ -2319,8 +2838,28 @@ void main() {
         'limits': 1,
         'timers left': 0,
       });
+      // A year, and no number that overflows.
+      for (final form in [
+        'Retry-After of the largest integer',
+        'Retry-After over the largest integer',
+      ]) {
+        expect(
+          result[form],
+          {
+            'exchanges': 1,
+            'reason': 'server',
+            'retryAfter': 31536000,
+            'waits': <Object?>[],
+            'limits': 1,
+            'timers left': 0,
+          },
+          reason: form,
+        );
+      }
       for (final form in [
         'Retry-After in a form of no use',
+        'Retry-After in hexadecimal',
+        'Retry-After with a sign',
         'Retry-After below zero',
         'Retry-After with a month of no use',
       ]) {
@@ -2387,6 +2926,7 @@ void main() {
         'timers left': 0,
       });
 
+      expect(result['a refresh that takes longer than the timeout'], late);
       expect(result['a cancel before the call'], {
         'failure': 'cancelled',
         'exchanges': 0,
@@ -2425,6 +2965,36 @@ void main() {
     });
   });
 
+  group('the generated local server of the tests', () {
+    late DartFiles app;
+
+    setUpAll(() async => app = await _app());
+
+    tearDownAll(() => app.delete());
+
+    test(
+        'gives the binding its stand-in back with the last close, answers, '
+        'and notes a client that left during its upload', () async {
+      expect(await app.run(_withImports(_server)), {
+        'the binding has its stand-in': true,
+        'with two servers': true,
+        'after the first close, twice': true,
+        'a request': {
+          'status': 201,
+          'answer': '{"count":1}',
+          'method': 'POST',
+          'uri': '/notes?page=1',
+          'header': 'a',
+          'body': 'body',
+        },
+        'a request that no answer is for': 404,
+        'after the last close': true,
+        'a client that left during its upload': {'errors': 1, 'requests': 0},
+        'uncaught': <Object?>[],
+      });
+    });
+  });
+
   group('the generated client in a release build', () {
     late DartFiles app;
 
@@ -2450,6 +3020,17 @@ void main() {
     test('is code that type-checks, and the client of the app has the session',
         () async {
       expect(await app.analysisProblems(), isEmpty);
+    });
+
+    test('has no info of the analyzer or of the rules of an app in its file',
+        () async {
+      expect(
+        await app.analysisProblems(
+          infos: true,
+          only: (file) => file == RestRole.sessionTokensFile,
+        ),
+        isEmpty,
+      );
     });
 
     test(
@@ -2636,6 +3217,9 @@ void main() {
       expect(section, contains('Use `https` in a release.'));
       expect(section, contains('`${RestRole.testServerFile}`'));
       expect(section, contains('per attempt'));
+      expect(section, contains('climbs out of it with `..`'));
+      expect(section, contains('(List<dynamic> json)'));
+      expect(section, contains('pending timer'));
     });
 
     test('tells of the token in an app with sign-in alone', () async {

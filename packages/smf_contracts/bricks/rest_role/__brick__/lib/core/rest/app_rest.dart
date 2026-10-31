@@ -46,7 +46,8 @@ enum RestFailureReason {
   /// A 409.
   conflict,
 
-  /// Any other 4xx.
+  /// Any other 4xx, or a relative path that climbs out of the address of the
+  /// API, which no server got.
   rejected,
 
   /// A 429.
@@ -99,7 +100,8 @@ final class RestFailure implements Exception {
       ].join();
 }
 
-/// What a server answered with a status of success, or with 304.
+/// What a server answered: the answer of a call with a status of success or
+/// with 304, and the refusal in [RestFailure.response].
 final class RestResponse {
   /// Creates the response; a test of the code of the app may too.
   const RestResponse({
@@ -124,23 +126,51 @@ final class RestResponse {
   /// `response.decoded(Note.fromJson)`.
   ///
   /// A body that is no JSON, a body of another type than [parse] takes, and
-  /// any error of [parse] fail with [RestFailureReason.invalidResponse].
+  /// any error of [parse] fail with [RestFailureReason.invalidResponse], also
+  /// an error of the future of an `async` [parse].
+  ///
+  /// The JSON of a list is a `List<dynamic>` and that of an object a
+  /// `Map<String, dynamic>`, whatever they hold. So a function of a list takes
+  /// a `List<dynamic>` and casts its items inside:
+  /// `(List<dynamic> json) => [for (final item in json) Note.fromJson(item as Map<String, dynamic>)]`.
+  /// One that takes a `List<Map<String, dynamic>>` fails with every body.
   T decoded<T, J>(T Function(J json) parse) {
     try {
-      return parse(jsonDecode(text) as J);
+      final json = jsonDecode(text);
+      if (json is! J) {
+        throw RestFailure(
+          RestFailureReason.invalidResponse,
+          status: status,
+          response: this,
+          developerHint: 'The JSON of the body is no $J. A list of JSON is a '
+              'List<dynamic> and an object a Map<String, dynamic>, so a typed '
+              'list needs a cast: take one of those, and cast inside.',
+        );
+      }
+      final parsed = parse(json);
+      if (parsed is Future<Object?>) {
+        return parsed.catchError(_notFitting) as T;
+      }
+      return parsed;
+    } on RestFailure {
+      rethrow;
     } on Object catch (error, stackTrace) {
+      _notFitting(error, stackTrace);
+    }
+  }
+
+  /// Fails with [RestFailureReason.invalidResponse] for [error]. The hint has
+  /// its type and not its text, which may quote the body.
+  Never _notFitting(Object error, StackTrace stackTrace) =>
       Error.throwWithStackTrace(
         RestFailure(
           RestFailureReason.invalidResponse,
           status: status,
           response: this,
-          // The text of the error may quote the body.
           developerHint: 'The body does not fit: ${error.runtimeType}.',
         ),
         stackTrace,
       );
-    }
-  }
 
   @override
   String toString() => 'RestResponse($status)';
@@ -208,6 +238,13 @@ const int _maxJitterMilliseconds = 250;
 /// The longest wait that a server can make a call take before it repeats.
 const Duration _maxWait = Duration(seconds: 30);
 
+/// The longest wait of a `Retry-After` that the client tells of, in seconds:
+/// a year. A longer one counts as this, so that no number overflows.
+const int _maxRetryAfterSeconds = 365 * 24 * 60 * 60;
+
+/// The form of a wait in seconds in `Retry-After`.
+final RegExp _retryAfterSeconds = RegExp(r'^\d+$');
+
 /// The statuses after which `GET` and `HEAD` repeat.
 const Set<int> _repeatedStatuses = {429, 502, 503, 504};
 
@@ -242,6 +279,15 @@ final RegExp _httpDate = RegExp(
 /// one, so `//other.example/x` stays a path on the server of the app.
 final RegExp _absolute = RegExp(r'^https?://', caseSensitive: false);
 
+/// What ends the path in a relative path.
+final RegExp _queryOrFragment = RegExp('[?#]');
+
+/// A dot of a path, encoded.
+final RegExp _encodedDot = RegExp('%2e', caseSensitive: false);
+
+/// What a server may take for a slash of a path.
+final RegExp _slash = RegExp(r'/|\\|%2f|%5c', caseSensitive: false);
+
 final Random _random = Random();
 
 /// The REST client of the app, [appRest], over the transport of the provider
@@ -249,7 +295,9 @@ final Random _random = Random();
 ///
 /// What it guarantees is here, so it is the same with every provider:
 /// - A path is relative to [baseAddress], with or without a leading slash, and
-///   an address with `http://` or `https://` goes where it says.
+///   stays under it: one that climbs out with `..` fails with
+///   [RestFailureReason.rejected] before anything is sent. An address with
+///   `http://` or `https://` goes where it says.
 /// - A call fails only with a [RestFailure].
 /// - The token of the user goes only to the origin of [baseAddress], and a
 ///   redirect to another origin takes it away, with the cookies of the caller.
@@ -277,24 +325,28 @@ final class AppRestClient {
   /// another time.
   final Duration timeout;
 
-  /// How long the client waits for the token of the user at most. A forced
-  /// refresh on a device without a network may take a minute before it fails,
-  /// and a request does not wait for that.
+  /// How long the client waits for the token of the user at most, each time
+  /// that it needs one, and within the timeout of the attempt. A forced refresh
+  /// on a device without a network may take a minute before it fails, and a
+  /// request does not wait for that.
   final Duration tokenWait;
 
   RestTransport _transport;
   String? _baseAddress;
   RestTokens? _tokens;
 
-  /// For a test: replaces what is given. The code of the app never calls it.
+  /// For a test: replaces what is given, and with [noBaseAddress] or [noTokens]
+  /// takes away the address or the tokens. The code of the app never calls it.
   void use({
     RestTransport? transport,
     String? baseAddress,
     RestTokens? tokens,
+    bool noBaseAddress = false,
+    bool noTokens = false,
   }) {
     _transport = transport ?? _transport;
-    _baseAddress = baseAddress ?? _baseAddress;
-    _tokens = tokens ?? _tokens;
+    _baseAddress = noBaseAddress ? null : baseAddress ?? _baseAddress;
+    _tokens = noTokens ? null : tokens ?? _tokens;
   }
 
   /// Sends a `GET`, which the client repeats as [AppRestClient] tells.
@@ -436,6 +488,7 @@ final class AppRestClient {
         );
       }
       final base = _baseOf(_baseAddress);
+      final body = json != null ? utf8.encode(jsonEncode(json)) : bytes;
       return await _Call(
         client: this,
         method: method,
@@ -446,8 +499,11 @@ final class AppRestClient {
             key.toLowerCase(): value,
           if (json != null && _hasNoContentType(headers))
             'content-type': 'application/json',
+          // Without it a stack may send the body in chunks, which many upload
+          // addresses refuse.
+          if (body != null) 'content-length': '${body.length}',
         },
-        body: json != null ? utf8.encode(jsonEncode(json)) : bytes,
+        body: body,
         timeout: timeout ?? this.timeout,
         cancel: cancel,
       ).run();
@@ -482,6 +538,15 @@ final class AppRestClient {
       }
       final root = base.toString().replaceFirst(RegExp(r'/+$'), '');
       final relative = path.replaceFirst(RegExp('^/+'), '');
+      if (_climbsOut(relative)) {
+        throw RestFailure(
+          RestFailureReason.rejected,
+          developerHint: 'The path "${relative.split(_queryOrFragment).first}" '
+              'climbs out of the address of the API, so nothing was sent. Keep '
+              'what a user types out of a path, or encode it with '
+              'Uri.encodeComponent.',
+        );
+      }
       address = Uri.parse(relative.isEmpty ? root : '$root/$relative');
     }
     final added = [
@@ -493,6 +558,28 @@ final class AppRestClient {
           query: [if (address.query.isNotEmpty) address.query, ...added]
               .join('&'),
         );
+  }
+
+  /// Whether the [relative] path, joined to the address of the API, climbs out
+  /// of the path of that address: `..` that goes above where it started,
+  /// written as it is or encoded, with a slash that may be encoded too, since a
+  /// server may decode it. So the token of the user goes to no other service
+  /// behind one host.
+  bool _climbsOut(String relative) {
+    final segments = relative
+        .split(_queryOrFragment)
+        .first
+        .replaceAll(_encodedDot, '.')
+        .split(_slash);
+    var depth = 0;
+    for (final segment in segments) {
+      if (segment == '..') {
+        if (--depth < 0) return true;
+      } else if (segment.isNotEmpty && segment != '.') {
+        depth++;
+      }
+    }
+    return false;
   }
 
   /// The address in [value] that paths are relative to, or `null` when it is
@@ -681,22 +768,27 @@ final class _Call {
       _refreshed = null;
       return refreshed;
     }
-    Future<String?> read() => limit.race(
-          tokens.current,
-          within: client.tokenWait,
-        );
-    var owner = tokens.owner;
-    var token = await read();
-    // The user changed during the read, as when the app starts, so the token
-    // may be of the user before.
-    if (tokens.owner != owner) {
-      owner = tokens.owner;
-      token = await read();
-    }
+    final (owner, token) = await limit.race(
+      () => _tokenOfOwner(tokens),
+      within: client.tokenWait,
+    );
     final before = _owner;
     if (before != null && owner != before) throw _otherUser();
     _owner = owner;
     return token;
+  }
+
+  /// The user of [tokens] and that user's token. When the user changes during
+  /// the read, as when the app starts, the token may be of the user before, so
+  /// it reads once more, and fails when the user changes again.
+  Future<(String?, String?)> _tokenOfOwner(RestTokens tokens) async {
+    final owner = tokens.owner;
+    final token = await tokens.current();
+    if (tokens.owner == owner) return (owner, token);
+    final next = tokens.owner;
+    final again = await tokens.current();
+    if (tokens.owner != next) throw _otherUser();
+    return (next, again);
   }
 
   /// Gets the token that replaces [rejected], once in a call, for the same
@@ -780,8 +872,10 @@ final class _Call {
   static Duration? _retryAfterOf(Map<String, String> headers) {
     final value = headers['retry-after']?.trim();
     if (value == null) return null;
-    final seconds = int.tryParse(value);
-    if (seconds != null) return seconds < 0 ? null : Duration(seconds: seconds);
+    if (_retryAfterSeconds.hasMatch(value)) {
+      final seconds = int.tryParse(value) ?? _maxRetryAfterSeconds;
+      return Duration(seconds: min(seconds, _maxRetryAfterSeconds));
+    }
     final match = _httpDate.firstMatch(value);
     final month = match == null ? -1 : _months.indexOf(match[2]!);
     if (match == null || month < 0) return null;

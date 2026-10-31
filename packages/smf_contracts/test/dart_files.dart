@@ -265,11 +265,13 @@ final class DartFiles {
   /// [flutter], stand-ins for other libraries of Flutter that the files
   /// use, each by its name, such as `widgets.dart`. [packages] are stand-ins
   /// for other packages, each the text of its main library by the name of the
-  /// package, such as `flutter_test`.
+  /// package, such as `flutter_test`. [analysisOptions] is the text of the
+  /// `analysis_options.yaml` of the app, if it has one.
   factory DartFiles.write(
     Map<String, String> files, {
     Map<String, String> flutter = const {},
     Map<String, String> packages = const {},
+    String? analysisOptions,
   }) {
     final root = Directory.systemTemp.createTempSync('smf_contracts_');
     void write(String path, String text) => File('${root.path}/$path')
@@ -288,6 +290,9 @@ final class DartFiles {
       write('$name/lib/$name.dart', text);
     }
     write('app/pubspec.yaml', 'name: ${testContext.appName}\n');
+    if (analysisOptions != null) {
+      write('app/analysis_options.yaml', analysisOptions);
+    }
     write(
       'app/.dart_tool/package_config.json',
       jsonEncode({
@@ -317,13 +322,19 @@ final class DartFiles {
       Directory('${_root.path}/app').resolveSymbolicLinksSync();
 
   /// The errors and warnings that the analyzer finds in the files, each
-  /// with the path of its file.
-  Future<List<String>> analysisProblems() async {
+  /// with the path of its file, and with [infos] what it reports as an info
+  /// too, as `flutter analyze` fails on in the jobs of CI. [only] keeps to the
+  /// files that it accepts.
+  Future<List<String>> analysisProblems({
+    bool infos = false,
+    bool Function(String file)? only,
+  }) async {
     final appPath = _appPath;
     final collection = AnalysisContextCollection(includedPaths: [appPath]);
     try {
       final problems = <String>[];
       for (final file in _paths) {
+        if (only != null && !only(file)) continue;
         // The analyzer takes only the paths of the system, such as
         // C:\app\lib\main.dart on Windows.
         final path = Uri.directory(appPath).resolve(file).toFilePath();
@@ -336,7 +347,7 @@ final class DartFiles {
           continue;
         }
         for (final diagnostic in result.diagnostics) {
-          if (diagnostic.severity == Severity.info) continue;
+          if (!infos && diagnostic.severity == Severity.info) continue;
           problems.add(
             '$file:${result.lineInfo.getLocation(diagnostic.offset)}: '
             '${diagnostic.message}',

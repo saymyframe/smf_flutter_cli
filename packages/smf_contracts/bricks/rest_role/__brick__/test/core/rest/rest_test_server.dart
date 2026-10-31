@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -37,35 +36,47 @@ final class RestTestRequest {
 /// to the first:
 /// - The binding of the tests gives every `HttpClient` a stand-in that answers
 ///   400 to everything, which would reach the code as the reason `rejected`.
-///   [start] takes the stand-in away, and [close] puts it back.
+///   [start] takes the stand-in away, and the [close] of the last server that
+///   is open puts it back.
 /// - Inside `testWidgets`, the time is fake, and a real socket never completes
-///   there. Make the request in `tester.runAsync`. A plain `test()` runs in
-///   real time and needs nothing.
+///   there. Make the request in `tester.runAsync`, and let it end before the
+///   test does, since the timer of a request that is still running fails the
+///   test. A plain `test()` runs in real time and needs nothing.
 ///
 /// Files of tests run at once, so a server takes a free port: give the client
 /// [address].
 final class RestTestServer {
-  RestTestServer._(this._server, this._overrides) {
-    _server.listen(_serve);
+  RestTestServer._(this._server) {
+    _server.listen(_serve, onError: errors.add);
   }
 
   /// Starts a server on a free port of this machine.
   static Future<RestTestServer> start() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    final overrides = HttpOverrides.current;
-    HttpOverrides.global = null;
-    return RestTestServer._(
-      await HttpServer.bind(InternetAddress.loopbackIPv4, 0),
-      overrides,
-    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    if (_open++ == 0) {
+      _overrides = HttpOverrides.current;
+      HttpOverrides.global = null;
+    }
+    return RestTestServer._(server);
   }
 
+  /// How many servers are open: the stand-in comes back with the last close.
+  static int _open = 0;
+
+  /// What [start] took away.
+  static HttpOverrides? _overrides;
+
   final HttpServer _server;
-  final HttpOverrides? _overrides;
+  bool _closed = false;
   final Map<String, Future<void> Function(HttpRequest request)> _answers = {};
 
-  /// The requests that the server got, in order.
+  /// The requests that the server got in full, in order.
   final List<RestTestRequest> requests = [];
+
+  /// What went wrong with a request, such as a client that left during its
+  /// upload, which is what a cancel does.
+  final List<Object> errors = [];
 
   /// The address of the server.
   String get address => 'http://${_server.address.address}:${_server.port}';
@@ -94,13 +105,24 @@ final class RestTestServer {
         await request.response.close();
       });
 
-  /// Stops the server and puts back what [start] took away.
+  /// Stops the server. The last server that is open puts back what [start]
+  /// took away.
   Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
     await _server.close(force: true);
-    HttpOverrides.global = _overrides;
+    if (--_open == 0) HttpOverrides.global = _overrides;
   }
 
   Future<void> _serve(HttpRequest request) async {
+    try {
+      await _answer(request);
+    } on IOException catch (error) {
+      errors.add(error);
+    }
+  }
+
+  Future<void> _answer(HttpRequest request) async {
     final bytes = await request.fold<List<int>>(
       [],
       (all, part) => all..addAll(part),

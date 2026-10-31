@@ -45,11 +45,13 @@ const restRole = RestRole._();
 /// The client is the same code in every app, over a thin transport, so a
 /// second provider keeps all of this by construction:
 /// - a relative path joins the address of [baseAddressKey], with or without a
-///   leading slash and keeping the path of the address. Only `http://` and
-///   `https://` make a path an address of its own, which goes where it says,
-///   so `//other.example/x` stays on the server of the app. Without a usable
-///   address, a relative path fails with `notConfigured`, whose hint names the
-///   key, and the transport is not called;
+///   leading slash and keeping the path of the address. A path that climbs out
+///   of it with `..`, written as it is or encoded, fails with `rejected` before
+///   anything is sent, so the token goes to no other service behind one host.
+///   Only `http://` and `https://` make a path an address of its own, which
+///   goes where it says, so `//other.example/x` stays on the server of the app.
+///   Without a usable address, a relative path fails with `notConfigured`,
+///   whose hint names the key, and the transport is not called;
 /// - a call fails only with a `RestFailure`, of a closed set of reasons;
 /// - in an app with the [AuthRole], the token of the user goes only to the
 ///   origin of the address: the same scheme, host and port. A redirect to
@@ -112,7 +114,9 @@ const restRole = RestRole._();
 /// answers, or starts a `RestTestServer` and gives the client its address. The
 /// doc of that class tells of the two traps of `flutter test`: its binding
 /// answers 400 to every `HttpClient`, and a real socket never completes in the
-/// fake time of `testWidgets`, so such a request runs in `tester.runAsync`.
+/// fake time of `testWidgets`, so such a request runs in `tester.runAsync`. A
+/// request that is still running when a `testWidgets` body ends fails the test
+/// with a pending timer, the timer of its attempt.
 ///
 /// No test of an app reaches the network, so a module that makes no request
 /// needs nothing. A module whose start-up or services make requests declares
@@ -271,10 +275,12 @@ String _restReadme({required bool auth}) => '''
 `appRest` in `${RestRole.clientFile}` makes the requests of the app:
 
 ```dart
-final notes = (await appRest.get('notes', query: {'page': '1'})).decoded(Note.listFromJson);
+final notes = (await appRest.get('notes', query: {'page': '1'})).decoded(
+  (List<dynamic> json) => [for (final item in json) Note.fromJson(item as Map<String, dynamic>)],
+);
 ```
 
-A path is relative to the address of the API, with or without a leading slash, and keeps the path of that address. A full address with `http://` or `https://` goes where it says, such as a link to the next page or an upload address.
+A path is relative to the address of the API, with or without a leading slash, and keeps the path of that address. One that climbs out of it with `..` fails with `rejected` before anything is sent, so encode what a user types with `Uri.encodeComponent`. A full address with `http://` or `https://` goes where it says, such as a link to the next page or an upload address.
 
 The address is `${RestRole.baseAddressKey.name}` in `.env`, as the section "${EnvRole.readmeHeading}" says. It is no secret, and a change takes a new `flutter run`. While it is empty, a relative path fails with `notConfigured`, whose hint names the key, and the app still builds and starts. Use `https` in a release. On a device, `http://10.0.2.2:8080` is your computer on the Android emulator and `http://127.0.0.1:8080` on the iOS simulator, and a phone reaches it at its address on your network. Each environment has an address of its own: change the value by hand, or have CI write `.env` for its job.
 
@@ -287,9 +293,9 @@ ${auth ? '''
 
 In this app, each request to the origin of `${RestRole.baseAddressKey.name}` carries the token of `appSession` as `Authorization: Bearer <token>`, and no other request does, also after a redirect. Your server checks the token itself. On a 401, the client gets a new token once and repeats the request once, for any method. Then it fails with `unauthorized`, which signs nobody out, since a server may refuse for other reasons: decide in the app what that means. A request made while the app starts, before the session is known, may go without a token, so make a request that needs the user after `bootstrap()`.
 ''' : ''}
-`response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`. For generated models, run `flutter pub add json_annotation dev:json_serializable dev:build_runner` and pass the `fromJson` of the model.
+`response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`. A list of JSON is a `List<dynamic>`, so a function of a list takes that and casts its items inside, as above. For generated models, run `flutter pub add json_annotation dev:json_serializable dev:build_runner` and pass the `fromJson` of the model.
 
-In a test, `RestTestServer` of `${RestRole.testServerFile}` is a local server, and `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a real request runs in `tester.runAsync`. `${RestRole.clientTestFile}` shows the first.
+In a test, `RestTestServer` of `${RestRole.testServerFile}` is a local server, and `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a real request runs in `tester.runAsync`. A request that is still running when a `testWidgets` body ends fails the test with a pending timer. `${RestRole.clientTestFile}` shows the first.
 ''';
 
 /// The template of the [RestRole]: the files of the role, the implementation
@@ -331,13 +337,13 @@ final class _RestTemplate extends _ServiceTemplate<RoleImplementation> {
   /// answer.
   @override
   String get agentNote => '''
-- `appRest` in `$file` makes the requests of the app: `appRest.get('notes')`, `post`, `put`, `patch`, `delete`, `head`. A path is relative to `REST_BASE_URL` in `.env`, with or without a leading slash. A full address goes where it says. Call it from the state of a screen or from a repository, never from a widget, and create no other `AppRestClient` in the code of the app.
-- `response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`.
+- `appRest` in `$file` makes the requests of the app: `appRest.get('notes')`, `post`, `put`, `patch`, `delete`, `head`. A path is relative to `REST_BASE_URL` in `.env`, with or without a leading slash, and one that climbs out of it with `..` fails with `rejected`. A full address goes where it says. Call it from the state of a screen or from a repository, never from a widget, and create no other `AppRestClient` in the code of the app.
+- `response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`. A list of JSON is a `List<dynamic>`, so a function of a list takes that and casts its items inside.
 - A call fails only with a `RestFailure`: show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal. While `REST_BASE_URL` is empty, a relative path fails with `notConfigured`, and the app still builds and starts.
 - `GET` and `HEAD` repeat by themselves after a broken connection and after 429, 502, 503 and 504, keeping to `Retry-After`. Other methods never do. Never wrap a call in a loop of your own.
 - The `timeout` of a call is per attempt, 30 seconds by default, so a `GET` with its repeats may take longer. `RestCancel` ends a call: cancel it where the state of a screen is disposed of.
 - A new provider implements `$service` of `${RestRole.transportFile}`, and only the files of that implementation import it. The code of the app calls neither `$factory()` nor `appRest.use()`, which is for tests.
-- In a test, `RestTestServer` of `${RestRole.testServerFile}` is a local server, or `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a request to that server runs in `tester.runAsync`.
+- In a test, `RestTestServer` of `${RestRole.testServerFile}` is a local server, or `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a request to that server runs in `tester.runAsync`. A request that is still running when a `testWidgets` body ends fails the test with a pending timer.
 ''';
 
   /// The bricks, the key, the permission and the notes of the role. The role
