@@ -29,6 +29,9 @@ dependencies:
   # The provider of the env role in the registry of several providers, whose
   # values RevenueCat reads.
   smf_dart_define: ^0.7.0
+  # The provider of the REST role in the registry of several providers, for the
+  # app test that it keeps and the tests of the role that the CLI keeps.
+  smf_dio: ^0.7.0
   # The providers of the roles that an app can have several providers of,
   # in the registry of several providers.
   smf_firebase_analytics: ^0.4.3

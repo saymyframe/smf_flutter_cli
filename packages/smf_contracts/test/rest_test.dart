@@ -828,6 +828,23 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
   result['each status'] = statuses;
 
+  // The headers of a body that the provider decoded, and of one it did not.
+  Future<Map<String, String>> headersOf(Map<String, String> headers) async =>
+      (await clientOf(FakeRest()..answers.add(reply(200, headers: headers)))
+              .post('notes'))
+          .headers;
+  result['the headers of a body'] = {
+    'decoded': await headersOf(const {
+      'content-encoding': 'gzip',
+      'content-length': '27',
+      'x-kept': 'yes',
+    }),
+    'as it came': await headersOf(const {
+      'content-length': '27',
+      'x-kept': 'yes',
+    }),
+  };
+
   // The errors of a transport and of a caller.
   Future<String> errorOf(Object answer) async {
     final fake = FakeRest()..answers.add(answer);
@@ -2352,6 +2369,16 @@ void main() {
         'fails only with a RestFailure, of a closed set of reasons', () async {
       final result =
           (await app.run('$_prelude$_failures'))! as Map<Object?, Object?>;
+
+      expect(
+        result['the headers of a body'],
+        {
+          'decoded': {'x-kept': 'yes'},
+          'as it came': {'content-length': '27', 'x-kept': 'yes'},
+        },
+        reason: 'The bytes of a response are always decoded, so the headers '
+            'that describe a coded body stay out of it.',
+      );
 
       expect(result['what a request carries'], [
         {

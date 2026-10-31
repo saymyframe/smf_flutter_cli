@@ -28,6 +28,7 @@ import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
+import 'package:smf_dio/smf_dio.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -263,6 +264,7 @@ List<SmfModule> severalProvidersModules() => const [
       LocalNotificationsModule(),
       FirebaseMessagingModule(),
       DartDefineModule(),
+      DioModule(),
       RevenueCatModule(),
       PaywallModule(),
     ];

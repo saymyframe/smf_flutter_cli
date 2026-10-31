@@ -5,6 +5,7 @@ library;
 
 import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_dio/smf_dio.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -37,6 +38,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
+  final dio = await appTestsDirectoryOf('smf_dio');
   final googleSignIn = await appTestsDirectoryOf('smf_google_sign_in');
   final appleSignIn = await appTestsDirectoryOf('smf_apple_sign_in');
   final messaging = await appTestsDirectoryOf('smf_firebase_messaging');
@@ -617,6 +619,20 @@ Future<MatrixAppTests> smfAppTests() async {
       // which the app is then in and remembers, or the languages of the
       // device.
       await languageSettingAppTest(),
+      // The requests of the apps with the REST role, whichever module provides
+      // it: an address, the failures, the token, the repeats, the stops and
+      // the log. Its probe sees on a device that the stack of the provider
+      // works there, also over http:// and in a release build.
+      await restRoleAppTest(),
+      // The requests of the users of the session, in the apps with the REST
+      // role and the auth role, whichever modules provide them.
+      await restSessionAppTest(),
+      // What only dio does: one exchange on a Dio, which keeps its connections
+      // between two exchanges, and what an error of Dio ends it with.
+      MatrixAppTest(
+        '$dio/dio',
+        appliesTo: _has(DioModule.id),
+      ),
       // The splash screen of the apps with the splash role, whichever module
       // provides it: the step of the provider made it in the native projects
       // of the app, for each mode of the device, on Android below 12 and
@@ -641,10 +657,11 @@ Future<MatrixAppTests> smfAppTests() async {
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
     // role, of the env role, of the auth role, of the notifications role,
-    // of the push role, of the purchases role, of the settings screen role,
-    // of the theme role, of the localization role and of the splash role
-    // gets the tests of its role. Each provider of the app entry role gets
-    // the test of the theme role, which checks that its root rebuilds.
+    // of the push role, of the purchases role, of the REST role, of the
+    // settings screen role, of the theme role, of the localization role and of
+    // the splash role gets the tests of its role. Each provider of the app
+    // entry role gets the test of the theme role, which checks that its root
+    // rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -655,6 +672,7 @@ Future<MatrixAppTests> smfAppTests() async {
       notificationsRole,
       pushRole,
       purchasesRole,
+      restRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,

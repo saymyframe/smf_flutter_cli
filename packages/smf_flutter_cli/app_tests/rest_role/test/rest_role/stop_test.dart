@@ -7,6 +7,8 @@
 // request, and only at upper bounds of seconds, so that a slow machine does not
 // fail it.
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/rest/app_rest.dart';
@@ -128,6 +130,92 @@ void main() {
 
     expect(outcome, failsWith(RestFailureReason.cancelled));
     expect(await slow.sawClose(), isTrue, reason: _closes);
+  });
+
+  test(
+      'a cancel once the head of a reply came, before its body, ends the call '
+      'at once, and the connection closes', () async {
+    final heard = Completer<void>();
+    final slow = await RawServer.start((socket, head) {
+      unawaited(
+        RawServer.send(
+          socket,
+          'HTTP/1.1 200 OK\r\ncontent-length: 1000\r\n\r\n',
+          () {
+            if (!heard.isCompleted) heard.complete();
+          },
+        ),
+      );
+    });
+    addTearDown(slow.close);
+    final cancel = RestCancel();
+
+    final call = outcomeOf(
+      clientOf(server).post('${slow.address}/notes', cancel: cancel),
+    );
+    await heard.future;
+    // The head of the reply reaches the client.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    cancel.cancel();
+    final outcome = await call.timeout(const Duration(seconds: 3));
+
+    expect(outcome, failsWith(RestFailureReason.cancelled));
+    expect(await slow.sawClose(), isTrue, reason: _closes);
+  });
+
+  test(
+      'a cancel while a server does not take the body ends the call at once, '
+      'and the connection closes', () async {
+    final heard = Completer<void>();
+    final closed = Completer<void>();
+    final full = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    Socket? accepted;
+    full.listen((socket) {
+      accepted = socket;
+      socket.done.ignore();
+      late final StreamSubscription<List<int>> reads;
+      reads = socket.listen(
+        (_) {
+          // The server reads the start of the request and no more of it, so
+          // the upload stops once the buffers of the two sides are full.
+          if (!heard.isCompleted) heard.complete();
+          reads.pause();
+          Timer(const Duration(milliseconds: 300), reads.resume);
+        },
+        onDone: () {
+          if (!closed.isCompleted) closed.complete();
+        },
+        onError: (Object _) {
+          if (!closed.isCompleted) closed.complete();
+        },
+      );
+    });
+    addTearDown(() async {
+      await full.close();
+      accepted?.destroy();
+    });
+    final cancel = RestCancel();
+    final address = 'http://${full.address.address}:${full.port}/notes';
+
+    final call = outcomeOf(
+      clientOf(server).post(
+        address,
+        bytes: Uint8List(64 * 1024 * 1024),
+        cancel: cancel,
+      ),
+    );
+    await heard.future;
+    cancel.cancel();
+    final outcome = await call.timeout(const Duration(seconds: 3));
+
+    expect(outcome, failsWith(RestFailureReason.cancelled));
+    expect(
+      await closed.future
+          .then((_) => true)
+          .timeout(const Duration(seconds: 5), onTimeout: () => false),
+      isTrue,
+      reason: _closes,
+    );
   });
 
   test('a cancel before the call sends nothing', () async {
