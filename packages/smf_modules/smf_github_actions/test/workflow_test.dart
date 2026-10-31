@@ -109,7 +109,7 @@ void main() {
         expect(job['name'], 'Build for Android');
         expect(
           workflow['run-name'],
-          "\${{ inputs.environment && format('Build for Android ({0})', "
+          r"${{ inputs.environment && format('Build for Android ({0})', "
           "inputs.environment) || '' }}",
         );
       });
