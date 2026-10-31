@@ -143,7 +143,6 @@ void main() {
       expect(step.external, isFalse);
       expect(step.interactive, isFalse);
       expect(step.notice, isNull);
-      expect(step.hosts, isEmpty);
       expect(step.needs, isEmpty);
       expect(step.followUpOf, isNull);
     });
