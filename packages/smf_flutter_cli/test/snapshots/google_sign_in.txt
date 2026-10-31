@@ -88,6 +88,8 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - On a tap, the state of the screen awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. `credential()` returns `null` when the user closed the sheet of the identity provider, which is no failure: the screen goes back to how it was. Call `credential()` from the state of a screen, never within a call of `appSession`.
 - `appSession.signInWith` gives an anonymous user the identity with the same id, or signs in to the account that has the identity already, and `takeGuestData()` moves what the anonymous user had. `appSession.deleteAccount()` asks a way to sign in with `revokesOnDeletion` for a credential again itself, and deletes nothing when the user closes its sheet.
 - `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`.
+- `appSession.userToken()` gives the token with which a server of the app tells who the user is, and `null` when nobody is signed in. An anonymous user has one too. The provider keeps and renews it, so read it for each request and keep it nowhere. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead: reads at the same time share one refresh, and `null` means that nobody is signed in any more.
+- A read of the token waits for the start of the session and for an anonymous sign-in on its way, at most 3 seconds in all, and for no other call. So a request made before `initAuth()` is over, as in `bootstrap()`, may find no token. A read fails only with an `AuthFailure`: `network` leaves the user signed in, and after `recentSignInRequired` the session of the user has ended on the server and the user is signed out.
 - A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
 
 With `firebase_auth`:
@@ -96,6 +98,7 @@ With `firebase_auth`:
 - That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section Firebase Authentication of `README.md`.
 - `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
+- `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews when it is about to expire. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
 
 - For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`. After `flutterfire configure` for another project, it has to run again: run it only when asked.
 
@@ -215,6 +218,8 @@ You can also enable the methods in the Firebase console, under [Authentication >
 
 Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
 
+`appSession.userToken()` is a Firebase ID token. A server of the app verifies it with the [Firebase Admin SDK](https://firebase.google.com/docs/auth/admin/verify-id-tokens). The Admin SDK takes only a token of its own Firebase project, so a token of another project fails there.
+
 When an anonymous user signs in to an account that exists already, the anonymous user stays in the project, and nobody can sign in as that user again. A project that is upgraded to Firebase Authentication with Identity Platform can delete anonymous users that are older than 30 days automatically. See [Automatic clean-up](https://firebase.google.com/docs/auth/android/anonymous-auth#auto-cleanup) in the documentation of Firebase.
 
 ## Sign-in
@@ -228,6 +233,8 @@ The sign-in mode of the app says who may use it without an account. This app was
 The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `required` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
 
 To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
+
+A server of the app tells who the user is by a token. `appSession.userToken()` gives the token of the user, and `null` when nobody is signed in. An anonymous user has one too. The provider of sign-in keeps it and renews it, so read it for each request rather than keep it. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead. The server has to check the token itself: where the provider has a section in this README, that section tells how.
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
@@ -1004,6 +1011,15 @@ final class AppSessionController extends ChangeNotifier
   /// that the app starts no second one next to it.
   final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
 
+  /// What the reads of the token wait for that were made before the first
+  /// start. Each read has one of its own, which completes in the zone of that
+  /// read, so a read in a zone that runs nothing any more holds nothing up.
+  final List<Completer<void>> _tokensUntilStarted = [];
+
+  /// The refreshes of the token that are on their way, each by the id of its
+  /// user, so that the next user does not get the token of the user before.
+  final Map<String?, Future<String?>> _tokenRefreshes = {};
+
   /// Tells when the user comes back to the app, in the mode
   /// [AuthMode.anonymous].
   _ResumeObserver? _observer;
@@ -1087,6 +1103,10 @@ final class AppSessionController extends ChangeNotifier
     if (!_started) {
       _started = true;
       _untilStarted?.complete();
+      for (final read in _tokensUntilStarted) {
+        read.complete();
+      }
+      _tokensUntilStarted.clear();
     }
     if (first) await earlier;
   }
@@ -1173,6 +1193,42 @@ final class AppSessionController extends ChangeNotifier
     if (fresh != null) await service.deleteAccount(fresh: fresh);
   }, waitsForAnonymousUser: true);
 
+  /// The token of the user for a server of the app, or `null` when nobody is
+  /// signed in.
+  ///
+  /// It waits for the first start and for an anonymous sign-in on its way,
+  /// together at most [anonymousWait], and for no other call: the sheet of a
+  /// way to sign in may be open for minutes, and a request does not wait for
+  /// it. So a read made before `initAuth()` is not over, as in `bootstrap()`,
+  /// answers `null` once that wait is over, if there is no service by then.
+  ///
+  /// It is not one of the calls that run one after another, and tells the
+  /// listeners of the session nothing, also when the provider tells of the
+  /// same user again, unless the provider found that the session of the user
+  /// has ended on the server: the session then has nobody when the call fails,
+  /// with [AuthFailureReason.recentSignInRequired].
+  Future<String?> userToken() => _token((service) => service.userToken());
+
+  /// A token to use in place of [rejected], which a server refused, or `null`
+  /// when nobody is signed in.
+  ///
+  /// Reads at the same time share one refresh. A read that starts after that
+  /// refresh, with the same [rejected], takes its token and needs no other. A
+  /// read that was on its way during the refresh may still answer [rejected],
+  /// which costs one more refresh. It waits and fails as [userToken] does.
+  Future<String?> userTokenAfter(String rejected) async {
+    final current = await userToken();
+    if (current != rejected) return current;
+    final uid = _session.uid;
+    return _tokenRefreshes[uid] ??=
+        _token((service) => service.userToken(forceRefresh: true)).whenComplete(
+          () {
+            // Not as an arrow: the refresh would then wait for itself.
+            _tokenRefreshes.remove(uid);
+          },
+        );
+  }
+
   /// Stops following the service and the lifecycle of the app. A call that
   /// is on its way still ends as it would have, but tells no listener, and
   /// no anonymous sign-in follows it.
@@ -1202,6 +1258,43 @@ final class AppSessionController extends ChangeNotifier
           .firstOrNull,
     _ => null,
   };
+
+  /// Reads the token of the user with [read], once the wait of [userToken]
+  /// is over, and `null` when the app has no service by then.
+  ///
+  /// When it fails, the session takes the user that the service has left. A
+  /// call that takes its turn follows, so that in the mode
+  /// [AuthMode.anonymous] the app signs in anonymously again, but not next to
+  /// a sign-in that is on its way.
+  Future<String?> _token(
+    Future<String?> Function(AuthService service) read,
+  ) async {
+    if (!_started || _anonymousSignIns.containsKey(_service)) {
+      await _untilTokenCanBeRead().timeout(anonymousWait, onTimeout: () {});
+    }
+    final service = _service;
+    if (service == null) return null;
+    try {
+      return await read(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      _retry();
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> _untilTokenCanBeRead() async {
+    if (!_started) {
+      final started = Completer<void>();
+      _tokensUntilStarted.add(started);
+      await started.future;
+    }
+    await _anonymousSignIns[_service];
+  }
 
   /// The user came back to the app. In the mode [AuthMode.anonymous], an
   /// app without a user then signs in anonymously again: as what follows
@@ -1596,7 +1689,9 @@ final class AuthFailure implements Exception {
 ///   who is signed in. Made when nobody is signed in, or when the session of
 ///   that user has ended on the server, such a call fails with
 ///   [AuthFailureReason.recentSignInRequired], and in the second case it
-///   signs the user out on the device first.
+///   signs the user out on the device first. [userToken] reads, so it answers
+///   `null` when nobody is signed in, and does the same as those calls when
+///   the session of the user has ended on the server.
 /// - A [SignInCredential] whose identity provider the provider does not
 ///   take fails with [AuthFailureReason.notConfigured], with the issuer in
 ///   the [AuthFailure.developerHint].
@@ -1714,6 +1809,30 @@ abstract interface class AuthService {
   /// that fails, such as one that the backend is not set up for, with
   /// [AuthFailureReason.notConfigured]. Either way nothing is deleted.
   Future<void> deleteAccount({SignInCredential? fresh});
+
+  /// The token with which a server of the app tells who the user is, or
+  /// `null` when nobody is signed in. An anonymous user has one too.
+  ///
+  /// It comes from the device when it can, and the service refreshes one that
+  /// is about to expire on its own, so most reads make no request. With
+  /// [forceRefresh] it asks the server of the provider for a new token, which
+  /// differs from the one before and which the reads after it give. A token
+  /// that the server issued in the same second may come back the same.
+  ///
+  /// A read changes no user, and leaves whoever is signed in, but in the case
+  /// below. [userChanges] may tell of the same user again after it, as after
+  /// any change of the token, which the session ignores.
+  ///
+  /// It fails with [AuthFailureReason.network] when it needs the server and
+  /// does not reach it, and with [AuthFailureReason.tooManyAttempts] when the
+  /// server refuses for now. It fails with
+  /// [AuthFailureReason.recentSignInRequired] for a user whose session has
+  /// ended on the server, or may fail with [AuthFailureReason.userDisabled]
+  /// for one whom the server disabled: the service signs that user out on the
+  /// device first, while that user is still signed in. Anything else is
+  /// [AuthFailureReason.unknown], with what the provider answered as its
+  /// [AuthFailure.developerHint]. No hint of a failure has the token.
+  Future<String?> userToken({bool forceRefresh = false});
 }
 === lib/core/auth/firebase_auth_service.dart (firebase_auth) ===
 import 'dart:async';
@@ -1819,6 +1938,11 @@ const _linkReasons = {
 /// the Services ID and the OAuth code flow configuration of the Apple
 /// sign-in method in the Firebase console: without them it fails with
 /// [AuthFailureReason.notConfigured], and the account stays.
+///
+/// [userToken] is the Firebase ID token of the user, which the Firebase SDK
+/// keeps on the device and renews when it is about to expire. A
+/// server verifies it with the Firebase Admin SDK, as a token of the Firebase
+/// project that the app is configured with.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
@@ -1962,6 +2086,84 @@ final class FirebaseAuthService implements AuthService {
         // sign-out, which may come after this call is over.
         await _auth.signOut();
       }, credential: fresh);
+
+  /// It reads past [_run], which tells of the user after each call, since an
+  /// app may read the token for each of its requests. A forced read still
+  /// gives [userChanges] an event of the same user, since Firebase tells that
+  /// the token changed, and so does a reload.
+  ///
+  /// When the platform has nobody, as while a sign-out is on its way, the
+  /// plugin may not have heard of it yet: nobody is signed in, so there is no
+  /// token.
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    try {
+      return await user.getIdToken(forceRefresh);
+    } on Object catch (error, stackTrace) {
+      if (error is FirebaseAuthException && error.code == 'no-current-user') {
+        return null;
+      }
+      Error.throwWithStackTrace(await _failureOfRead(user, error), stackTrace);
+    }
+  }
+
+  /// The failure of a read of the token of [user] that failed with [error].
+  ///
+  /// On Android the plugin answers the read with the code `unknown` for each
+  /// answer of the server but a network failure, also for a user whom the
+  /// server deleted or disabled, with the code only in a text. A reload of the
+  /// user answers with the code, so the service asks that.
+  ///
+  /// When the server no longer takes [user], the service signs that user out,
+  /// as the Firebase SDK does a moment later, and tells of it. A read runs
+  /// next to the calls of the app, so it does so only while [user] is still
+  /// signed in: by now another user may be.
+  Future<AuthFailure> _failureOfRead(User user, Object error) async {
+    final answer = error is FirebaseAuthException && error.code == 'unknown'
+        ? await _answerToReload(user) ?? error
+        : error;
+    final code = answer is FirebaseAuthException ? answer.code : null;
+    final disabled = code == 'user-disabled';
+    if (!disabled && !_endedSession.contains(code)) return _readFailure(answer);
+    if (_auth.currentUser?.uid == user.uid) {
+      try {
+        await _auth.signOut();
+      } on Object catch (signOutError) {
+        return _readFailure(signOutError);
+      }
+      _changes.add(null);
+    }
+    return AuthFailure(
+      disabled
+          ? AuthFailureReason.userDisabled
+          : AuthFailureReason.recentSignInRequired,
+    );
+  }
+
+  /// The failure of a read for [error], as that of any other call, but that
+  /// a read of a user who is signed in never says that sign-in is not enabled
+  /// in the project, as an internal error of iOS would.
+  AuthFailure _readFailure(Object error) {
+    final failure = _failureOf(error, null, const {});
+    return failure.reason == AuthFailureReason.notConfigured
+        ? AuthFailure(
+            AuthFailureReason.unknown,
+            developerHint: _answerOf(error),
+          )
+        : failure;
+  }
+
+  /// What a reload of [user] fails with, or `null` if it completes.
+  Future<Object?> _answerToReload(User user) async {
+    try {
+      await user.reload();
+      return null;
+    } on Object catch (error) {
+      return error;
+    }
+  }
 
   /// Signs [user] in again with [fresh], so that Firebase deletes the
   /// account without asking for a recent sign-in, and revokes the tokens of

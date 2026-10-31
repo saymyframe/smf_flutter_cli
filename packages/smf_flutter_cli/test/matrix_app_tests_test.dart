@@ -49,6 +49,9 @@ final class SignInOfTest implements AuthService {
   Stream<AuthUser?> get userChanges => const Stream.empty();
 
   @override
+  Future<String?> userToken({bool forceRefresh = false}) async => null;
+
+  @override
   Future<void> signIn({required String email, required String password}) =>
       _refuse();
 
