@@ -1585,7 +1585,10 @@ List<BrokenProvider> brokenProviders() => const [
         bug: 'It gives the last token that it gave with nobody signed in, so '
             'the requests of the next person on the device go to a server as '
             'the user who left.',
-        app: [],
+        // The fixture REST, with the fixture values of .env, which it
+        // requires, so that the test of the requests of the users of the
+        // session applies to the app too.
+        app: [FakeRestModule.id, FakeEnvModule.id],
         failures: [
           MatrixExpectedFailure(
             _userTokenTests,
@@ -1597,6 +1600,20 @@ List<BrokenProvider> brokenProviders() => const [
             'the session gives the token of its user, as the mode of the app '
             'says',
             _noTokenAfterSignOut,
+          ),
+          MatrixExpectedFailure(
+            _restSessionTests,
+            'a request without an account carries what the mode of the app '
+                'says',
+            'In the modes required and guest, nobody has no token, so the '
+                'request goes without a header.',
+          ),
+          MatrixExpectedFailure(
+            _restSessionTests,
+            'after a sign-out, a request carries no token of the user who left',
+            'After a sign-out a request goes without a token, and in the mode '
+                'anonymous with the token of the next anonymous user: never as '
+                'the user who left.',
           ),
         ],
       ),
@@ -1731,6 +1748,277 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.restDecodingQuery,
+        role: restRole,
+        bug: 'Its transport sends the query of an address decoded, so a value '
+            'with an & or an = reaches the server as something else.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restAddressTests,
+            'a request reaches the path of the address, with its query',
+            'A provider sends the address as it is, with its query.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restLeakingErrors,
+        role: restRole,
+        bug: 'It reports only a broken connection as a failed one, so a '
+            'failure to connect and a failed TLS handshake reach the code as '
+            'the reason unknown.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'a port where nothing listens is the reason network, for each '
+                'method',
+            'A failure to connect is RestConnectionFailed.',
+          ),
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'a TLS handshake that fails is the reason network',
+            'A TLS handshake that fails is RestConnectionFailed',
+          ),
+          MatrixExpectedFailure(_restProbeTests, _restProbeTest, _restProbe),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restQuotingErrors,
+        role: restRole,
+        bug: 'Its hint has the text of an error, which may quote the address '
+            'with its query, so a key of the query reaches a log.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'a connection that breaks in a body is the reason network, and '
+                'the hint has no query',
+            'The hint of a provider has no query',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restFollowingRedirects,
+        role: restRole,
+        bug: 'It follows a redirect itself, with every header of the exchange, '
+            'so the token of the user goes to the host that a server names.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToHostTest,
+            _redirectToHostLeaves,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToPortTest,
+            _redirectToPortLeaves,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restKeepingHeaders,
+        role: restRole,
+        bug: 'It keeps the first authorization that it sent as a default of '
+            'its later calls, so a repeat has the token that the server '
+            'refused, and a request to another origin has it too.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restTokenTests,
+            'a request to another port or another host has no token',
+            'The token goes only to the origin of the address',
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToHostTest,
+            _redirectToHostLeaves,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToPortTest,
+            _redirectToPortLeaves,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            'a header authorization of the caller stays, in place of the '
+                'token',
+            'A header of the caller takes precedence over the token.',
+          ),
+          MatrixExpectedFailure(
+            _restRefreshTests,
+            'a 401 gets a new token once, and repeats once with it and with '
+                'the same body',
+            'The repeat after a refresh has the new token',
+          ),
+          MatrixExpectedFailure(
+            _restLogTests,
+            _restLogTest,
+            'A debug build prints one line for each attempt.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restRepeatingRequests,
+        role: restRole,
+        bug: 'It repeats a failed exchange itself, so a server gets a POST '
+            'twice, which may have done what it asked.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a GET stops after two repeats, with the reason of the status',
+            'The client makes each repeat, and a provider makes one attempt '
+                'for each.',
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a POST does not repeat after a 503',
+            _oneAttempt,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a PUT does not repeat after a 503',
+            _oneAttempt,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a PATCH does not repeat after a 503',
+            _oneAttempt,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a DELETE does not repeat after a 503',
+            _oneAttempt,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a connection that breaks repeats a GET, and not a POST',
+            'A GET repeats twice at most, and a provider makes one attempt '
+                'for each.',
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            _retryAfterDateTest,
+            _retryAfterDate,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            _retryAfterLongTest,
+            'The client takes no wait that long, and a provider repeats '
+            'nothing itself.',
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel wakes the wait for a repeat at once',
+            'The client waits for the Retry-After, and a provider repeats '
+                'nothing itself.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restLosingReplyHeaders,
+        role: restRole,
+        bug: 'It gives a reply without its headers, so the client reads no '
+            'Retry-After and no location of a redirect.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'the headers of a reply come with their names in lower case, and '
+                'the values of one header together',
+            'A provider keeps the headers of a reply, with their names in '
+                'lower case',
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            'a redirect on the origin of the address keeps the token',
+            _redirectFollowed,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToHostTest,
+            _redirectFollowed,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToPortTest,
+            _redirectFollowed,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a GET waits for the Retry-After of a reply, in seconds',
+            'A provider keeps the headers of a reply, and the client waits '
+                'for the Retry-After in them.',
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            _retryAfterDateTest,
+            _retryAfterDate,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            _retryAfterLongTest,
+            _retryAfterOnFailure,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a POST does not wait, and the failure has the Retry-After',
+            _retryAfterOnFailure,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restIgnoringStop,
+        role: restRole,
+        bug: 'It does not stop an exchange, so the connection of a call that '
+            'ended stays open.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restStopTests,
+            'no answer within the timeout is the reason timeout, and the '
+            'connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a body that comes bit by bit past the timeout is the reason '
+            'timeout, and the connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel while the server holds the request ends the call at '
+            'once, and the connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel in the middle of a body ends the call at once, and the '
+            'connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(_restProbeTests, _restProbeTest, _restProbe),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restLoggingHeaders,
+        role: restRole,
+        bug: 'It prints the headers of each exchange, so the token of the user '
+            'is in the log of the device.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restLogTests,
+            _restLogTest,
+            'Nothing that a client or a provider prints, or says in a failure, '
+            'has a header, a query or a body.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '
@@ -1829,6 +2117,79 @@ const List<ModuleId> _appWithGates = [
   FakeCrashModule.id,
   FakeServiceLogModule.id,
 ];
+
+/// The other modules of the app of a broken provider of the REST role: the
+/// fixture values of .env, since the role requires the env role, and whose
+/// getter of the address the test of the role reads.
+const List<ModuleId> _appWithRest = [FakeEnvModule.id];
+
+/// The files of the tests of the REST role.
+const _restAddressTests = 'test/rest_role/address_test.dart';
+const _restFailureTests = 'test/rest_role/failures_test.dart';
+const _restTokenTests = 'test/rest_role/token_test.dart';
+const _restRefreshTests = 'test/rest_role/refresh_test.dart';
+const _restRepeatTests = 'test/rest_role/repeats_test.dart';
+const _restStopTests = 'test/rest_role/stop_test.dart';
+const _restLogTests = 'test/rest_role/log_test.dart';
+const _restProbeTests = 'test/rest_role/probe_test.dart';
+
+/// The file of the tests of the token of the session on a request.
+const _restSessionTests = 'test/rest_session/session_token_test.dart';
+
+/// The name of the test of the probe of the REST role, and its reason.
+const _restProbeTest = 'the probe of the role finds no problem';
+const _restProbe =
+    'The stack of a provider reaches a server on the device, stops an '
+    'exchange, and fails as a connection fails for a closed port and for a '
+    'request over http:// to an address that no machine has.';
+
+/// The name of the test of what a debug build prints of a call.
+const _restLogTest =
+    'a call with a refresh prints a line for each attempt, with no token, no '
+    'query and no body';
+
+/// The names of two tests of a redirect to another origin, and the reasons of
+/// their expectations of the headers at that origin and that the client
+/// follows it.
+const _redirectToHostTest =
+    'a redirect to another host takes the token and the credentials of the '
+    'caller away';
+const _redirectToPortTest =
+    'a redirect to another port takes the token away, and a hop back gets it '
+    'again';
+const _redirectToHostLeaves =
+    'The client decides which header goes where, so a provider follows no '
+    'redirect: at another origin, the token and the cookie of the caller are '
+    'gone.';
+const _redirectToPortLeaves =
+    'The client decides which header goes where, so a provider follows no '
+    'redirect: another port gets no token, and only a hop back to the origin '
+    'of the address does.';
+const _redirectFollowed =
+    'A GET follows a redirect, whose location is a header of the reply.';
+
+/// The reason of the tests that a method does not repeat, and of the tests of
+/// a Retry-After.
+const _oneAttempt =
+    'A method that may have done what it asked does not repeat, so a provider '
+    'makes one attempt for each exchange.';
+const _retryAfterDateTest =
+    'a GET waits for the Retry-After of a reply, as a date';
+const _retryAfterDate =
+    'A provider keeps the headers of a reply, and the client waits for the '
+    'date of the Retry-After in them.';
+const _retryAfterLongTest =
+    'a Retry-After over the longest wait gives no repeat, and the failure has '
+    'it';
+const _retryAfterOnFailure =
+    'A provider keeps the headers of a reply, and the failure has the wait '
+    'that the client did not take.';
+
+/// The reason of the tests that an exchange that has to stop closes its
+/// connection.
+const _connectionCloses =
+    'When RestExchange.stop completes, a provider closes the connection at '
+    'once.';
 
 /// The other modules of the app of a broken layout: a router, the two
 /// fixture features, whose destinations the main navigation shows, and what
