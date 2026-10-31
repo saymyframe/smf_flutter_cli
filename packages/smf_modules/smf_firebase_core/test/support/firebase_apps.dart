@@ -63,14 +63,21 @@ String? configurationProblem({
       _ => null,
     };
 
+/// What a failure of the script of the app that configures a flavor may mean,
+/// for the message of a test that runs it.
+///
+/// On macOS the script runs flutterfire once for each build configuration, and
+/// flutterfire registers an app when the project does not list one with the id.
+/// Firebase answers a second app with one id with HTTP 409, for Android and for
+/// iOS, which the Firebase CLI prints as `Failed to create iOS app`.
+const registerRefusedHint = '\nIf flutterfire failed on apps:create after the '
+    'first run for a flavor, the project did not list the app of the run '
+    'before it yet, and Firebase refused a second app with its id: the script '
+    'has to wait between its runs.';
+
 /// Why the Firebase apps with the id [id] that the project lists once
 /// flutterfire configured a flavor are wrong; `null` if they are the one app
 /// [appId] of the options of the flavor.
-///
-/// On macOS the script of the app runs flutterfire once for each build
-/// configuration, and flutterfire registers an app when the project does not
-/// list one with the id. So a project that does not list a new app yet at the
-/// next run leaves it with two, and the options with the second.
 String? registeredAppsProblem({
   required List<String> appIds,
   required String appId,
@@ -118,6 +125,10 @@ List<String> firebaseJsonProblems({
       'firebase.json names $appOfOptions as the $platform app of $options.',
   ];
   void check(String name, Object? entry, String file) {
+    if (entry == null) {
+      problems.add('firebase.json has nothing for $name: no run wrote it.');
+      return;
+    }
     if (_at(entry, ['projectId']) != project) {
       problems.add(
         'firebase.json names ${_at(entry, ['projectId'])} as the project of '

@@ -16,13 +16,16 @@
 // flutterfire registers the Android or iOS app of a flavor in the project when
 // the project has no app with its id yet, and otherwise takes the first app
 // with the id. The test fails when the project has more than one, which runs
-// that register the app at the same time can leave, and so can the runs of
-// flutterfire for one flavor, if a run does not see the app that the run before
-// it registered: each run could get the options of another. So only a run with
-// SMF_FIREBASE_REGISTER=1, which CI gives only the runs of the workflow Build,
-// lets flutterfire register the apps; any other run fails before flutterfire
-// when the project has no app with the id of one of the flavors (see
-// configurationProblem).
+// that register the app at the same time can leave: each run could get the
+// options of another. So only a run with SMF_FIREBASE_REGISTER=1, which CI
+// gives only the runs of the workflow Build, lets flutterfire register the
+// apps; any other run fails before flutterfire when the project has no app with
+// the id of one of the flavors (see configurationProblem).
+//
+// On macOS the script runs flutterfire once for each build configuration, so
+// the test also fails when a run does not see the app that the run before it
+// registered, whichever way that shows: Firebase refuses the second app, and
+// the script fails (see registerRefusedHint), or the project has two.
 @TestOn('vm')
 library;
 
@@ -56,6 +59,7 @@ Future<String> _run(
   List<String> arguments, {
   String? directory,
   Map<String, String>? environment,
+  String hint = '',
 }) async {
   final result = await Process.run(
     executable,
@@ -69,7 +73,8 @@ Future<String> _run(
   expect(
     result.exitCode,
     0,
-    reason: '$executable ${arguments.first}: ${result.stdout}${result.stderr}',
+    reason: '$executable ${arguments.first}: ${result.stdout}${result.stderr}'
+        '$hint',
   );
   return '${result.stdout}';
 }
@@ -164,6 +169,7 @@ void main() {
             '--platforms=$platform',
           ],
           directory: app,
+          hint: registerRefusedHint,
         );
         printOnFailure(configured);
       }

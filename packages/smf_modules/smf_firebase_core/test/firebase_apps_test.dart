@@ -261,10 +261,9 @@ const Map<String, _Flavor> _flavors = {
       // ignore: avoid_dynamic_calls, the form of the file above
       (json['flutter']['platforms']['ios']['buildConfigurations'] as Map)
           .remove('Profile-dev');
-      expect(
-        problems(jsonEncode(json), platform: 'ios'),
-        contains(contains('the build configuration Profile-dev')),
-      );
+      const problem = 'firebase.json has nothing for the build configuration '
+          'Profile-dev: no run wrote it.';
+      expect(problems(jsonEncode(json), platform: 'ios'), [problem]);
     });
 
     test('reports a flavor that the file does not have', () {
