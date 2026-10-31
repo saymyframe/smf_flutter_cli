@@ -20,6 +20,7 @@ const List<Role> _roles = [
   notificationsRole,
   pushRole,
   purchasesRole,
+  restRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -63,6 +64,7 @@ void main() {
       'notifications role',
       'push messages role',
       'purchases role',
+      'REST API role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -159,6 +161,13 @@ void main() {
       'requires': <String>{},
       'uses': {'auth', 'settings_screen', 'localization'},
     });
+    // The address of the API is a value of the app, and the token of the user
+    // goes with the requests in an app with sign-in.
+    expect(shape(restRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'env'},
+      'uses': {'auth'},
+    });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
@@ -239,6 +248,8 @@ void main() {
     final dartFile = RegExp(r'^lib/[a-z0-9_/]+\.dart$');
     // A test mirrors the file of lib/ that it tests.
     final testFile = RegExp(r'^test/[a-z0-9_/]+_test\.dart$');
+    // What the tests of an app use, such as a local server.
+    final testSupportFile = RegExp(r'^test/[a-z0-9_/]+\.dart$');
     // A file for those who work on the app, such as the guide for coding
     // agents, is at its root.
     final rootFile = RegExp(r'^[A-Z]+\.md$');
@@ -263,6 +274,7 @@ void main() {
           anyOf(
             matches(dartFile),
             matches(testFile),
+            matches(testSupportFile),
             matches(rootFile),
             matches(androidResource),
             matches(valuesFile),
@@ -307,6 +319,7 @@ void main() {
           'notifications',
           'push',
           'purchases',
+          'rest',
           'settings_screen',
           'onboarding_screen',
           'theme',
@@ -519,6 +532,7 @@ void main() {
         'text_none',
         'text_failed',
         'env_keys',
+        'rest_tokens',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
