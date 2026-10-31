@@ -184,7 +184,10 @@ jobs:
   # `--allow-warning=<code>` for each warning about what the app is made of
   # that it has on purpose, and must pass `flutter analyze`, and then the
   # tests that the packages keep for it in `app_tests/`, with
-  # `flutter test`. Each job checks its shard of the apps in a directory
+  # `flutter test`. An app of a provider of the CI role also runs the commands
+  # of its CI in a clone of it, before those tests go in. The matrix does this
+  # in the step that generates the apps, and only for apps without every
+  # module. Each job checks its shard of the apps in a directory
   # with a space in its name, and then its shard of the apps with every
   # module of the matrix in a directory whose name has letters beyond ASCII
   # too.

@@ -18,12 +18,14 @@ import 'dart:isolate' show Isolate;
 import 'package:file/file.dart';
 import 'package:file/local.dart';
 import 'package:smf_contracts/core.dart';
+import 'package:smf_flutter_cli/src/ci_commands.dart';
 import 'package:smf_flutter_cli/src/cli.dart';
 import 'package:smf_flutter_cli/src/expected_failures.dart';
 import 'package:smf_flutter_cli/src/matrix_plan.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
+export 'src/ci_commands.dart';
 export 'src/expected_failures.dart';
 export 'src/flutter_versions.dart';
 export 'src/matrix_plan.dart';
@@ -2545,12 +2547,28 @@ typedef MatrixTest = Future<(int, String)> Function(
   MatrixEnv? env,
 });
 
+/// Runs commands of CI in a clone of the app in a directory, as
+/// [runCiCommands] does; returns the exit code of the first command that fails
+/// and the output up to it, or 0 and the output of all.
+typedef MatrixCiRunner = Future<(int, String)> Function(
+  String directory,
+  List<String> commands, {
+  Map<String, String> environment,
+  String? artifact,
+});
+
 /// The commands that [runMatrix] and [createEveryModuleApps] run for each
 /// app, and where they write what happens, which tests of the matrix may
 /// replace; each left `null` is the real one.
 final class MatrixCommands {
   /// Creates the commands, with the real one for each left `null`.
-  const MatrixCommands({this.log, this.create, this.analyze, this.test});
+  const MatrixCommands({
+    this.log,
+    this.create,
+    this.analyze,
+    this.test,
+    this.ci,
+  });
 
   /// Gets what happens, line by line: by default the standard output.
   final void Function(String line)? log;
@@ -2565,6 +2583,96 @@ final class MatrixCommands {
   /// Adds the tests that apply to an app and runs them: by default
   /// [runAppTests].
   final MatrixTest? test;
+
+  /// Runs the commands of the CI of an app: by default [runCiCommands].
+  final MatrixCiRunner? ci;
+}
+
+/// The commands of the CI of an app of a matrix, or `null` for an app without
+/// CI. The tool of a matrix gives it to its runs from the role of CI, which
+/// they know nothing of.
+typedef MatrixCi = MatrixCiCommands? Function(MatrixApp app);
+
+/// What the CI of an app runs; see [MatrixCi].
+final class MatrixCiCommands {
+  /// Creates the commands.
+  const MatrixCiCommands({required this.checks, required this.build});
+
+  /// What runs on each push, in this order, each to run with `bash -c`.
+  final List<String> checks;
+
+  /// What builds the app on request.
+  final MatrixCiBuild build;
+}
+
+/// What builds an app in its CI, for one environment; see [MatrixCiCommands].
+final class MatrixCiBuild {
+  /// Creates the build.
+  const MatrixCiBuild({
+    required this.commands,
+    required this.keys,
+    required this.artifact,
+  });
+
+  /// What runs, in this order, each to run with `bash -c`.
+  final List<String> commands;
+
+  /// The names of the variables of the process through which the [commands]
+  /// get the values of the environment.
+  final List<String> keys;
+
+  /// The path in the app of the file that the [commands] write.
+  final String artifact;
+
+  /// A value for each of [keys], for a real build: in turn a value that
+  /// `.env` holds as it is and one that it holds only in double quotes, so
+  /// that the `flutter` tool reads the two forms of a value there.
+  Map<String, String> get variables => {
+        for (final (index, key) in keys.indexed)
+          key: index.isEven ? 'ci_value' : 'a value # of CI',
+      };
+}
+
+/// Runs the commands of the CI of [app], which `smf create` generated in
+/// [directory] as that app of the matrix, such as an app with every module of
+/// the plan of a job of CI, in a clone of it ([runCiCommands]): those of each
+/// push, and with [build] then the build, with the values of
+/// [MatrixCiBuild.variables], in a clone of its own, since a build starts from
+/// a repository without `.env`, which the checks may have written.
+///
+/// Returns 0 when each command succeeded and the build left its file, and 1
+/// otherwise, and for an app without CI, whose run would check nothing. The
+/// log of [commands] gets what happens, and their ci runs the commands.
+Future<int> runCiOf(
+  MatrixApp app, {
+  required String directory,
+  required MatrixCi ci,
+  bool build = false,
+  MatrixCommands commands = const MatrixCommands(),
+}) async {
+  // coverage:ignore-start
+  // The default prints to the terminal, as the runs in CI do; the tests give
+  // their own.
+  final say = commands.log ?? _print;
+  // coverage:ignore-end
+  final run = commands.ci ?? runCiCommands;
+  final ofApp = ci(app);
+  if (ofApp == null) {
+    say('${app.name} has no commands of CI to run.');
+    return 1;
+  }
+  final (checked, output) = await run(directory, ofApp.checks);
+  say(output.trim());
+  if (checked != 0) return 1;
+  if (!build) return 0;
+  final (built, buildOutput) = await run(
+    directory,
+    ofApp.build.commands,
+    environment: ofApp.build.variables,
+    artifact: ofApp.build.artifact,
+  );
+  say(buildOutput.trim());
+  return built == 0 ? 0 : 1;
 }
 
 /// Generates every app of the [matrixOf] of [modules] with [roleOptions] in
@@ -2599,6 +2707,17 @@ final class MatrixCommands {
 /// values (see [MatrixAppTest.envValues]). Without [env], a test that gives
 /// an app values fails, and `flutter test` gets no arguments.
 ///
+/// Through [ci], which the tool of the matrix takes from the role of CI, each
+/// app of a provider of that role also runs the commands of its CI on each
+/// push, in a clone of it ([runCiCommands]), before the tests go into the app:
+/// so they run as on the first push of a new app, and a command that does not
+/// hold in a fresh copy of the repository, such as one that needs `.env`, is a
+/// problem of the run. The apps with every module and the apps of the other
+/// values of a mode option leave this out: the first have CI of a job of their
+/// own (see [runCiOf]), and the second differ from the others in their Dart
+/// code only. The build of the app does not run here, since a job of a shard
+/// has no cache of Gradle.
+///
 /// The apps stay in [directory], with the tests. [commands] run for each
 /// app, and their log gets what happens.
 Future<int> runMatrix(
@@ -2608,12 +2727,14 @@ Future<int> runMatrix(
   MatrixAppTests appTests = const MatrixAppTests([]),
   MatrixSelection selection = const MatrixSelection(),
   MatrixEnv? env,
+  MatrixCi? ci,
   MatrixCommands commands = const MatrixCommands(),
 }) async {
   final run = _MatrixRun(
     directory: directory,
     appTests: appTests.tests,
     env: env,
+    ci: ci,
     // coverage:ignore-start
     // The defaults print to the terminal, create the apps with smf and
     // analyze them with Flutter, as the runs of the matrix in CI do; the
@@ -2624,6 +2745,7 @@ Future<int> runMatrix(
         commands.analyze ?? (directory) => _flutter(['analyze'], directory),
     // coverage:ignore-end
     test: commands.test ?? runAppTests,
+    runCi: commands.ci ?? runCiCommands,
   );
   final (:apps, :failed) = await matrixOf(
     modules,
@@ -2989,22 +3111,27 @@ final class _MatrixRun {
     required this.directory,
     required this.appTests,
     required this.env,
+    required this.ci,
     required this.say,
     required this.create,
     required this.analyze,
     required this.test,
+    required this.runCi,
   });
 
   final String directory;
   final List<MatrixAppTest> appTests;
   final MatrixEnv? env;
+  final MatrixCi? ci;
   final void Function(String line) say;
   final MatrixCreate create;
   final MatrixAnalyze analyze;
   final MatrixTest test;
+  final MatrixCiRunner runCi;
 
-  /// Generates [app] as [name] in the directory, analyzes it and runs its
-  /// tests, and returns the problems found.
+  /// Generates [app] as [name] in the directory, analyzes it, runs the
+  /// commands of its CI in a clone of it, as far as a run of the matrix does
+  /// (see [runMatrix]), and then its tests, and returns the problems found.
   Future<List<String>> check(MatrixApp app, String name) async {
     say('\n=== $name: $app');
     final (generated, problems) = await _generate(
@@ -3019,6 +3146,18 @@ final class _MatrixRun {
     if (analyzed != 0) {
       return problems
         ..add('$name ($app): flutter analyze exited with $analyzed.');
+    }
+    if (app.everyModuleWith == null && app.modes.isEmpty) {
+      if (ci?.call(app) case final ofApp?) {
+        final (code, output) = await runCi(generated.path, ofApp.checks);
+        say(output.trim());
+        if (code != 0) {
+          problems.add(
+            '$name ($app): a command of its CI exited with $code in a clone of '
+            'the app.',
+          );
+        }
+      }
     }
     final tests = [
       for (final test in appTests)
