@@ -297,7 +297,7 @@ final class AppRestClient {
     _tokens = tokens ?? _tokens;
   }
 
-  /// Sends a `GET`, which repeats by itself.
+  /// Sends a `GET`, which the client repeats as [AppRestClient] tells.
   Future<RestResponse> get(
     String path, {
     Map<String, String>? query,
@@ -314,7 +314,7 @@ final class AppRestClient {
         cancel: cancel,
       );
 
-  /// Sends a `HEAD`, which repeats by itself.
+  /// Sends a `HEAD`, which the client repeats as [AppRestClient] tells.
   Future<RestResponse> head(
     String path, {
     Map<String, String>? query,
