@@ -86,9 +86,12 @@ const restRole = RestRole._();
 /// The contract of `RestTransport` is in [transportFile]: one attempt, no
 /// redirect followed, any status a reply, a failed connection as
 /// `RestConnectionFailed`, a connection closed when `RestExchange.stop`
-/// completes, no credential or cookie added, nothing written to a log, and a
-/// function that takes no arguments and never throws. Only a running app shows
-/// whether a provider keeps to it.
+/// completes, no credential or cookie added, nothing written to a log, a client
+/// of the stack that follows `HttpOverrides`, and a function that takes no
+/// arguments and never throws. Only a running app shows whether a provider
+/// keeps to it. A TLS handshake that is on its way is the one exchange that
+/// `HttpClient` of `dart:io` cannot end, so its socket stays until the server
+/// ends it.
 ///
 /// ## Rules
 ///

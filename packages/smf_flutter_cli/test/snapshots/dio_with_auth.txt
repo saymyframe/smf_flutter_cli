@@ -3931,7 +3931,12 @@ final class RestConnectionFailed implements Exception {
 ///   `SocketException`, `HttpException` and `TlsException`. Any other error is
 ///   a bug of the provider, which reaches the caller as the reason `unknown`.
 /// - When [RestExchange.stop] completes, it closes the connection at once. It
-///   needs no timeout of its own: `appRest` stops every exchange.
+///   needs no timeout of its own: `appRest` stops every exchange. On `dart:io`,
+///   only a TLS handshake that is on its way stays until the server ends it,
+///   since `HttpClient` has no way to end one.
+/// - On `dart:io`, one that keeps an `HttpClient` makes a new one when
+///   `HttpOverrides` change, as they do when a test starts or closes a
+///   `RestTestServer`.
 /// - It sends [RestExchange.uri] as it is, with those headers and that body.
 ///   Its stack may add the headers of the transport itself, such as `host`,
 ///   `user-agent` and `accept-encoding`. It adds no credential or cookie, and
