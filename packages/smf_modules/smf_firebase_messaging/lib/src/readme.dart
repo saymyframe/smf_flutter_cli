@@ -22,21 +22,23 @@ const iconResource = '@drawable/${NotificationsRole.androidIcon}';
 /// The section of the module in the README of the app, which also has the
 /// section of the push role: the address of the device, the key of the
 /// Apple Push Notification service that Firebase needs for iOS, how to
-/// upload it and that the section of the steps by hand lists the upload,
-/// how to send a test message, what the module set up for
-/// Android, why the service sets the presentation options of iOS, and how
+/// upload it, what repeats for the iOS app of each flavor and that the
+/// section of the steps by hand lists the upload, how to send a test message,
+/// what the module set up for Android, why the service sets the presentation options of iOS, and how
 /// the app would handle a message in the background.
 const String readmeSection = '''
 The app receives its push messages with [firebase_messaging](https://pub.dev/packages/firebase_messaging): `$serviceFile` implements the push service of the app on it (see the section ${PushRole.readmeHeading}). The address of this device is its registration token of Firebase Cloud Messaging.
 
-Firebase sends messages to iOS through the Apple Push Notification service (APNs), with an APNs key of your team, which you upload by hand once for the project:
+Firebase sends messages to iOS through the Apple Push Notification service (APNs), with an APNs key of your team, which you upload by hand:
 
 1. In your Apple Developer account, under Certificates, Identifiers & Profiles, create a key under Keys with the Apple Push Notifications service (APNs) enabled. Download its `.p8` file, and note its Key ID and your Team ID.
 2. In the Firebase console, open the settings of the project, then Cloud Messaging, and upload the key under the configuration of the Apple app, with its Key ID and your Team ID.
 
-A key sends only to the apps of its team, so register the bundle id of the app as an App ID in that team, with Push Notifications. The key matters only for sending: the iOS app gets its address without it, but Firebase cannot send to that address. The section ${AppEntryRole.setupHeading} lists the upload among the steps that you do by hand.
+The Firebase console has this configuration under each Apple app of the project, so check it for the iOS app of each flavor that you send to, and repeat the upload where it has no key. One key serves every app of its team, so the file and the ids stay the same.
 
-To send this device a test message, run the app in debug mode and copy the address that it prints. In the Firebase console, open Messaging, create a notification campaign, choose Send test message and paste the address. A server sends a message with the HTTP v1 API of Firebase Cloud Messaging: `POST https://fcm.googleapis.com/v1/projects/<project-id>/messages:send`, with an OAuth token of a service account of the project and the address as the `token` of the message.
+A key sends only to the apps of its team, so register the bundle id of each flavor that you send to as an App ID in that team, with Push Notifications. The key matters only for sending: the iOS app gets its address without it, but Firebase cannot send to that address. The section ${AppEntryRole.setupHeading} lists the upload among the steps that you do by hand.
+
+To send this device a test message, run the app in debug mode and copy the address that it prints. In the Firebase console, open Messaging, create a notification campaign, choose Send test message and paste the address. A server sends a message with the HTTP v1 API of Firebase Cloud Messaging: `POST https://fcm.googleapis.com/v1/projects/<project-id>/messages:send`, with an OAuth token of a service account of the project and the address as the `token` of the message. A server sends to an address through the Firebase project of the flavor that the build has.
 
 `${AppEntryRole.androidManifestFile}` names the channel `${NotificationsRole.defaultChannel}` of the notifications of the app (`$channelMetaData`) and their small icon `$iconResource` (`$iconMetaData`). Android shows a message that arrives in the background with them.
 
