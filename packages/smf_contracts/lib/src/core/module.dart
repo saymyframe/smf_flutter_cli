@@ -41,6 +41,7 @@ final class ModuleDescriptor {
     this.variants,
     this.sockets = const [],
     this.socketFamilies = const [],
+    this.selectedByDefault = false,
   });
 
   /// The id of the module.
@@ -84,6 +85,15 @@ final class ModuleDescriptor {
 
   /// Socket families of the module itself; see [SocketFamily.module].
   final List<SocketFamily<Object?, SocketKind>> socketFamilies;
+
+  /// Whether a run in a terminal offers the module selected among the modules
+  /// of its [kind], so that Enter takes it, such as a start screen that a new
+  /// app should have.
+  ///
+  /// A run without a terminal never takes a module that it was not given. A
+  /// module that provides a role is asked about through its role, where Enter
+  /// takes the first provider, so this says nothing for it.
+  final bool selectedByDefault;
 
   /// The roles the module provides.
   Set<Role> get provides => {for (final provider in providers) provider.role};

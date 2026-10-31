@@ -22,6 +22,9 @@ final class _Prompter implements SmfPrompter {
 
   final List<_Question> asked = [];
 
+  /// What each question of many answers offers selected, by its message.
+  final Map<String, List<String>> selected = {};
+
   List<T> _pick<T extends Object>(
     String message,
     List<T> choices,
@@ -58,8 +61,12 @@ final class _Prompter implements SmfPrompter {
     List<T> choices, {
     String Function(T choice)? display,
     List<T> defaultValues = const [],
-  }) async =>
-      _pick(message, choices, display);
+  }) async {
+    selected[message] = [
+      for (final value in defaultValues) display?.call(value) ?? '$value',
+    ];
+    return _pick(message, choices, display);
+  }
 
   /// The step of a module that is skippable asks before it runs: this answers
   /// yes when a question of the script starts the message, and fails on any
@@ -159,6 +166,7 @@ final class _Commands implements SmfProcessRunner {
 typedef _Run = ({
   int code,
   List<_Question> asked,
+  Map<String, List<String>> selected,
   List<String> lines,
   List<String> warnings,
   List<String> infos,
@@ -202,6 +210,7 @@ Future<_Run> _create(
   return (
     code: code,
     asked: prompter.asked,
+    selected: prompter.selected,
     lines: logger.lines,
     warnings: logger.warnings,
     infos: logger.infos,
@@ -218,6 +227,42 @@ const _paywallChoice = 'paywall — A paywall with the plans of the purchases '
     'of the app, and a subscription screen';
 
 void main() {
+  test('a run in a terminal offers home selected, and no other module',
+      () async {
+    final run = await _create({
+      'Features': ['home'],
+      'Infrastructure': [],
+      'Layout': ['None'],
+      'Onboarding screen': ['None'],
+      'Settings screen': ['None'],
+      'State management': ['bloc'],
+      'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
+      'Localization': ['None'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
+      'Preferences': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+      'Authentication': ['None'],
+      'CI': ['None'],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    expect(run.selected['Features: which do you want?'], [
+      startsWith('home — '),
+    ]);
+    expect(run.selected['Infrastructure: which do you want?'], isEmpty);
+    expect(run.selected['Crash reporting: which module provides it?'], isEmpty);
+    expect(run.selected['Analytics: which module provides it?'], isEmpty);
+  });
+
   test(
       'a run in a terminal asks for the features first, and not for the '
       'router once the app has home', () async {

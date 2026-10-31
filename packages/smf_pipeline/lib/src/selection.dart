@@ -349,6 +349,10 @@ final class _ModuleQuestions {
           '${modules.first.descriptor.kind.label}: which do you want?',
           modules,
           display: _display,
+          defaultValues: [
+            for (final module in modules)
+              if (module.descriptor.selectedByDefault) module,
+          ],
         ),
       );
     }
