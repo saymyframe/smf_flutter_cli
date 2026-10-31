@@ -1517,15 +1517,15 @@ final class MatrixAppTests {
   }
 }
 
-/// Copies the files of [tests] into the app of the matrix [app], generated
-/// in [directory] with the package [packageName], with the placeholders
-/// of the files filled, writes the files that the tests generate for the
-/// app next to them, and returns the paths of the files in the app; see
-/// [MatrixAppTest.directory] and [MatrixAppTest.generatedFiles].
+/// Copies the files of [tests] into the `generated` app of [target], with the
+/// placeholders of the files filled, writes the files that the tests generate
+/// for the app next to them, and returns the paths of the files in the app;
+/// see [MatrixAppTest.directory] and [MatrixAppTest.generatedFiles].
 ///
-/// Without [app], for an app that `smf create` generated outside the
-/// matrix, only `{{app_name}}` is filled: the [MatrixAppTest.values] come
-/// from an app of the matrix, and so do the files that the tests generate.
+/// Without the `app` of [target], for an app that `smf create` generated
+/// outside the matrix, only `{{app_name}}` is filled: the
+/// [MatrixAppTest.values] come from an app of the matrix, and so do the files
+/// that the tests generate.
 ///
 /// If some of the [tests] declare [MatrixAppTest.mocks], it also writes the
 /// configuration of the tests of the app, `test/flutter_test_config.dart`,
@@ -1551,8 +1551,8 @@ final class MatrixAppTests {
 /// with one on a line.
 ///
 /// Throws a [MatrixAppTestException], before it copies anything, if a test
-/// generates files without [app], if a file keeps a placeholder that no
-/// value fills, if two of the [tests] have a file at the same path, the
+/// generates files without the `app` of [target], if a file keeps a placeholder
+/// that no value fills, if two of the [tests] have a file at the same path, the
 /// files they generate included, if a test generates a file at a path that
 /// is no relative path in the app, if the mocks of a test are in no file
 /// of it in `test/`, if its probe is in no file of it in
@@ -1566,19 +1566,18 @@ final class MatrixAppTests {
 /// (see [MatrixEnv.file]), whose values the tests give through
 /// [MatrixAppTest.envValues].
 List<String> addAppTests(
+  TestedApp target,
   List<MatrixAppTest> tests, {
-  required String directory,
-  required String packageName,
-  MatrixApp? app,
   String? envFile,
   List<String> buildArguments = const [],
   List<String> releaseBuildArguments = const [],
   FileSystem fileSystem = const LocalFileSystem(),
 }) {
+  final (:generated, :app) = target;
   final context = fileSystem.path;
   final (:texts, :owners) = _filesOfTests(
     tests,
-    packageName: packageName,
+    packageName: generated.name,
     app: app,
     fileSystem: fileSystem,
   );
@@ -1612,7 +1611,7 @@ List<String> addAppTests(
     }
   }
   for (final MapEntry(key: path, value: text) in texts.entries) {
-    fileSystem.file(context.join(directory, path))
+    fileSystem.file(context.join(generated.path, path))
       ..createSync(recursive: true)
       ..writeAsStringSync(text);
   }
@@ -2023,8 +2022,7 @@ Future<(int, String)> runAppTests(
       ),
       env: env,
       valuesOf: () => _envValuesOf(tests, app, env, generated.path, fileSystem),
-      flutter: flutter,
-      fileSystem: fileSystem,
+      machine: (flutter: flutter, fileSystem: fileSystem),
     );
 
 /// The tests of [all] to add to [app], an app of the matrix that
@@ -2061,31 +2059,31 @@ List<MatrixAppTest> appTestsFor(
   ];
 }
 
-/// Adds [tests] to [generated], an app that `smf create` generated outside
-/// the matrix, such as one that CI starts on a device: copies their files
-/// with [addAppTests], which fills only `{{app_name}}` in them, and adds
-/// their dev dependencies with `flutter pub add` through [flutter], if they
-/// have any. It runs neither the analysis nor the tests, which the caller
+/// Adds [tests] to the `generated` app of [target], an app that `smf create`
+/// generated outside the matrix, such as one that CI starts on a device: copies
+/// their files with [addAppTests], which fills only `{{app_name}}` in them, and
+/// adds their dev dependencies with `flutter pub add` through [flutter], if
+/// they have any. It runs neither the analysis nor the tests, which the caller
 /// runs where it needs them.
 ///
-/// With [app], the app of the matrix that [generated] was generated as,
-/// such as an app with every module of the plan of CI that the matrix tool
+/// With the `app` of [target], the app of the matrix that it was generated
+/// as, such as an app with every module of the plan of CI that the matrix tool
 /// of the CLI generates with `--create --app`, it fills the values of the
-/// tests too, and writes the files that they generate for [app] (see
+/// tests too, and writes the files that they generate for that app (see
 /// [MatrixAppTest.generatedFiles]), as for an app of the matrix. With the
-/// start check, it also writes the arguments that build [app] with its
+/// start check, it also writes the arguments that build that app with its
 /// values, the tool arguments of [env] for it ([startBuildArgumentsFile]);
-/// none without [app], whose roles they come from, as the probes of the
+/// none without the `app`, whose roles they come from, as the probes of the
 /// tests of the app do.
 ///
 /// With the start check, it also writes the [releaseBuildArguments], those
 /// that a build of the app as a release takes too
-/// ([startReleaseArgumentsFile]), with [app] or without it.
+/// ([startReleaseArgumentsFile]), with the `app` or without it.
 ///
 /// It writes none of the values that the tests give an app of the matrix
 /// ([MatrixAppTest.envValues]). With [envValues], whose `path` is a file of
 /// values of CI in the form of the file of [env], such as `.env`, with a
-/// line `KEY=value` for each key, and with [app], whose build arguments
+/// line `KEY=value` for each key, and with the `app`, whose build arguments
 /// give the build those values, it writes each of them into the line of
 /// its key in the file of [env] of the app, where that line has no value
 /// yet, such as the public key of a service of the project of CI. It
@@ -2101,14 +2099,13 @@ List<MatrixAppTest> appTestsFor(
 /// Returns 0 and the output, or the exit code of `flutter pub add` and the
 /// output if it fails. A problem of the files of the tests is a failure
 /// too, with the exit code 1, such as a placeholder that only an app of the
-/// matrix fills, or files that tests generate, without [app]; and so is a
+/// matrix fills, or files that tests generate, without the `app`; and so is a
 /// problem of [envValues], such as a file that is not there, a line that is
 /// no line `KEY=value`, a key given twice, a value with a double quote, or
-/// values without [app] or [env].
+/// values without the `app` or [env].
 Future<(int, String)> addAppTestsTo(
-  GeneratedApp generated,
+  TestedApp target,
   List<MatrixAppTest> tests, {
-  MatrixApp? app,
   MatrixEnv? env,
   List<String> releaseBuildArguments = const [],
   CiEnvValues? envValues,
@@ -2116,7 +2113,7 @@ Future<(int, String)> addAppTestsTo(
   FileSystem fileSystem = const LocalFileSystem(),
 }) =>
     _addAndRun(
-      (generated: generated, app: app),
+      target,
       tests,
       _pubAdd(tests),
       env: env,
@@ -2125,14 +2122,13 @@ Future<(int, String)> addAppTestsTo(
           ? null
           : _envValuesOfFile(
               envValues.path,
-              app,
+              target.app,
               env,
-              generated.path,
+              target.generated.path,
               fileSystem,
               mask: envValues.mask,
             ),
-      flutter: flutter,
-      fileSystem: fileSystem,
+      machine: (flutter: flutter, fileSystem: fileSystem),
     );
 
 /// A file of values of CI for the file of the values of an app, such as
@@ -2144,11 +2140,15 @@ typedef CiEnvValues = ({String path, bool mask});
 /// An app that tests go into: the app that `smf create` generated
 /// (`generated`), and the app of the matrix that it was generated as
 /// (`app`), `null` for an app that it generated outside the matrix.
-typedef _TestedApp = ({GeneratedApp generated, MatrixApp? app});
+typedef TestedApp = ({GeneratedApp generated, MatrixApp? app});
+
+/// What adding tests to an app works with: what runs the `flutter` tool
+/// (`flutter`), and the file system of the app (`fileSystem`).
+typedef _Machine = ({MatrixFlutter flutter, FileSystem fileSystem});
 
 /// Adds [tests] to the `generated` app of [target], for its `app` of the
 /// matrix if it has one, with the build arguments of [env] for that app and
-/// the [releaseBuildArguments], and runs [commands] with [flutter] until one
+/// the [releaseBuildArguments], and runs [commands] on [machine] until one
 /// fails; returns its exit code and the output up to it, or 0 and the output
 /// of all.
 ///
@@ -2157,25 +2157,23 @@ typedef _TestedApp = ({GeneratedApp generated, MatrixApp? app});
 /// run, and prints its summary. A problem that [valuesOf] throws is a
 /// failure with the exit code 1, before anything is copied.
 Future<(int, String)> _addAndRun(
-  _TestedApp target,
+  TestedApp target,
   List<MatrixAppTest> tests,
   List<List<String>> commands, {
   required MatrixEnv? env,
   required _EnvValues? Function() valuesOf,
-  required MatrixFlutter flutter,
-  required FileSystem fileSystem,
+  required _Machine machine,
   List<String> releaseBuildArguments = const [],
 }) async {
   final (:generated, :app) = target;
+  final (:flutter, :fileSystem) = machine;
   final List<String> added;
   final _EnvValues? values;
   try {
     values = valuesOf();
     added = addAppTests(
+      target,
       tests,
-      app: app,
-      directory: generated.path,
-      packageName: generated.name,
       envFile: env?.file,
       buildArguments: [if (app != null) ...?env?.toolArguments(app)],
       releaseBuildArguments: releaseBuildArguments,
@@ -2675,8 +2673,8 @@ Future<int> runCiOf(
   return built == 0 ? 0 : 1;
 }
 
-/// Generates every app of the [matrixOf] of [modules] with [roleOptions] in
-/// [directory], with the options of CI, analyzes each with
+/// Generates every app of the [matrixOf] of [modules] in [directory], with the
+/// options of CI, analyzes each with
 /// `flutter analyze`, and, in an app that some of the tests of [appTests]
 /// apply to, adds them and runs every test of the app with `flutter test`.
 /// Returns the exit code: 0 if every app was generated with every module
@@ -2723,7 +2721,6 @@ Future<int> runCiOf(
 Future<int> runMatrix(
   List<SmfModule> modules, {
   required String directory,
-  Map<String, String?> roleOptions = const {},
   MatrixAppTests appTests = const MatrixAppTests([]),
   MatrixSelection selection = const MatrixSelection(),
   MatrixEnv? env,
@@ -2749,7 +2746,6 @@ Future<int> runMatrix(
   );
   final (:apps, :failed) = await matrixOf(
     modules,
-    roleOptions: roleOptions,
     everyModuleApps: selection.everyModuleApps,
   );
   final problems = [
@@ -2767,8 +2763,7 @@ Future<int> runMatrix(
   // the apps that are not checked run where the whole matrix is, and the
   // matrix of a run for one app with every module lacks the others.
   final all = switch (selection.everyModuleApps) {
-    NamedEveryModuleApp() =>
-      (await matrixOf(modules, roleOptions: roleOptions)).apps,
+    NamedEveryModuleApp() => (await matrixOf(modules)).apps,
     _ => apps,
   };
   for (final test in appTests.tests) {
@@ -2961,8 +2956,7 @@ Future<(List<String>, String)> runFailingAppTests(
     ],
     env: env,
     valuesOf: () => _envValuesOf(tests, app, env, generated.path, fileSystem),
-    flutter: flutter,
-    fileSystem: fileSystem,
+    machine: (flutter: flutter, fileSystem: fileSystem),
   );
   if (code != 0) return ([output.trim().split('\n').last], output);
   final (_, report) = await flutter(

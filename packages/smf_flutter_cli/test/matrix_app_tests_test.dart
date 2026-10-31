@@ -17,6 +17,7 @@ import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_paywall/smf_paywall.dart';
+import 'package:smf_pipeline/smf_pipeline.dart' show GeneratedApp;
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
@@ -2174,10 +2175,14 @@ void main() {
     final directory = Directory.systemTemp.createTempSync('smf_probes_');
     addTearDown(() => directory.deleteSync(recursive: true));
     final added = addAppTests(
+      (
+        generated: GeneratedApp(
+          name: 'my_app',
+          path: directory.path,
+        ),
+        app: app,
+      ),
       tests,
-      directory: directory.path,
-      packageName: 'my_app',
-      app: app,
     );
     // The paths in the app, as the file system of the machine writes them.
     expect(
