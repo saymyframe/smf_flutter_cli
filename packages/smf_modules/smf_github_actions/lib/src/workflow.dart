@@ -19,7 +19,7 @@ const _environmentVariable = 'APP_ENVIRONMENT';
 /// The choice of the developer, where GitHub reads an expression.
 const _chosenEnvironment = r'${{ inputs.environment }}';
 
-/// The steps of a job that sets up Flutter, at the indent of a step.
+/// The step of a job that sets up Flutter, at the indent of a step.
 const _flutterStep = '''
       - uses: $_flutter
         with:
