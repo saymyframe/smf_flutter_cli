@@ -97,10 +97,10 @@ With `firebase_auth`:
 - `FirebaseAuthService` in `lib/core/auth/firebase_auth_service.dart` implements `AuthService` on `FirebaseAuth.instance`. In `lib/`, only that file imports the package: other code signs in through `appSession`.
 - That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section Firebase Authentication of `README.md`.
-- `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
+- `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI, one project in a run. Where the flavors have several projects, it needs `--project <id>` for each. It changes the Firebase project and needs a Firebase account: run it only when asked.
 - `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews when it is about to expire. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
 
-- For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`. After `flutterfire configure` for another project, it has to run again: run it only when asked.
+- For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`, which all the flavors share. After `tool/configure_firebase.dart` for another project, it has to run again with `--project <id>`: run it only when asked.
 
 ## Firebase
 
@@ -215,37 +215,43 @@ The app signs in with [Firebase Authentication](https://firebase.google.com/docs
 
 The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, Anonymous when the mode of the app is `anonymous` (see the section Sign-in), and Google for the ways to sign in of the app. Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
 
-`smf create` asks to enable them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
+`smf create` asks to enable them right after `dart tool/configure_firebase.dart dev` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart
 ```
 
-The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app but those that Google needs, as told below. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
+The script reads the project from `firebase.json`, where `tool/configure_firebase.dart` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app but those that Google needs, as told below. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart --account <email>
 ```
 
-For Google sign-in, the script also gives Google the name of the app and the email address of the account of the Firebase CLI for the consent screen that users see when they sign in. The address is the support email there. When the Firebase CLI runs as no user account, as with a service account, the script leaves Google out and says so: run it with `--account <email>`, or enable Google in the Firebase console.
-
-The script sets up the rest of what Google needs only for the project that `firebase.json` names, not for one that `--project` names:
-
-- It registers the SHA-1 and SHA-256 of the Android debug key of the machine that runs it, which Google uses to recognize the Android app. When the machine has no debug key yet, the script creates it, as the first debug build would. Every machine has a debug key of its own, so run the script on each machine that builds the app for debugging, or add the SHA of its key in the Firebase console, in the settings of the Android app.
-- It downloads the Firebase files of the app again, such as `android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist`, once they have the clients of Google, and writes them where `flutterfire configure` wrote them.
-- It writes the URL scheme of the iOS app, `REVERSED_CLIENT_ID` of `ios/Runner/GoogleService-Info.plist`, into `CFBundleURLTypes` of `ios/Runner/Info.plist`. It adds the scheme and removes none: after a change of the project, remove the scheme of the former project there by hand.
-
-Run the script again after `flutterfire configure` for another project.
-
-A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, with the id of the Android app from `firebase.json`:
+Flavors may have Firebase projects of their own, and each project needs the methods enabled. A run of the script covers one project, so once `firebase.json` has several, the script stops and lists them. Run it once for each:
 
 ```bash
-firebase apps:android:sha:create <appId> <sha>
+dart tool/enable_firebase_sign_in.dart --project <id>
+```
+
+For Google sign-in, the script also gives Google the name of the app and the email address of the account of the Firebase CLI for the consent screen that users see when they sign in. The address is the support email there. When the Firebase CLI runs as no user account, as with a service account, the script leaves Google out and says so: run it with `--account <email>`, or enable Google in the Firebase console.
+
+The script sets up the rest of what Google needs only for the apps that `firebase.json` names in the project of the run. A project that no flavor is configured for gets none of it:
+
+- It registers the SHA-1 and SHA-256 of the Android debug key of the machine that runs it for each of those Android apps, which Google uses to recognize the Android app. When the machine has no debug key yet, the script creates it, as the first debug build would. Every machine has a debug key of its own, so run the script on each machine that builds the app for debugging, or add the SHA of its key in the Firebase console, in the settings of the Android app.
+- It downloads the Firebase files of those apps again, once they have the clients of Google, and writes them to the paths that `firebase.json` names.
+- It writes the URL scheme of each of those iOS apps, `REVERSED_CLIENT_ID` of its `GoogleService-Info.plist`, into `CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors share that file, so it lists a scheme for each iOS app that the script ran for, in the build of every flavor. It adds a scheme and removes none: after a flavor moves to another project, remove the scheme of the former project there by hand.
+
+After you configure a flavor for another project, run the script for that project too.
+
+A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, for the Android app of each flavor that such a key signs, with the id of that app and of its project from `firebase.json`:
+
+```bash
+firebase apps:android:sha:create <appId> <sha> --project=<id>
 ```
 
 The section Finish the setup lists this among the steps that you do by hand.
 
-You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in the project that the app is configured for.
+You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in each project that a flavor is configured for.
 
 Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
 
@@ -2495,12 +2501,13 @@ final class FirebaseAuthService implements AuthService {
       IdTokenCredential(:final issuer) => _providers[issuer]?.name,
       null => null,
     };
-    const script =
-        'run `dart tool/enable_firebase_sign_in.dart` in the '
-        'directory of the app';
+    final script =
+        'run `dart tool/enable_firebase_sign_in.dart --project '
+        '$project` in the directory of the app';
     // The way to sign in, after "sign-in", and what enables it: the script
-    // of the app enables Email/Password, Anonymous and Google, and the
-    // Firebase console every way to sign in.
+    // of the app enables Email/Password, Anonymous and Google, in the project
+    // of this flavor of the app, and the Firebase console every way to sign
+    // in.
     final (withMethod, enable) = switch (method) {
       null => (
         '',
@@ -3877,9 +3884,11 @@ List<File> _hooksOf(Directory app) {
 //
 //     dart tool/enable_firebase_sign_in.dart
 //
-// The project is the one that `flutterfire configure` wrote into
-// `firebase.json` of the app, or the one that `--project <id>` names. The
-// script says which, and gives the Firebase CLI that project and no other.
+// The project is the one of `firebase.json` of the app, where
+// `tool/configure_firebase.dart` writes the project of each flavor, or the one that
+// `--project <id>` names. Where the flavors have several projects, the script
+// needs `--project <id>`, and a run for each project. The script says which
+// project it runs for, and gives the Firebase CLI that project and no other.
 //
 // The script enables the methods with `firebase deploy --only auth` of the
 // Firebase CLI, which enables what its configuration names and disables
@@ -3907,16 +3916,17 @@ List<File> _hooksOf(Directory app) {
 // Google out and says so.
 //
 // The ways to sign in of Google need more of the project and of the app,
-// which the script then sets up for the project that `flutterfire
-// configure` configured the app for, whose apps `firebase.json` names:
+// which the script then sets up for the apps that `firebase.json` names in
+// the project of the run:
 // - it registers the SHA-1 and SHA-256 of the Android debug key of this
-//   machine for the Android app, and creates that key as the first debug
+//   machine for each Android app, and creates that key as the first debug
 //   build would when there is none;
-// - it downloads the Firebase files of the app again once they have the
-//   clients of Google, to where `flutterfire configure` wrote them;
-// - it writes the URL scheme that the iOS app needs, the reversed id of its
-//   client of Google, into `ios/Runner/Info.plist`. It adds the scheme and
-//   removes none, and a file that has it already stays as it is.
+// - it downloads the Firebase files of those apps again once they have the
+//   clients of Google, to the paths that `firebase.json` names;
+// - it writes the URL scheme of each iOS app, the reversed id of its client
+//   of Google, into `ios/Runner/Info.plist`, which all the flavors share. It
+//   adds a scheme and removes none, and a file that has it already stays as
+//   it is.
 // These are the only files of the app that the script changes. Of the
 // other arguments, those calls of the Firebase CLI get only the account.
 
@@ -3972,6 +3982,12 @@ final _modeDeclaration = RegExp(
 /// This script, as the user runs it in the directory of the app.
 const _command = 'dart tool/enable_firebase_sign_in.dart';
 
+/// The script of the app that configures Firebase for a flavor.
+const _configureScript = 'tool/configure_firebase.dart';
+
+/// The command that configures Firebase for a flavor of the app.
+const _configure = 'dart $_configureScript <flavor> --project=<id>';
+
 Future<void> main(List<String> arguments) async {
   // The app is the directory above `tool`, wherever the script is run from,
   // also through a link to it.
@@ -4004,6 +4020,9 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     );
   }
   final project = named ?? _configuredProject(app);
+  // This script as the user runs it again for the same project. Without the
+  // project that the arguments name, it could stop at several projects.
+  final again = named == null ? _command : '$_command --project $project';
   final account = _accountIn(passedOn);
   // What the ways to sign in need is for the apps of the app in the
   // project.
@@ -4104,7 +4123,7 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     final supportEmail = account ?? await _loggedInAs(run);
     if (interrupted) return 130;
     if (supportEmail == null) {
-      stdout.writeln(_withoutGoogle(project, named: named != null));
+      stdout.writeln(_withoutGoogle(project, again));
     }
     final google = supportEmail != null;
 
@@ -4153,12 +4172,14 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     ], ProcessStartMode.inheritStdio);
     final code = await deploy.exitCode;
     if (interrupted) return 130;
-    if (code != 0) stderr.writeln(_afterFailure(code, project, passedOn));
+    if (code != 0) {
+      stderr.writeln(_afterFailure(code, project, passedOn, again));
+    }
     if (code != 0) return code;
     try {
       await _setUp(
         app,
-        _Cli(run, tool, project, account, () => interrupted),
+        _Cli(run, tool, project, account, again, () => interrupted),
         _needs,
         apps,
         waitForClients: google,
@@ -4170,7 +4191,7 @@ Future<int> _enable(Directory app, List<String> arguments) async {
         ..writeln(failed.why)
         ..writeln(
           'What this script did before that stays done, and running it '
-          'again does the rest: $_command',
+          'again does the rest: $again',
         );
       return 1;
     }
@@ -4211,14 +4232,16 @@ final class _Interrupted implements Exception {
 /// The Firebase CLI and the other tools as the script runs them to set up
 /// what the ways to sign in need: the Firebase CLI for [project], as
 /// [account] if the arguments of the script name one, and the other tools,
-/// both so that Ctrl+C reaches them, with what tells whether the user
-/// pressed Ctrl+C.
+/// both so that Ctrl+C reaches them, with the command that runs the script
+/// again for the project, [again], and what tells whether the user pressed
+/// Ctrl+C.
 final class _Cli {
   _Cli(
     this._firebase,
     this._tool,
     this.project,
     this.account,
+    this.again,
     this._interrupted,
   );
 
@@ -4232,6 +4255,7 @@ final class _Cli {
   _tool;
   final String project;
   final String? account;
+  final String again;
   final bool Function() _interrupted;
 
   /// Runs [executable] with [arguments], in a shell on Windows when
@@ -4280,7 +4304,7 @@ final class _Cli {
     };
     throw _Failed(
       'The Firebase CLI did not $what (exit code $code)'
-      '${error.isEmpty ? '' : ': $error'}\n${_accountHint(account)}',
+      '${error.isEmpty ? '' : ': $error'}\n${_accountHint(account, again)}',
     );
   }
 }
@@ -4314,13 +4338,12 @@ String _consoleOf(String project) =>
     'providers';
 
 /// What the script tells when it leaves Google out in [project], since the
-/// Firebase CLI runs as no user account, and how to run it again, with the
-/// project if its arguments [named] it.
-String _withoutGoogle(String project, {required bool named}) =>
+/// Firebase CLI runs as no user account, and how to run it again, [again].
+String _withoutGoogle(String project, String again) =>
     'Google is left out: its consent screen needs a support email, the '
     'email address of a user account of the Firebase CLI, and the Firebase '
     'CLI runs as none here, as with a service account. To enable Google, '
-    'run: $_command${named ? ' --project $project' : ''} --account <email>, '
+    'run: $again --account <email>, '
     'or enable it in the Firebase console: ${_consoleOf(project)}';
 
 /// The account that [options], the arguments of the script for the Firebase
@@ -4355,20 +4378,26 @@ Future<String?> _loggedInAs(
 }
 
 /// What the script tells of [account], the one that its arguments name,
-/// after a call of the Firebase CLI failed.
-String _accountHint(String? account) => account != null
+/// after a call of the Firebase CLI failed, with the command that runs the
+/// script again, [again].
+String _accountHint(String? account, String again) => account != null
     ? '- The arguments name the account $account for it. "firebase '
           'login:list" shows the accounts that the Firebase CLI has.'
     : '- If it ran as the wrong account: this script runs the Firebase CLI '
           'in a temporary directory, where an account that "firebase '
           'login:use" chose for the directory of the app does not apply. To '
-          'name the account, run: $_command --account <email>';
+          'name the account, run: $again --account <email>';
 
 /// What the script tells after the Firebase CLI failed with the exit code
 /// [code] for [project], with the arguments [passedOn]: which account it
 /// may have run as, where its log was, and the other way to enable the
-/// methods.
-String _afterFailure(int code, String project, List<String> passedOn) {
+/// methods. [again] is the command that runs the script again.
+String _afterFailure(
+  int code,
+  String project,
+  List<String> passedOn,
+  String again,
+) {
   final options = passedOn.takeWhile((argument) => argument != '--').toList();
   // The last account that the options name is the one of the Firebase CLI.
   String? account;
@@ -4388,11 +4417,11 @@ String _afterFailure(int code, String project, List<String> passedOn) {
       '- If it ran as the wrong account: this script runs the Firebase CLI '
           'in a temporary directory, where an account that "firebase '
           'login:use" chose for the directory of the app does not apply. To '
-          'name the account, run: $_command --account <email>',
+          'name the account, run: $again --account <email>',
     if (!options.contains('--debug'))
       '- Its log, firebase-debug.log, was in that temporary directory, '
           'which this script removes. To see what the Firebase CLI did, '
-          'run: $_command --debug',
+          'run: $again --debug',
     '- ${_inConsole(project)}',
   ].join('\n');
 }
@@ -4471,16 +4500,18 @@ String _modeOf(Directory app) {
   return (project, [...others, if (end >= 0) ...arguments.sublist(end)]);
 }
 
-/// The id of the Firebase project that `flutterfire configure` wrote into
-/// `firebase.json` of [app]: under `flutter`, each platform of the app has
-/// the id of its project.
+/// The id of the Firebase project in `firebase.json` of [app], where
+/// [_configureScript] writes the project of each flavor: under `flutter`,
+/// each platform of the app has the id of its project. Flavors may have
+/// several projects, and a run of this script is for one.
 String _configuredProject(Directory app) {
   final file = File('${app.path}/firebase.json');
   const orName = 'or name the project: $_command --project <id>';
   if (!file.existsSync()) {
     throw _Stop(
-      '${file.path} is missing, so the app is not configured for Firebase '
-      'yet. Run "flutterfire configure" first (see README.md), $orName',
+      '${file.path} is missing, so no flavor of the app is configured for '
+      'Firebase yet. Configure one first with "$_configure" (see README.md), '
+      '$orName',
     );
   }
   final Object? json;
@@ -4488,8 +4519,8 @@ String _configuredProject(Directory app) {
     json = jsonDecode(_textOf(file));
   } on FormatException catch (error) {
     throw _Stop(
-      '${file.path} is not JSON (${error.message}). Run "flutterfire '
-      'configure" again (see README.md), $orName',
+      '${file.path} is not JSON (${error.message}). Configure a flavor again '
+      'with "$_configure" (see README.md), $orName',
     );
   }
   final projects = <String>{};
@@ -4507,22 +4538,27 @@ String _configuredProject(Directory app) {
   collect(json is Map ? json['flutter'] : null);
   if (projects.isEmpty) {
     throw _Stop(
-      '${file.path} has no Firebase project of "flutterfire configure". Run '
-      'it first (see README.md), $orName',
+      '${file.path} names no Firebase project. Configure a flavor first with '
+      '"$_configure" (see README.md), $orName',
     );
   }
   if (projects.length > 1) {
+    final commands = [
+      for (final project in projects) '$_command --project $project',
+    ];
     throw _Stop(
-      '${file.path} has several Firebase projects (${projects.join(', ')}). '
-      'Name one: $_command --project <id>',
+      '${file.path} has several Firebase projects (${projects.join(', ')}), '
+      'since flavors of the app may have projects of their own. A run of this '
+      'script enables the methods in one project, so run it once for each:\n'
+      '${commands.join('\n')}',
     );
   }
   final project = projects.single;
   if (!_projectId.hasMatch(project)) {
     throw _Stop(
       '${file.path} has "$project" as its Firebase project, which is no id '
-      'of a project. Run "flutterfire configure" again (see README.md), '
-      '$orName',
+      'of a project. Configure a flavor again with "$_configure" (see '
+      'README.md), $orName',
     );
   }
   return project;
@@ -4617,11 +4653,11 @@ Future<void> _setUp(
 }) async {
   if (apps.isEmpty) {
     stdout.writeln(
-      'firebase.json of the app names no app of the project ${cli.project} '
-      'that "flutterfire configure" configured the app for, so this run '
-      'registers no debug key, downloads no Firebase file and writes no URL '
-      'scheme there. To set the app up for that project, run "flutterfire '
-      'configure" for it first, and then this script again.',
+      'firebase.json of the app names no app of the project ${cli.project}, '
+      'so this run registers no debug key, downloads no Firebase file and '
+      'writes no URL scheme there. To set up a flavor of the app in that '
+      'project, run "dart $_configureScript <flavor> '
+      '--project=${cli.project}" first, and then this script again.',
     );
     return;
   }

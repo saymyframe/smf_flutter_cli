@@ -395,8 +395,8 @@ void main() {
 
     // The script of the app enables Google, and only the Firebase console
     // Apple.
-    const script = 'run `dart tool/enable_firebase_sign_in.dart` in the '
-        'directory of the app, or ';
+    final script = 'run `dart tool/enable_firebase_sign_in.dart --project '
+        '$project` in the directory of the app, or ';
     String hint(String method) =>
         'notConfigured (Sign-in with $method is not enabled in the Firebase '
         'project $project (Firebase answered operation-not-allowed). To fix '
@@ -596,8 +596,8 @@ void main() {
     String hint(String answered) =>
         'notConfigured (Sign-in is not enabled in the Firebase project '
         '$project (Firebase answered $answered). To fix it, run `dart '
-        'tool/enable_firebase_sign_in.dart` in the directory of the app, or '
-        'enable Email/Password, and Anonymous for an app that signs in '
+        'tool/enable_firebase_sign_in.dart --project $project` in the '
+        'directory of the app, or enable Email/Password, and Anonymous for an app that signs in '
         'anonymous users, in the Firebase console under Authentication > '
         'Sign-in method: $link)';
     expect(
@@ -658,8 +658,9 @@ void main() {
         'and macOS when sign-in is not enabled in the Firebase project ',
       ),
       contains(
-        'If that is the cause, run `dart tool/enable_firebase_sign_in.dart` '
-        'in the directory of the app, or enable Email/Password',
+        'If that is the cause, run `dart tool/enable_firebase_sign_in.dart '
+        '--project ${Firebase.app().options.projectId}` in the directory of '
+        'the app, or enable Email/Password',
       ),
       endsWith('/authentication/providers)'),
     );
