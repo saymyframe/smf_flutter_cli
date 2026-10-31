@@ -86,9 +86,14 @@ const restRole = RestRole._();
 /// The contract of `RestTransport` is in [transportFile]: one attempt, no
 /// redirect followed, any status a reply, a failed connection as
 /// `RestConnectionFailed`, a connection closed when `RestExchange.stop`
-/// completes, no credential or cookie added, nothing written to a log, and a
-/// function that takes no arguments and never throws. Only a running app shows
-/// whether a provider keeps to it.
+/// completes, no credential or cookie added, nothing written to a log, a client
+/// of the stack that follows `HttpOverrides`, the headers of a coding only on a
+/// body in that coding, and a function that takes no arguments and never
+/// throws. Only a running app shows whether a provider keeps to it. On
+/// `dart:io` the call ends at once, but a TLS handshake on its way cannot be
+/// ended, not even by `close(force: true)`: its socket closes when the
+/// handshake ends or the server ends it. A provider that shares one
+/// `HttpClient` cannot end a TCP connect on its way either: the system ends it.
 ///
 /// ## Rules
 ///
@@ -284,7 +289,7 @@ A path is relative to the address of the API, with or without a leading slash, a
 
 The address is `${RestRole.baseAddressKey.name}` in `.env`, as the section "${EnvRole.readmeHeading}" says. It is no secret, and a change takes a new `flutter run`. While it is empty, a relative path fails with `notConfigured`, whose hint names the key, and the app still builds and starts. Use `https` in a release. On a device, `http://10.0.2.2:8080` is your computer on the Android emulator and `http://127.0.0.1:8080` on the iOS simulator, and a phone reaches it at its address on your network. Each environment has an address of its own: change the value by hand, or have CI write `.env` for its job.
 
-A call fails only with a `RestFailure`. Show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal.
+A call fails only with a `RestFailure`. Show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal. The `headers` of a response join several values of one header, so several `set-cookie` values cannot be told apart there.
 
 `GET` and `HEAD` repeat twice at most after a connection that broke and after 429, 502, 503 and 504, keeping to a `Retry-After` of up to 30 seconds. Other methods never repeat, since the server may have done what they asked, and their failure has the `retryAfter` that the server named.
 

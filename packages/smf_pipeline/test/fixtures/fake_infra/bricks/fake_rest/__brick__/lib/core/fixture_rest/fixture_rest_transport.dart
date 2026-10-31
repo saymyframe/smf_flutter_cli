@@ -45,6 +45,12 @@ final class FixtureRestTransport implements RestTransport {
       response.headers.forEach(
         (name, values) => headers[name] = values.join(', '),
       );
+      if (response.compressionState ==
+          HttpClientResponseCompressionState.decompressed) {
+        headers
+          ..remove(HttpHeaders.contentEncodingHeader)
+          ..remove(HttpHeaders.contentLengthHeader);
+      }
       return RestReply(
         status: response.statusCode,
         headers: headers,

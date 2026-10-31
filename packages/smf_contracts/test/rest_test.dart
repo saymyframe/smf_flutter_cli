@@ -828,6 +828,24 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
   result['each status'] = statuses;
 
+  // The headers of a body as the provider leaves them, whichever coding it
+  // decoded.
+  Future<Map<String, String>> headersOf(Map<String, String> headers) async =>
+      (await clientOf(FakeRest()..answers.add(reply(200, headers: headers)))
+              .post('notes'))
+          .headers;
+  result['the headers of a body'] = {
+    'in a coding': await headersOf({
+      'content-encoding': 'br',
+      'content-length': '27',
+      'x-kept': 'yes',
+    }),
+    'in none': await headersOf({
+      'content-length': '27',
+      'x-kept': 'yes',
+    }),
+  };
+
   // The errors of a transport and of a caller.
   Future<String> errorOf(Object answer) async {
     final fake = FakeRest()..answers.add(answer);
@@ -2352,6 +2370,19 @@ void main() {
         'fails only with a RestFailure, of a closed set of reasons', () async {
       final result =
           (await app.run('$_prelude$_failures'))! as Map<Object?, Object?>;
+
+      final headersOfBody =
+          result['the headers of a body']! as Map<Object?, Object?>;
+      expect(
+        headersOfBody['in a coding'],
+        {'content-encoding': 'br', 'content-length': '27', 'x-kept': 'yes'},
+        reason: 'Only the provider knows what its stack decoded, so the client '
+            'leaves the headers of a coding to it.',
+      );
+      expect(
+        headersOfBody['in none'],
+        {'content-length': '27', 'x-kept': 'yes'},
+      );
 
       expect(result['what a request carries'], [
         {

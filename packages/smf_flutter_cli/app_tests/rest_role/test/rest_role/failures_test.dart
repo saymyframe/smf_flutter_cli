@@ -157,6 +157,11 @@ void main() {
       text,
       reason: 'A provider gives the body decoded of its content-encoding.',
     );
+    expect(
+      outcome.headers,
+      isNot(contains('content-encoding')),
+      reason: 'The headers of a response tell of the body that it has.',
+    );
   });
 
   group('decoded', () {

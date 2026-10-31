@@ -2095,6 +2095,7 @@ void main() {
       },
       {
         'flavors': 'integration_test/flavors/probe.dart probeFlavor',
+        'rest_role': 'integration_test/rest_role/probe.dart probeRest',
         'firebase_auth':
             'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
@@ -2167,6 +2168,7 @@ void main() {
         'router_walk',
         'localization_role',
         'flavors',
+        'rest_role',
       ],
     );
     final directory = Directory.systemTemp.createTempSync('smf_probes_');
@@ -2212,6 +2214,7 @@ void main() {
         'probe11: router_walk/walk.dart',
         'probe12: localization_role/probe.dart',
         'probe13: flavors/probe.dart',
+        'probe14: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
@@ -2229,6 +2232,7 @@ void main() {
       ('router_walk', 'probe11.probeRoutes'),
       ('localization_role', 'probe12.probeLanguages'),
       ('flavors', 'probe13.probeFlavor'),
+      ('rest_role', 'probe14.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -3781,9 +3785,9 @@ void main() {
       'and the first gives the key of the role a value', () async {
     final roleTest = await restRoleAppTest();
     final sessionTest = await restSessionAppTest();
-    // No module of the CLI provides the role in the apps of its matrix yet, so
-    // the registry has a provider of the test, with the provider of the env
-    // role, which the role requires.
+    // A provider of the test, with the provider of the env role, which the role
+    // requires, since the tests select their apps by the role and not by the
+    // module of the CLI that provides it.
     const modules = <SmfModule>[
       FlutterCoreModule(),
       DartDefineModule(),
@@ -3851,6 +3855,36 @@ void main() {
     expect(withRole.where(none.appliesTo), isEmpty);
     final noSession = await restSessionAppTest(among: (_) => false);
     expect(withRole.where(noSession.appliesTo), isEmpty);
+  });
+
+  test(
+      'the tests of the REST role run in the apps of dio and in the apps with '
+      'every module, that of the session only with sign-in, and the test of '
+      'the module in the apps with the module, with neither mocks nor a probe',
+      () {
+    final roleTest = named('rest_role');
+    final sessionTest = named('rest_session');
+    final moduleTest = named('dio');
+    List<String> appsOf(MatrixAppTest test) => [
+          for (final app in apps)
+            if (test.appliesTo(app)) app.name,
+        ];
+
+    expect(appsOf(roleTest), ['dio with auth', 'dio', ..._everyModule]);
+    expect(appsOf(sessionTest), ['dio with auth', ..._everyModule]);
+    expect(appsOf(moduleTest), ['dio with auth', 'dio', ..._everyModule]);
+    expect(
+      {
+        for (final app in apps.where(sessionTest.appliesTo))
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+      },
+      AuthMode.values.toSet(),
+    );
+    expect(roleTest.startProbe!.function, 'probeRest');
+    expect(sessionTest.startProbe, isNull);
+    expect(moduleTest.roles, isEmpty, reason: 'It tests one provider.');
+    expect(moduleTest.mocks, isNull, reason: 'dio has no platform side.');
+    expect(moduleTest.startProbe, isNull);
   });
 
   test(
@@ -3938,6 +3972,8 @@ void main() {
           ..._googleSignIn,
           ..._appleSignIn,
           ..._signIn,
+          // The REST role uses the role.
+          'dio with auth',
         ])
           name: 'required',
         for (final name in _authModes) name: name.split('--auth-mode=').last,
@@ -5531,15 +5567,18 @@ void main() {
       expect(test.values, isNull);
       expect(test.mocks, isNull);
       expect(test.startProbe, isNull);
-      // The matrix of the CLI runs it in the apps whose modules give the
-      // role keys: those of revenuecat and of the paywall, whose tests give
-      // the keys values in .env, and those with every module.
+      // The matrix of the CLI runs it in the apps whose roles and modules give
+      // the role keys: those of dio, whose role gives the key of its address,
+      // of revenuecat and of the paywall, whose tests give the keys values in
+      // .env, and those with every module.
       expect(
         [
           for (final app in apps)
             if (named('env_role').appliesTo(app)) app.name,
         ],
         [
+          'dio with auth',
+          'dio',
           _rcAll,
           _rcAuthSettings,
           _rcAuthL10n,
@@ -5877,6 +5916,7 @@ void main() {
         ..._googleSignIn,
         ..._appleSignIn,
         ..._signIn,
+        'dio with auth',
         _rcAll,
         _rcAuthSettings,
         _rcAuthL10n,

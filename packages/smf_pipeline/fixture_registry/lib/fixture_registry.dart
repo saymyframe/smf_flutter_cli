@@ -28,6 +28,7 @@ import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
+import 'package:smf_dio/smf_dio.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -209,9 +210,12 @@ List<ModuleId> everyFixture({
 /// the push role that the CLI has, for the app test that it keeps and for
 /// the test of that role that the CLI keeps, which run there next to the
 /// other Firebase modules and show a message through those notifications.
-/// Last come dart_define, the provider of the env role that the CLI has,
-/// and RevenueCat, the provider of the purchases role that the CLI has,
-/// which reads its keys from the values of .env, for the app test that it
+/// Last come dart_define, the provider of the env role that the CLI has, dio,
+/// the provider of the REST role that the CLI has, for the app test that it
+/// keeps and for the tests of that role that the CLI keeps, which run there
+/// with the users of the session of Firebase Authentication, and RevenueCat,
+/// the provider of the purchases role that the CLI has, which reads its keys
+/// from the values of .env, for the app test that it
 /// keeps and for the tests of that role that the CLI keeps, which run
 /// there with the users of the session of Firebase Authentication and
 /// whose entry that restores purchases the settings screen shows too, and
@@ -264,6 +268,7 @@ List<SmfModule> severalProvidersModules() => const [
       LocalNotificationsModule(),
       FirebaseMessagingModule(),
       DartDefineModule(),
+      DioModule(),
       RevenueCatModule(),
       PaywallModule(),
       LauncherIconsModule(),

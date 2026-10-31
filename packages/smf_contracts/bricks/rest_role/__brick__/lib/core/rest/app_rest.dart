@@ -113,10 +113,15 @@ final class RestResponse {
   /// The status of the answer.
   final int status;
 
-  /// The headers, each name in lower case.
+  /// The headers, each name in lower case, and several values of one header
+  /// joined by `, `. So several `set-cookie` values cannot be told apart here.
+  /// A body that the provider decoded has neither `content-encoding` nor
+  /// `content-length` here, and a body in a coding that it did not decode has
+  /// both.
   final Map<String, String> headers;
 
-  /// The body.
+  /// The body: decoded when [headers] have no `content-encoding`, and otherwise
+  /// in that coding.
   final List<int> bytes;
 
   /// The body as UTF-8.
