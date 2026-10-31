@@ -452,6 +452,53 @@ void main() {
       expect(host.prompter.asked.last.shown, isNot(contains('None')));
     });
 
+    test('Enter takes the modules of a kind that are selected by default',
+        () async {
+      final registry = ModuleRegistry([
+        scaffold(),
+        TestModule('about'),
+        TestModule('start', selectedByDefault: true),
+        TestModule(
+          'firebase',
+          kind: const ModuleKind(id: 'infra', label: 'Infrastructure'),
+        ),
+      ]);
+      final host = FakeHost(
+        answers: [
+          null, // plain modules: the default
+          null, // infrastructure: the default
+        ],
+        terminal: true,
+      );
+
+      final selection = await select(
+        const CreateRequest(appName: 'app', org: 'com.example'),
+        registry,
+        host.environment(),
+      );
+
+      expect(ids(selection), ['start']);
+    });
+
+    test('a module selected by default can be left out', () async {
+      final registry = ModuleRegistry([
+        scaffold(),
+        TestModule('start', selectedByDefault: true),
+      ]);
+      final host = FakeHost(
+        answers: [<String>[]],
+        terminal: true,
+      );
+
+      final selection = await select(
+        const CreateRequest(appName: 'app', org: 'com.example'),
+        registry,
+        host.environment(),
+      );
+
+      expect(ids(selection), isEmpty);
+    });
+
     test('a module chosen by kind brings its dependencies', () async {
       final nav = TestRole<NoDsl>('nav');
       final registry = ModuleRegistry([

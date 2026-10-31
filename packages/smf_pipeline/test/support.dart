@@ -181,6 +181,7 @@ final class TestModule extends SmfModule {
     List<SocketFamily<Object?, SocketKind>> socketFamilies = const [],
     this.contributions = const [],
     String? description,
+    bool selectedByDefault = false,
   }) : descriptor = ModuleDescriptor(
           id: ModuleId(id),
           description: description ?? 'The module $id',
@@ -192,6 +193,7 @@ final class TestModule extends SmfModule {
           variants: variants,
           sockets: sockets,
           socketFamilies: socketFamilies,
+          selectedByDefault: selectedByDefault,
         );
 
   @override
@@ -539,7 +541,8 @@ final class Prompt {
 /// - `input`: a string, or `null` for the default value;
 /// - `select`: the start of the displayed choice to pick, or `null` for the
 ///   default value;
-/// - `multiSelect`: the starts of the displayed choices to pick.
+/// - `multiSelect`: the starts of the displayed choices to pick, or `null` for
+///   the default values.
 final class ScriptedPrompter implements SmfPrompter {
   ScriptedPrompter(List<Object?> answers) : _answers = [...answers];
 
@@ -594,7 +597,8 @@ final class ScriptedPrompter implements SmfPrompter {
     List<T> defaultValues = const [],
   }) async {
     final shown = [for (final c in choices) display?.call(c) ?? '$c'];
-    final answer = _next(Prompt('multiSelect', message, shown))! as List;
+    final answer = _next(Prompt('multiSelect', message, shown)) as List?;
+    if (answer == null) return defaultValues;
     return [
       for (var i = 0; i < choices.length; i++)
         if (answer.any((start) => shown[i].startsWith(start as String)))

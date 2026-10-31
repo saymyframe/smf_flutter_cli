@@ -371,6 +371,7 @@ void main() {
       expect(descriptor.id, const ModuleId('home'));
       expect(descriptor.kind, ModuleKinds.feature);
       expect(descriptor.provides, isEmpty);
+      expect(descriptor.selectedByDefault, isTrue);
       // The kind makes a feature require the router.
       expect(descriptor.requires, isEmpty);
       expect(descriptor.effectiveRequires, {routerRole});
