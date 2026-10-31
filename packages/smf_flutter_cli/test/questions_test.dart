@@ -260,15 +260,15 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
-      'App icon: which module provides it?',
-      'Splash screen: which module provides it?',
       'Events: which module provides it?',
+      'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Authentication: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
       'CI: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
@@ -376,15 +376,15 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
-      'App icon: which module provides it?',
-      'Splash screen: which module provides it?',
       'Events: which module provides it?',
+      'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Authentication: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
       'CI: which module provides it?',
     ]);
     expect(
@@ -622,15 +622,15 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
-      'App icon: which module provides it?',
-      'Splash screen: which module provides it?',
       'Events: which module provides it?',
+      'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Authentication: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
       'CI: which module provides it?',
     ]);
     expect(
@@ -700,15 +700,15 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
-      'App icon: which module provides it?',
-      'Splash screen: which module provides it?',
       'Events: which module provides it?',
+      'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Authentication: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
       'CI: which module provides it?',
     ]);
     expect(run.asked[5].shown, [
@@ -983,7 +983,7 @@ void main() {
       ),
     );
     expect(run.asked[events].shown, [
-      'event_bus — Event bus with event_bus',
+      'event_bus — Events between parts of the app with event_bus',
       'None',
     ]);
     final app = run.files.directory('/work/my_app');
@@ -1155,7 +1155,7 @@ void main() {
     expect(question.message, 'Splash screen: which module provides it?');
     expect(question.shown, [
       equals(
-        'native_splash — A splash screen for the light and the dark mode, '
+        'native_splash — Light and dark splash screen from assets/branding '
         'with flutter_native_splash',
       ),
       'None',
@@ -1482,7 +1482,7 @@ void main() {
 
   test(
       'a run in a terminal asks which modules provide the crash reporting '
-      'after the events, and offers Firebase Crashlytics, which brings '
+      'after the values of .env, and offers Firebase Crashlytics, which brings '
       'Firebase', () async {
     final run = await _create(
       {
@@ -1991,7 +1991,7 @@ void main() {
 
   test(
       'a run in a terminal asks which module provides the authentication '
-      'after the analytics, offers Firebase Authentication, which brings '
+      'after the events, offers Firebase Authentication, which brings '
       'Firebase, and then asks who may use the app without an account',
       () async {
     final run = await _create(
@@ -2025,12 +2025,19 @@ void main() {
     );
 
     expect(run.code, 0, reason: run.lines.join('\n'));
-    // The roles come in the order of the list of modules, and firebase_auth
-    // is the last but CI. An app has one provider of sign-in, or none. The
-    // mode of the auth role is a choice of the role, which it asks for once
-    // the modules of the app are known, with the default first.
-    final [..., provider, _, mode] = run.asked;
-    expect(provider.message, 'Authentication: which module provides it?');
+    // An app has one provider of sign-in, or none. The mode of the auth role
+    // is a choice of the role, which it asks for once the modules of the app
+    // are known, with the default first.
+    final messages = [for (final question in run.asked) question.message];
+    final authentication = messages.indexOf(
+      'Authentication: which module provides it?',
+    );
+    expect(
+      authentication,
+      messages.indexOf('Events: which module provides it?') + 1,
+    );
+    final provider = run.asked[authentication];
+    final mode = run.asked.last;
     expect(provider.shown, [
       'firebase_auth — Firebase Authentication with firebase_auth',
       'None',
@@ -2491,11 +2498,13 @@ void main() {
     // role requires, which come after the two screens that the
     // notifications role adds to; what is under the hood, the preferences
     // that the localization, the theme, the onboarding and the
-    // notifications require, the DI container and the state manager; the
-    // splash screen; the events; the REST API; then the services of crash
-    // reporting, analytics and authentication; and last CI. The choices of the
-    // roles come once the modules are known, and the question about a step that
-    // the user may leave for later once the app is rendered.
+    // notifications require, the DI container, the state manager and the
+    // events; what the app talks to, the authentication, the REST API and
+    // the purchases; what tells how it runs, the crash reporting and the
+    // analytics; and last what gets it released, its icon, its splash screen
+    // and CI. The choices of the roles come once the modules are known, and
+    // the question about a step that the user may leave for later once the
+    // app is rendered.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
       'Infrastructure: which do you want?',
@@ -2509,12 +2518,12 @@ void main() {
         'State management: sign_in requires the state management role. '
         'Which module provides it?',
       ),
-      'App icon: which module provides it?',
-      'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'REST API: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
       'CI: which module provides it?',
       'Who may use the app without an account?',
       startsWith('Making the app icon from assets/branding ('),

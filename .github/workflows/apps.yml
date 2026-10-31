@@ -344,7 +344,9 @@ jobs:
     runs-on: ubuntu-latest
     # About 10 minutes: the app and its first build with Gradle. When the job
     # writes an entry of the cache of Gradle from an empty cache, it also
-    # downloads about 1.8 GB and builds a release app, a few minutes more.
+    # downloads about 1.8 GB and builds a release app, a few minutes more. The
+    # commands of the CI of the app add a minute, and the first job of the
+    # matrix builds a release app once more.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -475,6 +477,22 @@ jobs:
         with:
           path: *gradle_paths
           key: ${{ steps.gradle_lookup.outputs.cache-primary-key }}
+
+      # What the CI of the app runs on its first push, in a clone of a commit
+      # of it, so without .env and whatever else its .gitignore keeps out. The
+      # first job of the matrix also builds the app as its CI does, in a clone
+      # of its own, with values for its keys that the matrix tool makes up, and
+      # for x86_64 alone. The step comes after the save, so that the entry of
+      # the cache stays what the two builds above need. The commands fetch
+      # their packages and need no secret: a clone has no .env, so the checks
+      # copy .env.example, where every value is empty.
+      - name: Run the commands of the CI of the app with every module in a clone of it
+        env: *app_env
+        run: |
+          for app in "$RUNNER_TEMP/SMF apps/android"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --ci-commands --app "$APP" \
+              ${{ strategy.job-index == 0 && '--build' || '' }} "${app%/}"
+          done
 
   # An app with every module but the modules whose steps need an external
   # service, such as the Firebase project that flutterfire configures an

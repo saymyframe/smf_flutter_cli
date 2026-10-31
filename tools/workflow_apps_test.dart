@@ -3954,6 +3954,36 @@ jobs:
   );
 
   test(
+      'the job that builds each app of the plan for Android runs the commands '
+      'of the CI of the app, after the save of the cache of Gradle, and only '
+      'its first job builds the app as its CI does', () {
+    final top = Process.runSync('git', ['rev-parse', '--show-toplevel']);
+    expect(top.exitCode, 0, reason: '${top.stderr}');
+    final file = File('${'${top.stdout}'.trim()}/.github/workflows/apps.yml');
+    final jobs =
+        (loadYaml(file.readAsStringSync()) as YamlMap)['jobs'] as YamlMap;
+    final android = jobs['android'] as YamlMap;
+    final matrix = (android['strategy'] as YamlMap)['matrix'] as YamlMap;
+    final steps = (android['steps'] as YamlList).cast<YamlMap>();
+    final commands = steps.indexWhere(
+      (step) => '${step['run'] ?? ''}'.contains('--ci-commands'),
+    );
+
+    expect(matrix['app'], r'${{ fromJSON(needs.plan.outputs.apps) }}');
+    expect(commands, isNonNegative, reason: 'No step runs the commands.');
+    expect(
+      commands,
+      greaterThan(
+        steps.indexWhere((step) => step['name'] == 'Save the cache of Gradle'),
+      ),
+    );
+    expect(
+      steps[commands]['run'],
+      contains(r"${{ strategy.job-index == 0 && '--build' || '' }}"),
+    );
+  });
+
+  test(
       'the workflows and the scripts of the repository choose their apps by '
       'role and take them from the plan, and each exception applies to one '
       'of their steps', () {

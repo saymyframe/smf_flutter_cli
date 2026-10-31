@@ -42,7 +42,7 @@ final class NativeSplashModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description: 'A splash screen for the light and the dark mode, with '
+        description: 'Light and dark splash screen from assets/branding with '
             'flutter_native_splash',
         kind: ModuleKinds.infrastructure,
         providers: [RoleProvider.plain(splashRole)],

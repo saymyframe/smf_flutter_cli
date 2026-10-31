@@ -8,6 +8,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_ci.dart';
+import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
@@ -144,6 +145,18 @@ void main() {
 
       final every = apps.singleWhere((app) => app.everyModuleWith != null);
       expect(matrixCi(every)!.build.keys, ['SHOP_KEY', 'SHOP_URL']);
+    });
+
+    test(
+        'gives the commands of every app with every module of the CLI, whose '
+        'job of CI fails on an app without them', () async {
+      final (:apps, :failed) = await everyModuleAppsOf(smfModules);
+
+      expect(failed, isEmpty);
+      expect(apps, isNotEmpty);
+      for (final app in apps) {
+        expect(matrixCi(app), isNotNull, reason: app.name);
+      }
     });
 
     test('gives nothing for an app without the role or without its data',
