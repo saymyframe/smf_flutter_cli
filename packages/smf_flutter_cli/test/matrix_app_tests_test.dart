@@ -3813,7 +3813,11 @@ void main() {
     expect(
       [
         for (final app in ofRole)
-          (app.name, roleTest.appliesTo(app), sessionTest.appliesTo(app)),
+          (
+            app.name,
+            roleTest.appliesTo(app),
+            sessionTest.appliesTo(app),
+          ),
       ],
       [
         for (final app in ofRole)
@@ -3831,8 +3835,10 @@ void main() {
       reason: 'The role uses the auth role, so a provider has an app with it.',
     );
     for (final app in withRole) {
-      expect(roleTest.envValues!(app),
-          {key: roleTest.values!(app)['base_address']});
+      expect(
+        roleTest.envValues!(app),
+        {key: roleTest.values!(app)['base_address']},
+      );
       expect(roleTest.values!(app)['base_key'], key);
     }
 
