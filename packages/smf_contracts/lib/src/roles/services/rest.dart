@@ -255,20 +255,6 @@ List<SmfIssue> _checkRestUse(StructuralRuleInput<RoleImplementation> input) => [
           ),
     ];
 
-/// The note of the role in the guide for coding agents: how code makes a
-/// request and reads its answer, what a failure is, what repeats and how long
-/// an attempt takes, what a provider implements, and how a test gets an
-/// answer.
-const String _restAgentNote = '''
-- `appRest` in `${RestRole.clientFile}` makes the requests of the app: `appRest.get('notes')`, `post`, `put`, `patch`, `delete`, `head`. A path is relative to `REST_BASE_URL` in `.env`, with or without a leading slash. A full address goes where it says. Call it from the state of a screen or from a repository, never from a widget, and create no other `AppRestClient` in the code of the app.
-- `response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`.
-- A call fails only with a `RestFailure`: show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal. While `REST_BASE_URL` is empty, a relative path fails with `notConfigured`, and the app still builds and starts.
-- `GET` and `HEAD` repeat by themselves after a broken connection and after 429, 502, 503 and 504, keeping to `Retry-After`. Other methods never do. Never wrap a call in a loop of your own.
-- The `timeout` of a call is per attempt, 30 seconds by default, so a `GET` with its repeats may take longer. `RestCancel` ends a call: cancel it where the state of a screen is disposed of.
-- A new provider implements `RestTransport` of `${RestRole.transportFile}`, and only the files of that implementation import it. The code of the app calls neither `createRestTransport()` nor `appRest.use()`, which is for tests.
-- In a test, `RestTestServer` of `${RestRole.testServerFile}` is a local server, or `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a request to that server runs in `tester.runAsync`.
-''';
-
 /// What the role adds to its note in an app with sign-in: where the token goes,
 /// what a 401 does, and what a request at start-up meets.
 const String _restTokenNote = '''
@@ -339,8 +325,20 @@ final class _RestTemplate extends _ServiceTemplate<RoleImplementation> {
   @override
   SocketRef<CodeSocket> get implementations => RestRole.implementations;
 
+  /// The note of the role in the guide for coding agents: how code makes a
+  /// request and reads its answer, what a failure is, what repeats and how
+  /// long an attempt takes, what a provider implements, and how a test gets an
+  /// answer.
   @override
-  String get agentNote => _restAgentNote;
+  String get agentNote => '''
+- `appRest` in `$file` makes the requests of the app: `appRest.get('notes')`, `post`, `put`, `patch`, `delete`, `head`. A path is relative to `REST_BASE_URL` in `.env`, with or without a leading slash. A full address goes where it says. Call it from the state of a screen or from a repository, never from a widget, and create no other `AppRestClient` in the code of the app.
+- `response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`.
+- A call fails only with a `RestFailure`: show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal. While `REST_BASE_URL` is empty, a relative path fails with `notConfigured`, and the app still builds and starts.
+- `GET` and `HEAD` repeat by themselves after a broken connection and after 429, 502, 503 and 504, keeping to `Retry-After`. Other methods never do. Never wrap a call in a loop of your own.
+- The `timeout` of a call is per attempt, 30 seconds by default, so a `GET` with its repeats may take longer. `RestCancel` ends a call: cancel it where the state of a screen is disposed of.
+- A new provider implements `$service` of `${RestRole.transportFile}`, and only the files of that implementation import it. The code of the app calls neither `$factory()` nor `appRest.use()`, which is for tests.
+- In a test, `RestTestServer` of `${RestRole.testServerFile}` is a local server, or `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a request to that server runs in `tester.runAsync`.
+''';
 
   /// The bricks, the key, the permission and the notes of the role. The role
   /// registers nothing in a DI container: the code of an app uses `appRest`.
