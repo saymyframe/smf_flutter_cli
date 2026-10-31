@@ -956,10 +956,10 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
-  /// The fixture REST that keeps one `HttpClient` for its exchanges, until one of
-  /// them has to stop. `HttpClient` asks `HttpOverrides` only when it is created,
-  /// so such a client stays with the stand-in of the binding of the tests after
-  /// `RestTestServer` took the stand-in away.
+  /// The fixture REST that keeps one `HttpClient` for its exchanges, until one
+  /// of them has to stop. `HttpClient` asks `HttpOverrides` only when it is
+  /// created, so such a client stays with the stand-in of the binding of the
+  /// tests after `RestTestServer` took the stand-in away.
   static const restKeepingClient = BrokenModule._(
     FakeRestModule(),
     ModuleId('broken_rest_keeps_client'),

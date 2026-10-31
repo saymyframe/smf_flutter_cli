@@ -2466,8 +2466,8 @@ void main() {
     // that the localization, the theme, the onboarding and the
     // notifications require, the DI container and the state manager; the
     // splash screen; the events; the REST API; then the services of crash
-    // reporting, analytics and authentication; and last CI. The choices of the roles come
-    // once the modules are known, and the question about a step that the user
+    // reporting, analytics and authentication; and last CI. The choices of the
+    // roles come once the modules are known, and the question about a step that the user
     // may leave for later once the app is rendered.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
