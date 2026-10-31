@@ -31,7 +31,7 @@ A build takes the values of `${EnvRole.dotEnvFile}` from the variables of the Gi
 gh variable set <KEY> --env $first --body '<value>'
 ```
 
-Repeat this for each environment that needs it. GitHub offers environments on a private repository only with a paid plan. Without them, set **Repository variables** instead, which give every build the same values. A key of your own also needs a line under `env:` of the step that writes `${EnvRole.dotEnvFile}`, as in `MY_SERVICE_KEY: \${{ vars.MY_SERVICE_KEY }}`.
+Repeat this for each environment that needs it. GitHub documents environment variables on a private repository only for its paid plans, though a private repository on the Free plan takes them with this command too. If yours does not, set **Repository variables** instead, which give every build the same values. A key of your own also needs a line under `env:` of the step that writes `${EnvRole.dotEnvFile}`, as in `MY_SERVICE_KEY: \${{ vars.MY_SERVICE_KEY }}`.
 ''');
   }
   buffer.write('''
