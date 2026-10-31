@@ -29,6 +29,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_settings/smf_settings.dart';
 
@@ -65,6 +66,29 @@ const _appEntryBuildingRootOnce = BrokenModule(
       'Widget build(BuildContext context) =>',
       'Widget build(BuildContext context) => _root ??=',
     ),
+  ],
+);
+
+/// The app icon whose image for the App Store has alpha: launcher_icons, the
+/// provider of the app icon role of the CLI, with the foreground as the image
+/// of the icon and without what takes the alpha away. So the tool only warns,
+/// and the step of the module succeeds.
+///
+/// No fixture provides the role, since a fixture would have to write every
+/// density and icon set by hand, and only its test would read them. So the
+/// broken one changes the module of the CLI, here for the reason that the app
+/// entry above is.
+const _appIconWithAlpha = BrokenModule(
+  LauncherIconsModule(),
+  id: ModuleId('broken_app_icon_with_alpha'),
+  description: 'App icon with alpha on iOS (fixture)',
+  file: 'flutter_launcher_icons.yaml',
+  changes: [
+    (
+      'image_path: "${AppIconRole.imageFile}"',
+      'image_path: "${AppIconRole.foregroundFile}"',
+    ),
+    ('remove_alpha_ios: true', 'remove_alpha_ios: false'),
   ],
 );
 
@@ -1401,6 +1425,26 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        _appIconWithAlpha,
+        role: appIconRole,
+        bug: 'Its icon for the App Store is made from the logo on a '
+            'transparent background and keeps the alpha, which the App Store '
+            'refuses.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _appIconTests,
+            'on iOS the icon for the App Store has no alpha',
+            'The App Store refuses an icon with alpha',
+          ),
+          MatrixExpectedFailure(
+            _appIconTests,
+            'on iOS the icon for the App Store has the pixels of the source',
+            'is made from the image of the role',
+          ),
+        ],
+      ),
+      BrokenProvider(
         _appEntryDefaultingToRelease,
         role: appEntryRole,
         bug: 'The line default-flavor of its pubspec names the flavor for a '
@@ -2367,6 +2411,9 @@ const _probeTest = 'the probe of the role finds no problem';
 const _eachLanguageSupported =
     'For each language of the app, the root has a delegate of each kind of '
     'localizations that supports it.';
+
+/// The file of the test of the native projects of the app icon role.
+const _appIconTests = 'test/app_icon_role/app_icon_role_test.dart';
 
 /// The file of the tests of the token of the auth role, and the reasons of
 /// its expectations that the fixture sign-in with a known bug of the token

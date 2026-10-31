@@ -867,6 +867,7 @@ void main() {
         'mode_declaration',
         'anonymous_mode',
         'minimum_firebase_cli',
+        'configure_script',
       ]);
       final language = brick.vars['email_language']! as RoleVar;
       expect(language.role, localizationRole);
@@ -911,6 +912,7 @@ void main() {
       expect(brick.vars['anonymous_mode'], 'anonymous');
       expect(AuthMode.anonymous.name, 'anonymous');
       expect(brick.vars['minimum_firebase_cli'], '15.34.0');
+      expect(brick.vars['configure_script'], 'tool/configure_firebase.dart');
       expect(firstFirebaseCliWithSignIn, '15.34.0');
     });
 
@@ -1763,8 +1765,8 @@ void main() {
             'hint of one that is not enabled', () {
           // The script of the app enables Google, and only the Firebase
           // console Apple.
-          const script = 'run `$enableSignInCommand` in the directory of the '
-              'app, or ';
+          const script = 'run `$enableSignInCommand --project '
+              'stand-in-project` in the directory of the app, or ';
           String notEnabled(String method) =>
               'notConfigured: Sign-in with $method is not enabled in the '
               'Firebase project stand-in-project (Firebase answered '
@@ -2174,7 +2176,8 @@ void main() {
           'the script that enables it and the link to the project', () {
         const link = 'https://console.firebase.google.com/project/'
             'stand-in-project/authentication/providers';
-        const enable = 'run `$enableSignInCommand` in the directory of the '
+        const enable = 'run `$enableSignInCommand --project stand-in-project` '
+            'in the directory of the '
             'app, or enable Email/Password, and Anonymous for an app that '
             'signs in anonymous users, in the Firebase console under '
             'Authentication > Sign-in method: $link';
@@ -2284,7 +2287,7 @@ void main() {
           'and what it leaves as it is', () {
         expect(
           readmeSectionOf(const {}),
-          allOf(
+          allOf([
             contains('```bash\n$enableSignInCommand\n```\n'),
             contains('```bash\n$enableSignInCommand --account <email>\n```\n'),
             contains(
@@ -2295,11 +2298,21 @@ void main() {
                 'the app.'),
             // The step has a notice, so a run asks about it.
             contains('`smf create` asks to enable them right after '
-                '`flutterfire configure` has configured the app.'),
+                '`dart ${FirebaseCoreModule.configureScript} '
+                '${AppEntryRole.defaultFlavor.name}` has configured the '
+                'app.'),
+            // A run is for one project, and flavors may have several.
+            contains('so once `firebase.json` has several, the script stops '
+                'and lists them. Run it once for each:\n\n```bash\n'
+                '$enableSignInCommand --project <id>\n```\n'),
+            contains('in each project that a flavor is configured for.'),
+            // No command of a plain run of flutterfire, whose files no
+            // flavor reads.
+            isNot(contains('flutterfire')),
             // Of no way to sign in with an identity provider.
             isNot(contains('Google')),
             isNot(contains('Apple')),
-          ),
+          ]),
         );
         // What the script reads, each a file of the app or a name in it.
         final code = _codeOf(readmeSectionOf(const {}));
@@ -2322,6 +2335,10 @@ void main() {
           allOf(
             contains("const _sessionFile = '${AuthRole.sessionFile}';"),
             contains(r"File('${app.path}/firebase.json')"),
+            contains(
+              'const _configureScript = '
+              "'${FirebaseCoreModule.configureScript}';",
+            ),
             contains("'deploy',\n      '--only',\n      'auth',"),
           ),
         );
@@ -2346,7 +2363,7 @@ void main() {
         expect(
           app.files[_implementation]!.text,
           allOf(
-            contains('run `$enableSignInCommand` in the '),
+            contains('run `$enableSignInCommand --project '),
             contains('enable Email/Password, and Anonymous'),
             contains('Authentication > Sign-in method'),
           ),
@@ -2800,30 +2817,38 @@ void main() {
           contains('It never disables a method, and it changes no file of '
               'the app but those that Google needs, as told below.'),
           // The brand goes to whichever project the script enables the
-          // methods in, and the rest only to the project of firebase.json.
+          // methods in, and the rest only to the apps of firebase.json.
           contains('\n\nFor Google sign-in, the script also gives Google the '
               'name of the app and the email address of the account of the '
               'Firebase CLI for the consent screen that users see when they '
               'sign in.'),
           contains('\n\nThe script sets up the rest of what Google needs only '
-              'for the project that `firebase.json` names, not for one that '
-              '`--project` names:\n\n- It registers'),
+              'for the apps that `firebase.json` names in the project of the '
+              'run. A project that no flavor is configured for gets none of '
+              'it:\n\n- It registers'),
           contains('run it with `--account <email>`, or enable Google in the '
               'Firebase console.'),
           contains('\n- It registers the SHA-1 and SHA-256 of the Android '
-              'debug key of the machine that runs it'),
+              'debug key of the machine that runs it for each of those '
+              'Android apps'),
           contains('the script creates it, as the first debug build would.'),
-          contains('\n- It downloads the Firebase files of the app again'),
-          contains('\n- It writes the URL scheme of the iOS app, '
-              '`REVERSED_CLIENT_ID` of `ios/Runner/GoogleService-Info.plist`, '
-              'into `CFBundleURLTypes` of `ios/Runner/Info.plist`.'),
-          contains('\n\nRun the script again after `flutterfire configure` '
-              'for another project.\n'),
+          contains('\n- It downloads the Firebase files of those apps again, '
+              'once they have the clients of Google, and writes them to the '
+              'paths that `firebase.json` names.'),
+          contains('\n- It writes the URL scheme of each of those iOS apps, '
+              '`REVERSED_CLIENT_ID` of its `GoogleService-Info.plist`, into '
+              '`CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors '
+              'share that file, so it lists a scheme for each iOS app that '
+              'the script ran for'),
+          contains('\n\nAfter you configure a flavor for another project, run '
+              'the script for that project too.\n'),
+          isNot(contains('flutterfire')),
           contains('under Test and release > App integrity in the Play '
               'Console.'),
-          contains('```bash\nfirebase apps:android:sha:create <appId> <sha>\n'
-              '```\n\nThe section ${AppEntryRole.setupHeading} lists this '
-              'among the steps that you do by hand.\n'),
+          contains('```bash\nfirebase apps:android:sha:create <appId> <sha> '
+              '--project=<id>\n```\n\nThe section '
+              '${AppEntryRole.setupHeading} lists this among the steps that '
+              'you do by hand.\n'),
           contains('\n\nApple is enabled in the Firebase console, which the '
               'Firebase CLI cannot do:'),
           contains('(App Store Review Guideline 5.1.1(v))'),
@@ -2837,7 +2862,10 @@ void main() {
           contains('never put it into the app or its repository.'),
           contains('fails with `notConfigured`, and the account stays. The '
               'section ${AppEntryRole.setupHeading} lists both, adding Apple '
-              'and entering the key, among the steps that you do by hand.\n'),
+              'and entering the key, among the steps that you do by hand. '
+              'Each Firebase project has these settings of its own, so repeat '
+              'them in the project of each flavor that signs in with '
+              'Apple.\n'),
           // Each block is a paragraph of its own.
           isNot(contains('\n\n\n')),
         ]),
@@ -2913,7 +2941,12 @@ void main() {
         _codeOf(note),
         containsAll([enableSignInScript, 'ios/Runner/Info.plist']),
       );
-      for (final path in [enableSignInScript, 'ios/Runner/Info.plist']) {
+      expect(note, contains('`${FirebaseCoreModule.configureScript}`'));
+      for (final path in [
+        enableSignInScript,
+        FirebaseCoreModule.configureScript,
+        'ios/Runner/Info.plist',
+      ]) {
         expect(withBoth.files.keys, contains(path));
       }
       expect(methodsAgentNote(const {}), isNull);

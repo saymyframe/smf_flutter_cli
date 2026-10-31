@@ -194,7 +194,12 @@ void _expectTheAppWithout(
 }) {
   expect(
     app.files.keys.toSet(),
-    {...without.files.keys, CrashReportingRole.file, _implementation},
+    {
+      ...without.files.keys,
+      CrashReportingRole.file,
+      _implementation,
+      crashlyticsPhaseFixScript,
+    },
   );
   expect(
     app.files[CrashReportingRole.file]!.owner,
@@ -381,13 +386,12 @@ void main() {
 
     test(
         'contributes its brick, firebase_crashlytics, its implementation of '
-        'the reporter, created without waiting, the fix of the build phase '
-        'for Crashlytics, its section of the README and its note for coding '
-        'agents, and nothing else', () {
+        'the reporter, created without waiting, its section of the README and '
+        'its note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(6));
-      final note = contributions[5] as SocketContribution;
+      expect(contributions, hasLength(5));
+      final note = contributions[4] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, crashReportingRole.description);
       expect(note.entryValue, AgentNote(agentNote));
@@ -397,7 +401,7 @@ void main() {
       expect(brick.bundle.name, 'firebase_crashlytics');
       expect(
         [for (final file in brick.bundle.files) file.path],
-        [_implementation],
+        unorderedEquals([_implementation, crashlyticsPhaseFixScript]),
       );
       final dependency = contributions[1] as PubspecDependency;
       expect(dependency.package, 'firebase_crashlytics');
@@ -417,76 +421,40 @@ void main() {
         ),
       );
       expect(implementation.create!.import, implementation.type.import);
-      expect(contributions[3], same(crashlyticsPhaseFix));
-      final readme = contributions[4] as SocketContribution;
+      final readme = contributions[3] as SocketContribution;
       expect(readme.socket, AppEntryRole.readmeSections);
       expect(readme.entryKey, 'Crashlytics');
       expect(readme.entryValue, readmeSection);
     });
 
     test(
-        'continues the step of firebase_core that runs flutterfire configure, '
-        'on macOS, with Ruby that points the phase for Crashlytics of '
-        'flutterfire at the upload script in the build directory of the app',
-        () {
-      final fix = module
-          .contribute(ContractHarness.defaultContext)
-          .whereType<PostGenStep>()
-          .single;
-
-      expect(fix.followUpOf, FirebaseCoreModule.configureStep);
-      expect(fix.tool.executable, 'ruby');
-      expect(fix.tool.prefixArgs, isEmpty);
-      expect(fix.arguments, hasLength(3));
-      expect(fix.arguments.first, '-e');
+        'runs nothing after generation itself, since the fix of the phase has '
+        'to follow every run of flutterfire: its script is in the directory '
+        'that the script of firebase_core runs after them', () {
       expect(
-        fix.arguments[1],
-        allOf(
-          contains(
-            r'"$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/'
-            'Crashlytics/run"',
-          ),
-          contains(
-            r'"$SRCROOT/../build/ios/SourcePackages/checkouts/'
-            'firebase-ios-sdk/Crashlytics/run"',
-          ),
-        ),
+        module
+            .contribute(ContractHarness.defaultContext)
+            .whereType<PostGenStep>(),
+        isEmpty,
       );
-      expect(fix.arguments.last, AppEntryRole.xcodeProjectFile);
       expect(
-        fix.description,
-        'Fixing the Crashlytics phase of flutterfire for flutter build ipa',
+        crashlyticsPhaseFixScript,
+        startsWith('${FirebaseCoreModule.configuredHooksDirectory}/'),
       );
-      // It changes a file of the app, so it runs without asking or the
-      // terminal, and the app is complete without it.
-      expect(fix.interactive, isFalse);
-      expect(fix.external, isFalse);
-      expect(fix.skippable, isTrue);
-      // flutterfire adds the phase only on macOS, and elsewhere there is
-      // nothing to fix; the step that it continues needs the Ruby of the
-      // Mac.
-      expect(fix.hosts, {HostOperatingSystem.macos});
-      expect(fix.needs, isEmpty);
-      expect(fix.when, isEmpty);
-      expect(fix.id, isNull);
-      // The README of the app gives it as the pipeline prints it, in single
-      // quotes, which the program has none of.
-      expect(fix.arguments[1], isNot(contains("'")));
-      expect(
-        crashlyticsPhaseFixCommand,
-        "ruby -e '${fix.arguments[1]}' ${fix.arguments[2]}",
-      );
+      expect(crashlyticsPhaseFixCommand, 'dart $crashlyticsPhaseFixScript');
     });
 
     test(
-        'tells in the README of the app how to fix the phase once the app is '
-        'configured again on macOS', () {
+        'tells in the README of the app which script fixes the phase after '
+        'flutterfire configure by hand', () {
       expect(readmeHeading, 'Crashlytics');
       expect(
         readmeSection,
         allOf(
           contains('```bash\n$crashlyticsPhaseFixCommand\n```\n'),
           contains('`flutter build ipa` needs one more change on macOS'),
+          contains('ends each flavor with `$crashlyticsPhaseFixScript`'),
+          contains('`${FirebaseCoreModule.configureScript}`'),
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
         ),
       );
@@ -521,8 +489,8 @@ void main() {
     });
 
     test(
-        'runs the fix of the phase in the apps of the module right after '
-        'flutterfire configure of firebase_core, which it continues', () {
+        'has only the step of firebase_core that configures Firebase in the '
+        'apps of the module', () {
       final apps = [
         for (final result in results)
           if (result.resolution!.modules
@@ -532,22 +500,18 @@ void main() {
 
       expect(apps, hasLength(2));
       for (final result in apps) {
-        final steps = [
-          for (final collected in result.validation!.postGenOrder.contributions)
-            (
-              '${collected.origin}',
-              collected.contribution as PostGenStep,
-            ),
-        ];
         expect(
-          [for (final (origin, step) in steps) (origin, step.id)],
           [
-            ('firebase_core', FirebaseCoreModule.configureStep),
-            ('firebase_crashlytics', null),
+            for (final collected
+                in result.validation!.postGenOrder.contributions)
+              (
+                '${collected.origin}',
+                (collected.contribution as PostGenStep).id
+              ),
           ],
+          [('firebase_core', FirebaseCoreModule.configureStep)],
           reason: '${result.contractCase}',
         );
-        expect(steps.last.$2, same(crashlyticsPhaseFix));
       }
     });
 
@@ -626,7 +590,7 @@ void main() {
     test(
         'tells coding agents to report through the reporter of the app, '
         'which its file implements on Crashlytics without printing, and '
-        'where the fix of the build phase is', () {
+        'which script fixes the build phase', () {
       final index = DartFileIndexer.index(
         _implementation,
         withCrashlytics.files[_implementation]!.text,
@@ -664,18 +628,15 @@ void main() {
           '`FirebaseCrashlytics.instance`',
         ),
       );
-      // The section of the README with the fix, which the note points to.
+      // The script, which the app has, and which the rule of the guide checks
+      // by its path.
+      expect(withCrashlytics.files, contains(crashlyticsPhaseFixScript));
       expect(
-        withCrashlytics.files[AppEntryRole.readmeFile]!.text,
-        contains('\n## $readmeHeading\n'),
+        withCrashlytics.files[crashlyticsPhaseFixScript]!.owner,
+        const ModuleOrigin(FirebaseCrashlyticsModule.id),
       );
-      expect(
-        agentNote,
-        contains(
-          'the fix of the section $readmeHeading of '
-          '`${AppEntryRole.readmeFile}`.',
-        ),
-      );
+      expect(agentNote, contains('`$crashlyticsPhaseFixScript`'));
+      expect(agentNote, contains('`${FirebaseCoreModule.configureScript}`'));
     });
 
     test(

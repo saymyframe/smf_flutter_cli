@@ -61,6 +61,9 @@ final class _Prompter implements SmfPrompter {
   }) async =>
       _pick(message, choices, display);
 
+  /// The step of a module that is skippable asks before it runs: this answers
+  /// yes when a question of the script starts the message, and fails on any
+  /// other question.
   @override
   Future<bool> confirm(String message, {bool defaultValue = false}) async {
     asked.add((message: message, shown: const []));
@@ -226,6 +229,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['bloc'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
@@ -255,6 +259,7 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
+      'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Purchases: which module provides it?',
@@ -338,6 +343,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['riverpod'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
@@ -367,6 +373,7 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
+      'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Purchases: which module provides it?',
@@ -421,6 +428,7 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
@@ -518,6 +526,7 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
@@ -576,6 +585,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
@@ -605,6 +615,7 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
+      'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Purchases: which module provides it?',
@@ -649,6 +660,7 @@ void main() {
       'Router': ['go_router'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
@@ -679,6 +691,7 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
+      'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Purchases: which module provides it?',
@@ -715,6 +728,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
@@ -854,6 +868,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
@@ -927,6 +942,7 @@ void main() {
       'Router': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
@@ -1000,6 +1016,7 @@ void main() {
       'Router': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
@@ -1108,6 +1125,7 @@ void main() {
       'Analytics': <String>[],
       'Authentication': ['None'],
       'CI': ['None'],
+      'App icon': ['None'],
     };
     const step = 'Making the splash screen from assets/branding';
     final declined = await _create({
@@ -1166,6 +1184,7 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['material_theme'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
@@ -1259,6 +1278,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
@@ -1378,6 +1398,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
         'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
@@ -1455,6 +1476,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
         'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
@@ -1539,24 +1561,19 @@ void main() {
         contains('  firebase_core: '),
       ),
     );
-    // The fix of the phase for Crashlytics that flutterfire adds is left
-    // for later with the configuration, which it continues: the second
-    // step of the list, after the first, and no warning.
-    const configuration = '2 steps are left for later. Run them in the app, '
-        'in this order:\n'
-        '  1. Configuring Firebase with flutterfire (the run skips external '
+    // The script that configures a flavor fixes the phase for Crashlytics that
+    // flutterfire adds, so the run has one step to leave for later, and no
+    // warning.
+    const configuration = 'One step is left for later. Run it in the app:\n'
+        '  Configuring Firebase with flutterfire (the run skips external '
         'setup, and ';
     const itsCommand = 'are missing):\n'
-        '     dart tool/configure_firebase.dart dev';
-    const fix = '\n  2. Fixing the Crashlytics phase of flutterfire for '
-        'flutter build ipa (it runs after step 1):\n'
-        "     ruby -e 'f = ARGV[0]; ";
+        '    dart tool/configure_firebase.dart dev';
     expect(
       run.lines[run.lines.length - 2],
-      stringContainsInOrder([configuration, itsCommand, fix]),
+      stringContainsInOrder([configuration, itsCommand]),
     );
     expect(run.warnings, isNot(contains(contains('flutterfire is not done'))));
-    expect(run.warnings, isNot(contains(contains('Crashlytics phase'))));
     expect(
       app.childFile('README.md').readAsStringSync(),
       allOf(contains('\n## Firebase\n'), contains('\n## Crashlytics\n')),
@@ -1576,6 +1593,7 @@ void main() {
         'Settings screen': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
         'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
@@ -1706,6 +1724,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
         'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
@@ -1804,6 +1823,7 @@ void main() {
       'Onboarding screen': ['onboarding'],
       'Localization': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
       'Splash screen': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
@@ -1899,6 +1919,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
         'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
@@ -1960,6 +1981,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
         'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
@@ -2150,6 +2172,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
         'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
@@ -2273,6 +2296,7 @@ void main() {
         'Onboarding screen': ['None'],
         'State management': ['riverpod'],
         'Theme': ['None'],
+        'App icon': ['None'],
         'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
@@ -2395,6 +2419,7 @@ void main() {
       'onboarding',
       'gen_l10n',
       'material_theme',
+      'launcher_icons',
       'native_splash',
       'firebase_messaging',
       'get_it',
@@ -2413,6 +2438,8 @@ void main() {
         'Onboarding screen': ['onboarding'],
         'Localization': ['gen_l10n'],
         'Theme': ['material_theme'],
+        'App icon': ['launcher_icons'],
+        'Making the app icon': ['yes'],
         'Splash screen': ['native_splash'],
         'Making the splash screen': ['yes'],
         'Push messages': ['firebase_messaging'],
@@ -2454,12 +2481,14 @@ void main() {
         'State management: sign_in requires the state management role. '
         'Which module provides it?',
       ),
+      'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'CI: which module provides it?',
       'Who may use the app without an account?',
+      startsWith('Making the app icon from assets/branding ('),
       equals(
         'Making the splash screen from assets/branding (dart run '
         'flutter_native_splash:create), for native_splash. Run it now?',

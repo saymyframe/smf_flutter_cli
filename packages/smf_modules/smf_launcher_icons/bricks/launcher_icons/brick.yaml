@@ -1,0 +1,12 @@
+name: launcher_icons
+description: "The sources of the icon of an SMF app, the configuration of flutter_launcher_icons and the script that makes the icon."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: icon_background, the colour behind the logo, and xcode_project,
+# the path of the Xcode project of the app.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

@@ -49,7 +49,7 @@ void main() {
 
     test(
         'of 1.4.1 looks for the upload script in the build directory of '
-        'Xcode, which the step that continues the configuration changes', () {
+        'Xcode, which the script of the module changes', () {
       final phase = crashlyticsPhases['1.4.1']!;
 
       expect(
@@ -59,7 +59,7 @@ void main() {
       expect(phase, isNot(contains(crashlyticsScriptInApp)));
     });
 
-    test('of 1.4.0 does not, so the step leaves it as it is', () {
+    test('of 1.4.0 does not, so the script leaves it as it is', () {
       expect(
         crashlyticsPhases['1.4.0'],
         isNot(contains(crashlyticsScriptInBuildDirectory)),

@@ -13,6 +13,7 @@ import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
@@ -41,6 +42,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final appleSignIn = await appTestsDirectoryOf('smf_apple_sign_in');
   final messaging = await appTestsDirectoryOf('smf_firebase_messaging');
   final home = await appTestsDirectoryOf('smf_home_flutter');
+  final launcherIcons = await appTestsDirectoryOf('smf_launcher_icons');
   final localNotifications = await appTestsDirectoryOf(
     'smf_local_notifications',
   );
@@ -617,6 +619,34 @@ Future<MatrixAppTests> smfAppTests() async {
       // which the app is then in and remembers, or the languages of the
       // device.
       await languageSettingAppTest(),
+      // The native projects of the apps with the app icon role, whichever
+      // module provides it, once the step of the provider has run: an image
+      // for each density and an adaptive icon on Android, and on iOS an icon
+      // set for each name of the build configurations, whose icon for the
+      // App Store has no alpha and the pixels of the source.
+      MatrixAppTest(
+        '$cli/app_icon_role',
+        appliesTo: (app) => app.hook!.presentRoles.contains(appIconRole),
+        devDependencies: const ['xml'],
+        values: (_) => const {
+          'image_file': AppIconRole.imageFile,
+          'foreground_file': AppIconRole.foregroundFile,
+          'android_manifest_file': AppEntryRole.androidManifestFile,
+          'xcode_project_file': AppEntryRole.xcodeProjectFile,
+        },
+        roles: {appIconRole},
+      ),
+      // What the real flutter_launcher_icons leaves in the Xcode project,
+      // with the script of the module: the setting that it damages is back,
+      // and one icon has every build configuration. A later version of the
+      // tool that damages another line fails here.
+      MatrixAppTest(
+        '$launcherIcons/launcher_icons',
+        appliesTo: _has(LauncherIconsModule.id),
+        values: (_) => const {
+          'xcode_project_file': AppEntryRole.xcodeProjectFile,
+        },
+      ),
       // The splash screen of the apps with the splash role, whichever module
       // provides it: the step of the provider made it in the native projects
       // of the app, for each mode of the device, on Android below 12 and
@@ -642,9 +672,10 @@ Future<MatrixAppTests> smfAppTests() async {
     // provider of the DI role, of the events role, of the preferences
     // role, of the env role, of the auth role, of the notifications role,
     // of the push role, of the purchases role, of the settings screen role,
-    // of the theme role, of the localization role and of the splash role
-    // gets the tests of its role. Each provider of the app entry role gets
-    // the test of the theme role, which checks that its root rebuilds.
+    // of the theme role, of the localization role, of the app icon role and of
+    // the splash role gets the tests of its role. Each provider of the app
+    // entry role gets the test of the theme role, which checks that its root
+    // rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -659,6 +690,7 @@ Future<MatrixAppTests> smfAppTests() async {
       themeRole,
       appEntryRole,
       localizationRole,
+      appIconRole,
       splashRole,
     },
   );
