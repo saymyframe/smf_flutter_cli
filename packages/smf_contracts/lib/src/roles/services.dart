@@ -11,6 +11,8 @@ import 'package:smf_contracts/bundles/preferences_role_bundle.dart';
 import 'package:smf_contracts/bundles/purchases_role_bundle.dart';
 import 'package:smf_contracts/bundles/purchases_role_setting_bundle.dart';
 import 'package:smf_contracts/bundles/push_role_bundle.dart';
+import 'package:smf_contracts/bundles/rest_role_bundle.dart';
+import 'package:smf_contracts/bundles/rest_role_session_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/brick_templates.dart';
 import 'package:smf_contracts/src/roles/contributors.dart';
@@ -24,13 +26,14 @@ part 'services/notifications.dart';
 part 'services/preferences.dart';
 part 'services/purchases.dart';
 part 'services/push.dart';
+part 'services/rest.dart';
 
 /// The implementation of a service role that a provider contributes as its
 /// data, such as the Firebase implementation of `AnalyticsService`.
 ///
 /// The service roles are [eventsRole], [preferencesRole], [analyticsRole],
-/// [crashReportingRole], [authRole], [notificationsRole], [pushRole] and
-/// [purchasesRole].
+/// [crashReportingRole], [authRole], [notificationsRole], [pushRole],
+/// [purchasesRole] and [restRole].
 /// Each generates the interface of its service and a factory that returns
 /// the implementation, or, for a role with many providers, one service that
 /// forwards every call to all of them. Every provider contributes exactly
@@ -48,11 +51,11 @@ part 'services/push.dart';
 /// The factory takes no services: the services work without a DI
 /// container. The role registers its service in the DI container when one
 /// is present, but for the [authRole], the [notificationsRole], the
-/// [pushRole] and the [purchasesRole], which register nothing: the code of
-/// an app does not use the service of their provider, only the controller
-/// that the role generates over it, the session of [AuthRole], the
-/// notifications of [NotificationsRole], the push messages of [PushRole]
-/// and the purchases of [PurchasesRole].
+/// [pushRole], the [purchasesRole] and the [restRole], which register
+/// nothing: the code of an app does not use the service of their provider,
+/// only the controller that the role generates over it, the session of
+/// [AuthRole], the notifications of [NotificationsRole], the push messages of
+/// [PushRole], the purchases of [PurchasesRole] and the client of [RestRole].
 ///
 /// A role that an app can have several providers of creates each
 /// implementation on its own: one whose factory throws, or whose

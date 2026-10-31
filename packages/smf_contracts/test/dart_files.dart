@@ -84,6 +84,174 @@ abstract class BuildContext {
 }
 ''';
 
+/// A stand-in for the part of Flutter's foundation library that the files
+/// of a role with the session of the auth role use, with the signatures of
+/// Flutter 3.44: the app runs in debug mode, and what it prints goes to
+/// `debugPrinted`. A notifier that was disposed of throws when it is used.
+const sessionFoundation = r'''
+const bool kDebugMode = true;
+
+/// What the app printed with [debugPrint], in order.
+final List<String> debugPrinted = [];
+
+void debugPrint(String? message, {int? wrapWidth}) =>
+    debugPrinted.add('$message');
+
+class Immutable {
+  const Immutable();
+}
+
+const Immutable immutable = Immutable();
+
+typedef VoidCallback = void Function();
+
+abstract class Listenable {
+  const Listenable();
+
+  void addListener(VoidCallback listener);
+
+  void removeListener(VoidCallback listener);
+}
+
+abstract class ValueListenable<T> extends Listenable {
+  const ValueListenable();
+
+  T get value;
+}
+
+mixin class ChangeNotifier implements Listenable {
+  final List<VoidCallback> _listeners = [];
+  bool _disposed = false;
+
+  void _notDisposed() {
+    if (_disposed) throw StateError('A $runtimeType was used after dispose.');
+  }
+
+  @override
+  void addListener(VoidCallback listener) {
+    _notDisposed();
+    _listeners.add(listener);
+  }
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+
+  void notifyListeners() {
+    _notDisposed();
+    for (final listener in [..._listeners]) {
+      listener();
+    }
+  }
+
+  void dispose() {
+    _notDisposed();
+    _disposed = true;
+    _listeners.clear();
+  }
+}
+
+class ValueNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
+  ValueNotifier(this._value);
+
+  T _value;
+
+  @override
+  T get value => _value;
+
+  set value(T newValue) {
+    if (_value == newValue) return;
+    _value = newValue;
+    notifyListeners();
+  }
+}
+
+class ErrorDescription {
+  ErrorDescription(this.message);
+
+  final String message;
+}
+
+class FlutterErrorDetails {
+  const FlutterErrorDetails({
+    required this.exception,
+    this.stack,
+    this.library = 'Flutter framework',
+    this.context,
+  });
+
+  final Object exception;
+  final StackTrace? stack;
+  final String? library;
+  final ErrorDescription? context;
+}
+
+class FlutterError {
+  static void reportError(FlutterErrorDetails details) {}
+}
+
+enum TargetPlatform { android, fuchsia, iOS, linux, macOS, windows }
+
+TargetPlatform get defaultTargetPlatform => TargetPlatform.android;
+''';
+
+/// A stand-in for the part of Flutter's widgets library that the files of a
+/// role with the session of the auth role use: what that library exports of
+/// the foundation library, and the binding with the observers of the lifecycle
+/// of the app. `lifecycle()` puts the app into a state, and `resumeApp()`
+/// stands for the user who comes back to the app.
+const sessionWidgets = '''
+export 'foundation.dart'
+    show
+        ChangeNotifier,
+        ErrorDescription,
+        FlutterError,
+        FlutterErrorDetails,
+        Listenable,
+        ValueNotifier,
+        VoidCallback,
+        debugPrint,
+        immutable;
+
+enum AppLifecycleState { detached, resumed, inactive, hidden, paused }
+
+abstract class Widget {
+  const Widget();
+}
+
+final class BuildContext {
+  const BuildContext();
+}
+
+abstract mixin class WidgetsBindingObserver {
+  void didChangeAppLifecycleState(AppLifecycleState state) {}
+}
+
+class WidgetsBinding {
+  static final WidgetsBinding instance = WidgetsBinding();
+
+  /// The observers that were added and not removed.
+  final List<WidgetsBindingObserver> observers = [];
+
+  void addObserver(WidgetsBindingObserver observer) => observers.add(observer);
+
+  bool removeObserver(WidgetsBindingObserver observer) =>
+      observers.remove(observer);
+}
+
+/// The app comes into [state], which every observer is told of.
+void lifecycle(AppLifecycleState state) {
+  for (final observer in [...WidgetsBinding.instance.observers]) {
+    observer.didChangeAppLifecycleState(state);
+  }
+}
+
+/// The user comes back to the app, which was shown but not in use.
+void resumeApp() {
+  lifecycle(AppLifecycleState.inactive);
+  lifecycle(AppLifecycleState.resumed);
+}
+''';
+
 /// Dart files of an app, written to a temporary directory as the package of
 /// the test app, with stand-ins for Flutter's foundation and material
 /// libraries, so that the code that the template of a role generates can be
@@ -95,10 +263,15 @@ final class DartFiles {
   /// Writes [files], the text of each Dart file by its path from the root
   /// of the app, such as `lib/core/preferences/app_preferences.dart`, and
   /// [flutter], stand-ins for other libraries of Flutter that the files
-  /// use, each by its name, such as `widgets.dart`.
+  /// use, each by its name, such as `widgets.dart`. [packages] are stand-ins
+  /// for other packages, each the text of its main library by the name of the
+  /// package, such as `flutter_test`. [analysisOptions] is the text of the
+  /// `analysis_options.yaml` of the app, if it has one.
   factory DartFiles.write(
     Map<String, String> files, {
     Map<String, String> flutter = const {},
+    Map<String, String> packages = const {},
+    String? analysisOptions,
   }) {
     final root = Directory.systemTemp.createTempSync('smf_contracts_');
     void write(String path, String text) => File('${root.path}/$path')
@@ -113,7 +286,13 @@ final class DartFiles {
     for (final MapEntry(key: library, value: text) in flutter.entries) {
       write('flutter/lib/$library', text);
     }
+    for (final MapEntry(key: name, value: text) in packages.entries) {
+      write('$name/lib/$name.dart', text);
+    }
     write('app/pubspec.yaml', 'name: ${testContext.appName}\n');
+    if (analysisOptions != null) {
+      write('app/analysis_options.yaml', analysisOptions);
+    }
     write(
       'app/.dart_tool/package_config.json',
       jsonEncode({
@@ -122,6 +301,7 @@ final class DartFiles {
           for (final (name, rootUri) in [
             (testContext.appName, '../'),
             ('flutter', '../../flutter/'),
+            for (final name in packages.keys) (name, '../../$name/'),
           ])
             {
               'name': name,
@@ -142,13 +322,19 @@ final class DartFiles {
       Directory('${_root.path}/app').resolveSymbolicLinksSync();
 
   /// The errors and warnings that the analyzer finds in the files, each
-  /// with the path of its file.
-  Future<List<String>> analysisProblems() async {
+  /// with the path of its file, and with [infos] what it reports as an info
+  /// too, as `flutter analyze` fails on in the jobs of CI. [only] keeps to the
+  /// files that it accepts.
+  Future<List<String>> analysisProblems({
+    bool infos = false,
+    bool Function(String file)? only,
+  }) async {
     final appPath = _appPath;
     final collection = AnalysisContextCollection(includedPaths: [appPath]);
     try {
       final problems = <String>[];
       for (final file in _paths) {
+        if (only != null && !only(file)) continue;
         // The analyzer takes only the paths of the system, such as
         // C:\app\lib\main.dart on Windows.
         final path = Uri.directory(appPath).resolve(file).toFilePath();
@@ -161,7 +347,7 @@ final class DartFiles {
           continue;
         }
         for (final diagnostic in result.diagnostics) {
-          if (diagnostic.severity == Severity.info) continue;
+          if (!infos && diagnostic.severity == Severity.info) continue;
           problems.add(
             '$file:${result.lineInfo.getLocation(diagnostic.offset)}: '
             '${diagnostic.message}',

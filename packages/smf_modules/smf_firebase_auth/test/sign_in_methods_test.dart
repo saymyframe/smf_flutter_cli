@@ -674,7 +674,7 @@ class DefaultFirebaseOptions {
               },
             },
             'dart': {
-              'lib/firebase_options.dart': {
+              'lib/firebase_options_dev.dart': {
                 'projectId': _project,
                 'configurations': {'android': '1:1:android:a'},
               },
