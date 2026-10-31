@@ -39,6 +39,7 @@ import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_native_splash/smf_native_splash.dart';
@@ -270,4 +271,5 @@ List<SmfModule> severalProvidersModules() => const [
       DioModule(),
       RevenueCatModule(),
       PaywallModule(),
+      LauncherIconsModule(),
     ];

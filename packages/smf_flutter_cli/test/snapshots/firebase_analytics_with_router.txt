@@ -175,6 +175,14 @@ Once one flavor is configured, a build of a flavor that is not fails on Android,
 In Xcode, select the scheme of a flavor. It builds that flavor, whatever `ios/Flutter/Generated.xcconfig` says. The scheme `Runner` takes the flavor from that file, which has none after a fresh `flutter pub get`, so `appFlavor` is `null` there and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. `flutter build ios --config-only --flavor <flavor>` gives the file a flavor.
 
 The script changes the Xcode project only on macOS, and adds a build phase that runs `flutterfire` from `~/.pub-cache/bin`. So every Mac that builds the app for iOS needs the FlutterFire CLI activated, flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above. flutterfire needs the [Firebase CLI](https://firebase.google.com/docs/cli).
+
+## Firebase Analytics
+
+The app records its events with [firebase_analytics](https://pub.dev/packages/firebase_analytics): `lib/core/analytics/firebase_analytics_service.dart` implements the analytics service of the app on it.
+
+The events of the app reach Google Analytics only once the Firebase project is linked to it, which a project that `flutterfire configure` creates is not. Until then, the app logs its events, but they show up nowhere. Turn it on under Project settings > Integrations in the Firebase console. The section Finish the setup lists this among the steps that you do by hand.
+
+The link belongs to the project, and every app of the project sends its events there. So repeat this in each Firebase project of your flavors. Flavors that share a project need it once, and their events go to one property.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")

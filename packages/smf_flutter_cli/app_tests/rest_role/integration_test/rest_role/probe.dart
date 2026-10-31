@@ -3,14 +3,19 @@
 // place where the stack of the provider is the one of the device, also in a
 // release build. The test of the role runs it too (probe_test.dart).
 //
-// It uses no test framework, and sends nothing off the device: it makes its
-// requests to servers of its own on the loopback address of the device, with a
-// client of its own, and one request to an address that no machine has, which
+// It uses no test framework, and its requests reach no machine off the device:
+// it makes them to servers of its own on the loopback address of the device,
+// with a client of its own, and one to an address that no machine has, which
 // must end as a request that fails. So a release build shows that it may use
 // the network, a build for a device that its stack works there, and a release
 // of Flutter that starts to refuse http:// shows in the nightly run. Whether
 // the app has an address does not matter: an app of CI has an empty .env, and
 // then the client of the app must say so.
+//
+// A request has 10 seconds and a connection 3 seconds to close, since a debug
+// build on an emulator or a simulator of CI can be slow. Only a provider with a
+// problem takes that long, at most about 34 seconds in all, and in a healthy app
+// the probe takes about a second of the 60 seconds of all the probes.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -18,6 +23,9 @@ import 'dart:io';
 import 'package:{{app_name}}/core/env/app_env.dart';
 import 'package:{{app_name}}/core/rest/app_rest.dart';
 import 'package:{{app_name}}/core/rest/rest_transport.dart';
+
+/// How long a request of the probe to a server on the device takes at most.
+const Duration _requestTime = Duration(seconds: 10);
 
 /// The probe of the start check: what is wrong with the requests of the app.
 /// It waits for no screen, so it leaves [settle] out.
@@ -47,7 +55,7 @@ Future<List<String>> problemsOfStack(RestTransport transport) async {
 
 /// What is wrong with [client] for [address], the value of `.env`: while it has
 /// none, a relative path fails with `notConfigured`, whose hint names the key.
-/// With a value, nothing: such a request would leave the device.
+/// With a value, nothing: such a request would go to the server of the app.
 Future<List<String>> problemsOfAddress(
   AppRestClient client,
   String? address,
@@ -79,7 +87,7 @@ Future<List<String>> _problemsOfExchanges(RestTransport transport) async {
   final client = AppRestClient(
     transport: transport,
     baseAddress: 'http://127.0.0.1:${server.port}/probe',
-    timeout: const Duration(seconds: 3),
+    timeout: _requestTime,
   );
   try {
     final got = await client.get('get', query: {'a': 'b'});
@@ -121,7 +129,7 @@ Future<List<String>> _problemsOfStop(RestTransport transport) async {
   } on RestFailure catch (failure) {
     final isClosed = await closed.future
         .then((_) => true)
-        .timeout(const Duration(seconds: 1), onTimeout: () => false);
+        .timeout(const Duration(seconds: 3), onTimeout: () => false);
     return [
       if (failure.reason != RestFailureReason.timeout)
         'A server that does not answer ended in ${failure.reason.name}, and '
@@ -144,7 +152,7 @@ Future<List<String>> _problemsOfClosedPort(RestTransport transport) async {
   final client = AppRestClient(
     transport: transport,
     baseAddress: 'http://127.0.0.1:$port/probe',
-    timeout: const Duration(seconds: 2),
+    timeout: _requestTime,
   );
   try {
     await client.post('closed');
@@ -158,8 +166,12 @@ Future<List<String>> _problemsOfClosedPort(RestTransport transport) async {
   }
 }
 
+/// What is wrong with a request over `http://` to an address for documentation,
+/// which no machine has. A platform that refuses `http://` says so with an error
+/// of another kind, which reaches the code as `unknown` with no status, and a
+/// local server stops working. Anything else is no problem: the attempt may fail
+/// in any way, and a proxy of the network may answer in its place.
 Future<List<String>> _problemsOfCleartext(RestTransport transport) async {
-  // An address for documentation, which no machine has: nothing reaches it.
   final client = AppRestClient(
     transport: transport,
     baseAddress: 'http://192.0.2.1:9/',
@@ -167,15 +179,12 @@ Future<List<String>> _problemsOfCleartext(RestTransport transport) async {
   );
   try {
     await client.post('probe');
-    return const ['An address that no machine has gave an answer.'];
+    return const [];
   } on RestFailure catch (failure) {
     return [
-      // A platform that refuses http:// says so with an error of another kind,
-      // which reaches the code as unknown, and a local server stops working.
-      if (failure.reason != RestFailureReason.network &&
-          failure.reason != RestFailureReason.timeout)
-        'A request over http:// ended in ${failure.reason.name}, and not in '
-            'network or timeout: $failure.',
+      if (failure.reason == RestFailureReason.unknown && failure.status == null)
+        'A request over http:// ended in unknown, and not as a request that '
+            'fails: $failure.',
     ];
   }
 }

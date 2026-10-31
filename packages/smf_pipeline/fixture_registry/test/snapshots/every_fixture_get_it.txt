@@ -3354,53 +3354,77 @@ final class FixtureNotesFailed extends FixtureNotesView {
 
 /// The state of a screen with the notes of a server, as the state of a screen
 /// uses the REST client of the app: it knows the role and no provider of it,
-/// and cancels its call when it is disposed of.
+/// and cancels each call on its way when it is disposed of.
 final class FixtureNotes extends ValueNotifier<FixtureNotesView> {
   /// Creates the state.
   FixtureNotes() : super(const FixtureNotesLoading());
 
+  /// The calls on their way, each with a cancel of its own.
+  final Set<RestCancel> _calls = {};
+
+  /// The load on its way, which the next load replaces.
   RestCancel? _load;
 
-  /// Loads the notes.
+  /// The notes that were added while the load on its way was out, of which its
+  /// answer may know nothing.
+  List<FixtureNote> _added = [];
+
+  /// Loads the notes. An add on its way goes on, since the server may have
+  /// done what it asked.
   Future<void> load() async {
     _load?.cancel();
-    final cancel = _load = RestCancel();
+    final cancel = _load = _newCall();
+    final added = _added = [];
     value = const FixtureNotesLoading();
-    await _ending(cancel, () async {
+    try {
       final response = await appRest.get('notes', cancel: cancel);
-      return FixtureNotesShown(response.decoded(_notesOf));
-    });
+      final notes = response.decoded(_notesOf);
+      if (cancel.isCancelled) return;
+      final ids = {for (final note in notes) note.id};
+      value = FixtureNotesShown([
+        ...notes,
+        for (final note in added)
+          if (!ids.contains(note.id)) note,
+      ]);
+    } on RestFailure catch (failure) {
+      // An add that ended during the load shows what is newer.
+      if (!cancel.isCancelled && added.isEmpty) {
+        value = FixtureNotesFailed(failure.reason);
+      }
+    } finally {
+      _calls.remove(cancel);
+      if (identical(_load, cancel)) _load = null;
+    }
   }
 
   /// Adds a note with [text], and shows it after the notes that are shown.
   Future<void> add(String text) async {
-    final before = value;
-    final cancel = _load = RestCancel();
-    await _ending(cancel, () async {
+    final cancel = _newCall();
+    try {
       final response = await appRest.post(
         'notes',
         json: {'text': text},
         cancel: cancel,
       );
-      return FixtureNotesShown([
-        if (before is FixtureNotesShown) ...before.notes,
-        response.decoded(FixtureNote.fromJson),
+      final note = response.decoded(FixtureNote.fromJson);
+      if (cancel.isCancelled) return;
+      if (_load != null) _added.add(note);
+      final shown = value;
+      value = FixtureNotesShown([
+        if (shown is FixtureNotesShown) ...shown.notes,
+        note,
       ]);
-    });
+    } on RestFailure catch (failure) {
+      if (!cancel.isCancelled) value = FixtureNotesFailed(failure.reason);
+    } finally {
+      _calls.remove(cancel);
+    }
   }
 
-  /// Shows what [call] ends with, unless [cancel] ended it.
-  Future<void> _ending(
-    RestCancel cancel,
-    Future<FixtureNotesView> Function() call,
-  ) async {
-    FixtureNotesView view;
-    try {
-      view = await call();
-    } on RestFailure catch (failure) {
-      view = FixtureNotesFailed(failure.reason);
-    }
-    if (!cancel.isCancelled) value = view;
+  RestCancel _newCall() {
+    final cancel = RestCancel();
+    _calls.add(cancel);
+    return cancel;
   }
 
   static List<FixtureNote> _notesOf(List<dynamic> json) => [
@@ -3409,7 +3433,9 @@ final class FixtureNotes extends ValueNotifier<FixtureNotesView> {
 
   @override
   void dispose() {
-    _load?.cancel();
+    for (final call in _calls) {
+      call.cancel();
+    }
     super.dispose();
   }
 }

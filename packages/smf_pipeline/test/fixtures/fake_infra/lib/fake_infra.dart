@@ -1393,7 +1393,7 @@ final class FakeRestModule extends SmfModule {
 /// provider of the role, no router and no DI container, so it shows that one
 /// import is all that such a module needs. It works in an app with sign-in and
 /// in one without, a body of another shape is a reason of the role and not a
-/// `TypeError`, and it cancels its call when it is disposed of.
+/// `TypeError`, and it cancels each call on its way when it is disposed of.
 final class FakeRestUserModule extends SmfModule {
   /// Creates the module.
   const FakeRestUserModule();

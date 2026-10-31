@@ -4,7 +4,7 @@ The SMF module of [Firebase Crashlytics](https://firebase.google.com/docs/crashl
 
 An app can have several modules that provide crash reporting, and the reporter of the app forwards each report to all of them. Crashlytics works on the Firebase app, so the module depends on [smf_firebase_core](https://pub.dev/packages/smf_firebase_core), which comes with it and sets up Firebase.
 
-On macOS, `flutterfire configure` adds a build phase for Crashlytics to the Xcode project. Right after SMF configures the app, the module points the phase at the upload script of Crashlytics where Flutter puts it, so that `flutter build ipa` finds it. After you configure the app yourself, run the command that the README of the app gives. An app with Crashlytics that flutterfire_cli 1.4.0 configured fails to build for iOS with Swift Package Manager until it is configured again with 1.4.1; see [Firebase](https://doc.saymyframe.com/guides/firebase#an-app-configured-with-flutterfire_cli-140).
+On macOS, `flutterfire configure` adds a build phase for Crashlytics to the Xcode project and writes it again in each run. So the module adds a script to the app, which `tool/configure_firebase.dart` runs after flutterfire for each flavor: it points the phase at the upload script of Crashlytics where Flutter puts it, so that `flutter build ipa` finds it. After you run `flutterfire configure` yourself, run the command that the README of the app gives. An app with Crashlytics that flutterfire_cli 1.4.0 configured fails to build for iOS with Swift Package Manager until it is configured again with 1.4.1; see [Firebase](https://doc.saymyframe.com/guides/firebase#an-app-configured-with-flutterfire_cli-140).
 
 ## Use with the SMF CLI
 

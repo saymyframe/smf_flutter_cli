@@ -113,14 +113,14 @@ const modulePaths = {
       'module in the start check, through start_app.sh, as on Android.',
   ('Archive the app with every module', 'smf_firebase_crashlytics'):
       'The test of firebase_crashlytics that archives the app of the job '
-          'with the build phase for Crashlytics fixed by the command of its '
-          'README.',
+          'for a flavor, with the build phase for Crashlytics fixed by the '
+          'command of its README.',
   (
-    'Fix the build phase for Crashlytics of the app with every module',
+    'Check the build phase for Crashlytics of the app with every module',
     'smf_firebase_crashlytics',
-  ): 'The test of firebase_crashlytics that fixes the build phase for '
-      'Crashlytics that flutterfire added to the app of the job with the '
-      'command of its README, before CI starts it.',
+  ): 'The test of firebase_crashlytics that checks the build phase for '
+      'Crashlytics that flutterfire added to the app of the job, which the '
+      'script that configured the app fixed, before CI starts it.',
   ('Install the Firebase CLI with the script of SMF', 'smf_firebase_core'):
       'The test of firebase_core that runs its install script of the '
           'Firebase CLI on Windows for real.',

@@ -2065,6 +2065,8 @@ void main() {
           'purchases_session',
           'purchases_setting',
           'paywall',
+          'app_icon_role',
+          'launcher_icons',
           'splash_role',
           'native_splash',
         ]),

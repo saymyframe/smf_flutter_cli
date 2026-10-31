@@ -24,6 +24,7 @@ void main() {
   final ruby = rubyOnPath();
   final xcodeproj = ruby == null ? null : xcodeprojVersion(ruby);
   late String project;
+  late String fixScript;
   late Directory app;
   late File file;
 
@@ -40,6 +41,7 @@ void main() {
       ),
     );
     project = result.app!.texts[AppEntryRole.xcodeProjectFile]!;
+    fixScript = result.app!.texts[crashlyticsPhaseFixScript]!;
   });
 
   setUp(() {
@@ -87,11 +89,13 @@ void main() {
           'script in the app, and the gem reads the script with the path '
           'replaced', () {
         addCrashlyticsPhase(ruby!, app.path, '1.4.1');
-        const step = crashlyticsPhaseFix;
+        File('${app.path}/$crashlyticsPhaseFixScript')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(fixScript);
 
         final result = Process.runSync(
-          ruby,
-          step.tool.argumentsFor(step.arguments),
+          Platform.resolvedExecutable,
+          [crashlyticsPhaseFixScript],
           workingDirectory: app.path,
           stdoutEncoding: utf8,
           stderrEncoding: utf8,

@@ -385,7 +385,8 @@ void main() {
         '($module, gen_l10n, flutter_core, go_router, shared_preferences)';
     String everyModule(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, material_theme, native_splash, gen_l10n, get_it, '
+        'bottom_tabs, material_theme, launcher_icons, native_splash, gen_l10n, '
+        'get_it, '
         'event_bus, shared_preferences, dart_define, onboarding, '
         'local_notifications, '
         'firebase_core, firebase_crashlytics, firebase_analytics, '
@@ -445,6 +446,7 @@ void main() {
         'flutter_core, shared_preferences)',
       ),
       'material_theme (material_theme, flutter_core, shared_preferences)',
+      'launcher_icons (launcher_icons, flutter_core)',
       'native_splash (native_splash, flutter_core)',
       'get_it (get_it, flutter_core)',
       'event_bus with di (event_bus, get_it, flutter_core)',
@@ -871,7 +873,8 @@ void main() {
     expect(failed, isEmpty);
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, material_theme, native_splash, gen_l10n, get_it, '
+        'bottom_tabs, material_theme, launcher_icons, native_splash, gen_l10n, '
+        'get_it, '
         'event_bus, shared_preferences, dart_define, onboarding, '
         'local_notifications, dio, revenuecat, paywall, github_actions, local)';
     expect(apps.map((app) => '$app'), [
@@ -2673,6 +2676,7 @@ Type type() => Types;
               'settings',
               'bottom_tabs',
               'material_theme',
+              'launcher_icons',
               'native_splash',
               'gen_l10n',
               'get_it',
