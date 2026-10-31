@@ -9,46 +9,83 @@ import 'rest_transport.dart';
 /// Creates the [Dio] of the app. An interceptor goes here, such as one of a
 /// tracing service. One that logs leaves out the header `authorization` and the
 /// query of the address, and none repeats a request or follows a redirect:
-/// `appRest` does both.
+/// `appRest` does both. What this function adds to a request goes to every
+/// address, also after a redirect and to a full address such as a presigned
+/// upload. A credential goes through the token of the session or `headers:` of
+/// the call.
 Dio createDio() => Dio();
 
 /// Creates the transport of the app. It creates its [Dio] at the first request.
 RestTransport createDioRestTransport() => DioRestTransport(createDio);
 
-/// One exchange of `appRest` on a [Dio], which keeps its connections open
-/// between two exchanges, so that a request needs no new TLS handshake.
+/// A [Dio] of the transport, and the exchanges on it.
+final class _DioInUse {
+  _DioInUse(this.dio, this.overrides);
+
+  final Dio dio;
+
+  /// The overrides that its `HttpClient` is created under.
+  final HttpOverrides? overrides;
+
+  int _exchanges = 0;
+  bool _isRetired = false;
+
+  void begin() => _exchanges++;
+
+  void end() {
+    _exchanges--;
+    _closeIfDone();
+  }
+
+  /// No exchange starts on it from now on.
+  void retire() {
+    _isRetired = true;
+    _closeIfDone();
+  }
+
+  // A closed adapter refuses an exchange that has not reached it yet, which an
+  // exchange does only after a turn of the event loop.
+  void _closeIfDone() {
+    if (_isRetired && _exchanges == 0) dio.close();
+  }
+}
+
+/// One exchange of `appRest` on a [Dio], which keeps a connection open while
+/// requests follow within seconds, so that those requests need no new TLS
+/// handshake.
 final class DioRestTransport implements RestTransport {
   /// Creates the transport over what [createDio] creates.
   DioRestTransport(this._createDio);
 
   final Dio Function() _createDio;
-  Dio? _dio;
-  HttpOverrides? _overrides;
+  _DioInUse? _inUse;
 
   /// The [Dio] for the [HttpOverrides] of now. A [Dio] keeps the `HttpClient`
   /// that it created under the overrides of that time, so a change of them, such
   /// as what `RestTestServer` does in a test, takes a new one. In an app that
-  /// sets none, this is one [Dio] for as long as the app runs.
-  Dio get _current {
+  /// sets none, this is one [Dio].
+  _DioInUse _current() {
     final overrides = HttpOverrides.current;
-    final dio = _dio;
-    if (dio != null && identical(overrides, _overrides)) return dio;
-    // An exchange that is on its way ends as it would have.
-    dio?.close();
-    _overrides = overrides;
-    return _dio = _createDio();
+    final inUse = _inUse;
+    if (inUse != null && identical(overrides, inUse.overrides)) return inUse;
+    inUse?.retire();
+    return _inUse = _DioInUse(_createDio(), overrides);
   }
 
   @override
   Future<RestReply> send(RestExchange exchange) async {
     final cancel = CancelToken();
     unawaited(exchange.stop.then((_) => cancel.cancel()));
-    final body = exchange.body;
+    final inUse = _current()..begin();
     try {
-      final response = await _current.requestUri<List<int>>(
+      final response = await inUse.dio.requestUri<List<int>>(
         exchange.uri,
-        // Dio writes any other list as the text of its JSON.
-        data: body == null ? null : Uint8List.fromList(body),
+        data: switch (exchange.body) {
+          final Uint8List bytes => bytes,
+          // Dio writes any other list as the text of its JSON.
+          final List<int> list => Uint8List.fromList(list),
+          null => null,
+        },
         cancelToken: cancel,
         options: Options(
           method: exchange.method,
@@ -58,12 +95,20 @@ final class DioRestTransport implements RestTransport {
           responseType: ResponseType.bytes,
         ),
       );
+      final headers = {
+        for (final MapEntry(:key, :value) in response.headers.map.entries)
+          key.toLowerCase(): value.join(', '),
+      };
+      // HttpClient of dart:io decodes this coding alone, and leaves its headers,
+      // which no longer tell of the bytes. Any other coding stays as it came.
+      if (headers['content-encoding'] == 'gzip') {
+        headers
+          ..remove('content-encoding')
+          ..remove('content-length');
+      }
       return RestReply(
         status: response.statusCode!,
-        headers: {
-          for (final MapEntry(:key, :value) in response.headers.map.entries)
-            key.toLowerCase(): value.join(', '),
-        },
+        headers: headers,
         bytes: response.data ?? const [],
       );
     } on DioException catch (error, stackTrace) {
@@ -77,6 +122,8 @@ final class DioRestTransport implements RestTransport {
       }
       // Such as what an interceptor threw. It reaches the caller by its type.
       Error.throwWithStackTrace(cause ?? error, stackTrace);
+    } finally {
+      inUse.end();
     }
   }
 

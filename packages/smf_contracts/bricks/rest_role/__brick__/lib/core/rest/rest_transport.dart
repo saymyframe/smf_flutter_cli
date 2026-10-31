@@ -46,7 +46,7 @@ final class RestReply {
   /// joined by `, `.
   final Map<String, String> headers;
 
-  /// The body, decoded of its `content-encoding`.
+  /// The body, as the provider decoded it or as it came.
   final List<int> bytes;
 }
 
@@ -72,16 +72,19 @@ final class RestConnectionFailed implements Exception {
 /// - It follows no redirect: a 3xx is a reply. `appRest` follows them, since
 ///   it knows which header may go where.
 /// - Any status is a reply, and it keeps the headers of the reply, with their
-///   names in lower case. [RestReply.bytes] are decoded of `content-encoding`,
-///   so a stack that asks for gzip decodes what it gets.
+///   names in lower case. A provider whose stack decoded a body leaves out
+///   `content-encoding` and its `content-length`, which no longer tell of the
+///   bytes. A body in a coding that the stack did not decode keeps them.
 /// - A failure to connect, a TLS handshake or a certificate that fails, and a
 ///   connection that breaks are [RestConnectionFailed]. On `dart:io` those are
 ///   `SocketException`, `HttpException` and `TlsException`. Any other error is
 ///   a bug of the provider, which reaches the caller as the reason `unknown`.
 /// - When [RestExchange.stop] completes, it closes the connection at once. It
-///   needs no timeout of its own: `appRest` stops every exchange. On `dart:io`,
-///   only a TLS handshake that is on its way stays until the server ends it,
-///   since `HttpClient` has no way to end one.
+///   needs no timeout of its own: `appRest` stops every exchange. On `dart:io`
+///   the call ends at once, but a TLS handshake on its way cannot be ended, not
+///   even by `close(force: true)`: its socket closes when the handshake ends or
+///   the server ends it. A provider that shares one `HttpClient` cannot end a
+///   TCP connect on its way either: the system ends it.
 /// - On `dart:io`, one that keeps an `HttpClient` makes a new one when
 ///   `HttpOverrides` change, as they do when a test starts or closes a
 ///   `RestTestServer`.

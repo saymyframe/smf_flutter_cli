@@ -2068,6 +2068,21 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.restKeepingCodingHeaders,
+        role: restRole,
+        bug: 'It leaves content-encoding and content-length on a body that its '
+            'stack decoded, so a caller that reads them takes the bytes for '
+            'coded ones.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'a body that a server compressed comes decoded',
+            'The headers of a response tell of the body that it has.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.restKeepingClient,
         role: restRole,
         bug: 'It keeps one HttpClient, so the first request of a test file '

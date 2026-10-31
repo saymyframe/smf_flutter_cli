@@ -937,7 +937,8 @@ final class BrokenModule extends SmfModule {
         '      final headers = <String, String>{};\n'
             '      response.headers.forEach(\n'
             "        (name, values) => headers[name] = values.join(', '),\n"
-            '      );\n',
+            '      );\n'
+            '$_fixtureRestDecodedHeaders',
         '',
       ),
       ('        headers: headers,\n', '        headers: const {},\n'),
@@ -973,6 +974,17 @@ final class BrokenModule extends SmfModule {
         '      final request = await client.openUrl(\n',
       ),
     ],
+  );
+
+  /// The fixture REST that leaves the headers of a coding on a body that its
+  /// stack decoded, so `content-encoding` names a coding that the bytes no longer
+  /// have and `content-length` counts other bytes.
+  static const restKeepingCodingHeaders = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_keeps_coding_headers'),
+    'REST that keeps the headers of a coding it decoded (fixture)',
+    _fixtureRestFile,
+    [(_fixtureRestDecodedHeaders, '')],
   );
 
   /// The fixture REST that keeps one `HttpClient` for its exchanges, until one
@@ -1046,6 +1058,16 @@ final class BrokenModule extends SmfModule {
   /// The file of the fixture REST.
   static const _fixtureRestFile =
       'lib/core/fixture_rest/fixture_rest_transport.dart';
+
+  /// The lines of the fixture REST that leave out the headers of a coding that
+  /// its stack decoded.
+  static const _fixtureRestDecodedHeaders =
+      '      if (response.compressionState ==\n'
+      '          HttpClientResponseCompressionState.decompressed) {\n'
+      '        headers\n'
+      '          ..remove(HttpHeaders.contentEncodingHeader)\n'
+      '          ..remove(HttpHeaders.contentLengthHeader);\n'
+      '      }\n';
 
   /// The fixture notifications whose function forgets the notifications
   /// that are scheduled each time it opens them, as a provider does that

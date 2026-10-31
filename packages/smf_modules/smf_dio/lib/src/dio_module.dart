@@ -11,10 +11,13 @@ import 'package:smf_dio/src/readme.dart';
 /// This module adds `dio` to the dependencies of the app and implements
 /// `RestTransport` of the role in `lib/core/rest/dio_rest_transport.dart`, one
 /// exchange on a `Dio`:
-/// - it keeps one `Dio` with its connections for as long as the app runs, and
-///   creates it at the first request, so an app that makes none pays nothing.
-///   A new one comes only when `HttpOverrides` change, as in a test with
-///   `RestTestServer`, since a `Dio` keeps the `HttpClient` that it created;
+/// - it keeps one `Dio`, which keeps a connection open while requests follow
+///   within seconds, and creates it at the first request, so an app that makes
+///   none pays nothing. A new one comes only when `HttpOverrides` change, as in
+///   a test with `RestTestServer`, since a `Dio` keeps the `HttpClient` that it
+///   created, and the one before closes once its last exchange ended;
+/// - it leaves out `content-encoding` and its `content-length` for `gzip`
+///   alone, the coding that `HttpClient` of `dart:io` decodes;
 /// - it sends a body as a `Uint8List`, since `Dio` writes any other list as the
 ///   text of its JSON;
 /// - it follows no redirect and takes any status as a reply, which `appRest`

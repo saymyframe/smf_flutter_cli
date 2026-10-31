@@ -9,11 +9,13 @@ The role generates the client, and this module sends its requests over a `Dio`. 
 - In an app with sign-in, the token of the user goes only to the origin of that address, also after a redirect.
 - A 401 gets a new token once and repeats once, and requests at the same time share one refresh.
 - `GET` and `HEAD` repeat after a broken connection and after 429, 502, 503 and 504, keeping to `Retry-After`. Other methods never repeat.
-- A timeout covers a whole attempt and a cancel ends a call at once, and each closes the connection.
+- A timeout covers a whole attempt and a cancel ends a call at once. Each closes the connection, unless it is still being made: then the socket closes once the connect or the TLS handshake ends.
 - A debug build logs the origin and the path of each attempt, and no token and no query.
 - A release build for Android has the `INTERNET` permission.
 
-`createDio()` in the app is where an interceptor goes, such as one of a tracing service.
+`createDio()` in the app is where an interceptor goes, such as one of a tracing service. What it adds to a request goes to every address, so a credential goes through the token of the session or `headers:` of the call.
+
+Several `set-cookie` values cannot be told apart in the `headers` of a response. An API with cookies reads them in an interceptor.
 
 ## Use with the SMF CLI
 

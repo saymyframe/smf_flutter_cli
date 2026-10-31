@@ -629,8 +629,8 @@ Future<MatrixAppTests> smfAppTests() async {
       // The requests of the users of the session, in the apps with the REST
       // role and the auth role, whichever modules provide them.
       await restSessionAppTest(),
-      // What only dio does: one exchange on a Dio, which keeps its connections
-      // between two exchanges, and what an error of Dio ends it with.
+      // What only dio does: one exchange on a Dio, which keeps a connection
+      // open for the next request, and what an error of Dio ends it with.
       MatrixAppTest(
         '$dio/dio',
         appliesTo: _has(DioModule.id),

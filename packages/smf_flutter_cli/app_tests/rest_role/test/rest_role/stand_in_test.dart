@@ -1,7 +1,8 @@
 // A test that continuous integration runs in the apps with the REST role,
-// whichever module provides it: a request of the transport of the app follows
-// what RestTestServer does to the stand-in of the binding of the tests, also
-// when the transport made a request before and keeps a client of its stack.
+// whichever module provides it: a request of the transport of the app reaches a
+// RestTestServer, also when the transport made a request before the server
+// started, which on dart:io went to the stand-in of the binding of the tests,
+// and when it keeps a client of its stack.
 //
 // It knows only the role. It has a file of its own since the transport of the
 // app lasts for a whole test file, and this test needs it to have seen the
@@ -17,16 +18,14 @@ void main() {
   test(
       'a request reaches a server that starts after a request went to the '
       'stand-in of the binding, and none reaches it once it closed', () async {
-    // The address of a server that is not there yet does not matter: the
-    // stand-in answers every request.
+    // The answer does not matter, since a stack that does not use HttpClient
+    // of dart:io does not meet the stand-in: only that the transport has made
+    // a request.
     final before = AppRestClient(
       transport: createRestTransport(),
       baseAddress: await closedAddress(),
     );
-    await expectLater(
-      outcomeOf(before.post('notes')),
-      completion(failsWith(RestFailureReason.rejected)),
-    );
+    await outcomeOf(before.post('notes'));
 
     final server = await RestTestServer.start();
     addTearDown(server.close);
@@ -43,10 +42,8 @@ void main() {
 
     await server.close();
 
-    await expectLater(
-      outcomeOf(client.post('notes')),
-      completion(failsWith(RestFailureReason.rejected)),
-    );
+    await outcomeOf(client.post('notes'));
+
     expect(
       server.requests,
       hasLength(1),

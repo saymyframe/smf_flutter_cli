@@ -828,18 +828,19 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
   result['each status'] = statuses;
 
-  // The headers of a body that the provider decoded, and of one it did not.
+  // The headers of a body as the provider leaves them, whichever coding it
+  // decoded.
   Future<Map<String, String>> headersOf(Map<String, String> headers) async =>
       (await clientOf(FakeRest()..answers.add(reply(200, headers: headers)))
               .post('notes'))
           .headers;
   result['the headers of a body'] = {
-    'decoded': await headersOf({
-      'content-encoding': 'gzip',
+    'in a coding': await headersOf({
+      'content-encoding': 'br',
       'content-length': '27',
       'x-kept': 'yes',
     }),
-    'as it came': await headersOf({
+    'in none': await headersOf({
       'content-length': '27',
       'x-kept': 'yes',
     }),
@@ -2373,13 +2374,13 @@ void main() {
       final headersOfBody =
           result['the headers of a body']! as Map<Object?, Object?>;
       expect(
-        headersOfBody['decoded'],
-        {'x-kept': 'yes'},
-        reason: 'The bytes of a response are always decoded, so the headers '
-            'that describe a coded body stay out of it.',
+        headersOfBody['in a coding'],
+        {'content-encoding': 'br', 'content-length': '27', 'x-kept': 'yes'},
+        reason: 'Only the provider knows what its stack decoded, so the client '
+            'leaves the headers of a coding to it.',
       );
       expect(
-        headersOfBody['as it came'],
+        headersOfBody['in none'],
         {'content-length': '27', 'x-kept': 'yes'},
       );
 

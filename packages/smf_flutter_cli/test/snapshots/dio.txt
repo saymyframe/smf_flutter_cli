@@ -178,6 +178,7 @@ With `dio`:
 
 - `DioRestTransport` in `lib/core/rest/dio_rest_transport.dart` implements `RestTransport` on `Dio`. In `lib/`, only that file imports the package: other code makes requests through `appRest`.
 - `createDio()` in that file creates the `Dio` of the app, and an interceptor goes there. One that logs leaves out the header `authorization` and the query of the address, and none repeats a request or follows a redirect, which `appRest` does.
+- What `createDio()` adds to a request goes to every address, also after a redirect and to a full address such as a presigned upload. A credential goes through the token of the session or `headers:` of the call.
 
 ## Values in .env
 
@@ -277,13 +278,17 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
 
 ## dio
 
-`lib/core/rest/dio_rest_transport.dart` sends the requests of `appRest` with [dio](https://pub.dev/packages/dio), as the section "REST API" tells. `createDio()` in that file creates the `Dio` of the app, which keeps its connections open between requests. An interceptor goes there, such as one of a tracing service:
+`lib/core/rest/dio_rest_transport.dart` sends the requests of `appRest` with [dio](https://pub.dev/packages/dio), as the section "REST API" tells. `createDio()` in that file creates the `Dio` of the app, which keeps a connection open while requests follow within seconds. An interceptor goes there, such as one of a tracing service:
 
 ```dart
 Dio createDio() => Dio()..interceptors.add(TracingInterceptor());
 ```
 
 An interceptor that logs leaves out the header `authorization` and the query of the address, where a token or a key may be. None repeats a request or follows a redirect: `appRest` does both, since it knows which header may go where.
+
+What `createDio()` adds to a request goes to every address, also after a redirect and to a full address such as a presigned upload. A credential goes through the token of the session or `headers:` of the call.
+
+Several `set-cookie` values cannot be told apart in the `headers` of a response, since a value of that header may have a comma. An API with cookies reads them in an interceptor.
 
 Dio sends over `dart:io`, which reaches an `http://` address with no key in the Android manifest or in `Info.plist`. Another adapter, such as one of [native_dio_adapter](https://pub.dev/packages/native_dio_adapter) for the stack of the platform, goes into `httpClientAdapter` in `createDio()`. It then needs those keys for an `http://` address.
 
@@ -301,7 +306,7 @@ A path is relative to the address of the API, with or without a leading slash, a
 
 The address is `REST_BASE_URL` in `.env`, as the section "Values in .env" says. It is no secret, and a change takes a new `flutter run`. While it is empty, a relative path fails with `notConfigured`, whose hint names the key, and the app still builds and starts. Use `https` in a release. On a device, `http://10.0.2.2:8080` is your computer on the Android emulator and `http://127.0.0.1:8080` on the iOS simulator, and a phone reaches it at its address on your network. Each environment has an address of its own: change the value by hand, or have CI write `.env` for its job.
 
-A call fails only with a `RestFailure`. Show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal.
+A call fails only with a `RestFailure`. Show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal. The `headers` of a response join several values of one header, so several `set-cookie` values cannot be told apart there.
 
 `GET` and `HEAD` repeat twice at most after a connection that broke and after 429, 502, 503 and 504, keeping to a `Retry-After` of up to 30 seconds. Other methods never repeat, since the server may have done what they asked, and their failure has the `retryAfter` that the server named.
 
@@ -995,12 +1000,15 @@ final class RestResponse {
   /// The status of the answer.
   final int status;
 
-  /// The headers, each name in lower case. [bytes] are always decoded, so a
-  /// reply with a `content-encoding` has neither that header here nor its
-  /// `content-length`, which would count the coded body.
+  /// The headers, each name in lower case, and several values of one header
+  /// joined by `, `. So several `set-cookie` values cannot be told apart here.
+  /// A body that the provider decoded has neither `content-encoding` nor
+  /// `content-length` here, and a body in a coding that it did not decode has
+  /// both.
   final Map<String, String> headers;
 
-  /// The body, decoded of its `content-encoding`.
+  /// The body: decoded when [headers] have no `content-encoding`, and otherwise
+  /// in that coding.
   final List<int> bytes;
 
   /// The body as UTF-8.
@@ -1557,7 +1565,7 @@ final class _Call {
       final status = reply.status;
       final response = RestResponse(
         status: status,
-        headers: _ofDecodedBody(reply.headers),
+        headers: reply.headers,
         bytes: reply.bytes,
       );
       if (status == 401 && _sent != null && !_didRefresh) {
@@ -1629,15 +1637,6 @@ final class _Call {
         );
       }
     }
-  }
-
-  /// [headers] without what no longer holds of a body that the provider decoded;
-  /// see [RestResponse.headers].
-  static Map<String, String> _ofDecodedBody(Map<String, String> headers) {
-    if (!headers.containsKey('content-encoding')) return headers;
-    return {...headers}
-      ..remove('content-encoding')
-      ..remove('content-length');
   }
 
   /// The token for the next attempt, or `null` for none: an attempt to
@@ -1900,46 +1899,83 @@ import 'rest_transport.dart';
 /// Creates the [Dio] of the app. An interceptor goes here, such as one of a
 /// tracing service. One that logs leaves out the header `authorization` and the
 /// query of the address, and none repeats a request or follows a redirect:
-/// `appRest` does both.
+/// `appRest` does both. What this function adds to a request goes to every
+/// address, also after a redirect and to a full address such as a presigned
+/// upload. A credential goes through the token of the session or `headers:` of
+/// the call.
 Dio createDio() => Dio();
 
 /// Creates the transport of the app. It creates its [Dio] at the first request.
 RestTransport createDioRestTransport() => DioRestTransport(createDio);
 
-/// One exchange of `appRest` on a [Dio], which keeps its connections open
-/// between two exchanges, so that a request needs no new TLS handshake.
+/// A [Dio] of the transport, and the exchanges on it.
+final class _DioInUse {
+  _DioInUse(this.dio, this.overrides);
+
+  final Dio dio;
+
+  /// The overrides that its `HttpClient` is created under.
+  final HttpOverrides? overrides;
+
+  int _exchanges = 0;
+  bool _isRetired = false;
+
+  void begin() => _exchanges++;
+
+  void end() {
+    _exchanges--;
+    _closeIfDone();
+  }
+
+  /// No exchange starts on it from now on.
+  void retire() {
+    _isRetired = true;
+    _closeIfDone();
+  }
+
+  // A closed adapter refuses an exchange that has not reached it yet, which an
+  // exchange does only after a turn of the event loop.
+  void _closeIfDone() {
+    if (_isRetired && _exchanges == 0) dio.close();
+  }
+}
+
+/// One exchange of `appRest` on a [Dio], which keeps a connection open while
+/// requests follow within seconds, so that those requests need no new TLS
+/// handshake.
 final class DioRestTransport implements RestTransport {
   /// Creates the transport over what [createDio] creates.
   DioRestTransport(this._createDio);
 
   final Dio Function() _createDio;
-  Dio? _dio;
-  HttpOverrides? _overrides;
+  _DioInUse? _inUse;
 
   /// The [Dio] for the [HttpOverrides] of now. A [Dio] keeps the `HttpClient`
   /// that it created under the overrides of that time, so a change of them, such
   /// as what `RestTestServer` does in a test, takes a new one. In an app that
-  /// sets none, this is one [Dio] for as long as the app runs.
-  Dio get _current {
+  /// sets none, this is one [Dio].
+  _DioInUse _current() {
     final overrides = HttpOverrides.current;
-    final dio = _dio;
-    if (dio != null && identical(overrides, _overrides)) return dio;
-    // An exchange that is on its way ends as it would have.
-    dio?.close();
-    _overrides = overrides;
-    return _dio = _createDio();
+    final inUse = _inUse;
+    if (inUse != null && identical(overrides, inUse.overrides)) return inUse;
+    inUse?.retire();
+    return _inUse = _DioInUse(_createDio(), overrides);
   }
 
   @override
   Future<RestReply> send(RestExchange exchange) async {
     final cancel = CancelToken();
     unawaited(exchange.stop.then((_) => cancel.cancel()));
-    final body = exchange.body;
+    final inUse = _current()..begin();
     try {
-      final response = await _current.requestUri<List<int>>(
+      final response = await inUse.dio.requestUri<List<int>>(
         exchange.uri,
-        // Dio writes any other list as the text of its JSON.
-        data: body == null ? null : Uint8List.fromList(body),
+        data: switch (exchange.body) {
+          final Uint8List bytes => bytes,
+          // Dio writes any other list as the text of its JSON.
+          final List<int> list => Uint8List.fromList(list),
+          null => null,
+        },
         cancelToken: cancel,
         options: Options(
           method: exchange.method,
@@ -1949,12 +1985,20 @@ final class DioRestTransport implements RestTransport {
           responseType: ResponseType.bytes,
         ),
       );
+      final headers = {
+        for (final MapEntry(:key, :value) in response.headers.map.entries)
+          key.toLowerCase(): value.join(', '),
+      };
+      // HttpClient of dart:io decodes this coding alone, and leaves its headers,
+      // which no longer tell of the bytes. Any other coding stays as it came.
+      if (headers['content-encoding'] == 'gzip') {
+        headers
+          ..remove('content-encoding')
+          ..remove('content-length');
+      }
       return RestReply(
         status: response.statusCode!,
-        headers: {
-          for (final MapEntry(:key, :value) in response.headers.map.entries)
-            key.toLowerCase(): value.join(', '),
-        },
+        headers: headers,
         bytes: response.data ?? const [],
       );
     } on DioException catch (error, stackTrace) {
@@ -1968,6 +2012,8 @@ final class DioRestTransport implements RestTransport {
       }
       // Such as what an interceptor threw. It reaches the caller by its type.
       Error.throwWithStackTrace(cause ?? error, stackTrace);
+    } finally {
+      inUse.end();
     }
   }
 
@@ -2035,7 +2081,7 @@ final class RestReply {
   /// joined by `, `.
   final Map<String, String> headers;
 
-  /// The body, decoded of its `content-encoding`.
+  /// The body, as the provider decoded it or as it came.
   final List<int> bytes;
 }
 
@@ -2061,16 +2107,19 @@ final class RestConnectionFailed implements Exception {
 /// - It follows no redirect: a 3xx is a reply. `appRest` follows them, since
 ///   it knows which header may go where.
 /// - Any status is a reply, and it keeps the headers of the reply, with their
-///   names in lower case. [RestReply.bytes] are decoded of `content-encoding`,
-///   so a stack that asks for gzip decodes what it gets.
+///   names in lower case. A provider whose stack decoded a body leaves out
+///   `content-encoding` and its `content-length`, which no longer tell of the
+///   bytes. A body in a coding that the stack did not decode keeps them.
 /// - A failure to connect, a TLS handshake or a certificate that fails, and a
 ///   connection that breaks are [RestConnectionFailed]. On `dart:io` those are
 ///   `SocketException`, `HttpException` and `TlsException`. Any other error is
 ///   a bug of the provider, which reaches the caller as the reason `unknown`.
 /// - When [RestExchange.stop] completes, it closes the connection at once. It
-///   needs no timeout of its own: `appRest` stops every exchange. On `dart:io`,
-///   only a TLS handshake that is on its way stays until the server ends it,
-///   since `HttpClient` has no way to end one.
+///   needs no timeout of its own: `appRest` stops every exchange. On `dart:io`
+///   the call ends at once, but a TLS handshake on its way cannot be ended, not
+///   even by `close(force: true)`: its socket closes when the handshake ends or
+///   the server ends it. A provider that shares one `HttpClient` cannot end a
+///   TCP connect on its way either: the system ends it.
 /// - On `dart:io`, one that keeps an `HttpClient` makes a new one when
 ///   `HttpOverrides` change, as they do when a test starts or closes a
 ///   `RestTestServer`.

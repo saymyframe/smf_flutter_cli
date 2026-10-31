@@ -113,12 +113,15 @@ final class RestResponse {
   /// The status of the answer.
   final int status;
 
-  /// The headers, each name in lower case. [bytes] are always decoded, so a
-  /// reply with a `content-encoding` has neither that header here nor its
-  /// `content-length`, which would count the coded body.
+  /// The headers, each name in lower case, and several values of one header
+  /// joined by `, `. So several `set-cookie` values cannot be told apart here.
+  /// A body that the provider decoded has neither `content-encoding` nor
+  /// `content-length` here, and a body in a coding that it did not decode has
+  /// both.
   final Map<String, String> headers;
 
-  /// The body, decoded of its `content-encoding`.
+  /// The body: decoded when [headers] have no `content-encoding`, and otherwise
+  /// in that coding.
   final List<int> bytes;
 
   /// The body as UTF-8.
@@ -680,7 +683,7 @@ final class _Call {
       final status = reply.status;
       final response = RestResponse(
         status: status,
-        headers: _ofDecodedBody(reply.headers),
+        headers: reply.headers,
         bytes: reply.bytes,
       );
       if (status == 401 && _sent != null && !_didRefresh) {
@@ -752,15 +755,6 @@ final class _Call {
         );
       }
     }
-  }
-
-  /// [headers] without what no longer holds of a body that the provider decoded;
-  /// see [RestResponse.headers].
-  static Map<String, String> _ofDecodedBody(Map<String, String> headers) {
-    if (!headers.containsKey('content-encoding')) return headers;
-    return {...headers}
-      ..remove('content-encoding')
-      ..remove('content-length');
   }
 
   /// The token for the next attempt, or `null` for none: an attempt to

@@ -527,7 +527,7 @@ A path is relative to the address of the API, with or without a leading slash, a
 
 The address is `REST_BASE_URL` in `.env`, as the section "Values in .env" says. It is no secret, and a change takes a new `flutter run`. While it is empty, a relative path fails with `notConfigured`, whose hint names the key, and the app still builds and starts. Use `https` in a release. On a device, `http://10.0.2.2:8080` is your computer on the Android emulator and `http://127.0.0.1:8080` on the iOS simulator, and a phone reaches it at its address on your network. Each environment has an address of its own: change the value by hand, or have CI write `.env` for its job.
 
-A call fails only with a `RestFailure`. Show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal.
+A call fails only with a `RestFailure`. Show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal. The `headers` of a response join several values of one header, so several `set-cookie` values cannot be told apart there.
 
 `GET` and `HEAD` repeat twice at most after a connection that broke and after 429, 502, 503 and 504, keeping to a `Retry-After` of up to 30 seconds. Other methods never repeat, since the server may have done what they asked, and their failure has the `retryAfter` that the server named.
 
@@ -4095,6 +4095,12 @@ final class FixtureRestTransport implements RestTransport {
       response.headers.forEach(
         (name, values) => headers[name] = values.join(', '),
       );
+      if (response.compressionState ==
+          HttpClientResponseCompressionState.decompressed) {
+        headers
+          ..remove(HttpHeaders.contentEncodingHeader)
+          ..remove(HttpHeaders.contentLengthHeader);
+      }
       return RestReply(
         status: response.statusCode,
         headers: headers,
@@ -6764,12 +6770,15 @@ final class RestResponse {
   /// The status of the answer.
   final int status;
 
-  /// The headers, each name in lower case. [bytes] are always decoded, so a
-  /// reply with a `content-encoding` has neither that header here nor its
-  /// `content-length`, which would count the coded body.
+  /// The headers, each name in lower case, and several values of one header
+  /// joined by `, `. So several `set-cookie` values cannot be told apart here.
+  /// A body that the provider decoded has neither `content-encoding` nor
+  /// `content-length` here, and a body in a coding that it did not decode has
+  /// both.
   final Map<String, String> headers;
 
-  /// The body, decoded of its `content-encoding`.
+  /// The body: decoded when [headers] have no `content-encoding`, and otherwise
+  /// in that coding.
   final List<int> bytes;
 
   /// The body as UTF-8.
@@ -7326,7 +7335,7 @@ final class _Call {
       final status = reply.status;
       final response = RestResponse(
         status: status,
-        headers: _ofDecodedBody(reply.headers),
+        headers: reply.headers,
         bytes: reply.bytes,
       );
       if (status == 401 && _sent != null && !_didRefresh) {
@@ -7398,15 +7407,6 @@ final class _Call {
         );
       }
     }
-  }
-
-  /// [headers] without what no longer holds of a body that the provider decoded;
-  /// see [RestResponse.headers].
-  static Map<String, String> _ofDecodedBody(Map<String, String> headers) {
-    if (!headers.containsKey('content-encoding')) return headers;
-    return {...headers}
-      ..remove('content-encoding')
-      ..remove('content-length');
   }
 
   /// The token for the next attempt, or `null` for none: an attempt to
@@ -7706,7 +7706,7 @@ final class RestReply {
   /// joined by `, `.
   final Map<String, String> headers;
 
-  /// The body, decoded of its `content-encoding`.
+  /// The body, as the provider decoded it or as it came.
   final List<int> bytes;
 }
 
@@ -7732,16 +7732,19 @@ final class RestConnectionFailed implements Exception {
 /// - It follows no redirect: a 3xx is a reply. `appRest` follows them, since
 ///   it knows which header may go where.
 /// - Any status is a reply, and it keeps the headers of the reply, with their
-///   names in lower case. [RestReply.bytes] are decoded of `content-encoding`,
-///   so a stack that asks for gzip decodes what it gets.
+///   names in lower case. A provider whose stack decoded a body leaves out
+///   `content-encoding` and its `content-length`, which no longer tell of the
+///   bytes. A body in a coding that the stack did not decode keeps them.
 /// - A failure to connect, a TLS handshake or a certificate that fails, and a
 ///   connection that breaks are [RestConnectionFailed]. On `dart:io` those are
 ///   `SocketException`, `HttpException` and `TlsException`. Any other error is
 ///   a bug of the provider, which reaches the caller as the reason `unknown`.
 /// - When [RestExchange.stop] completes, it closes the connection at once. It
-///   needs no timeout of its own: `appRest` stops every exchange. On `dart:io`,
-///   only a TLS handshake that is on its way stays until the server ends it,
-///   since `HttpClient` has no way to end one.
+///   needs no timeout of its own: `appRest` stops every exchange. On `dart:io`
+///   the call ends at once, but a TLS handshake on its way cannot be ended, not
+///   even by `close(force: true)`: its socket closes when the handshake ends or
+///   the server ends it. A provider that shares one `HttpClient` cannot end a
+///   TCP connect on its way either: the system ends it.
 /// - On `dart:io`, one that keeps an `HttpClient` makes a new one when
 ///   `HttpOverrides` change, as they do when a test starts or closes a
 ///   `RestTestServer`.

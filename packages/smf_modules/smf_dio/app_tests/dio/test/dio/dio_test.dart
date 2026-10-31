@@ -26,6 +26,9 @@ final class _Stack implements HttpClientAdapter {
 
   final Object? failure;
   ResponseBody Function() reply = () => ResponseBody.fromString('', 200);
+
+  /// What an exchange waits for once it reached the stack, if anything.
+  Future<void>? hold;
   final List<RequestOptions> asked = [];
   final List<List<int>?> bodies = [];
   final List<Future<void>?> cancels = [];
@@ -49,6 +52,7 @@ final class _Stack implements HttpClientAdapter {
               (all, part) => all..addAll(part),
             ),
     );
+    await hold;
     if (failure case final failure?) throw failure;
     return reply();
   }
@@ -56,6 +60,9 @@ final class _Stack implements HttpClientAdapter {
   @override
   void close({bool force = false}) => closedGently = !force;
 }
+
+/// Overrides that change nothing of what `HttpClient` does.
+final class _OtherOverrides extends HttpOverrides {}
 
 /// A transport over [stack], with the Dio that the app creates.
 DioRestTransport _transportOver(_Stack stack) =>
@@ -360,6 +367,38 @@ void main() {
       expect([for (final stack in stacks) stack.asked.length], [1, 2, 1]);
     });
 
+    test(
+        'is closed once the overrides changed and its last exchange ended, and '
+        'not before', () async {
+      final stacks = <_Stack>[];
+      final held = Completer<void>();
+      final transport = DioRestTransport(() {
+        final stack = _Stack()..hold = stacks.isEmpty ? held.future : null;
+        stacks.add(stack);
+        return createDio()..httpClientAdapter = stack;
+      });
+      final before = HttpOverrides.current;
+      addTearDown(() => HttpOverrides.global = before);
+
+      final first = transport.send(_exchange());
+      await Future<void>.delayed(Duration.zero);
+      HttpOverrides.global = null;
+      await transport.send(_exchange());
+
+      expect(stacks, hasLength(2));
+      expect(
+        stacks.first.closedGently,
+        isFalse,
+        reason: 'An exchange is on its way on the Dio before.',
+      );
+
+      held.complete();
+      await first;
+
+      expect(stacks.first.closedGently, isTrue);
+      expect(stacks.last.closedGently, isFalse);
+    });
+
     test('is what the transport of the app uses', () {
       expect(createRestTransport(), isA<DioRestTransport>());
     });
@@ -415,6 +454,84 @@ void main() {
       expect(request.headers['content-length'], '4');
       expect(request.headers, isNot(contains('content-type')));
     });
+
+    test(
+        'an exchange that has not reached the stack of Dio when the overrides '
+        'change still reaches the server', () async {
+      server
+        ..answerJson('POST', '/first', 'first')
+        ..answerJson('GET', '/second', 'second');
+      final transport = createDioRestTransport();
+      final before = HttpOverrides.current;
+      addTearDown(() => HttpOverrides.global = before);
+
+      final first = transport.send(
+        _exchange(address: '${server.address}/first'),
+      );
+      await Future<void>.value();
+      HttpOverrides.global = _OtherOverrides();
+      final second = transport.send(
+        _exchange(method: 'GET', address: '${server.address}/second'),
+      );
+
+      expect((await first).status, 200);
+      expect((await second).status, 200);
+      expect(
+        [for (final request in server.requests) request.uri.path],
+        unorderedEquals(['/first', '/second']),
+      );
+    });
+
+    test('a body in gzip comes decoded, without the headers of its coding',
+        () async {
+      final coded = gzip.encode(utf8.encode('decoded'));
+      server.answer('GET', '/coded', (request) async {
+        request.response
+          ..headers.set('content-encoding', 'gzip')
+          ..headers.contentLength = coded.length
+          ..add(coded);
+        await request.response.close();
+      });
+
+      final reply = await createDioRestTransport().send(
+        _exchange(method: 'GET', address: '${server.address}/coded'),
+      );
+
+      expect(utf8.decode(reply.bytes), 'decoded');
+      expect(reply.headers, isNot(contains('content-encoding')));
+      expect(reply.headers, isNot(contains('content-length')));
+    });
+
+    for (final coding in const [
+      'br',
+      'deflate',
+      'GZIP',
+      'x-gzip',
+      'identity'
+    ]) {
+      test(
+          'a body in $coding, which the stack does not decode, keeps its '
+          'bytes and the headers that tell of them', () async {
+        const bytes = [1, 2, 3, 4];
+        server.answer('GET', '/coded', (request) async {
+          request.response
+            ..headers.set('content-encoding', coding)
+            ..headers.contentLength = bytes.length
+            ..add(bytes);
+          await request.response.close();
+        });
+        final client = AppRestClient(
+          transport: createRestTransport(),
+          baseAddress: server.address,
+        );
+
+        final response = await client.get('coded');
+
+        expect(response.bytes, bytes);
+        expect(response.headers['content-encoding'], coding);
+        expect(response.headers['content-length'], '${bytes.length}');
+      });
+    }
 
     for (final delay in const [0, 1, 2, 5, 10]) {
       test(
