@@ -2012,6 +2012,7 @@ const _eachLanguageSupported =
 
 /// The file of the test of the native projects of the app icon role.
 const _appIconTests = 'test/app_icon_role/app_icon_role_test.dart';
+
 /// The file of the tests of the token of the auth role, and the reasons of
 /// its expectations that the fixture sign-in with a known bug of the token
 /// fails.
