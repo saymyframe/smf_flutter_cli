@@ -1239,20 +1239,20 @@ void main() {
         // preferences.
         'flutter_core with router, localization',
         'flutter_core with localization',
+        'bottom_tabs with localization',
         'home with localization',
         'settings with localization',
-        'bottom_tabs with localization',
+        // The onboarding requires the preferences.
+        'onboarding with localization',
+        'onboarding',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
         'material_theme with localization',
         'material_theme',
-        'shared_preferences with di',
-        'shared_preferences',
-        // The onboarding requires the preferences.
-        'onboarding with localization',
-        'onboarding',
         // So does the notifications role.
         ..._localNotifications,
+        'shared_preferences with di',
+        'shared_preferences',
         // And the push role requires the notifications.
         'firebase_messaging',
         // Firebase Authentication with the localization, which requires
@@ -1374,12 +1374,12 @@ void main() {
         // shows the labels of the destinations in the language of the app.
         'flutter_core with router, localization',
         'flutter_core with localization',
+        'bottom_tabs with localization',
         'home with localization',
         'settings with localization',
-        'bottom_tabs with localization',
+        'onboarding with localization',
         'material_theme with settings_screen, localization',
         'material_theme with localization',
-        'onboarding with localization',
         // The notifications role, whose entry of the settings screen has
         // texts.
         _lnAll,

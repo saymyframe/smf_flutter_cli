@@ -384,14 +384,12 @@ void main() {
     String localized(String module) => '$module with localization '
         '($module, gen_l10n, flutter_core, go_router, shared_preferences)';
     String everyModule(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, material_theme, launcher_icons, native_splash, gen_l10n, '
-        'get_it, '
-        'event_bus, shared_preferences, dart_define, onboarding, '
-        'local_notifications, '
-        'firebase_core, firebase_crashlytics, firebase_analytics, '
-        'firebase_messaging, firebase_auth, google_sign_in, apple_sign_in, '
-        'sign_in, dio, revenuecat, paywall, github_actions)';
+        '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
+        'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
+        'event_bus, shared_preferences, firebase_core, firebase_messaging, '
+        'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, revenuecat, '
+        'paywall, dart_define, firebase_crashlytics, firebase_analytics, '
+        'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -426,13 +424,16 @@ void main() {
       ),
       'flutter_core (flutter_core)',
       'go_router with layout (go_router, bottom_tabs, flutter_core)',
-      'bloc (bloc, flutter_core)',
-      'riverpod (riverpod, flutter_core)',
+      localized('bottom_tabs'),
       localized('home'),
       'home (home, flutter_core, go_router)',
       localized('settings'),
       'settings (settings, flutter_core, go_router)',
-      localized('bottom_tabs'),
+      equals(
+        'onboarding with localization (onboarding, gen_l10n, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      'onboarding (onboarding, flutter_core, shared_preferences, go_router)',
       equals(
         'material_theme with settings_screen, localization (material_theme, '
         'settings, gen_l10n, flutter_core, shared_preferences, go_router)',
@@ -446,19 +447,6 @@ void main() {
         'flutter_core, shared_preferences)',
       ),
       'material_theme (material_theme, flutter_core, shared_preferences)',
-      'launcher_icons (launcher_icons, flutter_core)',
-      'native_splash (native_splash, flutter_core)',
-      'get_it (get_it, flutter_core)',
-      'event_bus with di (event_bus, get_it, flutter_core)',
-      'event_bus (event_bus, flutter_core)',
-      'shared_preferences with di (shared_preferences, get_it, flutter_core)',
-      'shared_preferences (shared_preferences, flutter_core)',
-      'dart_define (dart_define, flutter_core)',
-      equals(
-        'onboarding with localization (onboarding, gen_l10n, flutter_core, '
-        'shared_preferences, go_router)',
-      ),
-      'onboarding (onboarding, flutter_core, shared_preferences, go_router)',
       equals(
         'local_notifications with settings_screen, onboarding_screen, '
         'localization (local_notifications, settings, onboarding, gen_l10n, '
@@ -495,30 +483,14 @@ void main() {
         'local_notifications (local_notifications, flutter_core, '
         'shared_preferences)',
       ),
+      'get_it (get_it, flutter_core)',
+      'bloc (bloc, flutter_core)',
+      'riverpod (riverpod, flutter_core)',
+      'event_bus with di (event_bus, get_it, flutter_core)',
+      'event_bus (event_bus, flutter_core)',
+      'shared_preferences with di (shared_preferences, get_it, flutter_core)',
+      'shared_preferences (shared_preferences, flutter_core)',
       'firebase_core (firebase_core, flutter_core)',
-      equals(
-        'firebase_crashlytics with di (firebase_crashlytics, get_it, '
-        'firebase_core, flutter_core)',
-      ),
-      equals(
-        'firebase_crashlytics (firebase_crashlytics, firebase_core, '
-        'flutter_core)',
-      ),
-      equals(
-        'firebase_analytics with di, router (firebase_analytics, get_it, '
-        'go_router, firebase_core, flutter_core)',
-      ),
-      equals(
-        'firebase_analytics with di (firebase_analytics, get_it, '
-        'firebase_core, flutter_core)',
-      ),
-      equals(
-        'firebase_analytics with router (firebase_analytics, go_router, '
-        'firebase_core, flutter_core)',
-      ),
-      equals(
-        'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
-      ),
       equals(
         'firebase_messaging (firebase_messaging, firebase_core, flutter_core, '
         'local_notifications, shared_preferences)',
@@ -642,6 +614,32 @@ void main() {
             'paywall ($stateManager)$uses (paywall,',
             '${others.replaceFirst('%', stateManager)})',
           ].join(' '),
+      'dart_define (dart_define, flutter_core)',
+      equals(
+        'firebase_crashlytics with di (firebase_crashlytics, get_it, '
+        'firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_crashlytics (firebase_crashlytics, firebase_core, '
+        'flutter_core)',
+      ),
+      equals(
+        'firebase_analytics with di, router (firebase_analytics, get_it, '
+        'go_router, firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_analytics with di (firebase_analytics, get_it, '
+        'firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_analytics with router (firebase_analytics, go_router, '
+        'firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
+      ),
+      'launcher_icons (launcher_icons, flutter_core)',
+      'native_splash (native_splash, flutter_core)',
       // CI with the values of .env, which its build writes, and without.
       'github_actions with env (github_actions, dart_define, flutter_core)',
       'github_actions (github_actions, flutter_core)',
@@ -872,11 +870,10 @@ void main() {
 
     expect(failed, isEmpty);
     String without(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, material_theme, launcher_icons, native_splash, gen_l10n, '
-        'get_it, '
-        'event_bus, shared_preferences, dart_define, onboarding, '
-        'local_notifications, dio, revenuecat, paywall, github_actions, local)';
+        '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
+        'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
+        'event_bus, shared_preferences, dio, revenuecat, paywall, dart_define, '
+        'launcher_icons, native_splash, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2671,23 +2668,23 @@ Type type() => Types;
             [
               'flutter_core',
               'go_router',
-              stateManager,
+              'bottom_tabs',
               'home',
               'settings',
-              'bottom_tabs',
+              'onboarding',
               'material_theme',
-              'launcher_icons',
-              'native_splash',
               'gen_l10n',
+              'local_notifications',
               'get_it',
+              stateManager,
               'event_bus',
               'shared_preferences',
-              'dart_define',
-              'onboarding',
-              'local_notifications',
               'dio',
               'revenuecat',
               'paywall',
+              'dart_define',
+              'launcher_icons',
+              'native_splash',
               'github_actions',
             ].join(','),
             '-o',
