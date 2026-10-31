@@ -58,6 +58,10 @@ dependencies:
   # The provider of the theme role in the registry of several providers, for
   # the tests of the role that the CLI keeps.
   smf_material_theme: ^0.4.3
+  # The provider of the splash role in the registry of several providers, for
+  # the app test that it keeps and the test of the role that the CLI keeps, and
+  # the broken provider that the test of the role must fail on.
+  smf_native_splash: ^0.7.0
   # The onboarding of the CLI, for its app test in the app of several
   # providers, whose other tests its mocks open its guard for.
   smf_onboarding: ^0.6.0

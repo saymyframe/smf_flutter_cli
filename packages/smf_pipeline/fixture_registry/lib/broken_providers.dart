@@ -29,6 +29,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_settings/smf_settings.dart';
 
 /// The app entry that builds its root once: flutter_core, the app entry of
@@ -122,6 +123,30 @@ const _goRouterAskingWithinItsCalls = BrokenModule(
   file: RouterRole.appRouterFactoryFile,
   changes: [
     ('    if (_asking > 0) return null;', '    if (_asking < 0) return null;'),
+  ],
+);
+
+/// The splash screen whose configuration sets `android_min_sdk` to the lowest
+/// version of Android that the apps run on: native_splash with that one line.
+/// flutter_native_splash then writes `drawable/launch_background.xml` alone,
+/// and leaves `drawable-v21/launch_background.xml` as the app entry has it,
+/// without an image. That file wins on Android below 12, so the screen there
+/// has no image, though the app builds and every other file of the screen is
+/// made: only the files that the step leaves show the bug.
+///
+/// No fixture provides the splash role, since its files come from a tool that
+/// only the module knows, so the broken one changes the module of the CLI. It
+/// is made here for the reason that the app entry above is.
+const _splashWithAndroidMinSdk = BrokenModule(
+  NativeSplashModule(),
+  id: ModuleId('broken_splash_sets_android_min_sdk'),
+  description: 'A splash screen that Android below 12 shows blank (fixture)',
+  file: 'flutter_native_splash.yaml',
+  changes: [
+    (
+      'flutter_native_splash:\n',
+      'flutter_native_splash:\n  android_min_sdk: 24\n',
+    ),
   ],
 );
 
@@ -1393,6 +1418,22 @@ List<BrokenProvider> brokenProviders() => const [
             _flavorTests,
             'the probe of the flavor finds no problem',
             'The app has the flavor that its build asked for.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _splashWithAndroidMinSdk,
+        role: splashRole,
+        bug: 'Its configuration sets android_min_sdk, so the tool leaves the '
+            'launch background that Android below 12 reads without an image.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/splash_role/splash_role_test.dart',
+            'below Android 12, the window background of the activity has an '
+                'image in each mode, at each version of the system',
+            'The launch background that the system shows below Android 12 '
+                'has an image, in each mode and at each version of the system.',
           ),
         ],
       ),

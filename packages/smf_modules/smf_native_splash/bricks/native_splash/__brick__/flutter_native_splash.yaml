@@ -1,0 +1,15 @@
+# How `dart run flutter_native_splash:create` makes the splash screen of the
+# app. Run that command after you change this file or one of the images.
+flutter_native_splash:
+  color: "{{{light_background}}}"
+  color_dark: "{{{dark_background}}}"
+  image: "{{{light_image}}}"
+  image_dark: "{{{dark_image}}}"
+  android: true
+  ios: true
+  web: false
+  android_12:
+    color: "{{{light_background}}}"
+    color_dark: "{{{dark_background}}}"
+    image: "{{{light_image}}}"
+    image_dark: "{{{dark_image}}}"
