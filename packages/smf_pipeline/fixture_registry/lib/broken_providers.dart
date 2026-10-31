@@ -2019,9 +2019,9 @@ List<BrokenProvider> brokenProviders() => const [
         BrokenModule.restKeepingClient,
         role: restRole,
         bug: 'It keeps one HttpClient, so the first request of a test file '
-            'that went to the stand-in of the binding of the tests leaves every '
-            'later request with that stand-in, also once RestTestServer took '
-            'it away.',
+            'that went to the stand-in of the binding of the tests leaves '
+            'every later request with that stand-in, also once RestTestServer '
+            'took it away.',
         app: _appWithRest,
         failures: [
           MatrixExpectedFailure(

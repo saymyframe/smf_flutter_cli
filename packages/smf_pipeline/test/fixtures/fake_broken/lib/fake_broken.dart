@@ -968,10 +968,12 @@ final class BrokenModule extends SmfModule {
     [
       (
         '/// Creates the transport of the fixture.\n',
-        'HttpClient? _client;\n\n/// Creates the transport of the fixture.\n',
+        'HttpClient? _client;\n\n'
+            '/// Creates the transport of the fixture.\n',
       ),
       (
-        '    // A client for each exchange, so nothing stays between two calls.\n'
+        '    // A client for each exchange, so nothing stays between two '
+            'calls.\n'
             '    final client = HttpClient();\n',
         '    final client = _client ??= HttpClient();\n',
       ),
