@@ -43,7 +43,7 @@ final class DioModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description: 'REST API with dio',
+        description: 'REST client with dio',
         kind: ModuleKinds.infrastructure,
         providers: [RoleProvider.plain(restRole)],
       );

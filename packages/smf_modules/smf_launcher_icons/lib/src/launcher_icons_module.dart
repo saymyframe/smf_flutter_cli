@@ -35,7 +35,8 @@ final class LauncherIconsModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description: 'App icon with flutter_launcher_icons',
+        description:
+            'App icon from assets/branding with flutter_launcher_icons',
         kind: ModuleKinds.infrastructure,
         providers: [RoleProvider.plain(appIconRole)],
       );
