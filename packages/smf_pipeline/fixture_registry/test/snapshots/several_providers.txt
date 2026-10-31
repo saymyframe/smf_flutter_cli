@@ -201,6 +201,16 @@ With `firebase_analytics`:
 - Screen views need no code: the router calls `logFirebaseScreenView()` with each screen that the user sees, and it logs the screen under the name of its route.
 - `android/app/src/main/AndroidManifest.xml` and `ios/Runner/Info.plist` turn off the screen views that Firebase Analytics logs itself, which would name the one activity or view controller of Flutter rather than a screen.
 
+## App icon
+
+- The sources of the icon of the app are `assets/branding/icon.png` and `assets/branding/icon_foreground.png`. Do not edit the images made from them in the Android and iOS projects. Change a source and run the command that the note of the provider below gives. Keep the first source opaque, since the App Store refuses an icon with alpha.
+
+With `flutter_launcher_icons`:
+
+- After a change of a source or of `flutter_launcher_icons.yaml`, run `dart tool/update_app_icon.dart` and commit what changed under `android/` and `ios/`.
+- Do not run `dart run flutter_launcher_icons` itself: it writes the name of the icon into a build setting of the Xcode project that takes YES or NO, and the script repairs that setting.
+- Do not add a `flutter_launcher_icons-<flavor>.yaml`. It turns `flutter_launcher_icons.yaml` off, and on iOS it does not switch the icon of a flavor.
+
 ## Authentication
 
 - `appSession` in `lib/core/auth/app_session.dart` tells who uses the app, and knows it before the first frame. Its `value` is a `SignedOutSession`, an `AnonymousSession` or an `AccountSession`, and `appSession.value.uid` is the id of the user. Sign in, sign up, sign out and delete the account only through `appSession`. The app has one, so create no other `AppSessionController`.
@@ -635,6 +645,20 @@ The app reports its errors to [Firebase Crashlytics](https://firebase.google.com
 ruby -e 'f = ARGV[0]; s = File.exist?(f) ? File.binread(f) : ""; t = s.gsub("$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run", "$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run"); if t == s then puts "Nothing to fix in #{f}" else File.binwrite(f, t); puts "Fixed the Crashlytics phase in #{f}" end' ios/Runner.xcodeproj/project.pbxproj
 ```
 
+## Launcher icons
+
+`assets/branding/icon.png` shows the logo of Say My Frame in cream on green, and `assets/branding/icon_foreground.png` shows the same logo on a transparent background. On Android, `adaptive_icon_background` of `flutter_launcher_icons.yaml` is the colour behind it. Replace both images before you release the app.
+
+Launchers cut the second image to a shape of their own. They always keep a circle around its centre, as wide as 90% of the image, since `adaptive_icon_foreground_inset` of `flutter_launcher_icons.yaml` is 16%. Keep the whole logo inside that circle. The themed icon of Android is the alpha of the same image.
+
+After you change an image or `flutter_launcher_icons.yaml`, run this command and commit what changed under `android/` and `ios/`:
+
+```bash
+dart tool/update_app_icon.dart
+```
+
+Use this script rather than `dart run flutter_launcher_icons`, which writes the name of the icon into a build setting of the Xcode project that takes YES or NO. The script repairs that setting. A file `flutter_launcher_icons-<flavor>.yaml` turns `flutter_launcher_icons.yaml` off, and on iOS it does not switch the icon of a flavor, so one icon for each flavor needs more than that file.
+
 ## flutter_local_notifications
 
 The app shows its notifications with [flutter_local_notifications](https://pub.dev/packages/flutter_local_notifications): `lib/core/notifications/local_notifications_service.dart` implements the notifications service of the app on it (see the section Notifications).
@@ -648,6 +672,15 @@ The module set up what the package needs in the native projects:
 Every notification goes to the channel `default`, with a high importance, which the service creates when the app starts. A scheduled notification uses an inexact alarm on Android, which needs no permission: Android may show it a few minutes late. To show notifications to the minute, declare `android.permission.SCHEDULE_EXACT_ALARM` in the manifest, ask for it with `requestExactAlarmsPermission()` of `AndroidFlutterLocalNotificationsPlugin`, and schedule with `AndroidScheduleMode.exactAllowWhileIdle`. Google Play allows exact alarms only for apps whose main feature needs them, such as an alarm clock or a calendar.
 
 The app does not set up the actions of a notification, its buttons. They need the receiver `ActionBroadcastReceiver` on Android and, on iOS, a callback that registers the plugins for the isolate in which an action runs: see the README of the package.
+
+## App icon
+
+The icon of the app is made from two images, which the app does not bundle:
+
+- `assets/branding/icon.png`, 1024 by 1024 and opaque, since the App Store refuses an icon with alpha. iOS and older versions of Android show it.
+- `assets/branding/icon_foreground.png`, 1024 by 1024, the logo on a transparent background, for the adaptive icon of Android.
+
+All flavors share the icon. The section of the module that provides the icon says what the images show now, how much of the second one launchers cut, and which command to run after a change.
 
 ## Sign-in
 
@@ -1021,6 +1054,10 @@ plugins {
 }
 
 include(":app")
+=== assets/branding/icon.png (launcher_icons) ===
+<24643 bytes>
+=== assets/branding/icon_foreground.png (launcher_icons) ===
+<20610 bytes>
 === assets/fonts/geist/Geist-Medium.ttf (material_theme) ===
 <66576 bytes>
 === assets/fonts/geist/Geist-Regular.ttf (material_theme) ===
@@ -1121,6 +1158,23 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+=== flutter_launcher_icons.yaml (launcher_icons) ===
+# How `dart tool/update_app_icon.dart` makes the icon of the app. Run it after
+# you change this file or an image in assets/branding/.
+flutter_launcher_icons:
+  image_path: "assets/branding/icon.png"
+  android: true
+  ios: true
+  # An image with alpha gets this background on iOS, since the App Store
+  # refuses an icon with alpha.
+  remove_alpha_ios: true
+  background_color_ios: "#0F3326"
+  # The adaptive icon of Android, and its themed variant, of which Android
+  # reads only the alpha.
+  adaptive_icon_background: "#0F3326"
+  adaptive_icon_foreground: "assets/branding/icon_foreground.png"
+  adaptive_icon_foreground_inset: 16
+  adaptive_icon_monochrome: "assets/branding/icon_foreground.png"
 === ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -18244,6 +18298,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: "^0.14.4"
   flutter_lints: "^6.0.0"
 
 flutter:
@@ -19565,4 +19620,35 @@ String? _withUrlSchemes(String text, List<String> schemes) {
     '${_urlTypesOf(schemes, '$indent\t', newline)}'
     '$indent</array>$newline',
   );
+}
+=== tool/update_app_icon.dart (launcher_icons) ===
+// Makes the launcher icons of the app from assets/branding/, as
+// flutter_launcher_icons.yaml says. Run it again after you change an image:
+//
+//     dart tool/update_app_icon.dart
+import 'dart:io';
+
+import 'package:flutter_launcher_icons/main.dart' as flutter_launcher_icons;
+
+const _project = 'ios/Runner.xcodeproj/project.pbxproj';
+const _setting = 'ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS';
+
+Future<void> main(List<String> arguments) async {
+  final line = RegExp('$_setting = ([^;]*);');
+  final project = File(_project);
+  final before = [
+    for (final match in line.allMatches(project.readAsStringSync())) match[1],
+  ];
+  await flutter_launcher_icons.createIconsFromArguments(arguments);
+  // flutter_launcher_icons 0.14.4 writes the name of the icon into every build
+  // setting of the Xcode project whose name has ASSETCATALOG. This one takes
+  // YES or NO, so each line gets its value back, or YES after an earlier run
+  // of the tool.
+  final text = project.readAsStringSync();
+  var index = 0;
+  final fixed = text.replaceAllMapped(line, (_) {
+    final value = before.elementAtOrNull(index++);
+    return '$_setting = ${value == 'NO' ? 'NO' : 'YES'};';
+  });
+  if (fixed != text) project.writeAsStringSync(fixed);
 }
