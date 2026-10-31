@@ -719,10 +719,11 @@ final class MatrixToolOptions {
     if (values.containsKey(_appOption)) {
       if (!flags.contains('--every-module') &&
           !flags.contains('--create') &&
-          !flags.contains('--add-app-tests')) {
+          !flags.contains('--add-app-tests') &&
+          !flags.contains('--ci-commands')) {
         problems.add(
           '--app takes an app with every module, with --every-module, '
-          '--create or --add-app-tests.',
+          '--create, --add-app-tests or --ci-commands.',
         );
       }
       if (values.containsKey(_combinationsOption)) {

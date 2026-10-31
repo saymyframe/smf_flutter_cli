@@ -9,6 +9,7 @@ import 'package:smf_contracts/core.dart';
 import 'package:smf_contracts/smf_contracts.dart' show appEntryRole;
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
+import 'package:smf_flutter_cli/matrix_ci.dart';
 import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -109,6 +110,14 @@ import 'package:yaml/yaml.dart';
 /// the app would get no arguments that give it the values, so the tool
 /// refuses `--env-values` then. Of the values that the tests give an app of
 /// the matrix in its runs, it writes none.
+///
+/// A run of the matrix also runs the commands of the CI of each app of a
+/// provider of the CI role in a clone of it; see `runMatrix`. An app with every
+/// module has CI of a job of its own: with `--ci-commands`, `--app` and the
+/// name of such an app, and its directory, the tool runs the commands of the
+/// CI of the app that `--create --app` generated as that app, in a clone of
+/// it, and nothing else; with `--build` after `--ci-commands`, it then builds
+/// the app as its CI does, in a clone of its own; see `runCiOf` and `matrixCi`.
 Future<void> main(List<String> given) async {
   if (given case ['--plan', ...final options]) {
     exit(await printMatrixPlan(smfModules, options, native: appEntryRole));
@@ -172,6 +181,22 @@ Future<void> main(List<String> given) async {
     }
     _usage();
   }
+  if (arguments case ['--ci-commands', ...final rest]) {
+    final build = rest.firstOrNull == '--build';
+    final directories = build ? rest.skip(1).toList() : rest;
+    if (directories case [final directory]
+        when !directory.startsWith('-') &&
+            choice.selection is NamedEveryModuleApp) {
+      exit(
+        await _ciCommands(
+          choice.selection as NamedEveryModuleApp,
+          directory,
+          build: build,
+        ),
+      );
+    }
+    _usage();
+  }
   if (arguments
       case [
         '--create',
@@ -211,6 +236,7 @@ Future<void> main(List<String> given) async {
     directory: rest.first,
     appTests: await smfAppTests(),
     env: matrixEnv,
+    ci: matrixCi,
     selection: MatrixSelection(
       only: rest.length > 1 ? rest.skip(1).toSet() : null,
       everyModule: everyModule,
@@ -245,6 +271,10 @@ Never _usage([String? problem]) {
       '       dart run tool/matrix.dart --add-app-tests '
       '[--without-external-steps --app <name> | --app <name>] '
       '[--env-values <file>] <app> <app tests>...',
+    )
+    ..writeln(
+      '       dart run tool/matrix.dart --ci-commands [--build] --app <name> '
+      '<app>',
     )
     ..writeln(
       '<c>: pairwise (by default), 3-wise or all, the combinations of the '
@@ -343,6 +373,30 @@ Future<int> _addAppTests(
           ),
   );
   stdout.writeln(output.trim());
+  await Future.wait<void>([stdout.flush(), stderr.flush()]);
+  return code;
+}
+
+/// Runs the commands of the CI of the app with every module [named], generated
+/// in [directory], in a clone of it, and with [build] its build too; returns
+/// the exit code.
+Future<int> _ciCommands(
+  NamedEveryModuleApp named,
+  String directory, {
+  required bool build,
+}) async {
+  final (:apps, failed: _) = await everyModuleAppsOf(smfModules);
+  final selected = named.select(apps, smfModules);
+  if (selected.isEmpty) {
+    stderr.writeln(named.problemsOf(selected).join('\n'));
+    return 64;
+  }
+  final code = await runCiOf(
+    selected.single,
+    directory: p.absolute(directory),
+    ci: matrixCi,
+    build: build,
+  );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   return code;
 }

@@ -98,6 +98,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`sign_in`](https://doc.saymyframe.com/modules/sign-in) | Screens of sign-in, sign-up and password reset with an email address and a password, with a button for each way to sign in of the app, and the screen of the account with its entry on the settings screen, with BLoC or with Riverpod. |
 | [`revenuecat`](https://doc.saymyframe.com/modules/revenuecat) | Purchases with RevenueCat: premium access that the user buys with a plan of the default offering, and restores. |
 | [`paywall`](https://doc.saymyframe.com/modules/paywall) | A paywall that sells premium access with the plans of the purchases of the app, the screen of the subscription with its row on the settings screen, and a step of the onboarding, with BLoC or with Riverpod. |
+| [`github_actions`](https://doc.saymyframe.com/modules/github-actions) | CI on GitHub Actions: the format check, `flutter analyze` and `flutter test` on each push, and a release APK for an environment on request. |
 
 A module knows only the modules it depends on. A screen needs *a* router, not go_router, and analytics follows the screens of whichever router the app has. SMF calls these shared parts roles: a module that needs a role works with every module that provides it, and CI generates apps from many combinations of modules and checks each with `flutter analyze`. You can also write modules of your own; see [Extending SMF](https://doc.saymyframe.com/extending).
 

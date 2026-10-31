@@ -42,6 +42,7 @@ dependencies:
   smf_flutter_core: ^0.6.0
   smf_gen_l10n: ^0.5.1
   smf_get_it: ^0.4.3
+  smf_github_actions: ^0.7.0
   smf_go_router: ^0.6.1
   smf_google_sign_in: ^0.6.2
   smf_home_flutter: ^0.5.1
