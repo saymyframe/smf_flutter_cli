@@ -42,6 +42,10 @@ const _appTests = 'lib/matrix_app_tests.dart';
 /// of the matrix, imports it.
 const _matrixEnv = 'lib/matrix_env.dart';
 
+/// What the matrices run of the CI of an app, from the CI role: only their
+/// tools import it.
+const _matrixCi = 'lib/matrix_ci.dart';
+
 /// The library of the catalog of the steps by hand, which only
 /// `tool/setup_steps.dart` and the tests of the package import: it runs
 /// the contract harness over the modules of `smf create`, which no run of
@@ -62,7 +66,9 @@ void main() {
 
   test('the binary knows no role, only the core of the module model', () {
     for (final MapEntry(key: path, value: uris) in libraries.entries) {
-      if (path == _appTests || path == _matrixEnv) continue;
+      if (path == _appTests || path == _matrixEnv || path == _matrixCi) {
+        continue;
+      }
       for (final uri in uris) {
         if (!uri.startsWith('package:smf_contracts/')) continue;
         expect(uri, 'package:smf_contracts/core.dart', reason: path);
@@ -101,6 +107,19 @@ void main() {
       expect(
         [for (final uri in uris) _ownLibrary(path, uri)],
         isNot(contains(_matrixEnv)),
+        reason: path,
+      );
+    }
+  });
+
+  test(
+      'no library of the package imports what the matrices run of the CI of '
+      'an app, which names the role', () {
+    expect(libraries, contains(_matrixCi));
+    for (final MapEntry(key: path, value: uris) in libraries.entries) {
+      expect(
+        [for (final uri in uris) _ownLibrary(path, uri)],
+        isNot(contains(_matrixCi)),
         reason: path,
       );
     }

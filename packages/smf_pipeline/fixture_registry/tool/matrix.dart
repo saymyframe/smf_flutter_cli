@@ -6,6 +6,7 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/matrix_ci.dart';
 import 'package:smf_flutter_cli/matrix_env.dart';
 
 /// Generates the apps of the matrix of the fixture modules in the directory
@@ -17,7 +18,8 @@ import 'package:smf_flutter_cli/matrix_env.dart';
 /// matrix, such as `fake_codegen`, and only the apps named are checked. The
 /// matrix writes the values that the tests give an app into its `.env`, and
 /// runs `flutter test` with the arguments that the provider of the env role
-/// of the app needs; see `matrixEnv`.
+/// of the app needs; see `matrixEnv`. An app of a provider of the CI role also
+/// runs the commands of its CI in a clone of it; see `runMatrix`.
 /// With `--every-module` before the directory, it checks only the apps with
 /// every module, one for each combination of the providers of the roles
 /// that take one; see `everyModuleAppsOf`. Of those, a run takes a pairwise
@@ -88,6 +90,7 @@ Future<void> main(List<String> given) async {
     ),
     appTests: await fixtureAppTests(),
     env: matrixEnv,
+    ci: matrixCi,
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   exit(code);
