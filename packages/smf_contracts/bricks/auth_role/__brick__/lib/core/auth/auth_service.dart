@@ -184,7 +184,9 @@ final class AuthFailure implements Exception {
 ///   who is signed in. Made when nobody is signed in, or when the session of
 ///   that user has ended on the server, such a call fails with
 ///   [AuthFailureReason.recentSignInRequired], and in the second case it
-///   signs the user out on the device first.
+///   signs the user out on the device first. [userToken] reads, so it answers
+///   `null` when nobody is signed in, and does the same as those calls when
+///   the session of the user has ended on the server.
 /// - A [SignInCredential] whose identity provider the provider does not
 ///   take fails with [AuthFailureReason.notConfigured], with the issuer in
 ///   the [AuthFailure.developerHint].
@@ -302,4 +304,28 @@ abstract interface class AuthService {
   /// that fails, such as one that the backend is not set up for, with
   /// [AuthFailureReason.notConfigured]. Either way nothing is deleted.
   Future<void> deleteAccount({SignInCredential? fresh});
+
+  /// The token with which a server of the app tells who the user is, or
+  /// `null` when nobody is signed in. An anonymous user has one too.
+  ///
+  /// It comes from the device when it can, and the service refreshes one that
+  /// is about to expire on its own, so most reads make no request. With
+  /// [forceRefresh] it asks the server of the provider for a new token, which
+  /// differs from the one before and which the reads after it give. A token
+  /// that the server issued in the same second may come back the same.
+  ///
+  /// A read changes no user, and leaves whoever is signed in, but in the case
+  /// below. [userChanges] may tell of the same user again after it, as after
+  /// any change of the token, which the session ignores.
+  ///
+  /// It fails with [AuthFailureReason.network] when it needs the server and
+  /// does not reach it, and with [AuthFailureReason.tooManyAttempts] when the
+  /// server refuses for now. It fails with
+  /// [AuthFailureReason.recentSignInRequired] for a user whose session has
+  /// ended on the server, or may fail with [AuthFailureReason.userDisabled]
+  /// for one whom the server disabled: the service signs that user out on the
+  /// device first, while that user is still signed in. Anything else is
+  /// [AuthFailureReason.unknown], with what the provider answered as its
+  /// [AuthFailure.developerHint]. No hint of a failure has the token.
+  Future<String?> userToken({bool forceRefresh = false});
 }

@@ -993,7 +993,7 @@ $ofDevice};
 
 /// The test of the auth role that the CLI keeps in its
 /// `app_tests/auth_role`, for the apps with the role, whichever module
-/// provides it, in each mode of the role. Each of its four files runs the
+/// provides it, in each mode of the role. Each of its five files runs the
 /// start-up of the app once, with `bootstrap()`:
 /// - the service of the provider keeps the contract of `AuthService`, the
 ///   same in every mode. When a call completes, the user of the service is
@@ -1019,7 +1019,13 @@ $ofDevice};
 ///   deleted, at the latest once the user has signed in again;
 /// - an account that is signed up before the app starts is signed in when
 ///   the start-up is over, as the mocks of a module with a guard that asks
-///   for an account rely on.
+///   for an account rely on;
+/// - the token of the user: nobody has none, the user of an account and an
+///   anonymous user each have one, a forced refresh gives another one with
+///   the same user, and a read tells nobody of a change. The session gives
+///   the token of its user, refreshes a token that a server refused once for
+///   all the reads at the same time and for those that come later, and the
+///   next start has a token for the user of the device.
 ///
 /// The test knows only the role. The matrix fills in the mode of each app,
 /// which the test expects the app to be in: the choice of the role

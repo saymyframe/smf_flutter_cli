@@ -102,6 +102,9 @@ final class Scripted implements AuthService {
   Future<void> deleteAccount({SignInCredential? fresh}) =>
       _answer('deleteAccount', () => null);
 
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async => null;
+
   /// Signs in to the user of the identity of [credential], whose id is
   /// `identity`.
   @override

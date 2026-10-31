@@ -730,6 +730,64 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture sign-in whose forced read of the token gives the token that
+  /// the user has, as a provider does that answers from the device whatever
+  /// it is asked: a server that refused the token refuses the next one too,
+  /// and the user cannot get past it without a new sign-in.
+  static const authTokenNotRefreshed = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_token_not_refreshed'),
+    'Sign-in whose forced refresh gives the same token (fixture)',
+    _fixtureAuthFile,
+    [
+      (
+        '    _tokens[uid] = forceRefresh ? turn + 1 : turn;\n',
+        '    _tokens[uid] = turn;\n',
+      ),
+    ],
+  );
+
+  /// The fixture sign-in that gives the last token that it gave with nobody
+  /// signed in, as a provider does that keeps a token in a field of its own
+  /// past a sign-out: the requests of the next person on the device go to a
+  /// server as the user who left.
+  static const authTokenKeptAfterSignOut = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_token_kept_after_sign_out'),
+    'Sign-in that gives a token after a sign-out (fixture)',
+    _fixtureAuthFile,
+    [
+      (
+        '    if (user == null) return null;\n'
+            '    final uid = user.uid;\n',
+        '    if (user == null) {\n'
+            '      final last = _tokens.entries.lastOrNull;\n'
+            '      if (last == null) return null;\n'
+            '      final (uid, turn) = (last.key, last.value);\n'
+            "      return 'fixture-token-\$uid-\$turn';\n"
+            '    }\n'
+            '    final uid = user.uid;\n',
+      ),
+    ],
+  );
+
+  /// The fixture sign-in that keeps the token of the first user in a field of
+  /// its own and gives it to every next user, as a provider does that reads
+  /// the token once: a server takes the next person on the device for the
+  /// user before.
+  static const authTokenKeptForNextUser = BrokenModule._(
+    FakeAuthModule(),
+    ModuleId('broken_auth_token_kept_for_next_user'),
+    'Sign-in that gives every user the token of the first (fixture)',
+    _fixtureAuthFile,
+    [
+      (
+        "    return 'fixture-token-\$uid-\${_tokens[uid]}';\n",
+        "    return 'fixture-token-\${_tokens.keys.first}-\${_tokens[uid]}';\n",
+      ),
+    ],
+  );
+
   /// The file of the fixture sign-in.
   static const _fixtureAuthFile = 'lib/core/fixture_auth/fixture_auth.dart';
 
