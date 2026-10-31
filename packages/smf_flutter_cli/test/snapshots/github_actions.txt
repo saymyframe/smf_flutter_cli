@@ -2,6 +2,7 @@
 # The CI of this app. The section "GitHub Actions" of README.md tells what it
 # runs and where its values come from.
 name: CI
+run-name: ${{ inputs.environment && format('Build for Android ({0})', inputs.environment) || '' }}
 
 on:
   push:
@@ -47,7 +48,7 @@ jobs:
         run: flutter test
 
   build:
-    name: Build for Android (${{ inputs.environment }})
+    name: Build for Android
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45

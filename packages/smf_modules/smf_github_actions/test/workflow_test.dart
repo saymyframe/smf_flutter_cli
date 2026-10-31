@@ -101,6 +101,19 @@ void main() {
         expect(step['env'], {'APP_ENVIRONMENT': _chosen});
       });
 
+      test(
+          'names a skipped job without an expression, which GitHub would '
+          'show as it is on every push, and a run by its environment', () {
+        final job = (workflow['jobs'] as YamlMap)['build'] as YamlMap;
+
+        expect(job['name'], 'Build for Android');
+        expect(
+          workflow['run-name'],
+          r"${{ inputs.environment && format('Build for Android ({0})', "
+          "inputs.environment) || '' }}",
+        );
+      });
+
       test('offers the environments of the role, the first by default', () {
         final on = workflow['on'] as YamlMap;
         final dispatch = on['workflow_dispatch'] as YamlMap;
