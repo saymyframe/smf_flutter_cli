@@ -7,6 +7,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/bundles/firebase_analytics_bundle.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_analytics/src/agents.dart';
+import 'package:smf_firebase_analytics/src/readme.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
@@ -238,14 +239,25 @@ final Set<ContributionOrigin> _analytics = {
   const ModuleOrigin(FirebaseAnalyticsModule.id),
 };
 
+/// The section of the module in the README of [readmeOf], without its
+/// heading.
+String _sectionOf({required RenderedApp readmeOf}) {
+  final section = RegExp(
+    '\n## $readmeHeading\n\n([\\s\\S]*?)(?=\n## |\$)',
+  ).firstMatch(readmeOf.files[AppEntryRole.readmeFile]!.text);
+  expect(section, isNotNull, reason: 'The README has no section of the module');
+  return section![1]!;
+}
+
 /// Checks that [app] is [without] but for the files of the analytics, the
 /// dependency on firebase_analytics, the section of the analytics in the
-/// guide for coding agents, the step by hand of the module, which opens the
-/// README and adds the note of the app entry on the steps by hand to the
-/// guide, and the files that the modules [changedBy] generate; its
-/// `bootstrap()` included, since the service starts without waiting. With
-/// [screenReportingOff], the manifest of Android and `Info.plist` also turn
-/// off the screen views that Firebase Analytics logs itself.
+/// guide for coding agents, the section of the module in the README, the
+/// step by hand of the module, which opens the README and adds the note of
+/// the app entry on the steps by hand to the guide, and the files that the
+/// modules [changedBy] generate; its `bootstrap()` included, since the service
+/// starts without waiting. With [screenReportingOff], the manifest of Android
+/// and `Info.plist` also turn off the screen views that Firebase Analytics
+/// logs itself.
 void _expectTheAppWithout(
   RenderedApp app,
   RenderedApp without, {
@@ -290,8 +302,12 @@ void _expectTheAppWithout(
     _yamlOf(without.files['pubspec.yaml']!.text),
   );
   // The README is that of the app without the analytics, opened by the
-  // section of the steps by hand, which lists the step of the module alone.
-  final readme = app.files[AppEntryRole.readmeFile]!.text;
+  // section of the steps by hand, which lists the step of the module alone,
+  // with the section of the module.
+  final readme = app.files[AppEntryRole.readmeFile]!.text.replaceFirst(
+    '\n## $readmeHeading\n\n${_sectionOf(readmeOf: app)}',
+    '',
+  );
   final setup = RegExp(
     '## ${AppEntryRole.setupHeading}\n[\\s\\S]*?\n(?=## )',
   ).firstMatch(readme)!;
@@ -503,17 +519,23 @@ void main() {
         'contributes its brick, firebase_analytics, its implementation of the '
         'service, created without waiting, the step by hand of Google '
         'Analytics, a listener of the screen for a router with the screen '
-        'views of Firebase itself turned off, and its note for coding agents, '
-        'and nothing else', () {
+        'views of Firebase itself turned off, its section of the README and '
+        'its note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(8));
+      expect(contributions, hasLength(9));
       // Of the listener of the screen, which only an app with a router has.
       final note = contributions.last as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, analyticsRole.description);
       expect(note.entryValue, AgentNote(screenViewsAgentNote));
       expect(note.when, {routerRole});
+      final section =
+          contributions[contributions.length - 2] as SocketContribution;
+      expect(section.socket, AppEntryRole.readmeSections);
+      expect(section.entryKey, readmeHeading);
+      expect(section.entryValue, readmeSection);
+      expect(section.when, isEmpty);
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(firebaseAnalyticsBundle));
       expect(brick.bundle.name, 'firebase_analytics');
@@ -680,6 +702,28 @@ void main() {
         readme,
         contains(
           '\n1. ${FirebaseAnalyticsModule.googleAnalyticsStep.title}\n',
+        ),
+      );
+    });
+
+    test(
+        'tells in its section of the README which file is on the package, '
+        'and that Google Analytics is for each Firebase project of the '
+        'flavors', () {
+      final section = _sectionOf(readmeOf: withAnalytics);
+      expect(section, contains('`$_implementation`'));
+      expect(withAnalytics.files.keys, contains(_implementation));
+      expect(
+        section,
+        allOf(
+          contains('Project settings > Integrations'),
+          contains('The link belongs to the project, and every app of the '
+              'project sends its events there.'),
+          contains('So repeat this in each Firebase project of your flavors. '
+              'Flavors that share a project need it once, and their events '
+              'go to one property.'),
+          contains('The section ${AppEntryRole.setupHeading} lists this among '
+              'the steps that you do by hand.'),
         ),
       );
     });

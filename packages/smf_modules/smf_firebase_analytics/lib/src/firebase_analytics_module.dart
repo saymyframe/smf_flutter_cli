@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_analytics/bundles/firebase_analytics_bundle.dart';
 import 'package:smf_firebase_analytics/src/agents.dart';
+import 'package:smf_firebase_analytics/src/readme.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 
 /// The module that records what users do in the app with Firebase
@@ -46,7 +47,8 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// The events of the app reach Google Analytics only once the Firebase
 /// project is linked to it, which a project that `flutterfire configure`
 /// creates is not, so every app of the module lists the step by hand
-/// [googleAnalyticsStep].
+/// [googleAnalyticsStep], and its section of the README tells that the step
+/// repeats for each Firebase project of the flavors of the app.
 ///
 /// In the guide for coding agents of an app with a router, the module adds
 /// to the section of the analytics that the screen views need no code.
@@ -121,6 +123,7 @@ final class FirebaseAnalyticsModule extends SmfModule {
           const PlistBoolean(false),
           when: {routerRole},
         ),
+        AppEntryRole.readmeSections.entry(readmeHeading, readmeSection),
         // Of the listener, which only an app with a router has.
         AppEntryRole.agentSections.entry(
           analyticsRole.description,

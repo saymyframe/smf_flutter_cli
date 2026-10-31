@@ -15,6 +15,6 @@ With `firebase_messaging`:
 - On iOS, `createFirebasePushService()` calls `setForegroundNotificationPresentationOptions()` with an alert, a badge and a sound. Keep it: the package answers iOS for every notification in the foreground, those of `appNotifications` too, and without these options iOS shows none of them.
 - Never call `requestPermission()` of the package: the permission to show notifications belongs to `appNotifications.request()`.
 - `${AppEntryRole.androidManifestFile}` names the channel and the icon with which Android shows a message that arrives in the background, those of the notifications of the app. Change them together.
-- The section $readmeHeading of the README tells how to upload the key of the Apple Push Notification service and how to send this device a test message.
+- The section $readmeHeading of the README tells how to upload the key of the Apple Push Notification service, which repeats for the iOS app of each flavor that the app sends to, and how to send this device a test message.
 - The package has no platform side for tests. A test that runs `${AppEntryRole.bootstrap.name}()` answers the method channel `plugins.flutter.io/firebase_messaging` itself, with `setMockMethodCallHandler` of `TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger`.
 ''';
