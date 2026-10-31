@@ -956,6 +956,34 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture REST that keeps one `HttpClient` for its exchanges, until one of
+  /// them has to stop. `HttpClient` asks `HttpOverrides` only when it is created,
+  /// so such a client stays with the stand-in of the binding of the tests after
+  /// `RestTestServer` took the stand-in away.
+  static const restKeepingClient = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_keeps_client'),
+    'REST that keeps the client of a request before a test server (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        '/// Creates the transport of the fixture.\n',
+        'HttpClient? _client;\n\n/// Creates the transport of the fixture.\n',
+      ),
+      (
+        '    // A client for each exchange, so nothing stays between two calls.\n'
+            '    final client = HttpClient();\n',
+        '    final client = _client ??= HttpClient();\n',
+      ),
+      (
+        '        client.close(force: true);\n',
+        '        client.close(force: true);\n'
+            '        _client = null;\n',
+      ),
+      ('    } finally {\n      client.close();\n    }\n', '    }\n'),
+    ],
+  );
+
   /// The fixture REST that prints the headers of each exchange, as a logger of
   /// a stack does while someone looks for a bug: the token of the user is in
   /// the log of the device.

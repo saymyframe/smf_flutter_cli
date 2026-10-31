@@ -2000,7 +2000,37 @@ List<BrokenProvider> brokenProviders() => const [
             'connection closes',
             _connectionCloses,
           ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel once the head of a reply came, before its body, ends the '
+            'call at once, and the connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel while a server does not take the body ends the call at '
+            'once, and the connection closes',
+            _connectionCloses,
+          ),
           MatrixExpectedFailure(_restProbeTests, _restProbeTest, _restProbe),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restKeepingClient,
+        role: restRole,
+        bug: 'It keeps one HttpClient, so the first request of a test file '
+            'that went to the stand-in of the binding of the tests leaves every '
+            'later request with that stand-in, also once RestTestServer took '
+            'it away.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restStandInTests,
+            'a request reaches a server that starts after a request went to '
+                'the stand-in of the binding, and none reaches it once it '
+                'closed',
+            'takes the stand-in away',
+          ),
         ],
       ),
       BrokenProvider(
@@ -2130,6 +2160,7 @@ const _restTokenTests = 'test/rest_role/token_test.dart';
 const _restRefreshTests = 'test/rest_role/refresh_test.dart';
 const _restRepeatTests = 'test/rest_role/repeats_test.dart';
 const _restStopTests = 'test/rest_role/stop_test.dart';
+const _restStandInTests = 'test/rest_role/stand_in_test.dart';
 const _restLogTests = 'test/rest_role/log_test.dart';
 const _restProbeTests = 'test/rest_role/probe_test.dart';
 

@@ -1,6 +1,6 @@
 # smf_dio
 
-The SMF module of REST requests with [dio](https://pub.dev/packages/dio). It provides the REST role of SMF: the code of the app calls `appRest.get('notes')` and never needs to know the package behind it.
+The SMF module of REST requests with [dio](https://pub.dev/packages/dio). It provides the REST role of SMF: the code of the app calls `appRest.get('notes')` without knowing the package behind it.
 
 The role generates the client, and this module sends its requests over a `Dio`. What holds with this provider, as with any other:
 

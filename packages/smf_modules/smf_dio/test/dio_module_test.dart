@@ -187,8 +187,7 @@ void main() {
       expect(
         [
           for (final result in results)
-            for (final error in result.errors)
-              '${result.contractCase}: $error',
+            for (final error in result.errors) '${result.contractCase}: $error',
         ],
         isEmpty,
       );
@@ -305,6 +304,5 @@ void main() {
       }
       expect(agentNote, contains('`$transportFile`'));
     });
-
   });
 }

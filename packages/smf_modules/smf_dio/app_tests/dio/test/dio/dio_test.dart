@@ -29,7 +29,7 @@ final class _Stack implements HttpClientAdapter {
   final List<RequestOptions> asked = [];
   final List<List<int>?> bodies = [];
   final List<Future<void>?> cancels = [];
-  
+
   /// Whether Dio closed the stack and let what is on its way end.
   bool closedGently = false;
 
@@ -355,7 +355,8 @@ void main() {
       await transport.send(_exchange());
 
       expect(stacks, hasLength(3));
-      expect([for (final stack in stacks) stack.closedGently], [true, true, false]);
+      expect([for (final stack in stacks) stack.closedGently],
+          [true, true, false]);
       expect([for (final stack in stacks) stack.asked.length], [1, 2, 1]);
     });
 
@@ -464,8 +465,7 @@ void main() {
       });
     }
 
-    test(
-        'an exchange that stops during a TLS handshake closes its connection',
+    test('an exchange that stops during a TLS handshake closes its connection',
         () async {
       final closed = Completer<void>();
       final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
