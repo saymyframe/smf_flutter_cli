@@ -49,13 +49,19 @@
 // one of an identity without a user user-not-found. A reload of a user
 // that the server deleted is user-not-found too. A revocation takes an
 // authorization code once, and like the Firebase SDK it never answers one
-// while nobody is signed in.
+// while nobody is signed in. Each user has an ID token, which a read gives,
+// and which a read that forces a refresh and each sign-in replace. A forced
+// read tells the plugin of the new token through its stream, as the platform
+// does, of the same user. A forced read of a user that the server deleted is
+// answered as Android does, with an unknown error whose message says so, since
+// the plugin there gives no code for this call.
 //
 // It differs from Firebase in this:
 // - The platform tells the plugin of each change of the user through a
 //   stream, a moment after it answered the call that made the change. Here
 //   it tells only of a change that a test makes with
-//   MockFirebaseAuth.signOutOnPlatform(). So the plugin has a user who was
+//   MockFirebaseAuth.signOutOnPlatform(), and of the token of a forced read.
+//   So the plugin has a user who was
 //   deleted as its current one until the app signs out, which on a device
 //   lasts only that moment.
 // - It takes any text for an email address and any password, an empty one
@@ -66,6 +72,8 @@
 //   Firebase keeps an address in lower case.
 // - It deletes whoever is signed in. Firebase deletes an account only for
 //   a user who signed in a short while ago.
+// - The ID token of a user is no JSON Web Token: it names the user and how
+//   many tokens that user got, and it never expires.
 // - It checks no signature, audience or expiry of a token, takes the nonce
 //   of a token of Google once too, though Firebase takes such a token again
 //   while it is valid, and takes the raw nonce itself as the nonce of the
@@ -84,7 +92,11 @@ import 'package:firebase_auth_platform_interface/firebase_auth_platform_interfac
 // of a credential that the platform keeps.
 // ignore: implementation_imports
 import 'package:firebase_auth_platform_interface/src/pigeon/messages.pigeon.dart'
-    show FirebaseAuthHostApi, InternalAuthCredential, InternalUserCredential;
+    show
+        FirebaseAuthHostApi,
+        InternalAuthCredential,
+        InternalIdTokenResult,
+        InternalUserCredential;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -133,6 +145,9 @@ final class _User {
 
   /// Whether the server deleted the user, on this device or on another.
   bool deleted = false;
+
+  /// How many ID tokens the user got.
+  int tokens = 1;
 
   bool get isAnonymous => email == null && identities.isEmpty;
 
@@ -229,6 +244,10 @@ final class MockFirebaseAuth {
   final Map<int, _Token> _given = {};
 
   final Map<String, _Failure> _failures = {};
+
+  /// What the next calls of each method wait for before they answer.
+  final Map<String, List<Completer<void>>> _holds = {};
+
   _User? _current;
   int _created = 0;
   int _numbers = 0;
@@ -247,6 +266,15 @@ final class MockFirebaseAuth {
   /// of the plugin, `wrong-password`. The call changes nothing.
   void failNext(String method, {required String code, String? message}) =>
       _failures[method] = _Failure(code, message);
+
+  /// Holds back the next call of [method] that no hold has yet: it answers
+  /// once the completer that this returns completes, and takes what
+  /// [failNext] says by then, as a slow server does.
+  Completer<void> holdNext(String method) {
+    final hold = Completer<void>();
+    (_holds[method] ??= []).add(hold);
+    return hold;
+  }
 
   /// Puts the user [uid] on the device, with the account of [email] or as
   /// an anonymous user, and with an identity at each identity provider of
@@ -309,6 +337,8 @@ final class MockFirebaseAuth {
             (codec.decodeMessage(message)! as List<Object?>).sublist(1);
         // The plugin asks for its streams when it starts, not the app.
         if (!_streams.containsKey(method)) calls.add([method, ...arguments]);
+        final holds = _holds[method];
+        if (holds != null && holds.isNotEmpty) await holds.removeAt(0).future;
         final Object? answer;
         try {
           if (_failures.remove(method) case final failure?) throw failure;
@@ -464,12 +494,46 @@ final class MockFirebaseAuth {
       }
       return user.details;
     });
+    answer('FirebaseAuthUserHostApi', 'getIdToken', (arguments) {
+      final user = _signedIn();
+      final [forceRefresh as bool] = arguments;
+      if (forceRefresh) {
+        if (user.deleted) {
+          throw const _Failure(
+            'UNKNOWN',
+            'There is no user record corresponding to this identifier. The '
+                'user may have been deleted.',
+          );
+        }
+        user.tokens++;
+        // A moment after the answer, as the platform tells it.
+        scheduleMicrotask(() => _tellOfNewToken(user));
+      }
+      return InternalIdTokenResult(
+        token: 'firebase-token-${user.uid}-${user.tokens}',
+      );
+    });
     answer('FirebaseAuthUserHostApi', 'delete', (_) {
       _delete(_signedIn());
       // It tells the plugin nothing: see the top of the file.
       _current = null;
       return null;
     });
+  }
+
+  /// Tells the plugin that the token of [user] changed: an event of the same
+  /// user on the stream of the ID token, which the plugin takes for its user.
+  void _tellOfNewToken(_User user) {
+    final details = user.details;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      _streams['registerIdTokenListener']!,
+      const StandardMethodCodec().encodeSuccessEnvelope(<String, Object?>{
+        'appName': '[DEFAULT]',
+        'user': [details.userInfo.encode(), details.providerData],
+      }),
+      null,
+    );
   }
 
   /// The answer to a call that signed a user in: that user.
@@ -498,7 +562,11 @@ final class MockFirebaseAuth {
     return user;
   }
 
-  void _signIn(_User user) => _current = user;
+  /// Signs [user] in, with a new ID token as a sign-in gives one.
+  void _signIn(_User user) {
+    _current = user;
+    user.tokens++;
+  }
 
   /// Deletes [user] on the server, with its email address and identities.
   void _delete(_User user) {

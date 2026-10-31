@@ -14,6 +14,7 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/src/render.dart';
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
 import 'support.dart';
 
@@ -326,10 +327,29 @@ dev_dependencies:
   build_runner: "^2.10.0"
 
 flutter:
+  default-flavor: "dev"
   uses-material-design: true
   assets:
     - "assets/"
 ''');
+  });
+
+  test('pubspec.yaml has the default flavor under flutter', () {
+    final app = _render([
+      scaffold(
+        contributions: [
+          const PubspecContribution.flutter(defaultFlavor: 'dev'),
+          const PubspecContribution.flutter(usesMaterialDesign: true),
+        ],
+      ),
+    ]);
+
+    final pubspec = loadYaml(app.files['pubspec.yaml']!.text) as YamlMap;
+    expect((pubspec['flutter'] as YamlMap).keys, [
+      'default-flavor',
+      'uses-material-design',
+    ]);
+    expect((pubspec['flutter'] as YamlMap)['default-flavor'], 'dev');
   });
 
   test('a line with nothing but the tag of an empty socket goes away', () {
@@ -916,7 +936,7 @@ flutter:
     );
     expect(entries.first.$3, AgentNote('Change the colors in the theme.'));
     // A socket that got nothing has no entries.
-    expect(app.entriesOf(AppEntryRole.readmeSections), isEmpty);
+    expect(app.entriesOf(AppEntryRole.gitignore), isEmpty);
   });
 
   test('a cycle that only a fragment of a render hook meets stops rendering',

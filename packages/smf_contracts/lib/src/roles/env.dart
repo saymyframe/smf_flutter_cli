@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/env_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
 part 'env/env_dsl.dart';
 part 'env/env_rules.dart';
+part 'env/env_run_configurations.dart';
 part 'env/env_template.dart';
 
 /// The env role; see [EnvRole].
@@ -17,9 +20,10 @@ const envRole = EnvRole._();
 /// A module that requires or uses the role gives it an [EnvKey] for each
 /// value that its code reads: a name in UPPER_SNAKE_CASE that starts with
 /// the id of the module, such as `REVENUECAT_APPLE_KEY` of the module
-/// `revenuecat`, and a description of one line. Only modules give keys: the
-/// template of a role gives none and reads none. [keysIn] has the keys of an
-/// app.
+/// `revenuecat`, and a description of one line. The template of a role that
+/// requires or uses this role does the same, for a value that the code of
+/// the role reads whichever module provides it, with a name that starts with
+/// the id of the role. [keysIn] has the keys of an app.
 ///
 /// The role's template generates, whichever provider is selected:
 /// - [dotEnvFile], with a comment line `# <description>` and a line `KEY=`
@@ -34,7 +38,19 @@ const envRole = EnvRole._();
 /// - [exampleFile], with the same keys and no values. It stays in git, while
 ///   [dotEnvFile] does not: the template keeps [dotEnvFile] out of git with
 ///   the `.gitignore` of the app ([AppEntryRole.gitignore]), so a clone of
-///   the app copies [exampleFile] to [dotEnvFile] and fills it in.
+///   the app copies [exampleFile] to [dotEnvFile] and fills it in;
+/// - [vscodeLaunchFile] and [androidStudioRunFileOf], the run configurations
+///   of VS Code and of Android Studio, one for each flavor of the app
+///   ([AppEntryRole.flavors]), each with the flavor and then the arguments of
+///   [toolArgumentsIn]. So a provider gives its arguments and knows neither
+///   the flavors nor the IDEs. The configuration of the default flavor is the
+///   template of the launches of VS Code that name no configuration, such as
+///   a link above `main()`, a link above a test and the Testing view. An app
+///   without the role has no run configurations, and such a launch builds the
+///   default flavor through its pubspec.
+///
+/// [dotEnvFile] is not tied to a flavor: a command gives the app what the file
+/// has when the command runs, whichever flavor it builds.
 ///
 /// It also writes the section [readmeHeading] of the README of the app,
 /// with what the two files are for and the keys of the app, each with its
@@ -66,7 +82,8 @@ const envRole = EnvRole._();
 /// requires it, may also read `AppEnv.<getter>` itself, with [appEnv]
 /// imported. Either way, the code of a module reads only its own keys and
 /// those of the modules it depends on, which the rule `env.key_access`
-/// checks.
+/// checks. The files of the template of a role read its own keys in the same
+/// way, as `AppEnv.<getter>`, and no others.
 final class EnvRole extends Role<EnvData> {
   const EnvRole._();
 
@@ -87,6 +104,16 @@ final class EnvRole extends Role<EnvData> {
   /// the keys of the app. The section of a provider on how the values get
   /// into the app can refer to it.
   static const readmeHeading = 'Values in .env';
+
+  /// The path of the run configurations of VS Code, one for each flavor of
+  /// the app, which the template writes.
+  static const vscodeLaunchFile = '.vscode/launch.json';
+
+  /// The path of the run configuration of Android Studio for [flavor], which
+  /// the template writes. Android Studio shares what is in `.run/`, since the
+  /// `.idea/` of a project belongs to one machine.
+  static String androidStudioRunFileOf(AppFlavor flavor) =>
+      '.run/${flavor.name}.run.xml';
 
   /// `AppEnv`, the class in [readerFile] through which code reads the
   /// values of [dotEnvFile], which every provider generates.
@@ -176,20 +203,19 @@ final class EnvRole extends Role<EnvData> {
           id: 'env.key_access',
           description: 'The files of a module with the role among its roles '
               'read from AppEnv only the getters of its own keys and of the '
-              'keys of the modules it depends on, and the files of the '
-              'template of a role, and of the pipeline, read none. The rule '
-              'sees what a file reads from AppEnv, with or without the '
-              'prefix of an import, and no value that it reads through '
-              'another expression.',
+              'keys of the modules it depends on, the files of the template '
+              'of a role only those of its own keys, and the files of the '
+              'pipeline none. The rule sees what a file reads from AppEnv, '
+              'with or without the prefix of an import, and no value that it '
+              'reads through another expression.',
           check: _checkKeyAccess,
         ),
       ];
 
   /// The keys of the app in [input], the input of a hook of this role, of
   /// its provider, or of a role that requires or uses this role: those of
-  /// the modules, in the order the modules were selected. The keys of one
-  /// module keep its order. The template of a role gives no key, which the
-  /// template of this role reports.
+  /// the modules, in the order the modules were selected, and then those of
+  /// the templates of roles. The keys of one owner keep its order.
   ///
   /// The files of the template list the keys in this order, and a provider
   /// declares the getter of each in [appEnv].

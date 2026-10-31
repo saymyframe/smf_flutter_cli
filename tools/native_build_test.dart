@@ -32,6 +32,31 @@ android {
 }
 ''';
 
+/// The Gradle build script of the app module of an app with the id [id] and
+/// the flavors of the app with the name [name] on a device.
+String _flavoredAppScript(String id, String name) => '''
+android {
+    namespace = "$id"
+
+    defaultConfig {
+        applicationId = "$id"
+    }
+
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "$name Dev"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "$name"
+        }
+    }
+}
+''';
+
 /// An Xcode project of an app with the id [id], the remote Swift package
 /// [package] with the version [version], if any, and the build phase that
 /// flutterfire adds with [flutterfire].
@@ -307,6 +332,37 @@ sdks:
     });
 
     test(
+        'has the flavors of the Android project without the names that their '
+        'manifest placeholders give the app', () {
+      packages('app', plugins: {});
+      write(
+        'app/android/app/build.gradle.kts',
+        _flavoredAppScript('com.example.app', 'Start App'),
+      );
+
+      expect(
+        nativeBuildOf(Directory('${temp.path}/app'), 'android'),
+        'file android/app/build.gradle.kts\n'
+        '  android {\n'
+        '  \n'
+        '      defaultConfig {\n'
+        '      }\n'
+        '  \n'
+        '      flavorDimensions += "default"\n'
+        '      productFlavors {\n'
+        '          create("dev") {\n'
+        '              dimension = "default"\n'
+        '              applicationIdSuffix = ".dev"\n'
+        '          }\n'
+        '          create("prod") {\n'
+        '              dimension = "default"\n'
+        '          }\n'
+        '      }\n'
+        '  }',
+      );
+    });
+
+    test(
         'has the Swift packages that the Xcode project refers to itself, but '
         'nothing else of the project', () {
       final app = firebaseApp('app', package: 'swift-package');
@@ -362,6 +418,23 @@ sdks:
       expect(android(configured), isNot(android(app)));
       expect(ios(package), isNot(ios(app)));
       expect(ios(version), isNot(ios(app)));
+    });
+
+    test(
+        'is the same for apps whose flavors differ only in the name of the '
+        'app, so that they share an entry of the cache of Gradle', () {
+      final app = firebaseApp('app');
+      final other = firebaseApp('other', id: 'com.saymyframe.ci.other');
+      write(
+        'apps/app/android/app/build.gradle.kts',
+        _flavoredAppScript('com.example.app', 'Start App'),
+      );
+      write(
+        'apps/other/android/app/build.gradle.kts',
+        _flavoredAppScript('com.saymyframe.ci.other', 'Firebase Start App'),
+      );
+
+      expect(nativeBuildOf(other, 'android'), nativeBuildOf(app, 'android'));
     });
 
     test(

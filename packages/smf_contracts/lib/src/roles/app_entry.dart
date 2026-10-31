@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/app_entry_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
+part 'app_entry_flavors.dart';
 part 'app_entry_guide.dart';
 part 'app_entry_native.dart';
 
@@ -27,6 +28,10 @@ const appEntryRole = AppEntryRole._();
 ///   [xcodeProjectFile]; the iOS project also has [iosEntitlementsFile],
 ///   which the app target signs with, and its app delegate in Swift,
 ///   [appDelegateFile];
+/// - the three native flavors of [flavors], in the project of each platform,
+///   of which `default-flavor` in the pubspec names [defaultFlavor], so that
+///   a command of the `flutter` tool without `--flavor` builds that one; the
+///   structural rule `app_entry.flavors` holds a provider to them;
 /// - [readmeFile], the README of the app, which says under its title that
 ///   Say My Frame generated the app, with the line [generatedWith];
 /// - [gitignoreFile], which keeps out of git what Flutter and its tools
@@ -158,6 +163,15 @@ final class AppEntryRole extends Role<NoDsl> {
   /// lists.
   static const setupHeading = 'Finish the setup';
 
+  /// The heading of the section of [readmeFile] in which the template of
+  /// the role tells of the [flavors] of the app.
+  static const flavorsHeading = 'Flavors';
+
+  /// The heading of the section of [readmeFile] in which the provider tells
+  /// where each flavor is in its native projects, for a developer who renames,
+  /// adds or removes one. It follows the section [flavorsHeading].
+  static const flavorProjectsHeading = 'Flavors in the native projects';
+
   /// The path of the guide for coding agents that work on the app; see
   /// [agentSections].
   static const agentsFile = 'AGENTS.md';
@@ -178,6 +192,23 @@ final class AppEntryRole extends Role<NoDsl> {
   /// modules bring none.
   static const statusBarIconsTestFile =
       'test/core/app/status_bar_icons_test.dart';
+
+  /// The native flavors of every app, in the order from development to the
+  /// stores: a constant of the role rather than an option, so that every
+  /// app has the same ones.
+  static const List<AppFlavor> flavors = [
+    _devFlavor,
+    _stagingFlavor,
+    _prodFlavor,
+  ];
+
+  /// The flavor that a command of the `flutter` tool without `--flavor`
+  /// builds, also in release mode.
+  static const AppFlavor defaultFlavor = _devFlavor;
+
+  /// The flavor that a build for the stores names, which has the id of the
+  /// app itself.
+  static const AppFlavor releaseFlavor = _prodFlavor;
 
   /// The screen that an app starts on when no route starts it, created as
   /// `const FallbackStartScreen()`; import it with
@@ -266,7 +297,10 @@ final class AppEntryRole extends Role<NoDsl> {
   /// this one. CocoaPods takes it for the pods through the Podfile that
   /// Flutter writes when a plugin needs pods or Swift Package Manager is
   /// off, which leaves the platform unset. The provider contributes the
-  /// version of its template, so the socket always has a value.
+  /// version of its template, so the socket always has a value. The module
+  /// rule `app_entry.ios_deployment_target_tag` keeps a literal version out
+  /// of that template, since it would hold only until a module raises the
+  /// version.
   static const iosDeploymentTarget = SocketRef<ValueSocket<String>>.role(
     appEntryRole,
     'ios_deployment_target',
@@ -634,11 +668,14 @@ final class AppEntryRole extends Role<NoDsl> {
   ///
   /// They follow the description of the app as `## <heading>` sections, in
   /// the order of the contributions (see [SocketContribution]), but for the
-  /// section [setupHeading] of the steps by hand, which comes first. A
-  /// heading is one line without spaces around it, a section has text, and
+  /// section [setupHeading] of the steps by hand, which comes first, and the
+  /// sections [flavorsHeading] and [flavorProjectsHeading], which come next.
+  /// A heading is one line without spaces around it, a section has text, and
   /// two different texts under one heading conflict. Only the template of
-  /// the role contributes the section [setupHeading]. Without sections, the
-  /// README is that of the provider's template.
+  /// the role contributes the section [setupHeading]. The template puts the
+  /// section [flavorsHeading] here in every app, so the template of every
+  /// provider's README has the tag of this socket, and the pipeline reports a
+  /// provider without it.
   static const readmeSections = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'readme_sections',
@@ -802,6 +839,16 @@ final class AppEntryRole extends Role<NoDsl> {
               'the provider.',
           check: _checkTagLines,
         ),
+        ModuleRule(
+          id: 'app_entry.ios_deployment_target_tag',
+          description: 'In the template of '
+              'ios/Runner.xcodeproj/project.pbxproj, each build configuration '
+              'of the project has the tag of the minimum iOS version as its '
+              'IPHONEOS_DEPLOYMENT_TARGET, and one of a target has that tag or '
+              'no such setting, so a version that a module raises reaches '
+              'every configuration.',
+          check: _checkIosDeploymentTargetTag,
+        ),
       ];
 
   @override
@@ -867,6 +914,21 @@ final class AppEntryRole extends Role<NoDsl> {
               'app_entry.ios_app_id, in which its developer signs the app '
               'with such a team.',
           check: _checkIosAppIdStep,
+        ),
+        StructuralRule(
+          id: 'app_entry.flavors',
+          description: 'An app with a native project has the flavors of '
+              'AppEntryRole.flavors there. Its pubspec names one of them as '
+              'default-flavor. android/app/build.gradle.kts has each in '
+              'productFlavors, with a dimension and its application id. Every '
+              'configuration list of ios/Runner.xcodeproj/project.pbxproj has '
+              'its build configurations, which in the app target have its '
+              'bundle id and a base, the same for the flavors of a mode. Its '
+              'Xcode scheme exists, takes those configurations in each action '
+              'and runs the pre-action of Flutter. The rule leaves which '
+              'flavor is the default, and the form of the label of a flavor, '
+              'to other tests.',
+          check: _checkFlavors,
         ),
         StructuralRule(
           id: 'app_entry.agent_guide_paths',

@@ -11,6 +11,8 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_settings` | `settings`, a settings screen |
 | `smf_onboarding` | `onboarding`, the onboarding of the first launch |
 | `smf_material_theme` | `material_theme`, a light and a dark Material 3 theme |
+| `smf_launcher_icons` | `launcher_icons`, the app icon with flutter_launcher_icons |
+| `smf_native_splash` | `native_splash`, the splash screen with flutter_native_splash |
 | `smf_bloc`, `smf_riverpod` | `bloc` and `riverpod`, state management |
 | `smf_gen_l10n` | `gen_l10n`, localization with gen-l10n of Flutter |
 | `smf_get_it` | `get_it`, dependency injection |
@@ -26,8 +28,10 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_google_sign_in` | `google_sign_in`, Google sign-in on Android and iOS |
 | `smf_apple_sign_in` | `apple_sign_in`, Sign in with Apple on iOS |
 | `smf_sign_in` | `sign_in`, the screens of sign-in and of the account |
+| `smf_dio` | `dio`, REST requests with dio |
 | `smf_revenuecat` | `revenuecat`, premium access sold with RevenueCat |
 | `smf_paywall` | `paywall`, the paywall and the screen of the subscription |
+| `smf_github_actions` | `github_actions`, CI on GitHub Actions |
 
 `smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.
 

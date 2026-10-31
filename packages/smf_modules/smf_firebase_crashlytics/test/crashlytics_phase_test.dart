@@ -1,8 +1,9 @@
-// The fix of the build phase for Crashlytics runs here with each Ruby of the
-// machine that a user may run it with, as the step runs it, on the Xcode
-// project of an app of SMF with Crashlytics in a temporary directory;
-// without Ruby, the tests are skipped.
-@TestOn('vm && !windows')
+// The script of the app that fixes the build phase for Crashlytics, run with
+// `dart` as the script that configures a flavor runs it, in a directory
+// without the packages of the app, on the Xcode project of an app of SMF with
+// Crashlytics. flutterfire changes the Xcode project only on macOS, so the
+// script changes it only there.
+@TestOn('vm')
 library;
 
 import 'dart:convert';
@@ -18,17 +19,16 @@ import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/crashlytics_phases.dart';
-import 'support/ruby.dart';
 
 void main() {
-  final rubies = rubiesOfMachine();
-  const step = crashlyticsPhaseFix;
   late String project;
+  late String script;
+  late Directory root;
   late Directory app;
   late File file;
 
-  /// What the program says when it fixed the phase, and when there was
-  /// nothing to fix.
+  /// What the script says when it fixed the phase, and when there was nothing
+  /// to fix.
   const fixed = 'Fixed the Crashlytics phase in '
       '${AppEntryRole.xcodeProjectFile}\n';
   const nothing = 'Nothing to fix in ${AppEntryRole.xcodeProjectFile}\n';
@@ -46,22 +46,31 @@ void main() {
       ),
     );
     project = result.app!.texts[AppEntryRole.xcodeProjectFile]!;
+    script = result.app!.texts[crashlyticsPhaseFixScript]!;
   });
 
   setUp(() {
-    app = Directory.systemTemp.createTempSync('smf_phase_');
+    root = Directory.systemTemp.createTempSync('smf_phase_');
+    // A space and a letter beyond ASCII, as the jobs of CI have them.
+    app = Directory('${root.path}/my app é')..createSync();
+    File('${app.path}/$crashlyticsPhaseFixScript')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(script);
     file = File('${app.path}/${AppEntryRole.xcodeProjectFile}');
   });
 
-  tearDown(() => app.deleteSync(recursive: true));
+  tearDown(() => root.deleteSync(recursive: true));
 
-  /// Runs the step with [ruby] in [app], with [environment] added to that
-  /// of the test.
-  ProcessResult fix(String ruby, [Map<String, String> environment = const {}]) {
+  /// Runs the script in [app], or in [directory], with [environment] added to
+  /// that of the test.
+  ProcessResult fix({
+    String? directory,
+    Map<String, String> environment = const {},
+  }) {
     final result = Process.runSync(
-      ruby,
-      step.tool.argumentsFor(step.arguments),
-      workingDirectory: app.path,
+      Platform.resolvedExecutable,
+      ['${app.path}/$crashlyticsPhaseFixScript'],
+      workingDirectory: directory ?? app.path,
       environment: environment,
       stdoutEncoding: utf8,
       stderrEncoding: utf8,
@@ -81,90 +90,111 @@ void main() {
     return file.lastModifiedSync();
   }
 
-  // Without Ruby, the tests are named after the Ruby that they lack.
-  for (final ruby in rubies.isEmpty ? const [''] : rubies) {
-    group(
-      'the fix of the build phase for Crashlytics, with '
-      '${ruby.isEmpty ? 'Ruby' : ruby},',
-      () {
-        test(
-            'points the phase of flutterfire_cli 1.4.1 at the upload script in '
-            'the app, and changes nothing else', () {
-          final before = withCrashlyticsPhase(project, '1.4.1');
-          write(utf8.encode(before));
+  group(
+    'the script that fixes the build phase for Crashlytics, on macOS,',
+    () {
+      test(
+          'points the phase of flutterfire_cli 1.4.1 at the upload script in '
+          'the app, and changes nothing else', () {
+        final before = withCrashlyticsPhase(project, '1.4.1');
+        write(utf8.encode(before));
 
-          expect(fix(ruby).stdout, fixed);
+        expect(fix().stdout, fixed);
 
-          final after = file.readAsStringSync();
-          expect(
-            after,
-            before.replaceAll(
-              crashlyticsScriptInBuildDirectory,
-              crashlyticsScriptInApp,
-            ),
-          );
-          expect(crashlyticsScriptInApp.allMatches(after), hasLength(2));
-          expect(after, isNot(contains(crashlyticsScriptInBuildDirectory)));
-        });
+        final after = file.readAsStringSync();
+        expect(
+          after,
+          before.replaceAll(
+            crashlyticsScriptInBuildDirectory,
+            crashlyticsScriptInApp,
+          ),
+        );
+        expect(crashlyticsScriptInApp.allMatches(after), hasLength(2));
+        expect(after, isNot(contains(crashlyticsScriptInBuildDirectory)));
+      });
 
-        test('changes nothing the second time, and does not write the file',
-            () {
-          write(utf8.encode(withCrashlyticsPhase(project, '1.4.1')));
-          fix(ruby);
-          final bytes = file.readAsBytesSync();
+      test('changes nothing the second time, and does not write the file', () {
+        write(utf8.encode(withCrashlyticsPhase(project, '1.4.1')));
+        fix();
+        final bytes = file.readAsBytesSync();
+        final time = write(bytes);
+
+        expect(fix().stdout, nothing);
+
+        expect(file.readAsBytesSync(), bytes);
+        expect(file.lastModifiedSync(), time);
+      });
+
+      test(
+          'leaves a project without the phase, or with the phase of 1.4.0, as '
+          'it is', () {
+        for (final text in [
+          project,
+          withCrashlyticsPhase(project, '1.4.0'),
+        ]) {
+          final bytes = utf8.encode(text);
           final time = write(bytes);
 
-          expect(fix(ruby).stdout, nothing);
+          expect(fix().stdout, nothing);
 
           expect(file.readAsBytesSync(), bytes);
           expect(file.lastModifiedSync(), time);
-        });
+        }
+      });
 
-        test(
-            'leaves a project without the phase, or with the phase of '
-            '1.4.0, as it is', () {
-          for (final text in [
-            project,
-            withCrashlyticsPhase(project, '1.4.0'),
-          ]) {
-            final bytes = utf8.encode(text);
-            final time = write(bytes);
+      test('does nothing in an app without the Xcode project', () {
+        expect(fix().stdout, nothing);
 
-            expect(fix(ruby).stdout, nothing);
+        expect(file.existsSync(), isFalse);
+      });
 
-            expect(file.readAsBytesSync(), bytes);
-            expect(file.lastModifiedSync(), time);
-          }
-        });
+      test('keeps every other byte, in any encoding, whatever the locale', () {
+        // Latin-1 bytes, which are not UTF-8, next to UTF-8 ones.
+        final prefix = [...utf8.encode('// café\n'), 0xE9, 0xFF, 0x0A];
+        final phase = withCrashlyticsPhase(project, '1.4.1');
+        write([...prefix, ...utf8.encode(phase)]);
 
-        test('does nothing in an app without the Xcode project', () {
-          expect(fix(ruby).stdout, nothing);
+        fix(environment: const {'LANG': 'C', 'LC_ALL': 'C'});
 
-          expect(app.listSync(), isEmpty);
-        });
-
-        test(
-            'keeps every other byte, in any encoding, whatever the locale of '
-            'Ruby', () {
-          // Latin-1 bytes, which are not UTF-8, next to UTF-8 ones.
-          final prefix = [...utf8.encode('// café\n'), 0xE9, 0xFF, 0x0A];
-          final phase = utf8.encode(withCrashlyticsPhase(project, '1.4.1'));
-          write([...prefix, ...phase]);
-
-          fix(ruby, const {'LANG': 'C', 'LC_ALL': 'C'});
-
-          expect(file.readAsBytesSync(), [
-            ...prefix,
-            ...utf8.encode(
-              withCrashlyticsPhase(project, '1.4.1').replaceAll(
-                crashlyticsScriptInBuildDirectory,
-                crashlyticsScriptInApp,
-              ),
+        expect(file.readAsBytesSync(), [
+          ...prefix,
+          ...utf8.encode(
+            phase.replaceAll(
+              crashlyticsScriptInBuildDirectory,
+              crashlyticsScriptInApp,
             ),
-          ]);
-        });
-      },
-      skip: ruby.isEmpty ? 'Ruby is not on the PATH.' : null,
-    );
-  }
+          ),
+        ]);
+      });
+
+      test('finds the app from any directory', () {
+        write(utf8.encode(withCrashlyticsPhase(project, '1.4.1')));
+
+        expect(fix(directory: root.path).stdout, fixed);
+
+        expect(
+          file.readAsStringSync(),
+          isNot(contains(crashlyticsScriptInBuildDirectory)),
+        );
+      });
+    },
+    testOn: 'mac-os',
+  );
+
+  test(
+    'says nothing and changes nothing on another system, where flutterfire '
+    'leaves the Xcode project as it is',
+    () {
+      final bytes = utf8.encode(withCrashlyticsPhase(project, '1.4.1'));
+      final time = write(bytes);
+
+      final result = fix();
+
+      expect(result.stdout, isEmpty);
+      expect(result.stderr, isEmpty);
+      expect(file.readAsBytesSync(), bytes);
+      expect(file.lastModifiedSync(), time);
+    },
+    testOn: '!mac-os',
+  );
 }

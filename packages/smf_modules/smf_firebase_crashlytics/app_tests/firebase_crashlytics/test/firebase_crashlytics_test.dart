@@ -21,7 +21,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/crash_reporting/crashlytics_crash_reporter.dart';
-import 'package:{{app_name}}/firebase_options.dart';
+import 'package:{{app_name}}/firebase_options_of_flavor.dart';
 
 import 'firebase_crashlytics_mocks.dart';
 
@@ -65,9 +65,7 @@ void main() {
 
   setUpAll(() async {
     crashlytics = mockFirebaseCrashlytics();
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    await Firebase.initializeApp(options: firebaseOptionsOfFlavor);
   });
 
   setUp(() => crashlytics.clear());

@@ -31,11 +31,44 @@
 // run of a pull request, and SonarCloud stores the scan of a run by hand on
 // another branch as the analysis of main: until the next push to main, the
 // issues of main would be those of that branch.
+//
+// It also checks that the job of the checks gives its tests a pinned
+// actionlint, since the test that runs it over the workflow that SMF generates
+// skips without it, and a run with that test skipped looks like any other.
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
+
+/// The problems of the step of [workflow], the text of a workflow of GitHub
+/// Actions, that gives the tests of the job `checks` actionlint: without such
+/// a step before them, or with a condition on it, the test that runs actionlint
+/// over the workflow that SMF generates would skip and nobody would see it. It
+/// names a version, and checks what it downloads against a SHA-256 of its own.
+List<String> actionlintProblemsOf(String workflow) {
+  final jobs = (loadYaml(workflow) as YamlMap)['jobs'] as YamlMap;
+  final steps = ((jobs['checks'] as YamlMap)['steps'] as YamlList)
+      .cast<YamlMap>()
+      .toList();
+  int stepThatRuns(String text) =>
+      steps.indexWhere((step) => '${step['run']}'.contains(text));
+  final install = stepThatRuns('SMF_ACTIONLINT=');
+  if (install == -1 || install > stepThatRuns('melos run test:coverage')) {
+    return ['No step of the job checks sets SMF_ACTIONLINT before its tests.'];
+  }
+  final step = steps[install];
+  final env = step['env'] as YamlMap? ?? YamlMap();
+  return [
+    if (step.containsKey('if')) 'The step of actionlint has a condition.',
+    if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch('${env['ACTIONLINT_VERSION']}'))
+      'The step of actionlint pins no version in ACTIONLINT_VERSION.',
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch('${env['ACTIONLINT_SHA256']}') ||
+        !'${step['run']}'.contains(r'$ACTIONLINT_SHA256') ||
+        !'${step['run']}'.contains('sha256sum -c'))
+      'The step of actionlint checks no SHA-256 of what it downloads.',
+  ];
+}
 
 /// The problems of the [workflow], the text of a workflow of GitHub Actions:
 /// it has no job named CI, or more than one, or the job CI does not need
@@ -665,6 +698,87 @@ jobs:
     final workflow = File('$root/.github/workflows/build.yml');
 
     expect(problemsOf(workflow.readAsStringSync()), isEmpty);
+  });
+
+  group('the step of actionlint', () {
+    const workflow = r'''
+jobs:
+  checks:
+    steps:
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: "1.2.3"
+          ACTIONLINT_SHA256: aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f
+        run: |
+          echo "$ACTIONLINT_SHA256  archive" | sha256sum -c -
+          echo "SMF_ACTIONLINT=actionlint" >> "$GITHUB_ENV"
+      - name: Test
+        run: melos run test:coverage
+''';
+
+    test('passes with a pinned version and a checked SHA-256', () {
+      expect(actionlintProblemsOf(workflow), isEmpty);
+    });
+
+    test('finds that the tests have no actionlint', () {
+      const none = [
+        'No step of the job checks sets SMF_ACTIONLINT before its tests.',
+      ];
+      expect(
+        actionlintProblemsOf(workflow.replaceFirst('SMF_ACTIONLINT=', 'A=')),
+        none,
+      );
+      // A step after the tests.
+      expect(
+        actionlintProblemsOf(
+          workflow.replaceFirst('melos run test:coverage', 'true').replaceFirst(
+                'jobs:\n  checks:\n    steps:\n',
+                'jobs:\n  checks:\n    steps:\n'
+                    '      - run: melos run test:coverage\n',
+              ),
+        ),
+        none,
+      );
+    });
+
+    test('finds a condition on the step, which could skip the tests', () {
+      expect(
+        actionlintProblemsOf(
+          workflow.replaceFirst(
+            '      - name: Install actionlint\n',
+            '      - name: Install actionlint\n        if: false\n',
+          ),
+        ),
+        ['The step of actionlint has a condition.'],
+      );
+    });
+
+    test('finds a version or a SHA-256 that is not pinned', () {
+      expect(
+        actionlintProblemsOf(workflow.replaceFirst('"1.2.3"', 'latest')),
+        ['The step of actionlint pins no version in ACTIONLINT_VERSION.'],
+      );
+      for (final unchecked in [
+        workflow.replaceFirst('aba9ced2', 'abc'),
+        workflow.replaceFirst(r'"$ACTIONLINT_SHA256  archive"', '"a  archive"'),
+        workflow.replaceFirst('sha256sum -c -', 'cat'),
+      ]) {
+        expect(
+          actionlintProblemsOf(unchecked),
+          ['The step of actionlint checks no SHA-256 of what it downloads.'],
+        );
+      }
+    });
+
+    test('of build.yml gives the tests of the job of the checks actionlint',
+        () {
+      final top = Process.runSync('git', ['rev-parse', '--show-toplevel']);
+      expect(top.exitCode, 0, reason: '${top.stderr}');
+      final root = '${top.stdout}'.trim();
+      final workflow = File('$root/.github/workflows/build.yml');
+
+      expect(actionlintProblemsOf(workflow.readAsStringSync()), isEmpty);
+    });
   });
 
   group(

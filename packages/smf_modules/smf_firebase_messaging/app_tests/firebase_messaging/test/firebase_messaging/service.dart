@@ -17,13 +17,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/bootstrap.dart';
 import 'package:{{app_name}}/core/push/push_service.dart';
-import 'package:{{app_name}}/firebase_options.dart';
+import 'package:{{app_name}}/firebase_options_of_flavor.dart';
 
 /// Initializes Firebase, as the start-up of the app does before it creates
 /// the service.
-Future<void> initializeFirebase() => Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+Future<void> initializeFirebase() =>
+    Firebase.initializeApp(options: firebaseOptionsOfFlavor);
 
 /// Makes the platform of the tests iOS, with which the plugin asks for the
 /// token of the Apple Push Notification service and the service sets the

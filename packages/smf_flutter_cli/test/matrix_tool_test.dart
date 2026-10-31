@@ -190,6 +190,8 @@ void main() {
             ('purchases_role', 'probePurchases'),
             ('router_walk', 'probeRoutes'),
             ('localization_role', 'probeLanguages'),
+            ('flavors', 'probeFlavor'),
+            ('rest_role', 'probeRest'),
           ].indexed)
             (name, index, function),
         ],
@@ -210,6 +212,13 @@ void main() {
       expect(
         read(app, startBuildArgumentsFile),
         '--dart-define-from-file=.env\n',
+        reason: reason,
+      );
+      // What makes the release app that CI starts the one that a user gets,
+      // from the flavor that the app entry role names for a release.
+      expect(
+        read(app, startReleaseArgumentsFile),
+        '--flavor\nprod\n--dart-define=SMF_START_FLAVOR=prod\n',
         reason: reason,
       );
       if (!withoutExternalSteps) {
@@ -281,6 +290,12 @@ void main() {
     // of the matrix, as the probes do.
     expect(read(app, startAnswersFile), '');
     expect(read(app, startBuildArgumentsFile), '');
+    // Every app has the flavors of the app entry role, so the arguments of
+    // a release build come from no app of the matrix.
+    expect(
+      read(app, startReleaseArgumentsFile),
+      '--flavor\nprod\n--dart-define=SMF_START_FLAVOR=prod\n',
+    );
 
     final walk = named('router_walk');
     final result = await run(['--add-app-tests', newApp(), walk.directory]);
@@ -422,6 +437,37 @@ void main() {
     // once ran out.
     timeout: const Timeout(Duration(minutes: 2)),
   );
+
+  test(
+      '--ci-commands needs one app with every module and its directory, and '
+      'no other', () async {
+    for (final arguments in [
+      ['--ci-commands', newApp()],
+      ['--ci-commands', '--build', newApp()],
+      ['--ci-commands', '--app', 'every module (nothing)'],
+      ['--ci-commands', '--app', 'every module (nothing)', newApp(), newApp()],
+    ]) {
+      final result = await run(arguments);
+      expect(result.exitCode, 64, reason: '$arguments');
+      expect(
+        '${result.stderr}',
+        contains('--ci-commands'),
+        reason: '$arguments',
+      );
+    }
+
+    final unknown = await run([
+      '--ci-commands',
+      '--app',
+      'every module (nothing)',
+      newApp(),
+    ]);
+    expect(unknown.exitCode, 64);
+    expect(
+      '${unknown.stderr}',
+      contains('No app with every module is every module (nothing).'),
+    );
+  });
 
   test(
       'fails on --without-external-steps without --app, on an app with '

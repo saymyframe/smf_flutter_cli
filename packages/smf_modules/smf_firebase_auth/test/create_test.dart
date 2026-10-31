@@ -22,17 +22,10 @@ import 'support/fake_terminal.dart';
 const _dart = '/sdk/bin/dart';
 const _firebase = '/opt/npm/bin/firebase';
 
-/// The options of `flutterfire configure`, with the ids of the app.
-const _options = '--platforms=android,ios --overwrite-firebase-options '
-    '--ios-bundle-id=com.example.my-app '
-    '--android-package-name=com.example.my_app';
-
-/// `flutterfire configure` as the steps of the Flutter SDK run it, and as
-/// the user types it later.
-const _configure =
-    '$_dart pub global run flutterfire_cli:flutterfire configure $_options';
-const _configureLater =
-    'dart pub global run flutterfire_cli:flutterfire configure $_options';
+/// The script that configures the default flavor with flutterfire, as the
+/// steps of the Flutter SDK run it, and as the user types it later.
+const _configure = '$_dart tool/configure_firebase.dart dev';
+const _configureLater = 'dart tool/configure_firebase.dart dev';
 
 /// The step of the module as the pipeline runs it, and as the user types it
 /// later.

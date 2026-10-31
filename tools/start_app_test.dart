@@ -7,7 +7,10 @@
 // that the matrix tool writes next to the start check. With answers too:
 // the script runs a command of CI for each request that the app writes once
 // its start check passed, of the answers that the app asks for, and reads
-// the verdict of the app on it.
+// the verdict of the app on it. It finds the APK of a build by the build mode,
+// so the name of a flavor in the name of the APK makes no difference to it,
+// and it builds a release app with the arguments of another list next to the
+// start check, so it names no flavor.
 //
 // No test waits for the time to pass. The script tells the time by SECONDS
 // of bash, which the tests move on by the seconds that the build, a command
@@ -44,9 +47,10 @@ void main() {
     File('$app/integration_test/start_check.dart')
       ..createSync(recursive: true)
       ..writeAsStringSync('void main() {}\n');
-    // The arguments that build the app, none here, which the matrix tool
-    // writes next to the start check.
+    // The arguments that build the app and those that a release build takes
+    // too, none here, which the matrix tool writes next to the start check.
     File('$app/integration_test/start_build_arguments').writeAsStringSync('');
+    File('$app/integration_test/start_release_arguments').writeAsStringSync('');
   });
   tearDown(() => temp.deleteSync(recursive: true));
 
@@ -84,7 +88,13 @@ perl() {
   /// the build [mode] after them if it is given, with a build that takes
   /// [buildSeconds] by the clock of the script and ends with [buildCode],
   /// and a start check that writes [result], or nothing, to the file of the
-  /// app and to the log of the device. The first [brokenDownloads] builds
+  /// app and to the log of the device. A build for Android writes the APK of
+  /// its mode, with the name that Flutter gives it for the flavor of the
+  /// build, `app-<flavor>-<mode>.apk`: the one after `--flavor` among its
+  /// arguments, or else [flavor], the flavor of a command without it, or for
+  /// an app without flavors `app-<mode>.apk`, and with [writesApk] `false`
+  /// none. The first
+  /// [brokenDownloads] builds
   /// fail as one of Gradle does when a package of the Android SDK did not
   /// download. The command of the device that has the word [slow] takes
   /// [slowSeconds] by that clock. The emulator has the ABI [abi], and with
@@ -103,6 +113,8 @@ perl() {
     String? mode,
     int buildSeconds = 0,
     int buildCode = 0,
+    String? flavor,
+    bool writesApk = true,
     int brokenDownloads = 0,
     String? slow,
     int slowSeconds = 0,
@@ -131,8 +143,17 @@ if [ "\$(wc -l < "${temp.path}/builds" | tr -d " ")" -le $brokenDownloads ]; the
 fi
 [ $buildCode -eq 0 ] || exit $buildCode
 mkdir -p build/app/outputs/flutter-apk build/ios/iphonesimulator/Runner.app
-: > build/app/outputs/flutter-apk/app-debug.apk
-: > build/app/outputs/flutter-apk/app-release.apk
+if [ "\$2" = apk ] && $writesApk; then
+  flavor='${flavor ?? ''}'
+  previous=
+  for argument in "\$@"; do
+    [ "\$previous" != --flavor ] || flavor="\$argument"
+    previous="\$argument"
+  done
+  apk="build/app/outputs/flutter-apk/app-\${flavor:+\$flavor-}\${3#--}.apk"
+  : > "\$apk"
+  : > "\$apk.sha1"
+fi
 cat > build/ios/iphonesimulator/Runner.app/Info.plist << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
@@ -152,7 +173,8 @@ flutter() {
 }
 sleep() { SECONDS=\$((SECONDS + $sleepSeconds)); }
 ${slow == null ? '' : slowCommand(slow, slowSeconds)}''');
-    command('sdk/build-tools/35.0.0/aapt2', '''
+    command('sdk/build-tools/35.0.0/aapt2', r'''
+[ -f "$3" ] || { echo "$3: No such file" >&2; exit 1; }
 echo "package: name='com.example.app' versionCode='1'"
 echo "launchable-activity: name='com.example.app.MainActivity'"''');
     // adb -s <device> <command>: the device installs the APK, pm clear
@@ -414,6 +436,98 @@ esac''');
     );
   });
 
+  group('finds the APK of the build by its mode', () {
+    const directory = 'build/app/outputs/flutter-apk';
+
+    /// A file that an earlier build left in the directory of the APKs.
+    void leftBehind(String name) =>
+        File('$app/$directory/$name').createSync(recursive: true);
+
+    for (final (mode, flavor, apk) in [
+      ('debug', null, 'app-debug.apk'),
+      ('release', null, 'app-release.apk'),
+      ('debug', 'dev', 'app-dev-debug.apk'),
+      ('release', 'prod', 'app-prod-release.apk'),
+    ]) {
+      test('and installs $apk of a $mode build', () {
+        final result =
+            run(seconds: 30, mode: mode, flavor: flavor, result: 'passed');
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+        expect(
+          File('${temp.path}/installed').readAsStringSync(),
+          '$directory/$apk\n',
+        );
+      });
+    }
+
+    test(
+        'and leaves the APK of the other mode alone, which the debug app that '
+        'CI starts before the release app of the same app leaves there', () {
+      final debug = run(seconds: 30, flavor: 'dev', result: 'passed');
+      final release = run(
+        seconds: 30,
+        mode: 'release',
+        flavor: 'prod',
+        result: 'passed',
+      );
+
+      expect(debug.exitCode, 0, reason: '${debug.stdout}${debug.stderr}');
+      expect(
+        release.exitCode,
+        0,
+        reason: '${release.stdout}${release.stderr}',
+      );
+      expect(
+        File('${temp.path}/installed').readAsStringSync(),
+        '$directory/app-prod-release.apk\n',
+      );
+    });
+
+    test('and fails with the APKs that it found when none is of its mode', () {
+      leftBehind('app-dev-release.apk');
+
+      final result = run(seconds: 30, writesApk: false, result: 'passed');
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::flutter build apk left 0 APKs of the mode debug, where the '
+            'script installs one. All the APKs in $directory: '
+            '$directory/app-dev-release.apk.\n',
+      );
+      expect(File('${temp.path}/installed').existsSync(), isFalse);
+    });
+
+    test('and says so when the build left no APK at all', () {
+      final result = run(seconds: 30, writesApk: false, result: 'passed');
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::flutter build apk left 0 APKs of the mode debug, where the '
+            'script installs one. All the APKs in $directory: none.\n',
+      );
+    });
+
+    test(
+        'and fails with the APKs that it found when two are of its mode, '
+        'rather than start the one that the build did not write', () {
+      leftBehind('app-debug.apk');
+
+      final result = run(seconds: 30, flavor: 'dev', result: 'passed');
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::flutter build apk left 2 APKs of the mode debug, where the '
+            'script installs one. All the APKs in $directory: '
+            '$directory/app-debug.apk $directory/app-dev-debug.apk.\n',
+      );
+      expect(File('${temp.path}/installed').existsSync(), isFalse);
+    });
+  });
+
   group('with the arguments of the build', () {
     const check = 'integration_test/start_check.dart';
     // The arguments that give the build the values of the app, as the
@@ -475,6 +589,97 @@ esac''');
         '::error::$app has no integration_test/start_build_arguments: add the '
             'start check with the --add-app-tests of '
             'packages/smf_flutter_cli/tool/matrix.dart.\n',
+      );
+      expect(File('${temp.path}/builds').existsSync(), isFalse);
+    });
+  });
+
+  group('with the arguments of a release build', () {
+    const check = 'integration_test/start_check.dart';
+    const release = 'integration_test/start_release_arguments';
+    // What the matrix tool writes from the app entry role.
+    const flavor = ['--flavor', 'prod', '--dart-define=FLAVOR=prod'];
+
+    void writeArguments() =>
+        File('$app/$release').writeAsStringSync('${flavor.join('\n')}\n');
+
+    test(
+        'builds a release app with them, after the arguments of every build, '
+        'and installs the APK of the flavor that they name', () {
+      writeArguments();
+      File('$app/integration_test/start_build_arguments')
+          .writeAsStringSync('--dart-define-from-file=.env\n');
+
+      final result = run(
+        seconds: 30,
+        mode: 'release',
+        flavor: 'dev',
+        result: 'passed',
+      );
+
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      const build = 'build apk --release --target-platform android-x64';
+      expect(
+        File('${temp.path}/builds').readAsLinesSync().single,
+        '$build -t $check --dart-define-from-file=.env ${flavor.join(' ')}',
+      );
+      expect(
+        File('${temp.path}/installed').readAsStringSync(),
+        'build/app/outputs/flutter-apk/app-prod-release.apk\n',
+      );
+    });
+
+    test(
+        'builds a debug app for Android without them, as a command without '
+        '--flavor does, and without a list of them', () {
+      writeArguments();
+
+      final first = run(seconds: 30, flavor: 'dev', result: 'passed');
+
+      expect(first.exitCode, 0, reason: '${first.stdout}${first.stderr}');
+      expect(
+        File('${temp.path}/installed').readAsStringSync(),
+        'build/app/outputs/flutter-apk/app-dev-debug.apk\n',
+      );
+
+      File('$app/$release').deleteSync();
+      final second = run(seconds: 30, flavor: 'dev', result: 'passed');
+
+      expect(second.exitCode, 0, reason: '${second.stdout}${second.stderr}');
+      expect(
+        File('${temp.path}/builds').readAsLinesSync(),
+        List.filled(2, 'build apk --debug -t $check'),
+      );
+    });
+
+    test(
+      'builds an app for an iOS simulator without them',
+      () {
+        writeArguments();
+
+        final result = run(platform: 'ios', seconds: 30, result: 'passed');
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+        expect(
+          File('${temp.path}/builds').readAsLinesSync(),
+          ['build ios --simulator --debug -t $check'],
+        );
+      },
+      testOn: 'mac-os',
+    );
+
+    test(
+        'fails before the build of a release app when the app has no list of '
+        'them, which the matrix tool adds with the start check', () {
+      File('$app/$release').deleteSync();
+
+      final result = run(seconds: 30, mode: 'release', result: 'passed');
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stdout}',
+        '::error::$app has no $release: add the start check with the '
+            '--add-app-tests of packages/smf_flutter_cli/tool/matrix.dart.\n',
       );
       expect(File('${temp.path}/builds').existsSync(), isFalse);
     });

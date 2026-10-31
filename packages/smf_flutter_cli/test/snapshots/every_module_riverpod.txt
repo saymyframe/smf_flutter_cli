@@ -20,6 +20,9 @@ PAYWALL_TERMS_URL=
 
 # The address of the privacy policy that the paywall links to
 PAYWALL_PRIVACY_URL=
+
+# The address of the REST API of the app, such as https://api.example.com/v1
+REST_BASE_URL=
 === .env.example (role:env) ===
 # This file lists the keys of the values that the app reads, each under a
 # comment that says what goes there. After a clone, copy it to .env and fill
@@ -43,6 +46,97 @@ PAYWALL_TERMS_URL=
 
 # The address of the privacy policy that the paywall links to
 PAYWALL_PRIVACY_URL=
+
+# The address of the REST API of the app, such as https://api.example.com/v1
+REST_BASE_URL=
+=== .github/workflows/ci.yml (github_actions) ===
+# The CI of this app. The section "GitHub Actions" of README.md tells what it
+# runs and where its values come from.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: The environment to build the Android app for
+        type: choice
+        required: true
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.environment }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  checks:
+    name: Format, analyze and test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+      - name: Copy .env.example to .env
+        run: |
+          [ -f .env ] || cp .env.example .env
+      - name: Get the packages
+        run: flutter pub get
+      - name: Check the format
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test --dart-define-from-file=.env
+
+  build:
+    name: Build for Android (${{ inputs.environment }})
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+      - name: Write .env from the variables of the environment
+        env:
+          REVENUECAT_APPLE_KEY: ${{ vars.REVENUECAT_APPLE_KEY }}
+          REVENUECAT_GOOGLE_KEY: ${{ vars.REVENUECAT_GOOGLE_KEY }}
+          REVENUECAT_TEST_KEY: ${{ vars.REVENUECAT_TEST_KEY }}
+          PAYWALL_TERMS_URL: ${{ vars.PAYWALL_TERMS_URL }}
+          PAYWALL_PRIVACY_URL: ${{ vars.PAYWALL_PRIVACY_URL }}
+          REST_BASE_URL: ${{ vars.REST_BASE_URL }}
+        run: dart tool/write_env.dart
+      - name: Get the packages
+        run: flutter pub get
+      - name: Build the Android app
+        env:
+          APP_ENVIRONMENT: ${{ inputs.environment }}
+        run: flutter build apk --release --flavor "$APP_ENVIRONMENT" --dart-define-from-file=.env
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-${{ inputs.environment }}-release
+          path: build/app/outputs/flutter-apk/app-${{ inputs.environment }}-release.apk
+          if-no-files-found: error
 === .gitignore (flutter_core) ===
 # Miscellaneous
 *.class
@@ -92,25 +186,67 @@ app.*.map.json
 
 # The values of the app, which each developer fills in from .env.example
 .env
-=== .run/main.run.xml (dart_define) ===
+=== .run/dev.run.xml (role:env) ===
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="my_app" type="FlutterRunConfigurationType" factoryName="Flutter">
-    <option name="additionalArgs" value="--dart-define-from-file=.env" />
+  <configuration default="false" name="my_app dev" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor dev --dart-define-from-file=.env" />
     <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
     <method v="2" />
   </configuration>
 </component>
-=== .vscode/launch.json (dart_define) ===
+=== .run/prod.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app prod" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor prod --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/staging.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app staging" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor staging --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .vscode/launch.json (role:env) ===
 {
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "my_app",
+      "name": "my_app dev",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
-      "toolArgs": ["--dart-define-from-file=.env"],
+      "toolArgs": [
+        "--flavor",
+        "dev",
+        "--dart-define-from-file=.env"
+      ],
       "templateFor": ""
+    },
+    {
+      "name": "my_app staging",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "staging",
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "my_app prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "prod",
+        "--dart-define-from-file=.env"
+      ]
     }
   ]
 }
@@ -127,6 +263,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
 
 - The section "Finish the setup" of the README lists the steps of the setup that no command can do, such as a step in the web console of a service that the app uses. Only the developer of the app does them: when a task depends on one of them, point the developer to that section, and do not try to do the step yourself.
 
@@ -145,6 +282,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
 - The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
 
 ## Analytics
 
@@ -157,6 +295,16 @@ With `firebase_analytics`:
 - Screen views need no code: the router calls `logFirebaseScreenView()` with each screen that the user sees, and it logs the screen under the name of its route.
 - `android/app/src/main/AndroidManifest.xml` and `ios/Runner/Info.plist` turn off the screen views that Firebase Analytics logs itself, which would name the one activity or view controller of Flutter rather than a screen.
 
+## App icon
+
+- The sources of the icon of the app are `assets/branding/icon.png` and `assets/branding/icon_foreground.png`. Do not edit the images made from them in the Android and iOS projects. Change a source and run the command that the note of the provider below gives. Keep the first source opaque, since the App Store refuses an icon with alpha.
+
+With `flutter_launcher_icons`:
+
+- After a change of a source or of `flutter_launcher_icons.yaml`, run `dart tool/update_app_icon.dart` and commit what changed under `android/` and `ios/`.
+- Do not run `dart run flutter_launcher_icons` itself: it writes the name of the icon into a build setting of the Xcode project that takes YES or NO, and the script repairs that setting.
+- Do not add a `flutter_launcher_icons-<flavor>.yaml`. It turns `flutter_launcher_icons.yaml` off, and on iOS it does not switch the icon of a flavor.
+
 ## Authentication
 
 - `appSession` in `lib/core/auth/app_session.dart` tells who uses the app, and knows it before the first frame. Its `value` is a `SignedOutSession`, an `AnonymousSession` or an `AccountSession`, and `appSession.value.uid` is the id of the user. Sign in, sign up, sign out and delete the account only through `appSession`. The app has one, so create no other `AppSessionController`.
@@ -167,6 +315,8 @@ With `firebase_analytics`:
 - On a tap, the state of the screen awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. `credential()` returns `null` when the user closed the sheet of the identity provider, which is no failure: the screen goes back to how it was. Call `credential()` from the state of a screen, never within a call of `appSession`.
 - `appSession.signInWith` gives an anonymous user the identity with the same id, or signs in to the account that has the identity already, and `takeGuestData()` moves what the anonymous user had. `appSession.deleteAccount()` asks a way to sign in with `revokesOnDeletion` for a credential again itself, and deletes nothing when the user closes its sheet.
 - `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`.
+- `appSession.userToken()` gives the token with which a server of the app tells who the user is, and `null` when nobody is signed in. An anonymous user has one too. The provider keeps and renews it, so read it for each request and keep it nowhere. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead: reads at the same time share one refresh, and `null` means that nobody is signed in any more.
+- A read of the token waits for the start of the session and for an anonymous sign-in on its way, at most 3 seconds in all, and for no other call. So a request made before `initAuth()` is over, as in `bootstrap()`, may find no token. A read fails only with an `AuthFailure`: `network` leaves the user signed in, and after `recentSignInRequired` the session of the user has ended on the server and the user is signed out.
 - A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
 
 With `firebase_auth`:
@@ -174,10 +324,28 @@ With `firebase_auth`:
 - `FirebaseAuthService` in `lib/core/auth/firebase_auth_service.dart` implements `AuthService` on `FirebaseAuth.instance`. In `lib/`, only that file imports the package: other code signs in through `appSession`.
 - That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section Firebase Authentication of `README.md`.
-- `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
+- `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI, one project in a run. Where the flavors have several projects, it needs `--project <id>` for each. It changes the Firebase project and needs a Firebase account: run it only when asked.
+- `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews when it is about to expire. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
 
-- For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`. After `flutterfire configure` for another project, it has to run again: run it only when asked.
+- For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`, which all the flavors share. After `tool/configure_firebase.dart` for another project, it has to run again with `--project <id>`: run it only when asked.
 - Apple is enabled in the Firebase console by hand, with the private key of Apple that deleting an account needs. That key is a secret: never put it into the app or its repository.
+
+## CI
+
+- CI runs the commands of the section "Continuous integration" of `README.md`, in a fresh copy of the repository. Keep them passing, and run them before you finish a change.
+- A generated file that the app needs stays in git, or comes from `flutter pub get`, since no other of these commands writes it.
+
+- `tool/write_env.dart` writes `.env` for a build of CI, from the keys of `.env.example` and the variables of the process. A new key also needs its variable where CI runs. The script stops when `.env` has a value, and never replaces one.
+- The first check copies `.env.example` only when `.env` is missing, so running it keeps the values on your machine.
+- A value of `.env` ends up in the app, so never give a build of CI a secret through it.
+
+With `GitHub Actions`:
+
+- `.github/workflows/ci.yml` has the two jobs: `checks`, on each push, and `build`, which a developer starts for an environment.
+- Never put `${{ … }}` in a `run:` line, which would make a value a part of the script. Pass the value through `env:` of the step, and read it as a variable of the shell.
+- Each `uses:` line is pinned to a full commit, with its tag in a comment after it. To update an action, change the two together.
+
+- A new key of `.env` needs a line under `env:` of the step of `build` that runs `tool/write_env.dart`, as in `MY_SERVICE_KEY: ${{ vars.MY_SERVICE_KEY }}`. Without it, a build leaves that value empty.
 
 ## Crash reporting
 
@@ -188,7 +356,7 @@ With `firebase_auth`:
 With `firebase_crashlytics`:
 
 - Report through `CrashReporter`, not through `FirebaseCrashlytics.instance`.
-- After `flutterfire configure` runs on macOS, `flutter build ipa` needs the fix of the section Crashlytics of `README.md`.
+- `tool/configure_firebase.dart` keeps the build phase for Crashlytics working for `flutter build ipa` on macOS. After `flutterfire configure` by hand, `flutter build ipa` needs `tool/firebase_configured/fix_crashlytics_phase.dart`.
 
 ## Dependency injection
 
@@ -214,9 +382,9 @@ With `event_bus`:
 
 ## Firebase
 
-- `bootstrap()` initializes Firebase with `DefaultFirebaseOptions` of `lib/firebase_options.dart`. That file is a placeholder until `flutterfire configure` writes it, and the app stops at start-up with an `UnsupportedError` until then. Do not write it by hand.
-- `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
-- A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
+- `bootstrap()` initializes Firebase with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, by the flavor of the build. `lib/firebase_options_dev.dart`, `lib/firebase_options_staging.dart` and `lib/firebase_options_prod.dart` are placeholders until `tool/configure_firebase.dart` writes them, and a build of such a flavor stops at start-up with an `UnsupportedError`. Do not write them by hand.
+- `tool/configure_firebase.dart` needs a Firebase account and a project: run it only when asked, with the command of the section Firebase of `README.md`. Do not run `flutterfire configure`, which writes one configuration that every flavor then shares.
+- A test that runs `main()` or `bootstrap()` starts Firebase with the options of the flavor of the test, `dev`, which needs a mock of its platform side. Prefer a test of a widget, which needs neither.
 
 ## Google sign-in
 
@@ -363,8 +531,28 @@ With `firebase_messaging`:
 - On iOS, `createFirebasePushService()` calls `setForegroundNotificationPresentationOptions()` with an alert, a badge and a sound. Keep it: the package answers iOS for every notification in the foreground, those of `appNotifications` too, and without these options iOS shows none of them.
 - Never call `requestPermission()` of the package: the permission to show notifications belongs to `appNotifications.request()`.
 - `android/app/src/main/AndroidManifest.xml` names the channel and the icon with which Android shows a message that arrives in the background, those of the notifications of the app. Change them together.
-- The section Firebase Cloud Messaging of the README tells how to upload the key of the Apple Push Notification service and how to send this device a test message.
+- The section Firebase Cloud Messaging of the README tells how to upload the key of the Apple Push Notification service, which repeats for the iOS app of each flavor that the app sends to, and how to send this device a test message.
 - The package has no platform side for tests. A test that runs `bootstrap()` answers the method channel `plugins.flutter.io/firebase_messaging` itself, with `setMockMethodCallHandler` of `TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger`.
+
+## REST API
+
+- `appRest` in `lib/core/rest/app_rest.dart` makes the requests of the app: `appRest.get('notes')`, `post`, `put`, `patch`, `delete`, `head`. A path is relative to `REST_BASE_URL` in `.env`, with or without a leading slash, and one that climbs out of it with `..` fails with `rejected`. A full address goes where it says. Call it from the state of a screen or from a repository, never from a widget, and create no other `AppRestClient` in the code of the app.
+- `response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`. A list of JSON is a `List<dynamic>`, so a function of a list takes that and casts its items inside.
+- A call fails only with a `RestFailure`: show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal. While `REST_BASE_URL` is empty, a relative path fails with `notConfigured`, and the app still builds and starts.
+- `GET` and `HEAD` repeat by themselves after a broken connection and after 429, 502, 503 and 504, keeping to `Retry-After`. Other methods never do. Never wrap a call in a loop of your own.
+- The `timeout` of a call is per attempt, 30 seconds by default, so a `GET` with its repeats may take longer. `RestCancel` ends a call: cancel it where the state of a screen is disposed of.
+- A new provider implements `RestTransport` of `lib/core/rest/rest_transport.dart`, and only the files of that implementation import it. The code of the app calls neither `createRestTransport()` nor `appRest.use()`, which is for tests.
+- In a test, `RestTestServer` of `test/core/rest/rest_test_server.dart` is a local server, or `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a request to that server runs in `tester.runAsync`. A request that is still running when a `testWidgets` body ends fails the test with a pending timer.
+
+- `appRest` adds the token of `appSession` to each request to the origin of `REST_BASE_URL`, through `lib/core/rest/session_tokens.dart`, and to nothing else. A header `authorization` that a call gives stays in its place.
+- On a 401 it gets a new token once and repeats once, for any method. Then it fails with `unauthorized`, which signs nobody out: decide in the app what that means.
+- A request made while the app starts, before `initAuth()` is over, waits for the start at most `anonymousWait`, and goes without a token if there is still no session. So make a request that needs the user after `bootstrap()`.
+
+With `dio`:
+
+- `DioRestTransport` in `lib/core/rest/dio_rest_transport.dart` implements `RestTransport` on `Dio`. In `lib/`, only that file imports the package: other code makes requests through `appRest`.
+- `createDio()` in that file creates the `Dio` of the app, and an interceptor goes there. One that logs leaves out the header `authorization` and the query of the address, and none repeats a request or follows a redirect, which `appRest` does.
+- What `createDio()` adds to a request goes to every address, also after a redirect and to a full address such as a presigned upload. A credential goes through the token of the session or `headers:` of the call.
 
 ## Router
 
@@ -429,6 +617,16 @@ With `sign_in_with_apple`:
 - A provider is one for the app, so two pages of one screen that are open at once show the same state.
 - A widget reads who uses the app with `ref.watch(sessionProvider)`, an `AppSession`. `sessionProvider` of `lib/features/sign_in/session_provider.dart` follows `appSession`.
 
+## Splash screen
+
+- The sources of the splash screen are `assets/branding/splash_light.png` and `assets/branding/splash_dark.png`, a logo for each mode of the device on a transparent background. Do not edit the images made from them in the Android and iOS projects. Change a source and run the command that the note of the provider below gives.
+
+With `flutter_native_splash`:
+
+- `flutter_native_splash.yaml` has the images and the colours of the screen. After a change of that file or of an image, run `dart run flutter_native_splash:create` and commit what it changed under `android/` and `ios/`.
+- Never set `android_min_sdk` in `flutter_native_splash.yaml`. The tool then leaves `android/app/src/main/res/drawable-v21/launch_background.xml` as it is, and that file wins on Android below 12, so the screen there has no image.
+- The package is a dev dependency, so no code of the app imports it.
+
 ## State management
 
 With `flutter_riverpod`:
@@ -457,11 +655,11 @@ With `flutter_riverpod`:
 - Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
 - Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
 - `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+- `.vscode/launch.json` and `.run/<flavor>.run.xml` are the run configurations of VS Code and Android Studio, one for each flavor. Each passes the flavor and the arguments that the values need. In VS Code, F5 starts the selected configuration, while the links above `main()` and above a test and the Testing view always use `dev`, whose configuration alone has `templateFor`. In Android Studio, a test gets none of these arguments.
 
 With `--dart-define-from-file`:
 
 - Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`.
-- In VS Code, `.vscode/launch.json` passes it to Run and Debug (F5), to the Run and Debug links above `main()` and to the tests run from their links or from the Testing view, since its configuration is the template of every launch (`templateFor`). In Android Studio, `.run/main.run.xml` passes it only to the run configuration named after the app, not to a test that you run there.
 - A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
 - The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
 === CLAUDE.md (role:app_entry) ===
@@ -491,6 +689,37 @@ Once any commands of the sections below have run, the setup still needs these st
 12. Give RevenueCat access to Google Play with a service account
 13. Publish your terms of use and privacy policy and put their links into .env
 
+Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
+
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.my_app.dev` | `com.example.my-app.dev` |
+| `staging` | `com.example.my_app.staging` | `com.example.my-app.staging` |
+| `prod` | `com.example.my_app` | `com.example.my-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so you repeat a step of its setup for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`, which builds the id and the name of `prod`. A scheme sets only the id and the name. `appFlavor` comes from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote, so run `flutter build ios --config-only --flavor <flavor>` before you run the scheme from Xcode.
+
 ## Run, test and build with .env
 
 `AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
@@ -498,12 +727,12 @@ Once any commands of the sections below have run, the setup still needs these st
 ```bash
 flutter run --dart-define-from-file=.env
 flutter test --dart-define-from-file=.env
-flutter build apk --dart-define-from-file=.env
-flutter build appbundle --dart-define-from-file=.env
-flutter build ipa --dart-define-from-file=.env
+flutter build apk --flavor prod --dart-define-from-file=.env
+flutter build appbundle --flavor prod --dart-define-from-file=.env
+flutter build ipa --flavor prod --dart-define-from-file=.env
 ```
 
-In VS Code, `.vscode/launch.json` passes the argument to Run and Debug (F5), to the Run and Debug links above `main()`, and to the tests that you run from the links above them or from the Testing view: its configuration is the template of every launch of the app (`templateFor`). In Android Studio, `.run/main.run.xml` passes it to the run configuration named after the app, and a test that you run there gets no argument.
+A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
 
 A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
@@ -516,23 +745,35 @@ static String? get myServiceKey {
 }
 ```
 
-The section "Values in .env" tells what goes into `.env` and lists the keys of the app.
+The section "Values in .env" tells what goes into `.env`, lists the keys of the app and names the run configurations that pass the argument.
 
 ## Firebase
 
-The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with the options of `DefaultFirebaseOptions` in `lib/firebase_options.dart`. `flutterfire configure` of the FlutterFire CLI writes these options when it registers the app in a Firebase project, together with `android/app/google-services.json`, `firebase.json` and, on macOS, `ios/Runner/GoogleService-Info.plist`. Until then, the options are a placeholder, and the app stops at start-up with an `UnsupportedError`.
+The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below.
 
-To configure the app, or to configure it again, such as for another Firebase project or on another machine, run in its directory:
+`smf create` offers to configure `dev`, and otherwise leaves the command for later. To configure a flavor, or to configure it again, such as for another project or on another machine, run in the directory of the app:
 
 ```bash
 dart pub global activate flutterfire_cli 1.4.1
 firebase login
-flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=com.example.my-app --android-package-name=com.example.my_app
+dart tool/configure_firebase.dart staging --project=<id>
 ```
 
-The command gives flutterfire the ids of the Android and iOS apps that SMF generated; if you change them, change them in the command too. `flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli), and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated too.
+Use this script rather than `flutterfire configure`, which writes one configuration that every flavor then shares: `ios/Runner/GoogleService-Info.plist` goes into the resources of every flavor, and `android/app/google-services.json` is what the Google services plugin takes for any variant without a file of its own. It registers the Android and iOS apps of the flavor in the project and writes its options, `android/app/src/<flavor>/google-services.json`, `firebase.json` and, on macOS, `ios/flavors/<flavor>/GoogleService-Info.plist`. Commit them. Elsewhere the script leaves the Xcode project and that file as they were, so run it again on a Mac for iOS. In a terminal you may leave `--project` out, and flutterfire then asks. Other arguments, such as `--account=<email>`, go to flutterfire. The ids of each flavor are at the top of the script: if you change them in the projects, change them there too.
 
-Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above.
+Once one flavor is configured, a build of a flavor that is not fails on Android, with `File google-services.json is missing`. On iOS it builds and stops at start-up, unless a build phase that flutterfire adds for a Firebase package fails the build there first.
+
+In Xcode, select the scheme of a flavor. It builds that flavor, whatever `ios/Flutter/Generated.xcconfig` says. The scheme `Runner` takes the flavor from that file, which has none after a fresh `flutter pub get`, so `appFlavor` is `null` there and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. `flutter build ios --config-only --flavor <flavor>` gives the file a flavor.
+
+The script changes the Xcode project only on macOS, and adds a build phase that runs `flutterfire` from `~/.pub-cache/bin`. So every Mac that builds the app for iOS needs the FlutterFire CLI activated, flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above. flutterfire needs the [Firebase CLI](https://firebase.google.com/docs/cli).
+
+## Firebase Analytics
+
+The app records its events with [firebase_analytics](https://pub.dev/packages/firebase_analytics): `lib/core/analytics/firebase_analytics_service.dart` implements the analytics service of the app on it.
+
+The events of the app reach Google Analytics only once the Firebase project is linked to it, which a project that `flutterfire configure` creates is not. Until then, the app logs its events, but they show up nowhere. Turn it on under Project settings > Integrations in the Firebase console. The section Finish the setup lists this among the steps that you do by hand.
+
+The link belongs to the project, and every app of the project sends its events there. So repeat this in each Firebase project of your flavors. Flavors that share a project need it once, and their events go to one property.
 
 ## Firebase Authentication
 
@@ -540,53 +781,63 @@ The app signs in with [Firebase Authentication](https://firebase.google.com/docs
 
 The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, Anonymous when the mode of the app is `anonymous` (see the section Sign-in), and Google and Apple for the ways to sign in of the app. Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
 
-`smf create` asks to enable them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
+`smf create` asks to enable them right after `dart tool/configure_firebase.dart dev` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart
 ```
 
-The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app but those that Google needs, as told below. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
+The script reads the project from `firebase.json`, where `tool/configure_firebase.dart` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app but those that Google needs, as told below. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart --account <email>
 ```
 
-For Google sign-in, the script also gives Google the name of the app and the email address of the account of the Firebase CLI for the consent screen that users see when they sign in. The address is the support email there. When the Firebase CLI runs as no user account, as with a service account, the script leaves Google out and says so: run it with `--account <email>`, or enable Google in the Firebase console.
-
-The script sets up the rest of what Google needs only for the project that `firebase.json` names, not for one that `--project` names:
-
-- It registers the SHA-1 and SHA-256 of the Android debug key of the machine that runs it, which Google uses to recognize the Android app. When the machine has no debug key yet, the script creates it, as the first debug build would. Every machine has a debug key of its own, so run the script on each machine that builds the app for debugging, or add the SHA of its key in the Firebase console, in the settings of the Android app.
-- It downloads the Firebase files of the app again, such as `android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist`, once they have the clients of Google, and writes them where `flutterfire configure` wrote them.
-- It writes the URL scheme of the iOS app, `REVERSED_CLIENT_ID` of `ios/Runner/GoogleService-Info.plist`, into `CFBundleURLTypes` of `ios/Runner/Info.plist`. It adds the scheme and removes none: after a change of the project, remove the scheme of the former project there by hand.
-
-Run the script again after `flutterfire configure` for another project.
-
-A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, with the id of the Android app from `firebase.json`:
+Flavors may have Firebase projects of their own, and each project needs the methods enabled. A run of the script covers one project, so once `firebase.json` has several, the script stops and lists them. Run it once for each:
 
 ```bash
-firebase apps:android:sha:create <appId> <sha>
+dart tool/enable_firebase_sign_in.dart --project <id>
+```
+
+For Google sign-in, the script also gives Google the name of the app and the email address of the account of the Firebase CLI for the consent screen that users see when they sign in. The address is the support email there. When the Firebase CLI runs as no user account, as with a service account, the script leaves Google out and says so: run it with `--account <email>`, or enable Google in the Firebase console.
+
+The script sets up the rest of what Google needs only for the apps that `firebase.json` names in the project of the run. A project that no flavor is configured for gets none of it:
+
+- It registers the SHA-1 and SHA-256 of the Android debug key of the machine that runs it for each of those Android apps, which Google uses to recognize the Android app. When the machine has no debug key yet, the script creates it, as the first debug build would. Every machine has a debug key of its own, so run the script on each machine that builds the app for debugging, or add the SHA of its key in the Firebase console, in the settings of the Android app.
+- It downloads the Firebase files of those apps again, once they have the clients of Google, and writes them to the paths that `firebase.json` names.
+- It writes the URL scheme of each of those iOS apps, `REVERSED_CLIENT_ID` of its `GoogleService-Info.plist`, into `CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors share that file, so it lists a scheme for each iOS app that the script ran for, in the build of every flavor. It adds a scheme and removes none: after a flavor moves to another project, remove the scheme of the former project there by hand.
+
+After you configure a flavor for another project, run the script for that project too.
+
+A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, for the Android app of each flavor that such a key signs, with the id of that app and of its project from `firebase.json`:
+
+```bash
+firebase apps:android:sha:create <appId> <sha> --project=<id>
 ```
 
 The section Finish the setup lists this among the steps that you do by hand.
 
-Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays. The section Finish the setup lists both, adding Apple and entering the key, among the steps that you do by hand.
+Apple is enabled in the Firebase console, which the Firebase CLI cannot do: add Apple under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers). Deleting an account that signs in with Apple revokes the tokens that Apple gave the app, as the App Store asks of an app with Sign in with Apple (App Store Review Guideline 5.1.1(v)). Firebase does that with the Services ID and the OAuth code flow configuration, which you enter in the settings of the Apple provider there: your Apple team ID, and the Key ID and the private key of a key for Sign in with Apple. The private key is a secret: enter it in the console yourself, and never put it into the app or its repository. Until they are set, deleting an account that signs in with Apple fails with `notConfigured`, and the account stays. The section Finish the setup lists both, adding Apple and entering the key, among the steps that you do by hand. Each Firebase project has these settings of its own, so repeat them in the project of each flavor that signs in with Apple.
 
-You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in the project that the app is configured for.
+You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in each project that a flavor is configured for.
 
 Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
+
+`appSession.userToken()` is a Firebase ID token. A server of the app verifies it with the [Firebase Admin SDK](https://firebase.google.com/docs/auth/admin/verify-id-tokens). The Admin SDK takes only a token of its own Firebase project, so a token of another project fails there.
 
 When an anonymous user signs in to an account that exists already, the anonymous user stays in the project, and nobody can sign in as that user again. A project that is upgraded to Firebase Authentication with Identity Platform can delete anonymous users that are older than 30 days automatically. See [Automatic clean-up](https://firebase.google.com/docs/auth/android/anonymous-auth#auto-cleanup) in the documentation of Firebase.
 
 ## Crashlytics
 
-The app reports its errors to [Firebase Crashlytics](https://firebase.google.com/docs/crashlytics) through `firebase_crashlytics` once Firebase is configured. On macOS, `flutterfire configure` adds a build phase to the Xcode project that uploads the debug symbols of the app with the upload script of Crashlytics. The phase that flutterfire_cli 1.4.0 adds does not find the script where Flutter puts the Swift packages of the app, so with Swift Package Manager `flutter run` and `flutter build ios` fail in that phase. Configuring the app again on macOS with flutterfire_cli 1.4.1 or a later 1.x replaces the phase.
+The app reports its errors to [Firebase Crashlytics](https://firebase.google.com/docs/crashlytics) through `firebase_crashlytics` once Firebase is configured. On macOS, `tool/configure_firebase.dart` has flutterfire add a build phase to the Xcode project that uploads the debug symbols of the app with the upload script of Crashlytics. The phase that flutterfire_cli 1.4.0 adds does not find the script where Flutter puts the Swift packages of the app, so with Swift Package Manager `flutter run` and `flutter build ios` fail in that phase. Running the script again on macOS with flutterfire_cli 1.4.1 or a later 1.x replaces the phase.
 
-`flutter build ipa` needs one more change on macOS. The phase of flutterfire_cli 1.4.1 looks for the upload script in the build directory of Xcode, which is `build/ios` for `flutter run` and `flutter build ios` but not for the archive of `flutter build ipa`. So SMF points the phase at `build/ios/SourcePackages` right after it configures the app. `flutterfire configure` writes the phase again, so after running it yourself on macOS, run in the directory of the app:
+`flutter build ipa` needs one more change on macOS. The phase of flutterfire_cli 1.4.1 looks for the upload script in the build directory of Xcode, which is `build/ios` for `flutter run` and `flutter build ios` but not for the archive of `flutter build ipa`. flutterfire writes the phase again in each of its runs, so `tool/configure_firebase.dart` ends each flavor with `tool/firebase_configured/fix_crashlytics_phase.dart`, which points the phase at `build/ios/SourcePackages`. After running `flutterfire configure` yourself on macOS, run that script in the directory of the app:
 
 ```bash
-ruby -e 'f = ARGV[0]; s = File.exist?(f) ? File.binread(f) : ""; t = s.gsub("$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run", "$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run"); if t == s then puts "Nothing to fix in #{f}" else File.binwrite(f, t); puts "Fixed the Crashlytics phase in #{f}" end' ios/Runner.xcodeproj/project.pbxproj
+dart tool/firebase_configured/fix_crashlytics_phase.dart
 ```
+
+The phase looks up the build configuration in `firebase.json`. So on macOS, once one flavor is configured, a build of a flavor that is not fails in the phase with `FirebaseJsonException: Please run "flutterfire configure"`. Run `dart tool/configure_firebase.dart <flavor> --project=<id>` for that flavor.
 
 ## Texts
 
@@ -600,6 +851,53 @@ The texts of a new language, such as German, go into a file of their own:
 2. Run `flutter gen-l10n`.
 
 The section "Languages" tells where else the new language goes.
+
+## GitHub Actions
+
+`.github/workflows/ci.yml` runs on GitHub once you push the app there. Each push runs the checks of the section "Continuous integration", which need no setup.
+
+To build an APK, open **Actions**, then **CI**, then **Run workflow**, and pick an environment, or run:
+
+```bash
+gh workflow run ci.yml -f environment=dev
+```
+
+The file has to be on the default branch of the repository for that. The APK is an artifact of the run.
+
+A build takes the values of `.env` from the variables of the GitHub environment that you picked. Set them in **Settings**, **Environments**, one environment for each of `dev`, `staging` and `prod` that you build, under **Environment variables**, by the names of the keys:
+
+- `REVENUECAT_APPLE_KEY`
+- `REVENUECAT_GOOGLE_KEY`
+- `REVENUECAT_TEST_KEY`
+- `PAYWALL_TERMS_URL`
+- `PAYWALL_PRIVACY_URL`
+- `REST_BASE_URL`
+
+With the GitHub CLI:
+
+```bash
+gh variable set <KEY> --env dev --body '<value>'
+```
+
+Repeat this for each environment that needs it. GitHub offers environments on a private repository only with a paid plan. Without them, set **Repository variables** instead, which give every build the same values. A key of your own also needs a line under `env:` of the step that writes `.env`, as in `MY_SERVICE_KEY: ${{ vars.MY_SERVICE_KEY }}`.
+
+CI runs the latest stable Flutter, so a new release can turn it red with no change in your code: `flutter analyze` fails on a new deprecation, and the format check on a change of the formatter. To stay on the version that you develop with, add `flutter-version: <version>` under `channel: stable` in both jobs, with the version that `flutter --version` prints, and change it when you upgrade.
+
+A build that fails on a download usually passes when you run it again.
+
+## Launcher icons
+
+`assets/branding/icon.png` shows the logo of Say My Frame in cream on green, and `assets/branding/icon_foreground.png` shows the same logo on a transparent background. On Android, `adaptive_icon_background` of `flutter_launcher_icons.yaml` is the colour behind it. Replace both images before you release the app.
+
+Launchers cut the second image to a shape of their own. They always keep a circle around its centre, as wide as 90% of the image, since `adaptive_icon_foreground_inset` of `flutter_launcher_icons.yaml` is 16%. Keep the whole logo inside that circle. The themed icon of Android is the alpha of the same image.
+
+After you change an image or `flutter_launcher_icons.yaml`, run this command and commit what changed under `android/` and `ios/`:
+
+```bash
+dart tool/update_app_icon.dart
+```
+
+Use this script rather than `dart run flutter_launcher_icons`, which writes the name of the icon into a build setting of the Xcode project that takes YES or NO. The script repairs that setting. A file `flutter_launcher_icons-<flavor>.yaml` turns `flutter_launcher_icons.yaml` off, and on iOS it does not switch the icon of a flavor, so one icon for each flavor needs more than that file.
 
 ## flutter_local_notifications
 
@@ -615,6 +913,29 @@ Every notification goes to the channel `default`, with a high importance, which 
 
 The app does not set up the actions of a notification, its buttons. They need the receiver `ActionBroadcastReceiver` on Android and, on iOS, a callback that registers the plugins for the isolate in which an action runs: see the README of the package.
 
+## Native splash
+
+`assets/branding/splash_light.png` and `assets/branding/splash_dark.png` show the mark of Say My Frame, in green for the light mode and in cream for the dark one. Replace them with your own before you release the app. The colours behind them are in `flutter_native_splash.yaml`: `color` and `color_dark`, and the same two under `android_12` for Android 12 and later.
+
+After you change an image or that file, make the screen again and commit what changed under `android/` and `ios/`:
+
+```bash
+dart run flutter_native_splash:create
+```
+
+The command rewrites `ios/Runner/Info.plist` with one more level of indentation. Keep `android_min_sdk` out of `flutter_native_splash.yaml`: with it, the tool leaves the launch background of Android below 12 as it is, and the screen there has no image.
+
+A file `flutter_native_splash-<flavor>.yaml` does not give a flavor its own screen on iOS: the tool writes one, and the app keeps showing the screen of `flutter_native_splash.yaml`.
+
+## App icon
+
+The icon of the app is made from two images, which the app does not bundle:
+
+- `assets/branding/icon.png`, 1024 by 1024 and opaque, since the App Store refuses an icon with alpha. iOS and older versions of Android show it.
+- `assets/branding/icon_foreground.png`, 1024 by 1024, the logo on a transparent background, for the adaptive icon of Android.
+
+All flavors share the icon. The section of the module that provides the icon says what the images show now, how much of the second one launchers cut, and which command to run after a change.
+
 ## Sign-in
 
 The sign-in mode of the app says who may use it without an account. This app was generated in the mode `required`: `authMode` in `lib/core/auth/app_session.dart` is `AuthMode.required`.
@@ -626,6 +947,8 @@ The sign-in mode of the app says who may use it without an account. This app was
 The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `required` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
 
 To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
+
+A server of the app tells who the user is by a token. `appSession.userToken()` gives the token of the user, and `null` when nobody is signed in. An anonymous user has one too. The provider of sign-in keeps it and renews it, so read it for each request rather than keep it. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead. The server has to check the token itself: where the provider has a section in this README, that section tells how.
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
@@ -669,11 +992,39 @@ On Android, when the setup is the cause, the `developerHint` has one of these tw
 
 The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_sign_in.dart`, shows the "G" of Google from `lib/core/google_sign_in/assets/google_logo.png`, the logo of the Google Sign-In SDK (Apache License 2.0). The [branding guidelines of Sign in with Google](https://developers.google.com/identity/branding-guidelines) ask a custom button to show that logo in its own colours, on a light background, without a change: keep the image as it is.
 
+## Continuous integration
+
+On each push, CI of this app runs these commands in a fresh copy of the repository:
+
+```bash
+[ -f .env ] || cp .env.example .env
+flutter pub get
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test --dart-define-from-file=.env
+```
+
+On request, it builds a release APK for one of the environments `dev`, `staging` and `prod`:
+
+```bash
+dart tool/write_env.dart
+flutter pub get
+flutter build apk --release --flavor <environment> --dart-define-from-file=.env
+```
+
+The APK is `build/app/outputs/flutter-apk/app-<environment>-release.apk`. The build signs it as the Android project of the app does, so it is for testers: uploading to a store, a signing key of your own and iOS are not part of it.
+
+CI writes its own `.env`, since that file is not in git. The checks copy `.env.example` when `.env` is missing, so in a fresh copy every value is empty, and on your machine your values stay. A build takes the values of the chosen environment with `tool/write_env.dart`, and lists the keys it found no value for. A value with a double quote or a line break stops the build, and so does a `.env` that has a value already, which the script never replaces: delete the file to write it again. Every value ends up in the app, so never use one for a secret.
+
+The section of the module that provides CI tells how to start a build.
+
 ## Values in .env
 
 `.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
+
+`.env` is not tied to a flavor: a build of any flavor takes what `.env` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
 
 The keys of the app:
 
@@ -682,8 +1033,30 @@ The keys of the app:
 - `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 - `PAYWALL_TERMS_URL`, read as `AppEnv.paywallTermsUrl`, from the module `paywall`: The address of the terms of use that the paywall links to
 - `PAYWALL_PRIVACY_URL`, read as `AppEnv.paywallPrivacyUrl`, from the module `paywall`: The address of the privacy policy that the paywall links to
+- `REST_BASE_URL`, read as `AppEnv.restBaseUrl`, from the REST API role: The address of the REST API of the app, such as https://api.example.com/v1
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
+
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
+
+## dio
+
+`lib/core/rest/dio_rest_transport.dart` sends the requests of `appRest` with [dio](https://pub.dev/packages/dio), as the section "REST API" tells. `createDio()` in that file creates the `Dio` of the app, which keeps a connection open while requests follow within seconds. An interceptor goes there, such as one of a tracing service:
+
+```dart
+Dio createDio() => Dio()..interceptors.add(TracingInterceptor());
+```
+
+An interceptor that logs leaves out the header `authorization` and the query of the address, where a token or a key may be. None repeats a request or follows a redirect: `appRest` does both, since it knows which header may go where.
+
+What `createDio()` adds to a request goes to every address, also after a redirect and to a full address such as a presigned upload. A credential goes through the token of the session or `headers:` of the call.
+
+Several `set-cookie` values cannot be told apart in the `headers` of a response, since a value of that header may have a comma. An API with cookies reads them in an interceptor.
+
+Dio sends over `dart:io`, which reaches an `http://` address with no key in the Android manifest or in `Info.plist`. Another adapter, such as one of [native_dio_adapter](https://pub.dev/packages/native_dio_adapter) for the stack of the platform, goes into `httpClientAdapter` in `createDio()`. It then needs those keys for an `http://` address.
 
 ## RevenueCat
 
@@ -725,14 +1098,16 @@ On Android a notification shows `android/app/src/main/res/drawable/ic_notificati
 
 The app receives its push messages with [firebase_messaging](https://pub.dev/packages/firebase_messaging): `lib/core/push/firebase_push_service.dart` implements the push service of the app on it (see the section Push messages). The address of this device is its registration token of Firebase Cloud Messaging.
 
-Firebase sends messages to iOS through the Apple Push Notification service (APNs), with an APNs key of your team, which you upload by hand once for the project:
+Firebase sends messages to iOS through the Apple Push Notification service (APNs), with an APNs key of your team, which you upload by hand:
 
 1. In your Apple Developer account, under Certificates, Identifiers & Profiles, create a key under Keys with the Apple Push Notifications service (APNs) enabled. Download its `.p8` file, and note its Key ID and your Team ID.
 2. In the Firebase console, open the settings of the project, then Cloud Messaging, and upload the key under the configuration of the Apple app, with its Key ID and your Team ID.
 
-A key sends only to the apps of its team, so register the bundle id of the app as an App ID in that team, with Push Notifications. The key matters only for sending: the iOS app gets its address without it, but Firebase cannot send to that address. The section Finish the setup lists the upload among the steps that you do by hand.
+The Firebase console has this configuration under each Apple app of the project, so check it for the iOS app of each flavor that you send to, and repeat the upload where it has no key. One key serves every app of its team, so the file and the ids stay the same.
 
-To send this device a test message, run the app in debug mode and copy the address that it prints. In the Firebase console, open Messaging, create a notification campaign, choose Send test message and paste the address. A server sends a message with the HTTP v1 API of Firebase Cloud Messaging: `POST https://fcm.googleapis.com/v1/projects/<project-id>/messages:send`, with an OAuth token of a service account of the project and the address as the `token` of the message.
+A key sends only to the apps of its team, so register the bundle id of each flavor that you send to as an App ID in that team, with Push Notifications. The key matters only for sending: the iOS app gets its address without it, but Firebase cannot send to that address. The section Finish the setup lists the upload among the steps that you do by hand.
+
+To send this device a test message, run the app in debug mode and copy the address that it prints. In the Firebase console, open Messaging, create a notification campaign, choose Send test message and paste the address. A server sends a message with the HTTP v1 API of Firebase Cloud Messaging: `POST https://fcm.googleapis.com/v1/projects/<project-id>/messages:send`, with an OAuth token of a service account of the project and the address as the `token` of the message. A server sends to an address through the Firebase project of the flavor that the build has.
 
 `android/app/src/main/AndroidManifest.xml` names the channel `default` of the notifications of the app (`com.google.firebase.messaging.default_notification_channel_id`) and their small icon `@drawable/ic_notification` (`com.google.firebase.messaging.default_notification_icon`). Android shows a message that arrives in the background with them.
 
@@ -794,6 +1169,38 @@ A message that arrives while the app is in the foreground reaches `appPush.messa
 `appPush.taps` tells of each tap on a message while the app runs, and `appPush.launchMessage` is the message whose tap launched the app. Read both once the first screen is shown, and navigate as the rest of the app does. A tap on a message does not reach `appNotifications.taps`, so the code of the app sees each tap once.
 
 A message with data and no title or body reaches the app only while it is in the foreground. In the background, or when the app is closed, it runs no code of the app. Images in a message do not show on iOS, which needs an extension of the app for them.
+
+## REST API
+
+`appRest` in `lib/core/rest/app_rest.dart` makes the requests of the app:
+
+```dart
+final notes = (await appRest.get('notes', query: {'page': '1'})).decoded(
+  (List<dynamic> json) => [for (final item in json) Note.fromJson(item as Map<String, dynamic>)],
+);
+```
+
+A path is relative to the address of the API, with or without a leading slash, and keeps the path of that address. One that climbs out of it with `..` fails with `rejected` before anything is sent, so encode what a user types with `Uri.encodeComponent`. A full address with `http://` or `https://` goes where it says, such as a link to the next page or an upload address.
+
+The address is `REST_BASE_URL` in `.env`, as the section "Values in .env" says. It is no secret, and a change takes a new `flutter run`. While it is empty, a relative path fails with `notConfigured`, whose hint names the key, and the app still builds and starts. Use `https` in a release. On a device, `http://10.0.2.2:8080` is your computer on the Android emulator and `http://127.0.0.1:8080` on the iOS simulator, and a phone reaches it at its address on your network. Each environment has an address of its own: change the value by hand, or have CI write `.env` for its job.
+
+A call fails only with a `RestFailure`. Show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal. The `headers` of a response join several values of one header, so several `set-cookie` values cannot be told apart there.
+
+`GET` and `HEAD` repeat twice at most after a connection that broke and after 429, 502, 503 and 504, keeping to a `Retry-After` of up to 30 seconds. Other methods never repeat, since the server may have done what they asked, and their failure has the `retryAfter` that the server named.
+
+The `timeout` of a call is per attempt, 30 seconds by default, so a `GET` with its repeats may take longer. A `RestCancel` ends a call at once: cancel it where the state of a screen is disposed of.
+
+In this app, each request to the origin of `REST_BASE_URL` carries the token of `appSession` as `Authorization: Bearer <token>`, and no other request does, also after a redirect. Your server checks the token itself. On a 401, the client gets a new token once and repeats the request once, for any method. Then it fails with `unauthorized`, which signs nobody out, since a server may refuse for other reasons: decide in the app what that means. A request made while the app starts, before the session is known, may go without a token, so make a request that needs the user after `bootstrap()`.
+
+`response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`. A list of JSON is a `List<dynamic>`, so a function of a list takes that and casts its items inside, as above. For generated models, run `flutter pub add json_annotation dev:json_serializable dev:build_runner` and pass the `fromJson` of the model.
+
+In a test, `RestTestServer` of `test/core/rest/rest_test_server.dart` is a local server, and `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a real request runs in `tester.runAsync`. A request that is still running when a `testWidgets` body ends fails the test with a pending timer. `test/core/rest/app_rest_test.dart` shows the first.
+
+## Splash screen
+
+The screen that the system shows while the app starts is made from two images, which the app does not bundle: `assets/branding/splash_light.png` for the light mode of the device and `assets/branding/splash_dark.png` for the dark one. Each is 1152 by 1152, a logo on a transparent background. Keep the logo inside a circle of two thirds of the width of the image, since Android 12 and later cut the rest.
+
+All flavors share the screen. The section of the module that provides the screen says what the images show now, where the colours behind them are, and which command to run after a change.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -823,6 +1230,24 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "My App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "My App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "My App"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -848,8 +1273,9 @@ dependencies {
 === android/app/src/main/AndroidManifest.xml (flutter_core) ===
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="My App"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -962,6 +1388,14 @@ plugins {
 }
 
 include(":app")
+=== assets/branding/icon.png (launcher_icons) ===
+<24643 bytes>
+=== assets/branding/icon_foreground.png (launcher_icons) ===
+<20610 bytes>
+=== assets/branding/splash_dark.png (native_splash) ===
+<22152 bytes>
+=== assets/branding/splash_light.png (native_splash) ===
+<22152 bytes>
 === assets/fonts/geist/Geist-Medium.ttf (material_theme) ===
 <66576 bytes>
 === assets/fonts/geist/Geist-Regular.ttf (material_theme) ===
@@ -1062,7 +1496,49 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+=== flutter_launcher_icons.yaml (launcher_icons) ===
+# How `dart tool/update_app_icon.dart` makes the icon of the app. Run it after
+# you change this file or an image in assets/branding/.
+flutter_launcher_icons:
+  image_path: "assets/branding/icon.png"
+  android: true
+  ios: true
+  # An image with alpha gets this background on iOS, since the App Store
+  # refuses an icon with alpha.
+  remove_alpha_ios: true
+  background_color_ios: "#0F3326"
+  # The adaptive icon of Android, and its themed variant, of which Android
+  # reads only the alpha.
+  adaptive_icon_background: "#0F3326"
+  adaptive_icon_foreground: "assets/branding/icon_foreground.png"
+  adaptive_icon_foreground_inset: 16
+  adaptive_icon_monochrome: "assets/branding/icon_foreground.png"
+=== flutter_native_splash.yaml (native_splash) ===
+# How `dart run flutter_native_splash:create` makes the splash screen of the
+# app. Run that command after you change this file or one of the images.
+flutter_native_splash:
+  color: "#F1F1E8"
+  color_dark: "#0F3326"
+  image: "assets/branding/splash_light.png"
+  image_dark: "assets/branding/splash_dark.png"
+  android: true
+  ios: true
+  web: false
+  android_12:
+    color: "#F1F1E8"
+    color_dark: "#0F3326"
+    image: "assets/branding/splash_light.png"
+    image_dark: "assets/branding/splash_dark.png"
 === ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -1094,7 +1570,7 @@ import UIKit
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>My App</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -1228,13 +1704,13 @@ import 'package:my_app/core/notifications/app_notifications.dart';
 import 'package:my_app/core/preferences/app_preferences.dart';
 import 'package:my_app/core/purchases/app_purchases.dart';
 import 'package:my_app/core/push/app_push.dart';
-import 'package:my_app/firebase_options.dart';
+import 'package:my_app/firebase_options_of_flavor.dart';
 
 /// Runs the start-up code of the app before its first frame: first what
 /// must come before anything else, then the platform services, then the
 /// services of the app, then what needs them.
 Future<void> bootstrap() async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(options: firebaseOptionsOfFlavor);
   await initAuth();
   installCrashReporting();
   await initPreferences();
@@ -1786,6 +2262,15 @@ final class AppSessionController extends ChangeNotifier
   /// that the app starts no second one next to it.
   final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
 
+  /// What the reads of the token wait for that were made before the first
+  /// start. Each read has one of its own, which completes in the zone of that
+  /// read, so a read in a zone that runs nothing any more holds nothing up.
+  final List<Completer<void>> _tokensUntilStarted = [];
+
+  /// The refreshes of the token that are on their way, each by the id of its
+  /// user, so that the next user does not get the token of the user before.
+  final Map<String?, Future<String?>> _tokenRefreshes = {};
+
   /// Tells when the user comes back to the app, in the mode
   /// [AuthMode.anonymous].
   _ResumeObserver? _observer;
@@ -1869,6 +2354,10 @@ final class AppSessionController extends ChangeNotifier
     if (!_started) {
       _started = true;
       _untilStarted?.complete();
+      for (final read in _tokensUntilStarted) {
+        read.complete();
+      }
+      _tokensUntilStarted.clear();
     }
     if (first) await earlier;
   }
@@ -1955,6 +2444,42 @@ final class AppSessionController extends ChangeNotifier
     if (fresh != null) await service.deleteAccount(fresh: fresh);
   }, waitsForAnonymousUser: true);
 
+  /// The token of the user for a server of the app, or `null` when nobody is
+  /// signed in.
+  ///
+  /// It waits for the first start and for an anonymous sign-in on its way,
+  /// together at most [anonymousWait], and for no other call: the sheet of a
+  /// way to sign in may be open for minutes, and a request does not wait for
+  /// it. So a read made before `initAuth()` is not over, as in `bootstrap()`,
+  /// answers `null` once that wait is over, if there is no service by then.
+  ///
+  /// It is not one of the calls that run one after another, and tells the
+  /// listeners of the session nothing, also when the provider tells of the
+  /// same user again, unless the provider found that the session of the user
+  /// has ended on the server: the session then has nobody when the call fails,
+  /// with [AuthFailureReason.recentSignInRequired].
+  Future<String?> userToken() => _token((service) => service.userToken());
+
+  /// A token to use in place of [rejected], which a server refused, or `null`
+  /// when nobody is signed in.
+  ///
+  /// Reads at the same time share one refresh. A read that starts after that
+  /// refresh, with the same [rejected], takes its token and needs no other. A
+  /// read that was on its way during the refresh may still answer [rejected],
+  /// which costs one more refresh. It waits and fails as [userToken] does.
+  Future<String?> userTokenAfter(String rejected) async {
+    final current = await userToken();
+    if (current != rejected) return current;
+    final uid = _session.uid;
+    return _tokenRefreshes[uid] ??=
+        _token((service) => service.userToken(forceRefresh: true)).whenComplete(
+          () {
+            // Not as an arrow: the refresh would then wait for itself.
+            _tokenRefreshes.remove(uid);
+          },
+        );
+  }
+
   /// Stops following the service and the lifecycle of the app. A call that
   /// is on its way still ends as it would have, but tells no listener, and
   /// no anonymous sign-in follows it.
@@ -1984,6 +2509,43 @@ final class AppSessionController extends ChangeNotifier
           .firstOrNull,
     _ => null,
   };
+
+  /// Reads the token of the user with [read], once the wait of [userToken]
+  /// is over, and `null` when the app has no service by then.
+  ///
+  /// When it fails, the session takes the user that the service has left. A
+  /// call that takes its turn follows, so that in the mode
+  /// [AuthMode.anonymous] the app signs in anonymously again, but not next to
+  /// a sign-in that is on its way.
+  Future<String?> _token(
+    Future<String?> Function(AuthService service) read,
+  ) async {
+    if (!_started || _anonymousSignIns.containsKey(_service)) {
+      await _untilTokenCanBeRead().timeout(anonymousWait, onTimeout: () {});
+    }
+    final service = _service;
+    if (service == null) return null;
+    try {
+      return await read(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      _retry();
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> _untilTokenCanBeRead() async {
+    if (!_started) {
+      final started = Completer<void>();
+      _tokensUntilStarted.add(started);
+      await started.future;
+    }
+    await _anonymousSignIns[_service];
+  }
 
   /// The user came back to the app. In the mode [AuthMode.anonymous], an
   /// app without a user then signs in anonymously again: as what follows
@@ -2378,7 +2940,9 @@ final class AuthFailure implements Exception {
 ///   who is signed in. Made when nobody is signed in, or when the session of
 ///   that user has ended on the server, such a call fails with
 ///   [AuthFailureReason.recentSignInRequired], and in the second case it
-///   signs the user out on the device first.
+///   signs the user out on the device first. [userToken] reads, so it answers
+///   `null` when nobody is signed in, and does the same as those calls when
+///   the session of the user has ended on the server.
 /// - A [SignInCredential] whose identity provider the provider does not
 ///   take fails with [AuthFailureReason.notConfigured], with the issuer in
 ///   the [AuthFailure.developerHint].
@@ -2496,6 +3060,30 @@ abstract interface class AuthService {
   /// that fails, such as one that the backend is not set up for, with
   /// [AuthFailureReason.notConfigured]. Either way nothing is deleted.
   Future<void> deleteAccount({SignInCredential? fresh});
+
+  /// The token with which a server of the app tells who the user is, or
+  /// `null` when nobody is signed in. An anonymous user has one too.
+  ///
+  /// It comes from the device when it can, and the service refreshes one that
+  /// is about to expire on its own, so most reads make no request. With
+  /// [forceRefresh] it asks the server of the provider for a new token, which
+  /// differs from the one before and which the reads after it give. A token
+  /// that the server issued in the same second may come back the same.
+  ///
+  /// A read changes no user, and leaves whoever is signed in, but in the case
+  /// below. [userChanges] may tell of the same user again after it, as after
+  /// any change of the token, which the session ignores.
+  ///
+  /// It fails with [AuthFailureReason.network] when it needs the server and
+  /// does not reach it, and with [AuthFailureReason.tooManyAttempts] when the
+  /// server refuses for now. It fails with
+  /// [AuthFailureReason.recentSignInRequired] for a user whose session has
+  /// ended on the server, or may fail with [AuthFailureReason.userDisabled]
+  /// for one whom the server disabled: the service signs that user out on the
+  /// device first, while that user is still signed in. Anything else is
+  /// [AuthFailureReason.unknown], with what the provider answered as its
+  /// [AuthFailure.developerHint]. No hint of a failure has the token.
+  Future<String?> userToken({bool forceRefresh = false});
 }
 === lib/core/auth/firebase_auth_service.dart (firebase_auth) ===
 import 'dart:async';
@@ -2604,6 +3192,11 @@ const _linkReasons = {
 /// the Services ID and the OAuth code flow configuration of the Apple
 /// sign-in method in the Firebase console: without them it fails with
 /// [AuthFailureReason.notConfigured], and the account stays.
+///
+/// [userToken] is the Firebase ID token of the user, which the Firebase SDK
+/// keeps on the device and renews when it is about to expire. A
+/// server verifies it with the Firebase Admin SDK, as a token of the Firebase
+/// project that the app is configured with.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
@@ -2756,6 +3349,84 @@ final class FirebaseAuthService implements AuthService {
         // sign-out, which may come after this call is over.
         await _auth.signOut();
       }, credential: fresh);
+
+  /// It reads past [_run], which tells of the user after each call, since an
+  /// app may read the token for each of its requests. A forced read still
+  /// gives [userChanges] an event of the same user, since Firebase tells that
+  /// the token changed, and so does a reload.
+  ///
+  /// When the platform has nobody, as while a sign-out is on its way, the
+  /// plugin may not have heard of it yet: nobody is signed in, so there is no
+  /// token.
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    try {
+      return await user.getIdToken(forceRefresh);
+    } on Object catch (error, stackTrace) {
+      if (error is FirebaseAuthException && error.code == 'no-current-user') {
+        return null;
+      }
+      Error.throwWithStackTrace(await _failureOfRead(user, error), stackTrace);
+    }
+  }
+
+  /// The failure of a read of the token of [user] that failed with [error].
+  ///
+  /// On Android the plugin answers the read with the code `unknown` for each
+  /// answer of the server but a network failure, also for a user whom the
+  /// server deleted or disabled, with the code only in a text. A reload of the
+  /// user answers with the code, so the service asks that.
+  ///
+  /// When the server no longer takes [user], the service signs that user out,
+  /// as the Firebase SDK does a moment later, and tells of it. A read runs
+  /// next to the calls of the app, so it does so only while [user] is still
+  /// signed in: by now another user may be.
+  Future<AuthFailure> _failureOfRead(User user, Object error) async {
+    final answer = error is FirebaseAuthException && error.code == 'unknown'
+        ? await _answerToReload(user) ?? error
+        : error;
+    final code = answer is FirebaseAuthException ? answer.code : null;
+    final disabled = code == 'user-disabled';
+    if (!disabled && !_endedSession.contains(code)) return _readFailure(answer);
+    if (_auth.currentUser?.uid == user.uid) {
+      try {
+        await _auth.signOut();
+      } on Object catch (signOutError) {
+        return _readFailure(signOutError);
+      }
+      _changes.add(null);
+    }
+    return AuthFailure(
+      disabled
+          ? AuthFailureReason.userDisabled
+          : AuthFailureReason.recentSignInRequired,
+    );
+  }
+
+  /// The failure of a read for [error], as that of any other call, but that
+  /// a read of a user who is signed in never says that sign-in is not enabled
+  /// in the project, as an internal error of iOS would.
+  AuthFailure _readFailure(Object error) {
+    final failure = _failureOf(error, null, const {});
+    return failure.reason == AuthFailureReason.notConfigured
+        ? AuthFailure(
+            AuthFailureReason.unknown,
+            developerHint: _answerOf(error),
+          )
+        : failure;
+  }
+
+  /// What a reload of [user] fails with, or `null` if it completes.
+  Future<Object?> _answerToReload(User user) async {
+    try {
+      await user.reload();
+      return null;
+    } on Object catch (error) {
+      return error;
+    }
+  }
 
   /// Signs [user] in again with [fresh], so that Firebase deletes the
   /// account without asking for a recent sign-in, and revokes the tokens of
@@ -2998,12 +3669,13 @@ final class FirebaseAuthService implements AuthService {
       IdTokenCredential(:final issuer) => _providers[issuer]?.name,
       null => null,
     };
-    const script =
-        'run `dart tool/enable_firebase_sign_in.dart` in the '
-        'directory of the app';
+    final script =
+        'run `dart tool/enable_firebase_sign_in.dart --project '
+        '$project` in the directory of the app';
     // The way to sign in, after "sign-in", and what enables it: the script
-    // of the app enables Email/Password, Anonymous and Google, and the
-    // Firebase console every way to sign in.
+    // of the app enables Email/Password, Anonymous and Google, in the project
+    // of this flavor of the app, and the Firebase console every way to sign
+    // in.
     final (withMethod, enable) = switch (method) {
       null => (
         '',
@@ -3529,6 +4201,13 @@ abstract final class AppEnv {
   /// The address of the privacy policy that the paywall links to.
   static String? get paywallPrivacyUrl {
     const value = String.fromEnvironment('PAYWALL_PRIVACY_URL');
+    return value.isEmpty ? null : value;
+  }
+
+  /// The address of the REST API of the app, such as
+  /// https://api.example.com/v1.
+  static String? get restBaseUrl {
+    const value = String.fromEnvironment('REST_BASE_URL');
     return value.isEmpty ? null : value;
   }
 }
@@ -7418,6 +8097,1302 @@ abstract interface class PushService {
   /// The message whose tap launched the app, or `null` if the app was
   /// launched in another way.
   Future<PushMessage?> launchMessage();
+}
+=== lib/core/rest/app_rest.dart (role:rest) ===
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/rest/dio_rest_transport.dart' as impl0;
+import 'package:my_app/core/rest/session_tokens.dart';
+
+import '../env/app_env.dart';
+import 'rest_transport.dart';
+
+/// The REST client of the app. The code of the app makes its requests here,
+/// and gets each answer or a [RestFailure].
+final AppRestClient appRest = AppRestClient(
+  transport: createRestTransport(),
+  baseAddress: AppEnv.restBaseUrl,
+  tokens: const SessionRestTokens(),
+);
+
+/// Why a call failed.
+enum RestFailureReason {
+  /// A relative path, and no address to join it to:
+  /// `REST_BASE_URL` in `.env` is empty, or is no address of a server.
+  notConfigured,
+
+  /// The request did not reach a server, or the connection broke.
+  network,
+
+  /// No complete answer within the timeout of the attempt, or no token of the
+  /// user within [AppRestClient.tokenWait]. It is never repeated: the user
+  /// has waited long enough.
+  timeout,
+
+  /// The caller cancelled the call with a [RestCancel].
+  cancelled,
+
+  /// A 401, after one refresh of the token where the client added one. It
+  /// signs nobody out, since a server may refuse for other reasons: the app
+  /// decides what it means.
+  unauthorized,
+
+  /// A 403.
+  forbidden,
+
+  /// A 404.
+  notFound,
+
+  /// A 409.
+  conflict,
+
+  /// Any other 4xx, or a relative path that climbs out of the address of the
+  /// API, which no server got.
+  rejected,
+
+  /// A 429.
+  tooManyRequests,
+
+  /// A 5xx.
+  server,
+
+  /// A body that [RestResponse.decoded] does not take.
+  invalidResponse,
+
+  /// Anything else, such as a redirect of a `POST`.
+  unknown,
+}
+
+/// The only thing that a call of [AppRestClient] throws.
+final class RestFailure implements Exception {
+  /// Creates the failure.
+  const RestFailure(
+    this.reason, {
+    this.status,
+    this.response,
+    this.retryAfter,
+    this.developerHint,
+  });
+
+  /// Why the call failed, which the app shows in a text of its own.
+  final RestFailureReason reason;
+
+  /// The status of the answer, if a server answered.
+  final int? status;
+
+  /// The answer of a server that refused, whose body may say why:
+  /// `failure.response?.decoded(...)`.
+  final RestResponse? response;
+
+  /// The wait that the server named, which the client did not take: the
+  /// method does not repeat, the wait is too long, or the repeats are over.
+  final Duration? retryAfter;
+
+  /// For the developer, in debug mode only. It never has a token.
+  final String? developerHint;
+
+  @override
+  String toString() => [
+    'RestFailure(${reason.name}',
+    if (status != null) ', $status',
+    if (developerHint != null) ': $developerHint',
+    ')',
+  ].join();
+}
+
+/// What a server answered: the answer of a call with a status of success or
+/// with 304, and the refusal in [RestFailure.response].
+final class RestResponse {
+  /// Creates the response; a test of the code of the app may too.
+  const RestResponse({
+    required this.status,
+    required this.headers,
+    required this.bytes,
+  });
+
+  /// The status of the answer.
+  final int status;
+
+  /// The headers, each name in lower case, and several values of one header
+  /// joined by `, `. So several `set-cookie` values cannot be told apart here.
+  /// A body that the provider decoded has neither `content-encoding` nor
+  /// `content-length` here, and a body in a coding that it did not decode has
+  /// both.
+  final Map<String, String> headers;
+
+  /// The body: decoded when [headers] have no `content-encoding`, and otherwise
+  /// in that coding.
+  final List<int> bytes;
+
+  /// The body as UTF-8.
+  String get text => utf8.decode(bytes, allowMalformed: true);
+
+  /// [parse] applied to the JSON of the body, such as
+  /// `response.decoded(Note.fromJson)`.
+  ///
+  /// A body that is no JSON, a body of another type than [parse] takes, and
+  /// any error of [parse] fail with [RestFailureReason.invalidResponse], also
+  /// an error of the future of an `async` [parse].
+  ///
+  /// The JSON of a list is a `List<dynamic>` and that of an object a
+  /// `Map<String, dynamic>`, whatever they hold. So a function of a list takes
+  /// a `List<dynamic>` and casts its items inside:
+  /// `(List<dynamic> json) => [for (final item in json) Note.fromJson(item as Map<String, dynamic>)]`.
+  /// One that takes a `List<Map<String, dynamic>>` fails with every body.
+  T decoded<T, J>(T Function(J json) parse) {
+    try {
+      final json = jsonDecode(text);
+      if (json is! J) {
+        throw RestFailure(
+          RestFailureReason.invalidResponse,
+          status: status,
+          response: this,
+          developerHint:
+              'The JSON of the body is no $J. A list of JSON is a '
+              'List<dynamic> and an object a Map<String, dynamic>, so a typed '
+              'list needs a cast: take one of those, and cast inside.',
+        );
+      }
+      final parsed = parse(json);
+      if (parsed is Future<Object?>) {
+        return parsed.catchError(_notFitting) as T;
+      }
+      return parsed;
+    } on RestFailure {
+      rethrow;
+    } on Object catch (error, stackTrace) {
+      _notFitting(error, stackTrace);
+    }
+  }
+
+  /// Fails with [RestFailureReason.invalidResponse] for [error]. The hint has
+  /// its type and not its text, which may quote the body.
+  Never _notFitting(Object error, StackTrace stackTrace) =>
+      Error.throwWithStackTrace(
+        RestFailure(
+          RestFailureReason.invalidResponse,
+          status: status,
+          response: this,
+          developerHint: 'The body does not fit: ${error.runtimeType}.',
+        ),
+        stackTrace,
+      );
+
+  @override
+  String toString() => 'RestResponse($status)';
+}
+
+/// Ends a call, such as one of a screen that the user left: the call fails
+/// with [RestFailureReason.cancelled] at once and its connection closes.
+final class RestCancel {
+  final List<void Function()> _listeners = [];
+  bool _isCancelled = false;
+
+  /// Whether [cancel] was called.
+  bool get isCancelled => _isCancelled;
+
+  /// Ends the calls that were given this object.
+  void cancel() {
+    if (_isCancelled) return;
+    _isCancelled = true;
+    for (final listener in [..._listeners]) {
+      listener();
+    }
+  }
+}
+
+/// Who the requests of the app are made for. In an app without sign-in, the
+/// client has none.
+abstract interface class RestTokens {
+  /// The id of the user right now, or `null` when nobody is signed in. A
+  /// request of one user never repeats as another.
+  String? get owner;
+
+  /// The token of the user, or `null` for no header.
+  ///
+  /// It fails with a [RestFailure].
+  Future<String?> current();
+
+  /// A token to use in place of [rejected], which a server refused, or `null`
+  /// when nobody is signed in. Calls at the same time share one refresh.
+  ///
+  /// It fails with a [RestFailure].
+  Future<String?> after(String rejected);
+}
+
+/// The headers that go only to the origin they were given for.
+const List<String> _originHeaders = [
+  'authorization',
+  'cookie',
+  'proxy-authorization',
+];
+
+/// How many times a call repeats after a connection that failed, or after
+/// one of [_repeatedStatuses].
+const int _maxRepeats = 2;
+
+/// The waits before the repeats, for a server that names none.
+const List<Duration> _repeatWaits = [
+  Duration(milliseconds: 500),
+  Duration(seconds: 1),
+];
+
+/// How much a wait of [_repeatWaits] grows at most, so that the devices of
+/// many users do not repeat at the same moment.
+const int _maxJitterMilliseconds = 250;
+
+/// The longest wait that a server can make a call take before it repeats.
+const Duration _maxWait = Duration(seconds: 30);
+
+/// The longest wait of a `Retry-After` that the client tells of, in seconds:
+/// a year. A longer one counts as this, so that no number overflows.
+const int _maxRetryAfterSeconds = 365 * 24 * 60 * 60;
+
+/// The form of a wait in seconds in `Retry-After`.
+final RegExp _retryAfterSeconds = RegExp(r'^\d+$');
+
+/// The statuses after which `GET` and `HEAD` repeat.
+const Set<int> _repeatedStatuses = {429, 502, 503, 504};
+
+/// The statuses of a redirect that `GET` and `HEAD` follow.
+const Set<int> _redirects = {301, 302, 303, 307, 308};
+
+/// How many redirects a call follows at most.
+const int _maxRedirects = 5;
+
+const List<String> _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// The form of an HTTP date that a server sends today, such as
+/// `Sun, 06 Nov 1994 08:49:37 GMT`.
+final RegExp _httpDate = RegExp(
+  r'^[A-Za-z]{3}, (\d{2}) ([A-Za-z]{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$',
+);
+
+/// A path that is an address of its own: only `http://` and `https://` make
+/// one, so `//other.example/x` stays a path on the server of the app.
+final RegExp _absolute = RegExp(r'^https?://', caseSensitive: false);
+
+/// What ends the path in a relative path.
+final RegExp _queryOrFragment = RegExp('[?#]');
+
+/// A dot of a path, encoded.
+final RegExp _encodedDot = RegExp('%2e', caseSensitive: false);
+
+/// What a server may take for a slash of a path.
+final RegExp _slash = RegExp(r'/|\\|%2f|%5c', caseSensitive: false);
+
+final Random _random = Random();
+
+/// The REST client of the app, [appRest], over the transport of the provider
+/// of the REST role.
+///
+/// What it guarantees is here, so it is the same with every provider:
+/// - A path is relative to [baseAddress], with or without a leading slash, and
+///   stays under it: one that climbs out with `..` fails with
+///   [RestFailureReason.rejected] before anything is sent. An address with
+///   `http://` or `https://` goes where it says.
+/// - A call fails only with a [RestFailure].
+/// - The token of the user goes only to the origin of [baseAddress], and a
+///   redirect to another origin takes it away, with the cookies of the caller.
+/// - A 401 of a request with that token gets a new token once and repeats
+///   once, whatever the method, for the same user only.
+/// - `GET` and `HEAD` repeat twice at most after a connection that failed and
+///   after 429, 502, 503 and 504, keeping to `Retry-After`. Other methods
+///   never repeat, since the server may have done what they asked.
+/// - The timeout is per attempt, so a `GET` with its repeats may take longer,
+///   and a [RestCancel] ends a call at once.
+/// - A debug build prints one line for each attempt, with no token and no
+///   query.
+final class AppRestClient {
+  /// Creates a client. The app has one, [appRest], and a test creates one over
+  /// a transport of its own.
+  AppRestClient({
+    required this._transport,
+    required this._baseAddress,
+    this._tokens,
+    this.timeout = const Duration(seconds: 30),
+    this.tokenWait = const Duration(seconds: 10),
+  });
+
+  /// How long one attempt of a call takes at most, unless the call names
+  /// another time.
+  final Duration timeout;
+
+  /// How long the client waits for the token of the user at most, each time
+  /// that it needs one, and within the timeout of the attempt. A forced refresh
+  /// on a device without a network may take a minute before it fails, and a
+  /// request does not wait for that.
+  final Duration tokenWait;
+
+  RestTransport _transport;
+  String? _baseAddress;
+  RestTokens? _tokens;
+
+  /// For a test: replaces what is given, and with [noBaseAddress] or [noTokens]
+  /// takes away the address or the tokens. The code of the app never calls it.
+  void use({
+    RestTransport? transport,
+    String? baseAddress,
+    RestTokens? tokens,
+    bool noBaseAddress = false,
+    bool noTokens = false,
+  }) {
+    _transport = transport ?? _transport;
+    _baseAddress = noBaseAddress ? null : baseAddress ?? _baseAddress;
+    _tokens = noTokens ? null : tokens ?? _tokens;
+  }
+
+  /// Sends a `GET`, which the client repeats as [AppRestClient] tells.
+  Future<RestResponse> get(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    RestCancel? cancel,
+  }) => _request(
+    'GET',
+    path,
+    query: query,
+    headers: headers,
+    timeout: timeout,
+    cancel: cancel,
+  );
+
+  /// Sends a `HEAD`, which the client repeats as [AppRestClient] tells.
+  Future<RestResponse> head(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    RestCancel? cancel,
+  }) => _request(
+    'HEAD',
+    path,
+    query: query,
+    headers: headers,
+    timeout: timeout,
+    cancel: cancel,
+  );
+
+  /// Sends a `POST` with [json] as its body, or with [bytes].
+  Future<RestResponse> post(
+    String path, {
+    Object? json,
+    List<int>? bytes,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    RestCancel? cancel,
+  }) => _request(
+    'POST',
+    path,
+    json: json,
+    bytes: bytes,
+    query: query,
+    headers: headers,
+    timeout: timeout,
+    cancel: cancel,
+  );
+
+  /// Sends a `PUT` with [json] as its body, or with [bytes].
+  Future<RestResponse> put(
+    String path, {
+    Object? json,
+    List<int>? bytes,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    RestCancel? cancel,
+  }) => _request(
+    'PUT',
+    path,
+    json: json,
+    bytes: bytes,
+    query: query,
+    headers: headers,
+    timeout: timeout,
+    cancel: cancel,
+  );
+
+  /// Sends a `PATCH` with [json] as its body, or with [bytes].
+  Future<RestResponse> patch(
+    String path, {
+    Object? json,
+    List<int>? bytes,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    RestCancel? cancel,
+  }) => _request(
+    'PATCH',
+    path,
+    json: json,
+    bytes: bytes,
+    query: query,
+    headers: headers,
+    timeout: timeout,
+    cancel: cancel,
+  );
+
+  /// Sends a `DELETE`, with [json] as its body or with [bytes] if it has one.
+  Future<RestResponse> delete(
+    String path, {
+    Object? json,
+    List<int>? bytes,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    RestCancel? cancel,
+  }) => _request(
+    'DELETE',
+    path,
+    json: json,
+    bytes: bytes,
+    query: query,
+    headers: headers,
+    timeout: timeout,
+    cancel: cancel,
+  );
+
+  /// Makes the call, and turns any error of another kind into a failure with
+  /// the reason [RestFailureReason.unknown]. Its hint has the type of the
+  /// error and not its text, which may quote a header.
+  Future<RestResponse> _request(
+    String method,
+    String path, {
+    Object? json,
+    List<int>? bytes,
+    Map<String, String>? query,
+    Map<String, String>? headers,
+    Duration? timeout,
+    RestCancel? cancel,
+  }) async {
+    try {
+      if (json != null && bytes != null) {
+        throw const RestFailure(
+          RestFailureReason.unknown,
+          developerHint: 'A call takes json or bytes, not both.',
+        );
+      }
+      final base = _baseOf(_baseAddress);
+      final body = json != null ? utf8.encode(jsonEncode(json)) : bytes;
+      return await _Call(
+        client: this,
+        method: method,
+        base: base,
+        target: _addressOf(path, query, base),
+        headers: {
+          for (final MapEntry(:key, :value) in (headers ?? const {}).entries)
+            key.toLowerCase(): value,
+          if (json != null && _hasNoContentType(headers))
+            'content-type': 'application/json',
+          // Without it a stack may send the body in chunks, which many upload
+          // addresses refuse.
+          if (body != null) 'content-length': '${body.length}',
+        },
+        body: body,
+        timeout: timeout ?? this.timeout,
+        cancel: cancel,
+      ).run();
+    } on RestFailure {
+      rethrow;
+    } on Object catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        RestFailure(
+          RestFailureReason.unknown,
+          developerHint: 'The call ended with a ${error.runtimeType}.',
+        ),
+        stackTrace,
+      );
+    }
+  }
+
+  bool _hasNoContentType(Map<String, String>? headers) =>
+      headers == null ||
+      !headers.keys.any((name) => name.toLowerCase() == 'content-type');
+
+  /// The address of [path] with [query]; see [AppRestClient].
+  Uri _addressOf(String path, Map<String, String>? query, Uri? base) {
+    final Uri address;
+    if (_absolute.hasMatch(path)) {
+      address = Uri.parse(path);
+    } else {
+      if (base == null) {
+        throw RestFailure(
+          RestFailureReason.notConfigured,
+          developerHint: _baseProblem(_baseAddress),
+        );
+      }
+      final root = base.toString().replaceFirst(RegExp(r'/+$'), '');
+      final relative = path.replaceFirst(RegExp('^/+'), '');
+      if (_climbsOut(relative)) {
+        throw RestFailure(
+          RestFailureReason.rejected,
+          developerHint:
+              'The path "${relative.split(_queryOrFragment).first}" '
+              'climbs out of the address of the API, so nothing was sent. Keep '
+              'what a user types out of a path, or encode it with '
+              'Uri.encodeComponent.',
+        );
+      }
+      address = Uri.parse(relative.isEmpty ? root : '$root/$relative');
+    }
+    final added = [
+      for (final MapEntry(:key, :value) in (query ?? const {}).entries)
+        '${Uri.encodeComponent(key)}=${Uri.encodeComponent(value)}',
+    ];
+    if (added.isEmpty) return address.removeFragment();
+    return address.removeFragment().replace(
+      query: [if (address.query.isNotEmpty) address.query, ...added].join('&'),
+    );
+  }
+
+  /// Whether the [relative] path, joined to the address of the API, climbs out
+  /// of the path of that address: `..` that goes above where it started,
+  /// written as it is or encoded, with a slash that may be encoded too, since a
+  /// server may decode it. So the token of the user goes to no other service
+  /// behind one host.
+  bool _climbsOut(String relative) {
+    final segments = relative
+        .split(_queryOrFragment)
+        .first
+        .replaceAll(_encodedDot, '.')
+        .split(_slash);
+    var depth = 0;
+    for (final segment in segments) {
+      if (segment == '..') {
+        if (--depth < 0) return true;
+      } else if (segment.isNotEmpty && segment != '.') {
+        depth++;
+      }
+    }
+    return false;
+  }
+
+  /// The address in [value] that paths are relative to, or `null` when it is
+  /// none: it has no value, is no address of an `http` or `https` server, or
+  /// has a query, a fragment or a user.
+  Uri? _baseOf(String? value) {
+    final uri = value == null ? null : Uri.tryParse(value);
+    if (uri == null ||
+        !(uri.isScheme('http') || uri.isScheme('https')) ||
+        uri.host.isEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        uri.userInfo.isNotEmpty) {
+      return null;
+    }
+    return uri;
+  }
+
+  /// What the hint of a relative path says for [value], which [_baseOf] did
+  /// not take. It does not quote the value, which may have a user.
+  String _baseProblem(String? value) => value == null || value.isEmpty
+      ? 'REST_BASE_URL in .env is empty, and the path is relative. Put the '
+            'address of your REST API there, such as '
+            'https://api.example.com/v1, and start flutter run again. The '
+            'section "Values in .env" of the README tells how.'
+      : 'REST_BASE_URL in .env is no address of a server: it needs http:// or '
+            'https://, a host, and no query, fragment or user.';
+}
+
+/// One call of [AppRestClient], over its attempts.
+final class _Call {
+  _Call({
+    required this.client,
+    required this.method,
+    required this.base,
+    required this.target,
+    required this.headers,
+    required this.body,
+    required this.timeout,
+    required this.cancel,
+  }) : _callerHasAuthorization = headers.containsKey('authorization');
+
+  final AppRestClient client;
+  final String method;
+
+  /// The address that paths are relative to, whose origin gets the token.
+  final Uri? base;
+
+  /// The address of the next attempt, which a redirect changes.
+  Uri target;
+
+  /// The headers that the caller gave, which a redirect to another origin
+  /// takes away from.
+  final Map<String, String> headers;
+
+  final List<int>? body;
+  final Duration timeout;
+  final RestCancel? cancel;
+
+  /// A header `authorization` of the caller stays, and the token stays out.
+  final bool _callerHasAuthorization;
+
+  /// The user whom the call is made for, once a read of the token told.
+  String? _owner;
+
+  /// The token that the last attempt sent, if any.
+  String? _sent;
+
+  /// The token of a refresh, for the attempt after it.
+  String? _refreshed;
+
+  /// Whether the call has made its one refresh.
+  bool _didRefresh = false;
+
+  bool get _isSafe => method == 'GET' || method == 'HEAD';
+
+  /// The attempts of the call; see [AppRestClient].
+  Future<RestResponse> run() async {
+    var repeats = 0;
+    var hops = 0;
+    for (;;) {
+      final RestReply reply;
+      try {
+        reply = await _attempt();
+      } on RestConnectionFailed catch (failure) {
+        if (!_isSafe || repeats == _maxRepeats) {
+          throw RestFailure(
+            RestFailureReason.network,
+            developerHint: failure.hint,
+          );
+        }
+        await _wait(_repeatWait(repeats++));
+        continue;
+      }
+
+      final status = reply.status;
+      final response = RestResponse(
+        status: status,
+        headers: reply.headers,
+        bytes: reply.bytes,
+      );
+      if (status == 401 && _sent != null && !_didRefresh) {
+        await _refresh(_sent!, response);
+        continue;
+      }
+      if (_redirects.contains(status)) {
+        _follow(response, hops++);
+        continue;
+      }
+      if (status == 304 || (status >= 200 && status < 300)) return response;
+
+      final retryAfter = _retryAfterOf(reply.headers);
+      if (_isSafe &&
+          _repeatedStatuses.contains(status) &&
+          repeats < _maxRepeats &&
+          (retryAfter == null || retryAfter <= _maxWait)) {
+        await _wait(retryAfter ?? _repeatWait(repeats));
+        repeats++;
+        continue;
+      }
+      throw RestFailure(
+        _reasonOf(status),
+        status: status,
+        response: response,
+        retryAfter: retryAfter,
+        developerHint: _reasonOf(status) == RestFailureReason.unknown
+            ? 'The server answered with the status $status.'
+            : null,
+      );
+    }
+  }
+
+  /// One attempt: the token of the user where it may go, and one exchange,
+  /// within the timeout. A debug build prints one line for it.
+  Future<RestReply> _attempt() async {
+    final limit = _Limit(timeout, cancel);
+    final watch = Stopwatch()..start();
+    var outcome = RestFailureReason.unknown.name;
+    try {
+      final sent = await _tokenFor(limit);
+      _sent = sent;
+      final exchange = RestExchange(
+        method: method,
+        uri: target,
+        headers: {
+          ...headers,
+          if (sent != null) 'authorization': 'Bearer $sent',
+        },
+        body: body,
+        stop: limit.stop,
+      );
+      final reply = await limit.race(() => client._transport.send(exchange));
+      outcome = '${reply.status}';
+      return reply;
+    } on RestConnectionFailed {
+      outcome = RestFailureReason.network.name;
+      rethrow;
+    } on RestFailure catch (failure) {
+      outcome = failure.reason.name;
+      rethrow;
+    } finally {
+      limit.close();
+      if (kDebugMode) {
+        // The origin and the path alone: the query may have a key.
+        debugPrint(
+          'REST $method ${target.origin}${target.path} $outcome '
+          '(${watch.elapsedMilliseconds} ms)',
+        );
+      }
+    }
+  }
+
+  /// The token for the next attempt, or `null` for none: an attempt to
+  /// another origin gets none, and neither does a call with a header
+  /// `authorization` of its own.
+  Future<String?> _tokenFor(_Limit limit) async {
+    final tokens = client._tokens;
+    final origin = base?.origin;
+    if (tokens == null ||
+        _callerHasAuthorization ||
+        origin == null ||
+        target.origin != origin) {
+      return null;
+    }
+    if (_refreshed case final refreshed?) {
+      _refreshed = null;
+      return refreshed;
+    }
+    final (owner, token) = await limit.race(
+      () => _tokenOfOwner(tokens),
+      within: client.tokenWait,
+    );
+    final before = _owner;
+    if (before != null && owner != before) throw _otherUser();
+    _owner = owner;
+    return token;
+  }
+
+  /// The user of [tokens] and that user's token. When the user changes during
+  /// the read, as when the app starts, the token may be of the user before, so
+  /// it reads once more, and fails when the user changes again.
+  Future<(String?, String?)> _tokenOfOwner(RestTokens tokens) async {
+    final owner = tokens.owner;
+    final token = await tokens.current();
+    if (tokens.owner == owner) return (owner, token);
+    final next = tokens.owner;
+    final again = await tokens.current();
+    if (tokens.owner != next) throw _otherUser();
+    return (next, again);
+  }
+
+  /// Gets the token that replaces [rejected], once in a call, for the same
+  /// user. The server that refused it did nothing yet, so every method
+  /// repeats after it.
+  Future<void> _refresh(String rejected, RestResponse response) async {
+    _didRefresh = true;
+    final tokens = client._tokens!;
+    final limit = _Limit(timeout, cancel);
+    try {
+      final token = await limit.race(
+        () => tokens.after(rejected),
+        within: client.tokenWait,
+      );
+      if (token == null || tokens.owner != _owner) {
+        throw _otherUser(response: response);
+      }
+      _refreshed = token;
+    } finally {
+      limit.close();
+    }
+  }
+
+  RestFailure _otherUser({RestResponse? response}) => RestFailure(
+    RestFailureReason.unauthorized,
+    status: response?.status,
+    response: response,
+    developerHint:
+        'The user of the session changed during the call, so '
+        'it did not repeat for the new user.',
+  );
+
+  /// Goes on to the address that the redirect in [response] names: for `GET`
+  /// and `HEAD` only, since the server may have done what another method
+  /// asked. A hop to another origin takes the headers of the caller that are
+  /// only for the origin they were given for.
+  void _follow(RestResponse response, int hops) {
+    RestFailure refused(String hint) => RestFailure(
+      RestFailureReason.unknown,
+      status: response.status,
+      response: response,
+      developerHint: hint,
+    );
+    if (!_isSafe) {
+      throw refused(
+        'The server answered a $method with a redirect, which only GET and '
+        'HEAD follow. Call the address that it names yourself, if you mean to.',
+      );
+    }
+    if (hops == _maxRedirects) {
+      throw refused('More than $_maxRedirects redirects.');
+    }
+    final location = response.headers['location'];
+    if (location == null) throw refused('A redirect without a location.');
+    final next = target.resolve(location).removeFragment();
+    if (!(next.isScheme('http') || next.isScheme('https'))) {
+      throw refused('A redirect to an address that is no http or https one.');
+    }
+    if (next.origin != target.origin) _originHeaders.forEach(headers.remove);
+    target = next;
+  }
+
+  /// Waits for [duration], which a cancel ends at once.
+  Future<void> _wait(Duration duration) async {
+    final limit = _Limit(null, cancel);
+    final waited = Completer<void>();
+    final timer = Timer(duration, waited.complete);
+    try {
+      await limit.race(() => waited.future);
+    } finally {
+      timer.cancel();
+      limit.close();
+    }
+  }
+
+  static Duration _repeatWait(int repeats) =>
+      _repeatWaits[repeats] +
+      Duration(milliseconds: _random.nextInt(_maxJitterMilliseconds));
+
+  /// The wait that [headers] name, in seconds or as an HTTP date, or `null`
+  /// without one that the client can read.
+  static Duration? _retryAfterOf(Map<String, String> headers) {
+    final value = headers['retry-after']?.trim();
+    if (value == null) return null;
+    if (_retryAfterSeconds.hasMatch(value)) {
+      final seconds = int.tryParse(value) ?? _maxRetryAfterSeconds;
+      return Duration(seconds: min(seconds, _maxRetryAfterSeconds));
+    }
+    final match = _httpDate.firstMatch(value);
+    final month = match == null ? -1 : _months.indexOf(match[2]!);
+    if (match == null || month < 0) return null;
+    final wait = DateTime.utc(
+      int.parse(match[3]!),
+      month + 1,
+      int.parse(match[1]!),
+      int.parse(match[4]!),
+      int.parse(match[5]!),
+      int.parse(match[6]!),
+    ).difference(DateTime.now());
+    return wait.isNegative ? Duration.zero : wait;
+  }
+
+  static RestFailureReason _reasonOf(int status) => switch (status) {
+    401 => RestFailureReason.unauthorized,
+    403 => RestFailureReason.forbidden,
+    404 => RestFailureReason.notFound,
+    409 => RestFailureReason.conflict,
+    429 => RestFailureReason.tooManyRequests,
+    >= 400 && < 500 => RestFailureReason.rejected,
+    >= 500 && < 600 => RestFailureReason.server,
+    _ => RestFailureReason.unknown,
+  };
+}
+
+/// What ends an attempt or a wait: its timeout, if it has one, and the cancel
+/// of the caller. The call ends then, also when a provider does not stop.
+final class _Limit {
+  _Limit(Duration? timeout, this._cancel) {
+    final cancel = _cancel;
+    if (cancel != null) {
+      if (cancel.isCancelled) {
+        _cancelled();
+      } else {
+        cancel._listeners.add(_cancelled);
+      }
+    }
+    if (timeout != null) {
+      _timer = Timer(
+        timeout,
+        () => _end(
+          RestFailure(
+            RestFailureReason.timeout,
+            developerHint:
+                'No complete answer within ${timeout.inMilliseconds} ms.',
+          ),
+        ),
+      );
+    }
+  }
+
+  final RestCancel? _cancel;
+  final Completer<void> _stop = Completer();
+  Timer? _timer;
+  RestFailure? _ended;
+  void Function(RestFailure failure)? _racing;
+
+  /// Completes when the attempt has to stop.
+  Future<void> get stop => _stop.future;
+
+  void _cancelled() => _end(const RestFailure(RestFailureReason.cancelled));
+
+  void _end(RestFailure failure) {
+    if (_ended != null) return;
+    _ended = failure;
+    _stop.complete();
+    _racing?.call(failure);
+  }
+
+  /// What [work] gives, unless the limit ends first or [within] is over.
+  /// Whatever [work] does after that goes nowhere.
+  Future<T> race<T>(Future<T> Function() work, {Duration? within}) async {
+    if (_ended case final failure?) throw failure;
+    final result = Completer<T>();
+    void end(RestFailure failure) {
+      if (!result.isCompleted) result.completeError(failure);
+    }
+
+    _racing = end;
+    final wait = within == null
+        ? null
+        : Timer(
+            within,
+            () => end(
+              RestFailure(
+                RestFailureReason.timeout,
+                developerHint:
+                    'The token of the user did not come within '
+                    '${within.inMilliseconds} ms.',
+              ),
+            ),
+          );
+    unawaited(
+      Future<T>.sync(work).then(
+        (value) {
+          if (!result.isCompleted) result.complete(value);
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          if (!result.isCompleted) result.completeError(error, stackTrace);
+        },
+      ),
+    );
+    try {
+      return await result.future;
+    } finally {
+      wait?.cancel();
+      _racing = null;
+    }
+  }
+
+  /// Ends the timer of the limit, once what it limits is over.
+  void close() {
+    _timer?.cancel();
+    _cancel?._listeners.remove(_cancelled);
+  }
+}
+
+/// The transport of the provider of the REST role. Only the client of the app
+/// and a test of the provider call this.
+RestTransport createRestTransport() => _restTransport;
+
+final RestTransport _restTransport = impl0.createDioRestTransport();
+=== lib/core/rest/dio_rest_transport.dart (dio) ===
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
+import 'rest_transport.dart';
+
+/// Creates the [Dio] of the app. An interceptor goes here, such as one of a
+/// tracing service. One that logs leaves out the header `authorization` and the
+/// query of the address, and none repeats a request or follows a redirect:
+/// `appRest` does both. What this function adds to a request goes to every
+/// address, also after a redirect and to a full address such as a presigned
+/// upload. A credential goes through the token of the session or `headers:` of
+/// the call.
+Dio createDio() => Dio();
+
+/// Creates the transport of the app. It creates its [Dio] at the first request.
+RestTransport createDioRestTransport() => DioRestTransport(createDio);
+
+/// A [Dio] of the transport, and the exchanges on it.
+final class _DioInUse {
+  _DioInUse(this.dio, this.overrides);
+
+  final Dio dio;
+
+  /// The overrides that its `HttpClient` is created under.
+  final HttpOverrides? overrides;
+
+  int _exchanges = 0;
+  bool _isRetired = false;
+
+  void begin() => _exchanges++;
+
+  void end() {
+    _exchanges--;
+    _closeIfDone();
+  }
+
+  /// No exchange starts on it from now on.
+  void retire() {
+    _isRetired = true;
+    _closeIfDone();
+  }
+
+  // A closed adapter refuses an exchange that has not reached it yet, which an
+  // exchange does only after a turn of the event loop.
+  void _closeIfDone() {
+    if (_isRetired && _exchanges == 0) dio.close();
+  }
+}
+
+/// One exchange of `appRest` on a [Dio], which keeps a connection open while
+/// requests follow within seconds, so that those requests need no new TLS
+/// handshake.
+final class DioRestTransport implements RestTransport {
+  /// Creates the transport over what [createDio] creates.
+  DioRestTransport(this._createDio);
+
+  final Dio Function() _createDio;
+  _DioInUse? _inUse;
+
+  /// The [Dio] for the [HttpOverrides] of now. A [Dio] keeps the `HttpClient`
+  /// that it created under the overrides of that time, so a change of them, such
+  /// as what `RestTestServer` does in a test, takes a new one. In an app that
+  /// sets none, this is one [Dio].
+  _DioInUse _current() {
+    final overrides = HttpOverrides.current;
+    final inUse = _inUse;
+    if (inUse != null && identical(overrides, inUse.overrides)) return inUse;
+    inUse?.retire();
+    return _inUse = _DioInUse(_createDio(), overrides);
+  }
+
+  @override
+  Future<RestReply> send(RestExchange exchange) async {
+    final cancel = CancelToken();
+    unawaited(exchange.stop.then((_) => cancel.cancel()));
+    final inUse = _current()..begin();
+    try {
+      final response = await inUse.dio.requestUri<List<int>>(
+        exchange.uri,
+        data: switch (exchange.body) {
+          final Uint8List bytes => bytes,
+          // Dio writes any other list as the text of its JSON.
+          final List<int> list => Uint8List.fromList(list),
+          null => null,
+        },
+        cancelToken: cancel,
+        options: Options(
+          method: exchange.method,
+          headers: exchange.headers,
+          followRedirects: false,
+          validateStatus: (_) => true,
+          responseType: ResponseType.bytes,
+        ),
+      );
+      final headers = {
+        for (final MapEntry(:key, :value) in response.headers.map.entries)
+          key.toLowerCase(): value.join(', '),
+      };
+      // HttpClient of dart:io decodes this coding alone, and leaves its headers,
+      // which no longer tell of the bytes. Any other coding stays as it came.
+      if (headers['content-encoding'] == 'gzip') {
+        headers
+          ..remove('content-encoding')
+          ..remove('content-length');
+      }
+      return RestReply(
+        status: response.statusCode!,
+        headers: headers,
+        bytes: response.data ?? const [],
+      );
+    } on DioException catch (error, stackTrace) {
+      final cause = error.error;
+      if (_isOfTheConnection(error)) {
+        // The text of an error may quote the address with its query, so the
+        // hint has the type alone.
+        throw RestConnectionFailed(
+          'The connection failed with a ${cause?.runtimeType ?? error.type.name}.',
+        );
+      }
+      // Such as what an interceptor threw. It reaches the caller by its type.
+      Error.throwWithStackTrace(cause ?? error, stackTrace);
+    } finally {
+      inUse.end();
+    }
+  }
+
+  /// Whether [error] tells of a connection that failed or broke: on `dart:io`,
+  /// a failed TLS handshake and a connection that breaks in a body come as
+  /// [DioExceptionType.unknown], with what `dart:io` threw.
+  static bool _isOfTheConnection(DioException error) => switch (error.type) {
+    DioExceptionType.connectionError ||
+    DioExceptionType.connectionTimeout ||
+    DioExceptionType.sendTimeout ||
+    DioExceptionType.receiveTimeout ||
+    DioExceptionType.badCertificate => true,
+    DioExceptionType.unknown => error.error is IOException,
+    // Not the types by name: a later release of dio may add one, which must
+    // not stop an app from compiling.
+    _ => false,
+  };
+}
+=== lib/core/rest/rest_transport.dart (role:rest) ===
+/// One exchange with a server, as the provider of the REST role sends it.
+final class RestExchange {
+  /// Creates the exchange; only the client of the app does.
+  const RestExchange({
+    required this.method,
+    required this.uri,
+    required this.headers,
+    required this.stop,
+    this.body,
+  });
+
+  /// The method, in upper case.
+  final String method;
+
+  /// The whole address, with its query.
+  final Uri uri;
+
+  /// The headers, each name in lower case, with `content-length` for a body.
+  /// They may hold a token.
+  final Map<String, String> headers;
+
+  /// The body, or `null` for none.
+  final List<int>? body;
+
+  /// Completes when the exchange has to stop: a timeout, or a cancel.
+  final Future<void> stop;
+
+  /// Names no header and no query, so that a token never reaches a log.
+  @override
+  String toString() => 'RestExchange($method ${uri.origin}${uri.path})';
+}
+
+/// What a server answered.
+final class RestReply {
+  /// Creates the reply; a provider does, from what the server answered.
+  const RestReply({
+    required this.status,
+    required this.headers,
+    required this.bytes,
+  });
+
+  /// The status of the answer.
+  final int status;
+
+  /// The headers, each name in lower case, and several values of one header
+  /// joined by `, `.
+  final Map<String, String> headers;
+
+  /// The body, as the provider decoded it or as it came.
+  final List<int> bytes;
+}
+
+/// The request did not reach a server, or the connection broke. No other
+/// exception of a provider tells that.
+final class RestConnectionFailed implements Exception {
+  /// Creates the failure with [hint], for the developer of the app.
+  const RestConnectionFailed(this.hint);
+
+  /// What went wrong. It has no header, no query and no body.
+  final String hint;
+
+  @override
+  String toString() => 'RestConnectionFailed: $hint';
+}
+
+/// One exchange on the wire, which is all that a provider of the REST role
+/// does. `appRest` does the rest with what the provider reports, so every
+/// provider keeps the same guarantees.
+///
+/// Every provider keeps to this. Only a running app shows whether it does:
+/// - [send] makes one attempt. A provider repeats nothing.
+/// - It follows no redirect: a 3xx is a reply. `appRest` follows them, since
+///   it knows which header may go where.
+/// - Any status is a reply, and it keeps the headers of the reply, with their
+///   names in lower case. A provider whose stack decoded a body leaves out
+///   `content-encoding` and its `content-length`, which no longer tell of the
+///   bytes. A body in a coding that the stack did not decode keeps them.
+/// - A failure to connect, a TLS handshake or a certificate that fails, and a
+///   connection that breaks are [RestConnectionFailed]. On `dart:io` those are
+///   `SocketException`, `HttpException` and `TlsException`. Any other error is
+///   a bug of the provider, which reaches the caller as the reason `unknown`.
+/// - When [RestExchange.stop] completes, it closes the connection at once. It
+///   needs no timeout of its own: `appRest` stops every exchange. On `dart:io`
+///   the call ends at once, but a TLS handshake on its way cannot be ended, not
+///   even by `close(force: true)`: its socket closes when the handshake ends or
+///   the server ends it. A provider that shares one `HttpClient` cannot end a
+///   TCP connect on its way either: the system ends it.
+/// - On `dart:io`, one that keeps an `HttpClient` makes a new one when
+///   `HttpOverrides` change, as they do when a test starts or closes a
+///   `RestTestServer`.
+/// - It sends [RestExchange.uri] as it is, with those headers and that body.
+///   Its stack may add the headers of the transport itself, such as `host`,
+///   `user-agent` and `accept-encoding`. It adds no credential or cookie, and
+///   keeps none between two calls.
+/// - It writes no header, no query and no body to a log or a hint.
+/// - Its function takes no arguments, never throws and does not wait, and the
+///   implementation works from the first call.
+abstract interface class RestTransport {
+  /// Sends [exchange] and completes with what the server answered.
+  Future<RestReply> send(RestExchange exchange);
+}
+=== lib/core/rest/session_tokens.dart (role:rest) ===
+import '../auth/app_session.dart';
+import 'app_rest.dart';
+
+/// The token of the user of [appSession], for the requests of the app.
+final class SessionRestTokens implements RestTokens {
+  /// Creates the tokens of the session of the app.
+  const SessionRestTokens();
+
+  @override
+  String? get owner => appSession.value.uid;
+
+  @override
+  Future<String?> current() => _read(appSession.userToken);
+
+  @override
+  Future<String?> after(String rejected) =>
+      _read(() => appSession.userTokenAfter(rejected));
+
+  Future<String?> _read(Future<String?> Function() read) async {
+    try {
+      return await read();
+    } on AuthFailure catch (failure, stackTrace) {
+      Error.throwWithStackTrace(
+        RestFailure(
+          _reasonOf(failure.reason),
+          developerHint: failure.developerHint,
+        ),
+        stackTrace,
+      );
+    }
+  }
+
+  /// A session that ended on the server, and a disabled account, leave nobody
+  /// signed in by now, so the request has no user any more.
+  static RestFailureReason _reasonOf(AuthFailureReason reason) =>
+      switch (reason) {
+        AuthFailureReason.network => RestFailureReason.network,
+        AuthFailureReason.tooManyAttempts => RestFailureReason.tooManyRequests,
+        AuthFailureReason.recentSignInRequired ||
+        AuthFailureReason.userDisabled => RestFailureReason.unauthorized,
+        _ => RestFailureReason.unknown,
+      };
 }
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/foundation.dart';
@@ -16521,56 +18496,182 @@ class _SignUpViewState extends State<SignUpView> {
     );
   }
 }
-=== lib/firebase_options.dart (firebase_core) ===
+=== lib/firebase_options_dev.dart (firebase_core) ===
 // File generated by FlutterFire CLI.
 // ignore_for_file: type=lint
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
+/// The [FirebaseOptions] of the Firebase apps of the flavor dev.
 ///
-/// Example:
-/// ```dart
-/// import 'firebase_options.dart';
-/// // ...
-/// await Firebase.initializeApp(
-///   options: DefaultFirebaseOptions.currentPlatform,
-/// );
-/// ```
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart dev` writes its
+/// options here.
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
       throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
+        'Firebase is not configured for the flavor dev on web. '
+        'Run: dart tool/configure_firebase.dart dev --project=<id>',
       );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for android - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on android. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
         );
       case TargetPlatform.iOS:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on ios. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
         );
       case TargetPlatform.macOS:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on macos. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
         );
       case TargetPlatform.windows:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on windows. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
         );
       case TargetPlatform.linux:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on linux. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/firebase_options_of_flavor.dart (firebase_core) ===
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/services.dart' show appFlavor;
+
+import 'firebase_options_dev.dart' as dev_options;
+import 'firebase_options_prod.dart' as prod_options;
+import 'firebase_options_staging.dart' as staging_options;
+
+/// The options of the Firebase apps of the flavor of this build.
+///
+/// `appFlavor` is a constant, so a release build keeps only the options of
+/// its own flavor.
+FirebaseOptions get firebaseOptionsOfFlavor => switch (appFlavor) {
+  'dev' => dev_options.DefaultFirebaseOptions.currentPlatform,
+  'staging' => staging_options.DefaultFirebaseOptions.currentPlatform,
+  'prod' => prod_options.DefaultFirebaseOptions.currentPlatform,
+  _ => throw UnsupportedError(
+    'The app has no Firebase options for the flavor $appFlavor. A new '
+    'flavor goes into this file and into tool/configure_firebase.dart. '
+    'A run from Xcode of the scheme Runner reads the flavor from '
+    'ios/Flutter/Generated.xcconfig, which has none after flutter pub '
+    'get: select the scheme of a flavor, or run flutter build ios '
+    '--config-only --flavor <flavor> first.',
+  ),
+};
+=== lib/firebase_options_prod.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// The [FirebaseOptions] of the Firebase apps of the flavor prod.
+///
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart prod` writes its
+/// options here.
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Firebase is not configured for the flavor prod on web. '
+        'Run: dart tool/configure_firebase.dart prod --project=<id>',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on android. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on ios. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on macos. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on windows. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on linux. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/firebase_options_staging.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// The [FirebaseOptions] of the Firebase apps of the flavor staging.
+///
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart staging` writes its
+/// options here.
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Firebase is not configured for the flavor staging on web. '
+        'Run: dart tool/configure_firebase.dart staging --project=<id>',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on android. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on ios. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on macos. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on windows. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on linux. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
         );
       default:
         throw UnsupportedError(
@@ -16948,6 +19049,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   crypto: "^3.0.7"
+  dio: "^5.11.1"
   event_bus: "^2.0.1"
   firebase_analytics: "^12.6.0"
   firebase_auth: "^6.7.0"
@@ -16970,9 +19072,12 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: "^0.14.4"
   flutter_lints: "^6.0.0"
+  flutter_native_splash: "^2.4.8"
 
 flutter:
+  default-flavor: "dev"
   uses-material-design: true
   generate: true
   assets:
@@ -17043,6 +19148,515 @@ void main() {
     expect(style.systemNavigationBarIconBrightness, isNull);
   });
 }
+=== test/core/rest/app_rest_test.dart (role:rest) ===
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/rest/app_rest.dart';
+
+import 'rest_test_server.dart';
+
+void main() {
+  late RestTestServer server;
+  late AppRestClient client;
+
+  setUp(() async {
+    server = await RestTestServer.start();
+    client = AppRestClient(
+      transport: createRestTransport(),
+      baseAddress: '${server.address}/v1',
+    );
+  });
+
+  tearDown(() => server.close());
+
+  test(
+    'a relative path reaches the address, and the body is decoded',
+    () async {
+      server.answerJson('GET', '/v1/notes', ['a', 'b']);
+
+      final notes = await client.get('notes', query: {'page': '1'});
+
+      expect(notes.decoded((List<Object?> json) => json.length), 2);
+      expect(server.requests.single.uri.toString(), '/v1/notes?page=1');
+    },
+  );
+
+  test('a 404 fails with notFound', () async {
+    await expectLater(
+      client.get('notes'),
+      throwsA(
+        isA<RestFailure>()
+            .having(
+              (failure) => failure.reason,
+              'reason',
+              RestFailureReason.notFound,
+            )
+            .having((failure) => failure.status, 'status', 404),
+      ),
+    );
+  });
+}
+=== test/core/rest/rest_test_server.dart (role:rest) ===
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+/// A request that a [RestTestServer] got.
+final class RestTestRequest {
+  /// Creates the note of a request.
+  const RestTestRequest({
+    required this.method,
+    required this.uri,
+    required this.headers,
+    required this.bytes,
+  });
+
+  /// The method.
+  final String method;
+
+  /// The path and the query.
+  final Uri uri;
+
+  /// The headers, each name in lower case.
+  final Map<String, String> headers;
+
+  /// The body.
+  final List<int> bytes;
+
+  /// The body as UTF-8.
+  String get body => utf8.decode(bytes);
+}
+
+/// A local server for the tests of the app, for code that makes requests
+/// through `appRest`.
+///
+/// `flutter test` has two traps for a request, and this server is the answer
+/// to the first:
+/// - The binding of the tests gives every `HttpClient` a stand-in that answers
+///   400 to everything, which would reach the code as the reason `rejected`.
+///   [start] takes the stand-in away, and the [close] of the last server that
+///   is open puts it back.
+/// - Inside `testWidgets`, the time is fake, and a real socket never completes
+///   there. Make the request in `tester.runAsync`, and let it end before the
+///   test does, since the timer of a request that is still running fails the
+///   test. A plain `test()` runs in real time and needs nothing.
+///
+/// Files of tests run at once, so a server takes a free port: give the client
+/// [address].
+final class RestTestServer {
+  RestTestServer._(this._server) {
+    _server.listen(_serve, onError: errors.add);
+  }
+
+  /// Starts a server on a free port of this machine.
+  static Future<RestTestServer> start() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    if (_open++ == 0) {
+      _overrides = HttpOverrides.current;
+      HttpOverrides.global = null;
+    }
+    return RestTestServer._(server);
+  }
+
+  /// How many servers are open: the stand-in comes back with the last close.
+  static int _open = 0;
+
+  /// What [start] took away.
+  static HttpOverrides? _overrides;
+
+  final HttpServer _server;
+  bool _closed = false;
+  final Map<String, Future<void> Function(HttpRequest request)> _answers = {};
+
+  /// The requests that the server got in full, in order.
+  final List<RestTestRequest> requests = [];
+
+  /// What went wrong with a request, such as a client that left during its
+  /// upload, which is what a cancel does.
+  final List<Object> errors = [];
+
+  /// The address of the server.
+  String get address => 'http://${_server.address.address}:${_server.port}';
+
+  /// Answers a request of [method] for [path] with [handler], which closes the
+  /// response. Any other request gets a 404.
+  void answer(
+    String method,
+    String path,
+    Future<void> Function(HttpRequest request) handler,
+  ) => _answers['$method $path'] = handler;
+
+  /// Answers a request of [method] for [path] with [value] as JSON.
+  void answerJson(
+    String method,
+    String path,
+    Object? value, {
+    int status = 200,
+  }) => answer(method, path, (request) async {
+    request.response
+      ..statusCode = status
+      ..headers.contentType = ContentType.json
+      ..write(jsonEncode(value));
+    await request.response.close();
+  });
+
+  /// Stops the server. The last server that is open puts back what [start]
+  /// took away.
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    await _server.close(force: true);
+    if (--_open == 0) HttpOverrides.global = _overrides;
+  }
+
+  Future<void> _serve(HttpRequest request) async {
+    try {
+      await _answer(request);
+    } on IOException catch (error) {
+      errors.add(error);
+    }
+  }
+
+  Future<void> _answer(HttpRequest request) async {
+    final bytes = await request.fold<List<int>>(
+      [],
+      (all, part) => all..addAll(part),
+    );
+    final headers = <String, String>{};
+    request.headers.forEach(
+      (name, values) => headers[name] = values.join(', '),
+    );
+    requests.add(
+      RestTestRequest(
+        method: request.method,
+        uri: request.uri,
+        headers: headers,
+        bytes: bytes,
+      ),
+    );
+    final answer = _answers['${request.method} ${request.uri.path}'];
+    if (answer != null) return answer(request);
+    request.response.statusCode = HttpStatus.notFound;
+    await request.response.close();
+  }
+}
+=== tool/configure_firebase.dart (firebase_core) ===
+// Configures Firebase for one flavor of the app, with the FlutterFire CLI:
+//
+//     dart tool/configure_firebase.dart <flavor> --project=<id>
+//
+// In a terminal, without --project, flutterfire asks for the project. The
+// other arguments go to flutterfire as they are, such as --account=<email>.
+//
+// flutterfire writes one iOS build configuration in a run, and the build of
+// each needs its entry in firebase.json, so on macOS this script runs it once
+// for each. Run it again at any time: it changes nothing but the ids of the
+// build phases that flutterfire added, or moves the flavor to another project.
+//
+// Then it formats the options that flutterfire wrote, and runs each Dart file
+// of tool/firebase_configured by the order of their names, for what has to
+// follow every run of flutterfire.
+
+import 'dart:convert';
+import 'dart:io';
+
+/// The Android application id and the iOS bundle id of a flavor, each `null`
+/// for a platform that the app does not have, and its Xcode build
+/// configurations.
+typedef _Flavor = ({String? android, String? ios, List<String> configurations});
+
+/// The flavors of the app. SMF wrote their ids from the ids of the app: if you
+/// change them in the Android and Xcode projects, change them here too.
+const Map<String, _Flavor> _flavors = {
+  'dev': (
+    android: 'com.example.my_app.dev',
+    ios: 'com.example.my-app.dev',
+    configurations: ['Debug-dev', 'Profile-dev', 'Release-dev'],
+  ),
+  'staging': (
+    android: 'com.example.my_app.staging',
+    ios: 'com.example.my-app.staging',
+    configurations: ['Debug-staging', 'Profile-staging', 'Release-staging'],
+  ),
+  'prod': (
+    android: 'com.example.my_app',
+    ios: 'com.example.my-app',
+    configurations: ['Debug-prod', 'Profile-prod', 'Release-prod'],
+  ),
+};
+
+/// The platforms of the app.
+const _platforms = 'android,ios';
+
+/// The directory of what has to follow every run of flutterfire.
+const _hooks = 'tool/firebase_configured';
+
+/// What flutterfire_cli 1.4.1 takes with `--android-package-name`, as
+/// `validateAndroidPackageName` of its `lib/src/common/utils.dart` checks it.
+final _packageName = RegExp(
+  r'^[a-zA-Z][a-zA-Z0-9]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$',
+);
+
+/// What flutterfire_cli 1.4.1 takes with `--ios-bundle-id`, as
+/// `validateAppBundleId` of the same file checks it.
+final _bundleId = RegExp(
+  r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?|([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+))$',
+);
+
+Future<void> main(List<String> arguments) async {
+  final script = File.fromUri(Platform.script).resolveSymbolicLinksSync();
+  try {
+    exitCode = await _configure(File(script).parent.parent, arguments);
+  } on _Stop catch (stop) {
+    stderr.writeln(stop.why);
+    exitCode = 1;
+  }
+}
+
+/// Why the script stops before flutterfire.
+final class _Stop implements Exception {
+  const _Stop(this.why);
+
+  final String why;
+}
+
+/// Configures the flavor that [arguments] names in [app], and returns the exit
+/// code of the script.
+Future<int> _configure(Directory app, List<String> arguments) async {
+  final (named, others) = _withoutProject(arguments);
+  // The word that names a flavor, which may come after another option.
+  final flavors = others.where(_flavors.containsKey).toList();
+  if (flavors.length != 1) {
+    throw _Stop(
+      'Name a flavor: dart tool/configure_firebase.dart '
+      '<${_flavors.keys.join('|')}> --project=<id>',
+    );
+  }
+  final flavor = flavors.single;
+  final ofFlavor = _flavors[flavor]!;
+  final rest = [...others]..remove(flavor);
+  var project = named;
+  final terminal = _hasTerminal();
+  if (project == null && !terminal) {
+    throw _Stop(
+      'Name the Firebase project: dart tool/configure_firebase.dart $flavor '
+      '--project=<id>. Without a terminal, nobody can answer the question of '
+      'flutterfire.',
+    );
+  }
+  final platforms = _platformsIn(rest);
+  final android = platforms.contains('android') ? ofFlavor.android : null;
+  final ios = platforms.contains('ios') ? ofFlavor.ios : null;
+  _checkIds(android, ios);
+
+  // flutterfire changes the Xcode project only on macOS, so the runs differ
+  // only there.
+  final configurations = Platform.isMacOS && ios != null
+      ? ofFlavor.configurations
+      : ofFlavor.configurations.take(1);
+  for (final configuration in configurations) {
+    final process = await Process.start(
+      Platform.resolvedExecutable,
+      [
+        'pub',
+        'global',
+        'run',
+        'flutterfire_cli:flutterfire',
+        'configure',
+        if (project != null) '--project=$project',
+        '--platforms=$_platforms',
+        '--overwrite-firebase-options',
+        '--out=lib/firebase_options_$flavor.dart',
+        if (android != null) ...[
+          '--android-package-name=$android',
+          '--android-out=android/app/src/$flavor/google-services.json',
+        ],
+        if (ios != null) ...[
+          '--ios-bundle-id=$ios',
+          '--ios-out=ios/flavors/$flavor/GoogleService-Info.plist',
+          '--ios-build-config=$configuration',
+        ],
+        ...rest,
+      ],
+      workingDirectory: app.path,
+      // Without a terminal, flutterfire fails rather than wait for an answer.
+      environment: terminal ? null : const {'CI': 'true'},
+      mode: ProcessStartMode.inheritStdio,
+    );
+    final code = await process.exitCode;
+    if (code != 0) {
+      stderr.writeln(
+        'flutterfire failed for the flavor $flavor (exit code $code). What it '
+        'wrote stays, and running this script again does the rest. It needs '
+        'the FlutterFire CLI, a login of the Firebase CLI and, on macOS, the '
+        'Ruby gem xcodeproj: see the section Firebase of README.md.',
+      );
+      return code;
+    }
+    // The next runs need no answer.
+    project ??= _projectOf(app, flavor);
+  }
+
+  await _format(app, flavor);
+  for (final hook in _hooksOf(app)) {
+    final process = await Process.start(
+      Platform.resolvedExecutable,
+      [hook.path],
+      workingDirectory: app.path,
+      mode: ProcessStartMode.inheritStdio,
+    );
+    final code = await process.exitCode;
+    if (code != 0) {
+      stderr.writeln(
+        '${hook.path} failed (exit code $code). flutterfire configured the '
+        'flavor $flavor, and running this script again runs it again.',
+      );
+      return code;
+    }
+  }
+  stdout.writeln(
+    'Configured the flavor $flavor for the Firebase project $project. Commit '
+    'firebase.json and the files it names.',
+  );
+  if (ios != null && !Platform.isMacOS) {
+    stdout.writeln(
+      'flutterfire changes the Xcode project only on macOS, so this run left '
+      'it and ios/flavors/$flavor/GoogleService-Info.plist as they were. Run '
+      'dart tool/configure_firebase.dart $flavor again on a Mac for the iOS '
+      'app.',
+    );
+  }
+  return 0;
+}
+
+/// Whether someone can answer a question of flutterfire.
+///
+/// `stdin.hasTerminal` also holds for any other character device, such as the
+/// `/dev/null` of cron, `nohup`, `ssh -n` or Docker without `-i`, where
+/// flutterfire would wait forever. Only a terminal has an echo mode to read.
+bool _hasTerminal() {
+  try {
+    stdin.echoMode;
+    return true;
+  } on StdinException {
+    return false;
+  }
+}
+
+/// The project that [arguments] name, as flutterfire reads it, with the last
+/// one counting, and the other arguments.
+(String?, List<String>) _withoutProject(List<String> arguments) {
+  String? project;
+  final rest = <String>[];
+  for (var index = 0; index < arguments.length; index++) {
+    final argument = arguments[index];
+    if (argument == '--project' || argument == '-p') {
+      // Another option is no id, and flutterfire would take it for one.
+      if (++index == arguments.length || arguments[index].startsWith('-')) {
+        throw _Stop('$argument needs the id of a Firebase project.');
+      }
+      project = arguments[index];
+    } else if (argument.startsWith('--project=')) {
+      project = argument.substring('--project='.length);
+    } else if (argument.startsWith('-p')) {
+      project = argument.substring('-p'.length);
+    } else {
+      rest.add(argument);
+    }
+  }
+  if (project != null && project.isEmpty) {
+    throw _Stop('--project needs the id of a Firebase project.');
+  }
+  return (project, rest);
+}
+
+/// The platforms of this run: those of the app, unless [rest] names others.
+/// [rest] comes last on the command line of flutterfire, which takes the last
+/// value of an option.
+List<String> _platformsIn(List<String> rest) {
+  var platforms = _platforms;
+  for (var index = 0; index < rest.length; index++) {
+    if (rest[index].startsWith('--platforms=')) {
+      platforms = rest[index].substring('--platforms='.length);
+    } else if (rest[index] == '--platforms' && index + 1 < rest.length) {
+      platforms = rest[index + 1];
+    }
+  }
+  return platforms.split(',');
+}
+
+/// Stops at an id that flutterfire would refuse, with what to do about it.
+void _checkIds(String? android, String? ios) {
+  if (android != null && !_packageName.hasMatch(android)) {
+    throw _Stop(
+      'flutterfire takes no application id like $android (it allows no '
+      'underscore in its first part): use another org.',
+    );
+  }
+  if (ios != null && !_bundleId.hasMatch(ios)) {
+    throw _Stop(
+      'flutterfire takes no bundle id like $ios (it allows no hyphen at either '
+      'end of a part, and at most 63 characters in one): use another org.',
+    );
+  }
+}
+
+/// The project of the options of [flavor], which flutterfire wrote into
+/// `firebase.json` of [app].
+///
+/// It reads the entry of the options: the keys of the Android apps in that
+/// file depend on the path of the app.
+String _projectOf(Directory app, String flavor) {
+  final file = File('${app.path}/firebase.json');
+  final json = file.existsSync() ? jsonDecode(file.readAsStringSync()) : null;
+  Object? entry = json;
+  for (final key in [
+    'flutter',
+    'platforms',
+    'dart',
+    'lib/firebase_options_$flavor.dart',
+    'projectId',
+  ]) {
+    entry = entry is Map ? entry[key] : null;
+  }
+  if (entry is! String) {
+    throw _Stop(
+      '${file.path} names no Firebase project for the flavor $flavor, though '
+      'flutterfire succeeded. Run this script again with --project=<id>.',
+    );
+  }
+  return entry;
+}
+
+/// Formats the options of [flavor], which flutterfire writes in a format of
+/// its own, so that the check of the format of the app passes. They work
+/// without it, so a failure only warns.
+Future<void> _format(Directory app, String flavor) async {
+  final options = 'lib/firebase_options_$flavor.dart';
+  final result = await Process.run(Platform.resolvedExecutable, [
+    'format',
+    options,
+  ], workingDirectory: app.path);
+  if (result.exitCode != 0) {
+    stderr.writeln(
+      'Warning: dart format left $options as flutterfire wrote it (exit code '
+      '${result.exitCode}): ${result.stderr}',
+    );
+  }
+}
+
+/// The Dart files of the hooks directory of [app], by the order of their
+/// names. An app whose modules have nothing to do after flutterfire has no
+/// such directory.
+List<File> _hooksOf(Directory app) {
+  final directory = Directory('${app.path}/$_hooks');
+  if (!directory.existsSync()) return const [];
+  return [
+    for (final entity in directory.listSync())
+      if (entity is File && entity.path.endsWith('.dart')) entity,
+  ]..sort((a, b) => a.path.compareTo(b.path));
+}
 === tool/enable_firebase_sign_in.dart (firebase_auth) ===
 // Enables the sign-in methods of the app in its Firebase project:
 // Email/Password, and Anonymous when the app is in the mode `anonymous`,
@@ -17050,9 +19664,11 @@ void main() {
 //
 //     dart tool/enable_firebase_sign_in.dart
 //
-// The project is the one that `flutterfire configure` wrote into
-// `firebase.json` of the app, or the one that `--project <id>` names. The
-// script says which, and gives the Firebase CLI that project and no other.
+// The project is the one of `firebase.json` of the app, where
+// `tool/configure_firebase.dart` writes the project of each flavor, or the one that
+// `--project <id>` names. Where the flavors have several projects, the script
+// needs `--project <id>`, and a run for each project. The script says which
+// project it runs for, and gives the Firebase CLI that project and no other.
 //
 // The script enables the methods with `firebase deploy --only auth` of the
 // Firebase CLI, which enables what its configuration names and disables
@@ -17080,16 +19696,17 @@ void main() {
 // Google out and says so.
 //
 // The ways to sign in of Google need more of the project and of the app,
-// which the script then sets up for the project that `flutterfire
-// configure` configured the app for, whose apps `firebase.json` names:
+// which the script then sets up for the apps that `firebase.json` names in
+// the project of the run:
 // - it registers the SHA-1 and SHA-256 of the Android debug key of this
-//   machine for the Android app, and creates that key as the first debug
+//   machine for each Android app, and creates that key as the first debug
 //   build would when there is none;
-// - it downloads the Firebase files of the app again once they have the
-//   clients of Google, to where `flutterfire configure` wrote them;
-// - it writes the URL scheme that the iOS app needs, the reversed id of its
-//   client of Google, into `ios/Runner/Info.plist`. It adds the scheme and
-//   removes none, and a file that has it already stays as it is.
+// - it downloads the Firebase files of those apps again once they have the
+//   clients of Google, to the paths that `firebase.json` names;
+// - it writes the URL scheme of each iOS app, the reversed id of its client
+//   of Google, into `ios/Runner/Info.plist`, which all the flavors share. It
+//   adds a scheme and removes none, and a file that has it already stays as
+//   it is.
 // These are the only files of the app that the script changes. Of the
 // other arguments, those calls of the Firebase CLI get only the account.
 //
@@ -17148,6 +19765,12 @@ final _modeDeclaration = RegExp(
 /// This script, as the user runs it in the directory of the app.
 const _command = 'dart tool/enable_firebase_sign_in.dart';
 
+/// The script of the app that configures Firebase for a flavor.
+const _configureScript = 'tool/configure_firebase.dart';
+
+/// The command that configures Firebase for a flavor of the app.
+const _configure = 'dart $_configureScript <flavor> --project=<id>';
+
 Future<void> main(List<String> arguments) async {
   // The app is the directory above `tool`, wherever the script is run from,
   // also through a link to it.
@@ -17180,6 +19803,9 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     );
   }
   final project = named ?? _configuredProject(app);
+  // This script as the user runs it again for the same project. Without the
+  // project that the arguments name, it could stop at several projects.
+  final again = named == null ? _command : '$_command --project $project';
   final account = _accountIn(passedOn);
   // What the ways to sign in need is for the apps of the app in the
   // project.
@@ -17280,7 +19906,7 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     final supportEmail = account ?? await _loggedInAs(run);
     if (interrupted) return 130;
     if (supportEmail == null) {
-      stdout.writeln(_withoutGoogle(project, named: named != null));
+      stdout.writeln(_withoutGoogle(project, again));
     }
     final google = supportEmail != null;
 
@@ -17329,13 +19955,15 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     ], ProcessStartMode.inheritStdio);
     final code = await deploy.exitCode;
     if (interrupted) return 130;
-    if (code != 0) stderr.writeln(_afterFailure(code, project, passedOn));
+    if (code != 0) {
+      stderr.writeln(_afterFailure(code, project, passedOn, again));
+    }
     if (code != 0) return code;
     if (code == 0) stdout.writeln(_appleInConsole(project));
     try {
       await _setUp(
         app,
-        _Cli(run, tool, project, account, () => interrupted),
+        _Cli(run, tool, project, account, again, () => interrupted),
         _needs,
         apps,
         waitForClients: google,
@@ -17347,7 +19975,7 @@ Future<int> _enable(Directory app, List<String> arguments) async {
         ..writeln(failed.why)
         ..writeln(
           'What this script did before that stays done, and running it '
-          'again does the rest: $_command',
+          'again does the rest: $again',
         );
       return 1;
     }
@@ -17388,14 +20016,16 @@ final class _Interrupted implements Exception {
 /// The Firebase CLI and the other tools as the script runs them to set up
 /// what the ways to sign in need: the Firebase CLI for [project], as
 /// [account] if the arguments of the script name one, and the other tools,
-/// both so that Ctrl+C reaches them, with what tells whether the user
-/// pressed Ctrl+C.
+/// both so that Ctrl+C reaches them, with the command that runs the script
+/// again for the project, [again], and what tells whether the user pressed
+/// Ctrl+C.
 final class _Cli {
   _Cli(
     this._firebase,
     this._tool,
     this.project,
     this.account,
+    this.again,
     this._interrupted,
   );
 
@@ -17409,6 +20039,7 @@ final class _Cli {
   _tool;
   final String project;
   final String? account;
+  final String again;
   final bool Function() _interrupted;
 
   /// Runs [executable] with [arguments], in a shell on Windows when
@@ -17457,7 +20088,7 @@ final class _Cli {
     };
     throw _Failed(
       'The Firebase CLI did not $what (exit code $code)'
-      '${error.isEmpty ? '' : ': $error'}\n${_accountHint(account)}',
+      '${error.isEmpty ? '' : ': $error'}\n${_accountHint(account, again)}',
     );
   }
 }
@@ -17500,13 +20131,12 @@ String _consoleOf(String project) =>
     'providers';
 
 /// What the script tells when it leaves Google out in [project], since the
-/// Firebase CLI runs as no user account, and how to run it again, with the
-/// project if its arguments [named] it.
-String _withoutGoogle(String project, {required bool named}) =>
+/// Firebase CLI runs as no user account, and how to run it again, [again].
+String _withoutGoogle(String project, String again) =>
     'Google is left out: its consent screen needs a support email, the '
     'email address of a user account of the Firebase CLI, and the Firebase '
     'CLI runs as none here, as with a service account. To enable Google, '
-    'run: $_command${named ? ' --project $project' : ''} --account <email>, '
+    'run: $again --account <email>, '
     'or enable it in the Firebase console: ${_consoleOf(project)}';
 
 /// The account that [options], the arguments of the script for the Firebase
@@ -17541,20 +20171,26 @@ Future<String?> _loggedInAs(
 }
 
 /// What the script tells of [account], the one that its arguments name,
-/// after a call of the Firebase CLI failed.
-String _accountHint(String? account) => account != null
+/// after a call of the Firebase CLI failed, with the command that runs the
+/// script again, [again].
+String _accountHint(String? account, String again) => account != null
     ? '- The arguments name the account $account for it. "firebase '
           'login:list" shows the accounts that the Firebase CLI has.'
     : '- If it ran as the wrong account: this script runs the Firebase CLI '
           'in a temporary directory, where an account that "firebase '
           'login:use" chose for the directory of the app does not apply. To '
-          'name the account, run: $_command --account <email>';
+          'name the account, run: $again --account <email>';
 
 /// What the script tells after the Firebase CLI failed with the exit code
 /// [code] for [project], with the arguments [passedOn]: which account it
 /// may have run as, where its log was, and the other way to enable the
-/// methods.
-String _afterFailure(int code, String project, List<String> passedOn) {
+/// methods. [again] is the command that runs the script again.
+String _afterFailure(
+  int code,
+  String project,
+  List<String> passedOn,
+  String again,
+) {
   final options = passedOn.takeWhile((argument) => argument != '--').toList();
   // The last account that the options name is the one of the Firebase CLI.
   String? account;
@@ -17574,11 +20210,11 @@ String _afterFailure(int code, String project, List<String> passedOn) {
       '- If it ran as the wrong account: this script runs the Firebase CLI '
           'in a temporary directory, where an account that "firebase '
           'login:use" chose for the directory of the app does not apply. To '
-          'name the account, run: $_command --account <email>',
+          'name the account, run: $again --account <email>',
     if (!options.contains('--debug'))
       '- Its log, firebase-debug.log, was in that temporary directory, '
           'which this script removes. To see what the Firebase CLI did, '
-          'run: $_command --debug',
+          'run: $again --debug',
     '- ${_inConsole(project)}',
   ].join('\n');
 }
@@ -17657,16 +20293,18 @@ String _modeOf(Directory app) {
   return (project, [...others, if (end >= 0) ...arguments.sublist(end)]);
 }
 
-/// The id of the Firebase project that `flutterfire configure` wrote into
-/// `firebase.json` of [app]: under `flutter`, each platform of the app has
-/// the id of its project.
+/// The id of the Firebase project in `firebase.json` of [app], where
+/// [_configureScript] writes the project of each flavor: under `flutter`,
+/// each platform of the app has the id of its project. Flavors may have
+/// several projects, and a run of this script is for one.
 String _configuredProject(Directory app) {
   final file = File('${app.path}/firebase.json');
   const orName = 'or name the project: $_command --project <id>';
   if (!file.existsSync()) {
     throw _Stop(
-      '${file.path} is missing, so the app is not configured for Firebase '
-      'yet. Run "flutterfire configure" first (see README.md), $orName',
+      '${file.path} is missing, so no flavor of the app is configured for '
+      'Firebase yet. Configure one first with "$_configure" (see README.md), '
+      '$orName',
     );
   }
   final Object? json;
@@ -17674,8 +20312,8 @@ String _configuredProject(Directory app) {
     json = jsonDecode(_textOf(file));
   } on FormatException catch (error) {
     throw _Stop(
-      '${file.path} is not JSON (${error.message}). Run "flutterfire '
-      'configure" again (see README.md), $orName',
+      '${file.path} is not JSON (${error.message}). Configure a flavor again '
+      'with "$_configure" (see README.md), $orName',
     );
   }
   final projects = <String>{};
@@ -17693,22 +20331,27 @@ String _configuredProject(Directory app) {
   collect(json is Map ? json['flutter'] : null);
   if (projects.isEmpty) {
     throw _Stop(
-      '${file.path} has no Firebase project of "flutterfire configure". Run '
-      'it first (see README.md), $orName',
+      '${file.path} names no Firebase project. Configure a flavor first with '
+      '"$_configure" (see README.md), $orName',
     );
   }
   if (projects.length > 1) {
+    final commands = [
+      for (final project in projects) '$_command --project $project',
+    ];
     throw _Stop(
-      '${file.path} has several Firebase projects (${projects.join(', ')}). '
-      'Name one: $_command --project <id>',
+      '${file.path} has several Firebase projects (${projects.join(', ')}), '
+      'since flavors of the app may have projects of their own. A run of this '
+      'script enables the methods in one project, so run it once for each:\n'
+      '${commands.join('\n')}',
     );
   }
   final project = projects.single;
   if (!_projectId.hasMatch(project)) {
     throw _Stop(
       '${file.path} has "$project" as its Firebase project, which is no id '
-      'of a project. Run "flutterfire configure" again (see README.md), '
-      '$orName',
+      'of a project. Configure a flavor again with "$_configure" (see '
+      'README.md), $orName',
     );
   }
   return project;
@@ -17803,11 +20446,11 @@ Future<void> _setUp(
 }) async {
   if (apps.isEmpty) {
     stdout.writeln(
-      'firebase.json of the app names no app of the project ${cli.project} '
-      'that "flutterfire configure" configured the app for, so this run '
-      'registers no debug key, downloads no Firebase file and writes no URL '
-      'scheme there. To set the app up for that project, run "flutterfire '
-      'configure" for it first, and then this script again.',
+      'firebase.json of the app names no app of the project ${cli.project}, '
+      'so this run registers no debug key, downloads no Firebase file and '
+      'writes no URL scheme there. To set up a flavor of the app in that '
+      'project, run "dart $_configureScript <flavor> '
+      '--project=${cli.project}" first, and then this script again.',
     );
     return;
   }
@@ -18291,4 +20934,156 @@ String? _withUrlSchemes(String text, List<String> schemes) {
     '${_urlTypesOf(schemes, '$indent\t', newline)}'
     '$indent</array>$newline',
   );
+}
+=== tool/firebase_configured/fix_crashlytics_phase.dart (firebase_crashlytics) ===
+// Points the build phase for Crashlytics that flutterfire adds to the Xcode
+// project at the upload script of Crashlytics where Flutter puts it, so that
+// flutter build ipa finds it. See the section Crashlytics of README.md.
+//
+// flutterfire writes the phase again in each of its runs, so
+// tool/configure_firebase.dart runs this script after it. After
+// flutterfire configure by hand, run it yourself:
+//
+//     dart tool/firebase_configured/fix_crashlytics_phase.dart
+//
+// flutterfire changes the Xcode project only on macOS, so elsewhere this script
+// does nothing.
+
+import 'dart:convert';
+import 'dart:io';
+
+/// The Xcode project, from the directory of the app.
+const _project = 'ios/Runner.xcodeproj/project.pbxproj';
+
+/// Where the phase of flutterfire looks for the upload script: the build
+/// directory of Xcode, which is another one for the archive of
+/// flutter build ipa.
+const _inBuildDirectory =
+    r'$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run';
+
+/// Where the upload script is, in build/ios/SourcePackages of the app.
+const _inApp =
+    r'$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run';
+
+void main() {
+  if (!Platform.isMacOS) return;
+  final script = File.fromUri(Platform.script).resolveSymbolicLinksSync();
+  final app = File(script).parent.parent.parent;
+  final file = File('${app.path}/$_project');
+  // Byte for byte, whatever the encoding of the file and the locale.
+  final text = file.existsSync() ? latin1.decode(file.readAsBytesSync()) : '';
+  final fixed = text.replaceAll(_inBuildDirectory, _inApp);
+  if (fixed == text) {
+    stdout.writeln('Nothing to fix in $_project');
+  } else {
+    file.writeAsBytesSync(latin1.encode(fixed));
+    stdout.writeln('Fixed the Crashlytics phase in $_project');
+  }
+}
+=== tool/update_app_icon.dart (launcher_icons) ===
+// Makes the launcher icons of the app from assets/branding/, as
+// flutter_launcher_icons.yaml says. Run it again after you change an image:
+//
+//     dart tool/update_app_icon.dart
+import 'dart:io';
+
+import 'package:flutter_launcher_icons/main.dart' as flutter_launcher_icons;
+
+const _project = 'ios/Runner.xcodeproj/project.pbxproj';
+const _setting = 'ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS';
+
+Future<void> main(List<String> arguments) async {
+  final line = RegExp('$_setting = ([^;]*);');
+  final project = File(_project);
+  final before = [
+    for (final match in line.allMatches(project.readAsStringSync())) match[1],
+  ];
+  await flutter_launcher_icons.createIconsFromArguments(arguments);
+  // flutter_launcher_icons 0.14.4 writes the name of the icon into every build
+  // setting of the Xcode project whose name has ASSETCATALOG. This one takes
+  // YES or NO, so each line gets its value back, or YES after an earlier run
+  // of the tool.
+  final text = project.readAsStringSync();
+  var index = 0;
+  final fixed = text.replaceAllMapped(line, (_) {
+    final value = before.elementAtOrNull(index++);
+    return '$_setting = ${value == 'NO' ? 'NO' : 'YES'};';
+  });
+  if (fixed != text) project.writeAsStringSync(fixed);
+}
+=== tool/write_env.dart (role:ci) ===
+// Writes `.env` for a job of CI, from `.env.example` and the variables of the
+// process. No value in the file is a secret: every value ends up in the app.
+//
+// A key whose variable has a value gets it, in one of the two forms of a value
+// of `.env`: as it is, or in double quotes when it has white space, `#` or a
+// quote. Any other line stays as `.env.example` has it. A value with a double
+// quote, a control character or a line separator fits neither form, and could
+// add a line of its own, so the script stops and writes nothing. It never prints
+// a value.
+//
+// It never replaces a value. When `.env` has one, the script stops and leaves
+// the file as it is, and a developer who wants it written again deletes it. A
+// missing `.env`, or one without values such as a copy of `.env.example`, is
+// what a job of CI starts from.
+import 'dart:convert';
+import 'dart:io';
+
+final _key = RegExp(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=');
+final _unsafe = RegExp(r'["\x00-\x1F\x7F\u2028\u2029]');
+final _quoted = RegExp(r"[\s#'`]");
+final _withoutValue = RegExp(
+  r'^\s*(?:#.*|[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:""\s*)?(?:#.*)?)?$',
+);
+
+void main() {
+  final example = File('.env.example');
+  if (!example.existsSync()) {
+    stderr.writeln('.env.example is missing.');
+    exitCode = 1;
+    return;
+  }
+  final env = File('.env');
+  // In latin1, every file reads, so an error shows no part of a value.
+  if (env.existsSync() &&
+      !env.readAsLinesSync(encoding: latin1).every(_withoutValue.hasMatch)) {
+    stderr.writeln(
+      '.env has values, which this script would replace. Delete .env to write '
+      'it again.',
+    );
+    exitCode = 1;
+    return;
+  }
+  final lines = <String>[];
+  final empty = <String>[];
+  final refused = <String>[];
+  for (final line in example.readAsLinesSync()) {
+    final key = _key.firstMatch(line)?[1];
+    if (key == null) {
+      lines.add(line);
+      continue;
+    }
+    final value = Platform.environment[key] ?? '';
+    if (value.isEmpty) {
+      if (_withoutValue.hasMatch(line)) empty.add(key);
+      lines.add(line);
+    } else if (_unsafe.hasMatch(value)) {
+      refused.add(key);
+    } else {
+      lines.add('$key=${_quoted.hasMatch(value) ? '"$value"' : value}');
+    }
+  }
+  if (refused.isNotEmpty) {
+    stderr.writeln(
+      'The values of ${refused.join(', ')} have a double quote, a control '
+      'character or a line separator, which .env cannot hold.',
+    );
+    exitCode = 1;
+    return;
+  }
+  env.writeAsStringSync('${lines.join('\n')}\n');
+  stdout.writeln('Wrote .env.');
+  if (empty.isNotEmpty) {
+    stdout.writeln('No value for: ${empty.join(', ')}.');
+  }
 }

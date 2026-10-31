@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_flutter_core/src/agents.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
@@ -39,14 +40,15 @@ void main() {
       // Flutter takes it from there for the Swift packages of plugins, and
       // CocoaPods for their pods: the Podfile that Flutter writes when a
       // plugin needs one leaves the platform to the Xcode project.
+      // Each of the twelve build configurations of the project has it.
       expect(
         placesOf(AppEntryRole.iosDeploymentTarget.tag),
-        [pbxproj, pbxproj, pbxproj],
+        List.filled(12, pbxproj),
       );
       expect(
         RegExp('IPHONEOS_DEPLOYMENT_TARGET = ${RegExp.escape(tag)};')
             .allMatches(templates[pbxproj]!),
-        hasLength(3),
+        hasLength(12),
       );
       expect(templates.keys, isNot(contains('ios/Podfile')));
       expect(
@@ -135,9 +137,10 @@ void main() {
 
     test('have a manifest that parses, with the entries of the modules', () {
       final app = XmlDocument.parse(alone[manifest]!).rootElement;
+      // The name of each flavor is in its block of the Gradle file.
       expect(
         app.getElement('application')!.getAttribute('android:label'),
-        'Contract App',
+        r'${appName}',
       );
       expect(app.findElements('uses-permission'), isEmpty);
       expect(
@@ -189,7 +192,8 @@ void main() {
 
     test('have an Info.plist that parses, with the keys of the modules', () {
       final keys = _plistKeys(alone[infoPlist]!);
-      expect(keys['CFBundleDisplayName']!.innerText, 'Contract App');
+      // The name of each flavor is in its build configurations.
+      expect(keys['CFBundleDisplayName']!.innerText, r'$(APP_DISPLAY_NAME)');
       expect(keys['CFBundleName']!.innerText, 'ContractApp');
       expect(keys, isNot(contains('UIBackgroundModes')));
 
@@ -225,7 +229,7 @@ void main() {
       final ofApp = settings
           .where((it) => it.contains('INFOPLIST_FILE = Runner/Info.plist;'))
           .toList();
-      expect(ofApp, hasLength(3));
+      expect(ofApp, hasLength(12));
       for (final configuration in ofApp) {
         expect(
           'CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;'
@@ -233,7 +237,7 @@ void main() {
           hasLength(1),
         );
       }
-      expect('CODE_SIGN_ENTITLEMENTS'.allMatches(project), hasLength(3));
+      expect('CODE_SIGN_ENTITLEMENTS'.allMatches(project), hasLength(12));
       final reference = RegExp(
         r'(\w{24}) /\* Runner\.entitlements \*/ = \{isa = PBXFileReference; '
         r'lastKnownFileType = text\.plist\.entitlements; '
@@ -290,17 +294,18 @@ void main() {
             r'IPHONEOS_DEPLOYMENT_TARGET = ([\d.]+);',
           ).allMatches(pbxproj).map((match) => match[1]).join(' ');
 
-      expect(versions(alone[pbxproj]!), '15.0 15.0 15.0');
-      expect(versions(every[pbxproj]!), '16.0 16.0 16.0');
+      expect(versions(alone[pbxproj]!), List.filled(12, '15.0').join(' '));
+      expect(versions(every[pbxproj]!), List.filled(12, '16.0').join(' '));
+      // The three plain configurations and the three of prod.
       expect(
         'PRODUCT_BUNDLE_IDENTIFIER = com.example.contract-app;'
             .allMatches(alone[pbxproj]!),
-        hasLength(3),
+        hasLength(6),
       );
       expect(
         'PRODUCT_BUNDLE_IDENTIFIER = com.example.contract-app.RunnerTests;'
             .allMatches(alone[pbxproj]!),
-        hasLength(3),
+        hasLength(12),
       );
     });
 
@@ -348,6 +353,221 @@ void main() {
       );
     });
   });
+
+  group('the flavors of an app', () {
+    late Map<String, String> texts;
+
+    setUpAll(() async {
+      texts = (await renderedApp(const [FlutterCoreModule.id])).app!.texts;
+    });
+
+    /// What each flavor of the app has beyond the id of the role: its name
+    /// on the device.
+    const labels = {
+      'dev': 'Contract App Dev',
+      'staging': 'Contract App Staging',
+      'prod': 'Contract App',
+    };
+
+    test('are the flavors of the role, with their ids and names on Android',
+        () {
+      final gradle = texts[appGradle]!;
+      expect(gradle, contains('flavorDimensions += "default"'));
+      // The id of the app stays, and each flavor adds its suffix to it.
+      expect(gradle, contains('applicationId = "com.example.contract_app"'));
+
+      final flavors = RegExp(
+        r'create\("(\w+)"\) \{\n([^{}]*)\}',
+      ).allMatches(_block(gradle, 'productFlavors', indent: '    ')).toList();
+      expect(
+        [for (final flavor in flavors) flavor[1]],
+        [for (final flavor in AppEntryRole.flavors) flavor.name],
+      );
+      for (final (index, flavor) in AppEntryRole.flavors.indexed) {
+        final lines = [
+          for (final line in flavors[index][2]!.split('\n'))
+            if (line.trim().isNotEmpty) line.trim(),
+        ];
+        expect(lines, [
+          'dimension = "default"',
+          if (flavor.idSuffix.isNotEmpty)
+            'applicationIdSuffix = "${flavor.idSuffix}"',
+          'manifestPlaceholders["appName"] = "${labels[flavor.name]}"',
+        ]);
+      }
+    });
+
+    test(
+        'have twelve configurations in each list of the Xcode project: the '
+        'three plain ones, then three for each flavor', () {
+      final project = _XcodeProject(texts[pbxproj]!);
+
+      expect(project.lists, hasLength(3));
+      for (final list in project.lists) {
+        expect(list.keys, [
+          'Debug',
+          'Release',
+          'Profile',
+          for (final flavor in AppEntryRole.flavors)
+            ...flavor.xcodeConfigurations,
+        ]);
+        // What xcodebuild takes when no scheme names a configuration.
+        expect(list.defaultConfiguration, 'Release');
+      }
+    });
+
+    test(
+        'are the plain configuration of their mode in the Xcode project, '
+        'but for the id and the name of the flavor', () {
+      // The comparison of the brick with flutter create takes these copies
+      // out, so a setting that a newer Flutter adds would reach only the
+      // plain configurations, which no flutter command builds any more.
+      const ofFlavor = {'PRODUCT_BUNDLE_IDENTIFIER', 'APP_DISPLAY_NAME'};
+      final project = _XcodeProject(texts[pbxproj]!);
+
+      for (final list in project.lists) {
+        for (final flavor in AppEntryRole.flavors) {
+          for (final name in flavor.xcodeConfigurations) {
+            final plain = list.configurations[name.split('-').first]!;
+            final flavored = list.configurations[name]!;
+
+            expect(flavored.base, plain.base, reason: name);
+            expect(
+              {
+                for (final MapEntry(:key, :value) in flavored.settings.entries)
+                  if (!ofFlavor.contains(key)) key: value,
+              },
+              {
+                for (final MapEntry(:key, :value) in plain.settings.entries)
+                  if (!ofFlavor.contains(key)) key: value,
+              },
+              reason: name,
+            );
+          }
+        }
+      }
+    });
+
+    test('have their ids and names in the app target of the Xcode project', () {
+      final project = _XcodeProject(texts[pbxproj]!);
+      final ofApp = project.lists.singleWhere(
+        (list) => list.configurations.values.every(
+          (configuration) =>
+              configuration.settings['INFOPLIST_FILE'] == 'Runner/Info.plist',
+        ),
+      );
+      final identity = ContractHarness.defaultContext.appIdentity;
+
+      for (final mode in const ['Debug', 'Profile', 'Release']) {
+        final plain = ofApp.configurations[mode]!;
+        expect(
+          plain.settings['PRODUCT_BUNDLE_IDENTIFIER'],
+          identity.iosBundleId,
+        );
+        expect(plain.settings['APP_DISPLAY_NAME'], '"Contract App"');
+      }
+      for (final flavor in AppEntryRole.flavors) {
+        for (final name in flavor.xcodeConfigurations) {
+          final settings = ofApp.configurations[name]!.settings;
+          expect(
+            settings['PRODUCT_BUNDLE_IDENTIFIER'],
+            flavor.bundleIdIn(identity),
+            reason: name,
+          );
+          expect(
+            settings['APP_DISPLAY_NAME'],
+            '"${labels[flavor.name]}"',
+            reason: name,
+          );
+        }
+      }
+      // The tests of the app keep one id, and have no name of the flavor.
+      for (final list in project.lists) {
+        if (identical(list, ofApp)) continue;
+        for (final configuration in list.configurations.values) {
+          expect(configuration.settings, isNot(contains('APP_DISPLAY_NAME')));
+          expect(
+            configuration.settings['PRODUCT_BUNDLE_IDENTIFIER'],
+            anyOf(isNull, '${identity.iosBundleId}.RunnerTests'),
+          );
+        }
+      }
+    });
+
+    test('are the Runner scheme in their schemes, but for the configurations',
+        () {
+      // Without the pre-action of the Runner scheme, the first build with
+      // Swift Package Manager rewrites a scheme.
+      const runner = 'ios/Runner.xcodeproj/xcshareddata/xcschemes/'
+          'Runner.xcscheme';
+      final plain = texts[runner]!;
+      expect(plain, contains('xcode_backend.sh'));
+
+      for (final flavor in AppEntryRole.flavors) {
+        final scheme = texts[flavor.xcodeSchemeFile]!;
+        var expected = plain;
+        for (final name in flavor.xcodeConfigurations) {
+          final mode = name.split('-').first;
+          expected = expected.replaceAll(
+            'buildConfiguration = "$mode"',
+            'buildConfiguration = "$name"',
+          );
+        }
+        expect(scheme, expected, reason: flavor.xcodeSchemeFile);
+
+        final actions = {
+          for (final action
+              in XmlDocument.parse(scheme).rootElement.childElements)
+            if (action.getAttribute('buildConfiguration') case final name?)
+              action.name.local: name,
+        };
+        expect(actions, {
+          'TestAction': 'Debug-${flavor.name}',
+          'LaunchAction': 'Debug-${flavor.name}',
+          'ProfileAction': 'Profile-${flavor.name}',
+          'AnalyzeAction': 'Debug-${flavor.name}',
+          'ArchiveAction': 'Release-${flavor.name}',
+        });
+      }
+    });
+
+    test('tell coding agents where each flavor is, in files that the app has',
+        () {
+      for (final flavor in AppEntryRole.flavors) {
+        expect(texts.keys, contains(flavor.xcodeSchemeFile));
+        expect(
+          agentNote,
+          contains('`${flavor.xcodeSchemeFile.replaceFirst(
+            '${flavor.name}.xcscheme',
+            '<flavor>.xcscheme',
+          )}`'),
+        );
+      }
+      expect(texts.keys, containsAll([appGradle, pbxproj]));
+      expect(agentNote, contains('`productFlavors` of `$appGradle`'));
+      expect(agentNote, contains('`$pbxproj`'));
+      expect(agentNote, contains('`Debug-<flavor>`'));
+    });
+
+    test('tell in the README where each flavor is in the native projects', () {
+      final readme = texts[AppEntryRole.readmeFile]!;
+
+      expect(
+        readme,
+        contains('## ${AppEntryRole.flavorProjectsHeading}\n'),
+      );
+      expect(
+        readme,
+        allOf(
+          contains('`productFlavors` in `$appGradle`'),
+          contains('`ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>'
+              '.xcscheme`'),
+          contains('`$pbxproj`'),
+          contains('select the scheme of a flavor, not `Runner`'),
+        ),
+      );
+    });
+  });
 }
 
 /// The library of core library desugaring that the modules of the app ask
@@ -370,9 +590,83 @@ Map<String, XmlElement> _plistKeys(String text) {
   };
 }
 
-/// The text between the braces of the top-level block [name] of the Gradle
-/// script [text], which has no nested braces in these tests.
-String _block(String text, String name) {
-  final open = RegExp('^$name \\{', multiLine: true).firstMatch(text)!.end;
-  return text.substring(open, text.indexOf('\n}', open) + 1);
+/// The text between the braces of the block [name] of the Gradle script
+/// [text] at the level of [indent], whose closing brace is the first at that
+/// level.
+String _block(String text, String name, {String indent = ''}) {
+  final open =
+      RegExp('^$indent$name \\{', multiLine: true).firstMatch(text)!.end;
+  return text.substring(open, text.indexOf('\n$indent}', open) + 1);
+}
+
+/// A build configuration of an Xcode project: the name that Xcode and Flutter
+/// read, its base configuration, as the object it refers to, and its build
+/// settings by name, each with its value as the project writes it.
+typedef _Configuration = ({
+  String name,
+  String? base,
+  Map<String, String> settings,
+});
+
+/// A configuration list of an Xcode project: its [configurations] by name,
+/// in their order, and the name of its default.
+final class _ConfigurationList {
+  _ConfigurationList(this.configurations, this.defaultConfiguration);
+
+  final Map<String, _Configuration> configurations;
+
+  final String defaultConfiguration;
+
+  Iterable<String> get keys => configurations.keys;
+}
+
+/// The configuration lists of an Xcode project, read as Xcode writes the
+/// objects: each on lines of their own, at their depth of tabs.
+final class _XcodeProject {
+  _XcodeProject(String text) {
+    final objects = <String, _Configuration>{
+      for (final match in RegExp(
+        r'\t\t(\w{24}) /\* [^*]+ \*/ = \{\n'
+        r'\t\t\tisa = XCBuildConfiguration;\n'
+        r'(?:\t\t\tbaseConfigurationReference = (\w{24}) /\* [^*]+ \*/;\n)?'
+        r'\t\t\tbuildSettings = \{\n(.*?)\n\t\t\t\};\n'
+        r'\t\t\tname = "?([\w-]+)"?;\n\t\t\};',
+        dotAll: true,
+      ).allMatches(text))
+        match[1]!: (
+          name: match[4]!,
+          base: match[2],
+          settings: _settingsOf(match[3]!),
+        ),
+    };
+    lists = [
+      for (final match in RegExp(
+        r'isa = XCConfigurationList;\n'
+        r'\t\t\tbuildConfigurations = \(\n(.*?)\n\t\t\t\);\n'
+        r'.*?defaultConfigurationName = (\w+);',
+        dotAll: true,
+      ).allMatches(text))
+        _ConfigurationList(
+          {
+            for (final item
+                in RegExp(r'(\w{24}) /\* [\w-]+ \*/,').allMatches(match[1]!))
+              objects[item[1]!]!.name: objects[item[1]!]!,
+          },
+          match[2]!,
+        ),
+    ];
+  }
+
+  late final List<_ConfigurationList> lists;
+
+  /// The settings of a block of build settings: each is on one line, or on
+  /// several when its value is a list.
+  static Map<String, String> _settingsOf(String block) => {
+        for (final match in RegExp(
+          r'^\t\t\t\t("[^"]+"|\w+) = (\(.*?\n\t\t\t\t\)|[^;]*);$',
+          multiLine: true,
+          dotAll: true,
+        ).allMatches(block))
+          match[1]!: match[2]!,
+      };
 }

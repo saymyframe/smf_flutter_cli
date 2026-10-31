@@ -330,6 +330,73 @@ void main() {
             collected.contribution as SocketContribution,
         ]);
 
+    test(
+        'with a provider of the CI role in a format of its own, in a file '
+        'from its render hook, and the script of its template', () async {
+      final result = await checked(everyFixture());
+      final app = result.app!;
+
+      expect(
+        app.owners[FakeCiModule.file],
+        const ModuleOrigin(FakeCiModule.id),
+      );
+      expect(
+        app.owners[CiRole.writeEnvFile],
+        const RoleTemplateOrigin(ciRole),
+      );
+      final file = app.files[FakeCiModule.file]!.text;
+      // The commands of each job, with the values of the env role of the app.
+      expect(
+        file,
+        allOf(
+          startsWith('''
+# The CI of a fixture.
+on push
+  run Copy .env.example to .env = [ -f .env ] || cp .env.example .env
+  run Get the packages = flutter pub get
+  run Check the format = dart format --output=none --set-exit-if-changed lib test
+  run Analyze = flutter analyze
+  run Test = flutter test --dart-define-from-file .env
+on request dev
+'''),
+          contains('''
+on request staging
+  variable FAKE_ENV_USER_FIRST
+  variable FAKE_ENV_USER_SECOND
+  variable FAKE_ENV_USER_THIRD
+  variable REST_BASE_URL
+  run Write .env from the variables of the environment = dart tool/write_env.dart
+  run Get the packages = flutter pub get
+  run Build the Android app = flutter build apk --release --flavor staging --dart-define-from-file .env
+  keep build/app/outputs/flutter-apk/app-staging-release.apk
+'''),
+          contains('on request prod\n'),
+        ),
+      );
+      final readme = app.files[AppEntryRole.readmeFile]!.text;
+      expect(readme, contains('## ${CiRole.readmeHeading}'));
+    });
+
+    test(
+        'with the CI role and without the env role, has neither the script '
+        'nor a command that needs .env', () async {
+      final result = await harness.check(
+        const ContractCase('CI alone', requested: [FakeCiModule.id]),
+      );
+      expect(result.errors.map((issue) => '$issue'), isEmpty);
+      final app = result.app!;
+
+      expect(app.files, isNot(contains(CiRole.writeEnvFile)));
+      expect(
+        app.files[FakeCiModule.file]!.text,
+        allOf(
+          contains('run Test = flutter test\n'),
+          contains('--flavor dev\n'),
+          isNot(contains('.env')),
+        ),
+      );
+    });
+
     test('with BLoC', () async {
       final result = await checked(everyFixture());
       final resolution = result.resolution!;
@@ -1950,14 +2017,15 @@ void main() {
       // the two, with the texts of the app and without them, the apps of
       // the fixture way to sign in, with the texts and without them, the
       // apps of the fixture purchases with the fixture sign-in, with the
-      // texts and without them, and each app with every module, with a
-      // clock of 24 hours and with one of 12.
+      // texts and without them, the app of the fixture REST with the fixture
+      // sign-in, and each app with every module, with a clock of 24 hours and
+      // with one of 12.
       expect(withoutMode, contains(named('fake_auth')));
       expect(
         named('fake_auth').hook!.presentRoles,
         isNot(contains(routerRole)),
       );
-      expect(withoutMode, hasLength(26));
+      expect(withoutMode, hasLength(27));
       for (final app in withoutMode) {
         expect(
           app.createArguments('app_1', '/apps'),
@@ -2513,6 +2581,14 @@ const _cases = [
   'fake_env',
   'fake_env_user with env',
   'fake_env_user',
+  // The fixture REST with the fixture sign-in and without it, and the module
+  // that makes requests through it: the role uses the auth role, and the
+  // module only requires the role.
+  'fake_rest with auth',
+  'fake_rest',
+  'fake_rest_user',
+  'fake_ci with env',
+  'fake_ci',
   'fake_registrations (fake_di)',
   'fake_registrations (get_it)',
   'fake_parent',

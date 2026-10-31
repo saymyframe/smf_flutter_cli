@@ -80,25 +80,67 @@ app.*.map.json
 
 # The values of the app, which each developer fills in from .env.example
 .env
-=== .run/main.run.xml (dart_define) ===
+=== .run/dev.run.xml (role:env) ===
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="my_app" type="FlutterRunConfigurationType" factoryName="Flutter">
-    <option name="additionalArgs" value="--dart-define-from-file=.env" />
+  <configuration default="false" name="my_app dev" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor dev --dart-define-from-file=.env" />
     <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
     <method v="2" />
   </configuration>
 </component>
-=== .vscode/launch.json (dart_define) ===
+=== .run/prod.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app prod" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor prod --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/staging.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app staging" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor staging --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .vscode/launch.json (role:env) ===
 {
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "my_app",
+      "name": "my_app dev",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
-      "toolArgs": ["--dart-define-from-file=.env"],
+      "toolArgs": [
+        "--flavor",
+        "dev",
+        "--dart-define-from-file=.env"
+      ],
       "templateFor": ""
+    },
+    {
+      "name": "my_app staging",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "staging",
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "my_app prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "prod",
+        "--dart-define-from-file=.env"
+      ]
     }
   ]
 }
@@ -115,6 +157,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
 
 - The section "Finish the setup" of the README lists the steps of the setup that no command can do, such as a step in the web console of a service that the app uses. Only the developer of the app does them: when a task depends on one of them, point the developer to that section, and do not try to do the step yourself.
 
@@ -133,6 +176,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
 - The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
 
 ## Purchases
 
@@ -185,11 +229,11 @@ With `go_router`:
 - Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
 - Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
 - `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+- `.vscode/launch.json` and `.run/<flavor>.run.xml` are the run configurations of VS Code and Android Studio, one for each flavor. Each passes the flavor and the arguments that the values need. In VS Code, F5 starts the selected configuration, while the links above `main()` and above a test and the Testing view always use `dev`, whose configuration alone has `templateFor`. In Android Studio, a test gets none of these arguments.
 
 With `--dart-define-from-file`:
 
 - Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`.
-- In VS Code, `.vscode/launch.json` passes it to Run and Debug (F5), to the Run and Debug links above `main()` and to the tests run from their links or from the Testing view, since its configuration is the template of every launch (`templateFor`). In Android Studio, `.run/main.run.xml` passes it only to the run configuration named after the app, not to a test that you run there.
 - A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
 - The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
 === CLAUDE.md (role:app_entry) ===
@@ -212,6 +256,37 @@ Once any commands of the sections below have run, the setup still needs these st
 5. Give RevenueCat your In-App Purchase key from App Store Connect
 6. Give RevenueCat access to Google Play with a service account
 
+Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
+
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.my_app.dev` | `com.example.my-app.dev` |
+| `staging` | `com.example.my_app.staging` | `com.example.my-app.staging` |
+| `prod` | `com.example.my_app` | `com.example.my-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so you repeat a step of its setup for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`, which builds the id and the name of `prod`. A scheme sets only the id and the name. `appFlavor` comes from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote, so run `flutter build ios --config-only --flavor <flavor>` before you run the scheme from Xcode.
+
 ## Run, test and build with .env
 
 `AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
@@ -219,12 +294,12 @@ Once any commands of the sections below have run, the setup still needs these st
 ```bash
 flutter run --dart-define-from-file=.env
 flutter test --dart-define-from-file=.env
-flutter build apk --dart-define-from-file=.env
-flutter build appbundle --dart-define-from-file=.env
-flutter build ipa --dart-define-from-file=.env
+flutter build apk --flavor prod --dart-define-from-file=.env
+flutter build appbundle --flavor prod --dart-define-from-file=.env
+flutter build ipa --flavor prod --dart-define-from-file=.env
 ```
 
-In VS Code, `.vscode/launch.json` passes the argument to Run and Debug (F5), to the Run and Debug links above `main()`, and to the tests that you run from the links above them or from the Testing view: its configuration is the template of every launch of the app (`templateFor`). In Android Studio, `.run/main.run.xml` passes it to the run configuration named after the app, and a test that you run there gets no argument.
+A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
 
 A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
@@ -237,13 +312,15 @@ static String? get myServiceKey {
 }
 ```
 
-The section "Values in .env" tells what goes into `.env` and lists the keys of the app.
+The section "Values in .env" tells what goes into `.env`, lists the keys of the app and names the run configurations that pass the argument.
 
 ## Values in .env
 
 `.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
+
+`.env` is not tied to a flavor: a build of any flavor takes what `.env` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
 
 The keys of the app:
 
@@ -252,6 +329,11 @@ The keys of the app:
 - `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
+
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
 
 ## RevenueCat
 
@@ -319,6 +401,24 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "My App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "My App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "My App"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -343,7 +443,7 @@ dependencies {
 === android/app/src/main/AndroidManifest.xml (flutter_core) ===
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="My App"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -417,6 +517,15 @@ include(":app")
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 === ios/Runner/AppDelegate.swift (flutter_core) ===
 import Flutter
 import UIKit
@@ -444,7 +553,7 @@ import UIKit
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>My App</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -2796,6 +2905,7 @@ dev_dependencies:
   flutter_lints: "^6.0.0"
 
 flutter:
+  default-flavor: "dev"
   uses-material-design: true
 === test/core/app/fallback_start_screen_test.dart (flutter_core) ===
 import 'package:flutter/material.dart';

@@ -382,6 +382,21 @@ class User {
     _called('reload');
   }
 
+  int _idTokens = 1;
+
+  /// The ID token of the user, which names the user and how many the user
+  /// got: a forced read gives the next one, and an event of the user.
+  Future<String?> getIdToken([bool forceRefresh = false]) async {
+    await null;
+    _called('getIdToken', [forceRefresh]);
+    if (forceRefresh) {
+      _idTokens++;
+      // The platform tells that the token changed, of the same user.
+      _platform.add(this);
+    }
+    return 'id-token of $uid, number $_idTokens';
+  }
+
   /// The plugin keeps the user as its current one.
   Future<void> delete() async {
     await null;

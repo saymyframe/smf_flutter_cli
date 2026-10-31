@@ -32,7 +32,7 @@ final class EventBusModule extends SmfModule {
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
-        description: 'Event bus with event_bus',
+        description: 'Events between parts of the app with event_bus',
         kind: ModuleKinds.infrastructure,
         providers: [RoleProvider.plain(eventsRole)],
       );

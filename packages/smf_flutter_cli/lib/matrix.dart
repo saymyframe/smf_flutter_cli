@@ -18,12 +18,14 @@ import 'dart:isolate' show Isolate;
 import 'package:file/file.dart';
 import 'package:file/local.dart';
 import 'package:smf_contracts/core.dart';
+import 'package:smf_flutter_cli/src/ci_commands.dart';
 import 'package:smf_flutter_cli/src/cli.dart';
 import 'package:smf_flutter_cli/src/expected_failures.dart';
 import 'package:smf_flutter_cli/src/matrix_plan.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
+export 'src/ci_commands.dart';
 export 'src/expected_failures.dart';
 export 'src/flutter_versions.dart';
 export 'src/matrix_plan.dart';
@@ -514,10 +516,11 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   `crash_reporting`;
 /// - `envKeys`, the keys that it gives the apps of the matrix values of
 ///   ([MatrixAppTest.envValues]), each with the module that gives the app
-///   the key (`module`) and its package (`package`), as [env] tells them
-///   (see [MatrixEnv.keys]), both `null` where no module of the app gives
-///   the key, and the names of those apps (`apps`), in the order of the
-///   apps and of the keys;
+///   the key (`module`) and its package (`package`), or else the id of the
+///   role whose template gives it (`role`), as [env] tells them (see
+///   [MatrixEnv.keys]), all `null` where nothing in the app gives the key,
+///   and the names of those apps (`apps`), in the order of the apps and of
+///   the keys;
 /// - `answer`, the answer of CI that its probe asks for
 ///   ([MatrixStartProbe.answer]), only if it has one, so that the checks of
 ///   the repository find an answer that a workflow gives the script that
@@ -639,31 +642,33 @@ List<Map<String, String>> _roleFunctionUses(
 }
 
 /// The keys that [test] gives the apps of [apps] values of, each with the
-/// module that gives the app the key, as [env] tells it, and its package of
-/// [packages], `null` where no module of the app gives the key, and the
-/// names of the apps; see [appTestsReport].
+/// owner of the key in the app, as [env] tells it: the module with its
+/// package of [packages], or the id of the role, all `null` where nothing in
+/// the app gives the key. Each has the names of the apps; see
+/// [appTestsReport].
 List<Map<String, Object?>> _envKeysGivenBy(
   MatrixAppTest test,
   List<MatrixApp> apps,
   MatrixEnv? env,
   Map<ModuleId, String> packages,
 ) {
-  final given = <(String, ModuleId?), List<String>>{};
+  final given = <(String, MatrixEnvKeyOwner?), List<String>>{};
   for (final app in apps) {
     if (!test.appliesTo(app)) continue;
     final values = test.envValues?.call(app) ?? const <String, String?>{};
     if (values.isEmpty) continue;
-    final owners = env?.keys(app) ?? const <String, ModuleId>{};
+    final owners = env?.keys(app) ?? const <String, MatrixEnvKeyOwner>{};
     for (final key in values.keys) {
       (given[(key, owners[key])] ??= []).add(app.name);
     }
   }
   return [
-    for (final MapEntry(key: (key, module), value: names) in given.entries)
+    for (final MapEntry(key: (key, owner), value: names) in given.entries)
       {
         'key': key,
-        'module': module?.value,
-        'package': packages[module],
+        'module': owner?.module?.value,
+        'package': packages[owner?.module],
+        'role': owner?.role,
         'apps': names,
       },
   ];
@@ -1090,9 +1095,11 @@ final class MatrixAppTest {
   /// the module give values for the keys of the modules that their package
   /// keeps, such as a key that the mocks of the service take, so that the
   /// code of the module runs in the tests as with the values of a
-  /// developer. A value takes the place of the value in the line of its
-  /// key, and `null` removes the line, as for a key that the developer left
-  /// out of the file, which only the tests of the values themselves need.
+  /// developer. A test of a role gives values for the keys of the template
+  /// of that role ([roles]) in the same way. A value takes the place of the
+  /// value in the line of its key, and `null` removes the line, as for a key
+  /// that the developer left out of the file, which only the tests of the
+  /// values themselves need.
   ///
   /// The matrix writes them in its runs, [runMatrix] and [runFailingApps],
   /// before `flutter test`, which it runs with the arguments of
@@ -1221,6 +1228,13 @@ const startAnswersFile = 'integration_test/start_answers';
 /// that starts the app on a device builds it with them.
 const startBuildArgumentsFile = 'integration_test/start_build_arguments';
 
+/// The path in an app of the arguments of the `flutter` tool that a build of
+/// the app as a release takes too, one on each line, which [addAppTests]
+/// writes next to [startProbesFile]: the script of CI that starts the app on
+/// a device builds a release app with them, and a debug app without them, so
+/// that it names no flavor of the app.
+const startReleaseArgumentsFile = 'integration_test/start_release_arguments';
+
 /// A function among the files of a [MatrixAppTest] that sets up the mocks of
 /// the platform side of what the module of the tests runs in an app (see
 /// [MatrixAppTest.mocks]).
@@ -1272,16 +1286,21 @@ final class MatrixEnv {
   /// an app whose modules read no values.
   final List<String> Function(MatrixApp app) toolArguments;
 
-  /// The keys of the values of an app of the matrix, each with the module
-  /// that gives the app the key; none for an app whose modules read no
-  /// values.
+  /// The keys of the values of an app of the matrix, each with who gives
+  /// the app the key; none for an app that reads no values.
   ///
   /// The report of the tests of a matrix tool ([appTestsReport]) names, for
-  /// each key that a test gives an app a value of, its module, so that the
+  /// each key that a test gives an app a value of, its owner, so that the
   /// checks of the repository find a test that gives values for the keys of
-  /// a module that it does not know.
-  final Map<String, ModuleId> Function(MatrixApp app) keys;
+  /// a module that it does not know, or of a role whose contract it does not
+  /// check.
+  final Map<String, MatrixEnvKeyOwner> Function(MatrixApp app) keys;
 }
+
+/// Who gives an app a key of its values ([MatrixEnv.keys]): the module with
+/// the id `module`, or else the template of the role with the id `role`, since
+/// this library knows no role.
+typedef MatrixEnvKeyOwner = ({ModuleId? module, String? role});
 
 /// The tests that a matrix adds to its apps, and the roles whose contract
 /// they must check with every provider.
@@ -1524,10 +1543,12 @@ final class MatrixAppTests {
 /// the start check that the matrix analyzes in its apps and the one that CI
 /// starts on a device run the probes of the tests that go into the app.
 /// Next to it, it writes what the script of CI that starts the app on a
-/// device needs: the answers that those probes ask for, [startAnswersFile],
-/// and the [buildArguments], the arguments of the `flutter` tool that build
-/// the app with its values (see [MatrixEnv.toolArguments]),
-/// [startBuildArgumentsFile]; each with one on a line.
+/// device needs: the answers that those probes ask for, [startAnswersFile];
+/// the [buildArguments], the arguments of the `flutter` tool that build the
+/// app with its values (see [MatrixEnv.toolArguments]),
+/// [startBuildArgumentsFile]; and the [releaseBuildArguments], those that a
+/// build of the app as a release takes too, [startReleaseArgumentsFile]; each
+/// with one on a line.
 ///
 /// Throws a [MatrixAppTestException], before it copies anything, if a test
 /// generates files without [app], if a file keeps a placeholder that no
@@ -1539,8 +1560,9 @@ final class MatrixAppTests {
 /// letters, digits and underscores or the answer of another probe too, if
 /// a build argument is empty or has a line break, or if a test has a file
 /// at the path of the configuration of the mocks, of the list of the
-/// probes, of the answers or of the build arguments, which the matrix
-/// writes, or at [envFile], the path of the file of the values of the app
+/// probes, of the answers or of either list of build arguments, which the
+/// matrix writes, or at [envFile], the path of the file of the values of the
+/// app
 /// (see [MatrixEnv.file]), whose values the tests give through
 /// [MatrixAppTest.envValues].
 List<String> addAppTests(
@@ -1550,6 +1572,7 @@ List<String> addAppTests(
   MatrixApp? app,
   String? envFile,
   List<String> buildArguments = const [],
+  List<String> releaseBuildArguments = const [],
   FileSystem fileSystem = const LocalFileSystem(),
 }) {
   final context = fileSystem.path;
@@ -1578,8 +1601,13 @@ List<String> addAppTests(
   }
   final probes = _probesOf(tests, owners, fileSystem);
   if (tests.any((test) => test.readsStartProbes)) {
-    _checkBuildArguments(buildArguments);
-    for (final (path, text, what) in _startFilesOf(probes, buildArguments)) {
+    _checkBuildArguments(startBuildArgumentsFile, buildArguments);
+    _checkBuildArguments(startReleaseArgumentsFile, releaseBuildArguments);
+    for (final (path, text, what) in _startFilesOf(
+      probes,
+      buildArguments,
+      releaseBuildArguments,
+    )) {
       texts[matrixFile(path, 'which the matrix writes for $what.')] = text;
     }
   }
@@ -1610,24 +1638,26 @@ String _matrixFileOf(
 }
 
 /// Throws a [MatrixAppTestException] if one of [buildArguments] is empty or
-/// has a line break, which [startBuildArgumentsFile] cannot hold.
-void _checkBuildArguments(List<String> buildArguments) {
+/// has a line break, which their [file] cannot hold.
+void _checkBuildArguments(String file, List<String> buildArguments) {
   for (final argument in buildArguments) {
     if (argument.isEmpty || argument.contains(RegExp('[\n\r]'))) {
-      throw const MatrixAppTestException(
+      throw MatrixAppTestException(
         'A build argument of the app is empty or has a line break, which '
-        '$startBuildArgumentsFile cannot hold.',
+        '$file cannot hold.',
       );
     }
   }
 }
 
 /// The files that the matrix writes for the script of CI that starts an app
-/// on a device, with [probes] and [buildArguments]: the path of each, its
-/// text and for what the matrix writes it; see [addAppTests].
+/// on a device, with [probes], [buildArguments] and [releaseBuildArguments]:
+/// the path of each, its text and for what the matrix writes it; see
+/// [addAppTests].
 List<(String, String, String)> _startFilesOf(
   List<(String, MatrixStartProbe)> probes,
   List<String> buildArguments,
+  List<String> releaseBuildArguments,
 ) =>
     [
       (startProbesFile, _startProbesOf(probes), 'the probes of the tests'),
@@ -1643,6 +1673,11 @@ List<(String, String, String)> _startFilesOf(
         startBuildArgumentsFile,
         _linesOf(buildArguments),
         'the arguments that build the app',
+      ),
+      (
+        startReleaseArgumentsFile,
+        _linesOf(releaseBuildArguments),
+        'the arguments that build the app as a release',
       ),
     ];
 
@@ -2043,6 +2078,10 @@ List<MatrixAppTest> appTestsFor(
 /// none without [app], whose roles they come from, as the probes of the
 /// tests of the app do.
 ///
+/// With the start check, it also writes the [releaseBuildArguments], those
+/// that a build of the app as a release takes too
+/// ([startReleaseArgumentsFile]), with [app] or without it.
+///
 /// It writes none of the values that the tests give an app of the matrix
 /// ([MatrixAppTest.envValues]). With [envValues], whose `path` is a file of
 /// values of CI in the form of the file of [env], such as `.env`, with a
@@ -2071,6 +2110,7 @@ Future<(int, String)> addAppTestsTo(
   List<MatrixAppTest> tests, {
   MatrixApp? app,
   MatrixEnv? env,
+  List<String> releaseBuildArguments = const [],
   CiEnvValues? envValues,
   MatrixFlutter flutter = _flutter,
   FileSystem fileSystem = const LocalFileSystem(),
@@ -2080,6 +2120,7 @@ Future<(int, String)> addAppTestsTo(
       tests,
       _pubAdd(tests),
       env: env,
+      releaseBuildArguments: releaseBuildArguments,
       valuesOf: () => envValues == null
           ? null
           : _envValuesOfFile(
@@ -2106,9 +2147,10 @@ typedef CiEnvValues = ({String path, bool mask});
 typedef _TestedApp = ({GeneratedApp generated, MatrixApp? app});
 
 /// Adds [tests] to the `generated` app of [target], for its `app` of the
-/// matrix if it has one, with the build arguments of [env] for that app,
-/// and runs [commands] with [flutter] until one fails; returns its exit
-/// code and the output up to it, or 0 and the output of all.
+/// matrix if it has one, with the build arguments of [env] for that app and
+/// the [releaseBuildArguments], and runs [commands] with [flutter] until one
+/// fails; returns its exit code and the output up to it, or 0 and the output
+/// of all.
 ///
 /// It also writes into the file of the values of the app what [valuesOf]
 /// gives, such as the values that the tests give an app of the matrix in a
@@ -2122,6 +2164,7 @@ Future<(int, String)> _addAndRun(
   required _EnvValues? Function() valuesOf,
   required MatrixFlutter flutter,
   required FileSystem fileSystem,
+  List<String> releaseBuildArguments = const [],
 }) async {
   final (:generated, :app) = target;
   final List<String> added;
@@ -2135,6 +2178,7 @@ Future<(int, String)> _addAndRun(
       packageName: generated.name,
       envFile: env?.file,
       buildArguments: [if (app != null) ...?env?.toolArguments(app)],
+      releaseBuildArguments: releaseBuildArguments,
       fileSystem: fileSystem,
     );
   } on MatrixAppTestException catch (error) {
@@ -2503,12 +2547,28 @@ typedef MatrixTest = Future<(int, String)> Function(
   MatrixEnv? env,
 });
 
+/// Runs commands of CI in a clone of the app in a directory, as
+/// [runCiCommands] does; returns the exit code of the first command that fails
+/// and the output up to it, or 0 and the output of all.
+typedef MatrixCiRunner = Future<(int, String)> Function(
+  String directory,
+  List<String> commands, {
+  Map<String, String> environment,
+  String? artifact,
+});
+
 /// The commands that [runMatrix] and [createEveryModuleApps] run for each
 /// app, and where they write what happens, which tests of the matrix may
 /// replace; each left `null` is the real one.
 final class MatrixCommands {
   /// Creates the commands, with the real one for each left `null`.
-  const MatrixCommands({this.log, this.create, this.analyze, this.test});
+  const MatrixCommands({
+    this.log,
+    this.create,
+    this.analyze,
+    this.test,
+    this.ci,
+  });
 
   /// Gets what happens, line by line: by default the standard output.
   final void Function(String line)? log;
@@ -2523,6 +2583,96 @@ final class MatrixCommands {
   /// Adds the tests that apply to an app and runs them: by default
   /// [runAppTests].
   final MatrixTest? test;
+
+  /// Runs the commands of the CI of an app: by default [runCiCommands].
+  final MatrixCiRunner? ci;
+}
+
+/// The commands of the CI of an app of a matrix, or `null` for an app without
+/// CI. The tool of a matrix gives it to its runs from the role of CI, which
+/// they know nothing of.
+typedef MatrixCi = MatrixCiCommands? Function(MatrixApp app);
+
+/// What the CI of an app runs; see [MatrixCi].
+final class MatrixCiCommands {
+  /// Creates the commands.
+  const MatrixCiCommands({required this.checks, required this.build});
+
+  /// What runs on each push, in this order, each to run with `bash -c`.
+  final List<String> checks;
+
+  /// What builds the app on request.
+  final MatrixCiBuild build;
+}
+
+/// What builds an app in its CI, for one environment; see [MatrixCiCommands].
+final class MatrixCiBuild {
+  /// Creates the build.
+  const MatrixCiBuild({
+    required this.commands,
+    required this.keys,
+    required this.artifact,
+  });
+
+  /// What runs, in this order, each to run with `bash -c`.
+  final List<String> commands;
+
+  /// The names of the variables of the process through which the [commands]
+  /// get the values of the environment.
+  final List<String> keys;
+
+  /// The path in the app of the file that the [commands] write.
+  final String artifact;
+
+  /// A value for each of [keys], for a real build: in turn a value that
+  /// `.env` holds as it is and one that it holds only in double quotes, so
+  /// that the `flutter` tool reads the two forms of a value there.
+  Map<String, String> get variables => {
+        for (final (index, key) in keys.indexed)
+          key: index.isEven ? 'ci_value' : 'a value # of CI',
+      };
+}
+
+/// Runs the commands of the CI of [app], which `smf create` generated in
+/// [directory] as that app of the matrix, such as an app with every module of
+/// the plan of a job of CI, in a clone of it ([runCiCommands]): those of each
+/// push, and with [build] then the build, with the values of
+/// [MatrixCiBuild.variables], in a clone of its own, since a build starts from
+/// a repository without `.env`, which the checks may have written.
+///
+/// Returns 0 when each command succeeded and the build left its file, and 1
+/// otherwise, and for an app without CI, whose run would check nothing. The
+/// log of [commands] gets what happens, and their ci runs the commands.
+Future<int> runCiOf(
+  MatrixApp app, {
+  required String directory,
+  required MatrixCi ci,
+  bool build = false,
+  MatrixCommands commands = const MatrixCommands(),
+}) async {
+  // coverage:ignore-start
+  // The default prints to the terminal, as the runs in CI do; the tests give
+  // their own.
+  final say = commands.log ?? _print;
+  // coverage:ignore-end
+  final run = commands.ci ?? runCiCommands;
+  final ofApp = ci(app);
+  if (ofApp == null) {
+    say('${app.name} has no commands of CI to run.');
+    return 1;
+  }
+  final (checked, output) = await run(directory, ofApp.checks);
+  say(output.trim());
+  if (checked != 0) return 1;
+  if (!build) return 0;
+  final (built, buildOutput) = await run(
+    directory,
+    ofApp.build.commands,
+    environment: ofApp.build.variables,
+    artifact: ofApp.build.artifact,
+  );
+  say(buildOutput.trim());
+  return built == 0 ? 0 : 1;
 }
 
 /// Generates every app of the [matrixOf] of [modules] with [roleOptions] in
@@ -2557,6 +2707,17 @@ final class MatrixCommands {
 /// values (see [MatrixAppTest.envValues]). Without [env], a test that gives
 /// an app values fails, and `flutter test` gets no arguments.
 ///
+/// Through [ci], which the tool of the matrix takes from the role of CI, each
+/// app of a provider of that role also runs the commands of its CI on each
+/// push, in a clone of it ([runCiCommands]), before the tests go into the app:
+/// so they run as on the first push of a new app, and a command that does not
+/// hold in a fresh copy of the repository, such as one that needs `.env`, is a
+/// problem of the run. The apps with every module and the apps of the other
+/// values of a mode option leave this out: the first have CI of a job of their
+/// own (see [runCiOf]), and the second differ from the others in their Dart
+/// code only. The build of the app does not run here, since a job of a shard
+/// has no cache of Gradle.
+///
 /// The apps stay in [directory], with the tests. [commands] run for each
 /// app, and their log gets what happens.
 Future<int> runMatrix(
@@ -2566,12 +2727,14 @@ Future<int> runMatrix(
   MatrixAppTests appTests = const MatrixAppTests([]),
   MatrixSelection selection = const MatrixSelection(),
   MatrixEnv? env,
+  MatrixCi? ci,
   MatrixCommands commands = const MatrixCommands(),
 }) async {
   final run = _MatrixRun(
     directory: directory,
     appTests: appTests.tests,
     env: env,
+    ci: ci,
     // coverage:ignore-start
     // The defaults print to the terminal, create the apps with smf and
     // analyze them with Flutter, as the runs of the matrix in CI do; the
@@ -2582,6 +2745,7 @@ Future<int> runMatrix(
         commands.analyze ?? (directory) => _flutter(['analyze'], directory),
     // coverage:ignore-end
     test: commands.test ?? runAppTests,
+    runCi: commands.ci ?? runCiCommands,
   );
   final (:apps, :failed) = await matrixOf(
     modules,
@@ -2947,22 +3111,27 @@ final class _MatrixRun {
     required this.directory,
     required this.appTests,
     required this.env,
+    required this.ci,
     required this.say,
     required this.create,
     required this.analyze,
     required this.test,
+    required this.runCi,
   });
 
   final String directory;
   final List<MatrixAppTest> appTests;
   final MatrixEnv? env;
+  final MatrixCi? ci;
   final void Function(String line) say;
   final MatrixCreate create;
   final MatrixAnalyze analyze;
   final MatrixTest test;
+  final MatrixCiRunner runCi;
 
-  /// Generates [app] as [name] in the directory, analyzes it and runs its
-  /// tests, and returns the problems found.
+  /// Generates [app] as [name] in the directory, analyzes it, runs the
+  /// commands of its CI in a clone of it, as far as a run of the matrix does
+  /// (see [runMatrix]), and then its tests, and returns the problems found.
   Future<List<String>> check(MatrixApp app, String name) async {
     say('\n=== $name: $app');
     final (generated, problems) = await _generate(
@@ -2977,6 +3146,18 @@ final class _MatrixRun {
     if (analyzed != 0) {
       return problems
         ..add('$name ($app): flutter analyze exited with $analyzed.');
+    }
+    if (app.everyModuleWith == null && app.modes.isEmpty) {
+      if (ci?.call(app) case final ofApp?) {
+        final (code, output) = await runCi(generated.path, ofApp.checks);
+        say(output.trim());
+        if (code != 0) {
+          problems.add(
+            '$name ($app): a command of its CI exited with $code in a clone of '
+            'the app.',
+          );
+        }
+      }
     }
     final tests = [
       for (final test in appTests)

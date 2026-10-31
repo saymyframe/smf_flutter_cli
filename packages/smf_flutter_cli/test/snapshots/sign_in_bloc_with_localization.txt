@@ -57,6 +57,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
 
 After a change, run:
 
@@ -73,6 +74,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
 - The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
 
 ## Authentication
 
@@ -84,6 +86,8 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - On a tap, the state of the screen awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. `credential()` returns `null` when the user closed the sheet of the identity provider, which is no failure: the screen goes back to how it was. Call `credential()` from the state of a screen, never within a call of `appSession`.
 - `appSession.signInWith` gives an anonymous user the identity with the same id, or signs in to the account that has the identity already, and `takeGuestData()` moves what the anonymous user had. `appSession.deleteAccount()` asks a way to sign in with `revokesOnDeletion` for a credential again itself, and deletes nothing when the user closes its sheet.
 - `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`.
+- `appSession.userToken()` gives the token with which a server of the app tells who the user is, and `null` when nobody is signed in. An anonymous user has one too. The provider keeps and renews it, so read it for each request and keep it nowhere. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead: reads at the same time share one refresh, and `null` means that nobody is signed in any more.
+- A read of the token waits for the start of the session and for an anonymous sign-in on its way, at most 3 seconds in all, and for no other call. So a request made before `initAuth()` is over, as in `bootstrap()`, may find no token. A read fails only with an `AuthFailure`: `network` leaves the user signed in, and after `recentSignInRequired` the session of the user has ended on the server and the user is signed out.
 - A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
 
 With `firebase_auth`:
@@ -91,13 +95,14 @@ With `firebase_auth`:
 - `FirebaseAuthService` in `lib/core/auth/firebase_auth_service.dart` implements `AuthService` on `FirebaseAuth.instance`. In `lib/`, only that file imports the package: other code signs in through `appSession`.
 - That file gives each code of Firebase its `AuthFailureReason`, in `_failureOf()`. A code that it does not know becomes `unknown`: give it a reason there.
 - The ways to sign in are enabled in the Firebase project, not in the code. A call that fails with `notConfigured` tells in its `developerHint` how, and so does the section Firebase Authentication of `README.md`.
-- `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI. It changes the Firebase project and needs a Firebase account: run it only when asked.
+- `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI, one project in a run. Where the flavors have several projects, it needs `--project <id>` for each. It changes the Firebase project and needs a Firebase account: run it only when asked.
+- `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews when it is about to expire. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
 
 ## Firebase
 
-- `bootstrap()` initializes Firebase with `DefaultFirebaseOptions` of `lib/firebase_options.dart`. That file is a placeholder until `flutterfire configure` writes it, and the app stops at start-up with an `UnsupportedError` until then. Do not write it by hand.
-- `flutterfire configure` needs a Firebase account and someone to choose the project: run it only when asked, with the command of the section Firebase of `README.md`.
-- A test that runs `main()` or `bootstrap()` starts Firebase, which needs the options of `flutterfire configure` and a mock of its platform side. Prefer a test of a widget, which needs neither.
+- `bootstrap()` initializes Firebase with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, by the flavor of the build. `lib/firebase_options_dev.dart`, `lib/firebase_options_staging.dart` and `lib/firebase_options_prod.dart` are placeholders until `tool/configure_firebase.dart` writes them, and a build of such a flavor stops at start-up with an `UnsupportedError`. Do not write them by hand.
+- `tool/configure_firebase.dart` needs a Firebase account and a project: run it only when asked, with the command of the section Firebase of `README.md`. Do not run `flutterfire configure`, which writes one configuration that every flavor then shares.
+- A test that runs `main()` or `bootstrap()` starts Firebase with the options of the flavor of the test, `dev`, which needs a mock of its platform side. Prefer a test of a widget, which needs neither.
 
 ## Localization
 
@@ -196,21 +201,54 @@ A new Flutter project.
 
 Generated with [Say My Frame](https://doc.saymyframe.com).
 
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.my_app.dev` | `com.example.my-app.dev` |
+| `staging` | `com.example.my_app.staging` | `com.example.my-app.staging` |
+| `prod` | `com.example.my_app` | `com.example.my-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so you repeat a step of its setup for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`, which builds the id and the name of `prod`. A scheme sets only the id and the name. `appFlavor` comes from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote, so run `flutter build ios --config-only --flavor <flavor>` before you run the scheme from Xcode.
+
 ## Firebase
 
-The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with the options of `DefaultFirebaseOptions` in `lib/firebase_options.dart`. `flutterfire configure` of the FlutterFire CLI writes these options when it registers the app in a Firebase project, together with `android/app/google-services.json`, `firebase.json` and, on macOS, `ios/Runner/GoogleService-Info.plist`. Until then, the options are a placeholder, and the app stops at start-up with an `UnsupportedError`.
+The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below.
 
-To configure the app, or to configure it again, such as for another Firebase project or on another machine, run in its directory:
+`smf create` offers to configure `dev`, and otherwise leaves the command for later. To configure a flavor, or to configure it again, such as for another project or on another machine, run in the directory of the app:
 
 ```bash
 dart pub global activate flutterfire_cli 1.4.1
 firebase login
-flutterfire configure --platforms=android,ios --overwrite-firebase-options --ios-bundle-id=com.example.my-app --android-package-name=com.example.my_app
+dart tool/configure_firebase.dart staging --project=<id>
 ```
 
-The command gives flutterfire the ids of the Android and iOS apps that SMF generated; if you change them, change them in the command too. `flutterfire configure` needs the [Firebase CLI](https://firebase.google.com/docs/cli), and changes the Xcode project only on macOS. The build phases that it adds to the Xcode project for some Firebase packages run `flutterfire` from `~/.pub-cache/bin`, so every machine that builds such an app for iOS needs the FlutterFire CLI activated too.
+Use this script rather than `flutterfire configure`, which writes one configuration that every flavor then shares: `ios/Runner/GoogleService-Info.plist` goes into the resources of every flavor, and `android/app/google-services.json` is what the Google services plugin takes for any variant without a file of its own. It registers the Android and iOS apps of the flavor in the project and writes its options, `android/app/src/<flavor>/google-services.json`, `firebase.json` and, on macOS, `ios/flavors/<flavor>/GoogleService-Info.plist`. Commit them. Elsewhere the script leaves the Xcode project and that file as they were, so run it again on a Mac for iOS. In a terminal you may leave `--project` out, and flutterfire then asks. Other arguments, such as `--account=<email>`, go to flutterfire. The ids of each flavor are at the top of the script: if you change them in the projects, change them there too.
 
-Configure the app with flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above.
+Once one flavor is configured, a build of a flavor that is not fails on Android, with `File google-services.json is missing`. On iOS it builds and stops at start-up, unless a build phase that flutterfire adds for a Firebase package fails the build there first.
+
+In Xcode, select the scheme of a flavor. It builds that flavor, whatever `ios/Flutter/Generated.xcconfig` says. The scheme `Runner` takes the flavor from that file, which has none after a fresh `flutter pub get`, so `appFlavor` is `null` there and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. `flutter build ios --config-only --flavor <flavor>` gives the file a flavor.
+
+The script changes the Xcode project only on macOS, and adds a build phase that runs `flutterfire` from `~/.pub-cache/bin`. So every Mac that builds the app for iOS needs the FlutterFire CLI activated, flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above. flutterfire needs the [Firebase CLI](https://firebase.google.com/docs/cli).
 
 ## Firebase Authentication
 
@@ -218,21 +256,29 @@ The app signs in with [Firebase Authentication](https://firebase.google.com/docs
 
 The ways to sign in are enabled in the Firebase project, not in the code: Email/Password in every mode of the app, and Anonymous when the mode of the app is `anonymous` (see the section Sign-in). Until they are enabled, signing in and signing up fail with the reason `notConfigured`, and the `developerHint` of the failure tells how to enable them. In the mode `anonymous`, the app also starts without a user.
 
-`smf create` asks to enable them right after `flutterfire configure` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
+`smf create` asks to enable them right after `dart tool/configure_firebase.dart dev` has configured the app. To enable them later, for another Firebase project, or after you changed the mode of the app to `anonymous`, run in the directory of the app:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart
 ```
 
-The script reads the project from `firebase.json`, where `flutterfire configure` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
+The script reads the project from `firebase.json`, where `tool/configure_firebase.dart` wrote it, and the mode from `authMode` in `lib/core/auth/app_session.dart`, and says which project and which mode it enables them for. It enables the methods with `firebase deploy --only auth` of the [Firebase CLI](https://firebase.google.com/docs/cli) 15.34.0 or later. It never disables a method, and it changes no file of the app. `--project <id>` names another project, and the other arguments go to the Firebase CLI as they are. The script runs the Firebase CLI in a temporary directory, where an account that `firebase login:use` chose for the directory of the app does not apply. To name the account:
 
 ```bash
 dart tool/enable_firebase_sign_in.dart --account <email>
 ```
 
-You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in the project that the app is configured for.
+Flavors may have Firebase projects of their own, and each project needs the methods enabled. A run of the script covers one project, so once `firebase.json` has several, the script stops and lists them. Run it once for each:
+
+```bash
+dart tool/enable_firebase_sign_in.dart --project <id>
+```
+
+You can also enable the methods in the Firebase console, under [Authentication > Sign-in method](https://console.firebase.google.com/project/_/authentication/providers) in each project that a flavor is configured for.
 
 Firebase sends the message with which a user sets a new password from a template of the project: [Authentication > Templates](https://console.firebase.google.com/project/_/authentication/emails).
+
+`appSession.userToken()` is a Firebase ID token. A server of the app verifies it with the [Firebase Admin SDK](https://firebase.google.com/docs/auth/admin/verify-id-tokens). The Admin SDK takes only a token of its own Firebase project, so a token of another project fails there.
 
 When an anonymous user signs in to an account that exists already, the anonymous user stays in the project, and nobody can sign in as that user again. A project that is upgraded to Firebase Authentication with Identity Platform can delete anonymous users that are older than 30 days automatically. See [Automatic clean-up](https://firebase.google.com/docs/auth/android/anonymous-auth#auto-cleanup) in the documentation of Firebase.
 
@@ -260,6 +306,8 @@ The sign-in mode of the app says who may use it without an account. This app was
 The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `required` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
 
 To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
+
+A server of the app tells who the user is by a token. `appSession.userToken()` gives the token of the user, and `null` when nobody is signed in. An anonymous user has one too. The provider of sign-in keeps it and renews it, so read it for each request rather than keep it. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead. The server has to check the token itself: where the provider has a section in this README, that section tells how.
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
@@ -302,6 +350,24 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "My App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "My App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "My App"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -326,7 +392,7 @@ dependencies {
 === android/app/src/main/AndroidManifest.xml (flutter_core) ===
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="My App"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -400,6 +466,15 @@ include(":app")
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 === ios/Runner/AppDelegate.swift (flutter_core) ===
 import Flutter
 import UIKit
@@ -427,7 +502,7 @@ import UIKit
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>My App</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -539,13 +614,13 @@ class App extends StatelessWidget {
 import 'package:firebase_core/firebase_core.dart';
 import 'package:my_app/core/auth/app_session.dart';
 import 'package:my_app/core/preferences/app_preferences.dart';
-import 'package:my_app/firebase_options.dart';
+import 'package:my_app/firebase_options_of_flavor.dart';
 
 /// Runs the start-up code of the app before its first frame: first what
 /// must come before anything else, then the platform services, then the
 /// services of the app, then what needs them.
 Future<void> bootstrap() async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(options: firebaseOptionsOfFlavor);
   await initAuth();
   await initPreferences();
 }
@@ -1016,6 +1091,15 @@ final class AppSessionController extends ChangeNotifier
   /// that the app starts no second one next to it.
   final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
 
+  /// What the reads of the token wait for that were made before the first
+  /// start. Each read has one of its own, which completes in the zone of that
+  /// read, so a read in a zone that runs nothing any more holds nothing up.
+  final List<Completer<void>> _tokensUntilStarted = [];
+
+  /// The refreshes of the token that are on their way, each by the id of its
+  /// user, so that the next user does not get the token of the user before.
+  final Map<String?, Future<String?>> _tokenRefreshes = {};
+
   /// Tells when the user comes back to the app, in the mode
   /// [AuthMode.anonymous].
   _ResumeObserver? _observer;
@@ -1099,6 +1183,10 @@ final class AppSessionController extends ChangeNotifier
     if (!_started) {
       _started = true;
       _untilStarted?.complete();
+      for (final read in _tokensUntilStarted) {
+        read.complete();
+      }
+      _tokensUntilStarted.clear();
     }
     if (first) await earlier;
   }
@@ -1185,6 +1273,42 @@ final class AppSessionController extends ChangeNotifier
     if (fresh != null) await service.deleteAccount(fresh: fresh);
   }, waitsForAnonymousUser: true);
 
+  /// The token of the user for a server of the app, or `null` when nobody is
+  /// signed in.
+  ///
+  /// It waits for the first start and for an anonymous sign-in on its way,
+  /// together at most [anonymousWait], and for no other call: the sheet of a
+  /// way to sign in may be open for minutes, and a request does not wait for
+  /// it. So a read made before `initAuth()` is not over, as in `bootstrap()`,
+  /// answers `null` once that wait is over, if there is no service by then.
+  ///
+  /// It is not one of the calls that run one after another, and tells the
+  /// listeners of the session nothing, also when the provider tells of the
+  /// same user again, unless the provider found that the session of the user
+  /// has ended on the server: the session then has nobody when the call fails,
+  /// with [AuthFailureReason.recentSignInRequired].
+  Future<String?> userToken() => _token((service) => service.userToken());
+
+  /// A token to use in place of [rejected], which a server refused, or `null`
+  /// when nobody is signed in.
+  ///
+  /// Reads at the same time share one refresh. A read that starts after that
+  /// refresh, with the same [rejected], takes its token and needs no other. A
+  /// read that was on its way during the refresh may still answer [rejected],
+  /// which costs one more refresh. It waits and fails as [userToken] does.
+  Future<String?> userTokenAfter(String rejected) async {
+    final current = await userToken();
+    if (current != rejected) return current;
+    final uid = _session.uid;
+    return _tokenRefreshes[uid] ??=
+        _token((service) => service.userToken(forceRefresh: true)).whenComplete(
+          () {
+            // Not as an arrow: the refresh would then wait for itself.
+            _tokenRefreshes.remove(uid);
+          },
+        );
+  }
+
   /// Stops following the service and the lifecycle of the app. A call that
   /// is on its way still ends as it would have, but tells no listener, and
   /// no anonymous sign-in follows it.
@@ -1214,6 +1338,43 @@ final class AppSessionController extends ChangeNotifier
           .firstOrNull,
     _ => null,
   };
+
+  /// Reads the token of the user with [read], once the wait of [userToken]
+  /// is over, and `null` when the app has no service by then.
+  ///
+  /// When it fails, the session takes the user that the service has left. A
+  /// call that takes its turn follows, so that in the mode
+  /// [AuthMode.anonymous] the app signs in anonymously again, but not next to
+  /// a sign-in that is on its way.
+  Future<String?> _token(
+    Future<String?> Function(AuthService service) read,
+  ) async {
+    if (!_started || _anonymousSignIns.containsKey(_service)) {
+      await _untilTokenCanBeRead().timeout(anonymousWait, onTimeout: () {});
+    }
+    final service = _service;
+    if (service == null) return null;
+    try {
+      return await read(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      _retry();
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> _untilTokenCanBeRead() async {
+    if (!_started) {
+      final started = Completer<void>();
+      _tokensUntilStarted.add(started);
+      await started.future;
+    }
+    await _anonymousSignIns[_service];
+  }
 
   /// The user came back to the app. In the mode [AuthMode.anonymous], an
   /// app without a user then signs in anonymously again: as what follows
@@ -1608,7 +1769,9 @@ final class AuthFailure implements Exception {
 ///   who is signed in. Made when nobody is signed in, or when the session of
 ///   that user has ended on the server, such a call fails with
 ///   [AuthFailureReason.recentSignInRequired], and in the second case it
-///   signs the user out on the device first.
+///   signs the user out on the device first. [userToken] reads, so it answers
+///   `null` when nobody is signed in, and does the same as those calls when
+///   the session of the user has ended on the server.
 /// - A [SignInCredential] whose identity provider the provider does not
 ///   take fails with [AuthFailureReason.notConfigured], with the issuer in
 ///   the [AuthFailure.developerHint].
@@ -1726,6 +1889,30 @@ abstract interface class AuthService {
   /// that fails, such as one that the backend is not set up for, with
   /// [AuthFailureReason.notConfigured]. Either way nothing is deleted.
   Future<void> deleteAccount({SignInCredential? fresh});
+
+  /// The token with which a server of the app tells who the user is, or
+  /// `null` when nobody is signed in. An anonymous user has one too.
+  ///
+  /// It comes from the device when it can, and the service refreshes one that
+  /// is about to expire on its own, so most reads make no request. With
+  /// [forceRefresh] it asks the server of the provider for a new token, which
+  /// differs from the one before and which the reads after it give. A token
+  /// that the server issued in the same second may come back the same.
+  ///
+  /// A read changes no user, and leaves whoever is signed in, but in the case
+  /// below. [userChanges] may tell of the same user again after it, as after
+  /// any change of the token, which the session ignores.
+  ///
+  /// It fails with [AuthFailureReason.network] when it needs the server and
+  /// does not reach it, and with [AuthFailureReason.tooManyAttempts] when the
+  /// server refuses for now. It fails with
+  /// [AuthFailureReason.recentSignInRequired] for a user whose session has
+  /// ended on the server, or may fail with [AuthFailureReason.userDisabled]
+  /// for one whom the server disabled: the service signs that user out on the
+  /// device first, while that user is still signed in. Anything else is
+  /// [AuthFailureReason.unknown], with what the provider answered as its
+  /// [AuthFailure.developerHint]. No hint of a failure has the token.
+  Future<String?> userToken({bool forceRefresh = false});
 }
 === lib/core/auth/firebase_auth_service.dart (firebase_auth) ===
 import 'dart:async';
@@ -1834,6 +2021,11 @@ const _linkReasons = {
 /// the Services ID and the OAuth code flow configuration of the Apple
 /// sign-in method in the Firebase console: without them it fails with
 /// [AuthFailureReason.notConfigured], and the account stays.
+///
+/// [userToken] is the Firebase ID token of the user, which the Firebase SDK
+/// keeps on the device and renews when it is about to expire. A
+/// server verifies it with the Firebase Admin SDK, as a token of the Firebase
+/// project that the app is configured with.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
@@ -1986,6 +2178,84 @@ final class FirebaseAuthService implements AuthService {
         // sign-out, which may come after this call is over.
         await _auth.signOut();
       }, credential: fresh);
+
+  /// It reads past [_run], which tells of the user after each call, since an
+  /// app may read the token for each of its requests. A forced read still
+  /// gives [userChanges] an event of the same user, since Firebase tells that
+  /// the token changed, and so does a reload.
+  ///
+  /// When the platform has nobody, as while a sign-out is on its way, the
+  /// plugin may not have heard of it yet: nobody is signed in, so there is no
+  /// token.
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    try {
+      return await user.getIdToken(forceRefresh);
+    } on Object catch (error, stackTrace) {
+      if (error is FirebaseAuthException && error.code == 'no-current-user') {
+        return null;
+      }
+      Error.throwWithStackTrace(await _failureOfRead(user, error), stackTrace);
+    }
+  }
+
+  /// The failure of a read of the token of [user] that failed with [error].
+  ///
+  /// On Android the plugin answers the read with the code `unknown` for each
+  /// answer of the server but a network failure, also for a user whom the
+  /// server deleted or disabled, with the code only in a text. A reload of the
+  /// user answers with the code, so the service asks that.
+  ///
+  /// When the server no longer takes [user], the service signs that user out,
+  /// as the Firebase SDK does a moment later, and tells of it. A read runs
+  /// next to the calls of the app, so it does so only while [user] is still
+  /// signed in: by now another user may be.
+  Future<AuthFailure> _failureOfRead(User user, Object error) async {
+    final answer = error is FirebaseAuthException && error.code == 'unknown'
+        ? await _answerToReload(user) ?? error
+        : error;
+    final code = answer is FirebaseAuthException ? answer.code : null;
+    final disabled = code == 'user-disabled';
+    if (!disabled && !_endedSession.contains(code)) return _readFailure(answer);
+    if (_auth.currentUser?.uid == user.uid) {
+      try {
+        await _auth.signOut();
+      } on Object catch (signOutError) {
+        return _readFailure(signOutError);
+      }
+      _changes.add(null);
+    }
+    return AuthFailure(
+      disabled
+          ? AuthFailureReason.userDisabled
+          : AuthFailureReason.recentSignInRequired,
+    );
+  }
+
+  /// The failure of a read for [error], as that of any other call, but that
+  /// a read of a user who is signed in never says that sign-in is not enabled
+  /// in the project, as an internal error of iOS would.
+  AuthFailure _readFailure(Object error) {
+    final failure = _failureOf(error, null, const {});
+    return failure.reason == AuthFailureReason.notConfigured
+        ? AuthFailure(
+            AuthFailureReason.unknown,
+            developerHint: _answerOf(error),
+          )
+        : failure;
+  }
+
+  /// What a reload of [user] fails with, or `null` if it completes.
+  Future<Object?> _answerToReload(User user) async {
+    try {
+      await user.reload();
+      return null;
+    } on Object catch (error) {
+      return error;
+    }
+  }
 
   /// Signs [user] in again with [fresh], so that Firebase deletes the
   /// account without asking for a recent sign-in, and revokes the tokens of
@@ -2228,12 +2498,13 @@ final class FirebaseAuthService implements AuthService {
       IdTokenCredential(:final issuer) => _providers[issuer]?.name,
       null => null,
     };
-    const script =
-        'run `dart tool/enable_firebase_sign_in.dart` in the '
-        'directory of the app';
+    final script =
+        'run `dart tool/enable_firebase_sign_in.dart --project '
+        '$project` in the directory of the app';
     // The way to sign in, after "sign-in", and what enables it: the script
-    // of the app enables Email/Password, Anonymous and Google, and the
-    // Firebase console every way to sign in.
+    // of the app enables Email/Password, Anonymous and Google, in the project
+    // of this flavor of the app, and the Firebase console every way to sign
+    // in.
     final (withMethod, enable) = switch (method) {
       null => (
         '',
@@ -6785,56 +7056,182 @@ class _SignUpViewState extends State<SignUpView> {
     );
   }
 }
-=== lib/firebase_options.dart (firebase_core) ===
+=== lib/firebase_options_dev.dart (firebase_core) ===
 // File generated by FlutterFire CLI.
 // ignore_for_file: type=lint
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
+/// The [FirebaseOptions] of the Firebase apps of the flavor dev.
 ///
-/// Example:
-/// ```dart
-/// import 'firebase_options.dart';
-/// // ...
-/// await Firebase.initializeApp(
-///   options: DefaultFirebaseOptions.currentPlatform,
-/// );
-/// ```
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart dev` writes its
+/// options here.
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
       throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
+        'Firebase is not configured for the flavor dev on web. '
+        'Run: dart tool/configure_firebase.dart dev --project=<id>',
       );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for android - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on android. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
         );
       case TargetPlatform.iOS:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on ios. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
         );
       case TargetPlatform.macOS:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on macos. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
         );
       case TargetPlatform.windows:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on windows. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
         );
       case TargetPlatform.linux:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'Firebase is not configured for the flavor dev on linux. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/firebase_options_of_flavor.dart (firebase_core) ===
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/services.dart' show appFlavor;
+
+import 'firebase_options_dev.dart' as dev_options;
+import 'firebase_options_prod.dart' as prod_options;
+import 'firebase_options_staging.dart' as staging_options;
+
+/// The options of the Firebase apps of the flavor of this build.
+///
+/// `appFlavor` is a constant, so a release build keeps only the options of
+/// its own flavor.
+FirebaseOptions get firebaseOptionsOfFlavor => switch (appFlavor) {
+  'dev' => dev_options.DefaultFirebaseOptions.currentPlatform,
+  'staging' => staging_options.DefaultFirebaseOptions.currentPlatform,
+  'prod' => prod_options.DefaultFirebaseOptions.currentPlatform,
+  _ => throw UnsupportedError(
+    'The app has no Firebase options for the flavor $appFlavor. A new '
+    'flavor goes into this file and into tool/configure_firebase.dart. '
+    'A run from Xcode of the scheme Runner reads the flavor from '
+    'ios/Flutter/Generated.xcconfig, which has none after flutter pub '
+    'get: select the scheme of a flavor, or run flutter build ios '
+    '--config-only --flavor <flavor> first.',
+  ),
+};
+=== lib/firebase_options_prod.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// The [FirebaseOptions] of the Firebase apps of the flavor prod.
+///
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart prod` writes its
+/// options here.
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Firebase is not configured for the flavor prod on web. '
+        'Run: dart tool/configure_firebase.dart prod --project=<id>',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on android. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on ios. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on macos. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on windows. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on linux. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/firebase_options_staging.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// The [FirebaseOptions] of the Firebase apps of the flavor staging.
+///
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart staging` writes its
+/// options here.
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Firebase is not configured for the flavor staging on web. '
+        'Run: dart tool/configure_firebase.dart staging --project=<id>',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on android. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on ios. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on macos. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on windows. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on linux. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
         );
       default:
         throw UnsupportedError(
@@ -7011,6 +7408,7 @@ dev_dependencies:
   flutter_lints: "^6.0.0"
 
 flutter:
+  default-flavor: "dev"
   uses-material-design: true
   generate: true
 === test/core/app/fallback_start_screen_test.dart (flutter_core) ===
@@ -7168,6 +7566,322 @@ void main() {
     expect(style.systemNavigationBarIconBrightness, isNull);
   });
 }
+=== tool/configure_firebase.dart (firebase_core) ===
+// Configures Firebase for one flavor of the app, with the FlutterFire CLI:
+//
+//     dart tool/configure_firebase.dart <flavor> --project=<id>
+//
+// In a terminal, without --project, flutterfire asks for the project. The
+// other arguments go to flutterfire as they are, such as --account=<email>.
+//
+// flutterfire writes one iOS build configuration in a run, and the build of
+// each needs its entry in firebase.json, so on macOS this script runs it once
+// for each. Run it again at any time: it changes nothing but the ids of the
+// build phases that flutterfire added, or moves the flavor to another project.
+//
+// Then it formats the options that flutterfire wrote, and runs each Dart file
+// of tool/firebase_configured by the order of their names, for what has to
+// follow every run of flutterfire.
+
+import 'dart:convert';
+import 'dart:io';
+
+/// The Android application id and the iOS bundle id of a flavor, each `null`
+/// for a platform that the app does not have, and its Xcode build
+/// configurations.
+typedef _Flavor = ({String? android, String? ios, List<String> configurations});
+
+/// The flavors of the app. SMF wrote their ids from the ids of the app: if you
+/// change them in the Android and Xcode projects, change them here too.
+const Map<String, _Flavor> _flavors = {
+  'dev': (
+    android: 'com.example.my_app.dev',
+    ios: 'com.example.my-app.dev',
+    configurations: ['Debug-dev', 'Profile-dev', 'Release-dev'],
+  ),
+  'staging': (
+    android: 'com.example.my_app.staging',
+    ios: 'com.example.my-app.staging',
+    configurations: ['Debug-staging', 'Profile-staging', 'Release-staging'],
+  ),
+  'prod': (
+    android: 'com.example.my_app',
+    ios: 'com.example.my-app',
+    configurations: ['Debug-prod', 'Profile-prod', 'Release-prod'],
+  ),
+};
+
+/// The platforms of the app.
+const _platforms = 'android,ios';
+
+/// The directory of what has to follow every run of flutterfire.
+const _hooks = 'tool/firebase_configured';
+
+/// What flutterfire_cli 1.4.1 takes with `--android-package-name`, as
+/// `validateAndroidPackageName` of its `lib/src/common/utils.dart` checks it.
+final _packageName = RegExp(
+  r'^[a-zA-Z][a-zA-Z0-9]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$',
+);
+
+/// What flutterfire_cli 1.4.1 takes with `--ios-bundle-id`, as
+/// `validateAppBundleId` of the same file checks it.
+final _bundleId = RegExp(
+  r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?|([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+))$',
+);
+
+Future<void> main(List<String> arguments) async {
+  final script = File.fromUri(Platform.script).resolveSymbolicLinksSync();
+  try {
+    exitCode = await _configure(File(script).parent.parent, arguments);
+  } on _Stop catch (stop) {
+    stderr.writeln(stop.why);
+    exitCode = 1;
+  }
+}
+
+/// Why the script stops before flutterfire.
+final class _Stop implements Exception {
+  const _Stop(this.why);
+
+  final String why;
+}
+
+/// Configures the flavor that [arguments] names in [app], and returns the exit
+/// code of the script.
+Future<int> _configure(Directory app, List<String> arguments) async {
+  final (named, others) = _withoutProject(arguments);
+  // The word that names a flavor, which may come after another option.
+  final flavors = others.where(_flavors.containsKey).toList();
+  if (flavors.length != 1) {
+    throw _Stop(
+      'Name a flavor: dart tool/configure_firebase.dart '
+      '<${_flavors.keys.join('|')}> --project=<id>',
+    );
+  }
+  final flavor = flavors.single;
+  final ofFlavor = _flavors[flavor]!;
+  final rest = [...others]..remove(flavor);
+  var project = named;
+  final terminal = _hasTerminal();
+  if (project == null && !terminal) {
+    throw _Stop(
+      'Name the Firebase project: dart tool/configure_firebase.dart $flavor '
+      '--project=<id>. Without a terminal, nobody can answer the question of '
+      'flutterfire.',
+    );
+  }
+  final platforms = _platformsIn(rest);
+  final android = platforms.contains('android') ? ofFlavor.android : null;
+  final ios = platforms.contains('ios') ? ofFlavor.ios : null;
+  _checkIds(android, ios);
+
+  // flutterfire changes the Xcode project only on macOS, so the runs differ
+  // only there.
+  final configurations = Platform.isMacOS && ios != null
+      ? ofFlavor.configurations
+      : ofFlavor.configurations.take(1);
+  for (final configuration in configurations) {
+    final process = await Process.start(
+      Platform.resolvedExecutable,
+      [
+        'pub',
+        'global',
+        'run',
+        'flutterfire_cli:flutterfire',
+        'configure',
+        if (project != null) '--project=$project',
+        '--platforms=$_platforms',
+        '--overwrite-firebase-options',
+        '--out=lib/firebase_options_$flavor.dart',
+        if (android != null) ...[
+          '--android-package-name=$android',
+          '--android-out=android/app/src/$flavor/google-services.json',
+        ],
+        if (ios != null) ...[
+          '--ios-bundle-id=$ios',
+          '--ios-out=ios/flavors/$flavor/GoogleService-Info.plist',
+          '--ios-build-config=$configuration',
+        ],
+        ...rest,
+      ],
+      workingDirectory: app.path,
+      // Without a terminal, flutterfire fails rather than wait for an answer.
+      environment: terminal ? null : const {'CI': 'true'},
+      mode: ProcessStartMode.inheritStdio,
+    );
+    final code = await process.exitCode;
+    if (code != 0) {
+      stderr.writeln(
+        'flutterfire failed for the flavor $flavor (exit code $code). What it '
+        'wrote stays, and running this script again does the rest. It needs '
+        'the FlutterFire CLI, a login of the Firebase CLI and, on macOS, the '
+        'Ruby gem xcodeproj: see the section Firebase of README.md.',
+      );
+      return code;
+    }
+    // The next runs need no answer.
+    project ??= _projectOf(app, flavor);
+  }
+
+  await _format(app, flavor);
+  for (final hook in _hooksOf(app)) {
+    final process = await Process.start(
+      Platform.resolvedExecutable,
+      [hook.path],
+      workingDirectory: app.path,
+      mode: ProcessStartMode.inheritStdio,
+    );
+    final code = await process.exitCode;
+    if (code != 0) {
+      stderr.writeln(
+        '${hook.path} failed (exit code $code). flutterfire configured the '
+        'flavor $flavor, and running this script again runs it again.',
+      );
+      return code;
+    }
+  }
+  stdout.writeln(
+    'Configured the flavor $flavor for the Firebase project $project. Commit '
+    'firebase.json and the files it names.',
+  );
+  if (ios != null && !Platform.isMacOS) {
+    stdout.writeln(
+      'flutterfire changes the Xcode project only on macOS, so this run left '
+      'it and ios/flavors/$flavor/GoogleService-Info.plist as they were. Run '
+      'dart tool/configure_firebase.dart $flavor again on a Mac for the iOS '
+      'app.',
+    );
+  }
+  return 0;
+}
+
+/// Whether someone can answer a question of flutterfire.
+///
+/// `stdin.hasTerminal` also holds for any other character device, such as the
+/// `/dev/null` of cron, `nohup`, `ssh -n` or Docker without `-i`, where
+/// flutterfire would wait forever. Only a terminal has an echo mode to read.
+bool _hasTerminal() {
+  try {
+    stdin.echoMode;
+    return true;
+  } on StdinException {
+    return false;
+  }
+}
+
+/// The project that [arguments] name, as flutterfire reads it, with the last
+/// one counting, and the other arguments.
+(String?, List<String>) _withoutProject(List<String> arguments) {
+  String? project;
+  final rest = <String>[];
+  for (var index = 0; index < arguments.length; index++) {
+    final argument = arguments[index];
+    if (argument == '--project' || argument == '-p') {
+      // Another option is no id, and flutterfire would take it for one.
+      if (++index == arguments.length || arguments[index].startsWith('-')) {
+        throw _Stop('$argument needs the id of a Firebase project.');
+      }
+      project = arguments[index];
+    } else if (argument.startsWith('--project=')) {
+      project = argument.substring('--project='.length);
+    } else if (argument.startsWith('-p')) {
+      project = argument.substring('-p'.length);
+    } else {
+      rest.add(argument);
+    }
+  }
+  if (project != null && project.isEmpty) {
+    throw _Stop('--project needs the id of a Firebase project.');
+  }
+  return (project, rest);
+}
+
+/// The platforms of this run: those of the app, unless [rest] names others.
+/// [rest] comes last on the command line of flutterfire, which takes the last
+/// value of an option.
+List<String> _platformsIn(List<String> rest) {
+  var platforms = _platforms;
+  for (var index = 0; index < rest.length; index++) {
+    if (rest[index].startsWith('--platforms=')) {
+      platforms = rest[index].substring('--platforms='.length);
+    } else if (rest[index] == '--platforms' && index + 1 < rest.length) {
+      platforms = rest[index + 1];
+    }
+  }
+  return platforms.split(',');
+}
+
+/// Stops at an id that flutterfire would refuse, with what to do about it.
+void _checkIds(String? android, String? ios) {
+  if (android != null && !_packageName.hasMatch(android)) {
+    throw _Stop(
+      'flutterfire takes no application id like $android (it allows no '
+      'underscore in its first part): use another org.',
+    );
+  }
+  if (ios != null && !_bundleId.hasMatch(ios)) {
+    throw _Stop(
+      'flutterfire takes no bundle id like $ios (it allows no hyphen at either '
+      'end of a part, and at most 63 characters in one): use another org.',
+    );
+  }
+}
+
+/// The project of the options of [flavor], which flutterfire wrote into
+/// `firebase.json` of [app].
+///
+/// It reads the entry of the options: the keys of the Android apps in that
+/// file depend on the path of the app.
+String _projectOf(Directory app, String flavor) {
+  final file = File('${app.path}/firebase.json');
+  final json = file.existsSync() ? jsonDecode(file.readAsStringSync()) : null;
+  Object? entry = json;
+  for (final key in [
+    'flutter',
+    'platforms',
+    'dart',
+    'lib/firebase_options_$flavor.dart',
+    'projectId',
+  ]) {
+    entry = entry is Map ? entry[key] : null;
+  }
+  if (entry is! String) {
+    throw _Stop(
+      '${file.path} names no Firebase project for the flavor $flavor, though '
+      'flutterfire succeeded. Run this script again with --project=<id>.',
+    );
+  }
+  return entry;
+}
+
+/// Formats the options of [flavor], which flutterfire writes in a format of
+/// its own, so that the check of the format of the app passes. They work
+/// without it, so a failure only warns.
+Future<void> _format(Directory app, String flavor) async {
+  final options = 'lib/firebase_options_$flavor.dart';
+  final result = await Process.run(Platform.resolvedExecutable, [
+    'format',
+    options,
+  ], workingDirectory: app.path);
+  if (result.exitCode != 0) {
+    stderr.writeln(
+      'Warning: dart format left $options as flutterfire wrote it (exit code '
+      '${result.exitCode}): ${result.stderr}',
+    );
+  }
+}
+
+/// The Dart files of the hooks directory of [app], by the order of their
+/// names. An app whose modules have nothing to do after flutterfire has no
+/// such directory.
+List<File> _hooksOf(Directory app) {
+  final directory = Directory('${app.path}/$_hooks');
+  if (!directory.existsSync()) return const [];
+  return [
+    for (final entity in directory.listSync())
+      if (entity is File && entity.path.endsWith('.dart')) entity,
+  ]..sort((a, b) => a.path.compareTo(b.path));
+}
 === tool/enable_firebase_sign_in.dart (firebase_auth) ===
 // Enables the sign-in methods of the app in its Firebase project:
 // Email/Password, and Anonymous when the app is in the mode `anonymous`,
@@ -7175,9 +7889,11 @@ void main() {
 //
 //     dart tool/enable_firebase_sign_in.dart
 //
-// The project is the one that `flutterfire configure` wrote into
-// `firebase.json` of the app, or the one that `--project <id>` names. The
-// script says which, and gives the Firebase CLI that project and no other.
+// The project is the one of `firebase.json` of the app, where
+// `tool/configure_firebase.dart` writes the project of each flavor, or the one that
+// `--project <id>` names. Where the flavors have several projects, the script
+// needs `--project <id>`, and a run for each project. The script says which
+// project it runs for, and gives the Firebase CLI that project and no other.
 //
 // The script enables the methods with `firebase deploy --only auth` of the
 // Firebase CLI, which enables what its configuration names and disables
@@ -7225,6 +7941,12 @@ final _modeDeclaration = RegExp(
 /// This script, as the user runs it in the directory of the app.
 const _command = 'dart tool/enable_firebase_sign_in.dart';
 
+/// The script of the app that configures Firebase for a flavor.
+const _configureScript = 'tool/configure_firebase.dart';
+
+/// The command that configures Firebase for a flavor of the app.
+const _configure = 'dart $_configureScript <flavor> --project=<id>';
+
 Future<void> main(List<String> arguments) async {
   // The app is the directory above `tool`, wherever the script is run from,
   // also through a link to it.
@@ -7254,6 +7976,9 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     );
   }
   final project = named ?? _configuredProject(app);
+  // This script as the user runs it again for the same project. Without the
+  // project that the arguments name, it could stop at several projects.
+  final again = named == null ? _command : '$_command --project $project';
 
   // Every call of the Firebase CLI runs in this directory, also the one for
   // its version: the Firebase CLI keeps its log in the directory that it
@@ -7344,7 +8069,9 @@ Future<int> _enable(Directory app, List<String> arguments) async {
     ], ProcessStartMode.inheritStdio);
     final code = await deploy.exitCode;
     if (interrupted) return 130;
-    if (code != 0) stderr.writeln(_afterFailure(code, project, passedOn));
+    if (code != 0) {
+      stderr.writeln(_afterFailure(code, project, passedOn, again));
+    }
     return code;
   } finally {
     await interrupts.cancel();
@@ -7387,8 +8114,13 @@ String _notRunning(String why, String project) =>
 /// What the script tells after the Firebase CLI failed with the exit code
 /// [code] for [project], with the arguments [passedOn]: which account it
 /// may have run as, where its log was, and the other way to enable the
-/// methods.
-String _afterFailure(int code, String project, List<String> passedOn) {
+/// methods. [again] is the command that runs the script again.
+String _afterFailure(
+  int code,
+  String project,
+  List<String> passedOn,
+  String again,
+) {
   final options = passedOn.takeWhile((argument) => argument != '--').toList();
   // The last account that the options name is the one of the Firebase CLI.
   String? account;
@@ -7408,11 +8140,11 @@ String _afterFailure(int code, String project, List<String> passedOn) {
       '- If it ran as the wrong account: this script runs the Firebase CLI '
           'in a temporary directory, where an account that "firebase '
           'login:use" chose for the directory of the app does not apply. To '
-          'name the account, run: $_command --account <email>',
+          'name the account, run: $again --account <email>',
     if (!options.contains('--debug'))
       '- Its log, firebase-debug.log, was in that temporary directory, '
           'which this script removes. To see what the Firebase CLI did, '
-          'run: $_command --debug',
+          'run: $again --debug',
     '- ${_inConsole(project)}',
   ].join('\n');
 }
@@ -7491,16 +8223,18 @@ String _modeOf(Directory app) {
   return (project, [...others, if (end >= 0) ...arguments.sublist(end)]);
 }
 
-/// The id of the Firebase project that `flutterfire configure` wrote into
-/// `firebase.json` of [app]: under `flutter`, each platform of the app has
-/// the id of its project.
+/// The id of the Firebase project in `firebase.json` of [app], where
+/// [_configureScript] writes the project of each flavor: under `flutter`,
+/// each platform of the app has the id of its project. Flavors may have
+/// several projects, and a run of this script is for one.
 String _configuredProject(Directory app) {
   final file = File('${app.path}/firebase.json');
   const orName = 'or name the project: $_command --project <id>';
   if (!file.existsSync()) {
     throw _Stop(
-      '${file.path} is missing, so the app is not configured for Firebase '
-      'yet. Run "flutterfire configure" first (see README.md), $orName',
+      '${file.path} is missing, so no flavor of the app is configured for '
+      'Firebase yet. Configure one first with "$_configure" (see README.md), '
+      '$orName',
     );
   }
   final Object? json;
@@ -7508,8 +8242,8 @@ String _configuredProject(Directory app) {
     json = jsonDecode(_textOf(file));
   } on FormatException catch (error) {
     throw _Stop(
-      '${file.path} is not JSON (${error.message}). Run "flutterfire '
-      'configure" again (see README.md), $orName',
+      '${file.path} is not JSON (${error.message}). Configure a flavor again '
+      'with "$_configure" (see README.md), $orName',
     );
   }
   final projects = <String>{};
@@ -7527,22 +8261,27 @@ String _configuredProject(Directory app) {
   collect(json is Map ? json['flutter'] : null);
   if (projects.isEmpty) {
     throw _Stop(
-      '${file.path} has no Firebase project of "flutterfire configure". Run '
-      'it first (see README.md), $orName',
+      '${file.path} names no Firebase project. Configure a flavor first with '
+      '"$_configure" (see README.md), $orName',
     );
   }
   if (projects.length > 1) {
+    final commands = [
+      for (final project in projects) '$_command --project $project',
+    ];
     throw _Stop(
-      '${file.path} has several Firebase projects (${projects.join(', ')}). '
-      'Name one: $_command --project <id>',
+      '${file.path} has several Firebase projects (${projects.join(', ')}), '
+      'since flavors of the app may have projects of their own. A run of this '
+      'script enables the methods in one project, so run it once for each:\n'
+      '${commands.join('\n')}',
     );
   }
   final project = projects.single;
   if (!_projectId.hasMatch(project)) {
     throw _Stop(
       '${file.path} has "$project" as its Firebase project, which is no id '
-      'of a project. Run "flutterfire configure" again (see README.md), '
-      '$orName',
+      'of a project. Configure a flavor again with "$_configure" (see '
+      'README.md), $orName',
     );
   }
   return project;

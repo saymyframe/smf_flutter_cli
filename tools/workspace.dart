@@ -100,8 +100,8 @@ final class ListedAppTest {
   final List<RoleFunctionUse>? roleFunctionUses;
 
   /// The keys of the values of the apps that the test gives values of
-  /// (`MatrixAppTest.envValues`), each with the module that gives the apps
-  /// the key.
+  /// (`MatrixAppTest.envValues`), each with the module or the role that
+  /// gives the apps the key.
   final List<GivenEnvKey> envKeys;
 
   /// The answer of CI that the probe of the test asks the script that
@@ -113,12 +113,14 @@ final class ListedAppTest {
 /// which a matrix tool reports.
 final class GivenEnvKey {
   /// Describes the key [key], which the module [module] of the package
-  /// [package] gives the apps [apps], or no module when they are `null`.
+  /// [package], or else the template of the role [role], gives the apps
+  /// [apps], or nothing when they are all `null`.
   const GivenEnvKey(
     this.key, {
     required this.module,
     required this.package,
     required this.apps,
+    this.role,
   });
 
   /// Reads the report of a key.
@@ -126,6 +128,7 @@ final class GivenEnvKey {
         json['key']! as String,
         module: json['module'] as String?,
         package: json['package'] as String?,
+        role: json['role'] as String?,
         apps: [...(json['apps']! as List<Object?>).cast<String>()],
       );
 
@@ -138,6 +141,9 @@ final class GivenEnvKey {
 
   /// The package that declares [module].
   final String? package;
+
+  /// The id of the role whose template gives the apps the key, or `null`.
+  final String? role;
 
   /// The names of the apps of the matrix that the test gives the value.
   final List<String> apps;

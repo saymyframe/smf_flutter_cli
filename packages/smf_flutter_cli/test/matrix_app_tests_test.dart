@@ -9,11 +9,13 @@ import 'dart:io';
 import 'package:mason/mason.dart';
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
@@ -46,6 +48,9 @@ final class SignInOfTest implements AuthService {
 
   @override
   Stream<AuthUser?> get userChanges => const Stream.empty();
+
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async => null;
 
   @override
   Future<void> signIn({required String email, required String password}) =>
@@ -113,6 +118,66 @@ final class SignInOfTest implements AuthService {
           const AuthImplementation(
             type: TypeRef('SignInOfTest', import: _file),
             create: FactoryRef('createSignInOfTest', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the REST role for the test of the app tests of the role,
+/// which apply to the apps with the role whichever module provides it: a
+/// transport that reaches no server.
+final class _RestOfTest extends SmfModule {
+  const _RestOfTest();
+
+  /// The id of the module.
+  static const id = ModuleId('rest_of_test');
+
+  static const _path = 'core/rest_of_test/rest_of_test.dart';
+
+  static const _file = ImportRef.app(_path);
+
+  static const _source = '''
+import '../rest/rest_transport.dart';
+
+RestTransport createRestOfTest() => const RestOfTest();
+
+final class RestOfTest implements RestTransport {
+  const RestOfTest();
+
+  @override
+  Future<RestReply> send(RestExchange exchange) async =>
+      throw const RestConnectionFailed('No server of the test.');
+}
+''';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'REST that reaches no server',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(restRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          MasonBundle(
+            name: id.value,
+            description: 'The transport of the provider',
+            version: '0.1.0',
+            files: [
+              MasonBundledFile(
+                'lib/$_path',
+                base64.encode(utf8.encode(_source)),
+                'text',
+              ),
+            ],
+          ),
+        ),
+        restRole.data(
+          const RoleImplementation(
+            type: TypeRef('RestOfTest', import: _file),
+            create: FactoryRef('createRestOfTest', import: _file),
           ),
         ),
       ];
@@ -376,11 +441,16 @@ void main() {
     );
     expect(matrixEnv.keys(const MatrixApp('outside', [])), isEmpty);
     // The keys of an app are those of the role, each with the module that
-    // gives it, such as the keys of revenuecat.
+    // gives it, such as the keys of revenuecat, or the role whose template
+    // gives it.
+    const MatrixEnvKeyOwner ofRevenueCat = (
+      module: RevenueCatModule.id,
+      role: null,
+    );
     expect(matrixEnv.keys(app(_rc)), {
-      'REVENUECAT_APPLE_KEY': RevenueCatModule.id,
-      'REVENUECAT_GOOGLE_KEY': RevenueCatModule.id,
-      'REVENUECAT_TEST_KEY': RevenueCatModule.id,
+      'REVENUECAT_APPLE_KEY': ofRevenueCat,
+      'REVENUECAT_GOOGLE_KEY': ofRevenueCat,
+      'REVENUECAT_TEST_KEY': ofRevenueCat,
     });
     for (final app in apps) {
       expect(
@@ -388,7 +458,13 @@ void main() {
         app.hook!.presentRoles.contains(envRole)
             ? {
                 for (final key in envRole.keysIn(envRole.hookInput(app.hook!)))
-                  key.name: (key.owner as ModuleOrigin).module,
+                  key.name: switch (key.owner) {
+                    ModuleOrigin(:final module) => (module: module, role: null),
+                    final owner => (
+                        module: null,
+                        role: (owner as RoleTemplateOrigin).role.id,
+                      ),
+                  },
               }
             : isEmpty,
         reason: app.name,
@@ -419,6 +495,7 @@ void main() {
         themeRole,
         appEntryRole,
         localizationRole,
+        splashRole,
       ]),
     );
     expect(named('screen_views').roles, contains(routerRole));
@@ -430,6 +507,8 @@ void main() {
     expect(named('paywall_step').roles, {routerRole, onboardingScreenRole});
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
+    expect(named('splash_role').roles, {splashRole});
+    expect(named('native_splash').roles, isEmpty);
     expect(named('preferences_role').roles, {preferencesRole});
     expect(named('env_role').roles, {envRole});
     expect(named('auth_role').roles, {authRole});
@@ -460,8 +539,12 @@ void main() {
     // provider of the app entry builds, follows the theme mode.
     expect(named('theme_role').roles, {themeRole, appEntryRole});
     expect(named('theme_setting').roles, {themeRole});
+    expect(named('flavors').roles, {appEntryRole});
     expect(named('localization_role').roles, {localizationRole});
     expect(named('language_setting').roles, {localizationRole});
+    expect(named('app_icon_role').roles, {appIconRole});
+    // And the test of the provider of the app icon role.
+    expect(named('launcher_icons').roles, isEmpty);
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
   });
@@ -1059,6 +1142,36 @@ void main() {
   });
 
   test(
+      'the test of the splash role applies to the apps with the role, with '
+      'the paths of the roles, and the test of the module to those of the '
+      'module, with its colours', () async {
+    for (final name in const ['splash_role', 'native_splash']) {
+      expect(
+        [
+          for (final app in apps)
+            if (named(name).appliesTo(app)) app.name,
+        ],
+        ['native_splash', ..._everyModule],
+        reason: name,
+      );
+      expect(named(name).devDependencies, ['xml'], reason: name);
+    }
+    final app = apps.firstWhere(named('splash_role').appliesTo);
+    expect(named('splash_role').values!(app), {
+      'light_image': SplashRole.lightImageFile,
+      'dark_image': SplashRole.darkImageFile,
+      'android_manifest': AppEntryRole.androidManifestFile,
+      'info_plist': AppEntryRole.infoPlistFile,
+    });
+    expect(named('native_splash').values!(app), {
+      'light_background': '#F1F1E8',
+      'dark_background': '#0F3326',
+      'info_plist': AppEntryRole.infoPlistFile,
+      'android_manifest': AppEntryRole.androidManifestFile,
+    });
+  });
+
+  test(
       'the test of the events role applies to the apps with the role, or to '
       'those of them that it is given', () async {
     bool hasEvents(MatrixApp app) =>
@@ -1126,20 +1239,20 @@ void main() {
         // preferences.
         'flutter_core with router, localization',
         'flutter_core with localization',
+        'bottom_tabs with localization',
         'home with localization',
         'settings with localization',
-        'bottom_tabs with localization',
+        // The onboarding requires the preferences.
+        'onboarding with localization',
+        'onboarding',
         'material_theme with settings_screen, localization',
         'material_theme with settings_screen',
         'material_theme with localization',
         'material_theme',
-        'shared_preferences with di',
-        'shared_preferences',
-        // The onboarding requires the preferences.
-        'onboarding with localization',
-        'onboarding',
         // So does the notifications role.
         ..._localNotifications,
+        'shared_preferences with di',
+        'shared_preferences',
         // And the push role requires the notifications.
         'firebase_messaging',
         // Firebase Authentication with the localization, which requires
@@ -1261,12 +1374,12 @@ void main() {
         // shows the labels of the destinations in the language of the app.
         'flutter_core with router, localization',
         'flutter_core with localization',
+        'bottom_tabs with localization',
         'home with localization',
         'settings with localization',
-        'bottom_tabs with localization',
+        'onboarding with localization',
         'material_theme with settings_screen, localization',
         'material_theme with localization',
-        'onboarding with localization',
         // The notifications role, whose entry of the settings screen has
         // texts.
         _lnAll,
@@ -1963,7 +2076,8 @@ void main() {
 
   test(
       'the start check runs the probes of the tests that go into an app '
-      'with it, the walk of the routes, the services of the DI role, the '
+      'with it, the flavor of the app, the walk of the routes, the services '
+      'of the DI role, the '
       'preferences of the role, those of shared_preferences once they are '
       'opened again, the user of Firebase Authentication, the onboarding '
       'of a first launch, the languages of the localization role, the '
@@ -1980,6 +2094,8 @@ void main() {
             p.basename(test.directory): '${probe.path} ${probe.function}',
       },
       {
+        'flavors': 'integration_test/flavors/probe.dart probeFlavor',
+        'rest_role': 'integration_test/rest_role/probe.dart probeRest',
         'firebase_auth':
             'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
@@ -2051,6 +2167,8 @@ void main() {
         'purchases_role',
         'router_walk',
         'localization_role',
+        'flavors',
+        'rest_role',
       ],
     );
     final directory = Directory.systemTemp.createTempSync('smf_probes_');
@@ -2095,6 +2213,8 @@ void main() {
         'probe10: purchases_role/probe.dart',
         'probe11: router_walk/walk.dart',
         'probe12: localization_role/probe.dart',
+        'probe13: flavors/probe.dart',
+        'probe14: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
@@ -2111,6 +2231,8 @@ void main() {
       ('purchases_role', 'probe10.probePurchases'),
       ('router_walk', 'probe11.probeRoutes'),
       ('localization_role', 'probe12.probeLanguages'),
+      ('flavors', 'probe13.probeFlavor'),
+      ('rest_role', 'probe14.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -2979,6 +3101,59 @@ void main() {
   });
 
   test(
+      'the test of the flavor of a running app applies to the apps with every '
+      'module, whichever module provides the app entry, or to those of them '
+      'that it is given, and gets the flavor of a command without --flavor '
+      'from the role, and a probe that a release start of CI tells the flavor '
+      'it asked for', () async {
+    final flavors = named('flavors');
+    bool everyModule(MatrixApp app) => app.everyModuleWith != null;
+
+    expect(
+      [
+        for (final app in apps)
+          if (flavors.appliesTo(app)) app.name,
+      ],
+      [
+        for (final app in apps)
+          if (everyModule(app)) app.name,
+      ],
+    );
+    for (final app in apps.where(flavors.appliesTo)) {
+      expect(
+        flavors.values!(app),
+        {
+          'default_flavor': AppEntryRole.defaultFlavor.name,
+          'flavor_define': startFlavorDefine,
+        },
+        reason: app.name,
+      );
+    }
+    expect(
+      flavors.startProbe?.path,
+      'integration_test/flavors/probe.dart',
+    );
+    expect(flavors.startProbe?.function, 'probeFlavor');
+    expect(flavors.startProbe?.answer, isNull);
+    expect(flavors.mocks, isNull);
+    expect(flavors.generatedFiles, isNull);
+
+    // The release start of CI builds the flavor that the role names for a
+    // release, and tells the probe so.
+    final flavor = AppEntryRole.releaseFlavor.name;
+    expect(startReleaseBuildArguments, [
+      '--flavor',
+      flavor,
+      '--dart-define=$startFlavorDefine=$flavor',
+    ]);
+
+    final none = await flavorsAppTest(among: (app) => false);
+    expect(apps.where(none.appliesTo), isEmpty);
+    final all = await flavorsAppTest();
+    expect(apps.where(all.appliesTo), hasLength(apps.length));
+  });
+
+  test(
       'the test of the entry of the theme mode applies to the apps with the '
       'theme role and the settings screen role, and gets the location of '
       'the settings screen and the type of the entry from the data of the '
@@ -3605,6 +3780,114 @@ void main() {
   });
 
   test(
+      'the tests of the REST role apply to the apps with the role, whichever '
+      'module provides it, and that of the session to those with sign-in too, '
+      'and the first gives the key of the role a value', () async {
+    final roleTest = await restRoleAppTest();
+    final sessionTest = await restSessionAppTest();
+    // A provider of the test, with the provider of the env role, which the role
+    // requires, since the tests select their apps by the role and not by the
+    // module of the CLI that provides it.
+    const modules = <SmfModule>[
+      FlutterCoreModule(),
+      DartDefineModule(),
+      _SignInOfTest(),
+      _RestOfTest(),
+    ];
+    final (apps: ofRole, :failed) = await matrixOf(modules);
+    expect(
+      [
+        for (final result in failed)
+          '${result.contractCase}: ${result.errors.join('; ')}',
+      ],
+      isEmpty,
+    );
+    final key = RestRole.baseAddressKey.name;
+    final withRole = [
+      for (final app in ofRole)
+        if (app.modules.contains(_RestOfTest.id)) app,
+    ];
+
+    expect(p.basename(roleTest.directory), 'rest_role');
+    expect(Directory(roleTest.directory).existsSync(), isTrue);
+    expect(p.basename(sessionTest.directory), 'rest_session');
+    expect(Directory(sessionTest.directory).existsSync(), isTrue);
+    expect(roleTest.roles, {restRole});
+    expect(sessionTest.roles, {restRole});
+    expect(roleTest.mocks, isNull);
+    expect(roleTest.startProbe!.function, 'probeRest');
+    expect(sessionTest.startProbe, isNull);
+    expect(withRole, isNotEmpty);
+    expect(
+      [
+        for (final app in ofRole)
+          (
+            app.name,
+            roleTest.appliesTo(app),
+            sessionTest.appliesTo(app),
+          ),
+      ],
+      [
+        for (final app in ofRole)
+          (
+            app.name,
+            app.modules.contains(_RestOfTest.id),
+            app.modules.contains(_RestOfTest.id) &&
+                app.modules.contains(_SignInOfTest.id),
+          ),
+      ],
+    );
+    expect(
+      withRole.where(sessionTest.appliesTo),
+      isNotEmpty,
+      reason: 'The role uses the auth role, so a provider has an app with it.',
+    );
+    for (final app in withRole) {
+      expect(
+        roleTest.envValues!(app),
+        {key: roleTest.values!(app)['base_address']},
+      );
+      expect(roleTest.values!(app)['base_key'], key);
+    }
+
+    // A matrix chooses among them.
+    final none = await restRoleAppTest(among: (_) => false);
+    expect(withRole.where(none.appliesTo), isEmpty);
+    final noSession = await restSessionAppTest(among: (_) => false);
+    expect(withRole.where(noSession.appliesTo), isEmpty);
+  });
+
+  test(
+      'the tests of the REST role run in the apps of dio and in the apps with '
+      'every module, that of the session only with sign-in, and the test of '
+      'the module in the apps with the module, with neither mocks nor a probe',
+      () {
+    final roleTest = named('rest_role');
+    final sessionTest = named('rest_session');
+    final moduleTest = named('dio');
+    List<String> appsOf(MatrixAppTest test) => [
+          for (final app in apps)
+            if (test.appliesTo(app)) app.name,
+        ];
+
+    expect(appsOf(roleTest), ['dio with auth', 'dio', ..._everyModule]);
+    expect(appsOf(sessionTest), ['dio with auth', ..._everyModule]);
+    expect(appsOf(moduleTest), ['dio with auth', 'dio', ..._everyModule]);
+    expect(
+      {
+        for (final app in apps.where(sessionTest.appliesTo))
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+      },
+      AuthMode.values.toSet(),
+    );
+    expect(roleTest.startProbe!.function, 'probeRest');
+    expect(sessionTest.startProbe, isNull);
+    expect(moduleTest.roles, isEmpty, reason: 'It tests one provider.');
+    expect(moduleTest.mocks, isNull, reason: 'dio has no platform side.');
+    expect(moduleTest.startProbe, isNull);
+  });
+
+  test(
       'the test of the auth role applies to the apps with the role, '
       'whichever module provides it, in each mode of the role, and gets the '
       'mode that the role chose for each: the first one in an app that got '
@@ -3689,6 +3972,8 @@ void main() {
           ..._googleSignIn,
           ..._appleSignIn,
           ..._signIn,
+          // The REST role uses the role.
+          'dio with auth',
         ])
           name: 'required',
         for (final name in _authModes) name: name.split('--auth-mode=').last,
@@ -5167,6 +5452,57 @@ void main() {
     });
   });
 
+  group('the tests of the app icon', () {
+    /// An app of the module [module] with [roles], whichever module provides
+    /// them.
+    MatrixApp appWith(ModuleId module, Set<Role> roles) => MatrixApp(
+          'icon',
+          [module],
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    test(
+        'the test of the role applies to the apps with the role, whichever '
+        'module provides it, and reads the paths of the roles', () {
+      final test = named('app_icon_role');
+
+      expect(
+        test.appliesTo(appWith(const ModuleId('other'), {appIconRole})),
+        isTrue,
+      );
+      expect(test.appliesTo(appWith(const ModuleId('other'), {})), isFalse);
+      expect(test.values!(apps.first), {
+        'image_file': AppIconRole.imageFile,
+        'foreground_file': AppIconRole.foregroundFile,
+        'android_manifest_file': AppEntryRole.androidManifestFile,
+        'xcode_project_file': AppEntryRole.xcodeProjectFile,
+      });
+      expect(test.devDependencies, ['xml']);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+    });
+
+    test('the test of launcher_icons applies to the apps with the module', () {
+      final test = named('launcher_icons');
+
+      expect(
+        test.appliesTo(appWith(LauncherIconsModule.id, const {appIconRole})),
+        isTrue,
+      );
+      expect(
+        test.appliesTo(appWith(const ModuleId('other'), {appIconRole})),
+        isFalse,
+      );
+      expect(test.values!(apps.first), {
+        'xcode_project_file': AppEntryRole.xcodeProjectFile,
+      });
+    });
+  });
+
   group('the test of the env role', () {
     const shopKey = EnvKey(
       'SHOP_PUBLIC_KEY',
@@ -5231,15 +5567,18 @@ void main() {
       expect(test.values, isNull);
       expect(test.mocks, isNull);
       expect(test.startProbe, isNull);
-      // The matrix of the CLI runs it in the apps whose modules give the
-      // role keys: those of revenuecat and of the paywall, whose tests give
-      // the keys values in .env, and those with every module.
+      // The matrix of the CLI runs it in the apps whose roles and modules give
+      // the role keys: those of dio, whose role gives the key of its address,
+      // of revenuecat and of the paywall, whose tests give the keys values in
+      // .env, and those with every module.
       expect(
         [
           for (final app in apps)
             if (named('env_role').appliesTo(app)) app.name,
         ],
         [
+          'dio with auth',
+          'dio',
           _rcAll,
           _rcAuthSettings,
           _rcAuthL10n,
@@ -5577,6 +5916,7 @@ void main() {
         ..._googleSignIn,
         ..._appleSignIn,
         ..._signIn,
+        'dio with auth',
         _rcAll,
         _rcAuthSettings,
         _rcAuthL10n,
