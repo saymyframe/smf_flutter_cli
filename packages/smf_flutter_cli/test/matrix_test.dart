@@ -390,7 +390,7 @@ void main() {
         'local_notifications, '
         'firebase_core, firebase_crashlytics, firebase_analytics, '
         'firebase_messaging, firebase_auth, google_sign_in, apple_sign_in, '
-        'sign_in, revenuecat, paywall, github_actions)';
+        'sign_in, dio, revenuecat, paywall, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -554,6 +554,13 @@ void main() {
       signIn('riverpod', localized: true),
       signIn('bloc'),
       signIn('riverpod'),
+      // dio with the provider of the auth role that the REST role uses, and
+      // without it, with the provider of the env role that it requires.
+      equals(
+        'dio with auth (dio, firebase_auth, firebase_core, flutter_core, '
+        'dart_define)',
+      ),
+      'dio (dio, flutter_core, dart_define)',
       // RevenueCat with each subset of the roles that the purchases role
       // uses, with Firebase Authentication and its Firebase for the auth.
       equals(
@@ -866,7 +873,7 @@ void main() {
         '(flutter_core, go_router, $stateManager, home, settings, '
         'bottom_tabs, material_theme, native_splash, gen_l10n, get_it, '
         'event_bus, shared_preferences, dart_define, onboarding, '
-        'local_notifications, revenuecat, paywall, github_actions, local)';
+        'local_notifications, dio, revenuecat, paywall, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2674,6 +2681,7 @@ Type type() => Types;
               'dart_define',
               'onboarding',
               'local_notifications',
+              'dio',
               'revenuecat',
               'paywall',
               'github_actions',

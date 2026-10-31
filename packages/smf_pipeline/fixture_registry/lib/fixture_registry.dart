@@ -209,9 +209,12 @@ List<ModuleId> everyFixture({
 /// the push role that the CLI has, for the app test that it keeps and for
 /// the test of that role that the CLI keeps, which run there next to the
 /// other Firebase modules and show a message through those notifications.
-/// Last come dart_define, the provider of the env role that the CLI has,
-/// and RevenueCat, the provider of the purchases role that the CLI has,
-/// which reads its keys from the values of .env, for the app test that it
+/// Last come dart_define, the provider of the env role that the CLI has, dio,
+/// the provider of the REST role that the CLI has, for the app test that it
+/// keeps and for the tests of that role that the CLI keeps, which run there
+/// with the users of the session of Firebase Authentication, and RevenueCat,
+/// the provider of the purchases role that the CLI has, which reads its keys
+/// from the values of .env, for the app test that it
 /// keeps and for the tests of that role that the CLI keeps, which run
 /// there with the users of the session of Firebase Authentication and
 /// whose entry that restores purchases the settings screen shows too, and
