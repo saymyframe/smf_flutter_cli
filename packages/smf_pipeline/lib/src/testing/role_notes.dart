@@ -41,7 +41,8 @@ import 'package:smf_pipeline/src/testing/harness.dart';
 ///
 /// What a role guarantees is free to every note: the symbols of its
 /// [Role.interface] with their named parameters, their getters and the
-/// types that they are declared with, the files of those symbols, and each
+/// types that they are declared with, the files of those symbols, the files
+/// that its providers generate ([RoleInterface.providerFiles]), and each
 /// name that the description of one of its rules gives as code, which is a
 /// name before a `(`, or one with an upper-case letter or a `_` after its
 /// first character. A file or a directory at the root of the app that
@@ -197,7 +198,8 @@ final class _Apps {
   /// in the descriptions of their rules.
   final Set<String> _guaranteedNames = {};
 
-  /// The files of the symbols that the roles require.
+  /// The files of the symbols that the roles require, and the files that
+  /// they require of their providers.
   final Set<String> _guaranteedPaths = {};
 
   /// The names of a Dart file, by its text.
@@ -228,9 +230,11 @@ final class _Apps {
 
   /// Takes in what [role] guarantees: the files of the symbols of its
   /// [Role.interface], their names with their named parameters, their
-  /// getters and the types that they are declared with, and the names that
-  /// the descriptions of its rules give as code.
+  /// getters and the types that they are declared with, the files that it
+  /// requires of its providers, and the names that the descriptions of its
+  /// rules give as code.
   void _addGuarantees(Role role) {
+    _guaranteedPaths.addAll(role.interface.providerFiles);
     for (final symbol in role.interface.symbols) {
       _guaranteedPaths.add(symbol.path);
       _guaranteedNames
