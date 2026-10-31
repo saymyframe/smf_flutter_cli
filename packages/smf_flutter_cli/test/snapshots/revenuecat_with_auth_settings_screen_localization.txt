@@ -200,7 +200,7 @@ With `firebase_auth`:
 ## Firebase
 
 - `bootstrap()` initializes Firebase with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, by the flavor of the build. `lib/firebase_options_dev.dart`, `lib/firebase_options_staging.dart` and `lib/firebase_options_prod.dart` are placeholders until `tool/configure_firebase.dart` writes them, and a build of such a flavor stops at start-up with an `UnsupportedError`. Do not write them by hand.
-- `tool/configure_firebase.dart` needs a Firebase account and a project: run it only when asked, with the command of the section Firebase of `README.md`. Do not run `flutterfire configure`, whose files no flavor reads.
+- `tool/configure_firebase.dart` needs a Firebase account and a project: run it only when asked, with the command of the section Firebase of `README.md`. Do not run `flutterfire configure`, which writes one configuration that every flavor then shares.
 - A test that runs `main()` or `bootstrap()` starts Firebase with the options of the flavor of the test, `dev`, which needs a mock of its platform side. Prefer a test of a widget, which needs neither.
 
 ## Localization
@@ -374,7 +374,7 @@ The section "Values in .env" tells what goes into `.env`, lists the keys of the 
 
 The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below.
 
-`smf create` configures `dev`. To configure a flavor, or to configure it again, such as for another project or on another machine, run in the directory of the app:
+`smf create` offers to configure `dev`, and otherwise leaves the command for later. To configure a flavor, or to configure it again, such as for another project or on another machine, run in the directory of the app:
 
 ```bash
 dart pub global activate flutterfire_cli 1.4.1
@@ -382,7 +382,7 @@ firebase login
 dart tool/configure_firebase.dart staging --project=<id>
 ```
 
-Use this script rather than `flutterfire configure`, which would write files that no flavor reads. It registers the Android and iOS apps of the flavor in the project and writes its options, `android/app/src/<flavor>/google-services.json`, `firebase.json` and, on macOS, `ios/flavors/<flavor>/GoogleService-Info.plist`. Commit them. In a terminal you may leave `--project` out, and flutterfire then asks. Other arguments, such as `--account=<email>`, go to flutterfire. The ids of each flavor are at the top of the script: if you change them in the projects, change them there too.
+Use this script rather than `flutterfire configure`, which writes one configuration that every flavor then shares: `ios/Runner/GoogleService-Info.plist` goes into the resources of every flavor, and `android/app/google-services.json` is what the Google services plugin takes for any variant without a file of its own. It registers the Android and iOS apps of the flavor in the project and writes its options, `android/app/src/<flavor>/google-services.json`, `firebase.json` and, on macOS, `ios/flavors/<flavor>/GoogleService-Info.plist`. Commit them. Elsewhere the script leaves the Xcode project and that file as they were, so run it again on a Mac for iOS. In a terminal you may leave `--project` out, and flutterfire then asks. Other arguments, such as `--account=<email>`, go to flutterfire. The ids of each flavor are at the top of the script: if you change them in the projects, change them there too.
 
 Once one flavor is configured, a build of a flavor that is not fails on Android, with `File google-services.json is missing`. On iOS it builds and stops at start-up, unless a build phase that flutterfire adds for a Firebase package fails the build there first.
 
@@ -5514,8 +5514,8 @@ void main() {
 //
 // flutterfire writes one iOS build configuration in a run, and the build of
 // each needs its entry in firebase.json, so on macOS this script runs it once
-// for each. Run it again at any time: it changes nothing but the ids of two
-// build phases, or moves the flavor to another project.
+// for each. Run it again at any time: it changes nothing but the ids of the
+// build phases that flutterfire added, or moves the flavor to another project.
 //
 // Then it formats the options that flutterfire wrote, and runs each Dart file
 // of tool/firebase_configured by the order of their names, for what has to
@@ -5587,17 +5587,20 @@ final class _Stop implements Exception {
 /// Configures the flavor that [arguments] names in [app], and returns the exit
 /// code of the script.
 Future<int> _configure(Directory app, List<String> arguments) async {
-  final flavor = arguments.isEmpty ? null : arguments.first;
-  final ofFlavor = _flavors[flavor];
-  if (flavor == null || ofFlavor == null) {
+  final (named, others) = _withoutProject(arguments);
+  // The word that names a flavor, which may come after another option.
+  final flavors = others.where(_flavors.containsKey).toList();
+  if (flavors.length != 1) {
     throw _Stop(
       'Name a flavor: dart tool/configure_firebase.dart '
       '<${_flavors.keys.join('|')}> --project=<id>',
     );
   }
-  final (named, rest) = _withoutProject(arguments.sublist(1));
+  final flavor = flavors.single;
+  final ofFlavor = _flavors[flavor]!;
+  final rest = [...others]..remove(flavor);
   var project = named;
-  final terminal = stdin.hasTerminal;
+  final terminal = _hasTerminal();
   if (project == null && !terminal) {
     throw _Stop(
       'Name the Firebase project: dart tool/configure_firebase.dart $flavor '
@@ -5679,7 +5682,29 @@ Future<int> _configure(Directory app, List<String> arguments) async {
     'Configured the flavor $flavor for the Firebase project $project. Commit '
     'firebase.json and the files it names.',
   );
+  if (ios != null && !Platform.isMacOS) {
+    stdout.writeln(
+      'flutterfire changes the Xcode project only on macOS, so this run left '
+      'it and ios/flavors/$flavor/GoogleService-Info.plist as they were. Run '
+      'dart tool/configure_firebase.dart $flavor again on a Mac for the iOS '
+      'app.',
+    );
+  }
   return 0;
+}
+
+/// Whether someone can answer a question of flutterfire.
+///
+/// `stdin.hasTerminal` also holds for any other character device, such as the
+/// `/dev/null` of cron, `nohup`, `ssh -n` or Docker without `-i`, where
+/// flutterfire would wait forever. Only a terminal has an echo mode to read.
+bool _hasTerminal() {
+  try {
+    stdin.echoMode;
+    return true;
+  } on StdinException {
+    return false;
+  }
 }
 
 /// The project that [arguments] name, as flutterfire reads it, with the last
@@ -5690,7 +5715,8 @@ Future<int> _configure(Directory app, List<String> arguments) async {
   for (var index = 0; index < arguments.length; index++) {
     final argument = arguments[index];
     if (argument == '--project' || argument == '-p') {
-      if (++index == arguments.length) {
+      // Another option is no id, and flutterfire would take it for one.
+      if (++index == arguments.length || arguments[index].startsWith('-')) {
         throw _Stop('$argument needs the id of a Firebase project.');
       }
       project = arguments[index];
