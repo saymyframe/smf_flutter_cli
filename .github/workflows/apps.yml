@@ -704,22 +704,25 @@ jobs:
         run: dart tools/test_annotations.dart
 
   # An app with Firebase starts only once flutterfire configured it: the
-  # placeholder of its options throws at start-up. flutterfire writes the
-  # options of the Android and iOS apps with the ids of the app in the
-  # Firebase project of CI, saymyframe-app-cli, and on Android adds the
-  # Gradle plugins of Google services and Crashlytics. The native projects
+  # placeholder of its options throws at start-up. The script of the app runs
+  # flutterfire for the flavors dev, which a plain build gives and the jobs
+  # start, and prod, which a user ships. It writes the options of the Android
+  # and iOS apps of each flavor with its ids in the Firebase project of CI,
+  # saymyframe-app-cli, and on Android adds the Gradle plugins of Google
+  # services and Crashlytics. The ids of dev end with .dev, and those of prod
+  # are the ids of the app. No job configures staging. The native projects
   # and their configuration belong to the app entry, so the plan has one
   # app with every module that fits for each of its providers, with the
   # first providers of the other roles that fit with it: firebase_start_app
   # for the first provider of the app entry, and firebase_start_app_<app
   # entry> for another, after the providers other than the first of their
   # roles, names that stay when another role gets a second provider.
-  # flutterfire registers the Firebase apps when the
-  # project has none with those ids, and finds them in later runs: the ids
-  # come from the organization of the apps of CI, com.saymyframe.ci, and the
-  # name of the app. Jobs that run at the same time, such as those of the
-  # nightly run, could register an app each, and the test of the
-  # configuration fails on a project with several. So only the runs of
+  # flutterfire registers the Firebase apps when the project has none with
+  # those ids, and finds them in later runs: the ids come from the
+  # organization of the apps of CI, com.saymyframe.ci, the name of the app and
+  # the flavor. Jobs that run at the same time, such as those of the nightly
+  # run, could register an app each, and the test of the configuration fails
+  # on a project with several. So only the runs of
   # build.yml, with the input register_firebase_apps, let flutterfire
   # register an app, the Android one on Linux and the iOS one on macOS, one
   # job each: the run of the pull request into main that brings a new
@@ -773,9 +776,9 @@ jobs:
           dart pub global activate flutterfire_cli "$version"
 
       # A test of smf_firebase_core runs the command of the README of the app
-      # for Android, with the key of the service account in a file that only
-      # this step has, and skips an app that does not depend on
-      # firebase_core, which starts without it.
+      # for the flavors dev and prod on Android, with the key of the service
+      # account in a file that only this step has, and skips an app that does
+      # not depend on firebase_core, which starts without it.
       - name: Configure the app with every module with Firebase for Android
         working-directory: packages/smf_modules/smf_firebase_core
         env:
@@ -799,9 +802,10 @@ jobs:
       # app says, with the key of the service account: the job of the first
       # app of the plan in a run that may register apps in the project, of
       # build.yml, so that two jobs never write to the project at once. The
-      # script registers the SHA of a debug key, and in a project with
-      # Google each SHA creates an OAuth client of Google, of which Google
-      # lets a project create only so many. So the test gives the script
+      # script registers the SHA of a debug key for the Android app of each
+      # of the two flavors, and in a project with Google each SHA creates an
+      # OAuth client of Google, of which Google lets a project create only so
+      # many. So the test gives the script
       # the debug key of .github/android/debug.keystore, which stays the
       # same: its SHA is registered once and stays in the project.
       - name: Enable the sign-in methods of the app with every module in Firebase
@@ -1361,9 +1365,10 @@ jobs:
       - *install_firebase
 
       # A test of smf_firebase_core runs the command of the README of the app
-      # for iOS, with the key of the service account in a file that only
-      # this step has. It skips an app that does not depend on
-      # firebase_core, as on Linux.
+      # for the flavors dev and prod on iOS, with the key of the service
+      # account in a file that only this step has: three runs of flutterfire
+      # for each flavor, one for each of its build configurations. It skips an
+      # app that does not depend on firebase_core, as on Linux.
       - name: Configure the app with every module with Firebase for iOS
         working-directory: packages/smf_modules/smf_firebase_core
         env:

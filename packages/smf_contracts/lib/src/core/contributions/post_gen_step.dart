@@ -14,8 +14,7 @@ part of '../contributions.dart';
 /// publish the ids of, so a module knows nothing of the modules that
 /// continue its steps.
 ///
-/// A step whose [hosts] leave out the operating system of the run does not
-/// apply to it. A step that applies runs unless:
+/// A step that applies runs unless:
 /// - it is [external] and the run skips external setup
 ///   (`--skip-external-setup`);
 /// - it is [interactive], or has a [notice], and the run cannot ask the
@@ -48,7 +47,6 @@ final class PostGenStep extends Contribution {
     this.skippable = false,
     this.external = false,
     this.needs = const [],
-    this.hosts = const {},
     super.when,
   });
 
@@ -155,15 +153,6 @@ final class PostGenStep extends Contribution {
   /// pipeline reports an id that names no check of the contributor as a
   /// problem of the contributor.
   final List<String> needs;
-
-  /// The operating systems on which the step runs, or none for every one,
-  /// such as macOS for a step that changes the Xcode project of the app.
-  ///
-  /// On any other system the step does not apply to the run, as a
-  /// contribution whose [when] does not hold: it neither runs nor is left
-  /// for later, and neither are the steps that continue it. `--explain`
-  /// names the systems of such a step.
-  final Set<HostOperatingSystem> hosts;
 }
 
 /// Identifies a post-generation step of a module, so that another step may

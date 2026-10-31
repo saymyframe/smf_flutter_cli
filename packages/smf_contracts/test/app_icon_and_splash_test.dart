@@ -140,11 +140,6 @@ void main() {
             notice: 'It changes the Xcode project.',
             skippable: true,
           ),
-          'runs only on some systems': PostGenStep(
-            ToolRef('draw_images'),
-            ['--all'],
-            hosts: {HostOperatingSystem.macos},
-          ),
           'continues another step': PostGenStep(
             ToolRef('draw_images'),
             ['--all'],

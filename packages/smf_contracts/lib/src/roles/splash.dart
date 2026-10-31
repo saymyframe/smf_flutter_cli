@@ -65,7 +65,7 @@ final class SplashRole extends Role<NoDsl> {
           id: 'splash.step',
           description: 'A provider has a PostGenStep that makes the screen and '
               'that a run without a terminal runs too: one that is neither '
-              'external nor interactive, has no notice and no hosts, and '
+              'external nor interactive, has no notice and '
               'continues no other step.',
           check: imageStepProblems,
         ),

@@ -9,9 +9,9 @@ import 'package:smf_contracts/core.dart';
 /// A step that a run without a terminal leaves out leaves the images of
 /// `flutter create` in the apps of such runs, with nothing to tell of it:
 /// one that is [PostGenStep.external], [PostGenStep.interactive] or has a
-/// [PostGenStep.notice], one that runs only on some [PostGenStep.hosts], and
-/// one that continues another step ([PostGenStep.followUpOf]), which may not
-/// run itself. So at least one step of the provider has to be none of them.
+/// [PostGenStep.notice], and one that continues another step
+/// ([PostGenStep.followUpOf]), which may not run itself. So at least one step
+/// of the provider has to be none of them.
 ///
 /// The tool of the step is up to the provider, also one that the machine may
 /// lack ([PostGenStep.needs]): that is a matter of the machine, of which the
@@ -31,7 +31,7 @@ List<SmfIssue> imageStepProblems(ModuleRuleInput<NoDsl> input) {
       hint: 'The native projects belong to the provider of the app entry, so '
           'a brick cannot write these images there. Add a PostGenStep that '
           'needs nothing outside the app, does not talk to the user, has no '
-          'notice and no hosts, and continues no other step.',
+          'notice and continues no other step.',
       origin: ModuleOrigin(module.id),
     ),
   ];
@@ -44,7 +44,6 @@ String? _whyLeftOut(PostGenStep step) {
   if (step.external) return '"$command" needs something outside the app';
   if (step.interactive) return '"$command" talks to the user';
   if (step.notice != null) return '"$command" has a notice';
-  if (step.hosts.isNotEmpty) return '"$command" runs only on some systems';
   if (step.followUpOf != null) return '"$command" continues another step';
   return null;
 }

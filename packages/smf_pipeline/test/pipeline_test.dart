@@ -1521,12 +1521,7 @@ void main() {
               followUpOf: coreStep,
               skippable: true,
             ),
-            const PostGenStep(
-              ToolRef('check'),
-              [],
-              followUpOf: fixStep,
-              hosts: {HostOperatingSystem.macos},
-            ),
+            const PostGenStep(ToolRef('check'), [], followUpOf: fixStep),
             Preflight([install]),
           ],
         ),
@@ -1596,7 +1591,7 @@ void main() {
           // succeeded, each named with its own module. Quoted for the shell
           // of the host, as the commands for later.
           '    then fix it \'in "a b"\' (analytics)\n'
-          '      then check (analytics, on macOS)\n'
+          '      then check (analytics)\n'
           '  b (analytics)',
         ),
       );
@@ -1614,8 +1609,8 @@ void main() {
     });
 
     test(
-        'quotes a step for a shell of the systems it runs on, which may not '
-        'be this one', () async {
+        'quotes a step and the steps that continue it for the shell of the '
+        'run', () async {
       final host = FakeHost(operatingSystem: HostOperatingSystem.windows);
       final modules = [
         scaffold(),
@@ -1631,7 +1626,6 @@ void main() {
               ToolRef('ruby'),
               ['-e', r'puts "$HOME"', 'a b'],
               followUpOf: PostGenStepId(ModuleId('core'), 'tool'),
-              hosts: {HostOperatingSystem.macos},
             ),
           ],
         ),
@@ -1651,8 +1645,7 @@ void main() {
           'After generation\n'
           // PowerShell reads the comma as its own.
           '  tool "--platforms=android,ios" (core)\n'
-          // The shell of macOS would expand \$HOME in double quotes.
-          '    then ruby -e \'puts "\$HOME"\' \'a b\' (core, on macOS)',
+          r'    then ruby -e "puts \"$HOME\"" "a b" (core)',
         ),
       );
     });

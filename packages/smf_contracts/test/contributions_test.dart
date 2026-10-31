@@ -319,7 +319,6 @@ void main() {
       followUpOf: configure,
       notice: 'It also changes the project.',
       skippable: true,
-      hosts: {HostOperatingSystem.macos},
     );
 
     expect(step.tool.argumentsFor(step.arguments), [
@@ -337,14 +336,12 @@ void main() {
     expect(step.skippable, isTrue);
     expect(step.external, isTrue);
     expect(step.needs, ['tool']);
-    expect(step.hosts, isEmpty);
     expect(followUp.tool.executable, 'ruby');
     expect(followUp.arguments, ['fix.rb']);
     expect(followUp.id, isNull);
     expect(followUp.followUpOf, configure);
     expect(followUp.notice, 'It also changes the project.');
     expect(followUp.skippable, isTrue);
-    expect(followUp.hosts, {HostOperatingSystem.macos});
 
     const plain = PostGenStep(ToolRef('flutter'), ['pub', 'get']);
     expect(plain.id, isNull);
@@ -354,7 +351,6 @@ void main() {
     expect(plain.skippable, isFalse);
     expect(plain.external, isFalse);
     expect(plain.needs, isEmpty);
-    expect(plain.hosts, isEmpty);
   });
 
   test('PostGenStepId names a step of a module and compares by value', () {
