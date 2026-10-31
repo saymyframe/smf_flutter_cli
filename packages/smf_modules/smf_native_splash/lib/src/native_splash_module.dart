@@ -82,7 +82,7 @@ final class NativeSplashModule extends SmfModule {
 /// now, where the colours are, and the command. What each image has to be is
 /// in the section of the role.
 const _readmeSection = '''
-The images in `${SplashRole.lightImageFile}` and `${SplashRole.darkImageFile}` show the mark of Say My Frame, in green for the light mode and in cream for the dark one. Replace them with your own before you release the app. `$configFile` has the colours behind them: `color` and `color_dark`, and the same two under `android_12` for Android 12 and later.
+`${SplashRole.lightImageFile}` and `${SplashRole.darkImageFile}` show the mark of Say My Frame, in green for the light mode and in cream for the dark one. Replace them with your own before you release the app. The colours behind them are in `$configFile`: `color` and `color_dark`, and the same two under `android_12` for Android 12 and later.
 
 After you change an image or that file, make the screen again and commit what changed under `android/` and `ios/`:
 
@@ -90,7 +90,7 @@ After you change an image or that file, make the screen again and commit what ch
 $splashCommand
 ```
 
-The command writes `ios/Runner/Info.plist` anew, with one more level of indentation. Keep `android_min_sdk` out of `$configFile`: with it, the tool leaves the launch background of Android below 12 as it is, and the screen there has no image.
+The command rewrites `ios/Runner/Info.plist` with one more level of indentation. Keep `android_min_sdk` out of `$configFile`: with it, the tool leaves the launch background of Android below 12 as it is, and the screen there has no image.
 
-A file `flutter_native_splash-<flavor>.yaml` does not give a flavor a screen of its own on iOS, where the app keeps using the storyboard of `$configFile`.
+A file `flutter_native_splash-<flavor>.yaml` does not give a flavor its own screen on iOS: the tool writes one, and the app keeps showing the screen of `$configFile`.
 ''';

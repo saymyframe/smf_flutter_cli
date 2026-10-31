@@ -166,7 +166,9 @@ List<ModuleId> everyFixture({
 /// provider that must work; material_theme, a provider of the theme role,
 /// for the tests of that role that the CLI keeps: the theme mode, which
 /// shared_preferences remembers, and its entry, which the settings screen
-/// shows below those of the two fixtures; the fixture texts, a provider of
+/// shows below those of the two fixtures; native_splash, a provider of the
+/// splash role, for the test of its module and the test of the role that the
+/// CLI keeps; the fixture texts, a provider of
 /// the localization role, for the two tests of that role that the CLI
 /// keeps: the test of the role itself, with the texts of the fixture
 /// feature in two languages, and the test of the setting of the language,
