@@ -88,12 +88,12 @@ const restRole = RestRole._();
 /// `RestConnectionFailed`, a connection closed when `RestExchange.stop`
 /// completes, no credential or cookie added, nothing written to a log, a client
 /// of the stack that follows `HttpOverrides`, the headers of a coding only on a
-/// body in that coding, and a function that takes no arguments and never throws.
-/// Only a running app shows whether a provider keeps to it. On `dart:io` the call
-/// ends at once, but a TLS handshake on its way cannot be ended, not even by
-/// `close(force: true)`: its socket closes when the handshake ends or the server
-/// ends it. A provider that shares one `HttpClient` cannot end a TCP connect on
-/// its way either: the system ends it.
+/// body in that coding, and a function that takes no arguments and never
+/// throws. Only a running app shows whether a provider keeps to it. On
+/// `dart:io` the call ends at once, but a TLS handshake on its way cannot be
+/// ended, not even by `close(force: true)`: its socket closes when the
+/// handshake ends or the server ends it. A provider that shares one
+/// `HttpClient` cannot end a TCP connect on its way either: the system ends it.
 ///
 /// ## Rules
 ///

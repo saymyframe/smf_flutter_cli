@@ -977,8 +977,8 @@ final class BrokenModule extends SmfModule {
   );
 
   /// The fixture REST that leaves the headers of a coding on a body that its
-  /// stack decoded, so `content-encoding` names a coding that the bytes no longer
-  /// have and `content-length` counts other bytes.
+  /// stack decoded, so `content-encoding` names a coding that the bytes no
+  /// longer have and `content-length` counts other bytes.
   static const restKeepingCodingHeaders = BrokenModule._(
     FakeRestModule(),
     ModuleId('broken_rest_keeps_coding_headers'),
