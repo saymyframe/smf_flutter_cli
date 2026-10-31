@@ -290,7 +290,7 @@ final notes = (await appRest.get('notes', query: {'page': '1'})).decoded(Note.li
 
 A path is relative to the address of the API, with or without a leading slash, and keeps the path of that address. A full address with `http://` or `https://` goes where it says, such as a link to the next page or an upload address.
 
-The address is `${RestRole.baseAddressKey.name}` in `.env`, as the section "${EnvRole.readmeHeading}" says. It is no secret, and a change takes a new `flutter run`. While it is empty, a relative path fails with `notConfigured`, whose hint names the key, and the app still builds and starts. Use `https` in a release. On a device, `http://10.0.2.2:8080` is your computer on the Android emulator and `http://127.0.0.1:8080` on the iOS simulator, and a phone reaches it at its address on your network. CI writes `.env` for each environment, which has an address of its own.
+The address is `${RestRole.baseAddressKey.name}` in `.env`, as the section "${EnvRole.readmeHeading}" says. It is no secret, and a change takes a new `flutter run`. While it is empty, a relative path fails with `notConfigured`, whose hint names the key, and the app still builds and starts. Use `https` in a release. On a device, `http://10.0.2.2:8080` is your computer on the Android emulator and `http://127.0.0.1:8080` on the iOS simulator, and a phone reaches it at its address on your network. Each environment has an address of its own: change the value by hand, or have CI write `.env` for its job.
 
 A call fails only with a `RestFailure`. Show a text of the app for its `reason`, and its `developerHint` in debug mode only. `failure.response` has the body of a refusal.
 

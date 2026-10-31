@@ -547,6 +547,9 @@ Future<void> main(List<String> arguments, SendPort port) async {
     };
   }
   result['addresses that a relative path cannot join'] = problems;
+  result['the hint of an empty address'] =
+      (await caught(() => clientOf(FakeRest(), base: '').get('notes')))!
+          .developerHint;
 
   // The value of the role reaches the client of the app.
   await appRest.get('notes');
@@ -1897,6 +1900,11 @@ void main() {
               ],
             },
         },
+        'the hint of an empty address':
+            '${RestRole.baseAddressKey.name} in .env is empty, and the path is '
+                'relative. Put the address of your REST API there, such as '
+                'https://api.example.com/v1, and start flutter run again. The '
+                'section "${EnvRole.readmeHeading}" of the README tells how.',
         // AppEnv of the test app has this value.
         'the client of the app': 'https://env.example.com/v1/notes',
         'after use': 'https://test.example.com/notes',

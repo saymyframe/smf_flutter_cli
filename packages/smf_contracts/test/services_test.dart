@@ -232,7 +232,7 @@ void main() {
         notificationsRole,
         pushRole,
         purchasesRole,
-        restRole
+        restRole,
       ]) {
         expect(
           role.template!

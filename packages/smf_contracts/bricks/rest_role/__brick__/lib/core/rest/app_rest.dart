@@ -266,14 +266,12 @@ final class AppRestClient {
   /// Creates a client. The app has one, [appRest], and a test creates one over
   /// a transport of its own.
   AppRestClient({
-    required RestTransport transport,
-    required String? baseAddress,
-    RestTokens? tokens,
+    required this._transport,
+    required this._baseAddress,
+    this._tokens,
     this.timeout = const Duration(seconds: 30),
     this.tokenWait = const Duration(seconds: 10),
-  })  : _transport = transport,
-        _baseAddress = baseAddress,
-        _tokens = tokens;
+  });
 
   /// How long one attempt of a call takes at most, unless the call names
   /// another time.
