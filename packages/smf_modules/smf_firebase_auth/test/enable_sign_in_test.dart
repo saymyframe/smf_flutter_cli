@@ -1,11 +1,11 @@
 // The sign-in methods of an app with firebase_auth in its Firebase project,
-// as CI checks them once flutterfire configured the app and before it
-// starts the app on a device. The test needs a Firebase project, so it runs
-// only with an app that flutterfire configured in SMF_CONFIGURED_APP and
-// the id of its project in SMF_FIREBASE_PROJECT, as CI gives them. CI gives
-// it the app with every module of each provider of the app entry, one in
-// each job, and it skips an app that does not depend on firebase_auth,
-// which signs nobody in.
+// as CI checks them once flutterfire configured the flavors dev and prod of the
+// app and before it starts the app on a device. The test needs a Firebase
+// project, so it runs only with an app that flutterfire configured in
+// SMF_CONFIGURED_APP and the id of its project in SMF_FIREBASE_PROJECT, as CI
+// gives them. CI gives it the app with every module of each provider of the app
+// entry, one in each job, and it skips an app that does not depend on
+// firebase_auth, which signs nobody in.
 //
 // Every run asks the project as a client, with the API key of the app: a
 // sign-in with a password, for an address that has no account, which
@@ -30,11 +30,12 @@
 // or missing and a role to grant for them (see enablingFailure).
 //
 // The script changes no file of the app but those that the ways to sign in
-// of the app need: in an app with Google sign-in, the Firebase files that
-// it downloads again and ios/Runner/Info.plist, with the URL scheme of the
-// iOS app. Run as a service account, it leaves Google out, which is enabled
-// in the project of CI already, and sets up the rest: it registers the SHA
-// of the debug key of the machine. In a project with Google, each SHA that
+// of the app need: in an app with Google sign-in, the Firebase files of each
+// flavor that firebase.json names in the project, which it downloads again,
+// and ios/Runner/Info.plist, with the URL scheme of each iOS app. Run as a
+// service account, it leaves Google out, which is enabled in the project of
+// CI already, and sets up the rest: it registers the SHA of the debug key of
+// the machine for each Android app. In a project with Google, each SHA that
 // is registered creates an OAuth client of Google, and Google limits how
 // many a project creates. So CI gives the test a debug key that stays the
 // same, `.github/android/debug.keystore` of the repository, whose path is
@@ -228,7 +229,7 @@ void main() {
         final entries = _entriesOf(app);
         final files = _filesOf(app);
         // What the ways to sign in of the app need of the project, for its
-        // apps in the project.
+        // apps in the project: those of each flavor that is configured.
         final (:google, :needs) = scriptWaysOf(
           File('$app/$enableSignInScript').readAsStringSync(),
         );
