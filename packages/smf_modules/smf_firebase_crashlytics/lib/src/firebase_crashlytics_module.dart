@@ -26,16 +26,16 @@ import 'package:smf_firebase_crashlytics/src/readme.dart';
 /// on first use, without waiting. When the app has a DI container, the role
 /// registers the reporter in it.
 ///
-/// On macOS, `flutterfire configure`, which [FirebaseCoreModule] runs after
-/// generation, adds a build phase for Crashlytics to the Xcode project.
-/// Once flutterfire succeeded there, the module points the phase at the
-/// upload script of Crashlytics where Flutter puts it, so that
-/// `flutter build ipa` finds it too: its step continues the step of
-/// firebase_core that runs flutterfire, [FirebaseCoreModule.configureStep].
-/// The README of the app tells how to fix the phase after configuring the
-/// app again, and its guide for coding agents points there. The guide also
-/// says to report through the reporter of the app rather than through
-/// Crashlytics itself.
+/// On macOS, `flutterfire configure`, which the script of [FirebaseCoreModule]
+/// runs for each flavor, adds a build phase for Crashlytics to the Xcode
+/// project, and writes it again in each of its runs. So the module adds a
+/// script to [FirebaseCoreModule.configuredHooksDirectory], which that script
+/// runs after flutterfire, and it points the phase at the upload script of
+/// Crashlytics where Flutter puts it, so that `flutter build ipa` finds it for
+/// every flavor. The README of the app tells how to fix the phase after
+/// `flutterfire configure` by hand, and its guide for coding agents names the
+/// script. The guide also says to report through the reporter of the app
+/// rather than through Crashlytics itself.
 final class FirebaseCrashlyticsModule extends SmfModule {
   /// Creates the module.
   const FirebaseCrashlyticsModule();
@@ -58,7 +58,15 @@ final class FirebaseCrashlyticsModule extends SmfModule {
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
-        BrickContribution(firebaseCrashlyticsBundle),
+        BrickContribution(
+          firebaseCrashlyticsBundle,
+          vars: const {
+            'script_path': crashlyticsPhaseFixScript,
+            'xcode_project': AppEntryRole.xcodeProjectFile,
+            'script_in_build_directory': crashlyticsScriptInBuildDirectory,
+            'script_in_app': crashlyticsScriptInApp,
+          },
+        ),
         // The reporter of the brick reports an error of Flutter as
         // recordFlutterError of this version does, but without presenting
         // it: compare the two when moving to a newer version.
@@ -72,7 +80,6 @@ final class FirebaseCrashlyticsModule extends SmfModule {
             ),
           ),
         ),
-        crashlyticsPhaseFix,
         AppEntryRole.readmeSections.entry(readmeHeading, readmeSection),
         AppEntryRole.agentSections.entry(
           crashReportingRole.description,

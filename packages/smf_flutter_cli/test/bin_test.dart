@@ -715,16 +715,11 @@ void main() {
                 '  ✗ Firebase CLI (for firebase_core): missing\n',
               ),
               contains(
-                '  dart tool/configure_firebase.dart dev (firebase_core)\n'
-                // Once it succeeded, on macOS, the fix of the phase for
-                // Crashlytics, which continues it, quoted for a shell of
-                // macOS on any system.
-                "    then ruby -e 'f = ARGV[0]; ",
+                '  dart tool/configure_firebase.dart dev (firebase_core)\n',
               ),
-              contains(
-                "' ios/Runner.xcodeproj/project.pbxproj "
-                '(firebase_crashlytics, on macOS)\n',
-              ),
+              // The script of the app that configures a flavor fixes the phase
+              // for Crashlytics after each flavor, so no step continues it.
+              isNot(contains('    then ')),
             ]),
           );
           expect(
@@ -826,10 +821,7 @@ void main() {
                 'missing\n',
               ),
               // The step continues flutterfire configure, and has what the
-              // user has to know before it runs. The step of the other
-              // module that continues flutterfire configure comes after
-              // it, by the names of the two modules, and runs whatever
-              // becomes of this one.
+              // user has to know before it runs.
               contains(
                 'dart tool/configure_firebase.dart dev (firebase_core)\n'
                 '    then dart tool/enable_firebase_sign_in.dart '
@@ -842,12 +834,7 @@ void main() {
                 "app's Firebase files again and writes the iOS URL scheme "
                 'into ios/Runner/Info.plist.\n'
                 '      A run asks before it runs this step, and leaves it '
-                'for later when it cannot ask.\n'
-                "    then ruby -e 'f = ARGV[0]; ",
-              ),
-              contains(
-                "' ios/Runner.xcodeproj/project.pbxproj "
-                '(firebase_crashlytics, on macOS)\n',
+                'for later when it cannot ask.\n',
               ),
             ]),
           );

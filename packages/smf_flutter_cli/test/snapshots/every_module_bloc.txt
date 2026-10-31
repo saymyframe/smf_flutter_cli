@@ -349,7 +349,7 @@ With `GitHub Actions`:
 With `firebase_crashlytics`:
 
 - Report through `CrashReporter`, not through `FirebaseCrashlytics.instance`.
-- After `flutterfire configure` runs on macOS, `flutter build ipa` needs the fix of the section Crashlytics of `README.md`.
+- `tool/configure_firebase.dart` keeps the build phase for Crashlytics working for `flutter build ipa` on macOS. After `flutterfire configure` by hand, `flutter build ipa` needs `tool/firebase_configured/fix_crashlytics_phase.dart`.
 
 ## Dependency injection
 
@@ -800,13 +800,15 @@ When an anonymous user signs in to an account that exists already, the anonymous
 
 ## Crashlytics
 
-The app reports its errors to [Firebase Crashlytics](https://firebase.google.com/docs/crashlytics) through `firebase_crashlytics` once Firebase is configured. On macOS, `flutterfire configure` adds a build phase to the Xcode project that uploads the debug symbols of the app with the upload script of Crashlytics. The phase that flutterfire_cli 1.4.0 adds does not find the script where Flutter puts the Swift packages of the app, so with Swift Package Manager `flutter run` and `flutter build ios` fail in that phase. Configuring the app again on macOS with flutterfire_cli 1.4.1 or a later 1.x replaces the phase.
+The app reports its errors to [Firebase Crashlytics](https://firebase.google.com/docs/crashlytics) through `firebase_crashlytics` once Firebase is configured. On macOS, `tool/configure_firebase.dart` has flutterfire add a build phase to the Xcode project that uploads the debug symbols of the app with the upload script of Crashlytics. The phase that flutterfire_cli 1.4.0 adds does not find the script where Flutter puts the Swift packages of the app, so with Swift Package Manager `flutter run` and `flutter build ios` fail in that phase. Running the script again on macOS with flutterfire_cli 1.4.1 or a later 1.x replaces the phase.
 
-`flutter build ipa` needs one more change on macOS. The phase of flutterfire_cli 1.4.1 looks for the upload script in the build directory of Xcode, which is `build/ios` for `flutter run` and `flutter build ios` but not for the archive of `flutter build ipa`. So SMF points the phase at `build/ios/SourcePackages` right after it configures the app. `flutterfire configure` writes the phase again, so after running it yourself on macOS, run in the directory of the app:
+`flutter build ipa` needs one more change on macOS. The phase of flutterfire_cli 1.4.1 looks for the upload script in the build directory of Xcode, which is `build/ios` for `flutter run` and `flutter build ios` but not for the archive of `flutter build ipa`. flutterfire writes the phase again in each of its runs, so `tool/configure_firebase.dart` ends each flavor with `tool/firebase_configured/fix_crashlytics_phase.dart`, which points the phase at `build/ios/SourcePackages`. After running `flutterfire configure` yourself on macOS, run that script in the directory of the app:
 
 ```bash
-ruby -e 'f = ARGV[0]; s = File.exist?(f) ? File.binread(f) : ""; t = s.gsub("$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run", "$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run"); if t == s then puts "Nothing to fix in #{f}" else File.binwrite(f, t); puts "Fixed the Crashlytics phase in #{f}" end' ios/Runner.xcodeproj/project.pbxproj
+dart tool/firebase_configured/fix_crashlytics_phase.dart
 ```
+
+The phase looks up the build configuration in `firebase.json`. So on macOS, once one flavor is configured, a build of a flavor that is not fails in the phase with `FirebaseJsonException: Please run "flutterfire configure"`. Run `dart tool/configure_firebase.dart <flavor> --project=<id>` for that flavor.
 
 ## Texts
 
@@ -19416,6 +19418,51 @@ String? _withUrlSchemes(String text, List<String> schemes) {
     '${_urlTypesOf(schemes, '$indent\t', newline)}'
     '$indent</array>$newline',
   );
+}
+=== tool/firebase_configured/fix_crashlytics_phase.dart (firebase_crashlytics) ===
+// Points the build phase for Crashlytics that flutterfire adds to the Xcode
+// project at the upload script of Crashlytics where Flutter puts it, so that
+// flutter build ipa finds it. See the section Crashlytics of README.md.
+//
+// flutterfire writes the phase again in each of its runs, so
+// tool/configure_firebase.dart runs this script after it. After
+// flutterfire configure by hand, run it yourself:
+//
+//     dart tool/firebase_configured/fix_crashlytics_phase.dart
+//
+// flutterfire changes the Xcode project only on macOS, so elsewhere this script
+// does nothing.
+
+import 'dart:convert';
+import 'dart:io';
+
+/// The Xcode project, from the directory of the app.
+const _project = 'ios/Runner.xcodeproj/project.pbxproj';
+
+/// Where the phase of flutterfire looks for the upload script: the build
+/// directory of Xcode, which is another one for the archive of
+/// flutter build ipa.
+const _inBuildDirectory =
+    r'$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run';
+
+/// Where the upload script is, in build/ios/SourcePackages of the app.
+const _inApp =
+    r'$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run';
+
+void main() {
+  if (!Platform.isMacOS) return;
+  final script = File.fromUri(Platform.script).resolveSymbolicLinksSync();
+  final app = File(script).parent.parent.parent;
+  final file = File('${app.path}/$_project');
+  // Byte for byte, whatever the encoding of the file and the locale.
+  final text = file.existsSync() ? latin1.decode(file.readAsBytesSync()) : '';
+  final fixed = text.replaceAll(_inBuildDirectory, _inApp);
+  if (fixed == text) {
+    stdout.writeln('Nothing to fix in $_project');
+  } else {
+    file.writeAsBytesSync(latin1.encode(fixed));
+    stdout.writeln('Fixed the Crashlytics phase in $_project');
+  }
 }
 === tool/update_app_icon.dart (launcher_icons) ===
 // Makes the launcher icons of the app from assets/branding/, as
