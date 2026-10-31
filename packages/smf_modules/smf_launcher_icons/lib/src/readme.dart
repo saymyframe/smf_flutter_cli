@@ -13,9 +13,9 @@ const updateScript = 'tool/update_app_icon.dart';
 /// The command that makes the icon again.
 const updateCommand = 'dart $updateScript';
 
-/// The section of the module in the README of the app, after the section of
-/// the role: what the two images show, how much of the foreground launchers
-/// cut, and the command to run after a change.
+/// The section of the module in the README of the app: what the two images
+/// show, how much of the foreground launchers cut, and the command to run after
+/// a change.
 const readmeSection = '''
 `${AppIconRole.imageFile}` shows the logo of Say My Frame in cream on green, and `${AppIconRole.foregroundFile}` shows the same logo on a transparent background. On Android, `adaptive_icon_background` of `$configFile` is the colour behind it. Replace both images before you release the app.
 

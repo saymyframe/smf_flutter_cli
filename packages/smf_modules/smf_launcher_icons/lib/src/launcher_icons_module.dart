@@ -22,9 +22,9 @@ import 'package:smf_launcher_icons/src/readme.dart';
 /// takes `YES` or `NO`. The script runs the tool and repairs that setting, so
 /// the fix is not a second step that a developer would have to remember.
 ///
-/// A step that fails only warns and prints its command ([PostGenStep.
-/// skippable]): an app with the logo of Flutter is still an app, and it must
-/// not be lost for an icon.
+/// A step that fails only warns and prints its command, since it is skippable:
+/// an app with the logo of Flutter is still an app, and it must not be lost
+/// for an icon.
 final class LauncherIconsModule extends SmfModule {
   /// Creates the module.
   const LauncherIconsModule();
