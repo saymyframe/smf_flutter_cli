@@ -69,9 +69,10 @@ Future<MatrixAppTests> smfAppTests() async {
         appliesTo: (_) => true,
         readsStartProbes: true,
       ),
-      // The start-up of the app initializes Firebase, with the options that
-      // `flutterfire configure` would write, and the mocks of Firebase Core,
-      // which the matrix sets up for the tests of every module of the app.
+      // The start-up of the app initializes Firebase, with the options of the
+      // flavor of the tests as flutterfire would write them, and the mocks of
+      // Firebase Core, which the matrix sets up for the tests of every module
+      // of the app.
       MatrixAppTest(
         '$firebaseCore/firebase_core',
         appliesTo: _has(FirebaseCoreModule.id),

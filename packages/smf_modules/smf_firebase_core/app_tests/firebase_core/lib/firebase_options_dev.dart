@@ -7,18 +7,9 @@ import 'package:flutter/foundation.dart'
 // The options that `flutterfire configure` writes for the Android and iOS
 // apps of a Firebase project, here a project made up for the tests that
 // continuous integration runs in the apps with Firebase: it replaces the
-// placeholder that SMF generates, as configuring the app does.
+// placeholder of the flavor of the tests that SMF generates, as configuring
+// that flavor does. `flutter test` builds the default flavor of the app.
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
-///
-/// Example:
-/// ```dart
-/// import 'firebase_options.dart';
-/// // ...
-/// await Firebase.initializeApp(
-///   options: DefaultFirebaseOptions.currentPlatform,
-/// );
-/// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {

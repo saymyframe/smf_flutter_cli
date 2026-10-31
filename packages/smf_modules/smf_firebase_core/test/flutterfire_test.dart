@@ -222,17 +222,6 @@ void main() {
       );
       expect(android, identity.androidApplicationId);
       expect(ios, identity.iosBundleId);
-      final step = const FirebaseCoreModule()
-          .contribute(ContractHarness.defaultContext)
-          .whereType<PostGenStep>()
-          .singleWhere((step) => step.id == FirebaseCoreModule.configureStep);
-      expect(
-        step.arguments,
-        containsAll([
-          '--ios-bundle-id=$ios',
-          '--android-package-name=$android',
-        ]),
-      );
     });
 
     test(
@@ -252,15 +241,17 @@ void main() {
     });
 
     test('fills the options of each platform of the app in place', () {
-      final options = texts['lib/firebase_options.dart']!;
+      for (final flavor in AppEntryRole.flavors) {
+        final options = texts['lib/firebase_options_${flavor.name}.dart']!;
 
-      for (final platform
-          in ContractHarness.defaultContext.appIdentity.platforms) {
-        expect(
-          fillsOptionsInPlace(options, platform),
-          isTrue,
-          reason: platform,
-        );
+        for (final platform
+            in ContractHarness.defaultContext.appIdentity.platforms) {
+          expect(
+            fillsOptionsInPlace(options, platform),
+            isTrue,
+            reason: '${flavor.name} $platform',
+          );
+        }
       }
       expect(
         fillsOptionsInPlace('class DefaultFirebaseOptions {}', 'ios'),

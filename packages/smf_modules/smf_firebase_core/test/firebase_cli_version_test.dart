@@ -13,11 +13,9 @@ import 'support/fake_machine.dart';
 const _dart = '/sdk/bin/dart';
 const _firebase = '/opt/npm/bin/firebase';
 
-/// `flutterfire configure` as the steps of the Flutter SDK run it.
-const _configure = '$_dart pub global run flutterfire_cli:flutterfire '
-    'configure --platforms=android,ios --overwrite-firebase-options '
-    '--ios-bundle-id=com.example.my-app '
-    '--android-package-name=com.example.my_app';
+/// The script that configures the default flavor with flutterfire, as the
+/// steps of the Flutter SDK run it.
+const _configure = '$_dart tool/configure_firebase.dart dev';
 
 /// The step of [_RulesModule] as the pipeline runs it.
 const _deploy = '$_firebase deploy --only storage';
