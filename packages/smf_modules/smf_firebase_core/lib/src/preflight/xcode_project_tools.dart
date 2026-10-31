@@ -1,4 +1,5 @@
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_firebase_core/src/configure.dart';
 
 /// The lowest version of the Ruby gem xcodeproj that opens the Xcode project
 /// of the app, which has a local Swift package: 1.23.0 added
@@ -82,7 +83,7 @@ final class XcodeProjectToolsCheck extends PreflightCheck {
 /// Elsewhere it registers the iOS app and writes its options, but writes no
 /// `GoogleService-Info.plist` and leaves the Xcode project as it is, without
 /// the build phases that it adds there for some Firebase packages, so it is
-/// set up by running `flutterfire configure` again on a Mac. The check
+/// set up by running the script of the app again on a Mac. The check
 /// passes on macOS, where [XcodeProjectToolsCheck] checks what that needs,
 /// and nothing here can be installed.
 final class XcodeProjectOnMacCheck extends PreflightCheck {
@@ -106,7 +107,7 @@ final class XcodeProjectOnMacCheck extends PreflightCheck {
                   'writes its options into the Dart file of the flavor, but '
                   'writes no GoogleService-Info.plist and leaves the Xcode '
                   'project as it is, without the build phases that it adds '
-                  'for some Firebase packages: run flutterfire configure '
-                  'again on a Mac.',
+                  'for some Firebase packages: run dart $configureScriptPath '
+                  '<flavor> again on a Mac.',
             );
 }

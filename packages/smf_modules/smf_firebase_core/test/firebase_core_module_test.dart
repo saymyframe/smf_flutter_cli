@@ -307,7 +307,7 @@ void main() {
             'dart tool/configure_firebase.dart staging --project=<id>\n'
             '```\n',
           ),
-          contains('`smf create` configures `dev`'),
+          contains('`smf create` offers to configure `dev`'),
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
           contains('`lib/firebase_options_of_flavor.dart`'),
         ),
@@ -317,6 +317,8 @@ void main() {
         allOf(
           contains('runs `flutterfire` from `~/.pub-cache/bin`'),
           contains('rather than `flutterfire configure`'),
+          contains('one configuration that every flavor then shares'),
+          isNot(contains('no flavor reads')),
           // A run from Xcode, whose flavor the file of Flutter tells.
           contains('`ios/Flutter/Generated.xcconfig`'),
           contains('`flutter build ios --config-only --flavor <flavor>`'),
@@ -385,6 +387,13 @@ void main() {
       expect(
         agentNote,
         contains('`${FirebaseCoreModule.configureScript}` needs a Firebase'),
+      );
+      expect(
+        agentNote,
+        allOf(
+          contains('one configuration that every flavor then shares'),
+          isNot(contains('no flavor reads')),
+        ),
       );
       expect(
         agentNote,

@@ -7,8 +7,8 @@
 //
 // flutterfire writes one iOS build configuration in a run, and the build of
 // each needs its entry in firebase.json, so on macOS this script runs it once
-// for each. Run it again at any time: it changes nothing but the ids of two
-// build phases, or moves the flavor to another project.
+// for each. Run it again at any time: it changes nothing but the ids of the
+// build phases that flutterfire added, or moves the flavor to another project.
 //
 // Then it formats the options that flutterfire wrote, and runs each Dart file
 // of tool/firebase_configured by the order of their names, for what has to
@@ -63,17 +63,20 @@ final class _Stop implements Exception {
 /// Configures the flavor that [arguments] names in [app], and returns the exit
 /// code of the script.
 Future<int> _configure(Directory app, List<String> arguments) async {
-  final flavor = arguments.isEmpty ? null : arguments.first;
-  final ofFlavor = _flavors[flavor];
-  if (flavor == null || ofFlavor == null) {
+  final (named, others) = _withoutProject(arguments);
+  // The word that names a flavor, which may come after another option.
+  final flavors = others.where(_flavors.containsKey).toList();
+  if (flavors.length != 1) {
     throw _Stop(
       'Name a flavor: dart tool/configure_firebase.dart '
       '<${_flavors.keys.join('|')}> --project=<id>',
     );
   }
-  final (named, rest) = _withoutProject(arguments.sublist(1));
+  final flavor = flavors.single;
+  final ofFlavor = _flavors[flavor]!;
+  final rest = [...others]..remove(flavor);
   var project = named;
-  final terminal = stdin.hasTerminal;
+  final terminal = _hasTerminal();
   if (project == null && !terminal) {
     throw _Stop(
       'Name the Firebase project: dart tool/configure_firebase.dart $flavor '
@@ -155,7 +158,29 @@ Future<int> _configure(Directory app, List<String> arguments) async {
     'Configured the flavor $flavor for the Firebase project $project. Commit '
     'firebase.json and the files it names.',
   );
+  if (ios != null && !Platform.isMacOS) {
+    stdout.writeln(
+      'flutterfire changes the Xcode project only on macOS, so this run left '
+      'it and ios/flavors/$flavor/GoogleService-Info.plist as they were. Run '
+      'dart tool/configure_firebase.dart $flavor again on a Mac for the iOS '
+      'app.',
+    );
+  }
   return 0;
+}
+
+/// Whether someone can answer a question of flutterfire.
+///
+/// `stdin.hasTerminal` also holds for any other character device, such as the
+/// `/dev/null` of cron, `nohup`, `ssh -n` or Docker without `-i`, where
+/// flutterfire would wait forever. Only a terminal has an echo mode to read.
+bool _hasTerminal() {
+  try {
+    stdin.echoMode;
+    return true;
+  } on StdinException {
+    return false;
+  }
 }
 
 /// The project that [arguments] name, as flutterfire reads it, with the last
@@ -166,7 +191,8 @@ Future<int> _configure(Directory app, List<String> arguments) async {
   for (var index = 0; index < arguments.length; index++) {
     final argument = arguments[index];
     if (argument == '--project' || argument == '-p') {
-      if (++index == arguments.length) {
+      // Another option is no id, and flutterfire would take it for one.
+      if (++index == arguments.length || arguments[index].startsWith('-')) {
         throw _Stop('$argument needs the id of a Firebase project.');
       }
       project = arguments[index];

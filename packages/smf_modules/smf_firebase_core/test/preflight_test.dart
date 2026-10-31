@@ -1747,7 +1747,8 @@ void main() {
                 'its options into the Dart file of the flavor, but writes no '
                 'GoogleService-Info.plist and leaves the Xcode project as it '
                 'is, without the build phases that it adds for some Firebase '
-                'packages: run flutterfire configure again on a Mac.',
+                'packages: run dart tool/configure_firebase.dart <flavor> again '
+                'on a Mac.',
             installable: false,
           ),
           reason: '$system',

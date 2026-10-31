@@ -183,16 +183,19 @@ void main() {
 ''');
   }
 
-  /// The environment of a run in [app].
+  /// The environment of a run in [app]: that of the test without CI, which a
+  /// runner sets, since the script sets it itself or leaves it out. A run takes
+  /// this one alone, with `includeParentEnvironment: false`.
   Map<String, String> environmentOf(
     Directory app,
     Map<String, String> others,
   ) =>
       {
+        ...Platform.environment,
         'PUB_CACHE': pubCache,
         'FAKE_FLUTTERFIRE_LOG': '${app.path}.log',
         ...others,
-      };
+      }..remove('CI');
 
   /// Runs the script in [app] without a terminal.
   Future<ProcessResult> runScript(
@@ -205,6 +208,7 @@ void main() {
         [configureScript, ...arguments],
         workingDirectory: app.path,
         environment: environmentOf(app, environment),
+        includeParentEnvironment: false,
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
       );
@@ -278,6 +282,43 @@ void main() {
         expect(result.exitCode, 0, reason: '$arguments ${result.stderr}');
         expect(argumentsIn(app), _runsOf(dev, identity), reason: '$arguments');
       }
+    });
+
+    test('takes the flavor wherever it is among the arguments', () async {
+      for (final arguments in [
+        ['--project=my-project', dev.name],
+        ['-p', 'my-project', dev.name],
+        ['--project', 'my-project', dev.name],
+      ]) {
+        final app = newApp();
+
+        final result = await runScript(app, arguments);
+
+        expect(result.exitCode, 0, reason: '$arguments ${result.stderr}');
+        expect(argumentsIn(app), _runsOf(dev, identity), reason: '$arguments');
+      }
+
+      final app = newApp();
+      const others = ['--account=me@example.com'];
+      final result = await runScript(
+        app,
+        [...others, dev.name, '--project=my-project'],
+      );
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      expect(argumentsIn(app), _runsOf(dev, identity, others: others));
+    });
+
+    test('stops when the arguments name two flavors', () async {
+      final app = newApp();
+
+      final result = await runScript(
+        app,
+        [dev.name, prod.name, '--project=my-project'],
+      );
+
+      expect(result.exitCode, 1);
+      expect(result.stderr, contains('Name a flavor'));
+      expect(runsIn(app), isEmpty);
     });
 
     test('gives the other arguments to flutterfire as they are', () async {
@@ -357,6 +398,9 @@ void main() {
         ['--project'],
         ['-p'],
         ['--project='],
+        // The next option is no id, and would otherwise be the project.
+        ['--project', '--account=me@example.com'],
+        ['-p', '--account=me@example.com'],
       ]) {
         final app = newApp();
 
@@ -375,6 +419,7 @@ void main() {
         <String>[],
         ['other', '--project=my-project'],
         ['--project=my-project'],
+        ['--project=my-project', 'other'],
       ]) {
         final app = newApp();
 
@@ -563,6 +608,149 @@ void main() {
     });
   });
 
+  group('elsewhere than on macOS', () {
+    /// A new app whose script takes the system of the test for another one.
+    Directory appElsewhere() => newApp(
+          scriptText: script.replaceAll('Platform.isMacOS', 'false'),
+        );
+
+    test(
+        'runs flutterfire once, and says to run the script again on a Mac for '
+        'the iOS app, which that run left as it was', () async {
+      final app = appElsewhere();
+
+      final result = await runScript(app, [dev.name, '--project=my-project']);
+
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      expect(runsIn(app), hasLength(1));
+      expect(
+        result.stdout,
+        allOf(
+          contains('Configured the flavor dev'),
+          contains(
+            'Run dart tool/configure_firebase.dart dev again on a Mac for the '
+            'iOS app',
+          ),
+          contains('ios/flavors/dev/GoogleService-Info.plist'),
+        ),
+      );
+    });
+
+    test('says nothing of iOS in a run for Android alone', () async {
+      final app = appElsewhere();
+
+      final result = await runScript(
+        app,
+        [dev.name, '--project=my-project', '--platforms=android'],
+      );
+
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      expect(result.stdout, contains('Configured the flavor dev'));
+      expect(result.stdout, isNot(contains('on a Mac')));
+    });
+
+    test('on macOS, the script says nothing of a Mac', () async {
+      final app = newApp(
+        scriptText: script.replaceAll('Platform.isMacOS', 'true'),
+      );
+
+      final result = await runScript(app, [dev.name, '--project=my-project']);
+
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      expect(runsIn(app), hasLength(dev.xcodeConfigurations.length));
+      expect(result.stdout, isNot(contains('on a Mac')));
+    });
+  });
+
+  test(
+      'from another directory, runs flutterfire, the format and the hooks in '
+      'the directory of the app', () async {
+    final app = newApp();
+    addHook(app, 'a.dart');
+    final elsewhere = root.createTempSync('elsewhere');
+
+    final result = await Process.run(
+      Platform.resolvedExecutable,
+      ['${app.path}/$configureScript', dev.name, '--project=my-project'],
+      workingDirectory: elsewhere.path,
+      environment: environmentOf(app, const {}),
+      includeParentEnvironment: false,
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    );
+
+    expect(result.exitCode, 0, reason: '${result.stderr}');
+    expect(result.stderr, isNot(contains('Warning')));
+    final directory = app.resolveSymbolicLinksSync();
+    expect(runsIn(app), isNotEmpty);
+    for (final run in runsIn(app)) {
+      expect(run['directory'], directory);
+    }
+    expect(
+      File('${app.path}/lib/firebase_options_dev.dart').readAsStringSync(),
+      'const options = 1;\n',
+    );
+    expect(hooksLogOf(app), 'a.dart in $directory: const options = 1;\n');
+    expect(elsewhere.listSync(), isEmpty);
+  });
+
+  group(
+    'with /dev/null as its input, as under cron or ssh -n',
+    () {
+      /// Runs the script in [app] with its standard input from `/dev/null`,
+      /// which `stdin.hasTerminal` of Dart takes for a terminal. A pipe, as
+      /// `Process.run` gives, would not show that.
+      Future<ProcessResult> runWithoutInput(
+        Directory app,
+        List<String> arguments,
+      ) =>
+          Process.run(
+            '/bin/sh',
+            [
+              '-c',
+              r'exec "$@" </dev/null',
+              'sh',
+              Platform.resolvedExecutable,
+              configureScript,
+              ...arguments,
+            ],
+            workingDirectory: app.path,
+            environment: environmentOf(app, const {}),
+            includeParentEnvironment: false,
+            stdoutEncoding: utf8,
+            stderrEncoding: utf8,
+          );
+
+      test(
+          'stops before any run without a project, where flutterfire would '
+          'wait for an answer', () async {
+        final app = newApp();
+
+        final result = await runWithoutInput(app, [dev.name]);
+
+        expect(result.exitCode, 1, reason: '${result.stdout}');
+        expect(result.stderr, contains('--project=<id>'));
+        expect(runsIn(app), isEmpty);
+      });
+
+      test('with a project, tells flutterfire not to ask', () async {
+        final app = newApp();
+
+        final result = await runWithoutInput(
+          app,
+          [dev.name, '--project=my-project'],
+        );
+
+        expect(result.exitCode, 0, reason: '${result.stderr}');
+        expect(runsIn(app), isNotEmpty);
+        for (final run in runsIn(app)) {
+          expect(run['ci'], 'true');
+        }
+      });
+    },
+    skip: Platform.isWindows ? 'Windows has no /dev/null.' : null,
+  );
+
   group(
     'in a terminal',
     () {
@@ -588,6 +776,7 @@ void main() {
                 ],
           workingDirectory: app.path,
           environment: environmentOf(app, environment),
+          includeParentEnvironment: false,
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
@@ -605,6 +794,7 @@ void main() {
         for (final run in runsIn(app)) {
           // flutterfire keeps its questions.
           expect(run['terminal'], isTrue);
+          expect(run['ci'], isNull);
         }
         expect(
           result.stdout,
