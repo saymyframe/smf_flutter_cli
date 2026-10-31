@@ -239,14 +239,16 @@ void main() {
       test(
           'leaves the objects of a large app where the clone finds them: the '
           'commit starts no maintenance of git in the background', () async {
-        for (var index = 0; index < 400; index++) {
+        for (var index = 0; index < 1500; index++) {
           write('lib/part_$index.dart', '// Part $index.\n');
         }
 
-        // Git 2.54 packs loose objects a moment after a commit with more than
-        // 100 of them, in a process of its own. It then removes them while the
-        // clone copies them, and adds files while the temporary directory is
-        // removed. The repository is next to the clone.
+        // Git 2.54 packs loose objects a moment after a commit, in a process
+        // of its own, when it counts two or more in `objects/17`: a matter of
+        // the hashes in an app of a few hundred files, and sure in one of this
+        // size. It then removes them while the clone copies them, and adds
+        // files while the temporary directory is removed. The repository is
+        // next to the clone.
         final (code, output) = await runCiCommands(app, [
           'sleep 2 && ! ls ../repository/objects/pack/*.pack',
         ]);
