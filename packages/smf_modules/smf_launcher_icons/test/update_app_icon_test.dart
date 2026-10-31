@@ -24,6 +24,9 @@ import 'package:test/test.dart';
 /// The setting that flutter_launcher_icons 0.14.4 damages.
 const _setting = 'ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS';
 
+/// The file of the library of the tool that the script imports.
+const _library = 'main.dart';
+
 /// The stand-in for the library that the script imports: what
 /// `changeIosLauncherIcon` of the tool does with the Xcode project, in version
 /// 0.14.4, once its arguments ask for no failure.
@@ -77,7 +80,7 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync(app.files[updateScript]!.text);
     File(
-      '${directory.path}/stand_in/lib/main.dart',
+      '${directory.path}/stand_in/lib/$_library',
     )
       ..createSync(recursive: true)
       ..writeAsStringSync(_standIn);

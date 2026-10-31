@@ -169,8 +169,9 @@ void main() {
       expect(
         unit.directives
             .whereType<ImportDirective>()
-            .map((directive) => directive.uri.stringValue),
-        contains('package:flutter_launcher_icons/main.dart'),
+            .map((directive) => directive.uri.stringValue!)
+            .where((uri) => uri.startsWith('package:')),
+        [startsWith('package:flutter_launcher_icons/')],
       );
       final constants = {
         for (final declaration
