@@ -101,6 +101,11 @@ const _linkReasons = {
 /// the Services ID and the OAuth code flow configuration of the Apple
 /// sign-in method in the Firebase console: without them it fails with
 /// [AuthFailureReason.notConfigured], and the account stays.
+///
+/// [userToken] is the Firebase ID token of the user, which the Firebase SDK
+/// keeps on the device and renews when it is about to expire. A
+/// server verifies it with the Firebase Admin SDK, as a token of the Firebase
+/// project that the app is configured with.
 final class FirebaseAuthService implements AuthService {
   /// Creates the service on [_auth].
   FirebaseAuthService(this._auth);
@@ -251,6 +256,81 @@ final class FirebaseAuthService implements AuthService {
         },
         credential: fresh,
       );
+
+  /// It reads past [_run], which tells of the user after each call, since an
+  /// app may read the token for each of its requests. A forced read still
+  /// gives [userChanges] an event of the same user, since Firebase tells that
+  /// the token changed, and so does a reload.
+  ///
+  /// When the platform has nobody, as while a sign-out is on its way, the
+  /// plugin may not have heard of it yet: nobody is signed in, so there is no
+  /// token.
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    try {
+      return await user.getIdToken(forceRefresh);
+    } on Object catch (error, stackTrace) {
+      if (error is FirebaseAuthException && error.code == 'no-current-user') {
+        return null;
+      }
+      Error.throwWithStackTrace(await _failureOfRead(user, error), stackTrace);
+    }
+  }
+
+  /// The failure of a read of the token of [user] that failed with [error].
+  ///
+  /// On Android the plugin answers the read with the code `unknown` for each
+  /// answer of the server but a network failure, also for a user whom the
+  /// server deleted or disabled, with the code only in a text. A reload of the
+  /// user answers with the code, so the service asks that.
+  ///
+  /// When the server no longer takes [user], the service signs that user out,
+  /// as the Firebase SDK does a moment later, and tells of it. A read runs
+  /// next to the calls of the app, so it does so only while [user] is still
+  /// signed in: by now another user may be.
+  Future<AuthFailure> _failureOfRead(User user, Object error) async {
+    final answer = error is FirebaseAuthException && error.code == 'unknown'
+        ? await _answerToReload(user) ?? error
+        : error;
+    final code = answer is FirebaseAuthException ? answer.code : null;
+    final disabled = code == 'user-disabled';
+    if (!disabled && !_endedSession.contains(code)) return _readFailure(answer);
+    if (_auth.currentUser?.uid == user.uid) {
+      try {
+        await _auth.signOut();
+      } on Object catch (signOutError) {
+        return _readFailure(signOutError);
+      }
+      _changes.add(null);
+    }
+    return AuthFailure(
+      disabled
+          ? AuthFailureReason.userDisabled
+          : AuthFailureReason.recentSignInRequired,
+    );
+  }
+
+  /// The failure of a read for [error], as that of any other call, but that
+  /// a read of a user who is signed in never says that sign-in is not enabled
+  /// in the project, as an internal error of iOS would.
+  AuthFailure _readFailure(Object error) {
+    final failure = _failureOf(error, null, const {});
+    return failure.reason == AuthFailureReason.notConfigured
+        ? AuthFailure(AuthFailureReason.unknown, developerHint: _answerOf(error))
+        : failure;
+  }
+
+  /// What a reload of [user] fails with, or `null` if it completes.
+  Future<Object?> _answerToReload(User user) async {
+    try {
+      await user.reload();
+      return null;
+    } on Object catch (error) {
+      return error;
+    }
+  }
 
   /// Signs [user] in again with [fresh], so that Firebase deletes the
   /// account without asking for a recent sign-in, and revokes the tokens of

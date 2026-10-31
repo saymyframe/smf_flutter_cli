@@ -209,6 +209,13 @@ import 'package:flutter/foundation.dart';
 
 const password = 'secret';
 
+const _endedSessionCodes = [
+  'user-token-expired',
+  'invalid-user-token',
+  'user-not-found',
+  'no-current-user',
+];
+
 String userOf(AuthUser? user) => user == null
     ? 'nobody'
     : [
@@ -617,12 +624,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   await signIn();
 
   final ended = <String, Object?>{};
-  for (final code in const [
-    'user-token-expired',
-    'invalid-user-token',
-    'user-not-found',
-    'no-current-user',
-  ]) {
+  for (final code in _endedSessionCodes) {
     await service.signInAnonymously();
     failNext['delete'] = FirebaseAuthException(code: code);
     ended['delete: $code'] = await step(service.deleteAccount);
@@ -633,6 +635,82 @@ Future<void> main(List<String> arguments, SendPort port) async {
     );
   }
   result['ended session'] = ended;
+
+  // A read of the token: what it answers, how it ends for each code of
+  // Firebase, and that it tells the listener only of a user who had to go.
+  await service.signOut();
+  await settle();
+  firebaseCalls.clear();
+  heard.clear();
+  final tokens = <String, Object?>{
+    'nobody': await service.userToken(),
+    'nobody, forced': await service.userToken(forceRefresh: true),
+    'the calls for nobody': [...firebaseCalls],
+  };
+  await signIn();
+  await settle();
+  firebaseCalls.clear();
+  heard.clear();
+  tokens['a read'] = await service.userToken();
+  tokens['a read again'] = await service.userToken();
+  tokens['a forced read'] = await service.userToken(forceRefresh: true);
+  tokens['a read after it'] = await service.userToken();
+  await settle();
+  tokens['the calls'] = [...firebaseCalls];
+  tokens['heard'] = [...heard];
+  for (final code in const [
+    'network-request-failed',
+    'too-many-requests',
+  ]) {
+    failNext['getIdToken'] = FirebaseAuthException(code: code);
+    tokens['refused: $code'] =
+        await step(() => service.userToken(forceRefresh: true));
+  }
+  failNext['getIdToken'] = StateError('The plugin broke in.');
+  tokens['an error of another kind'] = await step(service.userToken);
+  final endedRead = <String, Object?>{};
+  for (final code in _endedSessionCodes.where(
+    (code) => code != 'no-current-user',
+  )) {
+    await signIn();
+    failNext['getIdToken'] = FirebaseAuthException(code: code);
+    endedRead[code] = await step(() => service.userToken(forceRefresh: true));
+  }
+  tokens['ended session'] = endedRead;
+  await signIn();
+  failNext['getIdToken'] = FirebaseAuthException(code: 'no-current-user');
+  String? ofNobody = 'not read';
+  tokens['nobody on the platform'] = await step(
+    () async => ofNobody = await service.userToken(),
+  );
+  tokens['the answer with nobody on the platform'] = ofNobody;
+  // The plugin on Android answers such a read with the code `unknown`.
+  final unknownRead = <String, Object?>{};
+  for (final code in [..._endedSessionCodes, 'user-disabled']) {
+    await signIn();
+    failNext['getIdToken'] = FirebaseAuthException(
+      code: 'unknown',
+      message: 'The server said no.',
+    );
+    failNext['reload'] = FirebaseAuthException(code: code);
+    unknownRead[code] = await step(
+      () => service.userToken(forceRefresh: true),
+    );
+  }
+  await signIn();
+  failNext['getIdToken'] = FirebaseAuthException(
+    code: 'unknown',
+    message: 'The server said no.',
+  );
+  unknownRead['a reload that completes'] = await step(
+    () => service.userToken(forceRefresh: true),
+  );
+  failNext['getIdToken'] = FirebaseAuthException(code: 'user-disabled');
+  unknownRead['disabled at once'] = await step(
+    () => service.userToken(forceRefresh: true),
+  );
+  tokens['unknown read'] = unknownRead;
+  result['tokens'] = tokens;
 
   await signIn();
   failNext['delete'] = FirebaseAuthException(code: 'requires-recent-login');
@@ -1374,7 +1452,7 @@ void main() {
               name: signatureOf(method),
           },
         );
-        expect(interface.keys, hasLength(11));
+        expect(interface.keys, hasLength(12));
       });
 
       test('asks Firebase for no language before a password reset', () {
@@ -1935,6 +2013,138 @@ void main() {
         });
         expect(sent['calls of Firebase for what is empty'], isEmpty);
         expect(sent['user after what is empty'], 'guest 2 <null>, anonymous');
+      });
+
+      test(
+          'gives the ID token of the user, which asks Firebase for a new one '
+          'only when it forces a refresh and tells the listener of no other '
+          'user', () {
+        final tokens = sent['tokens']! as Map<Object?, Object?>;
+        const account = 'uid of a@x.dev <a@x.dev>';
+        const first = 'id-token of uid of a@x.dev, number 1';
+        const second = 'id-token of uid of a@x.dev, number 2';
+        expect(
+          {
+            for (final key in const [
+              'nobody',
+              'nobody, forced',
+              'the calls for nobody',
+              'a read',
+              'a read again',
+              'a forced read',
+              'a read after it',
+              'the calls',
+              'heard',
+            ])
+              key: tokens[key],
+          },
+          {
+            'nobody': null,
+            'nobody, forced': null,
+            'the calls for nobody': <Object?>[],
+            'a read': first,
+            'a read again': first,
+            'a forced read': second,
+            'a read after it': second,
+            'the calls': [
+              'getIdToken(false)',
+              'getIdToken(false)',
+              'getIdToken(true)',
+              'getIdToken(false)',
+            ],
+            // Firebase tells that the token changed, of the same user.
+            'heard': [account],
+          },
+        );
+        expect(
+          tokens['nobody on the platform'],
+          [
+            'completed',
+            account,
+            ['getIdToken(false)'],
+            <Object?>[],
+          ],
+          reason: 'With nobody on the platform, as while a sign-out is on its '
+              'way, a read signs nobody out.',
+        );
+        expect(tokens['the answer with nobody on the platform'], isNull);
+        expect(
+          {
+            for (final code in const [
+              'network-request-failed',
+              'too-many-requests',
+            ])
+              code: tokens['refused: $code'],
+          },
+          {
+            for (final (code, reason) in const [
+              ('network-request-failed', 'network'),
+              ('too-many-requests', 'tooManyAttempts'),
+            ])
+              code: [
+                reason,
+                account,
+                ['getIdToken(true)'],
+                <Object?>[],
+              ],
+          },
+          reason: 'A read that Firebase refuses gets the reason of the code, '
+              'leaves the user and tells the listener nothing.',
+        );
+        expect(
+          tokens['an error of another kind'],
+          [
+            'unknown: Bad state: The plugin broke in.',
+            account,
+            ['getIdToken(false)'],
+            <Object?>[],
+          ],
+        );
+        expect(tokens['ended session'], {
+          for (final code in _endedSession)
+            if (code != 'no-current-user')
+              code: [
+                'recentSignInRequired',
+                'nobody',
+                ['getIdToken(true)', 'signOut()'],
+                ['nobody'],
+              ],
+        });
+      });
+
+      test(
+          'takes the reason of a read that the plugin on Android answers with '
+          'the code unknown from a reload of the user, and signs out a user '
+          'whom the server no longer takes', () {
+        final tokens = sent['tokens']! as Map<Object?, Object?>;
+        const reload = ['getIdToken(true)', 'reload()', 'signOut()'];
+        expect(tokens['unknown read'], {
+          for (final code in _endedSession)
+            code: [
+              'recentSignInRequired',
+              'nobody',
+              reload,
+              ['nobody'],
+            ],
+          'user-disabled': [
+            'userDisabled',
+            'nobody',
+            reload,
+            ['nobody'],
+          ],
+          'a reload that completes': [
+            'unknown: unknown: The server said no.',
+            'uid of a@x.dev <a@x.dev>',
+            ['getIdToken(true)', 'reload()'],
+            <Object?>[],
+          ],
+          'disabled at once': [
+            'userDisabled',
+            'nobody',
+            ['getIdToken(true)', 'signOut()'],
+            ['nobody'],
+          ],
+        });
       });
 
       test(
