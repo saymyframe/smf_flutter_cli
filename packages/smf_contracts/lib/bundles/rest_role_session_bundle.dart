@@ -1,0 +1,22 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, implicit_dynamic_list_literal, implicit_dynamic_map_literal, inference_failure_on_collection_literal
+
+import 'package:mason/mason.dart';
+
+final restRoleSessionBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "lib/core/rest/session_tokens.dart",
+      "data":
+          "aW1wb3J0ICcuLi9hdXRoL2FwcF9zZXNzaW9uLmRhcnQnOwppbXBvcnQgJ2FwcF9yZXN0LmRhcnQnOwoKLy8vIFRoZSB0b2tlbiBvZiB0aGUgdXNlciBvZiBbYXBwU2Vzc2lvbl0sIGZvciB0aGUgcmVxdWVzdHMgb2YgdGhlIGFwcC4KZmluYWwgY2xhc3MgU2Vzc2lvblJlc3RUb2tlbnMgaW1wbGVtZW50cyBSZXN0VG9rZW5zIHsKICAvLy8gQ3JlYXRlcyB0aGUgdG9rZW5zIG9mIHRoZSBzZXNzaW9uIG9mIHRoZSBhcHAuCiAgY29uc3QgU2Vzc2lvblJlc3RUb2tlbnMoKTsKCiAgQG92ZXJyaWRlCiAgU3RyaW5nPyBnZXQgb3duZXIgPT4gYXBwU2Vzc2lvbi52YWx1ZS51aWQ7CgogIEBvdmVycmlkZQogIEZ1dHVyZTxTdHJpbmc/PiBjdXJyZW50KCkgPT4gX3JlYWQoYXBwU2Vzc2lvbi51c2VyVG9rZW4pOwoKICBAb3ZlcnJpZGUKICBGdXR1cmU8U3RyaW5nPz4gYWZ0ZXIoU3RyaW5nIHJlamVjdGVkKSA9PgogICAgICBfcmVhZCgoKSA9PiBhcHBTZXNzaW9uLnVzZXJUb2tlbkFmdGVyKHJlamVjdGVkKSk7CgogIEZ1dHVyZTxTdHJpbmc/PiBfcmVhZChGdXR1cmU8U3RyaW5nPz4gRnVuY3Rpb24oKSByZWFkKSBhc3luYyB7CiAgICB0cnkgewogICAgICByZXR1cm4gYXdhaXQgcmVhZCgpOwogICAgfSBvbiBBdXRoRmFpbHVyZSBjYXRjaCAoZmFpbHVyZSwgc3RhY2tUcmFjZSkgewogICAgICBFcnJvci50aHJvd1dpdGhTdGFja1RyYWNlKAogICAgICAgIFJlc3RGYWlsdXJlKAogICAgICAgICAgX3JlYXNvbk9mKGZhaWx1cmUucmVhc29uKSwKICAgICAgICAgIGRldmVsb3BlckhpbnQ6IGZhaWx1cmUuZGV2ZWxvcGVySGludCwKICAgICAgICApLAogICAgICAgIHN0YWNrVHJhY2UsCiAgICAgICk7CiAgICB9CiAgfQoKICAvLy8gQSBzZXNzaW9uIHRoYXQgZW5kZWQgb24gdGhlIHNlcnZlciwgYW5kIGEgZGlzYWJsZWQgYWNjb3VudCwgbGVhdmUgbm9ib2R5CiAgLy8vIHNpZ25lZCBpbiBieSBub3csIHNvIHRoZSByZXF1ZXN0IGhhcyBubyB1c2VyIGFueSBtb3JlLgogIHN0YXRpYyBSZXN0RmFpbHVyZVJlYXNvbiBfcmVhc29uT2YoQXV0aEZhaWx1cmVSZWFzb24gcmVhc29uKSA9PgogICAgICBzd2l0Y2ggKHJlYXNvbikgewogICAgICAgIEF1dGhGYWlsdXJlUmVhc29uLm5ldHdvcmsgPT4gUmVzdEZhaWx1cmVSZWFzb24ubmV0d29yaywKICAgICAgICBBdXRoRmFpbHVyZVJlYXNvbi50b29NYW55QXR0ZW1wdHMgPT4gUmVzdEZhaWx1cmVSZWFzb24udG9vTWFueVJlcXVlc3RzLAogICAgICAgIEF1dGhGYWlsdXJlUmVhc29uLnJlY2VudFNpZ25JblJlcXVpcmVkIHx8CiAgICAgICAgQXV0aEZhaWx1cmVSZWFzb24udXNlckRpc2FibGVkID0+CiAgICAgICAgICBSZXN0RmFpbHVyZVJlYXNvbi51bmF1dGhvcml6ZWQsCiAgICAgICAgXyA9PiBSZXN0RmFpbHVyZVJlYXNvbi51bmtub3duLAogICAgICB9Owp9Cg==",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "rest_role_session",
+  "description":
+      "The token of the user for the REST client of an app with sign-in, from the session of the app.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "vars": {}
+});

@@ -71,174 +71,6 @@ Future<RenderedTemplate> _rendered({
       present: present,
     );
 
-/// A stand-in for the part of Flutter's foundation library that the files
-/// of the role and of the auth role use, with the signatures of Flutter
-/// 3.44: the app runs in debug mode, and what it prints goes to
-/// `debugPrinted`. A notifier that was disposed of throws when it is used.
-const _foundation = r'''
-const bool kDebugMode = true;
-
-/// What the app printed with [debugPrint], in order.
-final List<String> debugPrinted = [];
-
-void debugPrint(String? message, {int? wrapWidth}) =>
-    debugPrinted.add('$message');
-
-class Immutable {
-  const Immutable();
-}
-
-const Immutable immutable = Immutable();
-
-typedef VoidCallback = void Function();
-
-abstract class Listenable {
-  const Listenable();
-
-  void addListener(VoidCallback listener);
-
-  void removeListener(VoidCallback listener);
-}
-
-abstract class ValueListenable<T> extends Listenable {
-  const ValueListenable();
-
-  T get value;
-}
-
-mixin class ChangeNotifier implements Listenable {
-  final List<VoidCallback> _listeners = [];
-  bool _disposed = false;
-
-  void _notDisposed() {
-    if (_disposed) throw StateError('A $runtimeType was used after dispose.');
-  }
-
-  @override
-  void addListener(VoidCallback listener) {
-    _notDisposed();
-    _listeners.add(listener);
-  }
-
-  @override
-  void removeListener(VoidCallback listener) => _listeners.remove(listener);
-
-  void notifyListeners() {
-    _notDisposed();
-    for (final listener in [..._listeners]) {
-      listener();
-    }
-  }
-
-  void dispose() {
-    _notDisposed();
-    _disposed = true;
-    _listeners.clear();
-  }
-}
-
-class ValueNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
-  ValueNotifier(this._value);
-
-  T _value;
-
-  @override
-  T get value => _value;
-
-  set value(T newValue) {
-    if (_value == newValue) return;
-    _value = newValue;
-    notifyListeners();
-  }
-}
-
-class ErrorDescription {
-  ErrorDescription(this.message);
-
-  final String message;
-}
-
-class FlutterErrorDetails {
-  const FlutterErrorDetails({
-    required this.exception,
-    this.stack,
-    this.library = 'Flutter framework',
-    this.context,
-  });
-
-  final Object exception;
-  final StackTrace? stack;
-  final String? library;
-  final ErrorDescription? context;
-}
-
-class FlutterError {
-  static void reportError(FlutterErrorDetails details) {}
-}
-
-enum TargetPlatform { android, fuchsia, iOS, linux, macOS, windows }
-
-TargetPlatform get defaultTargetPlatform => TargetPlatform.android;
-''';
-
-/// A stand-in for the part of Flutter's widgets library that the files of
-/// the role and of the auth role use: what that library exports of the
-/// foundation library, and the binding with the observers of the lifecycle
-/// of the app. `lifecycle()` puts the app into a state, and `resumeApp()`
-/// stands for the user who comes back to the app.
-const _widgets = '''
-export 'foundation.dart'
-    show
-        ChangeNotifier,
-        ErrorDescription,
-        FlutterError,
-        FlutterErrorDetails,
-        Listenable,
-        ValueNotifier,
-        VoidCallback,
-        debugPrint,
-        immutable;
-
-enum AppLifecycleState { detached, resumed, inactive, hidden, paused }
-
-abstract class Widget {
-  const Widget();
-}
-
-final class BuildContext {
-  const BuildContext();
-}
-
-abstract mixin class WidgetsBindingObserver {
-  void didChangeAppLifecycleState(AppLifecycleState state) {}
-}
-
-class WidgetsBinding {
-  static final WidgetsBinding instance = WidgetsBinding();
-
-  /// The observers that were added and not removed.
-  final List<WidgetsBindingObserver> observers = [];
-
-  void addObserver(WidgetsBindingObserver observer) => observers.add(observer);
-
-  bool removeObserver(WidgetsBindingObserver observer) =>
-      observers.remove(observer);
-}
-
-/// The app comes into [state], which every observer is told of.
-void lifecycle(AppLifecycleState state) {
-  for (final observer in [...WidgetsBinding.instance.observers]) {
-    observer.didChangeAppLifecycleState(state);
-  }
-}
-
-/// The user comes back to the app, which was shown but not in use.
-void resumeApp() {
-  lifecycle(AppLifecycleState.inactive);
-  lifecycle(AppLifecycleState.resumed);
-}
-''';
-
 /// A provider of purchases for the test app, which keeps to the contract
 /// of `PurchasesService` unless a test says otherwise.
 ///
@@ -1236,12 +1068,12 @@ Future<DartFiles> _app({
     },
     flutter: {
       'foundation.dart': debug
-          ? _foundation
-          : _foundation.replaceFirst(
+          ? sessionFoundation
+          : sessionFoundation.replaceFirst(
               'const bool kDebugMode = true;',
               'const bool kDebugMode = false;',
             ),
-      'widgets.dart': _widgets,
+      'widgets.dart': sessionWidgets,
     },
   );
 }
