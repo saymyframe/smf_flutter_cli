@@ -1269,8 +1269,9 @@ jobs:
       - *annotate
 
   # The app with every module of each provider of the app entry, as on
-  # Linux, archived with the build phase for Crashlytics that flutterfire
-  # configure adds, fixed by the command that the README of the app gives.
+  # Linux, archived for a flavor with the build phases that flutterfire
+  # configure adds, the one for Crashlytics fixed by the command that the
+  # README of the app gives.
   # The test of smf_firebase_crashlytics skips an app that does not depend on
   # firebase_crashlytics, to which flutterfire adds no such phase. It needs
   # no Firebase project, so it runs without the key too.
@@ -1393,11 +1394,11 @@ jobs:
           "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CONFIGURED_APP \
             "$RUNNER_TEMP/SMF apps застосунки é/firebase" dart test test/enable_sign_in_test.dart --file-reporter json:build/test-results/enable_sign_in_test.json
 
-      # A test of smf_firebase_crashlytics fixes the build phase for
-      # Crashlytics that flutterfire added with the command of the README of
-      # the app, as SMF does right after it configures an app, and skips an
-      # app that does not depend on firebase_crashlytics.
-      - name: Fix the build phase for Crashlytics of the app with every module
+      # A test of smf_firebase_crashlytics checks that the script of the app
+      # that configured it left the build phase for Crashlytics that
+      # flutterfire added fixed, and skips an app that does not depend on
+      # firebase_crashlytics.
+      - name: Check the build phase for Crashlytics of the app with every module
         working-directory: packages/smf_modules/smf_firebase_crashlytics
         run: |
           "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CONFIGURED_APP \
