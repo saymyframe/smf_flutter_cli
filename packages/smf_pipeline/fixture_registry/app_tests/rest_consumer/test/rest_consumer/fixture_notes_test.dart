@@ -178,13 +178,18 @@ void main() {
     final load = own.load();
     await heard.future;
     own.dispose();
-    await load;
 
     await expectLater(
       closed.future.timeout(const Duration(seconds: 3)),
       completes,
       reason: 'The state of a screen cancels its call when it is disposed of, '
           'and the provider closes the connection.',
+    );
+    await load;
+    expect(
+      own.value,
+      isA<FixtureNotesLoading>(),
+      reason: 'A state that was disposed of hears nothing of its call.',
     );
   });
 }
