@@ -15,6 +15,17 @@ import 'package:{{app_name}}/core/rest/app_rest.dart';
 
 import 'rest_role.dart';
 
+/// What a TLS handshake with the server on [port] of this machine fails with.
+Future<Object?> errorOfHandshake(int port) async {
+  try {
+    final socket = await SecureSocket.connect('127.0.0.1', port);
+    socket.destroy();
+    return null;
+  } on Object catch (error) {
+    return error;
+  }
+}
+
 void main() {
   late RestTestServer server;
   late AppRestClient client;
@@ -99,15 +110,25 @@ void main() {
   test(
       'the headers of a reply come with their names in lower case, and the '
       'values of one header together', () async {
-    server.answer('POST', '$apiPath/headers', (request) async {
-      request.response.headers
-        ..set('X-Mixed-Case', 'kept', preserveHeaderCase: true)
-        ..add('x-several', 'one')
-        ..add('x-several', 'two');
-      await request.response.close();
+    // On a raw socket, since an HttpServer puts the values of one header on
+    // one line, and a provider then has nothing to join.
+    final raw = await RawServer.start((socket, head) {
+      unawaited(
+        RawServer.send(
+          socket,
+          'HTTP/1.1 200 OK\r\n'
+          'X-Mixed-Case: kept\r\n'
+          'x-several: one\r\n'
+          'x-several: two\r\n'
+          'content-length: 0\r\n'
+          '\r\n',
+          () {},
+        ),
+      );
     });
+    addTearDown(raw.close);
 
-    final outcome = await outcomeOf(client.post('headers'));
+    final outcome = await outcomeOf(client.post('${raw.address}/headers'));
 
     expect(outcome, answers(200), reason: 'The server has the path.');
     final headers = (outcome as RestResponse).headers;
@@ -191,16 +212,33 @@ void main() {
   });
 
   test('a TLS handshake that fails is the reason network', () async {
-    // A server that answers in plain text, which is no TLS.
+    // A server that reads the hello of the client and answers in plain text,
+    // and keeps the connection open: a socket that it closed over a hello that
+    // it had not read would reach the client as a reset, which is no failure
+    // of TLS.
     final plain = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(plain.close);
+    final sockets = <Socket>[];
+    addTearDown(() async {
+      await plain.close();
+      for (final socket in sockets) {
+        socket.destroy();
+      }
+    });
     plain.listen((socket) {
+      sockets.add(socket);
       socket
         ..done.ignore()
-        ..write('HTTP/1.1 200 OK\r\n\r\n');
-      unawaited(RawServer.send(socket, '', socket.destroy));
+        ..listen(
+          (_) => socket.write('this is no TLS\r\n\r\n'),
+          onError: (Object _) {},
+        );
     });
 
+    expect(
+      await errorOfHandshake(plain.port),
+      isA<HandshakeException>(),
+      reason: 'The server of the test fails a TLS handshake.',
+    );
     expect(
       await outcomeOf(client.post('https://127.0.0.1:${plain.port}/notes')),
       failsWith(RestFailureReason.network),

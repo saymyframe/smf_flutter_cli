@@ -789,10 +789,9 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
-  /// The fixture REST that reports only a broken connection as a failed one,
-  /// and lets a failure to connect and a failed TLS handshake through: the
-  /// code gets the reason `unknown` where the network is at fault, and a `GET`
-  /// does not repeat.
+  /// The fixture REST that lets a failure to connect through as an error of
+  /// another kind: the code gets the reason `unknown` where the network is at
+  /// fault, and a `GET` does not repeat.
   static const restLeakingErrors = BrokenModule._(
     FakeRestModule(),
     ModuleId('broken_rest_leaks_errors'),
@@ -800,11 +799,31 @@ final class BrokenModule extends SmfModule {
     _fixtureRestFile,
     [
       (
-        '    } on IOException catch (error) {\n',
-        '    } on HttpException catch (error) {\n',
+        _catchesFailures,
+        '    } on SocketException {\n      rethrow;\n$_catchesFailures',
       ),
     ],
   );
+
+  /// The fixture REST that lets a failed TLS handshake through as an error of
+  /// another kind, as a stack does that reports the failures of its sockets
+  /// alone: the code gets the reason `unknown` for a certificate that the
+  /// device does not trust.
+  static const restLeakingTlsFailures = BrokenModule._(
+    FakeRestModule(),
+    ModuleId('broken_rest_leaks_tls_failures'),
+    'REST whose failed TLS handshakes are unknown errors (fixture)',
+    _fixtureRestFile,
+    [
+      (
+        _catchesFailures,
+        '    } on TlsException {\n      rethrow;\n$_catchesFailures',
+      ),
+    ],
+  );
+
+  /// How the fixture REST takes the failures of a connection.
+  static const _catchesFailures = '    } on IOException catch (error) {\n';
 
   /// The fixture REST that says the text of an error in its hint, as is
   /// natural to write: the text of an error of `dart:io` may quote the address

@@ -1,12 +1,15 @@
 // A test that continuous integration runs in the apps with the module that
 // makes requests through the REST role, whichever module provides the role: it
 // loads and adds the notes of a server with one import, gives a body of another
-// shape a reason of the role, and cancels its call when it is disposed of.
+// shape a reason of the role, and cancels each call on its way when it is
+// disposed of. A load cancels no add, and does not take the place of what an add
+// showed while it was on its way.
 //
 // It tests a module, and starts neither the app nor a session. The tokens of the
 // client are those of the test, so that a request waits for no first start of a
 // session, in an app with sign-in and in one without.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -191,5 +194,169 @@ void main() {
       isA<FixtureNotesLoading>(),
       reason: 'A state that was disposed of hears nothing of its call.',
     );
+  });
+
+  group('with a server that holds its answers', () {
+    late Completer<void> releaseLoad;
+    late Completer<void> releaseAdd;
+
+    /// Answers a GET with [notes] and a POST with a new note, each held until
+    /// the test releases it.
+    void hold(List<Map<String, Object>> notes) {
+      releaseLoad = Completer();
+      releaseAdd = Completer();
+      server
+        ..answer('GET', '/notes', (request) async {
+          await releaseLoad.future;
+          request.response.write(jsonEncode(notes));
+          await request.response.close();
+        })
+        ..answer('POST', '/notes', (request) async {
+          await releaseAdd.future;
+          request.response.write('{"id":2,"text":"the second"}');
+          await request.response.close();
+        });
+    }
+
+    List<String> textsOf(FixtureNotesView view) => [
+          if (view is FixtureNotesShown)
+            for (final note in view.notes) note.text,
+        ];
+
+    test('dispose() after an add ends a load that is still on its way',
+        () async {
+      hold([
+        {'id': 1, 'text': 'the first'},
+      ]);
+      releaseAdd.complete();
+      final own = FixtureNotes();
+      final load = own.load();
+      await own.add('the second');
+
+      own.dispose();
+      releaseLoad.complete();
+
+      await expectLater(
+        load,
+        completes,
+        reason: 'A state cancels every call on its way when it is disposed of, '
+            'so no answer reaches it after that.',
+      );
+    });
+
+    test('dispose() ends an add that is on its way', () async {
+      hold(const []);
+      final own = FixtureNotes();
+      final add = own.add('the second');
+
+      own.dispose();
+      releaseAdd.complete();
+
+      await expectLater(
+        add,
+        completes,
+        reason: 'A state cancels every call on its way when it is disposed of, '
+            'so no answer reaches it after that.',
+      );
+    });
+
+    test('a load that answers after an add keeps the note of the add',
+        () async {
+      hold([
+        {'id': 1, 'text': 'the first'},
+      ]);
+      releaseAdd.complete();
+      final load = notes.load();
+      await notes.add('the second');
+      expect(textsOf(notes.value), ['the second']);
+
+      releaseLoad.complete();
+      await load;
+
+      expect(
+        textsOf(notes.value),
+        ['the first', 'the second'],
+        reason: 'The answer of a load that was on its way may know nothing of '
+            'a note that was added since, so it does not take its place.',
+      );
+    });
+
+    test('a load whose answer has the note of the add shows it once', () async {
+      hold([
+        {'id': 2, 'text': 'the second'},
+      ]);
+      releaseAdd.complete();
+      final load = notes.load();
+      await notes.add('the second');
+
+      releaseLoad.complete();
+      await load;
+
+      expect(textsOf(notes.value), ['the second']);
+    });
+
+    test('a load that fails after an add leaves the note of the add', () async {
+      hold(const []);
+      server.answer('GET', '/notes', (request) async {
+        await releaseLoad.future;
+        request.response.statusCode = 500;
+        await request.response.close();
+      });
+      releaseAdd.complete();
+      final load = notes.load();
+      await notes.add('the second');
+
+      releaseLoad.complete();
+      await load;
+
+      expect(
+        textsOf(notes.value),
+        ['the second'],
+        reason: 'What the add showed is newer than the load.',
+      );
+    });
+
+    test('a load does not cancel an add on its way', () async {
+      hold([
+        {'id': 1, 'text': 'the first'},
+      ]);
+      releaseLoad.complete();
+      final add = notes.add('the second');
+      // The POST reaches the server, which may do what it asks.
+      while (server.requests.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      await notes.load();
+      releaseAdd.complete();
+      await add;
+
+      expect(
+        textsOf(notes.value),
+        ['the first', 'the second'],
+        reason: 'A load cancels only the load before it: the server may have '
+            'done what an add asked.',
+      );
+    });
+
+    test('a load in place of a load on its way shows only its own answer',
+        () async {
+      hold([
+        {'id': 1, 'text': 'the first'},
+      ]);
+      final first = notes.load();
+      while (server.requests.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      server.answerJson('GET', '/notes', [
+        {'id': 3, 'text': 'the third'},
+      ]);
+
+      await notes.load();
+      releaseLoad.complete();
+      await first;
+
+      expect(textsOf(notes.value), ['the third']);
+    });
   });
 }

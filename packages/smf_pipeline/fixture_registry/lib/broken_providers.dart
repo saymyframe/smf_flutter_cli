@@ -1808,9 +1808,8 @@ List<BrokenProvider> brokenProviders() => const [
       BrokenProvider(
         BrokenModule.restLeakingErrors,
         role: restRole,
-        bug: 'It reports only a broken connection as a failed one, so a '
-            'failure to connect and a failed TLS handshake reach the code as '
-            'the reason unknown.',
+        bug: 'It lets a failure to connect through as an error of another '
+            'kind, so it reaches the code as the reason unknown.',
         app: _appWithRest,
         failures: [
           MatrixExpectedFailure(
@@ -1819,12 +1818,21 @@ List<BrokenProvider> brokenProviders() => const [
                 'method',
             'A failure to connect is RestConnectionFailed.',
           ),
+          MatrixExpectedFailure(_restProbeTests, _restProbeTest, _restProbe),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restLeakingTlsFailures,
+        role: restRole,
+        bug: 'It lets a failed TLS handshake through as an error of another '
+            'kind, so it reaches the code as the reason unknown.',
+        app: _appWithRest,
+        failures: [
           MatrixExpectedFailure(
             _restFailureTests,
             'a TLS handshake that fails is the reason network',
             'A TLS handshake that fails is RestConnectionFailed',
           ),
-          MatrixExpectedFailure(_restProbeTests, _restProbeTest, _restProbe),
         ],
       ),
       BrokenProvider(

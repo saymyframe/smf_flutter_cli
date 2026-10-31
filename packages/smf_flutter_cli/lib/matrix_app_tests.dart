@@ -1845,7 +1845,7 @@ const _restBaseAddress = 'http://127.0.0.1:9/api/v1';
 ///
 /// The test knows only the role. It gives [RestRole.baseAddressKey] a value in
 /// `.env`, so it names the role. Its probe, `probeRest()` of
-/// `integration_test/rest_role/probe.dart`, sends nothing off the device: a
+/// `integration_test/rest_role/probe.dart`, reaches no machine off the device: a
 /// `GET` and a `POST` reach a server of its own on the device, an exchange that
 /// has to stop closes its connection, a request over `http://` fails as a
 /// connection fails, and an app with an empty `.env`, as an app of CI has,
