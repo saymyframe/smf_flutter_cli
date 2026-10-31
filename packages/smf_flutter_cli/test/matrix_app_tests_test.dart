@@ -433,6 +433,7 @@ void main() {
         themeRole,
         appEntryRole,
         localizationRole,
+        splashRole,
       ]),
     );
     expect(named('screen_views').roles, contains(routerRole));
@@ -444,6 +445,8 @@ void main() {
     expect(named('paywall_step').roles, {routerRole, onboardingScreenRole});
     expect(named('di_role').roles, {diRole});
     expect(named('events_role').roles, {eventsRole});
+    expect(named('splash_role').roles, {splashRole});
+    expect(named('native_splash').roles, isEmpty);
     expect(named('preferences_role').roles, {preferencesRole});
     expect(named('env_role').roles, {envRole});
     expect(named('auth_role').roles, {authRole});
@@ -1071,6 +1074,36 @@ void main() {
         'screen0;',
       ),
     );
+  });
+
+  test(
+      'the test of the splash role applies to the apps with the role, with '
+      'the paths of the roles, and the test of the module to those of the '
+      'module, with its colours', () async {
+    for (final name in const ['splash_role', 'native_splash']) {
+      expect(
+        [
+          for (final app in apps)
+            if (named(name).appliesTo(app)) app.name,
+        ],
+        ['native_splash', ..._everyModule],
+        reason: name,
+      );
+      expect(named(name).devDependencies, ['xml'], reason: name);
+    }
+    final app = apps.firstWhere(named('splash_role').appliesTo);
+    expect(named('splash_role').values!(app), {
+      'light_image': SplashRole.lightImageFile,
+      'dark_image': SplashRole.darkImageFile,
+      'android_manifest': AppEntryRole.androidManifestFile,
+      'info_plist': AppEntryRole.infoPlistFile,
+    });
+    expect(named('native_splash').values!(app), {
+      'light_background': '#F1F1E8',
+      'dark_background': '#0F3326',
+      'info_plist': AppEntryRole.infoPlistFile,
+      'android_manifest': AppEntryRole.androidManifestFile,
+    });
   });
 
   test(

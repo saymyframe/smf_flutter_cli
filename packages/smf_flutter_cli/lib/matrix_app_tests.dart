@@ -14,6 +14,7 @@ import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
+import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
@@ -43,6 +44,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final localNotifications = await appTestsDirectoryOf(
     'smf_local_notifications',
   );
+  final nativeSplash = await appTestsDirectoryOf('smf_native_splash');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final paywall = await appTestsDirectoryOf('smf_paywall');
   final revenueCat = await appTestsDirectoryOf('smf_revenuecat');
@@ -615,15 +617,34 @@ Future<MatrixAppTests> smfAppTests() async {
       // which the app is then in and remembers, or the languages of the
       // device.
       await languageSettingAppTest(),
+      // The splash screen of the apps with the splash role, whichever module
+      // provides it: the step of the provider made it in the native projects
+      // of the app, for each mode of the device, on Android below 12 and
+      // from 12 on and on iOS.
+      await splashRoleAppTest(),
+      // What flutter_native_splash leaves in an app: the colours of the
+      // module, and an Info.plist that it wrote anew and that still has the
+      // keys of the app entry.
+      MatrixAppTest(
+        '$nativeSplash/native_splash',
+        appliesTo: (app) => app.modules.contains(NativeSplashModule.id),
+        devDependencies: const ['xml'],
+        values: (app) => const {
+          'light_background': splashLightBackground,
+          'dark_background': splashDarkBackground,
+          'info_plist': AppEntryRole.infoPlistFile,
+          'android_manifest': AppEntryRole.androidManifestFile,
+        },
+      ),
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
     // role, of the env role, of the auth role, of the notifications role,
     // of the push role, of the purchases role, of the settings screen role,
-    // of the theme role and of the localization role gets the tests of its
-    // role. Each provider of the app entry role gets the test of the theme
-    // role, which checks that its root rebuilds.
+    // of the theme role, of the localization role and of the splash role
+    // gets the tests of its role. Each provider of the app entry role gets
+    // the test of the theme role, which checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -638,9 +659,41 @@ Future<MatrixAppTests> smfAppTests() async {
       themeRole,
       appEntryRole,
       localizationRole,
+      splashRole,
     },
   );
 }
+
+/// The test of the splash role that the CLI keeps in its
+/// `app_tests/splash_role`, for the apps with the role, whichever module
+/// provides it: the two images of the role are in the app, and the step of
+/// the provider made the screen in the native projects. Below Android 12, the
+/// window background of the activity has an image in each mode and at each
+/// version of the system. From Android 12 on, the theme of the activity names
+/// a background and an icon of the splash screen of the system in each mode.
+/// On iOS, the launch storyboard shows an image for the dark mode too, whose
+/// files are larger than the image of one pixel of a new project and in the
+/// ratio of their scales.
+///
+/// The test reads the files of the app as `smf create` left them. It follows
+/// what the system follows and names no tool, so a provider without any
+/// package gets it too. The paths come from the roles. It has no mocks and no
+/// probe for the start check: nothing of the screen shows in Dart, and a
+/// launch from a command hides the icon of the splash screen of Android 12.
+/// The fixtures have no provider of the role: the real module shows the bug
+/// that the test catches (`brokenProviders` of the fixture registry).
+Future<MatrixAppTest> splashRoleAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/splash_role',
+      appliesTo: (app) => app.hook!.presentRoles.contains(splashRole),
+      devDependencies: const ['xml'],
+      values: (app) => const {
+        'light_image': SplashRole.lightImageFile,
+        'dark_image': SplashRole.darkImageFile,
+        'android_manifest': AppEntryRole.androidManifestFile,
+        'info_plist': AppEntryRole.infoPlistFile,
+      },
+      roles: {splashRole},
+    );
 
 /// The test of the events role that the CLI keeps in its
 /// `app_tests/events_role`, for the apps with the role, whichever module
