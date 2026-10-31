@@ -2,7 +2,7 @@
 
 The SMF module of [Google Analytics for Firebase](https://firebase.google.com/docs/analytics) with [firebase_analytics](https://pub.dev/packages/firebase_analytics). It provides the analytics role of SMF: the app records what its users do through its `AnalyticsService`, and, when the app has a router, a screen view for each screen the user sees. The app then turns off the screen views that Firebase Analytics logs itself, which would name the one activity or view controller of Flutter rather than a screen.
 
-An app can have several modules that provide analytics, and the service of the app forwards each call to all of them. Analytics works on the Firebase app, so the module depends on [smf_firebase_core](https://pub.dev/packages/smf_firebase_core), which comes with it and sets up Firebase. A Firebase project that `flutterfire configure` creates has no Google Analytics, so the README of the app lists turning it on among the steps that you do by hand, in its section "Finish the setup".
+An app can have several modules that provide analytics, and the service of the app forwards each call to all of them. Analytics works on the Firebase app, so the module depends on [smf_firebase_core](https://pub.dev/packages/smf_firebase_core), which comes with it and sets up Firebase. A Firebase project that `flutterfire configure` creates has no Google Analytics, so the README of the app lists turning it on among the steps that you do by hand, in its section "Finish the setup". The link to Google Analytics belongs to the project, so repeat this in each Firebase project of your flavors.
 
 ## Use with the SMF CLI
 
