@@ -63,7 +63,7 @@ final class AppIconRole extends Role<NoDsl> {
           id: 'app_icon.step',
           description: 'A provider has a PostGenStep that makes the icon and '
               'that a run without a terminal runs too: one that is neither '
-              'external nor interactive, has no notice and no hosts, and '
+              'external nor interactive, has no notice and '
               'continues no other step.',
           check: imageStepProblems,
         ),

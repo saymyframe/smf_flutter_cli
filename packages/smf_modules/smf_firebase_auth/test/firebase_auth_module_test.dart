@@ -1010,7 +1010,6 @@ void main() {
       // step needs no terminal.
       expect(step.interactive, isFalse);
       expect(step.needs, [firebaseCliWithSignIn.id]);
-      expect(step.hosts, isEmpty);
       expect(step.when, isEmpty);
       expect(step.id, isNull);
     });

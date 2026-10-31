@@ -23,9 +23,8 @@ import 'package:smf_pipeline/src/validation.dart';
 ///   post-generation steps;
 /// - the dependencies of the merged pubspec, and the commands that run
 ///   after generation, quoted for a shell of [operatingSystem], each step
-///   that continues another under it, with the systems of a step that runs
-///   only on some, and with the notice of a step that has one (see
-///   [PostGenStep.notice]), which a run asks the user about;
+///   that continues another under it, with the notice of a step that has
+///   one (see [PostGenStep.notice]), which a run asks the user about;
 /// - the steps that the developer of the app does by hand (see
 ///   [ManualStep]), in order, each with its contributors, below the link to
 ///   their guide if the front end of the pipeline names one (see
@@ -294,28 +293,22 @@ List<String> _contributors(ContributionOrder order) => {
     }.toList();
 
 /// The lines of [bound] under `After generation`: its command, quoted for a
-/// shell of [system], or of a system it runs on if it runs only on others,
-/// with its contributor and the systems it runs on if it runs only on some,
-/// then, a level deeper each, its notice with what a run does about it, if
-/// it has one, and those of the steps that continue it, which run once it
-/// succeeded; [depth] is the level of [bound].
+/// shell of [system], with its contributor, then, a level deeper each, its
+/// notice with what a run does about it, if it has one, and those of the
+/// steps that continue it, which run once it succeeded; [depth] is the level
+/// of [bound].
 Iterable<String> _stepLines(
   BoundStep bound,
   HostOperatingSystem system, {
   int depth = 0,
 }) sync* {
   final BoundStep(:step, :origin) = bound;
-  final shell = step.hosts.isEmpty || step.hosts.contains(system)
-      ? system
-      : step.hosts.first;
   final command = [
     step.tool.executable,
     ...step.tool.argumentsFor(step.arguments),
-  ].map((argument) => shellQuoted(argument, shell)).join(' ');
-  final systems = [for (final host in step.hosts) _systemNames[host]];
-  final where = systems.isEmpty ? '' : ', on ${systems.join(', ')}';
+  ].map((argument) => shellQuoted(argument, system)).join(' ');
   final indent = '  ' * (depth + 1);
-  yield '$indent${depth == 0 ? '' : 'then '}$command ($origin$where)';
+  yield '$indent${depth == 0 ? '' : 'then '}$command ($origin)';
   if (step.notice case final notice?) {
     yield '$indent  $notice';
     yield '$indent  A run asks before it runs this step, and leaves it for '
@@ -325,11 +318,3 @@ Iterable<String> _stepLines(
     yield* _stepLines(next, system, depth: depth + 1);
   }
 }
-
-/// The names of the operating systems in the text of `--explain`.
-const Map<HostOperatingSystem, String> _systemNames = {
-  HostOperatingSystem.macos: 'macOS',
-  HostOperatingSystem.linux: 'Linux',
-  HostOperatingSystem.windows: 'Windows',
-  HostOperatingSystem.other: 'other systems',
-};
