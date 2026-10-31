@@ -3947,9 +3947,10 @@ jobs:
       expect(answers, isNotEmpty);
       expect(answerProblemsOf(answers, asked), isEmpty);
     },
-    // Each tool loads the modules of its matrix first, which takes a while
-    // on the runners of CI.
-    timeout: const Timeout(Duration(minutes: 5)),
+    // Each of the three tools loads the modules of its matrix first, one after
+    // another: about 40 seconds each on a laptop, and more than 5 minutes in
+    // all on a runner of Windows, which runs other test files next to them.
+    timeout: const Timeout(Duration(minutes: 15)),
   );
 
   test(
