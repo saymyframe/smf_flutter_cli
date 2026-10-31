@@ -61,9 +61,14 @@ final class _Prompter implements SmfPrompter {
   }) async =>
       _pick(message, choices, display);
 
+  /// The step of a module that is skippable asks before it runs: this answers
+  /// yes when a question of the script starts the message, and fails on any
+  /// other question.
   @override
-  Future<bool> confirm(String message, {bool defaultValue = false}) =>
-      throw StateError('Unexpected question: $message');
+  Future<bool> confirm(String message, {bool defaultValue = false}) async {
+    if (_answers.keys.any(message.startsWith)) return true;
+    throw StateError('Unexpected question: $message');
+  }
 
   @override
   Future<String> input(String message, {String? defaultValue}) =>
@@ -2287,6 +2292,7 @@ void main() {
       'onboarding',
       'gen_l10n',
       'material_theme',
+      'launcher_icons',
       'firebase_messaging',
       'get_it',
       'bloc',
@@ -2304,6 +2310,7 @@ void main() {
         'Localization': ['gen_l10n'],
         'Theme': ['material_theme'],
         'App icon': ['launcher_icons'],
+        'Making the app icon': [],
         'Push messages': ['firebase_messaging'],
         'Dependency injection': ['get_it'],
         'State management': ['bloc'],
@@ -2339,9 +2346,9 @@ void main() {
       'Dependency injection: which module provides it?',
       equals(
         'State management: sign_in requires the state management role. '
-            'Which module provides it?',
-        'App icon: which module provides it?',
+        'Which module provides it?',
       ),
+      'App icon: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
