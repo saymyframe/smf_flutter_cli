@@ -16,7 +16,7 @@ import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/auth/auth_service.dart';
-import 'package:{{app_name}}/firebase_options.dart';
+import 'package:{{app_name}}/firebase_options_of_flavor.dart';
 
 /// The password of the accounts of the tests.
 const String password = 'Firebase-auth-tests-2468';
@@ -69,9 +69,8 @@ IdTokenCredential credentialOf(
 
 /// Initializes Firebase, as the start-up of the app does before it creates
 /// the service.
-Future<void> initializeFirebase() => Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+Future<void> initializeFirebase() =>
+    Firebase.initializeApp(options: firebaseOptionsOfFlavor);
 
 /// What [call] failed with, or `null` if it completed.
 Future<Object?> errorOf(Future<void> Function() call) async {

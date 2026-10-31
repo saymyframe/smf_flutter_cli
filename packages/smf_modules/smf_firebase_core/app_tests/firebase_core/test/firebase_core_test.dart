@@ -7,7 +7,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/bootstrap.dart';
-import 'package:{{app_name}}/firebase_options.dart';
+import 'package:{{app_name}}/firebase_options_of_flavor.dart';
+import 'package:{{app_name}}/firebase_options_prod.dart' as prod;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +21,25 @@ void main() {
 
     final app = Firebase.app();
     expect(app.name, defaultFirebaseAppName);
-    expect(app.options, DefaultFirebaseOptions.currentPlatform);
+    expect(app.options, firebaseOptionsOfFlavor);
     expect(app.options.projectId, 'smf-test');
+  });
+
+  test(
+      'the options of a flavor that is not configured stop the app with the '
+      'command that configures it', () {
+    expect(
+      () => prod.DefaultFirebaseOptions.currentPlatform,
+      throwsA(
+        isA<UnsupportedError>().having(
+          (error) => error.message,
+          'message',
+          allOf(
+            contains('the flavor prod'),
+            contains('dart tool/configure_firebase.dart prod'),
+          ),
+        ),
+      ),
+    );
   });
 }

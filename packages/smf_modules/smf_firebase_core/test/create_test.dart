@@ -13,18 +13,12 @@ import 'support/fake_machine.dart';
 const _dart = '/sdk/bin/dart';
 const _firebase = '/opt/npm/bin/firebase';
 
-/// The options of `flutterfire configure`, with the ids of the app.
-const _options = '--platforms=android,ios --overwrite-firebase-options '
-    '--ios-bundle-id=com.example.my-app '
-    '--android-package-name=com.example.my_app';
+/// The script that configures the default flavor with flutterfire, as the
+/// steps of the Flutter SDK run it.
+const _configure = '$_dart tool/configure_firebase.dart dev';
 
-/// `flutterfire configure` as the steps of the Flutter SDK run it.
-const _configure =
-    '$_dart pub global run flutterfire_cli:flutterfire configure $_options';
-
-/// `flutterfire configure` as the user types it later.
-const _later =
-    'dart pub global run flutterfire_cli:flutterfire configure $_options';
+/// The script that configures the default flavor, as the user types it later.
+const _later = 'dart tool/configure_firebase.dart dev';
 
 /// The question whether to configure Firebase now.
 const _configureNow = 'Configuring Firebase with flutterfire ($_later), for '
@@ -361,7 +355,9 @@ void main() {
     // for later.
     expect(machine.end, _nothingLeft);
     expect(
-      machine.files.file('/work/my_app/lib/firebase_options.dart').existsSync(),
+      machine.files
+          .file('/work/my_app/lib/firebase_options_dev.dart')
+          .existsSync(),
       isTrue,
     );
   });
@@ -441,11 +437,7 @@ void main() {
     expect(machine.end, _leftForLater('you chose to run it later'));
     expect(
       machine.files.file('/work/my_app/README.md').readAsStringSync(),
-      contains(
-        'flutterfire configure --platforms=android,ios '
-        '--overwrite-firebase-options --ios-bundle-id=com.example.my-app '
-        '--android-package-name=com.example.my_app\n',
-      ),
+      contains('dart tool/configure_firebase.dart staging --project=<id>\n'),
     );
   });
 

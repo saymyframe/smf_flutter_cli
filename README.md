@@ -88,7 +88,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`shared_preferences`](https://doc.saymyframe.com/modules/shared-preferences) | The settings of the app that are no secret, such as the theme mode, remembered between its launches with shared_preferences. |
 | [`dart_define`](https://doc.saymyframe.com/modules/dart-define) | The values that you fill in after generation, such as the public key of a service, in `.env`, which the app reads with `--dart-define-from-file`. |
 | [`local_notifications`](https://doc.saymyframe.com/modules/local-notifications) | Notifications with flutter_local_notifications: a notification now or at about a time to come, the permission to show them, and the taps on them. |
-| [`firebase_core`](https://doc.saymyframe.com/modules/firebase-core) | Firebase, set up with `flutterfire configure` after generation. |
+| [`firebase_core`](https://doc.saymyframe.com/modules/firebase-core) | Firebase for each flavor, set up with the script `tool/configure_firebase.dart` of the app after generation. |
 | [`firebase_crashlytics`](https://doc.saymyframe.com/modules/firebase-crashlytics) | Crash reporting with Firebase Crashlytics. |
 | [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |
 | [`firebase_messaging`](https://doc.saymyframe.com/modules/firebase-messaging) | Push messages with Firebase Cloud Messaging: the address of the device for a backend, the messages that arrive and the taps on them. |

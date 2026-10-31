@@ -18,7 +18,7 @@ The module adds firebase_auth to the `pubspec.yaml` of the app, and `lib/core/au
 
 ```dart
 Future<void> bootstrap() async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(options: firebaseOptionsOfFlavor);
   await initAuth();
 }
 ```

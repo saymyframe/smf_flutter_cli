@@ -16,7 +16,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/analytics/firebase_analytics_service.dart';
-import 'package:{{app_name}}/firebase_options.dart';
+import 'package:{{app_name}}/firebase_options_of_flavor.dart';
 
 import 'firebase_analytics_mocks.dart';
 
@@ -24,9 +24,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    await Firebase.initializeApp(options: firebaseOptionsOfFlavor);
   });
 
   setUp(analyticsCalls.clear);

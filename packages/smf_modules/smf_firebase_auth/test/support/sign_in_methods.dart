@@ -14,8 +14,8 @@ String signInMethodsOf(String project) =>
     'https://console.firebase.google.com/project/$project/authentication/'
     'providers';
 
-/// The API keys in [options], the text of `lib/firebase_options.dart` of an
-/// app: that of each platform that flutterfire configured, and none in the
+/// The API keys in [options], the text of the options of a flavor of an app:
+/// that of each platform that flutterfire configured, and none in the
 /// placeholder of an app that it has not configured yet.
 List<String> apiKeysOf(String options) => [
       for (final key in RegExp("apiKey: '([^']+)'").allMatches(options))
