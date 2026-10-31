@@ -2187,7 +2187,8 @@ void main() {
 
     test(
         'adds the URL scheme to the URL types that the Info.plist has, also '
-        'to none and in a file with the line breaks of Windows, and stops '
+        'to none, in a file indented one level further and in one with the '
+        'line breaks of Windows, and stops '
         'with what to add by hand at one in another form', () async {
       useAppWith('google');
       serveFiles();
@@ -2205,6 +2206,15 @@ void main() {
         _scheme,
         'com.googleusercontent.apps.1234567890-of-another-client',
       );
+
+      final indented = plist
+          .split('\n')
+          .map(
+            (line) => line.isEmpty || line.startsWith(RegExp('<[?!]|</?plist'))
+                ? line
+                : '\t$line',
+          )
+          .join('\n');
 
       final added = <String, String>{};
       for (final (name, before, after) in [
@@ -2249,6 +2259,16 @@ void main() {
           ),
         ),
         (
+          // A tool may write the whole file anew, one level further in.
+          'every line of the dictionary one level further in',
+          indented,
+          indented.replaceFirst(
+            '\t</dict>\n</plist>',
+            '\t\t<key>CFBundleURLTypes</key>\n\t\t<array>\n'
+                '${_urlType('\t\t\t')}\t\t</array>\n\t</dict>\n</plist>',
+          ),
+        ),
+        (
           'line breaks of Windows',
           plist.replaceAll('\n', '\r\n'),
           plist
@@ -2275,6 +2295,14 @@ void main() {
       expect(_urlSchemesOf(added['no URL type']!), [
         [_scheme],
       ]);
+      expect(
+        _urlSchemesOf(
+          added['every line of the dictionary one level further in']!,
+        ),
+        [
+          [_scheme],
+        ],
+      );
       expect(_urlSchemesOf(added['a scheme of Google of another client']!), [
         ['com.googleusercontent.apps.1234567890-of-another-client'],
         [_scheme],

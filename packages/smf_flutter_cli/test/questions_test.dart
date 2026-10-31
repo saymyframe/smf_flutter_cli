@@ -62,8 +62,16 @@ final class _Prompter implements SmfPrompter {
       _pick(message, choices, display);
 
   @override
-  Future<bool> confirm(String message, {bool defaultValue = false}) =>
-      throw StateError('Unexpected question: $message');
+  Future<bool> confirm(String message, {bool defaultValue = false}) async {
+    asked.add((message: message, shown: const []));
+    final answer = _answers.entries
+        .firstWhere(
+          (entry) => message.startsWith(entry.key),
+          orElse: () => throw StateError('Unexpected question: $message'),
+        )
+        .value;
+    return answer.single == 'yes';
+  }
 
   @override
   Future<String> input(String message, {String? defaultValue}) =>
@@ -218,6 +226,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['bloc'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -246,6 +255,7 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
+      'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
@@ -328,6 +338,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['riverpod'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -356,6 +367,7 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
+      'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
@@ -409,6 +421,7 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -505,6 +518,7 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -562,6 +576,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -590,6 +605,7 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
+      'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
@@ -633,6 +649,7 @@ void main() {
       'Router': ['go_router'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -662,6 +679,7 @@ void main() {
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
+      'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
@@ -697,6 +715,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -835,6 +854,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -907,6 +927,7 @@ void main() {
       'Router': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
@@ -979,6 +1000,7 @@ void main() {
       'Router': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -1061,6 +1083,77 @@ void main() {
   });
 
   test(
+      'a run in a terminal offers native_splash as the splash screen, and asks '
+      'before it runs the tool, whose command it keeps for later on a no',
+      () async {
+    final answers = {
+      'Features': <String>[],
+      'Infrastructure': <String>[],
+      'Layout': ['None'],
+      'Onboarding screen': ['None'],
+      'Settings screen': ['None'],
+      'Router': ['None'],
+      'State management': ['None'],
+      'Theme': ['None'],
+      'Splash screen': ['native_splash'],
+      'Localization': ['None'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
+      'Preferences': ['None'],
+      'Crash reporting': <String>[],
+      'Analytics': <String>[],
+      'Authentication': ['None'],
+      'CI': ['None'],
+    };
+    const step = 'Making the splash screen from assets/branding';
+    final declined = await _create({
+      ...answers,
+      step: ['no'],
+    });
+
+    expect(declined.code, 0, reason: declined.lines.join('\n'));
+    final question = declined.asked.singleWhere(
+      (question) => question.message.startsWith('Splash screen'),
+    );
+    expect(question.message, 'Splash screen: which module provides it?');
+    expect(question.shown, [
+      equals(
+        'native_splash — A splash screen for the light and the dark mode, '
+        'with flutter_native_splash',
+      ),
+      'None',
+    ]);
+    final app = declined.files.directory('/work/my_app');
+    expect(app.childFile(SplashRole.lightImageFile).existsSync(), isTrue);
+    expect(app.childFile(SplashRole.darkImageFile).existsSync(), isTrue);
+    expect(
+      declined.asked.last.message,
+      '$step (dart run flutter_native_splash:create), for native_splash. '
+      'Run it now?',
+    );
+    expect(
+      declined.infos.join('\n'),
+      contains('dart run flutter_native_splash:create'),
+      reason: 'A step that the user declined is left for later.',
+    );
+    expect(declined.warnings, isEmpty);
+
+    final ran = await _create({
+      ...answers,
+      step: ['yes'],
+    });
+    expect(ran.code, 0, reason: ran.lines.join('\n'));
+    expect(
+      ran.infos.join('\n'),
+      isNot(contains('dart run flutter_native_splash:create')),
+    );
+  });
+
+  test(
       'a run in a terminal asks which module provides the theme after the '
       'localization, and offers material_theme, which brings the '
       'preferences that remember the theme mode without a question, and '
@@ -1073,6 +1166,7 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['material_theme'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -1165,6 +1259,7 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -1283,6 +1378,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1359,6 +1455,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
@@ -1479,6 +1576,7 @@ void main() {
         'Settings screen': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1608,6 +1706,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1705,6 +1804,7 @@ void main() {
       'Onboarding screen': ['onboarding'],
       'Localization': ['None'],
       'Theme': ['None'],
+      'Splash screen': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
@@ -1799,6 +1899,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
@@ -1859,6 +1960,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -2048,6 +2150,7 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -2170,6 +2273,7 @@ void main() {
         'Onboarding screen': ['None'],
         'State management': ['riverpod'],
         'Theme': ['None'],
+        'Splash screen': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -2291,6 +2395,7 @@ void main() {
       'onboarding',
       'gen_l10n',
       'material_theme',
+      'native_splash',
       'firebase_messaging',
       'get_it',
       'bloc',
@@ -2308,6 +2413,8 @@ void main() {
         'Onboarding screen': ['onboarding'],
         'Localization': ['gen_l10n'],
         'Theme': ['material_theme'],
+        'Splash screen': ['native_splash'],
+        'Making the splash screen': ['yes'],
         'Push messages': ['firebase_messaging'],
         'Dependency injection': ['get_it'],
         'State management': ['bloc'],
@@ -2329,10 +2436,11 @@ void main() {
     // role requires, which come after the two screens that the
     // notifications role adds to; what is under the hood, the preferences
     // that the localization, the theme, the onboarding and the
-    // notifications require, the DI container, the state manager and the
-    // events; then the services of crash reporting, analytics and
-    // authentication; and last CI. The choices of the roles come once the
-    // modules are known.
+    // notifications require, the DI container and the state manager; the
+    // splash screen; the events; then the services of crash reporting,
+    // analytics and authentication; and last CI. The choices of the roles come
+    // once the modules are known, and the question about a step that the user
+    // may leave for later once the app is rendered.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
       'Infrastructure: which do you want?',
@@ -2346,11 +2454,16 @@ void main() {
         'State management: sign_in requires the state management role. '
         'Which module provides it?',
       ),
+      'Splash screen: which module provides it?',
       'Events: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'CI: which module provides it?',
       'Who may use the app without an account?',
+      equals(
+        'Making the splash screen from assets/branding (dart run '
+        'flutter_native_splash:create), for native_splash. Run it now?',
+      ),
     ]);
     // The answers before the questions of the settings screen, the router,
     // the notifications, the preferences, the purchases, the values of .env
