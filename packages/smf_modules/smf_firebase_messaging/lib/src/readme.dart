@@ -24,8 +24,8 @@ const iconResource = '@drawable/${NotificationsRole.androidIcon}';
 /// Apple Push Notification service that Firebase needs for iOS, how to
 /// upload it, what repeats for the iOS app of each flavor and that the
 /// section of the steps by hand lists the upload, how to send a test message,
-/// what the module set up for Android, why the service sets the presentation options of iOS, and how
-/// the app would handle a message in the background.
+/// what the module set up for Android, why the service sets the presentation
+/// options of iOS, and how the app would handle a message in the background.
 const String readmeSection = '''
 The app receives its push messages with [firebase_messaging](https://pub.dev/packages/firebase_messaging): `$serviceFile` implements the push service of the app on it (see the section ${PushRole.readmeHeading}). The address of this device is its registration token of Firebase Cloud Messaging.
 
