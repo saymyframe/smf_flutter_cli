@@ -74,6 +74,12 @@ Future<int> _cloneTo(
       'user.email=ci@saymyframe.invalid',
       '-c',
       'commit.gpgSign=false',
+      // Maintenance that a commit starts in the background may remove the
+      // loose objects of the repository while the clone copies them.
+      '-c',
+      'maintenance.auto=false',
+      '-c',
+      'gc.auto=0',
       ...inApp,
       'commit',
       '-q',

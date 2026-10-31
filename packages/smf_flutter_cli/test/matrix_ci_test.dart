@@ -236,6 +236,24 @@ void main() {
         expect(Directory(clone).existsSync(), isFalse);
       });
 
+      test(
+          'leaves the objects of a large app where the clone finds them: the '
+          'commit starts no maintenance of git in the background', () async {
+        for (var index = 0; index < 400; index++) {
+          write('lib/part_$index.dart', '// Part $index.\n');
+        }
+
+        // Git 2.54 packs loose objects a moment after a commit with more than
+        // 100 of them, in a process of its own. It then removes them while the
+        // clone copies them, and adds files while the temporary directory is
+        // removed. The repository is next to the clone.
+        final (code, output) = await runCiCommands(app, [
+          'sleep 2 && ! ls ../repository/objects/pack/*.pack',
+        ]);
+
+        expect(code, 0, reason: output);
+      });
+
       test('a command can do what a later command of the clone reads',
           () async {
         final (code, output) = await runCiCommands(app, [
