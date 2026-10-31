@@ -1102,8 +1102,10 @@ void main() {
     );
     expect(question.message, 'Splash screen: which module provides it?');
     expect(question.shown, [
-      'native_splash — A splash screen for the light and the dark mode, with '
-          'flutter_native_splash',
+      equals(
+        'native_splash — A splash screen for the light and the dark mode, '
+        'with flutter_native_splash',
+      ),
       'None',
     ]);
     final app = declined.files.directory('/work/my_app');
@@ -2425,8 +2427,10 @@ void main() {
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'Who may use the app without an account?',
-      'Making the splash screen from assets/branding (dart run '
-          'flutter_native_splash:create), for native_splash. Run it now?',
+      equals(
+        'Making the splash screen from assets/branding (dart run '
+        'flutter_native_splash:create), for native_splash. Run it now?',
+      ),
     ]);
     // The answers before the questions of the settings screen, the router,
     // the notifications, the preferences, the purchases, the values of .env

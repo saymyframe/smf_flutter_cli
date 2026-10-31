@@ -2173,7 +2173,7 @@ void main() {
           indented.replaceFirst(
             '\t</dict>\n</plist>',
             '\t\t<key>CFBundleURLTypes</key>\n\t\t<array>\n'
-            '${_urlType('\t\t\t')}\t\t</array>\n\t</dict>\n</plist>',
+                '${_urlType('\t\t\t')}\t\t</array>\n\t</dict>\n</plist>',
           ),
         ),
         (
