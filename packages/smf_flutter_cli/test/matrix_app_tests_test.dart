@@ -14,6 +14,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_pipeline/testing.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
@@ -5237,6 +5238,57 @@ void main() {
           reason: '$count',
         );
       }
+    });
+  });
+
+  group('the tests of the app icon', () {
+    /// An app of the module [module] with [roles], whichever module provides
+    /// them.
+    MatrixApp appWith(ModuleId module, Set<Role> roles) => MatrixApp(
+          'icon',
+          [module],
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    test(
+        'the test of the role applies to the apps with the role, whichever '
+        'module provides it, and reads the paths of the roles', () {
+      final test = named('app_icon_role');
+
+      expect(
+        test.appliesTo(appWith(const ModuleId('other'), {appIconRole})),
+        isTrue,
+      );
+      expect(test.appliesTo(appWith(const ModuleId('other'), {})), isFalse);
+      expect(test.values!(apps.first), {
+        'image_file': AppIconRole.imageFile,
+        'foreground_file': AppIconRole.foregroundFile,
+        'android_manifest_file': AppEntryRole.androidManifestFile,
+        'xcode_project_file': AppEntryRole.xcodeProjectFile,
+      });
+      expect(test.devDependencies, ['xml']);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+    });
+
+    test('the test of launcher_icons applies to the apps with the module', () {
+      final test = named('launcher_icons');
+
+      expect(
+        test.appliesTo(appWith(LauncherIconsModule.id, const {appIconRole})),
+        isTrue,
+      );
+      expect(
+        test.appliesTo(appWith(const ModuleId('other'), {appIconRole})),
+        isFalse,
+      );
+      expect(test.values!(apps.first), {
+        'xcode_project_file': AppEntryRole.xcodeProjectFile,
+      });
     });
   });
 

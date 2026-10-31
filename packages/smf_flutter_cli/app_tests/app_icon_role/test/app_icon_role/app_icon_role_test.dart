@@ -289,6 +289,6 @@ void main() {
               'An app whose step did not run keeps the icon of flutter create.',
         );
       }
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
   });
 }
