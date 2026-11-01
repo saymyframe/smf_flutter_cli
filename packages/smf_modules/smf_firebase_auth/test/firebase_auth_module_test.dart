@@ -2839,8 +2839,10 @@ void main() {
               '`CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors '
               'share that file, so it lists a scheme for each iOS app that '
               'the script ran for'),
-          contains('\n\nAfter you configure a flavor for another project, run '
-              'the script for that project too.\n'),
+          contains('\n\nAfter you configure a flavor, run the script again '
+              'for its project, even when another flavor already uses that '
+              'project: an earlier run could not set up an app that '
+              '`firebase.json` did not name yet.\n'),
           isNot(contains('flutterfire')),
           contains('under Test and release > App integrity in the Play '
               'Console.'),

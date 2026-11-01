@@ -166,7 +166,9 @@ Each flavor is in two places, so change both when you rename, add or remove one:
 - Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
 - iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
 
-In Xcode, select the scheme of a flavor, not `Runner`, which builds the id and the name of `prod`. A scheme sets only the id and the name. `appFlavor` comes from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote, so run `flutter build ios --config-only --flavor <flavor>` before you run the scheme from Xcode.
+In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
+
+On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
 
 ## Texts
 

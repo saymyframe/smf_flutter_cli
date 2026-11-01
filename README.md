@@ -37,7 +37,7 @@ smf --version
 
 ## Create an app
 
-In a terminal, `smf create` asks for what the command line does not give: the name of the app, its organization and its modules:
+In a terminal, `smf create` asks for what the command line does not give: the name of the app, its organization and its modules. Enter keeps the start screen `home`, which is selected already, and takes the first module of a role that takes one:
 
 ```bash
 smf create
@@ -67,6 +67,8 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 
 `smf create` exits with 0 on success, 1 when generation failed, 64 for a wrong command line, 70 for an unexpected error and 130 when you cancel it. The [reference of `smf create`](https://doc.saymyframe.com/guides/smf-create) has the details.
 
+Every app has the native flavors `dev`, `staging` and `prod`, which install next to each other on a device. `flutter run` builds `dev`, and a build for a store names its flavor, as in `flutter build appbundle --flavor prod`. See [Flavors](https://doc.saymyframe.com/guides/flavors).
+
 ## Modules
 
 <!-- profile-sync:modules:start -->
@@ -80,6 +82,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | [`settings`](https://doc.saymyframe.com/modules/settings) | A settings screen with the settings of the modules of the app in one group, a row for each. |
 | [`onboarding`](https://doc.saymyframe.com/modules/onboarding) | An onboarding that a new user goes through on the first launch, before every other screen. Other modules can add steps to it, such as a page that asks for the permission to show notifications. |
 | [`material_theme`](https://doc.saymyframe.com/modules/material-theme) | A light and a dark Material 3 theme with a palette and a bundled font, and the theme mode that the user selects, which the app remembers. |
+| [`launcher_icons`](https://doc.saymyframe.com/modules/launcher-icons) | The app icon on iOS and Android, an adaptive icon with a themed variant on Android, made with flutter_launcher_icons from two images in the app that you replace. |
 | [`native_splash`](https://doc.saymyframe.com/modules/native-splash) | A splash screen for the light and the dark mode, made with flutter_native_splash from two images in the app that you replace. |
 | [`bloc`](https://doc.saymyframe.com/modules/bloc) | State management with flutter_bloc. |
 | [`riverpod`](https://doc.saymyframe.com/modules/riverpod) | State management with flutter_riverpod. |

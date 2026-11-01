@@ -160,7 +160,9 @@ Each flavor is in two places, so change both when you rename, add or remove one:
 - Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
 - iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
 
-In Xcode, select the scheme of a flavor, not `Runner`, which builds the id and the name of `prod`. A scheme sets only the id and the name. `appFlavor` comes from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote, so run `flutter build ios --config-only --flavor <flavor>` before you run the scheme from Xcode.
+In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
+
+On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
 
 ## Firebase
 
@@ -214,7 +216,7 @@ The script sets up the rest of what Google needs only for the apps that `firebas
 - It downloads the Firebase files of those apps again, once they have the clients of Google, and writes them to the paths that `firebase.json` names.
 - It writes the URL scheme of each of those iOS apps, `REVERSED_CLIENT_ID` of its `GoogleService-Info.plist`, into `CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors share that file, so it lists a scheme for each iOS app that the script ran for, in the build of every flavor. It adds a scheme and removes none: after a flavor moves to another project, remove the scheme of the former project there by hand.
 
-After you configure a flavor for another project, run the script for that project too.
+After you configure a flavor, run the script again for its project, even when another flavor already uses that project: an earlier run could not set up an app that `firebase.json` did not name yet.
 
 A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, for the Android app of each flavor that such a key signs, with the id of that app and of its project from `firebase.json`:
 
