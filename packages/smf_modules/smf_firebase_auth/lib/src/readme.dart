@@ -114,7 +114,7 @@ The script sets up the rest of what Google needs only for the apps that `firebas
 
 ${[for (final step in steps) '- $step'].join('\n')}
 
-After you configure a flavor for another project, run the script for that project too.
+After you configure a flavor, run the script again for its project, even when another flavor already uses that project: an earlier run could not set up an app that `firebase.json` did not name yet.
 ''';
   const release = '''
 
