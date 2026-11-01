@@ -57,6 +57,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
 
 After a change, run:
 
@@ -73,6 +74,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
 - The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
 
 ## Authentication
 
@@ -84,6 +86,8 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - On a tap, the state of the screen awaits `credential()` of the way to sign in and gives the credential to `appSession.signInWith`. `credential()` returns `null` when the user closed the sheet of the identity provider, which is no failure: the screen goes back to how it was. Call `credential()` from the state of a screen, never within a call of `appSession`.
 - `appSession.signInWith` gives an anonymous user the identity with the same id, or signs in to the account that has the identity already, and `takeGuestData()` moves what the anonymous user had. `appSession.deleteAccount()` asks a way to sign in with `revokesOnDeletion` for a credential again itself, and deletes nothing when the user closes its sheet.
 - `AccountSession.issuers` lists the identity providers of an account, each the `issuer` of a `SignInMethod`.
+- `appSession.userToken()` gives the token with which a server of the app tells who the user is, and `null` when nobody is signed in. An anonymous user has one too. The provider keeps and renews it, so read it for each request and keep it nowhere. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead: reads at the same time share one refresh, and `null` means that nobody is signed in any more.
+- A read of the token waits for the start of the session and for an anonymous sign-in on its way, at most 3 seconds in all, and for no other call. So a request made before `initAuth()` is over, as in `bootstrap()`, may find no token. A read fails only with an `AuthFailure`: `network` leaves the user signed in, and after `recentSignInRequired` the session of the user has ended on the server and the user is signed out.
 - A new provider implements `AuthService` of `lib/core/auth/auth_service.dart`, and only the file of that implementation imports it. The code of the app imports `lib/core/auth/app_session.dart`, which exports `AuthFailure`, `AuthFailureReason`, `SignInCredential` and `IdTokenCredential`, and calls neither `initAuth()` nor `createAuthService()` nor `appSession.start()`.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
@@ -93,6 +97,35 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 A new Flutter project.
 
 Generated with [Say My Frame](https://doc.saymyframe.com).
+
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.fixture_app.dev` | `com.example.fixture-app.dev` |
+| `staging` | `com.example.fixture_app.staging` | `com.example.fixture-app.staging` |
+| `prod` | `com.example.fixture_app` | `com.example.fixture-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so you repeat a step of its setup for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`, which builds the id and the name of `prod`. A scheme sets only the id and the name. `appFlavor` comes from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote, so run `flutter build ios --config-only --flavor <flavor>` before you run the scheme from Xcode.
 
 ## Sign-in
 
@@ -105,6 +138,8 @@ The sign-in mode of the app says who may use it without an account. This app was
 The mode keeps nobody from a screen on its own. A guard of the routes does. One that reads `appSession.allowsApp` stands before the whole app. One that reads `appSession.hasAccount` stands only before the routes that it lists, the screens that need an account. A module with the screens of sign-in declares such guards. If the app was generated without such a module, every screen is open in every mode, `required` too, until you write a guard of your own that reads `appSession.allowsApp`. A screen that a module made for users with an account is open then too. A warning named each such route when the app was generated, and a guard of your own for them reads `appSession.hasAccount`.
 
 To change the mode, change the value of `authMode`. The provider of sign-in has to allow what the new mode needs, such as anonymous users for the mode `anonymous`. Where the provider has a section in this README, that section tells how.
+
+A server of the app tells who the user is by a token. `appSession.userToken()` gives the token of the user, and `null` when nobody is signed in. An anonymous user has one too. The provider of sign-in keeps it and renews it, so read it for each request rather than keep it. When a server refuses a token, `appSession.userTokenAfter(rejected)` gives the one to use instead. The server has to check the token itself: where the provider has a section in this README, that section tells how.
 
 When an anonymous user signs in to an account that exists already, the user of the app changes, and what the app keeps under the id of the anonymous user would be left behind. `takeGuestData()` in `lib/core/auth/guest_data.dart` says what moves to the account. As generated it moves nothing.
 
@@ -137,6 +172,24 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "Fixture App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "Fixture App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "Fixture App"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -161,7 +214,7 @@ dependencies {
 === android/app/src/main/AndroidManifest.xml (flutter_core) ===
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="Fixture App"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -235,6 +288,15 @@ include(":app")
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 === ios/Runner/AppDelegate.swift (flutter_core) ===
 import Flutter
 import UIKit
@@ -262,7 +324,7 @@ import UIKit
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Fixture App</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -824,6 +886,15 @@ final class AppSessionController extends ChangeNotifier
   /// that the app starts no second one next to it.
   final Map<AuthService, Future<void>> _anonymousSignIns = Map.identity();
 
+  /// What the reads of the token wait for that were made before the first
+  /// start. Each read has one of its own, which completes in the zone of that
+  /// read, so a read in a zone that runs nothing any more holds nothing up.
+  final List<Completer<void>> _tokensUntilStarted = [];
+
+  /// The refreshes of the token that are on their way, each by the id of its
+  /// user, so that the next user does not get the token of the user before.
+  final Map<String?, Future<String?>> _tokenRefreshes = {};
+
   /// Tells when the user comes back to the app, in the mode
   /// [AuthMode.anonymous].
   _ResumeObserver? _observer;
@@ -907,6 +978,10 @@ final class AppSessionController extends ChangeNotifier
     if (!_started) {
       _started = true;
       _untilStarted?.complete();
+      for (final read in _tokensUntilStarted) {
+        read.complete();
+      }
+      _tokensUntilStarted.clear();
     }
     if (first) await earlier;
   }
@@ -993,6 +1068,42 @@ final class AppSessionController extends ChangeNotifier
     if (fresh != null) await service.deleteAccount(fresh: fresh);
   }, waitsForAnonymousUser: true);
 
+  /// The token of the user for a server of the app, or `null` when nobody is
+  /// signed in.
+  ///
+  /// It waits for the first start and for an anonymous sign-in on its way,
+  /// together at most [anonymousWait], and for no other call: the sheet of a
+  /// way to sign in may be open for minutes, and a request does not wait for
+  /// it. So a read made before `initAuth()` is not over, as in `bootstrap()`,
+  /// answers `null` once that wait is over, if there is no service by then.
+  ///
+  /// It is not one of the calls that run one after another, and tells the
+  /// listeners of the session nothing, also when the provider tells of the
+  /// same user again, unless the provider found that the session of the user
+  /// has ended on the server: the session then has nobody when the call fails,
+  /// with [AuthFailureReason.recentSignInRequired].
+  Future<String?> userToken() => _token((service) => service.userToken());
+
+  /// A token to use in place of [rejected], which a server refused, or `null`
+  /// when nobody is signed in.
+  ///
+  /// Reads at the same time share one refresh. A read that starts after that
+  /// refresh, with the same [rejected], takes its token and needs no other. A
+  /// read that was on its way during the refresh may still answer [rejected],
+  /// which costs one more refresh. It waits and fails as [userToken] does.
+  Future<String?> userTokenAfter(String rejected) async {
+    final current = await userToken();
+    if (current != rejected) return current;
+    final uid = _session.uid;
+    return _tokenRefreshes[uid] ??=
+        _token((service) => service.userToken(forceRefresh: true)).whenComplete(
+          () {
+            // Not as an arrow: the refresh would then wait for itself.
+            _tokenRefreshes.remove(uid);
+          },
+        );
+  }
+
   /// Stops following the service and the lifecycle of the app. A call that
   /// is on its way still ends as it would have, but tells no listener, and
   /// no anonymous sign-in follows it.
@@ -1022,6 +1133,43 @@ final class AppSessionController extends ChangeNotifier
           .firstOrNull,
     _ => null,
   };
+
+  /// Reads the token of the user with [read], once the wait of [userToken]
+  /// is over, and `null` when the app has no service by then.
+  ///
+  /// When it fails, the session takes the user that the service has left. A
+  /// call that takes its turn follows, so that in the mode
+  /// [AuthMode.anonymous] the app signs in anonymously again, but not next to
+  /// a sign-in that is on its way.
+  Future<String?> _token(
+    Future<String?> Function(AuthService service) read,
+  ) async {
+    if (!_started || _anonymousSignIns.containsKey(_service)) {
+      await _untilTokenCanBeRead().timeout(anonymousWait, onTimeout: () {});
+    }
+    final service = _service;
+    if (service == null) return null;
+    try {
+      return await read(service);
+    } on Object catch (error, stackTrace) {
+      _sync();
+      _retry();
+      if (error is AuthFailure) rethrow;
+      Error.throwWithStackTrace(
+        AuthFailure(AuthFailureReason.unknown, developerHint: '$error'),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> _untilTokenCanBeRead() async {
+    if (!_started) {
+      final started = Completer<void>();
+      _tokensUntilStarted.add(started);
+      await started.future;
+    }
+    await _anonymousSignIns[_service];
+  }
 
   /// The user came back to the app. In the mode [AuthMode.anonymous], an
   /// app without a user then signs in anonymously again: as what follows
@@ -1416,7 +1564,9 @@ final class AuthFailure implements Exception {
 ///   who is signed in. Made when nobody is signed in, or when the session of
 ///   that user has ended on the server, such a call fails with
 ///   [AuthFailureReason.recentSignInRequired], and in the second case it
-///   signs the user out on the device first.
+///   signs the user out on the device first. [userToken] reads, so it answers
+///   `null` when nobody is signed in, and does the same as those calls when
+///   the session of the user has ended on the server.
 /// - A [SignInCredential] whose identity provider the provider does not
 ///   take fails with [AuthFailureReason.notConfigured], with the issuer in
 ///   the [AuthFailure.developerHint].
@@ -1534,6 +1684,30 @@ abstract interface class AuthService {
   /// that fails, such as one that the backend is not set up for, with
   /// [AuthFailureReason.notConfigured]. Either way nothing is deleted.
   Future<void> deleteAccount({SignInCredential? fresh});
+
+  /// The token with which a server of the app tells who the user is, or
+  /// `null` when nobody is signed in. An anonymous user has one too.
+  ///
+  /// It comes from the device when it can, and the service refreshes one that
+  /// is about to expire on its own, so most reads make no request. With
+  /// [forceRefresh] it asks the server of the provider for a new token, which
+  /// differs from the one before and which the reads after it give. A token
+  /// that the server issued in the same second may come back the same.
+  ///
+  /// A read changes no user, and leaves whoever is signed in, but in the case
+  /// below. [userChanges] may tell of the same user again after it, as after
+  /// any change of the token, which the session ignores.
+  ///
+  /// It fails with [AuthFailureReason.network] when it needs the server and
+  /// does not reach it, and with [AuthFailureReason.tooManyAttempts] when the
+  /// server refuses for now. It fails with
+  /// [AuthFailureReason.recentSignInRequired] for a user whose session has
+  /// ended on the server, or may fail with [AuthFailureReason.userDisabled]
+  /// for one whom the server disabled: the service signs that user out on the
+  /// device first, while that user is still signed in. Anything else is
+  /// [AuthFailureReason.unknown], with what the provider answered as its
+  /// [AuthFailure.developerHint]. No hint of a failure has the token.
+  Future<String?> userToken({bool forceRefresh = false});
 }
 === lib/core/auth/guest_data.dart (role:auth) ===
 /// Gives the account [accountUid] what a guest had: the function that
@@ -1668,6 +1842,11 @@ typedef _Identity = ({String issuer, String subject, String? email});
 /// checks a nonce takes a token with it once, and so does the fixture.
 final Set<String> _spentNonces = {};
 
+/// How many tokens the server gave each user, by the id of the user, once
+/// the user has read one: a start of the app keeps a token, and a refresh
+/// gives the next one.
+final Map<String, int> _tokens = {};
+
 /// The user who is signed in on this device, or `null`. It stands for the
 /// storage of a device, which a start of the app reads.
 AuthUser? _onDevice;
@@ -1716,7 +1895,9 @@ Future<AuthService> openFixtureAuth() async {
 /// [AuthFailureReason.accountExistsWithOtherMethod]. A refused link takes
 /// the token too, and keeps the identity for the credential object, which
 /// [signInWith] of the identical object then signs in with. It has no
-/// tokens of an identity provider to revoke when it deletes an account.
+/// tokens of an identity provider to revoke when it deletes an account. The
+/// token that it gives a server is no JSON Web Token: it names the user and
+/// how many tokens that user got.
 final class FixtureAuth implements AuthService {
   FixtureAuth._();
 
@@ -2002,6 +2183,19 @@ final class FixtureAuth implements AuthService {
     _identities.removeWhere((identity, uid) => uid == user.uid);
     _set(null);
   }
+
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async {
+    await _answer();
+    final user = _user;
+    if (user == null) return null;
+    final uid = user.uid;
+    final turn = _tokens[uid] ?? 1;
+    _tokens[uid] = forceRefresh ? turn + 1 : turn;
+    // As a provider that tells of each change of the token, of the same user.
+    if (forceRefresh) _changes.add(user);
+    return 'fixture-token-$uid-${_tokens[uid]}';
+  }
 }
 === lib/main.dart (flutter_core) ===
 import 'package:flutter/widgets.dart';
@@ -2034,6 +2228,7 @@ dev_dependencies:
   flutter_lints: "^6.0.0"
 
 flutter:
+  default-flavor: "dev"
   uses-material-design: true
 === test/core/app/fallback_start_screen_test.dart (flutter_core) ===
 import 'package:flutter/material.dart';

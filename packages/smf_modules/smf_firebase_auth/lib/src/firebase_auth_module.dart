@@ -17,8 +17,9 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// dependencies of the app and implements the service in
 /// `lib/core/auth/firebase_auth_service.dart` on `FirebaseAuth`, with an
 /// email address and a password, for anonymous users, and with the
-/// credentials of Google and Apple. The service is the same in every mode
-/// of the role.
+/// credentials of Google and Apple. It gives the Firebase ID token of the
+/// user as the token of the role. The service is the same in every mode of
+/// the role.
 ///
 /// Firebase Authentication works on the Firebase app, so the module depends
 /// on [FirebaseCoreModule], which initializes Firebase in `bootstrap()`, and
@@ -67,8 +68,9 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// in of Google, the script also sets up what it needs: the SHA of the
 /// debug key of the machine in the project, the Firebase files of the app
 /// with the clients of Google, and the URL scheme of the iOS app in
-/// `ios/Runner/Info.plist`. After generation, once `flutterfire configure`
-/// of [FirebaseCoreModule] configured the app, the module runs the script:
+/// `ios/Runner/Info.plist`. After generation, once
+/// [FirebaseCoreModule.configureScript] configured the default flavor of the
+/// app, the module runs the script:
 /// its step continues [FirebaseCoreModule.configureStep], and a run in a
 /// terminal asks about it, with what it does for Google sign-in. Any other
 /// run prints the command to run later, and so does a run on a machine
@@ -211,6 +213,9 @@ final class FirebaseAuthModule extends SmfModule {
             'mode_declaration': modeDeclarationCode,
             'anonymous_mode': AuthMode.anonymous.name,
             'minimum_firebase_cli': firstFirebaseCliWithSignIn,
+            // And the script that the messages of the script name, which
+            // writes firebase.json.
+            'configure_script': FirebaseCoreModule.configureScript,
           },
         ),
         const PubspecContribution.hosted('firebase_auth', '^6.7.0'),

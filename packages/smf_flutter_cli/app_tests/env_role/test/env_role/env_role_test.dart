@@ -1,5 +1,5 @@
 // A test that continuous integration runs in the apps with the env role
-// whose modules give the role keys, whichever module provides it: for each
+// that have keys, whichever module provides the role: for each
 // key of the app, the getter of AppEnv returns the value that .env gives
 // the key, and null when .env leaves the value empty or lacks the key.
 //

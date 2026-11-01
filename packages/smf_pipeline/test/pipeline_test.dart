@@ -120,11 +120,13 @@ void main() {
     expect(plan.collection.roleData.single.value, '/home');
     // The base value of the minimum iOS version, from the scaffold, and
     // what the template of the app entry role gives every app: its note for
-    // coding agents, and the widget for the icons of the status bar.
+    // coding agents, the widget for the icons of the status bar, and the
+    // section of the README on the flavors.
     expect(plan.socketOrders.keys, [
       AppEntryRole.iosDeploymentTarget,
       AppEntryRole.agentSections,
       AppEntryRole.appBuilder,
+      AppEntryRole.readmeSections,
     ]);
     expect(plan.postGenOrder.contributions, isEmpty);
     expect(plan.pubspec.dependencies.keys, ['flutter']);
@@ -1519,12 +1521,7 @@ void main() {
               followUpOf: coreStep,
               skippable: true,
             ),
-            const PostGenStep(
-              ToolRef('check'),
-              [],
-              followUpOf: fixStep,
-              hosts: {HostOperatingSystem.macos},
-            ),
+            const PostGenStep(ToolRef('check'), [], followUpOf: fixStep),
             Preflight([install]),
           ],
         ),
@@ -1594,7 +1591,7 @@ void main() {
           // succeeded, each named with its own module. Quoted for the shell
           // of the host, as the commands for later.
           '    then fix it \'in "a b"\' (analytics)\n'
-          '      then check (analytics, on macOS)\n'
+          '      then check (analytics)\n'
           '  b (analytics)',
         ),
       );
@@ -1612,8 +1609,8 @@ void main() {
     });
 
     test(
-        'quotes a step for a shell of the systems it runs on, which may not '
-        'be this one', () async {
+        'quotes a step and the steps that continue it for the shell of the '
+        'run', () async {
       final host = FakeHost(operatingSystem: HostOperatingSystem.windows);
       final modules = [
         scaffold(),
@@ -1629,7 +1626,6 @@ void main() {
               ToolRef('ruby'),
               ['-e', r'puts "$HOME"', 'a b'],
               followUpOf: PostGenStepId(ModuleId('core'), 'tool'),
-              hosts: {HostOperatingSystem.macos},
             ),
           ],
         ),
@@ -1649,8 +1645,7 @@ void main() {
           'After generation\n'
           // PowerShell reads the comma as its own.
           '  tool "--platforms=android,ios" (core)\n'
-          // The shell of macOS would expand \$HOME in double quotes.
-          '    then ruby -e \'puts "\$HOME"\' \'a b\' (core, on macOS)',
+          r'    then ruby -e "puts \"$HOME\"" "a b" (core)',
         ),
       );
     });

@@ -28,6 +28,7 @@ import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
+import 'package:smf_dio/smf_dio.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -38,8 +39,10 @@ import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
+import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
@@ -86,6 +89,9 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakePurchasesModule(),
       const FakeEnvModule(),
       const FakeEnvUserModule(),
+      const FakeRestModule(),
+      const FakeRestUserModule(),
+      const FakeCiModule(),
       const FakeRegistrationsModule(),
       const FakeParentModule(),
       const FakeChildModule(),
@@ -138,6 +144,9 @@ List<ModuleId> everyFixture({
       FakePurchasesModule.id,
       FakeEnvModule.id,
       FakeEnvUserModule.id,
+      FakeRestModule.id,
+      FakeRestUserModule.id,
+      FakeCiModule.id,
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
@@ -163,7 +172,9 @@ List<ModuleId> everyFixture({
 /// provider that must work; material_theme, a provider of the theme role,
 /// for the tests of that role that the CLI keeps: the theme mode, which
 /// shared_preferences remembers, and its entry, which the settings screen
-/// shows below those of the two fixtures; the fixture texts, a provider of
+/// shows below those of the two fixtures; native_splash, a provider of the
+/// splash role, for the test of its module and the test of the role that the
+/// CLI keeps; the fixture texts, a provider of
 /// the localization role, for the two tests of that role that the CLI
 /// keeps: the test of the role itself, with the texts of the fixture
 /// feature in two languages, and the test of the setting of the language,
@@ -199,9 +210,12 @@ List<ModuleId> everyFixture({
 /// the push role that the CLI has, for the app test that it keeps and for
 /// the test of that role that the CLI keeps, which run there next to the
 /// other Firebase modules and show a message through those notifications.
-/// Last come dart_define, the provider of the env role that the CLI has,
-/// and RevenueCat, the provider of the purchases role that the CLI has,
-/// which reads its keys from the values of .env, for the app test that it
+/// Last come dart_define, the provider of the env role that the CLI has, dio,
+/// the provider of the REST role that the CLI has, for the app test that it
+/// keeps and for the tests of that role that the CLI keeps, which run there
+/// with the users of the session of Firebase Authentication, and RevenueCat,
+/// the provider of the purchases role that the CLI has, which reads its keys
+/// from the values of .env, for the app test that it
 /// keeps and for the tests of that role that the CLI keeps, which run
 /// there with the users of the session of Firebase Authentication and
 /// whose entry that restores purchases the settings screen shows too, and
@@ -240,6 +254,7 @@ List<SmfModule> severalProvidersModules() => const [
       FakeScreenLogModule(),
       SettingsModule(),
       MaterialThemeModule(),
+      NativeSplashModule(),
       FakeL10nModule(),
       OnboardingModule(),
       FakeStepsModule(),
@@ -253,6 +268,8 @@ List<SmfModule> severalProvidersModules() => const [
       LocalNotificationsModule(),
       FirebaseMessagingModule(),
       DartDefineModule(),
+      DioModule(),
       RevenueCatModule(),
       PaywallModule(),
+      LauncherIconsModule(),
     ];

@@ -14,16 +14,35 @@
 // of the auth role, so the test expects nothing of who is signed in: only
 // that the session and Firebase agree. To make them disagree, it signs a
 // user up through the plugin, behind the session, of which the backend in
-// memory tells nobody.
+// memory tells nobody. With nobody signed in, the session has no token, and
+// the probe tells when a service gives one all the same.
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/bootstrap.dart';
 import 'package:{{app_name}}/core/auth/app_session.dart';
+import 'package:{{app_name}}/core/auth/auth_service.dart';
 
 import '../../integration_test/firebase_auth/probe.dart';
 import 'service.dart';
+
+/// A service that gives a token though nobody is signed in, which the probe
+/// must not take.
+final class _TokenOfNobody implements AuthService {
+  @override
+  AuthUser? get currentUser => null;
+
+  @override
+  Stream<AuthUser?> get userChanges => const Stream.empty();
+
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async =>
+      'a-token-of-nobody';
+
+  @override
+  Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 /// Runs [action], which [what] names, in real time, as on a device, and
 /// fails the test if it throws, which tester.runAsync would only report to
@@ -71,6 +90,8 @@ void main() {
       late String ofSession;
       late String ofFirebase;
       late List<String> afterNextSignOut;
+      late List<String> ofNobody;
+      late List<String> tokenOfNobody;
 
       await _inRealTime(tester, 'signing out and up', () async {
         afterStart = await probeFirebaseAuth(() async {});
@@ -90,6 +111,11 @@ void main() {
         behindTheSession = await probeFirebaseAuth(() async {});
         await appSession.signOut();
         afterNextSignOut = await probeFirebaseAuth(() async {});
+        // The session has nobody on the plugin once the plugin signed out.
+        await FirebaseAuth.instance.signOut();
+        ofNobody = await problemsOfToken();
+        await appSession.start(_TokenOfNobody());
+        tokenOfNobody = await problemsOfToken();
       });
 
       expect(
@@ -108,6 +134,21 @@ void main() {
         reason: 'The probe tells when the session of the app has another '
             'user than Firebase Authentication, each by its kind and its '
             'id.',
+      );
+      expect(
+        ofNobody,
+        isEmpty,
+        reason: 'With nobody signed in, appSession.userToken() gives no '
+            'token.',
+      );
+      expect(
+        tokenOfNobody,
+        [
+          'The session of the app gave a token of a user while nobody is '
+              'signed in on this device.',
+        ],
+        reason: 'The probe tells when the session gives a token with nobody '
+            'signed in, and the problem does not have the token.',
       );
     },
     // A widget test fails after ten minutes by default; a test that hangs

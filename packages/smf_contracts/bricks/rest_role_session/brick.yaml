@@ -1,0 +1,10 @@
+name: rest_role_session
+description: "The token of the user for the REST client of an app with sign-in, from the session of the app."
+
+# The template of a role in the module model. Its files are relative to the
+# root of the generated app. The template contributes this brick in an app
+# with the auth role.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

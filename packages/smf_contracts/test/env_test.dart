@@ -1,9 +1,12 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
+
 import 'package:smf_contracts/bundles/env_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
+import 'package:xml/xml.dart';
 
 import 'dart_files.dart';
 import 'role_support.dart';
@@ -12,6 +15,9 @@ import 'support.dart';
 /// A role whose template would read values of the app, as the template of a
 /// role that uses the env role could.
 final _boardRole = TestRole<NoDsl>('board', uses: {envRole});
+
+/// One more role that requires the env role, with no key of its own.
+final _otherUser = TestRole<NoDsl>('other_user', requires: {envRole});
 
 /// A role that neither requires nor uses the env role.
 final _otherRole = TestRole<NoDsl>('other');
@@ -63,6 +69,33 @@ abstract final class AppEnv {
 }
 ''';
 
+/// The tool arguments [arguments] from a provider of the env role.
+RoleData<Object> _toolArguments(List<String> arguments) =>
+    dataOf<EnvData>(envRole, EnvToolArguments(arguments), module: 'provider');
+
+/// The files that the render hook of the template gives an app with [data].
+Map<String, String> _hookFiles(List<RoleData<Object>> data) =>
+    envRole.template.render(inputOf(envRole, data: data)).files;
+
+/// The configurations of VS Code that the template gives an app with [data].
+List<Object?> _vscodeConfigurations(List<RoleData<Object>> data) {
+  final launch = jsonDecode(_hookFiles(data)[EnvRole.vscodeLaunchFile]!);
+  return (launch as Map<String, Object?>)['configurations']! as List<Object?>;
+}
+
+/// The options of the configuration of Android Studio for [flavor] that the
+/// template gives an app with [data], by their names.
+Map<String?, String?> _androidStudioOptions(
+  List<RoleData<Object>> data,
+  AppFlavor flavor,
+) =>
+    {
+      for (final option in XmlDocument.parse(
+        _hookFiles(data)[EnvRole.androidStudioRunFileOf(flavor)]!,
+      ).rootElement.childElements.single.findElements('option'))
+        option.getAttribute('name'): option.getAttribute('value'),
+    };
+
 void main() {
   group('the env role', () {
     test(
@@ -91,6 +124,14 @@ void main() {
       expect(EnvRole.exampleFile, '.env.example');
       expect(EnvRole.readerFile, 'lib/core/env/app_env.dart');
       expect(EnvRole.readmeHeading, 'Values in .env');
+      expect(EnvRole.vscodeLaunchFile, '.vscode/launch.json');
+      expect(
+        [
+          for (final flavor in AppEntryRole.flavors)
+            EnvRole.androidStudioRunFileOf(flavor),
+        ],
+        ['.run/dev.run.xml', '.run/staging.run.xml', '.run/prod.run.xml'],
+      );
       expect(envRole.interface.files, [
         EnvRole.dotEnvFile,
         EnvRole.exampleFile,
@@ -286,6 +327,28 @@ void main() {
       expect(keys.first.description, _shopApple.description);
       expect(keys.first.getter, 'shopAppleKey');
       expect('${keys.first}', 'key SHOP_APPLE_KEY of the module shop');
+    });
+
+    test(
+        'are those of the modules and then those of the templates of roles, '
+        'each with its template as its owner', () {
+      final keys = envRole.keysIn(
+        inputOf(
+          envRole,
+          data: [..._appKeys, _ofTemplate(_boardRole, _boardToken)],
+        ),
+      );
+
+      expect(
+        [for (final key in keys) key.name],
+        ['SHOP_APPLE_KEY', 'SHOP_GOOGLE_KEY', 'FEED_URL', 'BOARD_TOKEN'],
+      );
+      expect(keys.last.owner, RoleTemplateOrigin(_boardRole));
+      expect(keys.last.getter, 'boardToken');
+      expect(
+        '${keys.last}',
+        'key BOARD_TOKEN of the template of the board role',
+      );
     });
 
     test('are what a role that uses the env role reads too', () {
@@ -724,7 +787,7 @@ final described = describe(${vars['env_feed_url']!.absent});
           StructuralRuleRequest(
             hook: RoleHookRequest(
               data: [..._appKeys, ...more],
-              presentRoles: {envRole, _boardRole},
+              presentRoles: {envRole, _boardRole, _otherUser},
               context: testContext,
             ),
             files: {
@@ -822,28 +885,20 @@ final described = describe(${vars['env_feed_url']!.absent});
       expect(issues.last.hint, contains('without arguments'));
     });
 
-    test(
-        'reports what the template of a role, its own too, and the pipeline '
-        'read, since only the code of a module reads values', () {
-      // Not even a key that the template gave, which validation refuses.
+    test('lets the template of a role read its own keys', () {
       expect(
-        _messages(
-          check(
-            RoleTemplateOrigin(_boardRole),
-            accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
-            more: [_ofTemplate(_boardRole, _boardToken)],
-          ),
+        check(
+          RoleTemplateOrigin(_boardRole),
+          accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
+          more: [_ofTemplate(_boardRole, _boardToken)],
         ),
-        [
-          equals(
-            'role:board: lib/file.dart reads AppEnv.boardToken, the key '
-            'BOARD_TOKEN of the template of the board role, but only the code '
-            'of a module reads the values of the app, not that of the '
-            'template of the board role.',
-          ),
-        ],
+        isEmpty,
       );
+    });
 
+    test(
+        'reports what the template of a role reads of another owner, and what '
+        'the pipeline reads, since it has no key', () {
       const read = [IndexedMemberAccess('AppEnv', 'shopAppleKey')];
 
       for (final (owner, named) in [
@@ -858,13 +913,37 @@ final described = describe(${vars['env_feed_url']!.absent});
         expect(
           issue.message,
           'lib/file.dart reads AppEnv.shopAppleKey, the key SHOP_APPLE_KEY of '
-          'the module shop, but only the code of a module reads the values of '
-          'the app, not that of $named.',
+          'the module shop, but $named may only read its own keys.',
           reason: '$owner',
         );
         expect(issue.origin, owner);
-        expect(issue.hint, contains('module'));
+        expect(issue.hint, 'Give the role a key of your own.');
       }
+
+      // A key of the template of another role.
+      expect(
+        check(
+          RoleTemplateOrigin(_otherUser),
+          accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
+          more: [_ofTemplate(_boardRole, _boardToken)],
+        ).single.message,
+        'lib/file.dart reads AppEnv.boardToken, the key BOARD_TOKEN of the '
+        'template of the board role, but the template of the other_user role '
+        'may only read its own keys.',
+      );
+    });
+
+    test('reports a module that reads a key of the template of a role', () {
+      expect(
+        check(
+          ofShop,
+          accesses: const [IndexedMemberAccess('AppEnv', 'boardToken')],
+          more: [_ofTemplate(_boardRole, _boardToken)],
+        ).single.message,
+        'lib/file.dart reads AppEnv.boardToken, the key BOARD_TOKEN of the '
+        'template of the board role, but the module shop may only read its '
+        'own keys and those of the modules it depends on.',
+      );
     });
 
     test(
@@ -1006,6 +1085,8 @@ final described = describe(${vars['env_feed_url']!.absent});
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
+`.env` is not tied to a flavor: a build of any flavor takes what `.env` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
+
 The keys of the app:
 
 - `SHOP_APPLE_KEY`, read as `AppEnv.shopAppleKey`, from the module `shop`: The public key of the shop on iOS
@@ -1013,7 +1094,46 @@ The keys of the app:
 - `FEED_URL`, read as `AppEnv.feedUrl`, from the module `feed`: The address of the feed
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
+
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
 ''');
+    });
+
+    test(
+        'names the role of a key of the template of a role, in the files and '
+        'in the README, after the keys of the modules', () async {
+      final data = [..._appKeys, _ofTemplate(_boardRole, _boardToken)];
+      final rendered = await renderTemplate(envRole, data: data);
+
+      for (final file in [EnvRole.dotEnvFile, EnvRole.exampleFile]) {
+        expect(
+          rendered.files[file],
+          endsWith(
+            '# The address of the feed\n'
+            'FEED_URL=\n'
+            '\n'
+            '# The public token of the board\n'
+            'BOARD_TOKEN=\n',
+          ),
+          reason: file,
+        );
+      }
+      expect(
+        envRole.template
+            .render(inputOf(envRole, data: data))
+            .fragments
+            .single
+            .entryValue,
+        contains(
+          '- `FEED_URL`, read as `AppEnv.feedUrl`, from the module `feed`: The '
+          'address of the feed\n'
+          '- `BOARD_TOKEN`, read as `AppEnv.boardToken`, from the board role: '
+          'The public token of the board\n',
+        ),
+      );
     });
 
     test('says in the README of an app without keys that it has none', () {
@@ -1026,7 +1146,13 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
       expect(
         section,
         contains(
-          'a private key.\n'
+          'not tied to a flavor',
+        ),
+      );
+      expect(
+        section,
+        contains(
+          'for its job.\n'
           '\n'
           'No module of the app reads a value yet.\n'
           '\n'
@@ -1061,6 +1187,222 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
       expect(note.text, contains('`AppEnv.$named`'));
     });
 
+    group('the run configurations', () {
+      const appName = 'my_app';
+
+      test('are the only files of its render hook', () {
+        expect(_hookFiles(const []).keys.toSet(), {
+          EnvRole.vscodeLaunchFile,
+          for (final flavor in AppEntryRole.flavors)
+            EnvRole.androidStudioRunFileOf(flavor),
+        });
+      });
+
+      test(
+          'of VS Code launch the entry of the app once for each flavor, with '
+          'the flavor and then the tool arguments of the role', () {
+        final launch = jsonDecode(
+          _hookFiles([
+            _toolArguments(const ['--dart-define-from-file', '.env']),
+          ])[EnvRole.vscodeLaunchFile]!,
+        );
+
+        expect(launch, {
+          'version': '0.2.0',
+          'configurations': [
+            {
+              'name': '$appName dev',
+              'request': 'launch',
+              'type': 'dart',
+              'program': AppEntryRole.mainFile,
+              'toolArgs': [
+                '--flavor',
+                'dev',
+                '--dart-define-from-file',
+                '.env',
+              ],
+              // Dart-Code takes the first configuration with this key as
+              // the template of a launch that names no configuration, such
+              // as a link above main() or above a test or the Testing view,
+              // and puts the file in place of the program.
+              'templateFor': '',
+            },
+            {
+              'name': '$appName staging',
+              'request': 'launch',
+              'type': 'dart',
+              'program': AppEntryRole.mainFile,
+              'toolArgs': [
+                '--flavor',
+                'staging',
+                '--dart-define-from-file',
+                '.env',
+              ],
+            },
+            {
+              'name': '$appName prod',
+              'request': 'launch',
+              'type': 'dart',
+              'program': AppEntryRole.mainFile,
+              'toolArgs': [
+                '--flavor',
+                'prod',
+                '--dart-define-from-file',
+                '.env',
+              ],
+            },
+          ],
+        });
+      });
+
+      test(
+          'of VS Code have the default flavor first, which F5 starts until '
+          'the developer selects another, and as the only template', () {
+        final configurations = _vscodeConfigurations(const []);
+        bool isTemplate(Object? configuration) =>
+            (configuration! as Map<String, Object?>).containsKey('templateFor');
+
+        expect(
+          (configurations.first! as Map<String, Object?>)['name'],
+          '$appName ${AppEntryRole.defaultFlavor.name}',
+        );
+        expect(configurations.where(isTemplate), [configurations.first]);
+      });
+
+      test(
+          'of Android Studio run the entry of the app for one flavor each, '
+          'in a configuration that the project shares', () {
+        final files = _hookFiles([
+          _toolArguments(const ['--dart-define-from-file', '.env']),
+        ]);
+
+        for (final flavor in AppEntryRole.flavors) {
+          final component = XmlDocument.parse(
+            files[EnvRole.androidStudioRunFileOf(flavor)]!,
+          ).rootElement;
+          expect(component.name.local, 'component');
+          expect(
+            component.getAttribute('name'),
+            'ProjectRunConfigurationManager',
+          );
+          final configuration = component.childElements.single;
+          expect(configuration.name.local, 'configuration');
+          expect(
+            configuration.getAttribute('name'),
+            '$appName ${flavor.name}',
+          );
+          expect(
+            configuration.getAttribute('type'),
+            'FlutterRunConfigurationType',
+          );
+          expect(configuration.getAttribute('factoryName'), 'Flutter');
+          expect(configuration.getAttribute('default'), 'false');
+          expect(
+            _androidStudioOptions(
+              [
+                _toolArguments(const ['--dart-define-from-file', '.env']),
+              ],
+              flavor,
+            ),
+            {
+              'additionalArgs':
+                  '--flavor ${flavor.name} --dart-define-from-file .env',
+              'filePath': '\$PROJECT_DIR\$/${AppEntryRole.mainFile}',
+            },
+          );
+        }
+      });
+
+      test('pass the flavor alone for a provider without tool arguments', () {
+        expect(
+          (_vscodeConfigurations(const []).first!
+              as Map<String, Object?>)['toolArgs'],
+          ['--flavor', 'dev'],
+        );
+        expect(
+          _androidStudioOptions(
+            const [],
+            AppEntryRole.releaseFlavor,
+          )['additionalArgs'],
+          '--flavor prod',
+        );
+      });
+
+      test(
+          'keep an argument whole: as it is for VS Code, and for Android '
+          'Studio in double quotes when it has a space or a quote, which '
+          'the settings of a run take as one argument', () {
+        const arguments = ['--plain', '--name=a b', 'c"d&e<f>g'];
+        final data = [_toolArguments(arguments)];
+
+        expect(
+          (_vscodeConfigurations(data).first!
+              as Map<String, Object?>)['toolArgs'],
+          ['--flavor', 'dev', ...arguments],
+        );
+        expect(
+          _androidStudioOptions(
+            data,
+            AppEntryRole.defaultFlavor,
+          )['additionalArgs'],
+          r'--flavor dev --plain "--name=a b" "c\"d&e<f>g"',
+        );
+      });
+
+      test('have the name of the app as it is written, escaped for XML', () {
+        final output = envRole.template.render(
+          envRole.hookInput(
+            const RoleHookRequest(
+              data: [],
+              presentRoles: {envRole},
+              context: ModuleContext(
+                appName: 'a&"b',
+                orgName: 'com.example',
+                appIdentity: AppIdentity(
+                  platforms: ['android', 'ios'],
+                  androidApplicationId: 'com.example.a',
+                  iosBundleId: 'com.example.a',
+                  androidNamespace: 'com.example.a',
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(
+          XmlDocument.parse(
+            output.files[
+                EnvRole.androidStudioRunFileOf(AppEntryRole.defaultFlavor)]!,
+          ).rootElement.childElements.single.getAttribute('name'),
+          'a&"b dev',
+        );
+        expect(
+          ((jsonDecode(output.files[EnvRole.vscodeLaunchFile]!)
+                  as Map<String, Object?>)['configurations']! as List<Object?>)
+              .first,
+          containsPair('name', 'a&"b dev'),
+        );
+      });
+
+      test('end with a line break, as a text file of an app does', () {
+        for (final text in _hookFiles(const []).values) {
+          expect(text, endsWith('\n'));
+        }
+      });
+
+      test('tell the guide for coding agents which launch takes which flavor',
+          () {
+        expect(
+          agentNoteOf(envRole).text,
+          allOf(
+            contains('`${EnvRole.vscodeLaunchFile}`'),
+            contains('`.run/<flavor>.run.xml`'),
+            contains('`templateFor`'),
+          ),
+        );
+      });
+    });
+
     group('checks', () {
       List<String> validate(List<RoleData<Object>> data) =>
           _messages(envRole.template.validate(inputOf(envRole, data: data)));
@@ -1070,30 +1412,142 @@ To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv
       });
 
       test(
-          'a key from the template of a role, which only modules give, and '
-          'not the keys of the modules, which their rule checks', () {
+          'a key from the template of a role like a key of a module, and not '
+          'the keys of the modules, which their rule checks', () {
+        // A key that starts with the id of the role is what a module's is.
+        expect(
+          validate([
+            dataOf<EnvData>(
+              envRole,
+              const EnvKey('feed_url', description: ''),
+              module: 'feed',
+            ),
+            _ofTemplate(_boardRole, _boardToken),
+          ]),
+          isEmpty,
+        );
+
+        expect(
+          validate([
+            _ofTemplate(
+              _boardRole,
+              const EnvKey('SHOP_KEY', description: 'Of the board'),
+            ),
+            _ofTemplate(
+              _boardRole,
+              const EnvKey('BOARD_TEXT', description: 'First\nsecond'),
+            ),
+            _ofTemplate(
+              _otherUser,
+              const EnvKey('board_token', description: 'x'),
+            ),
+          ]),
+          [
+            equals(
+              'role:board: The key "SHOP_KEY" does not start with BOARD_, the '
+              'id of its owner in upper case and an underscore.',
+            ),
+            equals(
+              'role:board: The key "BOARD_TEXT" has a description that is not '
+              'one line of text without spaces around it.',
+            ),
+            equals(
+              'role:other_user: The key "board_token" needs a name in '
+              'UPPER_SNAKE_CASE of two words or more that starts with a '
+              'letter, such as REVENUECAT_APPLE_KEY.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'two keys of one template with one name or one getter, which the '
+          'rule of a module would report of a module', () {
+        expect(
+          validate([
+            _ofTemplate(_boardRole, _boardToken),
+            _ofTemplate(_boardRole, _boardToken),
+            _ofTemplate(
+              _boardRole,
+              const EnvKey('BOARD1_KEY', description: 'x'),
+            ),
+            _ofTemplate(
+              _boardRole,
+              const EnvKey('BOARD_1_KEY', description: 'x'),
+            ),
+          ]),
+          [
+            equals('role:board: Two keys are named "BOARD_TOKEN".'),
+            equals(
+              'role:board: The key "BOARD1_KEY" does not start with BOARD_, '
+              'the id of its owner in upper case and an underscore.',
+            ),
+            equals(
+              'role:board: The keys "BOARD1_KEY" and "BOARD_1_KEY" would both '
+              'be read as AppEnv.board1Key.',
+            ),
+          ],
+        );
+      });
+
+      test(
+          'a module with a key of the template of a role, which it answers '
+          'for: lenient mode can leave a module out, and no template', () {
         final issues = envRole.template.validate(
           inputOf(
             envRole,
             data: [
               dataOf<EnvData>(
                 envRole,
-                const EnvKey('feed_url', description: ''),
-                module: 'feed',
+                const EnvKey('BOARD_TOKEN', description: 'y'),
+                module: 'board',
+              ),
+              dataOf<EnvData>(
+                envRole,
+                const EnvKey('BOARD1_KEY', description: 'y'),
+                module: 'board1',
               ),
               _ofTemplate(_boardRole, _boardToken),
+              _ofTemplate(
+                _boardRole,
+                const EnvKey('BOARD_1_KEY', description: 'x'),
+              ),
             ],
           ),
         );
 
         expect(_messages(issues), [
           equals(
-            'role:board: The template of the board role gives the env role '
-            'the key BOARD_TOKEN, but only modules give the role '
-            'keys.',
+            'board: Both the module board and the template of the board role '
+            'give the env role the key BOARD_TOKEN.',
+          ),
+          equals(
+            'board1: The key BOARD1_KEY of the module board1 and the key '
+            'BOARD_1_KEY of the template of the board role would both be read '
+            'as AppEnv.board1Key.',
           ),
         ]);
-        expect(issues.single.hint, contains('module'));
+      });
+
+      test('the templates of two roles that give one key', () {
+        final second = TestRole<NoDsl>('board_x', requires: {envRole});
+        const key = EnvKey('BOARD_X_KEY', description: 'x');
+
+        final issue = envRole.template
+            .validate(
+              inputOf(
+                envRole,
+                data: [_ofTemplate(_boardRole, key), _ofTemplate(second, key)],
+              ),
+            )
+            .single;
+
+        expect(
+          issue.message,
+          'Both the template of the board role and the template of the board_x '
+          'role give the env role the key BOARD_X_KEY.',
+        );
+        expect(issue.origin, RoleTemplateOrigin(_boardRole));
       });
 
       test('the tool arguments of a template, which only a provider gives', () {

@@ -88,23 +88,22 @@ const importCleanupCodes = [
 /// 5. `dart fix --apply` for everything, unless [fullDartFix] is `false`;
 /// 6. `dart format .`.
 ///
-/// A step for other systems than that of the run (see [PostGenStep.hosts])
-/// neither runs nor is returned. A step that needs a terminal in a run that
-/// cannot ask the user, or external setup in a run that skips it, does not
-/// run, and neither does a step with a notice (see [PostGenStep.notice]) in
-/// a run that cannot ask; the pipeline checked before that such a step is
-/// skippable. Nor does a step that [PostGenStep.needs] a check which has
-/// not passed among [checks], the results of stage 6, and the user is not
-/// asked about it. In an interactive run the user may also leave a
-/// skippable step for later, but for a step that continues another, which
-/// is part of that step, unless it has a notice: the question about a step
-/// with a notice has the notice, and comes once the step that it continues
-/// succeeded. A skippable step whose tool is missing, or that fails, is
-/// left for later too; a failure is reported with the output of the
-/// command. The steps that continue a step that is not done, such as one
-/// that the user left for later, are left for later after it, without a
-/// question. Returns the steps that are not done, with their commands for
-/// later and their notices, in the order they would run.
+/// A step that needs a terminal in a run that cannot ask the user, or
+/// external setup in a run that skips it, does not run, and neither does a
+/// step with a notice (see [PostGenStep.notice]) in a run that cannot ask;
+/// the pipeline checked before that such a step is skippable. Nor does a
+/// step that [PostGenStep.needs] a check which has not passed among
+/// [checks], the results of stage 6, and the user is not asked about it. In
+/// an interactive run the user may also leave a skippable step for later,
+/// but for a step that continues another, which is part of that step,
+/// unless it has a notice: the question about a step with a notice has the
+/// notice, and comes once the step that it continues succeeded. A skippable
+/// step whose tool is missing, or that fails, is left for later too; a
+/// failure is reported with the output of the command. The steps that
+/// continue a step that is not done, such as one that the user left for
+/// later, are left for later after it, without a question. Returns the
+/// steps that are not done, with their commands for later and their
+/// notices, in the order they would run.
 ///
 /// Throws a [GenerationFailedException] when `pub get`, code generation or
 /// a step that is not skippable fails or cannot run, unless it continues a
@@ -191,11 +190,9 @@ final class _ModuleSteps {
   /// Runs [bound], then the steps that continue it once it succeeded, or
   /// records it and them as not done. The user is not asked about a
   /// [followUp], which is part of the step it continues, unless it has a
-  /// notice. A step for other systems neither runs nor is recorded, and
-  /// neither are the steps that continue it.
+  /// notice.
   Future<void> run(BoundStep bound, {bool followUp = false}) async {
     final BoundStep(:step, :origin) = bound;
-    if (!_isForHost(step)) return;
     final environment = _environment;
     final resolved = await _commands.resolve(step.tool, step.arguments);
     final command = _commands.display(step.tool, step.arguments, resolved);
@@ -341,18 +338,12 @@ final class _ModuleSteps {
     );
   }
 
-  /// Whether [step] runs on the operating system of the run; see
-  /// [PostGenStep.hosts].
-  bool _isForHost(PostGenStep step) =>
-      step.hosts.isEmpty || step.hosts.contains(_environment.operatingSystem);
-
   /// Records the steps that continue [bound], the step of the record
   /// [notDone], as not done either, each with its notice and before the
-  /// steps that continue it in turn, but for those of other systems.
+  /// steps that continue it in turn.
   Future<void> _leaveFollowUps(BoundStep bound, SkippedStep notDone) async {
     for (final followUp in bound.followUps) {
       final next = followUp.step;
-      if (!_isForHost(next)) continue;
       final resolved = await _commands.resolve(next.tool, next.arguments);
       final command = _commands.display(next.tool, next.arguments, resolved);
       final record = SkippedStep(

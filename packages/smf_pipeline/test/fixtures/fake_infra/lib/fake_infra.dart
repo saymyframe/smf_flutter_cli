@@ -17,6 +17,8 @@ import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_purchases_bundle.dart';
 import 'package:fake_infra/bundles/fake_push_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
+import 'package:fake_infra/bundles/fake_rest_bundle.dart';
+import 'package:fake_infra/bundles/fake_rest_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
@@ -1244,6 +1246,67 @@ final class _FakeEnvProvider extends RoleProvider<EnvData> {
   }''';
 }
 
+/// A provider of the CI role in a format of its own, which no host reads: the
+/// file [file], with a block for each environment that has the name of the
+/// environment in its commands, and a line for each key.
+///
+/// It shows that the role needs no host. The template of the role does the
+/// rest, whichever module provides it: the script that writes `.env`, and the
+/// section of the role in the README.
+final class FakeCiModule extends SmfModule {
+  /// Creates the module.
+  const FakeCiModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_ci');
+
+  /// The path of the file of the module.
+  static const file = 'ci/pipeline.conf';
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'CI in a format of its own (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [_FakeCiProvider()],
+      );
+}
+
+/// Writes the pipeline of the app for [FakeCiModule].
+final class _FakeCiProvider extends RoleProvider<NoDsl> {
+  const _FakeCiProvider();
+
+  @override
+  Role<NoDsl> get role => ciRole;
+
+  @override
+  RoleOutput render(RoleHookInput<NoDsl> input) {
+    final pipeline = ciRole.pipelineIn(input);
+    final build = pipeline.build;
+    return RoleOutput(
+      files: {
+        FakeCiModule.file: [
+          '# The CI of a fixture.',
+          'on push',
+          for (final check in pipeline.checks) _run(check),
+          for (final environment in build.environments) ...[
+            'on request $environment',
+            for (final key in build.keys) '  variable $key',
+            for (final command in build.prepare) _run(command),
+            '  run ${build.name} = ${build.command.of(environment)}',
+            '  keep ${build.artifact.of(environment)}',
+          ],
+          '',
+        ].join('\n'),
+      },
+    );
+  }
+
+  /// The line of [command].
+  static String _run(CiCommand command) =>
+      '  run ${command.name} = ${command.command}';
+}
+
 /// A module that reads three values of `.env`, which it gives the env role
 /// as keys in an app with that role: `FAKE_ENV_USER_FIRST`,
 /// `FAKE_ENV_USER_SECOND` and `FAKE_ENV_USER_THIRD`. Its brick reads each
@@ -1287,6 +1350,68 @@ final class FakeEnvUserModule extends SmfModule {
           vars: envRole.varsOf(id, keys),
         ),
         for (final key in keys) envRole.data(key),
+      ];
+}
+
+/// A provider of the REST role on `HttpClient` of `dart:io`, with no package:
+/// one exchange on the wire and nothing else, as the contract of
+/// `RestTransport` asks. The template of the role does the rest, whichever
+/// module provides it: `appRest`, its guarantees and its test server.
+final class FakeRestModule extends SmfModule {
+  /// Creates the module.
+  const FakeRestModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_rest');
+
+  static const _file = ImportRef.app(
+    'core/fixture_rest/fixture_rest_transport.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'REST on dart:io (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(restRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeRestBundle),
+        restRole.data(
+          const RoleImplementation(
+            type: TypeRef('FixtureRestTransport', import: _file),
+            create: FactoryRef('createFixtureRestTransport', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A module that makes requests through the REST role, as no module of the CLI
+/// does yet: the state of a screen with the notes of a server. It names no
+/// provider of the role, no router and no DI container, so it shows that one
+/// import is all that such a module needs. It works in an app with sign-in and
+/// in one without, a body of another shape is a reason of the role and not a
+/// `TypeError`, and it cancels each call on its way when it is disposed of.
+final class FakeRestUserModule extends SmfModule {
+  /// Creates the module.
+  const FakeRestUserModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_rest_user');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'The notes of a server over REST (fixture)',
+        kind: ModuleKinds.infrastructure,
+        requires: {restRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeRestUserBundle),
       ];
 }
 

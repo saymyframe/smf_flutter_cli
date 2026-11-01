@@ -29,6 +29,9 @@ dependencies:
   # The provider of the env role in the registry of several providers, whose
   # values RevenueCat reads.
   smf_dart_define: ^0.7.0
+  # The provider of the REST role in the registry of several providers, for the
+  # app test that it keeps and the tests of the role that the CLI keeps.
+  smf_dio: ^0.7.0
   # The providers of the roles that an app can have several providers of,
   # in the registry of several providers.
   smf_firebase_analytics: ^0.4.3
@@ -51,6 +54,7 @@ dependencies:
   # The start screen of the CLI, for its app test in the app of several
   # providers, which starts on another screen.
   smf_home_flutter: ^0.5.1
+  smf_launcher_icons: ^0.7.0
   # The provider of the notifications role in the registry of several
   # providers, for the app test that it keeps and the test of the role that
   # the CLI keeps.
@@ -58,6 +62,10 @@ dependencies:
   # The provider of the theme role in the registry of several providers, for
   # the tests of the role that the CLI keeps.
   smf_material_theme: ^0.4.3
+  # The provider of the splash role in the registry of several providers, for
+  # the app test that it keeps and the test of the role that the CLI keeps, and
+  # the broken provider that the test of the role must fail on.
+  smf_native_splash: ^0.7.0
   # The onboarding of the CLI, for its app test in the app of several
   # providers, whose other tests its mocks open its guard for.
   smf_onboarding: ^0.6.0

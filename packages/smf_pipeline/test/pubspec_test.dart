@@ -1,6 +1,7 @@
 import 'package:pub_semver/pub_semver.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
 import 'support.dart';
 
@@ -220,6 +221,60 @@ void main() {
     expect(result.issues.single.message, contains('another weight or style'));
   });
 
+  group('the default flavor', () {
+    test('is what the contributions that give one agree on', () {
+      final result = mergePubspec([
+        _by('a', const PubspecContribution.flutter(generate: true)),
+        _by('b', const PubspecContribution.flutter(defaultFlavor: 'dev')),
+        _by('c', const PubspecContribution.flutter(assets: ['assets/'])),
+        _by('d', const PubspecContribution.flutter(defaultFlavor: 'dev')),
+      ]);
+
+      expect(result.issues, isEmpty);
+      expect(result.pubspec.defaultFlavor, 'dev');
+    });
+
+    test('is none when no contribution gives one', () {
+      final result = mergePubspec([
+        _by('a', const PubspecContribution.flutter(generate: true)),
+      ]);
+
+      expect(result.issues, isEmpty);
+      expect(result.pubspec.defaultFlavor, isNull);
+    });
+
+    test('of a contribution that does not apply counts for nothing', () {
+      final result = mergePubspec([
+        _by('a', const PubspecContribution.flutter(defaultFlavor: 'dev')),
+        _by(
+          'b',
+          const PubspecContribution.flutter(defaultFlavor: 'prod'),
+          applies: false,
+        ),
+      ]);
+
+      expect(result.issues, isEmpty);
+      expect(result.pubspec.defaultFlavor, 'dev');
+    });
+
+    test(
+        'that differs is an issue of the later contributor, and the first '
+        'stays', () {
+      final result = mergePubspec([
+        _by('a', const PubspecContribution.flutter(defaultFlavor: 'dev')),
+        _by('b', const PubspecContribution.flutter(defaultFlavor: 'prod')),
+        _by('c', const PubspecContribution.flutter(defaultFlavor: 'dev')),
+      ]);
+
+      expect(
+        result.issues.map((issue) => '${issue.origin}: ${issue.message}'),
+        ['b: The default flavors "dev" (from a) and "prod" (from b) differ.'],
+      );
+      expect(result.issues.single.isError, isTrue);
+      expect(result.pubspec.defaultFlavor, 'dev');
+    });
+  });
+
   group('pubspecSocketTexts', () {
     test('renders every section, quoted and in a stable order', () {
       final result = mergePubspec([
@@ -280,6 +335,52 @@ void main() {
             '          style: "italic"',
       });
     });
+
+    test('the default flavor comes first in the flutter section', () {
+      final result = mergePubspec([
+        _by(
+          'a',
+          const PubspecContribution.flutter(
+            usesMaterialDesign: true,
+            generate: true,
+            assets: ['assets/'],
+          ),
+        ),
+        _by('b', const PubspecContribution.flutter(defaultFlavor: 'dev')),
+      ]);
+
+      expect(
+        pubspecSocketTexts(result.pubspec)['smf_pubspec_flutter'],
+        'flutter:\n'
+        '  default-flavor: "dev"\n'
+        '  uses-material-design: true\n'
+        '  generate: true\n'
+        '  assets:\n'
+        '    - "assets/"',
+      );
+    });
+
+    test('the default flavor alone makes a flutter section', () {
+      expect(
+        pubspecSocketTexts(
+          const MergedPubspec(defaultFlavor: 'dev'),
+        )['smf_pubspec_flutter'],
+        'flutter:\n'
+        '  default-flavor: "dev"',
+      );
+    });
+
+    // Flutter refuses a `default-flavor` that YAML does not read as a string.
+    for (final flavor in ['dev', '1.0', 'true', 'null', 'a: b', '#a']) {
+      test('the default flavor "$flavor" is a string of YAML', () {
+        final section = pubspecSocketTexts(
+          MergedPubspec(defaultFlavor: flavor),
+        )['smf_pubspec_flutter']!;
+
+        final flutter = (loadYaml(section) as YamlMap)['flutter'] as YamlMap;
+        expect(flutter['default-flavor'], flavor);
+      });
+    }
 
     test('an empty section renders to nothing', () {
       expect(

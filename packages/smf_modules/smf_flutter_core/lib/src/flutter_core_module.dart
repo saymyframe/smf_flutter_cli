@@ -2,11 +2,13 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/bundles/flutter_core_bundle.dart';
 import 'package:smf_flutter_core/bundles/flutter_core_fallback_bundle.dart';
 import 'package:smf_flutter_core/src/agents.dart';
+import 'package:smf_flutter_core/src/readme.dart';
 
 /// The module that creates the app itself, and so provides the app entry
 /// role.
 ///
-/// Its brick has the files of `flutter create` for Android and iOS, and:
+/// Its brick has the files of `flutter create` for Android and iOS, with the
+/// flavors of [AppEntryRole.flavors] added to both as plain text, and:
 /// - `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs `App`
 ///   inside the root wrappers of the modules;
 /// - `lib/bootstrap.dart`, with the start-up code of the modules in the
@@ -50,9 +52,18 @@ import 'package:smf_flutter_core/src/agents.dart';
 /// shows the view with texts of its own, in an app with the role too, where
 /// only the root of the app has the texts.
 ///
+/// Each flavor is a block of `productFlavors` in the Gradle file of the app,
+/// whose `manifestPlaceholders` have its name on the device, and on iOS a
+/// scheme and three build configurations in each configuration list of the
+/// Xcode project, which are copies of the plain configuration of their mode
+/// but for the id and the name of the flavor. The plain configurations and
+/// the `Runner` scheme stay, so the project is what `flutter create` writes
+/// with the flavors added to it.
+///
 /// In the guide for coding agents, the module adds to the section of the
 /// app entry what its files bring: the root widget and where its arguments
-/// go, where the tests are and the platforms of the app.
+/// go, where the tests are, the platforms of the app and where its flavors
+/// are.
 final class FlutterCoreModule extends SmfModule {
   /// Creates the module.
   const FlutterCoreModule();
@@ -137,7 +148,14 @@ final class FlutterCoreModule extends SmfModule {
       const PubspecContribution.sdk('flutter'),
       const PubspecContribution.sdk('flutter_test', dev: true),
       const PubspecContribution.hosted('flutter_lints', '^6.0.0', dev: true),
-      const PubspecContribution.flutter(usesMaterialDesign: true),
+      PubspecContribution.flutter(
+        usesMaterialDesign: true,
+        defaultFlavor: AppEntryRole.defaultFlavor.name,
+      ),
+      AppEntryRole.readmeSections.entry(
+        AppEntryRole.flavorProjectsHeading,
+        flavorProjectsSection,
+      ),
       AppEntryRole.agentSections.entry(
         appEntryRole.description,
         AgentNote(agentNote),

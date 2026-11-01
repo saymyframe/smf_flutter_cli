@@ -108,8 +108,8 @@ abstract base class Role<D extends Object> {
   /// [SocketFamily.memberOfTag].
   List<SocketFamily<Object?, SocketKind>> get socketFamilies => const [];
 
-  /// The files the role's template generates and the symbols every provider
-  /// must generate.
+  /// The files the role's template generates, and the files and the symbols
+  /// every provider must generate.
   RoleInterface get interface => const RoleInterface();
 
   /// Command line options of the role, such as `--start` of the router.
@@ -224,8 +224,10 @@ abstract base class Role<D extends Object> {
     );
   }
 
-  /// Runs the [structuralRules] over the app in [request] and returns the
-  /// problems found.
+  /// Runs the [structuralRules] over the app in [request], checks that each
+  /// provider among its modules generates the
+  /// [RoleInterface.providerFiles] of the role, and returns the problems
+  /// found.
   ///
   /// Each rule gets the role's data as [hookInput] builds it.
   @nonVirtual
@@ -238,7 +240,38 @@ abstract base class Role<D extends Object> {
       owners: Map.unmodifiable(request.owners),
       modules: List.unmodifiable(request.modules),
     );
-    return [for (final rule in structuralRules) ...rule.check(input)];
+    return [
+      for (final rule in structuralRules) ...rule.check(input),
+      for (final module in request.modules)
+        if (module.provides.contains(this))
+          for (final path in interface.providerFiles)
+            if (_providerFileIssue(path, module.id, request.owners[path])
+                case final issue?)
+              issue,
+    ];
+  }
+
+  /// The problem of the file at [path] of the [RoleInterface.providerFiles]
+  /// of the role, which [owner] generated, for its provider [provider], or
+  /// `null` if [owner] is that module, whichever of its variants.
+  SmfIssue? _providerFileIssue(
+    String path,
+    ModuleId provider,
+    ContributionOrigin? owner,
+  ) {
+    if (owner case ModuleOrigin(:final module) when module == provider) {
+      return null;
+    }
+    final found = owner == null ? 'the app has no such file' : '$owner has it';
+    return SmfIssue(
+      'The module $provider provides the $this, whose every provider '
+      'generates $path, but $found.',
+      hint: 'The file is the part of the provider that the rest of the app '
+          'relies on, so it comes with the provider and leaves with it. '
+          'Generate it from a brick or a render hook of the module.',
+      origin: ModuleOrigin(provider),
+      path: path,
+    );
   }
 
   /// Runs the [moduleRules] for the module in [request] and returns the
@@ -424,13 +457,29 @@ final class RoleOption {
 }
 
 /// What a role guarantees to the rest of the app: the files its template
-/// generates and the symbols that other code uses.
+/// generates, the files its providers generate and the symbols that other
+/// code uses.
 final class RoleInterface {
   /// Creates the interface of a role.
-  const RoleInterface({this.files = const [], this.symbols = const []});
+  const RoleInterface({
+    this.files = const [],
+    this.providerFiles = const [],
+    this.symbols = const [],
+  });
 
   /// The files the role's template generates, relative to the project root.
   final List<String> files;
+
+  /// The files that every provider of the role must generate, whatever is in
+  /// them, relative to the project root, such as an image that the README of
+  /// the app tells its developer to replace.
+  ///
+  /// They are for what [symbols] cannot name, a file that is no Dart code.
+  /// Such a file has one owner, so a role with them has at most one provider
+  /// in an app. [Role.checkStructure] checks that the provider generates
+  /// each, and so a note of the role may name them whichever module provides
+  /// the role.
+  final List<String> providerFiles;
 
   /// The symbols that other code uses: those every provider of the role
   /// must generate, and those of the files of the role's template.

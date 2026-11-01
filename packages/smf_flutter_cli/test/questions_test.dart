@@ -22,6 +22,9 @@ final class _Prompter implements SmfPrompter {
 
   final List<_Question> asked = [];
 
+  /// What each question of many answers offers selected, by its message.
+  final Map<String, List<String>> selected = {};
+
   List<T> _pick<T extends Object>(
     String message,
     List<T> choices,
@@ -58,12 +61,27 @@ final class _Prompter implements SmfPrompter {
     List<T> choices, {
     String Function(T choice)? display,
     List<T> defaultValues = const [],
-  }) async =>
-      _pick(message, choices, display);
+  }) async {
+    selected[message] = [
+      for (final value in defaultValues) display?.call(value) ?? '$value',
+    ];
+    return _pick(message, choices, display);
+  }
 
+  /// The step of a module that is skippable asks before it runs: this answers
+  /// yes when a question of the script starts the message, and fails on any
+  /// other question.
   @override
-  Future<bool> confirm(String message, {bool defaultValue = false}) =>
-      throw StateError('Unexpected question: $message');
+  Future<bool> confirm(String message, {bool defaultValue = false}) async {
+    asked.add((message: message, shown: const []));
+    final answer = _answers.entries
+        .firstWhere(
+          (entry) => message.startsWith(entry.key),
+          orElse: () => throw StateError('Unexpected question: $message'),
+        )
+        .value;
+    return answer.single == 'yes';
+  }
 
   @override
   Future<String> input(String message, {String? defaultValue}) =>
@@ -148,6 +166,7 @@ final class _Commands implements SmfProcessRunner {
 typedef _Run = ({
   int code,
   List<_Question> asked,
+  Map<String, List<String>> selected,
   List<String> lines,
   List<String> warnings,
   List<String> infos,
@@ -191,6 +210,7 @@ Future<_Run> _create(
   return (
     code: code,
     asked: prompter.asked,
+    selected: prompter.selected,
     lines: logger.lines,
     warnings: logger.warnings,
     infos: logger.infos,
@@ -207,9 +227,8 @@ const _paywallChoice = 'paywall — A paywall with the plans of the purchases '
     'of the app, and a subscription screen';
 
 void main() {
-  test(
-      'a run in a terminal asks for the features first, and not for the '
-      'router once the app has home', () async {
+  test('a run in a terminal offers home selected, and no other module',
+      () async {
     final run = await _create({
       'Features': ['home'],
       'Infrastructure': [],
@@ -218,6 +237,9 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['bloc'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -229,6 +251,44 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
+    });
+
+    expect(run.code, 0, reason: run.lines.join('\n'));
+    expect(run.selected['Features: which do you want?'], [
+      startsWith('home — '),
+    ]);
+    expect(run.selected['Infrastructure: which do you want?'], isEmpty);
+    expect(run.selected['Crash reporting: which module provides it?'], isEmpty);
+    expect(run.selected['Analytics: which module provides it?'], isEmpty);
+  });
+
+  test(
+      'a run in a terminal asks for the features first, and not for the '
+      'router once the app has home', () async {
+    final run = await _create({
+      'Features': ['home'],
+      'Infrastructure': [],
+      'Layout': ['None'],
+      'Onboarding screen': ['None'],
+      'Settings screen': ['None'],
+      'State management': ['bloc'],
+      'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
+      'Localization': ['None'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
+      'Preferences': ['None'],
+      'Crash reporting': [],
+      'Analytics': [],
+      'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -246,11 +306,15 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Authentication: which module provides it?',
+      'REST API: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Authentication: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(run.asked[0].shown, [
       'home — Start screen with a welcome and the next steps',
@@ -276,6 +340,10 @@ void main() {
     // notifications that their role requires, and then the preferences of
     // the localization, the theme and the notifications and the DI
     // container, all before the state managers.
+    expect(run.asked.last.shown, [
+      'github_actions — CI on GitHub Actions',
+      'None',
+    ]);
     expect(run.asked[11].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
@@ -322,6 +390,9 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['riverpod'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -333,6 +404,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -350,11 +422,15 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Authentication: which module provides it?',
+      'REST API: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Authentication: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -401,6 +477,9 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -412,6 +491,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -496,6 +576,9 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -507,6 +590,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -552,6 +636,9 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -563,6 +650,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -580,11 +668,15 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Authentication: which module provides it?',
+      'REST API: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Authentication: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(
       run.lines,
@@ -621,6 +713,9 @@ void main() {
       'Router': ['go_router'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -632,6 +727,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -650,11 +746,15 @@ void main() {
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
       'Events: which module provides it?',
+      'Authentication: which module provides it?',
+      'REST API: which module provides it?',
       'Purchases: which module provides it?',
       'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Authentication: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
+      'CI: which module provides it?',
     ]);
     expect(run.asked[5].shown, [
       'go_router — Routes and navigation with go_router',
@@ -683,6 +783,9 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -693,6 +796,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -820,6 +924,9 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -831,6 +938,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -891,6 +999,9 @@ void main() {
       'Router': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
@@ -902,6 +1013,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -916,7 +1028,7 @@ void main() {
       ),
     );
     expect(run.asked[events].shown, [
-      'event_bus — Event bus with event_bus',
+      'event_bus — Events between parts of the app with event_bus',
       'None',
     ]);
     final app = run.files.directory('/work/my_app');
@@ -962,6 +1074,9 @@ void main() {
       'Router': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -973,6 +1088,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1043,6 +1159,79 @@ void main() {
   });
 
   test(
+      'a run in a terminal offers native_splash as the splash screen, and asks '
+      'before it runs the tool, whose command it keeps for later on a no',
+      () async {
+    final answers = {
+      'Features': <String>[],
+      'Infrastructure': <String>[],
+      'Layout': ['None'],
+      'Onboarding screen': ['None'],
+      'Settings screen': ['None'],
+      'Router': ['None'],
+      'State management': ['None'],
+      'Theme': ['None'],
+      'Splash screen': ['native_splash'],
+      'REST API': ['None'],
+      'Localization': ['None'],
+      'Dependency injection': ['None'],
+      'Events': ['None'],
+      'Notifications': ['None'],
+      'Push messages': ['None'],
+      'Values in .env': ['None'],
+      'Purchases': ['None'],
+      'Preferences': ['None'],
+      'Crash reporting': <String>[],
+      'Analytics': <String>[],
+      'Authentication': ['None'],
+      'CI': ['None'],
+      'App icon': ['None'],
+    };
+    const step = 'Making the splash screen from assets/branding';
+    final declined = await _create({
+      ...answers,
+      step: ['no'],
+    });
+
+    expect(declined.code, 0, reason: declined.lines.join('\n'));
+    final question = declined.asked.singleWhere(
+      (question) => question.message.startsWith('Splash screen'),
+    );
+    expect(question.message, 'Splash screen: which module provides it?');
+    expect(question.shown, [
+      equals(
+        'native_splash — Light and dark splash screen from assets/branding '
+        'with flutter_native_splash',
+      ),
+      'None',
+    ]);
+    final app = declined.files.directory('/work/my_app');
+    expect(app.childFile(SplashRole.lightImageFile).existsSync(), isTrue);
+    expect(app.childFile(SplashRole.darkImageFile).existsSync(), isTrue);
+    expect(
+      declined.asked.last.message,
+      '$step (dart run flutter_native_splash:create), for native_splash. '
+      'Run it now?',
+    );
+    expect(
+      declined.infos.join('\n'),
+      contains('dart run flutter_native_splash:create'),
+      reason: 'A step that the user declined is left for later.',
+    );
+    expect(declined.warnings, isEmpty);
+
+    final ran = await _create({
+      ...answers,
+      step: ['yes'],
+    });
+    expect(ran.code, 0, reason: ran.lines.join('\n'));
+    expect(
+      ran.infos.join('\n'),
+      isNot(contains('dart run flutter_native_splash:create')),
+    );
+  });
+
+  test(
       'a run in a terminal asks which module provides the theme after the '
       'localization, and offers material_theme, which brings the '
       'preferences that remember the theme mode without a question, and '
@@ -1055,6 +1244,9 @@ void main() {
       'Settings screen': ['settings'],
       'State management': ['None'],
       'Theme': ['material_theme'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -1065,6 +1257,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1146,6 +1339,9 @@ void main() {
       'Settings screen': ['None'],
       'State management': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -1156,6 +1352,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1263,6 +1460,9 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
+        'Splash screen': ['None'],
+        'REST API': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1274,6 +1474,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1285,13 +1486,13 @@ void main() {
       'Layout: which module provides it?',
     ]);
     final app = run.files.directory('/work/my_app');
-    expect(app.childFile('lib/firebase_options.dart').existsSync(), isTrue);
+    expect(
+      app.childFile('lib/firebase_options_of_flavor.dart').existsSync(),
+      isTrue,
+    );
     expect(
       app.childFile('lib/bootstrap.dart').readAsStringSync(),
-      contains(
-        'Firebase.initializeApp(options: '
-        'DefaultFirebaseOptions.currentPlatform)',
-      ),
+      contains('Firebase.initializeApp(options: firebaseOptionsOfFlavor)'),
     );
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
@@ -1311,10 +1512,7 @@ void main() {
         '  Configuring Firebase with flutterfire (the run skips external '
         'setup, and Firebase CLI, Firebase login, FlutterFire CLI 1.4.1 or a '
         'later 1.x and Xcode project tools of flutterfire are missing):\n'
-        '    dart pub global run flutterfire_cli:flutterfire configure '
-        '--platforms=android,ios --overwrite-firebase-options '
-        '--ios-bundle-id=com.example.my-app '
-        '--android-package-name=com.example.my_app',
+        '    dart tool/configure_firebase.dart dev',
       ),
       'Then run the app:\n  cd /work/my_app\n  flutter run',
     ]);
@@ -1329,7 +1527,7 @@ void main() {
 
   test(
       'a run in a terminal asks which modules provide the crash reporting '
-      'after the events, and offers Firebase Crashlytics, which brings '
+      'after the values of .env, and offers Firebase Crashlytics, which brings '
       'Firebase', () async {
     final run = await _create(
       {
@@ -1341,6 +1539,9 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
+        'Splash screen': ['None'],
+        'REST API': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
@@ -1352,6 +1553,7 @@ void main() {
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1394,7 +1596,10 @@ void main() {
           .readAsStringSync(),
       contains('FirebaseCrashlytics.instance'),
     );
-    expect(app.childFile('lib/firebase_options.dart').existsSync(), isTrue);
+    expect(
+      app.childFile('lib/firebase_options_of_flavor.dart').existsSync(),
+      isTrue,
+    );
     // Firebase starts first, then the crash reporting, then the services
     // of the app.
     const bootstrap = 'lib/bootstrap.dart';
@@ -1420,24 +1625,19 @@ void main() {
         contains('  firebase_core: '),
       ),
     );
-    // The fix of the phase for Crashlytics that flutterfire adds is left
-    // for later with the configuration, which it continues: the second
-    // step of the list, after the first, and no warning.
-    const configuration = '2 steps are left for later. Run them in the app, '
-        'in this order:\n'
-        '  1. Configuring Firebase with flutterfire (the run skips external '
+    // The script that configures a flavor fixes the phase for Crashlytics that
+    // flutterfire adds, so the run has one step to leave for later, and no
+    // warning.
+    const configuration = 'One step is left for later. Run it in the app:\n'
+        '  Configuring Firebase with flutterfire (the run skips external '
         'setup, and ';
     const itsCommand = 'are missing):\n'
-        '     dart pub global run flutterfire_cli:flutterfire configure ';
-    const fix = '\n  2. Fixing the Crashlytics phase of flutterfire for '
-        'flutter build ipa (it runs after step 1):\n'
-        "     ruby -e 'f = ARGV[0]; ";
+        '    dart tool/configure_firebase.dart dev';
     expect(
       run.lines[run.lines.length - 2],
-      stringContainsInOrder([configuration, itsCommand, fix]),
+      stringContainsInOrder([configuration, itsCommand]),
     );
     expect(run.warnings, isNot(contains(contains('flutterfire is not done'))));
-    expect(run.warnings, isNot(contains(contains('Crashlytics phase'))));
     expect(
       app.childFile('README.md').readAsStringSync(),
       allOf(contains('\n## Firebase\n'), contains('\n## Crashlytics\n')),
@@ -1457,6 +1657,9 @@ void main() {
         'Settings screen': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
+        'Splash screen': ['None'],
+        'REST API': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1468,6 +1671,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1585,6 +1789,9 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
+        'Splash screen': ['None'],
+        'REST API': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1594,6 +1801,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1681,6 +1889,9 @@ void main() {
       'Onboarding screen': ['onboarding'],
       'Localization': ['None'],
       'Theme': ['None'],
+      'App icon': ['None'],
+      'Splash screen': ['None'],
+      'REST API': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
@@ -1691,6 +1902,7 @@ void main() {
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
+      'CI': ['None'],
     });
 
     expect(run.code, 0, reason: run.lines.join('\n'));
@@ -1774,6 +1986,9 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
+        'Splash screen': ['None'],
+        'REST API': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
@@ -1785,6 +2000,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
         'Authentication': ['None'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -1819,8 +2035,8 @@ void main() {
   });
 
   test(
-      'a run in a terminal asks last which module provides the '
-      'authentication, offers Firebase Authentication, which brings '
+      'a run in a terminal asks which module provides the authentication '
+      'after the events, offers Firebase Authentication, which brings '
       'Firebase, and then asks who may use the app without an account',
       () async {
     final run = await _create(
@@ -1833,6 +2049,9 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
+        'Splash screen': ['None'],
+        'REST API': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1845,17 +2064,25 @@ void main() {
         'Analytics': [],
         'Authentication': ['firebase_auth'],
         'Who may use the app': ['Everyone, as an anonymous user'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
 
     expect(run.code, 0, reason: run.lines.join('\n'));
-    // The roles come in the order of the list of modules, and firebase_auth
-    // is last. An app has one provider of sign-in, or none. The mode of the
-    // auth role is a choice of the role, which it asks for once the modules
-    // of the app are known, with the default first.
-    final [..., provider, mode] = run.asked;
-    expect(provider.message, 'Authentication: which module provides it?');
+    // An app has one provider of sign-in, or none. The mode of the auth role
+    // is a choice of the role, which it asks for once the modules of the app
+    // are known, with the default first.
+    final messages = [for (final question in run.asked) question.message];
+    final authentication = messages.indexOf(
+      'Authentication: which module provides it?',
+    );
+    expect(
+      authentication,
+      messages.indexOf('Events: which module provides it?') + 1,
+    );
+    final provider = run.asked[authentication];
+    final mode = run.asked.last;
     expect(provider.shown, [
       'firebase_auth — Firebase Authentication with firebase_auth',
       'None',
@@ -2021,6 +2248,9 @@ void main() {
         'Router': ['None'],
         'State management': ['None'],
         'Theme': ['None'],
+        'App icon': ['None'],
+        'Splash screen': ['None'],
+        'REST API': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -2032,6 +2262,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Who may use the app': ['Nobody'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2142,6 +2373,9 @@ void main() {
         'Onboarding screen': ['None'],
         'State management': ['riverpod'],
         'Theme': ['None'],
+        'App icon': ['None'],
+        'Splash screen': ['None'],
+        'REST API': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -2153,6 +2387,7 @@ void main() {
         'Crash reporting': [],
         'Analytics': [],
         'Who may use the app': ['Nobody'],
+        'CI': ['None'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2262,6 +2497,8 @@ void main() {
       'onboarding',
       'gen_l10n',
       'material_theme',
+      'launcher_icons',
+      'native_splash',
       'firebase_messaging',
       'get_it',
       'bloc',
@@ -2269,6 +2506,8 @@ void main() {
       'paywall',
       'firebase_crashlytics',
       'firebase_analytics',
+      'dio',
+      'github_actions',
     ];
     final run = await _create(
       {
@@ -2278,6 +2517,10 @@ void main() {
         'Onboarding screen': ['onboarding'],
         'Localization': ['gen_l10n'],
         'Theme': ['material_theme'],
+        'App icon': ['launcher_icons'],
+        'Making the app icon': ['yes'],
+        'Splash screen': ['native_splash'],
+        'Making the splash screen': ['yes'],
         'Push messages': ['firebase_messaging'],
         'Dependency injection': ['get_it'],
         'State management': ['bloc'],
@@ -2285,6 +2528,8 @@ void main() {
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': ['firebase_analytics'],
         'Who may use the app': ['Nobody'],
+        'REST API': ['dio'],
+        'CI': ['github_actions'],
       },
       options: ['--skip-external-setup'],
     );
@@ -2299,9 +2544,12 @@ void main() {
     // notifications role adds to; what is under the hood, the preferences
     // that the localization, the theme, the onboarding and the
     // notifications require, the DI container, the state manager and the
-    // events; and last the services of crash reporting, analytics and
-    // authentication. The choices of the roles come once the modules are
-    // known.
+    // events; what the app talks to, the authentication, the REST API and
+    // the purchases; what tells how it runs, the crash reporting and the
+    // analytics; and last what gets it released, its icon, its splash screen
+    // and CI. The choices of the roles come once the modules are known, and
+    // the question about a step that the user may leave for later once the
+    // app is rendered.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
       'Infrastructure: which do you want?',
@@ -2316,9 +2564,18 @@ void main() {
         'Which module provides it?',
       ),
       'Events: which module provides it?',
+      'REST API: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'App icon: which module provides it?',
+      'Splash screen: which module provides it?',
+      'CI: which module provides it?',
       'Who may use the app without an account?',
+      startsWith('Making the app icon from assets/branding ('),
+      equals(
+        'Making the splash screen from assets/branding (dart run '
+        'flutter_native_splash:create), for native_splash. Run it now?',
+      ),
     ]);
     // The answers before the questions of the settings screen, the router,
     // the notifications, the preferences, the purchases, the values of .env

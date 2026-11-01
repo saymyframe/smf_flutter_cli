@@ -1,5 +1,5 @@
 name: dart_define
-description: "The values of .env in an SMF app with --dart-define-from-file: AppEnv, and the run configurations of VS Code and Android Studio."
+description: "The values of .env in an SMF app with --dart-define-from-file: AppEnv."
 
 # A brick of the SMF module model. Its files are relative to the root of the
 # generated app. The pipeline renders it with app_name, org_name, the

@@ -114,6 +114,9 @@ void main() {
     final hasFixtureEnv = modules.any(
       (module) => module.descriptor.id == const ModuleId('fake_env'),
     );
+    final hasFixtureCi = modules.any(
+      (module) => module.descriptor.id == const ModuleId('fake_ci'),
+    );
     group('in the apps of the registry $name, the note of a role', () {
       late List<ContractResult> results;
 
@@ -326,6 +329,41 @@ void main() {
               '`FixturePurchases`',
               'fake_purchases',
             ],
+          );
+        });
+      }
+
+      // What only a registry with the fixture CI can tell: there the CI role
+      // has a provider, so the check holds its note against one, whose file
+      // no provider of another host has.
+      if (hasFixtureCi) {
+        test(
+            'of the CI role may name the commands and the file of its '
+            'template, and may not name the fixture or its file', () {
+          expect(
+            _namedWith(
+              results,
+              ciRole,
+              '- A build runs `dart ${CiRole.writeEnvFile}` and '
+              '`flutter pub get` first.',
+            ),
+            isEmpty,
+          );
+          expect(
+            _namedWith(
+              results,
+              ciRole,
+              '- The jobs are in `ci/pipeline.conf`.',
+            ),
+            ['`ci/pipeline.conf`'],
+          );
+          expect(
+            _namedWith(
+              results,
+              ciRole,
+              '- A job runs as fake_ci wants.',
+            ),
+            ['fake_ci'],
           );
         });
       }

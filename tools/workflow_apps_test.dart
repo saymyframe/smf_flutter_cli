@@ -113,14 +113,14 @@ const modulePaths = {
       'module in the start check, through start_app.sh, as on Android.',
   ('Archive the app with every module', 'smf_firebase_crashlytics'):
       'The test of firebase_crashlytics that archives the app of the job '
-          'with the build phase for Crashlytics fixed by the command of its '
-          'README.',
+          'for a flavor, with the build phase for Crashlytics fixed by the '
+          'command of its README.',
   (
-    'Fix the build phase for Crashlytics of the app with every module',
+    'Check the build phase for Crashlytics of the app with every module',
     'smf_firebase_crashlytics',
-  ): 'The test of firebase_crashlytics that fixes the build phase for '
-      'Crashlytics that flutterfire added to the app of the job with the '
-      'command of its README, before CI starts it.',
+  ): 'The test of firebase_crashlytics that checks the build phase for '
+      'Crashlytics that flutterfire added to the app of the job, which the '
+      'script that configured the app fixed, before CI starts it.',
   ('Install the Firebase CLI with the script of SMF', 'smf_firebase_core'):
       'The test of firebase_core that runs its install script of the '
           'Firebase CLI on Windows for real.',
@@ -707,12 +707,13 @@ String _whole(String where, String what) =>
     'as the apps get more, only the number of jobs grows.';
 
 /// The problems of the matrix tools that [script] runs: a run of
-/// [_wholeSelection], one that adds the tests of a matrix tool to an app
-/// without --app, and, in a job whose matrix has the keys [planKeys] from
-/// the plan, all of them for `*`, an --app or a --shard of a run that
-/// generates or checks apps, or adds tests to one, that does not come from
-/// the matrix of the plan, directly or through a variable of the
-/// environment of the step. A run that only explains what smf create would
+/// [_wholeSelection], one that adds the tests of a matrix tool to an app or
+/// runs the commands of the CI of an app without --app, and, in a job whose
+/// matrix has the keys [planKeys] from the plan, all of them for `*`, an --app
+/// or a --shard of a run that generates or checks apps, adds tests to one or
+/// runs the commands of its CI, that does not come from the matrix of the plan,
+/// directly or through a variable of the environment of the step. A run that
+/// only explains what smf create would
 /// generate may take an app of the plan as it likes. A script of
 /// .github/scripts, which has no matrix, has no [planKeys] and takes them
 /// as it is given them.
@@ -735,6 +736,14 @@ List<String> _planProblemsOfScript(_Script script, Set<String>? planKeys) {
         'start check the probes of the tests of the roles of the app, such as '
         'the walk of its routes: take --app from the matrix of the job, as '
         '--create --app does.',
+      );
+    }
+    if (arguments.firstOrNull == '--ci-commands' &&
+        !choice.containsKey('--app')) {
+      problems.add(
+        '${script.where} runs the commands of the CI of an app of a matrix '
+        'tool without --app. The commands come from the app of the matrix: '
+        'take --app from the matrix of the job, as --create --app does.',
       );
     }
     if (planKeys == null || arguments.contains('--explain')) continue;
@@ -1538,9 +1547,11 @@ List<String> mavenCentralProblemsOf(String workflow, {required String file}) {
 }
 
 /// Whether [step] runs Gradle for Android: builds an app with [buildApk],
-/// `flutter build apk` or `flutter build appbundle`, or starts one on
+/// `flutter build apk` or `flutter build appbundle`, runs the build of the CI
+/// of an app with `--ci-commands --build` of a matrix tool, or starts one on
 /// Android with .github/scripts/start_app.sh, which builds it.
 bool _buildsForAndroid(YamlMap step) =>
+    _buildsCiOfApp('${step['run'] ?? ''}') ||
     commandsOf('${step['run'] ?? ''}').any((words) {
       for (final (index, word) in words.indexed) {
         final rest = words.skip(index + 1).take(2).toList();
@@ -1556,6 +1567,12 @@ bool _buildsForAndroid(YamlMap step) =>
       }
       return false;
     });
+
+/// Whether the script [run] has a run of `--ci-commands` of a matrix tool with
+/// `--build`, also where an expression of GitHub Actions gives that option,
+/// whose `&&` would split the words of the command.
+bool _buildsCiOfApp(String run) =>
+    run.contains('--ci-commands') && run.contains('--build');
 
 /// Whether the word at [index] of [words] is `flutter`, followed by `build`
 /// and one of [targets].
@@ -2795,6 +2812,54 @@ dart run packages/smf_flutter_cli/tool/matrix.dart --add-app-tests --app "$2" "$
       );
     });
 
+    test(
+        'finds a step that runs the commands of the CI of an app without '
+        '--app, or with an --app that does not come from the matrix of the '
+        'plan', () {
+      expect(
+        planProblemsOf(
+          r'''
+jobs:
+  plan:
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+    steps:
+      - run: echo
+  android:
+    needs: plan
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    steps:
+      - name: Planned
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          dart run packages/smf_flutter_cli/tool/matrix.dart --ci-commands --app "$APP" \
+            ${{ strategy.job-index == 0 && '--build' || '' }} "$apps/app"
+      - name: Without an app
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --ci-commands "$apps/app"
+      - name: Named
+        run: dart run packages/smf_flutter_cli/tool/matrix.dart --ci-commands --app 'every module (bloc)' "$apps/app"
+''',
+          file: 'apps.yml',
+        ),
+        [
+          equals(
+            'apps.yml, job android, step "Without an app" runs the commands '
+            'of the CI of an app of a matrix tool without --app. The commands '
+            'come from the app of the matrix: take --app from the matrix of '
+            'the job, as --create --app does.',
+          ),
+          startsWith(
+            'apps.yml, job android, step "Named" takes --app every module '
+            '(bloc), which is no value of a matrix of its job that the plan '
+            'gives:',
+          ),
+        ],
+      );
+    });
+
     test('finds a job or a step that computes its timeout-minutes', () {
       expect(
         planProblemsOf(
@@ -3770,6 +3835,32 @@ jobs:
         ),
       ]);
     });
+
+    test(
+        'takes the build of the CI of an app for a run of Gradle, and not the '
+        'commands of its checks', () {
+      const workflow = r'''
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run the checks of the CI of the app
+        run: dart run tool/matrix.dart --ci-commands --app "$APP" "$app"
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run the build of the CI of the app
+        run: |
+          dart run tool/matrix.dart --ci-commands --app "$APP" \
+            ${{ strategy.job-index == 0 && '--build' || '' }} "$app"
+''';
+      expect(mavenCentralProblemsOf(workflow, file: 'apps.yml'), [
+        startsWith(
+          'apps.yml, job build runs Gradle for Android from the step "Run the '
+          'build of the CI of the app" on, but no step before it puts ',
+        ),
+      ]);
+    });
   });
 
   test(
@@ -3856,10 +3947,41 @@ jobs:
       expect(answers, isNotEmpty);
       expect(answerProblemsOf(answers, asked), isEmpty);
     },
-    // Each tool loads the modules of its matrix first, which takes a while
-    // on the runners of CI.
-    timeout: const Timeout(Duration(minutes: 5)),
+    // Each of the three tools loads the modules of its matrix first, one after
+    // another: about 40 seconds each on a laptop, and more than 5 minutes in
+    // all on a runner of Windows, which runs other test files next to them.
+    timeout: const Timeout(Duration(minutes: 15)),
   );
+
+  test(
+      'the job that builds each app of the plan for Android runs the commands '
+      'of the CI of the app, after the save of the cache of Gradle, and only '
+      'its first job builds the app as its CI does', () {
+    final top = Process.runSync('git', ['rev-parse', '--show-toplevel']);
+    expect(top.exitCode, 0, reason: '${top.stderr}');
+    final file = File('${'${top.stdout}'.trim()}/.github/workflows/apps.yml');
+    final jobs =
+        (loadYaml(file.readAsStringSync()) as YamlMap)['jobs'] as YamlMap;
+    final android = jobs['android'] as YamlMap;
+    final matrix = (android['strategy'] as YamlMap)['matrix'] as YamlMap;
+    final steps = (android['steps'] as YamlList).cast<YamlMap>();
+    final commands = steps.indexWhere(
+      (step) => '${step['run'] ?? ''}'.contains('--ci-commands'),
+    );
+
+    expect(matrix['app'], r'${{ fromJSON(needs.plan.outputs.apps) }}');
+    expect(commands, isNonNegative, reason: 'No step runs the commands.');
+    expect(
+      commands,
+      greaterThan(
+        steps.indexWhere((step) => step['name'] == 'Save the cache of Gradle'),
+      ),
+    );
+    expect(
+      steps[commands]['run'],
+      contains(r"${{ strategy.job-index == 0 && '--build' || '' }}"),
+    );
+  });
 
   test(
       'the workflows and the scripts of the repository choose their apps by '

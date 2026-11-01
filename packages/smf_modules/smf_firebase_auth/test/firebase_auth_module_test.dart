@@ -46,8 +46,8 @@ const _implementation = 'lib/core/auth/firebase_auth_service.dart';
 
 /// The statement of firebase_core that initializes Firebase in
 /// `bootstrap()`.
-const _initializeFirebase = 'await Firebase.initializeApp(options: '
-    'DefaultFirebaseOptions.currentPlatform);';
+const _initializeFirebase =
+    'await Firebase.initializeApp(options: firebaseOptionsOfFlavor);';
 
 /// The owners of the code of sign-in: this module and the template of its
 /// role.
@@ -208,6 +208,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 const password = 'secret';
+
+const _endedSessionCodes = [
+  'user-token-expired',
+  'invalid-user-token',
+  'user-not-found',
+  'no-current-user',
+];
 
 String userOf(AuthUser? user) => user == null
     ? 'nobody'
@@ -617,12 +624,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   await signIn();
 
   final ended = <String, Object?>{};
-  for (final code in const [
-    'user-token-expired',
-    'invalid-user-token',
-    'user-not-found',
-    'no-current-user',
-  ]) {
+  for (final code in _endedSessionCodes) {
     await service.signInAnonymously();
     failNext['delete'] = FirebaseAuthException(code: code);
     ended['delete: $code'] = await step(service.deleteAccount);
@@ -633,6 +635,82 @@ Future<void> main(List<String> arguments, SendPort port) async {
     );
   }
   result['ended session'] = ended;
+
+  // A read of the token: what it answers, how it ends for each code of
+  // Firebase, and that it tells the listener only of a user who had to go.
+  await service.signOut();
+  await settle();
+  firebaseCalls.clear();
+  heard.clear();
+  final tokens = <String, Object?>{
+    'nobody': await service.userToken(),
+    'nobody, forced': await service.userToken(forceRefresh: true),
+    'the calls for nobody': [...firebaseCalls],
+  };
+  await signIn();
+  await settle();
+  firebaseCalls.clear();
+  heard.clear();
+  tokens['a read'] = await service.userToken();
+  tokens['a read again'] = await service.userToken();
+  tokens['a forced read'] = await service.userToken(forceRefresh: true);
+  tokens['a read after it'] = await service.userToken();
+  await settle();
+  tokens['the calls'] = [...firebaseCalls];
+  tokens['heard'] = [...heard];
+  for (final code in const [
+    'network-request-failed',
+    'too-many-requests',
+  ]) {
+    failNext['getIdToken'] = FirebaseAuthException(code: code);
+    tokens['refused: $code'] =
+        await step(() => service.userToken(forceRefresh: true));
+  }
+  failNext['getIdToken'] = StateError('The plugin broke in.');
+  tokens['an error of another kind'] = await step(service.userToken);
+  final endedRead = <String, Object?>{};
+  for (final code in _endedSessionCodes.where(
+    (code) => code != 'no-current-user',
+  )) {
+    await signIn();
+    failNext['getIdToken'] = FirebaseAuthException(code: code);
+    endedRead[code] = await step(() => service.userToken(forceRefresh: true));
+  }
+  tokens['ended session'] = endedRead;
+  await signIn();
+  failNext['getIdToken'] = FirebaseAuthException(code: 'no-current-user');
+  String? ofNobody = 'not read';
+  tokens['nobody on the platform'] = await step(
+    () async => ofNobody = await service.userToken(),
+  );
+  tokens['the answer with nobody on the platform'] = ofNobody;
+  // The plugin on Android answers such a read with the code `unknown`.
+  final unknownRead = <String, Object?>{};
+  for (final code in [..._endedSessionCodes, 'user-disabled']) {
+    await signIn();
+    failNext['getIdToken'] = FirebaseAuthException(
+      code: 'unknown',
+      message: 'The server said no.',
+    );
+    failNext['reload'] = FirebaseAuthException(code: code);
+    unknownRead[code] = await step(
+      () => service.userToken(forceRefresh: true),
+    );
+  }
+  await signIn();
+  failNext['getIdToken'] = FirebaseAuthException(
+    code: 'unknown',
+    message: 'The server said no.',
+  );
+  unknownRead['a reload that completes'] = await step(
+    () => service.userToken(forceRefresh: true),
+  );
+  failNext['getIdToken'] = FirebaseAuthException(code: 'user-disabled');
+  unknownRead['disabled at once'] = await step(
+    () => service.userToken(forceRefresh: true),
+  );
+  tokens['unknown read'] = unknownRead;
+  result['tokens'] = tokens;
 
   await signIn();
   failNext['delete'] = FirebaseAuthException(code: 'requires-recent-login');
@@ -789,6 +867,7 @@ void main() {
         'mode_declaration',
         'anonymous_mode',
         'minimum_firebase_cli',
+        'configure_script',
       ]);
       final language = brick.vars['email_language']! as RoleVar;
       expect(language.role, localizationRole);
@@ -833,6 +912,7 @@ void main() {
       expect(brick.vars['anonymous_mode'], 'anonymous');
       expect(AuthMode.anonymous.name, 'anonymous');
       expect(brick.vars['minimum_firebase_cli'], '15.34.0');
+      expect(brick.vars['configure_script'], 'tool/configure_firebase.dart');
       expect(firstFirebaseCliWithSignIn, '15.34.0');
     });
 
@@ -930,7 +1010,6 @@ void main() {
       // step needs no terminal.
       expect(step.interactive, isFalse);
       expect(step.needs, [firebaseCliWithSignIn.id]);
-      expect(step.hosts, isEmpty);
       expect(step.when, isEmpty);
       expect(step.id, isNull);
     });
@@ -1374,7 +1453,7 @@ void main() {
               name: signatureOf(method),
           },
         );
-        expect(interface.keys, hasLength(11));
+        expect(interface.keys, hasLength(12));
       });
 
       test('asks Firebase for no language before a password reset', () {
@@ -1685,8 +1764,8 @@ void main() {
             'hint of one that is not enabled', () {
           // The script of the app enables Google, and only the Firebase
           // console Apple.
-          const script = 'run `$enableSignInCommand` in the directory of the '
-              'app, or ';
+          const script = 'run `$enableSignInCommand --project '
+              'stand-in-project` in the directory of the app, or ';
           String notEnabled(String method) =>
               'notConfigured: Sign-in with $method is not enabled in the '
               'Firebase project stand-in-project (Firebase answered '
@@ -1938,6 +2017,138 @@ void main() {
       });
 
       test(
+          'gives the ID token of the user, which asks Firebase for a new one '
+          'only when it forces a refresh and tells the listener of no other '
+          'user', () {
+        final tokens = sent['tokens']! as Map<Object?, Object?>;
+        const account = 'uid of a@x.dev <a@x.dev>';
+        const first = 'id-token of uid of a@x.dev, number 1';
+        const second = 'id-token of uid of a@x.dev, number 2';
+        expect(
+          {
+            for (final key in const [
+              'nobody',
+              'nobody, forced',
+              'the calls for nobody',
+              'a read',
+              'a read again',
+              'a forced read',
+              'a read after it',
+              'the calls',
+              'heard',
+            ])
+              key: tokens[key],
+          },
+          {
+            'nobody': null,
+            'nobody, forced': null,
+            'the calls for nobody': <Object?>[],
+            'a read': first,
+            'a read again': first,
+            'a forced read': second,
+            'a read after it': second,
+            'the calls': [
+              'getIdToken(false)',
+              'getIdToken(false)',
+              'getIdToken(true)',
+              'getIdToken(false)',
+            ],
+            // Firebase tells that the token changed, of the same user.
+            'heard': [account],
+          },
+        );
+        expect(
+          tokens['nobody on the platform'],
+          [
+            'completed',
+            account,
+            ['getIdToken(false)'],
+            <Object?>[],
+          ],
+          reason: 'With nobody on the platform, as while a sign-out is on its '
+              'way, a read signs nobody out.',
+        );
+        expect(tokens['the answer with nobody on the platform'], isNull);
+        expect(
+          {
+            for (final code in const [
+              'network-request-failed',
+              'too-many-requests',
+            ])
+              code: tokens['refused: $code'],
+          },
+          {
+            for (final (code, reason) in const [
+              ('network-request-failed', 'network'),
+              ('too-many-requests', 'tooManyAttempts'),
+            ])
+              code: [
+                reason,
+                account,
+                ['getIdToken(true)'],
+                <Object?>[],
+              ],
+          },
+          reason: 'A read that Firebase refuses gets the reason of the code, '
+              'leaves the user and tells the listener nothing.',
+        );
+        expect(
+          tokens['an error of another kind'],
+          [
+            'unknown: Bad state: The plugin broke in.',
+            account,
+            ['getIdToken(false)'],
+            <Object?>[],
+          ],
+        );
+        expect(tokens['ended session'], {
+          for (final code in _endedSession)
+            if (code != 'no-current-user')
+              code: [
+                'recentSignInRequired',
+                'nobody',
+                ['getIdToken(true)', 'signOut()'],
+                ['nobody'],
+              ],
+        });
+      });
+
+      test(
+          'takes the reason of a read that the plugin on Android answers with '
+          'the code unknown from a reload of the user, and signs out a user '
+          'whom the server no longer takes', () {
+        final tokens = sent['tokens']! as Map<Object?, Object?>;
+        const reload = ['getIdToken(true)', 'reload()', 'signOut()'];
+        expect(tokens['unknown read'], {
+          for (final code in _endedSession)
+            code: [
+              'recentSignInRequired',
+              'nobody',
+              reload,
+              ['nobody'],
+            ],
+          'user-disabled': [
+            'userDisabled',
+            'nobody',
+            reload,
+            ['nobody'],
+          ],
+          'a reload that completes': [
+            'unknown: unknown: The server said no.',
+            'uid of a@x.dev <a@x.dev>',
+            ['getIdToken(true)', 'reload()'],
+            <Object?>[],
+          ],
+          'disabled at once': [
+            'userDisabled',
+            'nobody',
+            ['getIdToken(true)', 'signOut()'],
+            ['nobody'],
+          ],
+        });
+      });
+
+      test(
           'signs out a user whose session has ended on the server, and '
           'fails the call for that user with recentSignInRequired', () {
         expect(sent['ended session'], {
@@ -1964,7 +2175,8 @@ void main() {
           'the script that enables it and the link to the project', () {
         const link = 'https://console.firebase.google.com/project/'
             'stand-in-project/authentication/providers';
-        const enable = 'run `$enableSignInCommand` in the directory of the '
+        const enable = 'run `$enableSignInCommand --project stand-in-project` '
+            'in the directory of the '
             'app, or enable Email/Password, and Anonymous for an app that '
             'signs in anonymous users, in the Firebase console under '
             'Authentication > Sign-in method: $link';
@@ -2074,7 +2286,7 @@ void main() {
           'and what it leaves as it is', () {
         expect(
           readmeSectionOf(const {}),
-          allOf(
+          allOf([
             contains('```bash\n$enableSignInCommand\n```\n'),
             contains('```bash\n$enableSignInCommand --account <email>\n```\n'),
             contains(
@@ -2085,11 +2297,21 @@ void main() {
                 'the app.'),
             // The step has a notice, so a run asks about it.
             contains('`smf create` asks to enable them right after '
-                '`flutterfire configure` has configured the app.'),
+                '`dart ${FirebaseCoreModule.configureScript} '
+                '${AppEntryRole.defaultFlavor.name}` has configured the '
+                'app.'),
+            // A run is for one project, and flavors may have several.
+            contains('so once `firebase.json` has several, the script stops '
+                'and lists them. Run it once for each:\n\n```bash\n'
+                '$enableSignInCommand --project <id>\n```\n'),
+            contains('in each project that a flavor is configured for.'),
+            // No command of a plain run of flutterfire, whose files no
+            // flavor reads.
+            isNot(contains('flutterfire')),
             // Of no way to sign in with an identity provider.
             isNot(contains('Google')),
             isNot(contains('Apple')),
-          ),
+          ]),
         );
         // What the script reads, each a file of the app or a name in it.
         final code = _codeOf(readmeSectionOf(const {}));
@@ -2112,6 +2334,10 @@ void main() {
           allOf(
             contains("const _sessionFile = '${AuthRole.sessionFile}';"),
             contains(r"File('${app.path}/firebase.json')"),
+            contains(
+              'const _configureScript = '
+              "'${FirebaseCoreModule.configureScript}';",
+            ),
             contains("'deploy',\n      '--only',\n      'auth',"),
           ),
         );
@@ -2136,7 +2362,7 @@ void main() {
         expect(
           app.files[_implementation]!.text,
           allOf(
-            contains('run `$enableSignInCommand` in the '),
+            contains('run `$enableSignInCommand --project '),
             contains('enable Email/Password, and Anonymous'),
             contains('Authentication > Sign-in method'),
           ),
@@ -2413,8 +2639,8 @@ void main() {
         contains("const _appName = 'Contract App';"),
       );
       expect(
-        withBoth.files['ios/Runner/Info.plist']!.text,
-        contains('<string>Contract App</string>'),
+        withBoth.files[AppEntryRole.xcodeProjectFile]!.text,
+        contains('APP_DISPLAY_NAME = "Contract App";'),
       );
     });
 
@@ -2590,30 +2816,38 @@ void main() {
           contains('It never disables a method, and it changes no file of '
               'the app but those that Google needs, as told below.'),
           // The brand goes to whichever project the script enables the
-          // methods in, and the rest only to the project of firebase.json.
+          // methods in, and the rest only to the apps of firebase.json.
           contains('\n\nFor Google sign-in, the script also gives Google the '
               'name of the app and the email address of the account of the '
               'Firebase CLI for the consent screen that users see when they '
               'sign in.'),
           contains('\n\nThe script sets up the rest of what Google needs only '
-              'for the project that `firebase.json` names, not for one that '
-              '`--project` names:\n\n- It registers'),
+              'for the apps that `firebase.json` names in the project of the '
+              'run. A project that no flavor is configured for gets none of '
+              'it:\n\n- It registers'),
           contains('run it with `--account <email>`, or enable Google in the '
               'Firebase console.'),
           contains('\n- It registers the SHA-1 and SHA-256 of the Android '
-              'debug key of the machine that runs it'),
+              'debug key of the machine that runs it for each of those '
+              'Android apps'),
           contains('the script creates it, as the first debug build would.'),
-          contains('\n- It downloads the Firebase files of the app again'),
-          contains('\n- It writes the URL scheme of the iOS app, '
-              '`REVERSED_CLIENT_ID` of `ios/Runner/GoogleService-Info.plist`, '
-              'into `CFBundleURLTypes` of `ios/Runner/Info.plist`.'),
-          contains('\n\nRun the script again after `flutterfire configure` '
-              'for another project.\n'),
+          contains('\n- It downloads the Firebase files of those apps again, '
+              'once they have the clients of Google, and writes them to the '
+              'paths that `firebase.json` names.'),
+          contains('\n- It writes the URL scheme of each of those iOS apps, '
+              '`REVERSED_CLIENT_ID` of its `GoogleService-Info.plist`, into '
+              '`CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors '
+              'share that file, so it lists a scheme for each iOS app that '
+              'the script ran for'),
+          contains('\n\nAfter you configure a flavor for another project, run '
+              'the script for that project too.\n'),
+          isNot(contains('flutterfire')),
           contains('under Test and release > App integrity in the Play '
               'Console.'),
-          contains('```bash\nfirebase apps:android:sha:create <appId> <sha>\n'
-              '```\n\nThe section ${AppEntryRole.setupHeading} lists this '
-              'among the steps that you do by hand.\n'),
+          contains('```bash\nfirebase apps:android:sha:create <appId> <sha> '
+              '--project=<id>\n```\n\nThe section '
+              '${AppEntryRole.setupHeading} lists this among the steps that '
+              'you do by hand.\n'),
           contains('\n\nApple is enabled in the Firebase console, which the '
               'Firebase CLI cannot do:'),
           contains('(App Store Review Guideline 5.1.1(v))'),
@@ -2627,7 +2861,10 @@ void main() {
           contains('never put it into the app or its repository.'),
           contains('fails with `notConfigured`, and the account stays. The '
               'section ${AppEntryRole.setupHeading} lists both, adding Apple '
-              'and entering the key, among the steps that you do by hand.\n'),
+              'and entering the key, among the steps that you do by hand. '
+              'Each Firebase project has these settings of its own, so repeat '
+              'them in the project of each flavor that signs in with '
+              'Apple.\n'),
           // Each block is a paragraph of its own.
           isNot(contains('\n\n\n')),
         ]),
@@ -2703,7 +2940,12 @@ void main() {
         _codeOf(note),
         containsAll([enableSignInScript, 'ios/Runner/Info.plist']),
       );
-      for (final path in [enableSignInScript, 'ios/Runner/Info.plist']) {
+      expect(note, contains('`${FirebaseCoreModule.configureScript}`'));
+      for (final path in [
+        enableSignInScript,
+        FirebaseCoreModule.configureScript,
+        'ios/Runner/Info.plist',
+      ]) {
         expect(withBoth.files.keys, contains(path));
       }
       expect(methodsAgentNote(const {}), isNull);

@@ -166,6 +166,7 @@ final class HomeModule extends SmfModule {
         description: 'Start screen with a welcome and the next steps',
         kind: ModuleKinds.feature,
         uses: {localizationRole},
+        selectedByDefault: true,
       );
 
   @override

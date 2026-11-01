@@ -226,6 +226,8 @@ void main() {
     // The test of the look of the fixture theme checks that the root
     // follows a widget that the themes of a provider read from its context.
     expect(named('theme_look').roles, {appEntryRole});
+    // Which flavor a command without --flavor builds only a run shows.
+    expect(named('flavors').roles, {appEntryRole});
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -311,6 +313,8 @@ void main() {
       'preferences_restorers',
       'theme_role',
       'theme_look',
+      // The test of the flavor of a running app that the CLI keeps.
+      'flavors',
       // The test of the notifications that the CLI keeps, for the fixture
       // notifications, which every such app has, and its test of the step
       // that the template of their role gives the fixture onboarding.
@@ -975,6 +979,55 @@ void main() {
   });
 
   test(
+      'the tests of the REST role apply to the apps with every module, where '
+      'the fixture REST provides the role next to the fixture sign-in, in each '
+      'mode of the auth role, and the test of the module that makes requests '
+      'to each app with that module; only the first gives the key of the role '
+      'a value, and only the first has a probe', () {
+    final roleTest = named('rest_role');
+    final sessionTest = named('rest_session');
+    final moduleTest = named('rest_consumer');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ];
+    final key = RestRole.baseAddressKey.name;
+
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(restRole) &&
+              app.everyModuleWith == null)
+            app.name,
+      ],
+      ['fake_rest with auth', 'fake_rest', 'fake_rest_user'],
+      reason: 'The role uses the auth role, so its provider has an app with '
+          'the fixture sign-in and one without, and the module requires it.',
+    );
+    expect(appsOf(roleTest), everyModule);
+    expect(appsOf(sessionTest), everyModule);
+    expect(
+      {
+        for (final app in apps.where(sessionTest.appliesTo))
+          authRole.modeIn(authRole.hookInput(app.hook!)),
+      },
+      AuthMode.values.toSet(),
+    );
+    expect(appsOf(moduleTest), ['fake_rest_user', ...everyModule]);
+    expect(roleTest.roles, {restRole});
+    expect(sessionTest.roles, {restRole});
+    expect(moduleTest.roles, isEmpty, reason: 'It tests a module.');
+    expect(roleTest.startProbe!.function, 'probeRest');
+    expect(sessionTest.startProbe, isNull);
+    expect(moduleTest.startProbe, isNull);
+    for (final app in apps.where(roleTest.appliesTo)) {
+      expect(roleTest.envValues!(app).keys, [key], reason: app.name);
+      expect(sessionTest.envValues, isNull, reason: app.name);
+      expect(moduleTest.envValues, isNull, reason: app.name);
+    }
+  });
+
+  test(
       'the test of the env role applies to the apps with every module, where '
       'the fixture values of .env provide the role and the module that reads '
       'values of .env gives it keys, and not to the apps of the two alone, '
@@ -989,7 +1042,8 @@ void main() {
     ];
 
     // The module uses the role, so it has an app with the role and one
-    // without, and the provider has an app without keys.
+    // without, and the provider has an app without keys, as has the provider
+    // of the CI role, which uses the role.
     expect(
       [
         for (final app in apps)
@@ -997,7 +1051,17 @@ void main() {
               app.modules.contains(FakeEnvUserModule.id))
             if (app.everyModuleWith == null) app.name,
       ],
-      ['fake_env', 'fake_env_user with env', 'fake_env_user'],
+      [
+        'fake_env',
+        'fake_env_user with env',
+        'fake_env_user',
+        // The fixture REST requires the role, whose key it gives, and the
+        // module that makes requests through it.
+        'fake_rest with auth',
+        'fake_rest',
+        'fake_rest_user',
+        'fake_ci with env',
+      ],
     );
     expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
     expect(appsOf(valuesTest), appsOf(roleTest));
@@ -1005,7 +1069,10 @@ void main() {
       final keys = envRole.keysIn(envRole.hookInput(app.hook!));
       expect(
         [for (final key in keys) key.name],
-        [for (final key in FakeEnvUserModule.keys) key.name],
+        [
+          for (final key in FakeEnvUserModule.keys) key.name,
+          RestRole.baseAddressKey.name,
+        ],
         reason: app.name,
       );
       // A value in double quotes, an empty one, and none, as of a key that
@@ -1075,9 +1142,9 @@ void main() {
     );
     // The apps of each mode: those of the fixture alone, six in the
     // default mode and one in each other mode, the two of the fixture way
-    // to sign in and the two of the fixture purchases with the role in the
-    // default mode, and each app with every module with a clock of 24 hours
-    // and with one of 12.
+    // to sign in, the two of the fixture purchases with the role and the one
+    // of the fixture REST with the role in the default mode, and each app
+    // with every module with a clock of 24 hours and with one of 12.
     expect(
       {
         for (final mode in AuthMode.values)
@@ -1085,7 +1152,7 @@ void main() {
               .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
               .length,
       },
-      {'required': 26, 'guest': 17, 'anonymous': 17},
+      {'required': 27, 'guest': 17, 'anonymous': 17},
     );
     // The mode comes from the choice of the role, which an app has without
     // the option too.
@@ -1982,6 +2049,7 @@ void main() {
           'settings_screen_role',
           'theme_role',
           'theme_setting',
+          'flavors',
           'fake_crash',
           'fake_analytics',
           'analytics_role',
@@ -1997,6 +2065,10 @@ void main() {
           'purchases_session',
           'purchases_setting',
           'paywall',
+          'app_icon_role',
+          'launcher_icons',
+          'splash_role',
+          'native_splash',
         ]),
       );
       // The test of the purchases of the user of the device is for an app

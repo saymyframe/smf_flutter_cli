@@ -27,9 +27,11 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   needs of the project, `_needs` ([SignInNeed]), with the code that sets
 ///   it up, comes with one that needs something.
 /// - It reads the id of the project from `firebase.json` of the app, where
-///   `flutterfire configure` of flutterfire_cli 1.4.1 writes it for each
-///   platform (`lib/src/common/utils.dart` there): flutterfire writes no
-///   `.firebaserc`. Its arguments may name another project.
+///   [FirebaseCoreModule.configureScript] has flutterfire_cli 1.4.1 write it
+///   for each platform (`lib/src/common/utils.dart` there): flutterfire writes
+///   no `.firebaserc`. Its arguments may name another project. Flavors may
+///   have several projects, and a run is for one: without such an argument the
+///   script stops there, with the command for each.
 /// - The project of the Firebase CLI is the script's to give. The Firebase
 ///   CLI takes the last `--project` or `-P` of its arguments before `--`
 ///   (`parseOptions` of commander 5.1.0 in firebase-tools 15.14.0), so the
@@ -62,9 +64,10 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   every later `firebase deploy` of the app would deploy the sign-in
 ///   methods too, and ask for the permissions of that. A `.firebaserc`
 ///   would make `flutterfire configure` take its project without asking.
-/// - For a way to sign in that needs it, and only for the project that
-///   `firebase.json` names, whose apps it names there, it registers the
-///   SHA-1 and SHA-256 of the Android debug key of the machine
+/// - For a way to sign in that needs it, and only for the apps that
+///   `firebase.json` names in the project of the run, of which each flavor
+///   in that project has its own, it registers the SHA-1 and SHA-256 of the
+///   Android debug key of the machine
 ///   ([SignInNeed.androidCertificate]) with
 ///   `firebase apps:android:sha:create`, those that
 ///   `firebase apps:android:sha:list` does not list. It reads them with
@@ -76,18 +79,19 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// - Then it downloads the Firebase files of the app again with
 ///   `firebase apps:sdkconfig --json` ([SignInNeed.serverClient] for
 ///   Android, [SignInNeed.iosClient] for iOS): they have the clients of
-///   Google only once Google is enabled. It writes them where
-///   `flutterfire configure` wrote them, a file that changed only, and only
-///   once it has the clients. Right after it enabled Google, it asks for a
+///   Google only once Google is enabled. It writes them to the paths that
+///   `firebase.json` names, a file that changed only, and only once it has
+///   the clients. Right after it enabled Google, it asks for a
 ///   file without them again for 15 seconds at most: a check against a
 ///   real project found them in the first answer. `--out` refuses a file
 ///   that exists in a run without a terminal
 ///   (`lib/commands/apps-sdkconfig.js`).
-/// - Then it writes the URL scheme of the iOS app, the reversed id of its
+/// - Then it writes the URL scheme of each iOS app, the reversed id of its
 ///   client of Google, into `CFBundleURLTypes` of `ios/Runner/Info.plist`,
-///   as text with the libraries of Dart. It adds a scheme and removes none,
-///   and leaves a file that has it as it is. It stops at a file in any
-///   other form, with what to add there by hand.
+///   as text with the libraries of Dart. The flavors share that file, so it
+///   lists the schemes of every project that the script ran for. It adds a
+///   scheme and removes none, and leaves a file that has it as it is. It
+///   stops at a file in any other form, with what to add there by hand.
 /// - Apple is enabled in the Firebase console, which no command of the
 ///   Firebase CLI does, so in an app with a way to sign in of Apple the
 ///   script tells what to set there, with the code for that alone.
@@ -134,8 +138,8 @@ const enableSignInCommand = 'dart $enableSignInScript';
 /// `flutterfire configure` registers. 15.34.0 takes an app of any platform,
 /// and adds a web app only to a project without any app
 /// (`lib/deploy/auth/prepare.js` of firebase-tools 15.34.0). The step runs
-/// after `flutterfire configure`, so the project has the apps of the app by
-/// then.
+/// after [FirebaseCoreModule.configureScript], so the project has the apps of
+/// the app by then.
 const firstFirebaseCliWithSignIn = '15.34.0';
 
 /// The check of the machine that [enableSignIn] needs: a Firebase CLI whose
@@ -239,21 +243,22 @@ String rawStringsOf(String pattern) {
   return lines.join('\n  ');
 }
 
-/// The step that continues the step of firebase_core that runs
-/// `flutterfire configure` ([FirebaseCoreModule.configureStep]), and
-/// enables the sign-in methods of the app in the Firebase project that the
-/// user chose there, with [enableSignInScript].
+/// The step that continues the step of firebase_core that configures the
+/// default flavor of the app ([FirebaseCoreModule.configureStep]), and enables
+/// the sign-in methods of the app in the Firebase project that the user chose
+/// there, with [enableSignInScript]. Right after generation `firebase.json`
+/// has that one project, so the step names none.
 ///
 /// For a way to sign in of Google, the script also changes the project and
 /// files of the app, so the step has a notice, [enableSignInNotice]: a run
-/// asks about it once flutterfire configured the app. A step cannot tell
+/// asks about it once that flavor is configured. A step cannot tell
 /// the ways to sign in of the app, so the step and its notice are the same
-/// in every app. A run that leaves `flutterfire configure` for later, such
-/// as one that cannot ask or that skips external setup, leaves this step
-/// for later with it, with its command and its notice, and so does a run
-/// in which flutterfire did not configure the app. The Firebase CLI asks
-/// nothing, so the step runs without the terminal. It needs a Firebase CLI
-/// that adds no app to the project, [firebaseCliWithSignIn].
+/// in every app. A run that leaves the configuration for later, such as one
+/// that cannot ask or that skips external setup, leaves this step for later
+/// with it, with its command and its notice, and so does a run in which the
+/// flavor was not configured. The Firebase CLI asks nothing, so the step runs
+/// without the terminal. It needs a Firebase CLI that adds no app to the
+/// project, [firebaseCliWithSignIn].
 final PostGenStep enableSignIn = PostGenStep(
   const ToolRef('dart'),
   const [enableSignInScript],

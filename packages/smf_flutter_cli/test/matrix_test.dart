@@ -357,8 +357,8 @@ void main() {
       'localization and without each, which all get the values of .env, the '
       'apps of the paywall for each state manager with the localization, '
       'the settings screen and the onboarding screen and without each, which '
-      'get RevenueCat, the values of .env and the router, the apps of the '
-      'onboarding with the '
+      'get RevenueCat, the values of .env and the router, the apps of CI with '
+      'the values of .env and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
       'onboarding screen and the localization and without each, which all '
@@ -384,12 +384,13 @@ void main() {
     String localized(String module) => '$module with localization '
         '($module, gen_l10n, flutter_core, go_router, shared_preferences)';
     String everyModule(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, dart_define, onboarding, local_notifications, '
-        'firebase_core, firebase_crashlytics, firebase_analytics, '
-        'firebase_messaging, firebase_auth, google_sign_in, apple_sign_in, '
-        'sign_in, revenuecat, paywall)';
+        '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
+        'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
+        'event_bus, shared_preferences, firebase_core, firebase_messaging, '
+        'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
+        'revenuecat, paywall, dart_define, firebase_crashlytics, '
+        'firebase_analytics, '
+        'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
     // the entry of the account, and the router.
@@ -424,13 +425,16 @@ void main() {
       ),
       'flutter_core (flutter_core)',
       'go_router with layout (go_router, bottom_tabs, flutter_core)',
-      'bloc (bloc, flutter_core)',
-      'riverpod (riverpod, flutter_core)',
+      localized('bottom_tabs'),
       localized('home'),
       'home (home, flutter_core, go_router)',
       localized('settings'),
       'settings (settings, flutter_core, go_router)',
-      localized('bottom_tabs'),
+      equals(
+        'onboarding with localization (onboarding, gen_l10n, flutter_core, '
+        'shared_preferences, go_router)',
+      ),
+      'onboarding (onboarding, flutter_core, shared_preferences, go_router)',
       equals(
         'material_theme with settings_screen, localization (material_theme, '
         'settings, gen_l10n, flutter_core, shared_preferences, go_router)',
@@ -444,17 +448,6 @@ void main() {
         'flutter_core, shared_preferences)',
       ),
       'material_theme (material_theme, flutter_core, shared_preferences)',
-      'get_it (get_it, flutter_core)',
-      'event_bus with di (event_bus, get_it, flutter_core)',
-      'event_bus (event_bus, flutter_core)',
-      'shared_preferences with di (shared_preferences, get_it, flutter_core)',
-      'shared_preferences (shared_preferences, flutter_core)',
-      'dart_define (dart_define, flutter_core)',
-      equals(
-        'onboarding with localization (onboarding, gen_l10n, flutter_core, '
-        'shared_preferences, go_router)',
-      ),
-      'onboarding (onboarding, flutter_core, shared_preferences, go_router)',
       equals(
         'local_notifications with settings_screen, onboarding_screen, '
         'localization (local_notifications, settings, onboarding, gen_l10n, '
@@ -491,30 +484,14 @@ void main() {
         'local_notifications (local_notifications, flutter_core, '
         'shared_preferences)',
       ),
+      'get_it (get_it, flutter_core)',
+      'bloc (bloc, flutter_core)',
+      'riverpod (riverpod, flutter_core)',
+      'event_bus with di (event_bus, get_it, flutter_core)',
+      'event_bus (event_bus, flutter_core)',
+      'shared_preferences with di (shared_preferences, get_it, flutter_core)',
+      'shared_preferences (shared_preferences, flutter_core)',
       'firebase_core (firebase_core, flutter_core)',
-      equals(
-        'firebase_crashlytics with di (firebase_crashlytics, get_it, '
-        'firebase_core, flutter_core)',
-      ),
-      equals(
-        'firebase_crashlytics (firebase_crashlytics, firebase_core, '
-        'flutter_core)',
-      ),
-      equals(
-        'firebase_analytics with di, router (firebase_analytics, get_it, '
-        'go_router, firebase_core, flutter_core)',
-      ),
-      equals(
-        'firebase_analytics with di (firebase_analytics, get_it, '
-        'firebase_core, flutter_core)',
-      ),
-      equals(
-        'firebase_analytics with router (firebase_analytics, go_router, '
-        'firebase_core, flutter_core)',
-      ),
-      equals(
-        'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
-      ),
       equals(
         'firebase_messaging (firebase_messaging, firebase_core, flutter_core, '
         'local_notifications, shared_preferences)',
@@ -552,6 +529,13 @@ void main() {
       signIn('riverpod', localized: true),
       signIn('bloc'),
       signIn('riverpod'),
+      // dio with the provider of the auth role that the REST role uses, and
+      // without it, with the provider of the env role that it requires.
+      equals(
+        'dio with auth (dio, firebase_auth, firebase_core, flutter_core, '
+        'dart_define)',
+      ),
+      'dio (dio, flutter_core, dart_define)',
       // RevenueCat with each subset of the roles that the purchases role
       // uses, with Firebase Authentication and its Firebase for the auth.
       equals(
@@ -631,6 +615,35 @@ void main() {
             'paywall ($stateManager)$uses (paywall,',
             '${others.replaceFirst('%', stateManager)})',
           ].join(' '),
+      'dart_define (dart_define, flutter_core)',
+      equals(
+        'firebase_crashlytics with di (firebase_crashlytics, get_it, '
+        'firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_crashlytics (firebase_crashlytics, firebase_core, '
+        'flutter_core)',
+      ),
+      equals(
+        'firebase_analytics with di, router (firebase_analytics, get_it, '
+        'go_router, firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_analytics with di (firebase_analytics, get_it, '
+        'firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_analytics with router (firebase_analytics, go_router, '
+        'firebase_core, flutter_core)',
+      ),
+      equals(
+        'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
+      ),
+      'launcher_icons (launcher_icons, flutter_core)',
+      'native_splash (native_splash, flutter_core)',
+      // CI with the values of .env, which its build writes, and without.
+      'github_actions with env (github_actions, dart_define, flutter_core)',
+      'github_actions (github_actions, flutter_core)',
       inMode('guest'),
       inMode('anonymous'),
       everyModule('bloc'),
@@ -858,10 +871,10 @@ void main() {
 
     expect(failed, isEmpty);
     String without(String stateManager) => 'every module ($stateManager) '
-        '(flutter_core, go_router, $stateManager, home, settings, '
-        'bottom_tabs, material_theme, gen_l10n, get_it, event_bus, '
-        'shared_preferences, dart_define, onboarding, local_notifications, '
-        'revenuecat, paywall, local)';
+        '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
+        'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
+        'event_bus, shared_preferences, dio, revenuecat, paywall, dart_define, '
+        'launcher_icons, native_splash, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -1706,7 +1719,8 @@ Type type() => Types;
   test(
       'the report of the app tests names each key that a test gives the apps '
       'a value of, with the module that gives the app the key and its '
-      'package, and none where no module of the app gives it', () async {
+      'package, or the role whose template gives it, and none where nothing '
+      'in the app gives it', () async {
     final home = await _appTestsOf('smf_home_flutter');
     const withHome = MatrixApp('with home', [
       FlutterCoreModule.id,
@@ -1718,14 +1732,20 @@ Type type() => Types;
       file: '.env',
       toolArguments: (app) => const [],
       keys: (app) => {
-        if (app.modules.contains(HomeModule.id)) 'HOME_URL': HomeModule.id,
+        if (app.modules.contains(HomeModule.id))
+          'HOME_URL': (module: HomeModule.id, role: null),
+        'ROLE_KEY': (module: null, role: 'board'),
       },
     );
     final tests = [
       MatrixAppTest(
         '$home/values',
         appliesTo: (_) => true,
-        envValues: (app) => {'HOME_URL': 'https://home.example', 'X_KEY': null},
+        envValues: (app) => {
+          'HOME_URL': 'https://home.example',
+          'X_KEY': null,
+          'ROLE_KEY': 'a value',
+        },
       ),
       MatrixAppTest('$home/none', appliesTo: (_) => true),
     ];
@@ -1751,39 +1771,45 @@ Type type() => Types;
           'key': 'HOME_URL',
           'module': 'home',
           'package': 'smf_home_flutter',
+          'role': null,
           'apps': ['with home'],
         },
         {
           'key': 'X_KEY',
           'module': null,
           'package': null,
+          'role': null,
+          'apps': ['with home', 'without home'],
+        },
+        {
+          'key': 'ROLE_KEY',
+          'module': null,
+          'package': null,
+          'role': 'board',
           'apps': ['with home', 'without home'],
         },
         {
           'key': 'HOME_URL',
           'module': null,
           'package': null,
+          'role': null,
           'apps': ['without home'],
         },
       ],
       <Object>[],
     ]);
-    // Without the keys of the apps, no module gives a key.
+    // Without the keys of the apps, nothing gives a key.
     expect(
       (await report()).first['envKeys'],
       [
-        {
-          'key': 'HOME_URL',
-          'module': null,
-          'package': null,
-          'apps': ['with home', 'without home'],
-        },
-        {
-          'key': 'X_KEY',
-          'module': null,
-          'package': null,
-          'apps': ['with home', 'without home'],
-        },
+        for (final key in const ['HOME_URL', 'X_KEY', 'ROLE_KEY'])
+          {
+            'key': key,
+            'module': null,
+            'package': null,
+            'role': null,
+            'apps': ['with home', 'without home'],
+          },
       ],
     );
   });
@@ -2643,20 +2669,24 @@ Type type() => Types;
             [
               'flutter_core',
               'go_router',
-              stateManager,
+              'bottom_tabs',
               'home',
               'settings',
-              'bottom_tabs',
+              'onboarding',
               'material_theme',
               'gen_l10n',
+              'local_notifications',
               'get_it',
+              stateManager,
               'event_bus',
               'shared_preferences',
-              'dart_define',
-              'onboarding',
-              'local_notifications',
+              'dio',
               'revenuecat',
               'paywall',
+              'dart_define',
+              'launcher_icons',
+              'native_splash',
+              'github_actions',
             ].join(','),
             '-o',
             '/apps',
@@ -2818,6 +2848,13 @@ Type type() => Types;
     const app = MatrixApp('home', [ModuleId('home')]);
 
     final added = addAppTests(
+      (
+        generated: const GeneratedApp(
+          name: 'my_app',
+          path: '/apps/app_1',
+        ),
+        app: app,
+      ),
       [
         MatrixAppTest(
           '/tests/core',
@@ -2826,9 +2863,6 @@ Type type() => Types;
         ),
         MatrixAppTest('/tests/more', appliesTo: (app) => true),
       ],
-      app: app,
-      directory: '/apps/app_1',
-      packageName: 'my_app',
       fileSystem: fileSystem,
     );
 
@@ -2858,10 +2892,14 @@ Type type() => Types;
       ..writeAsStringSync('// more\n');
     const app = MatrixApp('home', [ModuleId('home')]);
     List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          (
+            generated: const GeneratedApp(
+              name: 'my_app',
+              path: '/apps/app_1',
+            ),
+            app: app,
+          ),
           tests,
-          app: app,
-          directory: '/apps/app_1',
-          packageName: 'my_app',
           fileSystem: fileSystem,
         );
     // A problem reads as its message, also where it is printed.
@@ -2909,6 +2947,13 @@ Type type() => Types;
     final generating = <String>[];
 
     final added = addAppTests(
+      (
+        generated: const GeneratedApp(
+          name: 'my_app',
+          path: '/apps/app_1',
+        ),
+        app: app,
+      ),
       [
         MatrixAppTest(
           '/tests/core',
@@ -2927,9 +2972,6 @@ Type type() => Types;
         ),
         MatrixAppTest('/tests/more', appliesTo: (app) => true),
       ],
-      app: app,
-      directory: '/apps/app_1',
-      packageName: 'my_app',
       fileSystem: fileSystem,
     );
 
@@ -2966,6 +3008,13 @@ Type type() => Types;
       MatrixApp? matrixApp = app,
     }) =>
         addAppTests(
+          (
+            generated: const GeneratedApp(
+              name: 'my_app',
+              path: '/apps/app_1',
+            ),
+            app: matrixApp,
+          ),
           [
             MatrixAppTest('/tests/core', appliesTo: (app) => true),
             MatrixAppTest(
@@ -2974,9 +3023,6 @@ Type type() => Types;
               generatedFiles: (app, packageName) => files,
             ),
           ],
-          app: matrixApp,
-          directory: '/apps/app_1',
-          packageName: 'my_app',
           fileSystem: fileSystem,
         );
     // A problem reads as its message.
@@ -3051,10 +3097,14 @@ Type type() => Types;
     });
 
     List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          (
+            generated: const GeneratedApp(
+              name: 'my_app',
+              path: '/apps/app_1',
+            ),
+            app: app,
+          ),
           tests,
-          app: app,
-          directory: '/apps/app_1',
-          packageName: 'my_app',
           fileSystem: fileSystem,
         );
 
@@ -3215,10 +3265,14 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     });
 
     List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          (
+            generated: const GeneratedApp(
+              name: 'my_app',
+              path: '/apps/app_1',
+            ),
+            app: app,
+          ),
           tests,
-          app: app,
-          directory: '/apps/app_1',
-          packageName: 'my_app',
           fileSystem: fileSystem,
         );
 
@@ -3261,6 +3315,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
         startProbesFile,
         startAnswersFile,
         startBuildArgumentsFile,
+        startReleaseArgumentsFile,
       ]);
       expect(startProbesFile, 'integration_test/start_probes.dart');
       final list =
@@ -3397,18 +3452,27 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         'its own, for the script that starts the app on a device', () {
       expect(startAnswersFile, 'integration_test/start_answers');
       expect(startBuildArgumentsFile, 'integration_test/start_build_arguments');
+      expect(
+        startReleaseArgumentsFile,
+        'integration_test/start_release_arguments',
+      );
 
       final added = addAppTests(
+        (
+          generated: const GeneratedApp(
+            name: 'my_app',
+            path: '/apps/app_1',
+          ),
+          app: app,
+        ),
         [
           asking('/tests/messages', 'messages'),
           start,
           walk(),
           asking('/tests/access', 'access_2'),
         ],
-        app: app,
-        directory: '/apps/app_1',
-        packageName: 'my_app',
         buildArguments: const ['--dart-define-from-file=.env', '--flavor=ci'],
+        releaseBuildArguments: const ['--flavor', 'store'],
         fileSystem: fileSystem,
       );
 
@@ -3418,6 +3482,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           startProbesFile,
           startAnswersFile,
           startBuildArgumentsFile,
+          startReleaseArgumentsFile,
         ]),
       );
       expect(read(startAnswersFile), 'messages\naccess_2\n');
@@ -3425,6 +3490,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         read(startBuildArgumentsFile),
         '--dart-define-from-file=.env\n--flavor=ci\n',
       );
+      expect(read(startReleaseArgumentsFile), '--flavor\nstore\n');
     });
 
     test(
@@ -3433,18 +3499,25 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       expect(add([start, walk()]), containsAll([startAnswersFile]));
       expect(read(startAnswersFile), '');
       expect(read(startBuildArgumentsFile), '');
+      expect(read(startReleaseArgumentsFile), '');
 
       fileSystem.directory('/apps/app_1').deleteSync(recursive: true);
       final added = addAppTests(
+        (
+          generated: const GeneratedApp(
+            name: 'my_app',
+            path: '/apps/app_1',
+          ),
+          app: app,
+        ),
         [asking('/tests/messages', 'messages')],
-        app: app,
-        directory: '/apps/app_1',
-        packageName: 'my_app',
         buildArguments: const ['--dart-define-from-file=.env'],
+        releaseBuildArguments: const ['--flavor', 'store'],
         fileSystem: fileSystem,
       );
       expect(added, isNot(contains(startAnswersFile)));
       expect(added, isNot(contains(startBuildArgumentsFile)));
+      expect(added, isNot(contains(startReleaseArgumentsFile)));
     });
 
     test(
@@ -3457,13 +3530,19 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       List<String> addWith(
         List<MatrixAppTest> tests, {
         List<String> buildArguments = const [],
+        List<String> releaseBuildArguments = const [],
       }) =>
           addAppTests(
+            (
+              generated: const GeneratedApp(
+                name: 'my_app',
+                path: '/apps/app_1',
+              ),
+              app: app,
+            ),
             tests,
-            app: app,
-            directory: '/apps/app_1',
-            packageName: 'my_app',
             buildArguments: buildArguments,
+            releaseBuildArguments: releaseBuildArguments,
             fileSystem: fileSystem,
           );
 
@@ -3503,6 +3582,17 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           ),
           reason: argument,
         );
+        expect(
+          () => addWith(
+            [start],
+            releaseBuildArguments: ['--flavor=ci', argument],
+          ),
+          throwsProblem(
+            'A build argument of the app is empty or has a line break, which '
+            'integration_test/start_release_arguments cannot hold.',
+          ),
+          reason: argument,
+        );
       }
       expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
     });
@@ -3511,6 +3601,10 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       for (final (path, what) in [
         (startAnswersFile, 'the answers that their probes ask for'),
         (startBuildArgumentsFile, 'the arguments that build the app'),
+        (
+          startReleaseArgumentsFile,
+          'the arguments that build the app as a release',
+        ),
       ]) {
         final file = fileSystem.file('/tests/walk/$path')
           ..createSync(recursive: true)
@@ -4017,14 +4111,15 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       Map<String, int> codes = const {},
       MatrixApp? app,
       MatrixEnv? env,
+      List<String> releaseBuildArguments = const [],
       String? envValues,
       bool maskValues = false,
     }) =>
         addAppTestsTo(
-          generated,
+          (generated: generated, app: app),
           tests,
-          app: app,
           env: env,
+          releaseBuildArguments: releaseBuildArguments,
           envValues:
               envValues == null ? null : (path: envValues, mask: maskValues),
           fileSystem: fileSystem,
@@ -4261,6 +4356,24 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
           expect(code, 0, reason: output);
           expect(read(startBuildArgumentsFile), '');
+        }
+      });
+
+      test(
+          'writes the arguments that build the app as a release, whose app '
+          'entry role names them, also without the app of the matrix',
+          () async {
+        for (final app in [app, null]) {
+          fileSystem.directory('/apps/start_app').createSync(recursive: true);
+          final (code, output) = await add(
+            [start],
+            app: app,
+            releaseBuildArguments: const ['--flavor', 'store'],
+          );
+
+          expect(code, 0, reason: output);
+          expect(read(startReleaseArgumentsFile), '--flavor\nstore\n');
+          fileSystem.directory('/apps/start_app').deleteSync(recursive: true);
         }
       });
 

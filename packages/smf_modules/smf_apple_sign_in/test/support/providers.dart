@@ -95,6 +95,9 @@ final class TestAuthService implements AuthService {
   Future<void> signOut() async {}
 
   @override
+  Future<String?> userToken({bool forceRefresh = false}) async => null;
+
+  @override
   Future<void> deleteAccount({SignInCredential? fresh}) async => _fail();
 
   @override

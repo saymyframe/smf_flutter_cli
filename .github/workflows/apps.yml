@@ -184,7 +184,10 @@ jobs:
   # `--allow-warning=<code>` for each warning about what the app is made of
   # that it has on purpose, and must pass `flutter analyze`, and then the
   # tests that the packages keep for it in `app_tests/`, with
-  # `flutter test`. Each job checks its shard of the apps in a directory
+  # `flutter test`. An app of a provider of the CI role also runs the commands
+  # of its CI in a clone of it, before those tests go in. The matrix does this
+  # in the step that generates the apps, and only for apps without every
+  # module. Each job checks its shard of the apps in a directory
   # with a space in its name, and then its shard of the apps with every
   # module of the matrix in a directory whose name has letters beyond ASCII
   # too.
@@ -312,9 +315,9 @@ jobs:
     name: Generated apps (broken providers)
     if: inputs.broken_providers
     runs-on: ubuntu-latest
-    # Its small apps run one after another, each in about half a minute;
-    # the timeout leaves room for many more.
-    timeout-minutes: 20
+    # Its small apps run one after another, about 60 of them at about 20 seconds
+    # each, so this timeout leaves little room for more.
+    timeout-minutes: 30
     env: *linux_env
 
     steps:
@@ -341,7 +344,9 @@ jobs:
     runs-on: ubuntu-latest
     # About 10 minutes: the app and its first build with Gradle. When the job
     # writes an entry of the cache of Gradle from an empty cache, it also
-    # downloads about 1.8 GB and builds a release app, a few minutes more.
+    # downloads about 1.8 GB and builds a release app, a few minutes more. The
+    # commands of the CI of the app add a minute, and the first job of the
+    # matrix builds a release app once more.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -379,7 +384,7 @@ jobs:
       # for Android. tools/native_build.dart writes what the app builds
       # with, once it is generated, and configured in the jobs that
       # configure it: its plugins with Android code, with their versions,
-      # and its Gradle files without its ids, which name the versions of
+      # and its Gradle files without its ids or name, which name the versions of
       # Gradle and of its plugins. The key of an entry is its family, the
       # hash of that file and the version of Flutter, whose engine Gradle
       # downloads too, and the week. Each job of this matrix writes the
@@ -472,6 +477,22 @@ jobs:
         with:
           path: *gradle_paths
           key: ${{ steps.gradle_lookup.outputs.cache-primary-key }}
+
+      # What the CI of the app runs on its first push, in a clone of a commit
+      # of it, so without .env and whatever else its .gitignore keeps out. The
+      # first job of the matrix also builds the app as its CI does, in a clone
+      # of its own, with values for its keys that the matrix tool makes up, and
+      # for x86_64 alone. The step comes after the save, so that the entry of
+      # the cache stays what the two builds above need. The commands fetch
+      # their packages and need no secret: a clone has no .env, so the checks
+      # copy .env.example, where every value is empty.
+      - name: Run the commands of the CI of the app with every module in a clone of it
+        env: *app_env
+        run: |
+          for app in "$RUNNER_TEMP/SMF apps/android"/*/; do
+            dart run packages/smf_flutter_cli/tool/matrix.dart --ci-commands --app "$APP" \
+              ${{ strategy.job-index == 0 && '--build' || '' }} "${app%/}"
+          done
 
   # An app with every module but the modules whose steps need an external
   # service, such as the Firebase project that flutterfire configures an
@@ -667,8 +688,11 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/revenuecat-secret-key"
 
-      # The app as a user installs it: a release build, in which R8 shrinks
-      # the Java and Kotlin code and renames the classes that no rule keeps.
+      # The app as a user installs it: a release build of the flavor for a
+      # release, which the script takes from a file next to the start check
+      # that the matrix tool wrote from the app entry role, and in which R8
+      # shrinks the Java and Kotlin code and renames the classes that no rule
+      # keeps.
       # A plugin that looks a class up by its name, as through JNI, then
       # fails in a release app though it works in a debug one, as
       # shared_preferences_android 2.5.0 did when the app opened the
@@ -698,22 +722,25 @@ jobs:
         run: dart tools/test_annotations.dart
 
   # An app with Firebase starts only once flutterfire configured it: the
-  # placeholder of its options throws at start-up. flutterfire writes the
-  # options of the Android and iOS apps with the ids of the app in the
-  # Firebase project of CI, saymyframe-app-cli, and on Android adds the
-  # Gradle plugins of Google services and Crashlytics. The native projects
+  # placeholder of its options throws at start-up. The script of the app runs
+  # flutterfire for the flavors dev, which a plain build gives and the jobs
+  # start, and prod, which a user ships. It writes the options of the Android
+  # and iOS apps of each flavor with its ids in the Firebase project of CI,
+  # saymyframe-app-cli, and on Android adds the Gradle plugins of Google
+  # services and Crashlytics. The ids of dev end with .dev, and those of prod
+  # are the ids of the app. No job configures staging. The native projects
   # and their configuration belong to the app entry, so the plan has one
   # app with every module that fits for each of its providers, with the
   # first providers of the other roles that fit with it: firebase_start_app
   # for the first provider of the app entry, and firebase_start_app_<app
   # entry> for another, after the providers other than the first of their
   # roles, names that stay when another role gets a second provider.
-  # flutterfire registers the Firebase apps when the
-  # project has none with those ids, and finds them in later runs: the ids
-  # come from the organization of the apps of CI, com.saymyframe.ci, and the
-  # name of the app. Jobs that run at the same time, such as those of the
-  # nightly run, could register an app each, and the test of the
-  # configuration fails on a project with several. So only the runs of
+  # flutterfire registers the Firebase apps when the project has none with
+  # those ids, and finds them in later runs: the ids come from the
+  # organization of the apps of CI, com.saymyframe.ci, the name of the app and
+  # the flavor. Jobs that run at the same time, such as those of the nightly
+  # run, could register an app each, and the test of the configuration fails
+  # on a project with several. So only the runs of
   # build.yml, with the input register_firebase_apps, let flutterfire
   # register an app, the Android one on Linux and the iOS one on macOS, one
   # job each: the run of the pull request into main that brings a new
@@ -767,9 +794,9 @@ jobs:
           dart pub global activate flutterfire_cli "$version"
 
       # A test of smf_firebase_core runs the command of the README of the app
-      # for Android, with the key of the service account in a file that only
-      # this step has, and skips an app that does not depend on
-      # firebase_core, which starts without it.
+      # for the flavors dev and prod on Android, with the key of the service
+      # account in a file that only this step has, and skips an app that does
+      # not depend on firebase_core, which starts without it.
       - name: Configure the app with every module with Firebase for Android
         working-directory: packages/smf_modules/smf_firebase_core
         env:
@@ -793,9 +820,10 @@ jobs:
       # app says, with the key of the service account: the job of the first
       # app of the plan in a run that may register apps in the project, of
       # build.yml, so that two jobs never write to the project at once. The
-      # script registers the SHA of a debug key, and in a project with
-      # Google each SHA creates an OAuth client of Google, of which Google
-      # lets a project create only so many. So the test gives the script
+      # script registers the SHA of a debug key for the Android app of each
+      # of the two flavors, and in a project with Google each SHA creates an
+      # OAuth client of Google, of which Google lets a project create only so
+      # many. So the test gives the script
       # the debug key of .github/android/debug.keystore, which stays the
       # same: its SHA is registered once and stays in the project.
       - name: Enable the sign-in methods of the app with every module in Firebase
@@ -974,9 +1002,9 @@ jobs:
     name: macOS
     if: inputs.macos_and_windows
     runs-on: macos-26
-    # About 20 minutes, and up to twice that on a slow runner: the same tests
-    # on the same image have taken 18 minutes and 29.
-    timeout-minutes: 45
+    # About 40 minutes, and more on a slow runner: the same tests on the same
+    # image have taken 40 minutes and 45.
+    timeout-minutes: 60
     env: &macos_env
       FLUTTER_SHA256: ${{ inputs.macos_sha256 }}
       # The Xcode of the image that builds the apps.
@@ -1263,8 +1291,9 @@ jobs:
       - *annotate
 
   # The app with every module of each provider of the app entry, as on
-  # Linux, archived with the build phase for Crashlytics that flutterfire
-  # configure adds, fixed by the command that the README of the app gives.
+  # Linux, archived for a flavor with the build phases that flutterfire
+  # configure adds, the one for Crashlytics fixed by the command that the
+  # README of the app gives.
   # The test of smf_firebase_crashlytics skips an app that does not depend on
   # firebase_crashlytics, to which flutterfire adds no such phase. It needs
   # no Firebase project, so it runs without the key too.
@@ -1354,9 +1383,10 @@ jobs:
       - *install_firebase
 
       # A test of smf_firebase_core runs the command of the README of the app
-      # for iOS, with the key of the service account in a file that only
-      # this step has. It skips an app that does not depend on
-      # firebase_core, as on Linux.
+      # for the flavors dev and prod on iOS, with the key of the service
+      # account in a file that only this step has: three runs of flutterfire
+      # for each flavor, one for each of its build configurations. It skips an
+      # app that does not depend on firebase_core, as on Linux.
       - name: Configure the app with every module with Firebase for iOS
         working-directory: packages/smf_modules/smf_firebase_core
         env:
@@ -1387,11 +1417,11 @@ jobs:
           "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CONFIGURED_APP \
             "$RUNNER_TEMP/SMF apps застосунки é/firebase" dart test test/enable_sign_in_test.dart --file-reporter json:build/test-results/enable_sign_in_test.json
 
-      # A test of smf_firebase_crashlytics fixes the build phase for
-      # Crashlytics that flutterfire added with the command of the README of
-      # the app, as SMF does right after it configures an app, and skips an
-      # app that does not depend on firebase_crashlytics.
-      - name: Fix the build phase for Crashlytics of the app with every module
+      # A test of smf_firebase_crashlytics checks that the script of the app
+      # that configured it left the build phase for Crashlytics that
+      # flutterfire added fixed, and skips an app that does not depend on
+      # firebase_crashlytics.
+      - name: Check the build phase for Crashlytics of the app with every module
         working-directory: packages/smf_modules/smf_firebase_crashlytics
         run: |
           "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CONFIGURED_APP \
@@ -1422,8 +1452,8 @@ jobs:
     needs: plan
     if: ${{ !cancelled() && inputs.macos_and_windows }}
     runs-on: windows-latest
-    # About 20 minutes.
-    timeout-minutes: 45
+    # About 40 minutes.
+    timeout-minutes: 60
     defaults:
       run:
         shell: pwsh

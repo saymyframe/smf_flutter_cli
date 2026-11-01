@@ -181,6 +181,7 @@ final class TestModule extends SmfModule {
     List<SocketFamily<Object?, SocketKind>> socketFamilies = const [],
     this.contributions = const [],
     String? description,
+    bool selectedByDefault = false,
   }) : descriptor = ModuleDescriptor(
           id: ModuleId(id),
           description: description ?? 'The module $id',
@@ -192,6 +193,7 @@ final class TestModule extends SmfModule {
           variants: variants,
           sockets: sockets,
           socketFamilies: socketFamilies,
+          selectedByDefault: selectedByDefault,
         );
 
   @override
@@ -208,8 +210,8 @@ const plainKind = ModuleKind(id: 'plain', label: 'Plain modules');
 
 /// The module that provides the app entry in tests, with the base value of
 /// the minimum iOS version, the Dart SDK constraint and the dependency on
-/// Flutter, as flutter_core contributes them, and the files of
-/// [entryBrick] and [fallbackBrick] unless [bricks] is `false`.
+/// Flutter, as flutter_core contributes them, and the files of [entryBrick]
+/// and [fallbackBrick] with the default flavor unless [bricks] is `false`.
 TestModule scaffold({
   List<Contribution> contributions = const [],
   bool bricks = true,
@@ -219,7 +221,13 @@ TestModule scaffold({
       kind: ModuleKinds.scaffold,
       providers: [const RoleProvider.plain(appEntryRole)],
       contributions: [
-        if (bricks) ...[entryBrick(), fallbackBrick()],
+        if (bricks) ...[
+          entryBrick(),
+          fallbackBrick(),
+          PubspecContribution.flutter(
+            defaultFlavor: AppEntryRole.defaultFlavor.name,
+          ),
+        ],
         AppEntryRole.iosDeploymentTarget.value('13.0'),
         const PubspecContribution.environment(sdk: '^3.8.1'),
         const PubspecContribution.sdk('flutter'),
@@ -307,6 +315,25 @@ plugins {
 android {
     compileOptions {
 {{{smf_app_entry__android_core_library_desugaring_enabled}}}
+    }
+
+    defaultConfig {
+        applicationId = "{{org_name}}.{{app_name}}"
+    }
+
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+        }
+        create("prod") {
+            dimension = "default"
+        }
     }
 }
 
@@ -514,7 +541,8 @@ final class Prompt {
 /// - `input`: a string, or `null` for the default value;
 /// - `select`: the start of the displayed choice to pick, or `null` for the
 ///   default value;
-/// - `multiSelect`: the starts of the displayed choices to pick.
+/// - `multiSelect`: the starts of the displayed choices to pick, or `null` for
+///   the default values.
 final class ScriptedPrompter implements SmfPrompter {
   ScriptedPrompter(List<Object?> answers) : _answers = [...answers];
 
@@ -569,7 +597,8 @@ final class ScriptedPrompter implements SmfPrompter {
     List<T> defaultValues = const [],
   }) async {
     final shown = [for (final c in choices) display?.call(c) ?? '$c'];
-    final answer = _next(Prompt('multiSelect', message, shown))! as List;
+    final answer = _next(Prompt('multiSelect', message, shown)) as List?;
+    if (answer == null) return defaultValues;
     return [
       for (var i = 0; i < choices.length; i++)
         if (answer.any((start) => shown[i].startsWith(start as String)))

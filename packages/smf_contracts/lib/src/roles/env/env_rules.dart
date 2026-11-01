@@ -10,8 +10,8 @@ final RegExp _readsKey = RegExp('^$_appEnv\\.([A-Za-z0-9_\$]+)\$');
 /// gives, and tool arguments from a module that does not provide the role,
 /// more than once, or with an argument that is not one line.
 ///
-/// The template of the role refuses keys and tool arguments from the
-/// templates of roles.
+/// The template of the role checks the keys of the templates of roles and
+/// refuses tool arguments from them.
 List<SmfIssue> _checkKeys(ModuleRuleInput<EnvData> input) {
   final module = input.module;
   final origin = ModuleOrigin(module.id);
@@ -130,9 +130,10 @@ bool _isAppEnv(String? target) =>
 /// descriptor is [module] if it is a module of the app.
 ///
 /// It looks at the files of a module with the role among its roles, which
-/// may read its own keys and those of the modules it depends on, and at the
-/// files of the template of a role that requires or uses the role, and of
-/// the pipeline, which may read none. The harness reports the import of
+/// may read its own keys and those of the modules it depends on, at the
+/// files of the template of a role that requires or uses the role, which
+/// may read its own keys, and at the files of the pipeline, which has none.
+/// The harness reports the import of
 /// [EnvRole.readerFile] by a module without the role among its roles and by
 /// the template of a role that neither requires nor uses it. The provider
 /// of the role declares `AppEnv`. A module whose descriptor the app lacks
@@ -188,7 +189,6 @@ List<SmfIssue> _keyAccessIssuesOf(
           access.name,
           byGetter[access.name],
           owner: owner,
-          inModule: module != null,
           readable: readable,
         )
             case final issue?)
@@ -207,42 +207,32 @@ List<SmfIssue> _keyAccessIssuesOf(
 
 /// The issue of [read], the read of the getter [getter] of `AppEnv` at
 /// [path] by [owner], whose key is [key], or `null` when [owner] may read
-/// it: it reads a key of the app, from the code of a module ([inModule]),
-/// and the key is one of those in [readable].
+/// it: it reads a key of the app, and the key is one of those in [readable].
 SmfIssue? _readIssueOf(
   String path,
   String read,
   String getter,
   AppEnvKey? key, {
   required ContributionOrigin owner,
-  required bool inModule,
   required Set<ContributionOrigin> readable,
 }) {
   if (key == null) {
     return SmfIssue(
       '$path reads $read, but no key of the app has the getter $getter.',
-      hint: 'Give the role the key as data of the module that reads it, and '
+      hint: 'Give the role the key as data of the code that reads it, and '
           'read it as the getter that the role names for it, such as '
           '$_appEnv.myServiceKey for MY_SERVICE_KEY.',
       origin: owner,
       path: path,
     );
   }
-  if (!inModule) {
-    // Only the code of a module reads values.
-    return SmfIssue(
-      '$path reads $read, the $key, but only the code of a module reads '
-      'the values of the app, not that of ${_named(owner)}.',
-      hint: 'Read the value in the code of a module that gives the role '
-          'its key.',
-      origin: owner,
-      path: path,
-    );
-  }
   if (!readable.contains(key.owner)) {
+    final mayRead = owner is ModuleOrigin
+        ? 'its own keys and those of the modules it depends on'
+        : 'its own keys';
     return SmfIssue(
       '$path reads $read, the $key, but ${_named(owner)} may only read '
-      'its own keys and those of the modules it depends on.',
+      '$mayRead.',
       hint: 'Give the role a key of your own.',
       origin: owner,
       path: path,

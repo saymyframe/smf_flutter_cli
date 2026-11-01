@@ -312,7 +312,11 @@ void main() {
 
       expect(
         pubspec['flutter'],
-        {'uses-material-design': true, 'generate': true},
+        {
+          'default-flavor': AppEntryRole.defaultFlavor.name,
+          'uses-material-design': true,
+          'generate': true,
+        },
       );
       final others =
           _yamlOf(without.files['pubspec.yaml']!.text)! as Map<String, Object?>;
@@ -882,7 +886,9 @@ void main() {
       expect(
         _putInto(result, AppEntryRole.readmeSections),
         [
+          ('flutter_core', AppEntryRole.flavorProjectsHeading),
           ('gen_l10n', GenL10nModule.readmeHeading),
+          ('role:app_entry', AppEntryRole.flavorsHeading),
           ('role:localization', LocalizationRole.readmeHeading),
         ],
       );

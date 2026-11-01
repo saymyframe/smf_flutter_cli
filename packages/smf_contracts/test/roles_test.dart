@@ -20,10 +20,14 @@ const List<Role> _roles = [
   notificationsRole,
   pushRole,
   purchasesRole,
+  restRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
   envRole,
+  appIconRole,
+  splashRole,
+  ciRole,
 ];
 
 final RegExp _mustache = RegExp(r'\{\{\{?\s*([^}]*?)\s*\}?\}\}');
@@ -60,10 +64,14 @@ void main() {
       'notifications role',
       'push messages role',
       'purchases role',
+      'REST API role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
       'env role',
+      'app icon role',
+      'splash screen role',
+      'CI role',
     ]);
   });
 
@@ -153,6 +161,13 @@ void main() {
       'requires': <String>{},
       'uses': {'auth', 'settings_screen', 'localization'},
     });
+    // The address of the API is a value of the app, and the token of the user
+    // goes with the requests in an app with sign-in.
+    expect(shape(restRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'env'},
+      'uses': {'auth'},
+    });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
@@ -177,6 +192,22 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': <String>{},
+    });
+    // The icon and the splash screen are files of the native projects, which
+    // no role and no code of the app reads.
+    for (final role in [appIconRole, splashRole]) {
+      expect(shape(role), {
+        'cardinality': RoleCardinality.atMostOne,
+        'requires': <String>{},
+        'uses': <String>{},
+      });
+    }
+    // A repository lives on one host, and a job of CI works with the values
+    // of .env when the app has them.
+    expect(shape(ciRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'env'},
     });
   });
 
@@ -217,6 +248,8 @@ void main() {
     final dartFile = RegExp(r'^lib/[a-z0-9_/]+\.dart$');
     // A test mirrors the file of lib/ that it tests.
     final testFile = RegExp(r'^test/[a-z0-9_/]+_test\.dart$');
+    // What the tests of an app use, such as a local server.
+    final testSupportFile = RegExp(r'^test/[a-z0-9_/]+\.dart$');
     // A file for those who work on the app, such as the guide for coding
     // agents, is at its root.
     final rootFile = RegExp(r'^[A-Z]+\.md$');
@@ -228,14 +261,20 @@ void main() {
     // The file of the values of the app, and the file of their keys, at
     // its root, where the tools that read such a file look for it.
     final valuesFile = RegExp(r'^\.env(?:\.example)?$');
+    // An image that a provider generates and the app does not bundle.
+    final sourceImage = RegExp(r'^assets/branding/[a-z_]+\.png$');
     for (final role in _roles) {
       final interface = role.interface;
+      for (final file in interface.providerFiles) {
+        expect(file, matches(sourceImage), reason: file);
+      }
       for (final file in interface.files) {
         expect(
           file,
           anyOf(
             matches(dartFile),
             matches(testFile),
+            matches(testSupportFile),
             matches(rootFile),
             matches(androidResource),
             matches(valuesFile),
@@ -280,10 +319,14 @@ void main() {
           'notifications',
           'push',
           'purchases',
+          'rest',
           'settings_screen',
           'onboarding_screen',
           'theme',
           'env',
+          'app_icon',
+          'splash',
+          'ci',
         ],
       );
     });
@@ -405,9 +448,10 @@ void main() {
         for (final note in notesOf(role)) {
           // An app with nothing but what the app entry, the role, the
           // roles it requires and the roles of the note guarantee: the
-          // files of their templates and those of the symbols of their
-          // providers, and the files that the template of the role
-          // generates in an app with the roles of the note.
+          // files of their templates, those that their providers generate
+          // and those of the symbols of their providers, and the files that
+          // the template of the role generates in an app with the roles of
+          // the note.
           final guaranteed = {
             for (final present in {
               appEntryRole,
@@ -416,6 +460,7 @@ void main() {
               ...note.when,
             }) ...[
               ...present.interface.files,
+              ...present.interface.providerFiles,
               for (final symbol in present.interface.symbols) symbol.path,
             ],
             for (final brick in bricksOf(role))
@@ -487,6 +532,7 @@ void main() {
         'text_none',
         'text_failed',
         'env_keys',
+        'rest_tokens',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};

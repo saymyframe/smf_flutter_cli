@@ -29,6 +29,8 @@ import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_go_router/smf_go_router.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
+import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_settings/smf_settings.dart';
 
 /// The app entry that builds its root once: flutter_core, the app entry of
@@ -67,6 +69,72 @@ const _appEntryBuildingRootOnce = BrokenModule(
   ],
 );
 
+/// The app icon whose image for the App Store has alpha: launcher_icons, the
+/// provider of the app icon role of the CLI, with the foreground as the image
+/// of the icon and without what takes the alpha away. So the tool only warns,
+/// and the step of the module succeeds.
+///
+/// No fixture provides the role, since a fixture would have to write every
+/// density and icon set by hand, and only its test would read them. So the
+/// broken one changes the module of the CLI, here for the reason that the app
+/// entry above is.
+const _appIconWithAlpha = BrokenModule(
+  LauncherIconsModule(),
+  id: ModuleId('broken_app_icon_with_alpha'),
+  description: 'App icon with alpha on iOS (fixture)',
+  file: 'flutter_launcher_icons.yaml',
+  changes: [
+    (
+      'image_path: "${AppIconRole.imageFile}"',
+      'image_path: "${AppIconRole.foregroundFile}"',
+    ),
+    ('remove_alpha_ios: true', 'remove_alpha_ios: false'),
+  ],
+);
+
+/// The app entry whose line `default-flavor` of the pubspec names the flavor
+/// for a release: flutter_core, the app entry of the fixtures, with
+/// [_releaseAsDefaultFlavor]. So a command without `--flavor`, such as
+/// `flutter run` on the phone of a developer, builds the app of the users,
+/// under its id.
+///
+/// The line names a flavor of the role, and the app builds and has every
+/// flavor in its native projects: only a run of the `flutter` tool shows what
+/// such a command builds. It is made here for the reason that the app entry
+/// above is.
+const _appEntryDefaultingToRelease = BrokenModule.contributing(
+  FlutterCoreModule(),
+  id: ModuleId('broken_app_entry_defaults_to_release'),
+  description: 'Flutter app whose default flavor is that of a release '
+      '(fixture)',
+  contributions: _releaseAsDefaultFlavor,
+);
+
+/// [contributions] with [AppEntryRole.releaseFlavor] as the default flavor of
+/// the `flutter:` section of the pubspec.
+List<Contribution> _releaseAsDefaultFlavor(List<Contribution> contributions) =>
+    [
+      for (final contribution in contributions)
+        if (contribution
+            case PubspecFlutter(
+              :final assets,
+              :final fonts,
+              :final generate,
+              :final usesMaterialDesign,
+              when: final roles,
+            ))
+          PubspecContribution.flutter(
+            assets: assets,
+            fonts: fonts,
+            generate: generate,
+            usesMaterialDesign: usesMaterialDesign,
+            defaultFlavor: AppEntryRole.releaseFlavor.name,
+            when: roles,
+          )
+        else
+          contribution,
+    ];
+
 /// The router of go_router whose redirect asks the guards of the routes
 /// within the calls of the router too: it reads the counter of those calls
 /// the wrong way round. The router of a fixture has no redirect that runs
@@ -79,6 +147,30 @@ const _goRouterAskingWithinItsCalls = BrokenModule(
   file: RouterRole.appRouterFactoryFile,
   changes: [
     ('    if (_asking > 0) return null;', '    if (_asking < 0) return null;'),
+  ],
+);
+
+/// The splash screen whose configuration sets `android_min_sdk` to the lowest
+/// version of Android that the apps run on: native_splash with that one line.
+/// flutter_native_splash then writes `drawable/launch_background.xml` alone,
+/// and leaves `drawable-v21/launch_background.xml` as the app entry has it,
+/// without an image. That file wins on Android below 12, so the screen there
+/// has no image, though the app builds and every other file of the screen is
+/// made: only the files that the step leaves show the bug.
+///
+/// No fixture provides the splash role, since its files come from a tool that
+/// only the module knows, so the broken one changes the module of the CLI. It
+/// is made here for the reason that the app entry above is.
+const _splashWithAndroidMinSdk = BrokenModule(
+  NativeSplashModule(),
+  id: ModuleId('broken_splash_sets_android_min_sdk'),
+  description: 'A splash screen that Android below 12 shows blank (fixture)',
+  file: 'flutter_native_splash.yaml',
+  changes: [
+    (
+      'flutter_native_splash:\n',
+      'flutter_native_splash:\n  android_min_sdk: 24\n',
+    ),
   ],
 );
 
@@ -1333,6 +1425,63 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        _appIconWithAlpha,
+        role: appIconRole,
+        bug: 'Its icon for the App Store is made from the logo on a '
+            'transparent background and keeps the alpha, which the App Store '
+            'refuses.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _appIconTests,
+            'on iOS the icon for the App Store has no alpha',
+            'The App Store refuses an icon with alpha',
+          ),
+          MatrixExpectedFailure(
+            _appIconTests,
+            'on iOS the icon for the App Store has the pixels of the source',
+            'is made from the image of the role',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _appEntryDefaultingToRelease,
+        role: appEntryRole,
+        bug: 'The line default-flavor of its pubspec names the flavor for a '
+            'release, so a command without --flavor builds the app of the '
+            'users, under its id.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _flavorTests,
+            'a command without --flavor builds the default flavor of the app',
+            'A command without --flavor builds the default flavor of the app '
+                'that the app entry role names.',
+          ),
+          MatrixExpectedFailure(
+            _flavorTests,
+            'the probe of the flavor finds no problem',
+            'The app has the flavor that its build asked for.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _splashWithAndroidMinSdk,
+        role: splashRole,
+        bug: 'Its configuration sets android_min_sdk, so the tool leaves the '
+            'launch background that Android below 12 reads without an image.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/splash_role/splash_role_test.dart',
+            'below Android 12, the window background of the activity has an '
+                'image in each mode, at each version of the system',
+            'The launch background that the system shows below Android 12 '
+                'has an image, in each mode and at each version of the system.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.authRestoringUserLate,
         role: authRole,
         bug: 'Its function returns the service before it has read who is '
@@ -1404,6 +1553,14 @@ List<BrokenProvider> brokenProviders() => const [
             _leftOnDeviceTest,
             _linkKeptOnDevice,
           ),
+          // The token of the account is that of another user.
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'an anonymous user has a token, and keeps the id with a refresh '
+                'and with an account',
+            'The account that linkPassword() gave an anonymous user has a '
+                'token, with the id of that user.',
+          ),
         ],
       ),
       BrokenProvider(
@@ -1436,6 +1593,86 @@ List<BrokenProvider> brokenProviders() => const [
             'An anonymous user who signs in with a way to sign in keeps the '
                 'id: the session gives that user the identity with linkWith, '
                 'and the user is no longer anonymous.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.authTokenNotRefreshed,
+        role: authRole,
+        bug: 'Its forced read of the token gives the token that the user has, '
+            'so a server that refused the token refuses the next one too.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'the user of an account has a token, which a forced refresh '
+            'replaces',
+            _newToken,
+          ),
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'an anonymous user has a token, and keeps the id with a refresh '
+            'and with an account',
+            _newToken,
+          ),
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'the session refreshes a token that a server refused once, for '
+            'all the reads at the same time and for those that come later',
+            _newToken,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.authTokenKeptAfterSignOut,
+        role: authRole,
+        bug: 'It gives the last token that it gave with nobody signed in, so '
+            'the requests of the next person on the device go to a server as '
+            'the user who left.',
+        // The fixture REST, with the fixture values of .env, which it
+        // requires, so that the test of the requests of the users of the
+        // session applies to the app too.
+        app: [FakeRestModule.id, FakeEnvModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'the service gives no token while nobody is signed in',
+            _noToken,
+          ),
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'the session gives the token of its user, as the mode of the app '
+            'says',
+            _noTokenAfterSignOut,
+          ),
+          MatrixExpectedFailure(
+            _restSessionTests,
+            'a request without an account carries what the mode of the app '
+                'says',
+            'In the modes required and guest, nobody has no token, so the '
+                'request goes without a header.',
+          ),
+          MatrixExpectedFailure(
+            _restSessionTests,
+            'after a sign-out, a request carries no token of the user who left',
+            'After a sign-out a request goes without a token, and in the mode '
+                'anonymous with the token of the next anonymous user: never as '
+                'the user who left.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.authTokenKeptForNextUser,
+        role: authRole,
+        bug: 'It gives every user the token of the first, so a server takes '
+            'the next person on the device for the user before.',
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            _userTokenTests,
+            'two users have different tokens',
+            'Two users have different tokens: a server tells who the user is '
+                'by the token.',
           ),
         ],
       ),
@@ -1555,6 +1792,330 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.restDecodingQuery,
+        role: restRole,
+        bug: 'Its transport sends the query of an address decoded, so a value '
+            'with an & or an = reaches the server as something else.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restAddressTests,
+            'a request reaches the path of the address, with its query',
+            'A provider sends the address as it is, with its query.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restLeakingErrors,
+        role: restRole,
+        bug: 'It lets a failure to connect through as an error of another '
+            'kind, so it reaches the code as the reason unknown.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'a port where nothing listens is the reason network, for each '
+                'method',
+            'A failure to connect is RestConnectionFailed.',
+          ),
+          MatrixExpectedFailure(_restProbeTests, _restProbeTest, _restProbe),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restLeakingTlsFailures,
+        role: restRole,
+        bug: 'It lets a failed TLS handshake through as an error of another '
+            'kind, so it reaches the code as the reason unknown.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'a TLS handshake that fails is the reason network',
+            'A TLS handshake that fails is RestConnectionFailed',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restQuotingErrors,
+        role: restRole,
+        bug: 'Its hint has the text of an error, which may quote the address '
+            'with its query, so a key of the query reaches a log.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'a connection that breaks in a body is the reason network, and '
+                'the hint has no query',
+            'The hint of a provider has no query',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restFollowingRedirects,
+        role: restRole,
+        bug: 'It follows a redirect itself, with every header of the exchange, '
+            'so the token of the user goes to the host that a server names.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToHostTest,
+            _redirectToHostLeaves,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToPortTest,
+            _redirectToPortLeaves,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restKeepingHeaders,
+        role: restRole,
+        bug: 'It keeps the first authorization that it sent as a default of '
+            'its later calls, so a repeat has the token that the server '
+            'refused, and a request to another origin has it too.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restTokenTests,
+            'a request to another port or another host has no token',
+            'The token goes only to the origin of the address',
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToHostTest,
+            _redirectToHostLeaves,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToPortTest,
+            _redirectToPortLeaves,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            'a header authorization of the caller stays, in place of the '
+                'token',
+            'A header of the caller takes precedence over the token.',
+          ),
+          MatrixExpectedFailure(
+            _restRefreshTests,
+            'a 401 gets a new token once, and repeats once with it and with '
+                'the same body',
+            'The repeat after a refresh has the new token',
+          ),
+          MatrixExpectedFailure(
+            _restLogTests,
+            _restLogTest,
+            'A debug build prints one line for each attempt.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restRepeatingRequests,
+        role: restRole,
+        bug: 'It repeats a failed exchange itself, so a server gets a POST '
+            'twice, which may have done what it asked.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a GET stops after two repeats, with the reason of the status',
+            'The client makes each repeat, and a provider makes one attempt '
+                'for each.',
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a POST does not repeat after a 503',
+            _oneAttempt,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a PUT does not repeat after a 503',
+            _oneAttempt,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a PATCH does not repeat after a 503',
+            _oneAttempt,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a DELETE does not repeat after a 503',
+            _oneAttempt,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a connection that breaks repeats a GET, and not a POST',
+            'A GET repeats twice at most, and a provider makes one attempt '
+                'for each.',
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            _retryAfterDateTest,
+            _retryAfterDate,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            _retryAfterLongTest,
+            'The client takes no wait that long, and a provider repeats '
+            'nothing itself.',
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel wakes the wait for a repeat at once',
+            'The client waits for the Retry-After, and a provider repeats '
+                'nothing itself.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restLosingReplyHeaders,
+        role: restRole,
+        bug: 'It gives a reply without its headers, so the client reads no '
+            'Retry-After and no location of a redirect.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'the headers of a reply come with their names in lower case, and '
+                'the values of one header together',
+            'A provider keeps the headers of a reply, with their names in '
+                'lower case',
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            'a redirect on the origin of the address keeps the token',
+            _redirectFollowed,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToHostTest,
+            _redirectFollowed,
+          ),
+          MatrixExpectedFailure(
+            _restTokenTests,
+            _redirectToPortTest,
+            _redirectFollowed,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a GET waits for the Retry-After of a reply, in seconds',
+            'A provider keeps the headers of a reply, and the client waits '
+                'for the Retry-After in them.',
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            _retryAfterDateTest,
+            _retryAfterDate,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            _retryAfterLongTest,
+            _retryAfterOnFailure,
+          ),
+          MatrixExpectedFailure(
+            _restRepeatTests,
+            'a POST does not wait, and the failure has the Retry-After',
+            _retryAfterOnFailure,
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restIgnoringStop,
+        role: restRole,
+        bug: 'It does not stop an exchange, so the connection of a call that '
+            'ended stays open.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restStopTests,
+            'no answer within the timeout is the reason timeout, and the '
+            'connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a body that comes bit by bit past the timeout is the reason '
+            'timeout, and the connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel while the server holds the request ends the call at '
+            'once, and the connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel in the middle of a body ends the call at once, and the '
+            'connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel once the head of a reply came, before its body, ends the '
+            'call at once, and the connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(
+            _restStopTests,
+            'a cancel while a server does not take the body ends the call at '
+            'once, and the connection closes',
+            _connectionCloses,
+          ),
+          MatrixExpectedFailure(_restProbeTests, _restProbeTest, _restProbe),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restKeepingCodingHeaders,
+        role: restRole,
+        bug: 'It leaves content-encoding and content-length on a body that its '
+            'stack decoded, so a caller that reads them takes the bytes for '
+            'coded ones.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restFailureTests,
+            'a body that a server compressed comes decoded',
+            'The headers of a response tell of the body that it has.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restKeepingClient,
+        role: restRole,
+        bug: 'It keeps one HttpClient, so the first request of a test file '
+            'that went to the stand-in of the binding of the tests leaves '
+            'every later request with that stand-in, also once RestTestServer '
+            'took it away.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restStandInTests,
+            'a request reaches a server that starts after a request went to '
+                'the stand-in of the binding, and none reaches it once it '
+                'closed',
+            'takes the stand-in away',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.restLoggingHeaders,
+        role: restRole,
+        bug: 'It prints the headers of each exchange, so the token of the user '
+            'is in the log of the device.',
+        app: _appWithRest,
+        failures: [
+          MatrixExpectedFailure(
+            _restLogTests,
+            _restLogTest,
+            'Nothing that a client or a provider prints, or says in a failure, '
+            'has a header, a query or a body.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.serviceLogNotingAnalyticsTwice,
         role: analyticsRole,
         bug: 'Its analytics service notes each call twice, as a service does '
@@ -1653,6 +2214,80 @@ const List<ModuleId> _appWithGates = [
   FakeCrashModule.id,
   FakeServiceLogModule.id,
 ];
+
+/// The other modules of the app of a broken provider of the REST role: the
+/// fixture values of .env, since the role requires the env role, and whose
+/// getter of the address the test of the role reads.
+const List<ModuleId> _appWithRest = [FakeEnvModule.id];
+
+/// The files of the tests of the REST role.
+const _restAddressTests = 'test/rest_role/address_test.dart';
+const _restFailureTests = 'test/rest_role/failures_test.dart';
+const _restTokenTests = 'test/rest_role/token_test.dart';
+const _restRefreshTests = 'test/rest_role/refresh_test.dart';
+const _restRepeatTests = 'test/rest_role/repeats_test.dart';
+const _restStopTests = 'test/rest_role/stop_test.dart';
+const _restStandInTests = 'test/rest_role/stand_in_test.dart';
+const _restLogTests = 'test/rest_role/log_test.dart';
+const _restProbeTests = 'test/rest_role/probe_test.dart';
+
+/// The file of the tests of the token of the session on a request.
+const _restSessionTests = 'test/rest_session/session_token_test.dart';
+
+/// The name of the test of the probe of the REST role, and its reason.
+const _restProbeTest = 'the probe of the role finds no problem';
+const _restProbe =
+    'The stack of a provider reaches a server on the device, stops an '
+    'exchange, and fails as a connection fails for a closed port and for a '
+    'request over http:// to an address that no machine has.';
+
+/// The name of the test of what a debug build prints of a call.
+const _restLogTest =
+    'a call with a refresh prints a line for each attempt, with no token, no '
+    'query and no body';
+
+/// The names of two tests of a redirect to another origin, and the reasons of
+/// their expectations of the headers at that origin and that the client
+/// follows it.
+const _redirectToHostTest =
+    'a redirect to another host takes the token and the credentials of the '
+    'caller away';
+const _redirectToPortTest =
+    'a redirect to another port takes the token away, and a hop back gets it '
+    'again';
+const _redirectToHostLeaves =
+    'The client decides which header goes where, so a provider follows no '
+    'redirect: at another origin, the token and the cookie of the caller are '
+    'gone.';
+const _redirectToPortLeaves =
+    'The client decides which header goes where, so a provider follows no '
+    'redirect: another port gets no token, and only a hop back to the origin '
+    'of the address does.';
+const _redirectFollowed =
+    'A GET follows a redirect, whose location is a header of the reply.';
+
+/// The reason of the tests that a method does not repeat, and of the tests of
+/// a Retry-After.
+const _oneAttempt =
+    'A method that may have done what it asked does not repeat, so a provider '
+    'makes one attempt for each exchange.';
+const _retryAfterDateTest =
+    'a GET waits for the Retry-After of a reply, as a date';
+const _retryAfterDate =
+    'A provider keeps the headers of a reply, and the client waits for the '
+    'date of the Retry-After in them.';
+const _retryAfterLongTest =
+    'a Retry-After over the longest wait gives no repeat, and the failure has '
+    'it';
+const _retryAfterOnFailure =
+    'A provider keeps the headers of a reply, and the failure has the wait '
+    'that the client did not take.';
+
+/// The reason of the tests that an exchange that has to stop closes its
+/// connection.
+const _connectionCloses =
+    'When RestExchange.stop completes, a provider closes the connection at '
+    'once.';
 
 /// The other modules of the app of a broken layout: a router, the two
 /// fixture features, whose destinations the main navigation shows, and what
@@ -1830,6 +2465,31 @@ const _probeTest = 'the probe of the role finds no problem';
 const _eachLanguageSupported =
     'For each language of the app, the root has a delegate of each kind of '
     'localizations that supports it.';
+
+/// The file of the test of the native projects of the app icon role.
+const _appIconTests = 'test/app_icon_role/app_icon_role_test.dart';
+
+/// The file of the tests of the token of the auth role, and the reasons of
+/// its expectations that the fixture sign-in with a known bug of the token
+/// fails.
+const _userTokenTests = 'test/auth_role/user_token_test.dart';
+
+/// The reason of the tests of a forced refresh of the token.
+const _newToken = 'A read with forceRefresh asks the server of the provider '
+    'for a new token: it differs from the one before, the user stays, and the '
+    'reads after it give the new one.';
+
+/// The reason of the test of the service with nobody signed in.
+const _noToken = 'With nobody signed in, the service has no token to give: a '
+    'read answers null, also a read that forces a refresh, and no earlier '
+    'token stays behind for it.';
+
+/// The reason of the test of the session after a sign-out.
+const _noTokenAfterSignOut = 'After a sign-out the session has no token, and '
+    'in the mode anonymous the token of the new anonymous user.';
+
+/// The file of the test of the flavor of a running app.
+const _flavorTests = 'test/flavors/default_flavor_test.dart';
 
 /// The file of the tests of the next start of the auth role, and the
 /// reason of the expectation of each of them that a start of the app has

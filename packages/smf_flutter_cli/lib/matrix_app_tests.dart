@@ -5,6 +5,7 @@ library;
 
 import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_dio/smf_dio.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -13,7 +14,9 @@ import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
+import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
@@ -36,13 +39,16 @@ Future<MatrixAppTests> smfAppTests() async {
   final crashlytics = await appTestsDirectoryOf('smf_firebase_crashlytics');
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
+  final dio = await appTestsDirectoryOf('smf_dio');
   final googleSignIn = await appTestsDirectoryOf('smf_google_sign_in');
   final appleSignIn = await appTestsDirectoryOf('smf_apple_sign_in');
   final messaging = await appTestsDirectoryOf('smf_firebase_messaging');
   final home = await appTestsDirectoryOf('smf_home_flutter');
+  final launcherIcons = await appTestsDirectoryOf('smf_launcher_icons');
   final localNotifications = await appTestsDirectoryOf(
     'smf_local_notifications',
   );
+  final nativeSplash = await appTestsDirectoryOf('smf_native_splash');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final paywall = await appTestsDirectoryOf('smf_paywall');
   final revenueCat = await appTestsDirectoryOf('smf_revenuecat');
@@ -69,9 +75,10 @@ Future<MatrixAppTests> smfAppTests() async {
         appliesTo: (_) => true,
         readsStartProbes: true,
       ),
-      // The start-up of the app initializes Firebase, with the options that
-      // `flutterfire configure` would write, and the mocks of Firebase Core,
-      // which the matrix sets up for the tests of every module of the app.
+      // The start-up of the app initializes Firebase, with the options of the
+      // flavor of the tests as flutterfire would write them, and the mocks of
+      // Firebase Core, which the matrix sets up for the tests of every module
+      // of the app.
       MatrixAppTest(
         '$firebaseCore/firebase_core',
         appliesTo: _has(FirebaseCoreModule.id),
@@ -600,21 +607,91 @@ Future<MatrixAppTests> smfAppTests() async {
       // choice is saved and restored. Its probe goes through the languages
       // on a device.
       await localizationRoleAppTest(),
+      // The flavor of a running app, whichever module provides the app
+      // entry: a command without --flavor builds the default flavor of the
+      // role, which only a run of the flutter tool shows. Its probe sees on
+      // a device the flavor that the build asked for: the default flavor in
+      // the debug start of CI, and the one for a release in its release
+      // start. Only in the apps with every module, which run flutter test
+      // for other tests already.
+      await flavorsAppTest(among: (app) => app.everyModuleWith != null),
       // The setting of the language on the settings screen of the apps
       // with the localization role and the settings screen role, whichever
       // modules provide them: its sheet chooses a language of the app,
       // which the app is then in and remembers, or the languages of the
       // device.
       await languageSettingAppTest(),
+      // The requests of the apps with the REST role, whichever module provides
+      // it: an address, the failures, the token, the repeats, the stops and
+      // the log. Its probe sees on a device that the stack of the provider
+      // works there, also over http:// and in a release build.
+      await restRoleAppTest(),
+      // The requests of the users of the session, in the apps with the REST
+      // role and the auth role, whichever modules provide them.
+      await restSessionAppTest(),
+      // What only dio does: one exchange on a Dio, which keeps a connection
+      // open for the next request, and what an error of Dio ends it with.
+      MatrixAppTest(
+        '$dio/dio',
+        appliesTo: _has(DioModule.id),
+      ),
+      // The native projects of the apps with the app icon role, whichever
+      // module provides it, once the step of the provider has run: an image
+      // for each density and an adaptive icon on Android, and on iOS an icon
+      // set for each name of the build configurations, whose icon for the
+      // App Store has no alpha and the pixels of the source.
+      MatrixAppTest(
+        '$cli/app_icon_role',
+        appliesTo: (app) => app.hook!.presentRoles.contains(appIconRole),
+        devDependencies: const ['xml'],
+        values: (_) => const {
+          'image_file': AppIconRole.imageFile,
+          'foreground_file': AppIconRole.foregroundFile,
+          'android_manifest_file': AppEntryRole.androidManifestFile,
+          'xcode_project_file': AppEntryRole.xcodeProjectFile,
+        },
+        roles: {appIconRole},
+      ),
+      // What the real flutter_launcher_icons leaves in the Xcode project,
+      // with the script of the module: the setting that it damages is back,
+      // and one icon has every build configuration. A later version of the
+      // tool that damages another line fails here.
+      MatrixAppTest(
+        '$launcherIcons/launcher_icons',
+        appliesTo: _has(LauncherIconsModule.id),
+        values: (_) => const {
+          'xcode_project_file': AppEntryRole.xcodeProjectFile,
+        },
+      ),
+      // The splash screen of the apps with the splash role, whichever module
+      // provides it: the step of the provider made it in the native projects
+      // of the app, for each mode of the device, on Android below 12 and
+      // from 12 on and on iOS.
+      await splashRoleAppTest(),
+      // What flutter_native_splash leaves in an app: the colours of the
+      // module, and an Info.plist that it wrote anew and that still has the
+      // keys of the app entry.
+      MatrixAppTest(
+        '$nativeSplash/native_splash',
+        appliesTo: (app) => app.modules.contains(NativeSplashModule.id),
+        devDependencies: const ['xml'],
+        values: (app) => const {
+          'light_background': splashLightBackground,
+          'dark_background': splashDarkBackground,
+          'info_plist': AppEntryRole.infoPlistFile,
+          'android_manifest': AppEntryRole.androidManifestFile,
+        },
+      ),
     ],
     // Each provider of the router role gets a test of the listeners of the
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
     // role, of the env role, of the auth role, of the notifications role,
-    // of the push role, of the purchases role, of the settings screen role,
-    // of the theme role and of the localization role gets the tests of its
-    // role. Each provider of the app entry role gets the test of the theme
-    // role, which checks that its root rebuilds.
+    // of the push role, of the purchases role, of the REST role, of the
+    // settings screen role, of the theme role, of the localization role, of
+    // the app icon role and of the splash role gets the tests of its role. Each
+    // provider of the app entry role gets the test of the theme role, which
+    // checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -625,13 +702,47 @@ Future<MatrixAppTests> smfAppTests() async {
       notificationsRole,
       pushRole,
       purchasesRole,
+      restRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,
       localizationRole,
+      appIconRole,
+      splashRole,
     },
   );
 }
+
+/// The test of the splash role that the CLI keeps in its
+/// `app_tests/splash_role`, for the apps with the role, whichever module
+/// provides it: the two images of the role are in the app, and the step of
+/// the provider made the screen in the native projects. Below Android 12, the
+/// window background of the activity has an image in each mode and at each
+/// version of the system. From Android 12 on, the theme of the activity names
+/// a background and an icon of the splash screen of the system in each mode.
+/// On iOS, the launch storyboard shows an image for the dark mode too, whose
+/// files are larger than the image of one pixel of a new project and in the
+/// ratio of their scales.
+///
+/// The test reads the files of the app as `smf create` left them. It follows
+/// what the system follows and names no tool, so a provider without any
+/// package gets it too. The paths come from the roles. It has no mocks and no
+/// probe for the start check: nothing of the screen shows in Dart, and a
+/// launch from a command hides the icon of the splash screen of Android 12.
+/// The fixtures have no provider of the role: the real module shows the bug
+/// that the test catches (`brokenProviders` of the fixture registry).
+Future<MatrixAppTest> splashRoleAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/splash_role',
+      appliesTo: (app) => app.hook!.presentRoles.contains(splashRole),
+      devDependencies: const ['xml'],
+      values: (app) => const {
+        'light_image': SplashRole.lightImageFile,
+        'dark_image': SplashRole.darkImageFile,
+        'android_manifest': AppEntryRole.androidManifestFile,
+        'info_plist': AppEntryRole.infoPlistFile,
+      },
+      roles: {splashRole},
+    );
 
 /// The test of the events role that the CLI keeps in its
 /// `app_tests/events_role`, for the apps with the role, whichever module
@@ -932,7 +1043,7 @@ $ofDevice};
 
 /// The test of the auth role that the CLI keeps in its
 /// `app_tests/auth_role`, for the apps with the role, whichever module
-/// provides it, in each mode of the role. Each of its four files runs the
+/// provides it, in each mode of the role. Each of its five files runs the
 /// start-up of the app once, with `bootstrap()`:
 /// - the service of the provider keeps the contract of `AuthService`, the
 ///   same in every mode. When a call completes, the user of the service is
@@ -958,7 +1069,13 @@ $ofDevice};
 ///   deleted, at the latest once the user has signed in again;
 /// - an account that is signed up before the app starts is signed in when
 ///   the start-up is over, as the mocks of a module with a guard that asks
-///   for an account rely on.
+///   for an account rely on;
+/// - the token of the user: nobody has none, the user of an account and an
+///   anonymous user each have one, a forced refresh gives another one with
+///   the same user, and a read tells nobody of a change. The session gives
+///   the token of its user, refreshes a token that a server refused once for
+///   all the reads at the same time and for those that come later, and the
+///   next start has a token for the user of the device.
 ///
 /// The test knows only the role. The matrix fills in the mode of each app,
 /// which the test expects the app to be in: the choice of the role
@@ -1497,8 +1614,8 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
     );
 
 /// The test of the env role that the CLI keeps in its `app_tests/env_role`,
-/// for the apps with the role whose modules give it keys, whichever module
-/// provides the role, that [among] accepts, or all of them: for each key of
+/// for the apps with the role that have keys, whichever module provides the
+/// role, that [among] accepts, or all of them: for each key of
 /// the app, the getter of `AppEnv` returns the value that `.env` gives the
 /// key, and `null` when `.env` leaves the value empty or lacks the key.
 ///
@@ -1697,6 +1814,146 @@ $texts};
 ''',
   };
 }
+
+/// The name of the value of the build with which the start of an app on a
+/// device tells the probe of `app_tests/flavors` that it asked for a flavor. A
+/// build without it asks for none.
+const startFlavorDefine = 'SMF_START_FLAVOR';
+
+/// The arguments of the `flutter` tool that a build of an app as a release
+/// takes too when CI starts it on a device, which the script of CI reads
+/// ([startReleaseArgumentsFile]): the flavor that the app entry role names
+/// for a release, since a command without `--flavor` builds its default
+/// flavor in release mode too, and the same flavor for the probe of the
+/// flavor, which sees whether it reached the app. So the script names no
+/// flavor, and the release app that it starts is the one that a user gets.
+final List<String> startReleaseBuildArguments = [
+  '--flavor',
+  AppEntryRole.releaseFlavor.name,
+  '--dart-define=$startFlavorDefine=${AppEntryRole.releaseFlavor.name}',
+];
+
+/// The address of the REST API that the test of the REST role gives the role
+/// in `.env`: a port with no listener, since the files of tests run at once
+/// and no test binds a fixed port.
+const _restBaseAddress = 'http://127.0.0.1:9/api/v1';
+
+/// The test of the REST role that the CLI keeps in its `app_tests/rest_role`,
+/// for the apps with the role, whichever module provides it, that [among]
+/// accepts, or all of them. Each test but one makes a client of its own over
+/// `createRestTransport()` and runs in real time, against a local server, so
+/// it needs neither the start-up of the app nor a session:
+/// - `appRest` takes its address from `.env`, a request reaches the server as
+///   the code asked it, with no credential that the code did not give, and a
+///   relative path without an address fails with `notConfigured` before
+///   anything is sent;
+/// - any status is a reply, which comes back as a response or a failure of a
+///   closed set of reasons, and a connection that fails or breaks, also in a
+///   TLS handshake, is the reason `network`, with no query in its hint;
+/// - the token goes only to the origin of the address, also after a redirect,
+///   which a provider leaves to the client;
+/// - a 401 gets a new token once and repeats once;
+/// - `GET` and `HEAD` repeat as the role says, keeping to `Retry-After`, and
+///   other methods never do;
+/// - a timeout covers a whole attempt, a cancel ends a call at once, and each
+///   closes the connection;
+/// - a debug build prints one line for each attempt, and neither the client nor
+///   the provider prints or says a token, a query or a body.
+///
+/// The test knows only the role. It gives [RestRole.baseAddressKey] a value in
+/// `.env`, so it names the role. Its probe, `probeRest()` of
+/// `integration_test/rest_role/probe.dart`, reaches no machine off the device: a
+/// `GET` and a `POST` reach a server of its own on the device, an exchange that
+/// has to stop closes its connection, a request over `http://` fails as a
+/// connection fails, and an app with an empty `.env`, as an app of CI has,
+/// says so through the client of the app. The test runs the probe too.
+Future<MatrixAppTest> restRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/rest_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(restRole) &&
+          (among?.call(app) ?? true),
+      values: (app) => {
+        'base_address': _restBaseAddress,
+        'base_key': RestRole.baseAddressKey.name,
+      },
+      envValues: (app) => {RestRole.baseAddressKey.name: _restBaseAddress},
+      roles: {restRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/rest_role/probe.dart',
+        'probeRest',
+      ),
+    );
+
+/// The test of the requests of the users of the session that the CLI keeps in
+/// its `app_tests/rest_session`, for the apps with the REST role and the auth
+/// role, whichever modules provide them, that [among] accepts, or all of them,
+/// in each mode of the auth role. It runs the start-up of the app, and each
+/// request in real time in a widget test:
+/// - a request of the user of an account carries the token of the session, and
+///   one without an account what the mode of the app says;
+/// - after a sign-out, a request carries no token of the user who left;
+/// - requests that a server refuses at the same time share one refresh, and
+///   each repeats once;
+/// - a refresh that fails for the network is the reason `network`, and a
+///   session that ended on the server is `unauthorized`, with nobody signed in;
+/// - a request of one user does not repeat as the next user;
+/// - a second 401 is `unauthorized`, and signs nobody out.
+///
+/// It is a test of the REST role, whose template reads the token of the
+/// session. It reads the mode of the app from `authMode` of the app, so the
+/// matrix fills in nothing, and it uses the helpers of the test of the auth
+/// role, which every such app has. It has no probe for the start check: nobody
+/// can sign in on a device.
+Future<MatrixAppTest> restSessionAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/rest_session',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.containsAll({restRole, authRole}) &&
+          (among?.call(app) ?? true),
+      roles: {restRole},
+    );
+
+/// The test of the flavor of a running app that the CLI keeps in its
+/// `app_tests/flavors`, for the apps that [among] accepts, or all of them,
+/// whichever module provides the app entry: `appFlavor` of Flutter is the
+/// default flavor that the role names ([AppEntryRole.defaultFlavor]), since
+/// `flutter test` is a command without `--flavor`.
+///
+/// Only a run of the `flutter` tool shows what such a command builds, so the
+/// rules of the role leave that value to this test, and a provider that names
+/// another flavor of the role fails it.
+///
+/// Its probe, which the start check runs on a device, compares `appFlavor`
+/// with the flavor that the build asked for, which a build tells it with a
+/// value of the build ([startFlavorDefine]) and is the default flavor without
+/// one. So the debug start of CI shows the default flavor on a device, on each
+/// version of Flutter of the nightly run, and its release start the one in
+/// [startReleaseBuildArguments]. The id and the name of the app on a device
+/// are native, so no running app shows them.
+///
+/// The test knows only the role, and has no mocks. The matrix fills in the
+/// flavor and the name of the value.
+Future<MatrixAppTest> flavorsAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/flavors',
+      appliesTo: among ?? (_) => true,
+      values: (_) => {
+        'default_flavor': AppEntryRole.defaultFlavor.name,
+        'flavor_define': startFlavorDefine,
+      },
+      roles: {appEntryRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/flavors/probe.dart',
+        'probeFlavor',
+      ),
+    );
 
 /// The test of the theme role that the CLI keeps in its
 /// `app_tests/theme_role`, for the apps with the role, whichever module

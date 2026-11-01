@@ -552,7 +552,7 @@ void main() {
       expect(_startUpOf(result), [
         equals(
           'firebase_core: await Firebase.initializeApp(options: '
-          'DefaultFirebaseOptions.currentPlatform);',
+          'firebaseOptionsOfFlavor);',
         ),
         'role:preferences: await initPreferences();',
         'role:notifications: await initNotifications();',
@@ -893,6 +893,31 @@ void main() {
             contains('Cloud Messaging'),
             contains('App ID in that team'),
           ),
+        );
+      });
+
+      test(
+          'tells what repeats for each flavor: the upload for its iOS app, '
+          'its App ID, and that an address belongs to its project', () {
+        expect(
+          readmeSection,
+          allOf(
+            contains('Firebase console has this configuration under each '
+                'Apple app of the project, so check it for the iOS app of '
+                'each flavor that you send to, and repeat the upload where it '
+                'has no key.'),
+            contains('One key serves every app of its team, so the file and '
+                'the ids stay the same.'),
+            contains('register the bundle id of each flavor that you send to '
+                'as an App ID in that team'),
+            contains('A server sends to an address through the Firebase '
+                'project of the flavor that the build has.'),
+          ),
+        );
+        expect(
+          agentNote,
+          contains('which repeats for the iOS app of each flavor that the app '
+              'sends to'),
         );
       });
 

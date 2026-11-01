@@ -11,7 +11,8 @@ part of '../contributions.dart';
 /// - a package that is both a dependency and a dev dependency becomes a
 ///   dependency;
 /// - assets are united, fonts merged by family, and flags such as `generate`
-///   are set if any contribution sets them.
+///   are set if any contribution sets them;
+/// - two different default flavors are an error.
 sealed class PubspecContribution extends Contribution {
   const PubspecContribution({super.when});
 
@@ -56,12 +57,14 @@ sealed class PubspecContribution extends Contribution {
     Set<Role> when,
   }) = PubspecEnvironment;
 
-  /// Adds [assets], [fonts] and flags to the `flutter:` section.
+  /// Adds [assets], [fonts], flags and a [defaultFlavor] to the `flutter:`
+  /// section.
   const factory PubspecContribution.flutter({
     List<String> assets,
     List<PubspecFont> fonts,
     bool generate,
     bool usesMaterialDesign,
+    String? defaultFlavor,
     Set<Role> when,
   }) = PubspecFlutter;
 }
@@ -131,6 +134,7 @@ final class PubspecFlutter extends PubspecContribution {
     this.fonts = const [],
     this.generate = false,
     this.usesMaterialDesign = false,
+    this.defaultFlavor,
     super.when,
   });
 
@@ -145,6 +149,10 @@ final class PubspecFlutter extends PubspecContribution {
 
   /// Whether the app uses the Material icons font.
   final bool usesMaterialDesign;
+
+  /// The flavor that a `flutter` command without `--flavor` builds, the key
+  /// `default-flavor` of the section.
+  final String? defaultFlavor;
 }
 
 /// A font family of a [PubspecFlutter].

@@ -469,6 +469,10 @@ final class ScriptedAuthService implements AuthService {
   Future<void> deleteAccount({SignInCredential? fresh}) =>
       _answer('deleteAccount', () => null);
 
+  @override
+  Future<String?> userToken({bool forceRefresh = false}) async =>
+      _user == null ? null : 'token-of-${_user!.uid}';
+
   /// The issuer of [credential], which names it in the calls.
   String _issuerOf(SignInCredential credential) => switch (credential) {
         IdTokenCredential(:final issuer) => issuer,
