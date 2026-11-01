@@ -136,26 +136,24 @@ Iterable<SmfIssue> _defaultFlavorIssues(
 /// key `flutter` of the pubspec [text], or `null` if it has none.
 String? _defaultFlavorIn(String text) {
   final key = RegExp(r'^( +)([\w-]+)\s*:(.*)$');
-  int? indent;
-  var inSection = false;
-  for (final line in const LineSplitter().convert(text)) {
-    if (line.trim().isEmpty || line.trimLeft().startsWith('#')) continue;
-    if (!line.startsWith(' ')) {
-      if (inSection) return null;
-      inSection = RegExp(r'^flutter\s*:').hasMatch(line);
-    } else if (inSection) {
-      final match = key.firstMatch(line);
-      if (match == null) continue;
-      indent ??= match[1]!.length;
-      if (match[1]!.length == indent && match[2] == 'default-flavor') {
-        return match[3]!
-            .replaceFirst(RegExp(r'\s#.*$'), '')
-            .trim()
-            .replaceAll(RegExp(r'''^["']|["']$'''), '');
-      }
-    }
-  }
-  return null;
+  final keys = const LineSplitter()
+      .convert(text)
+      .where((line) => line.trim().isNotEmpty)
+      .where((line) => !line.trimLeft().startsWith('#'))
+      .skipWhile((line) => !RegExp(r'^flutter\s*:').hasMatch(line))
+      .skip(1)
+      .takeWhile((line) => line.startsWith(' '))
+      .map(key.firstMatch)
+      .nonNulls;
+  final flavor = keys
+      .where((match) => match[1]!.length == keys.first[1]!.length)
+      .where((match) => match[2] == 'default-flavor')
+      .firstOrNull;
+  if (flavor == null) return null;
+  return flavor[3]!
+      .replaceFirst(RegExp(r'\s#.*$'), '')
+      .trim()
+      .replaceAll(RegExp(r'''^["']|["']$'''), '');
 }
 
 /// The problems of [text], the Gradle build script of the app module of
@@ -245,12 +243,11 @@ Iterable<SmfIssue> _xcodeFlavorIssues(
   StructuralRuleInput<NoDsl> input,
   String text,
 ) sync* {
-  const path = AppEntryRole.xcodeProjectFile;
   SmfIssue issue(String message, {String? hint}) => SmfIssue(
         message,
         hint: hint,
-        origin: input.owners[path],
-        path: path,
+        origin: input.owners[AppEntryRole.xcodeProjectFile],
+        path: AppEntryRole.xcodeProjectFile,
       );
 
   final objects = _projectObjects(_withoutProjectComments(text));
@@ -258,26 +255,8 @@ Iterable<SmfIssue> _xcodeFlavorIssues(
     for (final object in objects)
       if (object.isa == 'XCBuildConfiguration') object.id: object,
   };
-  for (final list in objects.where((o) => o.isa == 'XCConfigurationList')) {
-    final names = {
-      for (final id in _configurationsIn(list.id, objects))
-        if (configurations[id] case final configuration?)
-          _buildConfiguration(configuration.body).name,
-    };
-    for (final flavor in AppEntryRole.flavors) {
-      for (final name in flavor.xcodeConfigurations) {
-        if (!names.contains(name)) {
-          yield issue(
-            'The build configuration list ${list.id} in $path lacks $name.',
-            hint: 'Flutter builds a flavor with the configuration of that '
-                'name, which the project and each target have to have.',
-          );
-        }
-      }
-    }
-  }
+  yield* _xcodeListIssues(objects, configurations, issue);
 
-  final infoPlist = _inIosProject(AppEntryRole.infoPlistFile);
   final ofProject = _projectConfigurations(objects);
   final ofApp = {
     for (final object in configurations.values)
@@ -287,7 +266,48 @@ Iterable<SmfIssue> _xcodeFlavorIssues(
       ).ofApp)
         _buildConfiguration(object.body).name: object,
   };
-  final identity = input.roleInput.context.appIdentity;
+  yield* _xcodeAppIssues(ofApp, input.roleInput.context.appIdentity, issue);
+  yield* _xcodeBaseIssues(ofApp, issue);
+}
+
+/// The problems of the configuration lists among [objects], whose build
+/// configurations are in [configurations]: each has those of every flavor,
+/// reported through [issue].
+Iterable<SmfIssue> _xcodeListIssues(
+  List<_ProjectObject> objects,
+  Map<String, _ProjectObject> configurations,
+  SmfIssue Function(String message, {String? hint}) issue,
+) sync* {
+  for (final list in objects.where((o) => o.isa == 'XCConfigurationList')) {
+    final names = {
+      for (final id in _configurationsIn(list.id, objects))
+        if (configurations[id] case final configuration?)
+          _buildConfiguration(configuration.body).name,
+    };
+    final expected = AppEntryRole.flavors.expand(
+      (flavor) => flavor.xcodeConfigurations,
+    );
+    for (final name in expected.where((name) => !names.contains(name))) {
+      yield issue(
+        'The build configuration list ${list.id} in '
+        '${AppEntryRole.xcodeProjectFile} lacks $name.',
+        hint: 'Flutter builds a flavor with the configuration of that name, '
+            'which the project and each target have to have.',
+      );
+    }
+  }
+}
+
+/// The problems of [ofApp], the build configurations of the app target by
+/// their names, for the app with [identity]: each flavor has its own, with
+/// the id of the flavor and a base, reported through [issue].
+Iterable<SmfIssue> _xcodeAppIssues(
+  Map<String?, _ProjectObject> ofApp,
+  AppIdentity identity,
+  SmfIssue Function(String message, {String? hint}) issue,
+) sync* {
+  const path = AppEntryRole.xcodeProjectFile;
+  final infoPlist = _inIosProject(AppEntryRole.infoPlistFile);
   for (final flavor in AppEntryRole.flavors) {
     final expected = flavor.bundleIdIn(identity);
     for (final name in flavor.xcodeConfigurations) {
@@ -316,6 +336,15 @@ Iterable<SmfIssue> _xcodeFlavorIssues(
       }
     }
   }
+}
+
+/// The problems of the bases of [ofApp], the build configurations of the app
+/// target by their names: the flavors of a mode share one, reported through
+/// [issue].
+Iterable<SmfIssue> _xcodeBaseIssues(
+  Map<String?, _ProjectObject> ofApp,
+  SmfIssue Function(String message, {String? hint}) issue,
+) sync* {
   for (final mode in _xcodeModes) {
     final names = [
       for (final flavor in AppEntryRole.flavors) '$mode-${flavor.name}',
@@ -328,7 +357,8 @@ Iterable<SmfIssue> _xcodeFlavorIssues(
     if (bases.length > 1) {
       yield issue(
         'The build configurations ${names.join(', ')} of the app target in '
-        '$path do not share one baseConfigurationReference.',
+        '${AppEntryRole.xcodeProjectFile} do not share one '
+        'baseConfigurationReference.',
       );
     }
   }

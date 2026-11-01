@@ -2848,6 +2848,13 @@ Type type() => Types;
     const app = MatrixApp('home', [ModuleId('home')]);
 
     final added = addAppTests(
+      (
+        generated: const GeneratedApp(
+          name: 'my_app',
+          path: '/apps/app_1',
+        ),
+        app: app,
+      ),
       [
         MatrixAppTest(
           '/tests/core',
@@ -2856,9 +2863,6 @@ Type type() => Types;
         ),
         MatrixAppTest('/tests/more', appliesTo: (app) => true),
       ],
-      app: app,
-      directory: '/apps/app_1',
-      packageName: 'my_app',
       fileSystem: fileSystem,
     );
 
@@ -2888,10 +2892,14 @@ Type type() => Types;
       ..writeAsStringSync('// more\n');
     const app = MatrixApp('home', [ModuleId('home')]);
     List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          (
+            generated: const GeneratedApp(
+              name: 'my_app',
+              path: '/apps/app_1',
+            ),
+            app: app,
+          ),
           tests,
-          app: app,
-          directory: '/apps/app_1',
-          packageName: 'my_app',
           fileSystem: fileSystem,
         );
     // A problem reads as its message, also where it is printed.
@@ -2939,6 +2947,13 @@ Type type() => Types;
     final generating = <String>[];
 
     final added = addAppTests(
+      (
+        generated: const GeneratedApp(
+          name: 'my_app',
+          path: '/apps/app_1',
+        ),
+        app: app,
+      ),
       [
         MatrixAppTest(
           '/tests/core',
@@ -2957,9 +2972,6 @@ Type type() => Types;
         ),
         MatrixAppTest('/tests/more', appliesTo: (app) => true),
       ],
-      app: app,
-      directory: '/apps/app_1',
-      packageName: 'my_app',
       fileSystem: fileSystem,
     );
 
@@ -2996,6 +3008,13 @@ Type type() => Types;
       MatrixApp? matrixApp = app,
     }) =>
         addAppTests(
+          (
+            generated: const GeneratedApp(
+              name: 'my_app',
+              path: '/apps/app_1',
+            ),
+            app: matrixApp,
+          ),
           [
             MatrixAppTest('/tests/core', appliesTo: (app) => true),
             MatrixAppTest(
@@ -3004,9 +3023,6 @@ Type type() => Types;
               generatedFiles: (app, packageName) => files,
             ),
           ],
-          app: matrixApp,
-          directory: '/apps/app_1',
-          packageName: 'my_app',
           fileSystem: fileSystem,
         );
     // A problem reads as its message.
@@ -3081,10 +3097,14 @@ Type type() => Types;
     });
 
     List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          (
+            generated: const GeneratedApp(
+              name: 'my_app',
+              path: '/apps/app_1',
+            ),
+            app: app,
+          ),
           tests,
-          app: app,
-          directory: '/apps/app_1',
-          packageName: 'my_app',
           fileSystem: fileSystem,
         );
 
@@ -3245,10 +3265,14 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     });
 
     List<String> add(List<MatrixAppTest> tests) => addAppTests(
+          (
+            generated: const GeneratedApp(
+              name: 'my_app',
+              path: '/apps/app_1',
+            ),
+            app: app,
+          ),
           tests,
-          app: app,
-          directory: '/apps/app_1',
-          packageName: 'my_app',
           fileSystem: fileSystem,
         );
 
@@ -3434,15 +3458,19 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       );
 
       final added = addAppTests(
+        (
+          generated: const GeneratedApp(
+            name: 'my_app',
+            path: '/apps/app_1',
+          ),
+          app: app,
+        ),
         [
           asking('/tests/messages', 'messages'),
           start,
           walk(),
           asking('/tests/access', 'access_2'),
         ],
-        app: app,
-        directory: '/apps/app_1',
-        packageName: 'my_app',
         buildArguments: const ['--dart-define-from-file=.env', '--flavor=ci'],
         releaseBuildArguments: const ['--flavor', 'store'],
         fileSystem: fileSystem,
@@ -3475,10 +3503,14 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
       fileSystem.directory('/apps/app_1').deleteSync(recursive: true);
       final added = addAppTests(
+        (
+          generated: const GeneratedApp(
+            name: 'my_app',
+            path: '/apps/app_1',
+          ),
+          app: app,
+        ),
         [asking('/tests/messages', 'messages')],
-        app: app,
-        directory: '/apps/app_1',
-        packageName: 'my_app',
         buildArguments: const ['--dart-define-from-file=.env'],
         releaseBuildArguments: const ['--flavor', 'store'],
         fileSystem: fileSystem,
@@ -3501,10 +3533,14 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         List<String> releaseBuildArguments = const [],
       }) =>
           addAppTests(
+            (
+              generated: const GeneratedApp(
+                name: 'my_app',
+                path: '/apps/app_1',
+              ),
+              app: app,
+            ),
             tests,
-            app: app,
-            directory: '/apps/app_1',
-            packageName: 'my_app',
             buildArguments: buildArguments,
             releaseBuildArguments: releaseBuildArguments,
             fileSystem: fileSystem,
@@ -4080,9 +4116,8 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       bool maskValues = false,
     }) =>
         addAppTestsTo(
-          generated,
+          (generated: generated, app: app),
           tests,
-          app: app,
           env: env,
           releaseBuildArguments: releaseBuildArguments,
           envValues:

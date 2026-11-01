@@ -357,9 +357,11 @@ Future<int> _addAppTests(
   final pubspec = File(p.join(app, 'pubspec.yaml')).readAsStringSync();
   final name = (loadYaml(pubspec) as YamlMap)['name'] as String;
   final (code, output) = await addAppTestsTo(
-    GeneratedApp(name: name, path: p.absolute(app)),
+    (
+      generated: GeneratedApp(name: name, path: p.absolute(app)),
+      app: matrixApp,
+    ),
     tests,
-    app: matrixApp,
     env: matrixEnv,
     releaseBuildArguments: startReleaseBuildArguments,
     envValues: envValues == null

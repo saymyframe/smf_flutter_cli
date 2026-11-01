@@ -67,10 +67,52 @@ List<SmfIssue> _checkPipelineRendered(StructuralRuleInput<NoDsl> input) {
     ];
   }
 
+  final pipeline = ciRole.pipelineIn(input.roleInput);
+  final build = pipeline.build;
+  final rendered = _RenderedPipeline(lines, origin);
+  return [
+    for (final command in [...pipeline.checks, ...build.prepare])
+      if (!rendered.hasLine(_commandAtEnd(command.command)))
+        rendered.problem('no line that ends with `${command.command}`'),
+    ...rendered.placeProblems(
+      _perEnvironment(build.command, _closes),
+      build.environments,
+      what: 'the command of the build',
+      missing: 'no line that ends with the command of the build, '
+          '`${build.command.of('<environment>')}`',
+    ),
+    // A format may have the path inside a list on one line, so the path need
+    // not end the line. A character of a path after it would make it another
+    // file.
+    ...rendered.placeProblems(
+      _perEnvironment(build.artifact, r'(?![\w./-])'),
+      build.environments,
+      what: 'the file of the build',
+      missing: 'no line with the file of the build, '
+          '`${build.artifact.of('<environment>')}`',
+    ),
+    for (final environment in build.environments)
+      if (!rendered.hasWord(environment))
+        rendered.problem('no environment `$environment`'),
+    for (final key in build.keys)
+      if (!rendered.hasWord(key)) rendered.problem('no key `$key`'),
+  ];
+}
+
+/// The [lines] of the files of the provider of the role, without comments,
+/// with the [origin] of the problems that the rule finds in them.
+final class _RenderedPipeline {
+  const _RenderedPipeline(this.lines, this.origin);
+
+  final List<String> lines;
+  final ModuleOrigin origin;
+
   bool hasLine(RegExp pattern) => lines.any(pattern.hasMatch);
+
   bool hasWord(String word) => hasLine(
         RegExp('(?<![\\w-])${RegExp.escape(word)}(?![\\w-])'),
       );
+
   SmfIssue problem(String what) => SmfIssue(
         '$_filesHave $what.',
         hint: 'Write everything that CiRole.pipelineIn() gives into the files '
@@ -78,21 +120,21 @@ List<SmfIssue> _checkPipelineRendered(StructuralRuleInput<NoDsl> input) {
         origin: origin,
       );
 
-  final pipeline = ciRole.pipelineIn(input.roleInput);
-  final build = pipeline.build;
-
-  // A stand-in that is no environment is a reference of the host, which a job
-  // fills in with the choice of the developer. Otherwise the file has to name
-  // every environment, as a format with a block for each does: with fewer, a
-  // choice of another environment would not build what it asks for.
+  /// The problems of the place of what [pattern] finds, one of
+  /// [_perEnvironment], for the [environments] of the build.
+  ///
+  /// A stand-in that is no environment is a reference of the host, which a job
+  /// fills in with the choice of the developer. Otherwise the file has to name
+  /// every environment, as a format with a block for each does: with fewer, a
+  /// choice of another environment would not build what it asks for.
   List<SmfIssue> placeProblems(
-    RegExp pattern, {
+    RegExp pattern,
+    List<String> environments, {
     required String what,
     required String missing,
   }) {
     final standIns = _standInsIn(lines, pattern);
     if (standIns.isEmpty) return [problem(missing)];
-    final environments = build.environments;
     if (!standIns.every(environments.contains)) return const [];
     final left = [
       for (final environment in environments)
@@ -114,31 +156,6 @@ List<SmfIssue> _checkPipelineRendered(StructuralRuleInput<NoDsl> input) {
       ),
     ];
   }
-
-  return [
-    for (final command in [...pipeline.checks, ...build.prepare])
-      if (!hasLine(_commandAtEnd(command.command)))
-        problem('no line that ends with `${command.command}`'),
-    ...placeProblems(
-      _perEnvironment(build.command, _closes),
-      what: 'the command of the build',
-      missing: 'no line that ends with the command of the build, '
-          '`${build.command.of('<environment>')}`',
-    ),
-    // A format may have the path inside a list on one line, so the path need
-    // not end the line. A character of a path after it would make it another
-    // file.
-    ...placeProblems(
-      _perEnvironment(build.artifact, r'(?![\w./-])'),
-      what: 'the file of the build',
-      missing: 'no line with the file of the build, '
-          '`${build.artifact.of('<environment>')}`',
-    ),
-    for (final environment in build.environments)
-      if (!hasWord(environment)) problem('no environment `$environment`'),
-    for (final key in build.keys)
-      if (!hasWord(key)) problem('no key `$key`'),
-  ];
 }
 
 /// Whether [owner], the owner of a file, is the module [provider].
