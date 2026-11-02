@@ -1002,9 +1002,10 @@ jobs:
     name: macOS
     if: inputs.macos_and_windows
     runs-on: macos-26
-    # About 40 minutes, and more on a slow runner: the same tests on the same
-    # image have taken 40 minutes and 45.
-    timeout-minutes: 60
+    # About 50 minutes, and more on a slow runner: the same tests on the same
+    # image took 46 and 50 minutes in one run, and ran out of 60 minutes on
+    # a third runner of that run.
+    timeout-minutes: 75
     env: &macos_env
       FLUTTER_SHA256: ${{ inputs.macos_sha256 }}
       # The Xcode of the image that builds the apps.
@@ -1042,8 +1043,13 @@ jobs:
 
       - *pub_get
 
+      # A test has 90 seconds here, three times the default of dart test: the
+      # runner has three cores for the three packages that it tests at a
+      # time, and a test that renders the apps with every module, which takes
+      # 20 seconds on one runner, took 29 seconds on another and ran out of
+      # 30 seconds on a third. A test with a timeout of its own keeps it.
       - name: Test the packages
-        run: dart run melos exec -c 3 --dir-exists=test -- dart test --reporter expanded --file-reporter json:build/test-results/test.json
+        run: dart run melos exec -c 3 --dir-exists=test -- dart test --timeout 3x --reporter expanded --file-reporter json:build/test-results/test.json
 
       - name: Test the tools
         if: ${{ !cancelled() }}
@@ -1452,8 +1458,9 @@ jobs:
     needs: plan
     if: ${{ !cancelled() && inputs.macos_and_windows }}
     runs-on: windows-latest
-    # About 40 minutes.
-    timeout-minutes: 60
+    # About 50 minutes: 48 to 51 in one run, with room for a slow runner, as
+    # on macOS.
+    timeout-minutes: 75
     defaults:
       run:
         shell: pwsh
