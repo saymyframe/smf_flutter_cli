@@ -1,3 +1,9 @@
+## 0.7.0
+
+> Note: This release has breaking changes.
+
+ - **BREAKING** **FEAT**(contracts): give the session of the app the token of the user ([#293](https://github.com/saymyframe/smf_flutter_cli/issues/293)). ([4703346e](https://github.com/saymyframe/smf_flutter_cli/commit/4703346e3b980629f7a985454f835f9efe341819))
+
 ## 0.6.1
 
  - Update a dependency to the latest release.

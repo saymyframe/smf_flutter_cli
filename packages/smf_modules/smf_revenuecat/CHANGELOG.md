@@ -1,3 +1,7 @@
+## 0.7.1
+
+ - Update a dependency to the latest release.
+
 ## 0.7.0
 
  - **FIX**(contracts): call the env role the env role in messages, not the values in .env role ([#277](https://github.com/saymyframe/smf_flutter_cli/issues/277)). ([90d58df8](https://github.com/saymyframe/smf_flutter_cli/commit/90d58df8d407de3a6058e7b2b9c39c293fc94ec9))

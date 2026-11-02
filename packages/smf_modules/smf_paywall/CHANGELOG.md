@@ -1,3 +1,7 @@
+## 0.7.1
+
+ - Update a dependency to the latest release.
+
 ## 0.7.0
 
  - **FEAT**(paywall): add the paywall, its guard of premium and the subscription screen, in a bloc and a riverpod variant ([#265](https://github.com/saymyframe/smf_flutter_cli/issues/265)). ([e65f88ba](https://github.com/saymyframe/smf_flutter_cli/commit/e65f88ba07965ca3923026f3c8aaa7fbc155b1a2))

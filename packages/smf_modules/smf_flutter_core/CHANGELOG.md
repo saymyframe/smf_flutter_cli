@@ -1,3 +1,11 @@
+## 0.7.0
+
+> Note: This release has breaking changes.
+
+ - **DOCS**(cli): describe flavors and the app icon in the READMEs, and what holds for the default mark ([#311](https://github.com/saymyframe/smf_flutter_cli/issues/311)). ([be105aae](https://github.com/saymyframe/smf_flutter_cli/commit/be105aae497e0e2c9aaf0d2ef1de8adb99d1fa7b))
+ - **BREAKING** **FEAT**(contracts): hold every provider of the app entry to the flavors of the role ([#289](https://github.com/saymyframe/smf_flutter_cli/issues/289)). ([b54cea70](https://github.com/saymyframe/smf_flutter_cli/commit/b54cea7017587c9acaa5881ea09cf32baeea4468))
+ - **BREAKING** **FEAT**(flutter_core): three native flavors in every app ([#286](https://github.com/saymyframe/smf_flutter_cli/issues/286)). ([0294ab7a](https://github.com/saymyframe/smf_flutter_cli/commit/0294ab7a78fe4f26ec3b238fe91bb4efd28aec4b))
+
 ## 0.6.0
 
 > Note: This release has breaking changes.

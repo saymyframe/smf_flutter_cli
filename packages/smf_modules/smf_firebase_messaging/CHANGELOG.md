@@ -1,3 +1,10 @@
+## 0.7.0
+
+> Note: This release has breaking changes.
+
+ - **DOCS**(firebase_messaging,firebase_analytics): say what repeats for each project ([#304](https://github.com/saymyframe/smf_flutter_cli/issues/304)). ([76a27328](https://github.com/saymyframe/smf_flutter_cli/commit/76a27328c1380b6c03783f923333c66a941c23a1))
+ - **BREAKING** **FEAT**(firebase_core): configure Firebase for each flavor ([#297](https://github.com/saymyframe/smf_flutter_cli/issues/297)). ([f08f2a15](https://github.com/saymyframe/smf_flutter_cli/commit/f08f2a15522ee292462c3bfb7c5bec24bb9794a8))
+
 ## 0.6.1
 
  - Update a dependency to the latest release.

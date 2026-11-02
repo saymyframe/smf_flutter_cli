@@ -1,3 +1,7 @@
+## 0.5.2
+
+ - **FEAT**(contracts): let a module be selected by default in a run in a terminal, and offer home so ([#310](https://github.com/saymyframe/smf_flutter_cli/issues/310)). ([3eacd80d](https://github.com/saymyframe/smf_flutter_cli/commit/3eacd80def0cec6d0c1f8af25b2ac64969bca0b0))
+
 ## 0.5.1
 
  - Update a dependency to the latest release.

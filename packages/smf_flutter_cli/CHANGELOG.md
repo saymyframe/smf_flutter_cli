@@ -1,3 +1,28 @@
+## 0.8.0
+
+> Note: This release has breaking changes.
+
+ - **FIX**(github_actions): name the build job without an expression ([#312](https://github.com/saymyframe/smf_flutter_cli/issues/312)). ([1b8d9d57](https://github.com/saymyframe/smf_flutter_cli/commit/1b8d9d57ca1354705b31fd63ae4d5676f72463a4))
+ - **FIX**(firebase_crashlytics): keep the build phase working after each configured flavor ([#302](https://github.com/saymyframe/smf_flutter_cli/issues/302)). ([1a6886b7](https://github.com/saymyframe/smf_flutter_cli/commit/1a6886b7a4ed3eea748cb3b67307d473cb264d5c))
+ - **FIX**(firebase_auth): name the script and the several projects ([#303](https://github.com/saymyframe/smf_flutter_cli/issues/303)). ([574808d7](https://github.com/saymyframe/smf_flutter_cli/commit/574808d7e252e3f116a7e85655b09c36ad3138a0))
+ - **FEAT**(contracts): let a module be selected by default in a run in a terminal, and offer home so ([#310](https://github.com/saymyframe/smf_flutter_cli/issues/310)). ([3eacd80d](https://github.com/saymyframe/smf_flutter_cli/commit/3eacd80def0cec6d0c1f8af25b2ac64969bca0b0))
+ - **FEAT**(cli): offer the modules in their order, and run the commands of the CI of an app in CI ([#309](https://github.com/saymyframe/smf_flutter_cli/issues/309)). ([706b83e5](https://github.com/saymyframe/smf_flutter_cli/commit/706b83e534e1bbaafea0d33e01039e31df3d9d9a))
+ - **FEAT**(dio): provide the REST role with dio ([#308](https://github.com/saymyframe/smf_flutter_cli/issues/308)). ([1e1ae336](https://github.com/saymyframe/smf_flutter_cli/commit/1e1ae33682f31abf01d6e2e57957624e89220041))
+ - **FEAT**(launcher_icons): the app icon with flutter_launcher_icons ([#301](https://github.com/saymyframe/smf_flutter_cli/issues/301)). ([d58bcf55](https://github.com/saymyframe/smf_flutter_cli/commit/d58bcf5532eeaa3d18c6b6d9fd2ed265b0399f2c))
+ - **FEAT**(native_splash): the splash screen with flutter_native_splash ([#299](https://github.com/saymyframe/smf_flutter_cli/issues/299)). ([b168e074](https://github.com/saymyframe/smf_flutter_cli/commit/b168e074763c65bef82517ee3c9e4809f02e12ad))
+ - **FEAT**(github_actions): CI on GitHub Actions ([#294](https://github.com/saymyframe/smf_flutter_cli/issues/294)). ([439843f0](https://github.com/saymyframe/smf_flutter_cli/commit/439843f0a1903505af654292a137c94d03a75566))
+ - **FEAT**(contracts): the CI role ([#291](https://github.com/saymyframe/smf_flutter_cli/issues/291)). ([235978de](https://github.com/saymyframe/smf_flutter_cli/commit/235978de06bb8101bc402b0f9cf797f17588dc90))
+ - **FEAT**(contracts): let the template of a role give the env role a key of its own ([#288](https://github.com/saymyframe/smf_flutter_cli/issues/288)). ([3f30d639](https://github.com/saymyframe/smf_flutter_cli/commit/3f30d639616c841b200c35e12331755dd8775b2a))
+ - **FEAT**(contracts): run configurations for each flavor from the env role ([#287](https://github.com/saymyframe/smf_flutter_cli/issues/287)). ([3d971715](https://github.com/saymyframe/smf_flutter_cli/commit/3d9717154f273600e3ca6cafccb76a4c5c1ba53f))
+ - **DOCS**(cli): show the recording and the screenshots of 0.8 ([#314](https://github.com/saymyframe/smf_flutter_cli/issues/314)). ([52d3c98d](https://github.com/saymyframe/smf_flutter_cli/commit/52d3c98dca17d9cf1b5c82fb512b01c2d6c6ac7b))
+ - **DOCS**(cli): describe flavors and the app icon in the READMEs, and what holds for the default mark ([#311](https://github.com/saymyframe/smf_flutter_cli/issues/311)). ([be105aae](https://github.com/saymyframe/smf_flutter_cli/commit/be105aae497e0e2c9aaf0d2ef1de8adb99d1fa7b))
+ - **DOCS**(github_actions): tell what a private repository on the Free plan does with environments ([#313](https://github.com/saymyframe/smf_flutter_cli/issues/313)). ([b96b307a](https://github.com/saymyframe/smf_flutter_cli/commit/b96b307adecd76dd37e088f4ebdbe5e6ede4efde))
+ - **DOCS**(firebase_messaging,firebase_analytics): say what repeats for each project ([#304](https://github.com/saymyframe/smf_flutter_cli/issues/304)). ([76a27328](https://github.com/saymyframe/smf_flutter_cli/commit/76a27328c1380b6c03783f923333c66a941c23a1))
+ - **BREAKING** **REFACTOR**(cli): take the app that tests go into as one parameter, and drop the role options of runMatrix that no caller gives. ([b95bd55a](https://github.com/saymyframe/smf_flutter_cli/commit/b95bd55a14edb605135b2b3a2218a343e4af5454))
+ - **BREAKING** **FEAT**(firebase_core): configure Firebase for each flavor ([#297](https://github.com/saymyframe/smf_flutter_cli/issues/297)). ([f08f2a15](https://github.com/saymyframe/smf_flutter_cli/commit/f08f2a15522ee292462c3bfb7c5bec24bb9794a8))
+ - **BREAKING** **FEAT**(contracts): give the session of the app the token of the user ([#293](https://github.com/saymyframe/smf_flutter_cli/issues/293)). ([4703346e](https://github.com/saymyframe/smf_flutter_cli/commit/4703346e3b980629f7a985454f835f9efe341819))
+ - **BREAKING** **FEAT**(flutter_core): three native flavors in every app ([#286](https://github.com/saymyframe/smf_flutter_cli/issues/286)). ([0294ab7a](https://github.com/saymyframe/smf_flutter_cli/commit/0294ab7a78fe4f26ec3b238fe91bb4efd28aec4b))
+
 ## 0.7.1
 
  - **FIX**(google_sign_in): fail with notConfigured when Android answers an unknown key as a cancel ([#281](https://github.com/saymyframe/smf_flutter_cli/issues/281)). ([4fcd71fa](https://github.com/saymyframe/smf_flutter_cli/commit/4fcd71fab131b780d47ab1f8c7e3864f83a76d32))
