@@ -159,6 +159,48 @@ void main() {
     expect(fileSystem.directory('/tmp/smf/app').existsSync(), isFalse);
   });
 
+  test(
+      'tries again to delete a file of the Flutter tools that a process '
+      'still writes to', () async {
+    var refusals = 2;
+
+    await move(
+      const TargetDecision(path: '/work/app'),
+      on: FaultyFileSystem(
+        fileSystem,
+        noDelete: (path) => path == '/tmp/smf/app/build' && refusals-- > 0,
+      ),
+    );
+
+    expect(refusals, lessThan(0));
+    expect(filesIn('/work/app'), moved);
+    expect(fileSystem.directory('/tmp/smf/app').existsSync(), isFalse);
+    expect(logger.warnings, isEmpty);
+  });
+
+  test('keeps the app where it is when a file of the Flutter tools stays',
+      () async {
+    await expectLater(
+      move(
+        const TargetDecision(path: '/work/app'),
+        on: FaultyFileSystem(
+          fileSystem,
+          noDelete: {'/tmp/smf/app/build'}.contains,
+        ),
+      ),
+      throwsA(
+        isA<GenerationFailedException>().having(
+          (e) => e.message,
+          'message',
+          startsWith('The app could not be moved to /work/app, so it stays in '
+              '/tmp/smf/app:'),
+        ),
+      ),
+    );
+    expect(fileSystem.directory('/work/app').existsSync(), isFalse);
+    expect(filesIn('/tmp/smf/app'), containsAll(moved));
+  });
+
   test('a temporary copy that cannot be deleted only warns', () async {
     await move(
       const TargetDecision(path: '/work/app'),
