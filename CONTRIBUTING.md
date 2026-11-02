@@ -87,7 +87,7 @@ The jobs with Flutter are many, mostly one for each app or shard of the plan, th
 
 The job `CI` sums up the jobs of `.github/workflows/build.yml`: it fails when any of them failed or was cancelled, and when one was skipped in a run that runs every job. The ruleset of main requires the checks `CI` and `PR title` before a pull request can be merged. A new job in `build.yml` goes into the `needs` of `CI`, and a test in `tools/` fails when it does not.
 
-The repository layout, the module-independence rules and the conventions for generated files and tests are described in [AGENTS.md](AGENTS.md). It is written for AI coding agents but is just as useful for people. The documentation of SMF, with a guide to writing modules, is at [doc.saymyframe.com](https://doc.saymyframe.com).
+How the repository is organized, how its generated apps are tested and what its CI runs is at [doc.saymyframe.com/contributing](https://doc.saymyframe.com/contributing), and how to write a module at [doc.saymyframe.com/extending](https://doc.saymyframe.com/extending). [AGENTS.md](AGENTS.md) has the repository layout, the module-independence rules and the conventions for generated files and tests in the form for AI coding agents: the same facts, in full and in one file.
 
 ## Code style
 

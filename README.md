@@ -111,7 +111,7 @@ A module knows only the modules it depends on. A screen needs *a* router, not go
 
 ## Contributing
 
-The repository is a Dart workspace managed with Melos, with a package for the module model (`smf_contracts`), the generation pipeline (`smf_pipeline`), each module and the CLI. [CONTRIBUTING.md](CONTRIBUTING.md) describes how to set it up and run its checks, and [AGENTS.md](AGENTS.md) describes its layout and rules.
+The repository is a Dart workspace managed with Melos, with a package for the module model (`smf_contracts`), the generation pipeline (`smf_pipeline`), each module and the CLI. How it is organized, how its generated apps are tested and what its CI runs is at [doc.saymyframe.com/contributing](https://doc.saymyframe.com/contributing), and how to write a module at [doc.saymyframe.com/extending](https://doc.saymyframe.com/extending). [CONTRIBUTING.md](CONTRIBUTING.md) describes how to set it up and run its checks, and [AGENTS.md](AGENTS.md) has its layout and rules in the form for coding agents.
 
 ## Support
 
