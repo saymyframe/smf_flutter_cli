@@ -90,15 +90,35 @@ Future<void> moveApp(
   }
 }
 
+/// How many times [_deleteToolFiles] tries to delete a file of the tools.
+const _toolFileAttempts = 5;
+
+/// How long [_deleteToolFiles] waits before it tries again.
+const _toolFileWait = Duration(milliseconds: 500);
+
 /// Deletes the [flutterToolFiles] of the app in [source].
+///
+/// A process that the steps before this stage started may still write to
+/// such a file. A directory that gets a new file while it is being deleted
+/// fails the deletion ("Directory not empty"), and Windows refuses to delete
+/// a file that a process has open, so it tries again for a moment before it
+/// gives up.
 Future<void> _deleteToolFiles(FileSystem fileSystem, String source) async {
   for (final path in flutterToolFiles) {
     final entity = fileSystem.path.joinAll([source, ...path.split('/')]);
-    final type = fileSystem.typeSync(entity, followLinks: false);
-    if (type == FileSystemEntityType.directory) {
-      await fileSystem.directory(entity).delete(recursive: true);
-    } else if (type != FileSystemEntityType.notFound) {
-      await fileSystem.file(entity).delete();
+    for (var attempt = 1;; attempt++) {
+      try {
+        final type = fileSystem.typeSync(entity, followLinks: false);
+        if (type == FileSystemEntityType.directory) {
+          await fileSystem.directory(entity).delete(recursive: true);
+        } else if (type != FileSystemEntityType.notFound) {
+          await fileSystem.file(entity).delete();
+        }
+        break;
+      } on FileSystemException {
+        if (attempt == _toolFileAttempts) rethrow;
+        await Future<void>.delayed(_toolFileWait);
+      }
     }
   }
 }
