@@ -1,3 +1,9 @@
+## 0.6.0
+
+> Note: This release has breaking changes.
+
+ - **BREAKING** **FEAT**(flutter_core): three native flavors in every app ([#286](https://github.com/saymyframe/smf_flutter_cli/issues/286)). ([0294ab7a](https://github.com/saymyframe/smf_flutter_cli/commit/0294ab7a78fe4f26ec3b238fe91bb4efd28aec4b))
+
 ## 0.5.1
 
  - Update a dependency to the latest release.

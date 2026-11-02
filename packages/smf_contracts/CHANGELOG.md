@@ -1,3 +1,21 @@
+## 0.8.0
+
+> Note: This release has breaking changes.
+
+ - **REFACTOR**(contracts): split the checks of the flavors and of the CI pipeline into smaller functions. ([4fe62e2f](https://github.com/saymyframe/smf_flutter_cli/commit/4fe62e2f46248e59ce27cf2b75bb57e8d68302a5))
+ - **FEAT**(contracts): let a module be selected by default in a run in a terminal, and offer home so ([#310](https://github.com/saymyframe/smf_flutter_cli/issues/310)). ([3eacd80d](https://github.com/saymyframe/smf_flutter_cli/commit/3eacd80def0cec6d0c1f8af25b2ac64969bca0b0))
+ - **FEAT**(dio): provide the REST role with dio ([#308](https://github.com/saymyframe/smf_flutter_cli/issues/308)). ([1e1ae336](https://github.com/saymyframe/smf_flutter_cli/commit/1e1ae33682f31abf01d6e2e57957624e89220041))
+ - **FEAT**(contracts): add the REST role, whose guarantees hold with every provider ([#300](https://github.com/saymyframe/smf_flutter_cli/issues/300)). ([06ed33d0](https://github.com/saymyframe/smf_flutter_cli/commit/06ed33d02d6e6aaa71abdf87eab4418377ff071b))
+ - **FEAT**(contracts): the app icon and splash roles ([#292](https://github.com/saymyframe/smf_flutter_cli/issues/292)). ([6a1384ac](https://github.com/saymyframe/smf_flutter_cli/commit/6a1384aca95792e5d6db0e7ba904bc86d3800a28))
+ - **FEAT**(contracts): the CI role ([#291](https://github.com/saymyframe/smf_flutter_cli/issues/291)). ([235978de](https://github.com/saymyframe/smf_flutter_cli/commit/235978de06bb8101bc402b0f9cf797f17588dc90))
+ - **FEAT**(contracts): let the template of a role give the env role a key of its own ([#288](https://github.com/saymyframe/smf_flutter_cli/issues/288)). ([3f30d639](https://github.com/saymyframe/smf_flutter_cli/commit/3f30d639616c841b200c35e12331755dd8775b2a))
+ - **FEAT**(contracts): run configurations for each flavor from the env role ([#287](https://github.com/saymyframe/smf_flutter_cli/issues/287)). ([3d971715](https://github.com/saymyframe/smf_flutter_cli/commit/3d9717154f273600e3ca6cafccb76a4c5c1ba53f))
+ - **FEAT**(contracts): a default flavor in the flutter section of the pubspec ([#284](https://github.com/saymyframe/smf_flutter_cli/issues/284)). ([0fdf1895](https://github.com/saymyframe/smf_flutter_cli/commit/0fdf18952f439715216f75440b4e9a99c810ba6c))
+ - **BREAKING** **FEAT**(contracts): remove the hosts of a step ([#305](https://github.com/saymyframe/smf_flutter_cli/issues/305)). ([057d76d0](https://github.com/saymyframe/smf_flutter_cli/commit/057d76d043d82eb72d3917d678b5f8387e0bd9c3))
+ - **BREAKING** **FEAT**(contracts): give the session of the app the token of the user ([#293](https://github.com/saymyframe/smf_flutter_cli/issues/293)). ([4703346e](https://github.com/saymyframe/smf_flutter_cli/commit/4703346e3b980629f7a985454f835f9efe341819))
+ - **BREAKING** **FEAT**(contracts): hold every provider of the app entry to the flavors of the role ([#289](https://github.com/saymyframe/smf_flutter_cli/issues/289)). ([b54cea70](https://github.com/saymyframe/smf_flutter_cli/commit/b54cea7017587c9acaa5881ea09cf32baeea4468))
+ - **BREAKING** **FEAT**(flutter_core): three native flavors in every app ([#286](https://github.com/saymyframe/smf_flutter_cli/issues/286)). ([0294ab7a](https://github.com/saymyframe/smf_flutter_cli/commit/0294ab7a78fe4f26ec3b238fe91bb4efd28aec4b))
+
 ## 0.7.0
 
 > Note: This release has breaking changes.

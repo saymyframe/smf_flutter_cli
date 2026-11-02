@@ -1,3 +1,10 @@
+## 0.5.0
+
+> Note: This release has breaking changes.
+
+ - **DOCS**(firebase_messaging,firebase_analytics): say what repeats for each project ([#304](https://github.com/saymyframe/smf_flutter_cli/issues/304)). ([76a27328](https://github.com/saymyframe/smf_flutter_cli/commit/76a27328c1380b6c03783f923333c66a941c23a1))
+ - **BREAKING** **FEAT**(firebase_core): configure Firebase for each flavor ([#297](https://github.com/saymyframe/smf_flutter_cli/issues/297)). ([f08f2a15](https://github.com/saymyframe/smf_flutter_cli/commit/f08f2a15522ee292462c3bfb7c5bec24bb9794a8))
+
 ## 0.4.3
 
  - **FIX**(firebase_analytics): turn off the screen views that Firebase logs itself ([#273](https://github.com/saymyframe/smf_flutter_cli/issues/273)). ([e90566e0](https://github.com/saymyframe/smf_flutter_cli/commit/e90566e03115e3c61a12984adf6f1e83a8b3d9cb))

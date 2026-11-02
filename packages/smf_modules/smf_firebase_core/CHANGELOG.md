@@ -1,3 +1,10 @@
+## 0.5.0
+
+> Note: This release has breaking changes.
+
+ - **BREAKING** **FEAT**(firebase_core): configure Firebase for each flavor ([#297](https://github.com/saymyframe/smf_flutter_cli/issues/297)). ([f08f2a15](https://github.com/saymyframe/smf_flutter_cli/commit/f08f2a15522ee292462c3bfb7c5bec24bb9794a8))
+ - **BREAKING** **FEAT**(flutter_core): three native flavors in every app ([#286](https://github.com/saymyframe/smf_flutter_cli/issues/286)). ([0294ab7a](https://github.com/saymyframe/smf_flutter_cli/commit/0294ab7a78fe4f26ec3b238fe91bb4efd28aec4b))
+
 ## 0.4.3
 
  - Update a dependency to the latest release.

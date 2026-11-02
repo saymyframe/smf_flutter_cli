@@ -1,3 +1,15 @@
+## 0.7.0
+
+> Note: This release has breaking changes.
+
+ - **FIX**(firebase_auth): name the script and the several projects ([#303](https://github.com/saymyframe/smf_flutter_cli/issues/303)). ([574808d7](https://github.com/saymyframe/smf_flutter_cli/commit/574808d7e252e3f116a7e85655b09c36ad3138a0))
+ - **FEAT**(native_splash): the splash screen with flutter_native_splash ([#299](https://github.com/saymyframe/smf_flutter_cli/issues/299)). ([b168e074](https://github.com/saymyframe/smf_flutter_cli/commit/b168e074763c65bef82517ee3c9e4809f02e12ad))
+ - **DOCS**(cli): describe flavors and the app icon in the READMEs, and what holds for the default mark ([#311](https://github.com/saymyframe/smf_flutter_cli/issues/311)). ([be105aae](https://github.com/saymyframe/smf_flutter_cli/commit/be105aae497e0e2c9aaf0d2ef1de8adb99d1fa7b))
+ - **BREAKING** **FEAT**(contracts): remove the hosts of a step ([#305](https://github.com/saymyframe/smf_flutter_cli/issues/305)). ([057d76d0](https://github.com/saymyframe/smf_flutter_cli/commit/057d76d043d82eb72d3917d678b5f8387e0bd9c3))
+ - **BREAKING** **FEAT**(firebase_core): configure Firebase for each flavor ([#297](https://github.com/saymyframe/smf_flutter_cli/issues/297)). ([f08f2a15](https://github.com/saymyframe/smf_flutter_cli/commit/f08f2a15522ee292462c3bfb7c5bec24bb9794a8))
+ - **BREAKING** **FEAT**(contracts): give the session of the app the token of the user ([#293](https://github.com/saymyframe/smf_flutter_cli/issues/293)). ([4703346e](https://github.com/saymyframe/smf_flutter_cli/commit/4703346e3b980629f7a985454f835f9efe341819))
+ - **BREAKING** **FEAT**(flutter_core): three native flavors in every app ([#286](https://github.com/saymyframe/smf_flutter_cli/issues/286)). ([0294ab7a](https://github.com/saymyframe/smf_flutter_cli/commit/0294ab7a78fe4f26ec3b238fe91bb4efd28aec4b))
+
 ## 0.6.1
 
  - Update a dependency to the latest release.

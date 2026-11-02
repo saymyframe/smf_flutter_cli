@@ -1,3 +1,9 @@
+## 0.7.0
+
+> Note: This release has breaking changes.
+
+ - **BREAKING** **FEAT**(contracts): give the session of the app the token of the user ([#293](https://github.com/saymyframe/smf_flutter_cli/issues/293)). ([4703346e](https://github.com/saymyframe/smf_flutter_cli/commit/4703346e3b980629f7a985454f835f9efe341819))
+
 ## 0.6.1
 
  - **REFACTOR**(contracts,pipeline,cli,sign_in): split the functions that SonarCloud finds too complex ([#240](https://github.com/saymyframe/smf_flutter_cli/issues/240)). ([7055060d](https://github.com/saymyframe/smf_flutter_cli/commit/7055060df967273c99faa10f381fcca99b19955b))
