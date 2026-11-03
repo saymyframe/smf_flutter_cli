@@ -13,13 +13,13 @@
 // of a value that the role names: a plain value, without white space, # or
 // quotes, and any other value in double quotes, each after KEY= and before a
 // comment, if the line has one. The matrix writes the keys of the app, from
-// the data of the role, into keys.dart next to the test. It reads AppEnv
+// the data of the role, into keys.dart next to the test, with what
+// AppEnv.supplied is. It reads AppEnv
 // without starting the app, since the role says that the getters return the
 // values before any code of the app runs, main() included.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:{{app_name}}/core/env/app_env.dart';
 
 import 'keys.dart';
 
@@ -93,7 +93,7 @@ void main() {
     'of the provider, while .env has a line of a key of the app',
     () {
       expect(
-        AppEnv.supplied,
+        envSupplied,
         isTrue,
         reason: '$dotEnvFile has a line of a key of the app, so '
             'AppEnv.supplied is true',
