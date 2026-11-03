@@ -69,6 +69,26 @@ const _appEntryBuildingRootOnce = BrokenModule(
   ],
 );
 
+/// The app entry whose `main()` runs the root of the app after a failed
+/// start: flutter_core, the app entry of the fixtures, without the `return`
+/// after its call of `showFailedStart()`. So when `bootstrap()` throws, the
+/// screen of the failed start shows for a moment, and then the root of the
+/// app runs over it, on services that the start-up did not set up.
+///
+/// `main()` still awaits `bootstrap()` in a `try` statement whose clause
+/// catches every error and calls `showFailedStart()`, as the rule
+/// `app_entry.main_sequence` of the role wants, and the app analyzes: only a
+/// running app shows the bug. It is made here for the reason that the app
+/// entry above is.
+const _appEntryRunningRootAfterFailedStart = BrokenModule(
+  FlutterCoreModule(),
+  id: ModuleId('broken_app_entry_runs_root_after_failed_start'),
+  description: 'Flutter app that runs its root after a failed start '
+      '(fixture)',
+  file: 'lib/main.dart',
+  changes: [('    return;\n', '')],
+);
+
 /// The app icon whose image for the App Store has alpha: launcher_icons, the
 /// provider of the app icon role of the CLI, with the foreground as the image
 /// of the icon and without what takes the alpha away. So the tool only warns,
@@ -1527,6 +1547,24 @@ List<BrokenProvider> brokenProviders() => const [
             _flavorTests,
             'the probe of the flavor finds no problem',
             'The app has the flavor that its build asked for.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _appEntryRunningRootAfterFailedStart,
+        role: appEntryRole,
+        bug: 'Its main() shows the screen of a failed start when bootstrap() '
+            'throws, and then runs the root of the app over it, with the '
+            'services that the start-up did not set up.',
+        // The fixture whose start-up fails when the test says so.
+        app: [FakeStartFailureModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/failed_start/failed_start_test.dart',
+            'a start-up that throws shows the screen of a failed start in '
+                'place of the app, and reports the error once',
+            'A failed start shows the screen of the failed start, and main() '
+                'runs no root of the app over it.',
           ),
         ],
       ),

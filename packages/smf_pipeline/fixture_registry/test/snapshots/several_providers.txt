@@ -171,7 +171,7 @@ This guide tells coding agents what the code of this Flutter app does not show. 
 
 The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
 
-- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
@@ -189,7 +189,7 @@ flutter test
 
 Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
 
-- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Every screen is below it, so create no other `MaterialApp` in `lib/`. The only other one is in `FailedStartApp`, which `main()` runs in its place when the start-up fails.
 - The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
@@ -239,7 +239,8 @@ With `firebase_auth`:
 - `tool/enable_firebase_sign_in.dart` enables them with the Firebase CLI, one project in a run. Where the flavors have several projects, it needs `--project <id>` for each. It changes the Firebase project and needs a Firebase account: run it only when asked.
 - `appSession.userToken()` gives the Firebase ID token of the user, which the Firebase SDK keeps on the device and renews when it is about to expire. A server verifies it with the Firebase Admin SDK, as a token of the Firebase project that the app is configured with.
 
-- For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project, downloads the Firebase files of the app again and writes the URL scheme of the iOS app into `ios/Runner/Info.plist`, which all the flavors share. After `tool/configure_firebase.dart` for another project, it has to run again with `--project <id>`: run it only when asked.
+- For Google sign-in, `tool/enable_firebase_sign_in.dart` also registers the SHA of the Android debug key of the machine in the Firebase project and downloads the Firebase files of the app again. After `tool/configure_firebase.dart` configures another project, the script has to run again with `--project <id>`. Run it only when asked.
+- `tool/firebase_configured/write_google_url_schemes.dart` writes the URL scheme of Google of each iOS app into `ios/Runner/Info.plist`, which all the flavors share. The Google Sign-In SDK stops the iOS app without it. `tool/configure_firebase.dart` and `tool/enable_firebase_sign_in.dart` run it after they change the Firebase files. It needs no account and changes only that file, so after a `GoogleService-Info.plist` changes some other way, run `dart tool/firebase_configured/write_google_url_schemes.dart`.
 - Apple is enabled in the Firebase console by hand, with the private key of Apple that deleting an account needs. That key is a secret: never put it into the app or its repository.
 
 ## Crash reporting
@@ -590,6 +591,14 @@ In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor bu
 
 On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
 
+## When the start-up fails
+
+`bootstrap()` in `lib/bootstrap.dart` runs before the first frame. When it throws, `main()` shows `FailedStartApp` of `lib/core/app/failed_start.dart` in place of the splash screen, which would otherwise stay. A debug build shows the error and its stack trace there and prints them to the console. Any other build only says that the app could not start.
+
+The error also reaches `FlutterError.onError`, so crash reporting that the start-up set up before the error reports it. An error before that reaches no crash reporter, so reproduce it in a debug build. The error usually says what to do, such as a command to run.
+
+The texts of the screen are in English, since the texts of the app need the start-up that failed. Change them in that file.
+
 ## Run, test and build with .env
 
 `AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
@@ -619,7 +628,7 @@ The section "Values in .env" tells what goes into `.env`, lists the keys of the 
 
 ## Firebase
 
-The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below.
+The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below. A debug build shows that error on the screen of a failed start.
 
 `smf create` offers to configure `dev`, and otherwise leaves the command for later. To configure a flavor, or to configure it again, such as for another project or on another machine, run in the directory of the app:
 
@@ -675,9 +684,15 @@ The script sets up the rest of what Google needs only for the apps that `firebas
 
 - It registers the SHA-1 and SHA-256 of the Android debug key of the machine that runs it for each of those Android apps, which Google uses to recognize the Android app. When the machine has no debug key yet, the script creates it, as the first debug build would. Every machine has a debug key of its own, so run the script on each machine that builds the app for debugging, or add the SHA of its key in the Firebase console, in the settings of the Android app.
 - It downloads the Firebase files of those apps again, once they have the clients of Google, and writes them to the paths that `firebase.json` names.
-- It writes the URL scheme of each of those iOS apps, `REVERSED_CLIENT_ID` of its `GoogleService-Info.plist`, into `CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors share that file, so it lists a scheme for each iOS app that the script ran for, in the build of every flavor. It adds a scheme and removes none: after a flavor moves to another project, remove the scheme of the former project there by hand.
+- Then it runs `tool/firebase_configured/write_google_url_schemes.dart`, which writes the URL schemes of the iOS apps (see below).
 
 After you configure a flavor, run the script again for its project, even when another flavor already uses that project: an earlier run could not set up an app that `firebase.json` did not name yet.
+
+The Google Sign-In SDK stops an iOS app whose `ios/Runner/Info.plist` lacks the URL scheme of its client of Google. `tool/firebase_configured/write_google_url_schemes.dart` writes that scheme, `REVERSED_CLIENT_ID` of the `GoogleService-Info.plist`, into `CFBundleURLTypes` there for each iOS app that `firebase.json` names. `dart tool/configure_firebase.dart` runs it each time it configures a flavor, and the script above runs it once it has downloaded the Firebase files. A `GoogleService-Info.plist` has that client only once Google is enabled in its project. Until then, `write_google_url_schemes.dart` writes no scheme for that app and prints the command that enables Google. The flavors share `ios/Runner/Info.plist`, so it holds a scheme for each iOS app, in the build of every flavor. The script adds schemes and removes none: after a flavor moves to another project, remove the scheme of the former project there by hand. If you change a `GoogleService-Info.plist` some other way, run it yourself:
+
+```bash
+dart tool/firebase_configured/write_google_url_schemes.dart
+```
 
 A release of the Android app is signed with another key, whose SHA-1 and SHA-256 Google needs too: those of the upload key, and of the app signing key of Google Play, under Test and release > App integrity in the Play Console. Add each with the Firebase CLI, for the Android app of each flavor that such a key signs, with the id of that app and of its project from `firebase.json`:
 
@@ -1770,6 +1785,124 @@ void logFirebaseScreenView(String? route, String location) {
         (Object error) => debugPrint('Firebase Analytics: $error'),
         test: (error) => error is PlatformException,
       );
+}
+=== lib/core/app/failed_start.dart (role:app_entry) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'status_bar_icons.dart';
+
+/// Shows why the app could not start, in place of the splash screen of the
+/// system, which would otherwise stay, and reports [error] with its
+/// [stackTrace] to the handler of the errors of Flutter.
+///
+/// `main()` calls it when `bootstrap()` throws, and then returns: the app
+/// does not start. The screen comes first, so a handler that throws cannot
+/// keep it away. The handlers that the start-up set up before it failed,
+/// such as those of crash reporting, hear of the error, and so does a test
+/// that runs `main()`.
+void showFailedStart(Object error, StackTrace stackTrace) {
+  runApp(FailedStartApp(error: error, stackTrace: stackTrace));
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'the start-up of the app',
+      context: ErrorDescription('while main() awaited bootstrap()'),
+    ),
+  );
+}
+
+/// The app that runs when the start-up failed: a screen that says so, with
+/// [error] and [stackTrace] in a debug build.
+///
+/// It needs nothing of the start-up: it has neither the theme nor the texts
+/// nor the root wrappers of the app, which the start-up sets up, and so its
+/// texts are in English. Change them here.
+class FailedStartApp extends StatelessWidget {
+  /// Creates the app of a start-up that failed with [error] at
+  /// [stackTrace].
+  const FailedStartApp({
+    required this.error,
+    required this.stackTrace,
+    this.showsError = kDebugMode,
+    super.key,
+  });
+
+  /// What `bootstrap()` threw.
+  final Object error;
+
+  /// Where `bootstrap()` threw [error].
+  final StackTrace stackTrace;
+
+  /// Whether the screen shows [error] and [stackTrace]: only in a debug
+  /// build, since the message of an error may hold data of the user and
+  /// means nothing to a user.
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(),
+    darkTheme: ThemeData(brightness: Brightness.dark),
+    builder: (context, child) => StatusBarIcons(child: child!),
+    home: _FailedStartScreen(
+      error: error,
+      stackTrace: stackTrace,
+      showsError: showsError,
+    ),
+  );
+}
+
+class _FailedStartScreen extends StatelessWidget {
+  const _FailedStartScreen({
+    required this.error,
+    required this.stackTrace,
+    required this.showsError,
+  });
+
+  final Object error;
+
+  final StackTrace stackTrace;
+
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = Theme.of(context).textTheme;
+    final code = texts.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Courier'],
+    );
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                'The app could not start',
+                style: texts.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (showsError) ...[
+              Text(
+                'bootstrap() in lib/bootstrap.dart threw:',
+                style: texts.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText('$error', style: code),
+              const SizedBox(height: 16),
+              SelectableText('$stackTrace', style: code),
+            ] else
+              Text('Close the app and open it again.', style: texts.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
 }
 === lib/core/app/status_bar_icons.dart (role:app_entry) ===
 import 'package:flutter/material.dart';
@@ -20349,10 +20482,18 @@ import 'package:flutter_bloc/flutter_bloc.dart' show BlocProvider;
 
 import 'app.dart';
 import 'bootstrap.dart';
+import 'core/app/failed_start.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    // The app shows why it could not start, in place of a splash screen
+    // that would stay.
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(
     BlocProvider(
       create: (_) => createPremiumCubit(),
@@ -21037,7 +21178,9 @@ List<File> _hooksOf(Directory app) {
 // - it downloads the Firebase files of those apps again once they have the
 //   clients of Google, to the paths that `firebase.json` names;
 // - it writes the URL scheme of each iOS app, the reversed id of its client
-//   of Google, into `ios/Runner/Info.plist`, which all the flavors share. It
+//   of Google, into `ios/Runner/Info.plist`, which all the flavors share,
+//   with `tool/firebase_configured/write_google_url_schemes.dart`, which
+//   `tool/configure_firebase.dart` runs after every run of flutterfire too. It
 //   adds a scheme and removes none, and a file that has it already stays as
 //   it is.
 // These are the only files of the app that the script changes. Of the
@@ -21081,8 +21224,10 @@ enum _Need {
 /// wrote it from the ways to sign in of the app.
 const _needs = {_Need.androidCertificate, _Need.iosClient, _Need.serverClient};
 
-/// The file of the app with the URL schemes of the iOS app.
-const _infoPlist = 'ios/Runner/Info.plist';
+/// The script of the app that writes the URL scheme of each iOS app into
+/// `ios/Runner/Info.plist`, which `tool/configure_firebase.dart` runs after
+/// every run of flutterfire too.
+const _urlSchemes = 'tool/firebase_configured/write_google_url_schemes.dart';
 
 /// The comments of [_sessionFile] and the declarations of `authMode` in it,
 /// in the form that the file keeps: a declaration starts its line and has a
@@ -21803,13 +21948,15 @@ Future<void> _setUp(
     if (needs.contains(_Need.iosClient)) ...ios,
   ];
   if (files.isEmpty) return;
-  final schemes = await _downloadFiles(
+  final withClients = await _downloadFiles(
     app,
     cli,
     files,
     waitForClients: waitForClients,
   );
-  if (schemes != null && schemes.isNotEmpty) _writeUrlSchemes(app, schemes);
+  // The iOS apps need the URL schemes of their clients of Google, which
+  // their files have now.
+  if (withClients && ios.isNotEmpty) await _writeUrlSchemes(app, cli);
 }
 
 /// A hash of a certificate as the script compares it: its hexadecimal
@@ -22015,14 +22162,14 @@ Future<String?> _keytool(_Cli cli) async {
 
 /// Downloads the Firebase files of [files], apps of [app], from the project
 /// of [cli], and writes those that have the clients of Google to their
-/// paths in the app. Returns the URL schemes that the iOS files among them
-/// have, or `null` when a file lacks the clients, which the script then
-/// tells.
+/// paths in the app. Returns whether they all have the clients: a file
+/// that lacks them, as in a project in which Google is not enabled, the
+/// script then tells.
 ///
 /// When [waitForClients], Google was enabled a moment ago, so the script
 /// downloads a file without the clients again, three times at most, five
 /// seconds apart, and fails when it still lacks them.
-Future<List<String>?> _downloadFiles(
+Future<bool> _downloadFiles(
   Directory app,
   _Cli cli,
   List<_App> files, {
@@ -22035,7 +22182,7 @@ Future<List<String>?> _downloadFiles(
   final contents = <_App, String>{};
   for (var attempt = 1; ; attempt++) {
     for (final file in files) {
-      if (contents[file] case final text? when _clientsOf(file, text) != null) {
+      if (contents[file] case final text? when _hasClients(file, text)) {
         continue;
       }
       final result = await cli.json([
@@ -22052,7 +22199,7 @@ Future<List<String>?> _downloadFiles(
     }
     final lacking = [
       for (final file in files)
-        if (_clientsOf(file, contents[file]!) == null) file,
+        if (!_hasClients(file, contents[file]!)) file,
     ];
     if (lacking.isEmpty || !waitForClients || attempt > 3) {
       final written = <String>[];
@@ -22065,12 +22212,7 @@ Future<List<String>?> _downloadFiles(
             ? 'The files of the app are as Firebase has them already.'
             : 'Wrote ${_listed(written)}.',
       );
-      if (lacking.isEmpty) {
-        return [
-          for (final file in files)
-            if (file.platform == 'ios') ...?_clientsOf(file, contents[file]!),
-        ];
-      }
+      if (lacking.isEmpty) return true;
       final names = _listed([for (final file in lacking) file.file]);
       if (waitForClients) {
         throw _Failed(
@@ -22083,23 +22225,21 @@ Future<List<String>?> _downloadFiles(
         'is not enabled, so this script has not written $names, and writes '
         'no URL scheme. Enable Google, and run this script again.',
       );
-      return null;
+      return false;
     }
     await Future<void>.delayed(const Duration(seconds: 5));
   }
 }
 
-/// The URL schemes of the clients of Google in [text], the Firebase file of
-/// [file], or `null` if it lacks a client that the app needs: for an iOS
-/// app, `REVERSED_CLIENT_ID`, its client of Google reversed, and for an
-/// Android app none, with the client of the server, an OAuth client of the
-/// type 3.
-List<String>? _clientsOf(_App file, String text) {
+/// Whether [text], the Firebase file of [file], has the clients of Google
+/// that the app needs: for an iOS app, its client of Google, whose id
+/// reversed is `REVERSED_CLIENT_ID`, and for an Android app, the client of
+/// the server, an OAuth client of the type 3.
+bool _hasClients(_App file, String text) {
   if (file.platform == 'ios') {
-    final scheme = RegExp(
-      r'<key>REVERSED_CLIENT_ID</key>\s*<string>([A-Za-z0-9.-]+)</string>',
-    ).firstMatch(text)?[1];
-    return scheme == null ? null : [scheme];
+    return RegExp(
+      r'<key>REVERSED_CLIENT_ID</key>\s*<string>[A-Za-z0-9.-]+</string>',
+    ).hasMatch(text);
   }
   bool hasServer(Object? node) => switch (node) {
     {'client_type': 3} => true,
@@ -22108,9 +22248,9 @@ List<String>? _clientsOf(_App file, String text) {
     _ => false,
   };
   try {
-    return hasServer(jsonDecode(text)) ? const [] : null;
+    return hasServer(jsonDecode(text));
   } on FormatException {
-    return null;
+    return false;
   }
 }
 
@@ -22143,16 +22283,229 @@ bool _write(Directory app, String path, String text) {
   return true;
 }
 
-/// Writes [schemes] into the URL schemes of [_infoPlist] of [app], those
-/// that it does not have, as a URL type of their own, and leaves the file
-/// as it is when it has them all.
+/// Runs [_urlSchemes] of [app], the script of the app that writes the URL
+/// scheme of each iOS app of `firebase.json` into `ios/Runner/Info.plist`,
+/// with the Dart VM that runs this script, as `tool/configure_firebase.dart` runs
+/// it after flutterfire, and prints what it printed.
 ///
-/// Throws a [_Failed] with what to add by hand when the file is not in a
-/// form that the script knows, and when it cannot be read or written.
+/// Throws a [_Failed] when it fails, once it told why.
+Future<void> _writeUrlSchemes(Directory app, _Cli cli) async {
+  final (code, printed, errors) = await cli.run(Platform.resolvedExecutable, [
+    '${app.path}/$_urlSchemes',
+  ]);
+  stdout.write(printed);
+  if (errors.isNotEmpty) stderr.writeln(errors);
+  if (code != 0) throw _Failed('$_urlSchemes failed (exit code $code).');
+}
+=== tool/firebase_configured/fix_crashlytics_phase.dart (firebase_crashlytics) ===
+// Points the build phase for Crashlytics that flutterfire adds to the Xcode
+// project at the upload script of Crashlytics where Flutter puts it, so that
+// flutter build ipa finds it. See the section Crashlytics of README.md.
+//
+// flutterfire writes the phase again in each of its runs, so
+// tool/configure_firebase.dart runs this script after it. After
+// flutterfire configure by hand, run it yourself:
+//
+//     dart tool/firebase_configured/fix_crashlytics_phase.dart
+//
+// flutterfire changes the Xcode project only on macOS, so elsewhere this script
+// does nothing.
+
+import 'dart:convert';
+import 'dart:io';
+
+/// The Xcode project, from the directory of the app.
+const _project = 'ios/Runner.xcodeproj/project.pbxproj';
+
+/// Where the phase of flutterfire looks for the upload script: the build
+/// directory of Xcode, which is another one for the archive of
+/// flutter build ipa.
+const _inBuildDirectory =
+    r'$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run';
+
+/// Where the upload script is, in build/ios/SourcePackages of the app.
+const _inApp =
+    r'$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run';
+
+void main() {
+  if (!Platform.isMacOS) return;
+  final script = File.fromUri(Platform.script).resolveSymbolicLinksSync();
+  final app = File(script).parent.parent.parent;
+  final file = File('${app.path}/$_project');
+  // Byte for byte, whatever the encoding of the file and the locale.
+  final text = file.existsSync() ? latin1.decode(file.readAsBytesSync()) : '';
+  final fixed = text.replaceAll(_inBuildDirectory, _inApp);
+  if (fixed == text) {
+    stdout.writeln('Nothing to fix in $_project');
+  } else {
+    file.writeAsBytesSync(latin1.encode(fixed));
+    stdout.writeln('Fixed the Crashlytics phase in $_project');
+  }
+}
+=== tool/firebase_configured/write_google_url_schemes.dart (firebase_auth) ===
+// Writes the URL scheme of Google of each iOS app that firebase.json names
+// into ios/Runner/Info.plist, which all the flavors share. The Google Sign-In
+// SDK stops an iOS app whose Info.plist lacks the scheme of its client. The
+// scheme is REVERSED_CLIENT_ID of the GoogleService-Info.plist of the app,
+// which has it once Google is enabled in its Firebase project.
+//
+// tool/configure_firebase.dart runs this script after every run of
+// flutterfire, and tool/enable_firebase_sign_in.dart after it downloaded the
+// Firebase files again. After `flutterfire configure` by hand, run it
+// yourself:
+//
+//     dart tool/firebase_configured/write_google_url_schemes.dart
+//
+// It adds a scheme and removes none, and leaves a file that has them all as
+// it is. It stops at an Info.plist in a form that it does not know, with what
+// to add there by hand.
+
+import 'dart:convert';
+import 'dart:io';
+
+/// The file of the app with the URL schemes of the iOS app.
+const _infoPlist = 'ios/Runner/Info.plist';
+
+/// The script of the app that enables Google in the Firebase project.
+const _enableSignIn = 'dart tool/enable_firebase_sign_in.dart';
+
+void main() {
+  // The app is the directory above `tool`, wherever the script is run from.
+  final script = File.fromUri(Platform.script).resolveSymbolicLinksSync();
+  final app = File(script).parent.parent.parent;
+  try {
+    final schemes = _schemesOf(app);
+    if (schemes.isNotEmpty) _writeUrlSchemes(app, schemes);
+  } on _Stop catch (stop) {
+    stderr.writeln(stop.why);
+    exitCode = 1;
+  }
+}
+
+/// Why the script stops without writing the URL schemes.
+final class _Stop implements Exception {
+  const _Stop(this.why);
+
+  final String why;
+}
+
+/// The text of [file], which is in UTF-8.
+String _textOf(File file) {
+  try {
+    return file.readAsStringSync();
+  } on FileSystemException catch (error) {
+    throw _Stop(
+      '${file.path} could not be read as a text in UTF-8 (${error.message}).',
+    );
+  }
+}
+
+/// [items] as a sentence lists them, such as `A, B and C`.
+String _listed(List<String> items) => items.length < 2
+    ? items.join()
+    : '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}';
+
+/// The URL schemes of the clients of Google of the iOS apps of [app], each
+/// once: `REVERSED_CLIENT_ID` of the Firebase file of each iOS app that
+/// `firebase.json` names, wherever flutterfire writes it there, for each
+/// build configuration and target. It tells of a file that is missing, and
+/// of one that has no client of Google yet, with the command that enables
+/// Google in its project, and of a `firebase.json` that names no iOS app.
+///
+/// Throws a [_Stop] when `firebase.json` is not JSON.
+List<String> _schemesOf(Directory app) {
+  final config = File('${app.path}/firebase.json');
+  if (!config.existsSync()) {
+    stdout.writeln(
+      'firebase.json is missing, so no flavor of the app is configured for '
+      'Firebase yet, and no URL scheme of Google is written.',
+    );
+    return const [];
+  }
+  final Object? json;
+  try {
+    json = jsonDecode(_textOf(config));
+  } on FormatException catch (error) {
+    throw _Stop(
+      'firebase.json is not JSON (${error.message}), so no URL scheme of '
+      'Google is written.',
+    );
+  }
+  // The Firebase file of each iOS app, with the project of the app, which
+  // flutterfire writes next to it.
+  final files = <String, String?>{};
+  void collect(Object? node) {
+    if (node is! Map) return;
+    if (node['fileOutput'] case final String file) {
+      final project = node['projectId'];
+      files.putIfAbsent(file, () => project is String ? project : null);
+    }
+    for (final value in node.values) {
+      collect(value);
+    }
+  }
+
+  // The projects of all the flavors: with several, the script that enables
+  // Google needs the project of a run.
+  final projects = <String>{};
+  void projectsIn(Object? node) {
+    if (node is! Map) return;
+    if (node['projectId'] case final String project) projects.add(project);
+    for (final value in node.values) {
+      projectsIn(value);
+    }
+  }
+
+  if (json case {'flutter': final Object? flutter}) projectsIn(flutter);
+  if (json case {'flutter': {'platforms': {'ios': final Object? ios}}}) {
+    collect(ios);
+  }
+  if (files.isEmpty) {
+    stdout.writeln(
+      'firebase.json names no iOS app, so no URL scheme of Google is written.',
+    );
+  }
+  final schemes = <String>{};
+  for (final MapEntry(key: path, value: project) in files.entries) {
+    final file = File('${app.path}/$path');
+    if (!file.existsSync()) {
+      stdout.writeln(
+        '$path, which firebase.json names, is missing, so no URL scheme of '
+        'Google is written for it.',
+      );
+      continue;
+    }
+    final scheme = RegExp(
+      r'<key>REVERSED_CLIENT_ID</key>\s*<string>([A-Za-z0-9.-]+)</string>',
+    ).firstMatch(_textOf(file))?[1];
+    if (scheme == null) {
+      final command = project != null && projects.length > 1
+          ? '$_enableSignIn --project $project'
+          : _enableSignIn;
+      stdout.writeln(
+        '$path${project == null ? '' : ', of the Firebase project $project,'} '
+        'has no client of Google yet, as in a project in which Google is not '
+        'enabled, so no URL scheme is written for it: $command enables Google '
+        'there and writes it.',
+      );
+    } else {
+      schemes.add(scheme);
+    }
+  }
+  return schemes.toList();
+}
+
+/// Writes [schemes] into the URL schemes of [_infoPlist] of [app], those
+/// that it does not have as the Google Sign-In SDK reads them
+/// ([_urlSchemesIn]), as a URL type of their own, and leaves the file as it
+/// is when it has them all.
+///
+/// Throws a [_Stop] with what to add by hand when the file is not in a form
+/// that the script knows, and when it cannot be read or written.
 void _writeUrlSchemes(Directory app, List<String> schemes) {
   final file = File('${app.path}/$_infoPlist');
   if (!file.existsSync()) {
-    throw _Failed(
+    throw _Stop(
       '$_infoPlist is missing, so this script cannot write the URL scheme '
       'of Google, ${_listed(schemes)}, into it.',
     );
@@ -22161,11 +22514,13 @@ void _writeUrlSchemes(Directory app, List<String> schemes) {
   try {
     text = file.readAsStringSync();
   } on FileSystemException catch (error) {
-    throw _Failed('$_infoPlist could not be read (${error.message}).');
+    throw _Stop('$_infoPlist could not be read (${error.message}).');
   }
+  // In lower case, as the Google Sign-In SDK compares them.
+  final present = _urlSchemesIn(text);
   final missing = [
-    for (final scheme in {...schemes})
-      if (!text.contains('<string>$scheme</string>')) scheme,
+    for (final scheme in schemes)
+      if (present.add(scheme.toLowerCase())) scheme,
   ];
   if (missing.isEmpty) {
     stdout.writeln('$_infoPlist has the URL scheme of Google already.');
@@ -22178,7 +22533,7 @@ void _writeUrlSchemes(Directory app, List<String> schemes) {
   final changed = _withUrlSchemes(text, missing);
   final newline = text.contains('\r\n') ? '\r\n' : '\n';
   if (changed == null) {
-    throw _Failed(
+    throw _Stop(
       '$_infoPlist is not in a form in which this script can add the URL '
       'scheme. Add this to CFBundleURLTypes there by hand:\n'
       '${_urlTypesOf(missing, '', newline).trimRight()}',
@@ -22187,12 +22542,46 @@ void _writeUrlSchemes(Directory app, List<String> schemes) {
   try {
     file.writeAsStringSync(changed);
   } on FileSystemException catch (error) {
-    throw _Failed(
+    throw _Stop(
       '$_infoPlist could not be written (${error.message}). Add this to '
       'CFBundleURLTypes there by hand:\n'
       '${_urlTypesOf(missing, '', newline).trimRight()}',
     );
   }
+}
+
+/// The URL schemes of the app in [text], an Info.plist in XML, in lower
+/// case, as the Google Sign-In SDK reads them (`-signInWithOptions:` of
+/// `GIDSignIn.m` in GoogleSignIn-iOS 9): the strings of the
+/// `CFBundleURLSchemes` of each item of `CFBundleURLTypes`. A scheme under
+/// another key, such as `LSApplicationQueriesSchemes`, or in a comment is
+/// none of them.
+Set<String> _urlSchemesIn(String text) {
+  final plain = text.replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
+  final types = RegExp(
+    r'<key>CFBundleURLTypes</key>\s*(?=<array>)',
+  ).firstMatch(plain);
+  final schemes = <String>{};
+  if (types == null) return schemes;
+  // The URL types end where their array ends, after the arrays within it.
+  var depth = 0;
+  for (final tag in RegExp(r'<(/?)array>').allMatches(plain, types.end)) {
+    depth += tag[1]!.isEmpty ? 1 : -1;
+    if (depth > 0) continue;
+    final of = RegExp(
+      r'<key>CFBundleURLSchemes</key>\s*<array>(.*?)</array>',
+      dotAll: true,
+    ).allMatches(plain.substring(types.end, tag.start));
+    for (final array in of) {
+      for (final scheme in RegExp(
+        '<string>([^<]*)</string>',
+      ).allMatches(array[1]!)) {
+        schemes.add(scheme[1]!.toLowerCase());
+      }
+    }
+    break;
+  }
+  return schemes;
 }
 
 /// The URL types of [schemes] as the items of `CFBundleURLTypes`, each line
@@ -22267,51 +22656,6 @@ String? _withUrlSchemes(String text, List<String> schemes) {
     '${_urlTypesOf(schemes, '$indent\t', newline)}'
     '$indent</array>$newline',
   );
-}
-=== tool/firebase_configured/fix_crashlytics_phase.dart (firebase_crashlytics) ===
-// Points the build phase for Crashlytics that flutterfire adds to the Xcode
-// project at the upload script of Crashlytics where Flutter puts it, so that
-// flutter build ipa finds it. See the section Crashlytics of README.md.
-//
-// flutterfire writes the phase again in each of its runs, so
-// tool/configure_firebase.dart runs this script after it. After
-// flutterfire configure by hand, run it yourself:
-//
-//     dart tool/firebase_configured/fix_crashlytics_phase.dart
-//
-// flutterfire changes the Xcode project only on macOS, so elsewhere this script
-// does nothing.
-
-import 'dart:convert';
-import 'dart:io';
-
-/// The Xcode project, from the directory of the app.
-const _project = 'ios/Runner.xcodeproj/project.pbxproj';
-
-/// Where the phase of flutterfire looks for the upload script: the build
-/// directory of Xcode, which is another one for the archive of
-/// flutter build ipa.
-const _inBuildDirectory =
-    r'$BUILD_DIR/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run';
-
-/// Where the upload script is, in build/ios/SourcePackages of the app.
-const _inApp =
-    r'$SRCROOT/../build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run';
-
-void main() {
-  if (!Platform.isMacOS) return;
-  final script = File.fromUri(Platform.script).resolveSymbolicLinksSync();
-  final app = File(script).parent.parent.parent;
-  final file = File('${app.path}/$_project');
-  // Byte for byte, whatever the encoding of the file and the locale.
-  final text = file.existsSync() ? latin1.decode(file.readAsBytesSync()) : '';
-  final fixed = text.replaceAll(_inBuildDirectory, _inApp);
-  if (fixed == text) {
-    stdout.writeln('Nothing to fix in $_project');
-  } else {
-    file.writeAsBytesSync(latin1.encode(fixed));
-    stdout.writeln('Fixed the Crashlytics phase in $_project');
-  }
 }
 === tool/update_app_icon.dart (launcher_icons) ===
 // Makes the launcher icons of the app from assets/branding/, as

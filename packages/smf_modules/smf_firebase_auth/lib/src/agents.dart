@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/src/enable_sign_in.dart';
 import 'package:smf_firebase_auth/src/readme.dart';
+import 'package:smf_firebase_auth/src/url_schemes.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 
 /// The note of the module in the guide for coding agents of the app, in the
@@ -21,20 +22,27 @@ With `firebase_auth`:
 /// The note of the module for an app with ways to sign in with an identity
 /// provider, [methods] by [firebaseMethodsOf], in the same section after
 /// [agentNote], or `null` for an app without them: what else the script of
-/// the app does for them, and what the developer of the app does by hand.
+/// the app does for them, what [urlSchemesHook] does for the client of the
+/// iOS app, and what the developer of the app does by hand.
 String? methodsAgentNote(Map<String, Set<SignInNeed>> methods) {
   const google = '- For Google sign-in, `$enableSignInScript` also registers '
       'the SHA of the Android debug key of the machine in the Firebase '
-      'project, downloads the Firebase files of the app again and writes the '
-      'URL scheme of the iOS app into `ios/Runner/Info.plist`, which all the '
-      'flavors share. After `${FirebaseCoreModule.configureScript}` for '
-      'another project, it has to run again with `--project <id>`: run it '
-      'only when asked.';
+      'project and downloads the Firebase files of the app again. After '
+      '`${FirebaseCoreModule.configureScript}` configures another project, the '
+      'script has to run again with `--project <id>`. Run it only when asked.';
+  const urlSchemes = '- `$urlSchemesHook` writes the URL scheme of Google of '
+      'each iOS app into `ios/Runner/Info.plist`, which all the flavors '
+      'share. The Google Sign-In SDK stops the iOS app without it. '
+      '`${FirebaseCoreModule.configureScript}` and `$enableSignInScript` run '
+      'it after they change the Firebase files. It needs no account and '
+      'changes only that file, so after a `GoogleService-Info.plist` changes '
+      'some other way, run `$urlSchemesCommand`.';
   const apple = '- Apple is enabled in the Firebase console by hand, with the '
       'private key of Apple that deleting an account needs. That key is a '
       'secret: never put it into the app or its repository.';
   final lines = [
     if (methods.values.any((needs) => needs.isNotEmpty)) google,
+    if (needsIosClient(methods)) urlSchemes,
     if (methods.containsKey('apple.com')) apple,
   ];
   return lines.isEmpty ? null : '${lines.join('\n')}\n';

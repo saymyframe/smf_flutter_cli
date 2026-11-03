@@ -96,10 +96,13 @@ const modulePaths = {
       'workflow Build enables the sign-in methods first with the script of '
       'the app, as its README says.',
   (
-    'Check the sign-in methods of the app with every module in Firebase',
+    'Check the sign-in methods and the URL schemes of the app with every '
+        'module in Firebase',
     'smf_firebase_auth',
   ): 'The test of firebase_auth that asks the Firebase project of the app '
-      'whether Email/Password is enabled there, before CI starts the app.',
+      'whether Email/Password is enabled there, and checks the URL schemes '
+      'of Google that the configuration of the iOS apps wrote, before CI '
+      'starts the app.',
   (
     'Start the app with every module on the Android emulator, and send it a '
         'push message',

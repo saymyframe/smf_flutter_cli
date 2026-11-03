@@ -12,7 +12,7 @@ dart tool/configure_firebase.dart staging --project=<id>
 
 On macOS it runs `flutterfire configure` once for each Xcode build configuration of the flavor, and once elsewhere. Then it formats the options and runs each Dart file of `tool/firebase_configured/`, by the order of their names. A module that depends on this one puts a file there for what has to follow every run of flutterfire. An app whose modules have nothing to run there has no such directory.
 
-Until a flavor is configured, its file is a placeholder, and a build of the flavor stops at start-up with an `UnsupportedError` that gives the command. Once one flavor is configured, a build of another one fails on Android for want of its `google-services.json`.
+Until a flavor is configured, its file is a placeholder, and a build of the flavor stops at start-up with an `UnsupportedError` that gives the command, which a debug build shows on the screen of a failed start. Once one flavor is configured, a build of another one fails on Android for want of its `google-services.json`.
 
 In Xcode, select the scheme of a flavor. It builds that flavor, whatever `ios/Flutter/Generated.xcconfig` says. The scheme `Runner` takes the flavor from that file, which has none after a fresh `flutter pub get`, so `appFlavor` is `null` there and `firebaseOptionsOfFlavor` throws. `flutter build ios --config-only --flavor <flavor>` gives the file a flavor.
 

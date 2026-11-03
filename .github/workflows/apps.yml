@@ -316,8 +316,8 @@ jobs:
     if: inputs.broken_providers
     runs-on: ubuntu-latest
     # Its small apps run one after another, about 60 of them at about 20 seconds
-    # each, and the tests of the router role are longer in about 20 of them,
-    # so this timeout leaves room for a few more.
+    # each, or 20 minutes in all, and the tests of the router role are longer
+    # in about 20 of them, so this timeout leaves room for a few more.
     timeout-minutes: 40
     env: *linux_env
 
@@ -1422,8 +1422,12 @@ jobs:
       # whether Email/Password is enabled there, as on Linux. This job only
       # asks: the job on Linux is the one that enables the methods, so the
       # test gets neither the key of the service account nor
-      # SMF_FIREBASE_ENABLE_SIGN_IN here.
-      - name: Check the sign-in methods of the app with every module in Firebase
+      # SMF_FIREBASE_ENABLE_SIGN_IN here. In an app with Google sign-in, the
+      # test also checks that the Firebase file of each iOS app has its
+      # client of Google and that ios/Runner/Info.plist has its URL scheme,
+      # which the script that tool/configure_firebase.dart runs after
+      # flutterfire wrote: this is the only job that configures the iOS apps.
+      - name: Check the sign-in methods and the URL schemes of the app with every module in Firebase
         working-directory: packages/smf_modules/smf_firebase_auth
         env:
           SMF_FIREBASE_PROJECT: saymyframe-app-cli

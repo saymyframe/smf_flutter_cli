@@ -15,9 +15,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_auth/src/enable_sign_in.dart';
+import 'package:smf_firebase_auth/src/url_schemes.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
@@ -2344,17 +2347,48 @@ void main() {
         final stopped = await run(keytools: ['jdk/bin'], standIn: shas);
 
         expect(stopped.code, 1, reason: name);
+        // What the script that writes the URL schemes told, which it ran.
         expect(
           stopped.errors,
           'stand-in: on the standard error\n'
           '$_infoPlist is not in a form in which this script can add the URL '
           'scheme. Add this to CFBundleURLTypes there by hand:\n'
           '${_urlType('')}'
+          '$urlSchemesHook failed (exit code 1).\n'
           '$rest\n',
           reason: name,
         );
         expect(fileOf(_infoPlist).readAsStringSync(), unknown, reason: name);
       }
+    });
+
+    test(
+        'writes the URL schemes with the script of the app that '
+        '${FirebaseCoreModule.configureScript} runs after flutterfire, and '
+        'stops with what is done when that script fails', () async {
+      useAppWith('google');
+      serveFiles();
+      File('${inMachine('android')}$keystore').writeAsStringSync('a key');
+      final plist = fileOf(_infoPlist).readAsStringSync();
+      fileOf(urlSchemesHook).deleteSync();
+
+      final result = await run(
+        keytools: ['jdk/bin'],
+        standIn: {'STAND_IN_SHAS': registered.join(',')},
+      );
+
+      expect(result.code, 1);
+      expect(
+        result.errors,
+        allOf(
+          contains('$urlSchemesHook failed (exit code '),
+          endsWith('$rest\n'),
+        ),
+      );
+      // The Firebase files are written, and Info.plist has no scheme: the
+      // script has no code of its own that writes one.
+      expect(fileOf(_iosFile).existsSync(), isTrue);
+      expect(fileOf(_infoPlist).readAsStringSync(), plist);
     });
 
     test(
@@ -2644,9 +2678,10 @@ void main() {
       });
 
       test(
-          'with --project, registers the debug key, downloads each Firebase '
-          'file once and writes the URL scheme for the flavor of that project '
-          'alone, next to the scheme of the other project', () async {
+          'with --project, registers the debug key and downloads each '
+          'Firebase file once for the flavor of that project alone, and the '
+          'script that it runs then writes the URL scheme of each iOS file '
+          'that the app has, next to those that Info.plist has', () async {
         File(configOf(app)).writeAsStringSync(
           _configuredByFlavors(const {
             'dev': 'smf-dev',
@@ -2886,6 +2921,7 @@ void main() {
           contains(
             '). Add this to CFBundleURLTypes there by hand:\n'
             '${_urlType('')}'
+            '$urlSchemesHook failed (exit code 1).\n'
             '$rest\n',
           ),
           isNot(contains('#0 ')),
@@ -3004,7 +3040,8 @@ void main() {
         'Apple': 'String _appleInConsole(',
         'the setup': 'const _needs = ',
         'the debug key': "'-genkeypair',",
-        'the URL scheme': '<key>CFBundleURLTypes</key>',
+        // The script runs the one that writes the URL schemes.
+        'the URL scheme': "const _urlSchemes = '$urlSchemesHook';",
       };
       Set<String> marksOf(String script) => {
             for (final MapEntry(:key, :value) in marks.entries)
@@ -3041,6 +3078,328 @@ void main() {
           at++;
         }
       }
+    });
+  });
+
+  group('the script that writes the URL schemes of Google', () {
+    /// The URL schemes of the clients of Google of the iOS apps of the
+    /// flavors dev and staging, each in a project of its own.
+    const devScheme = 'com.googleusercontent.apps.1234567890-dev';
+    const stagingScheme = 'com.googleusercontent.apps.1234567890-staging';
+
+    /// The file of the app of the test at [path].
+    File fileOf(String path) => File('${app.path}/$path');
+
+    /// The Firebase file of the iOS app of [flavor], where
+    /// tool/configure_firebase.dart has flutterfire write it.
+    String iosFileOf(String flavor) =>
+        'ios/flavors/$flavor/GoogleService-Info.plist';
+
+    /// The Info.plist of the app as the app entry writes it.
+    late String plist;
+
+    /// What a run of the script left: its exit code and what it printed.
+    Future<({int code, String output, String errors})> runHook({
+      String? workingDirectory,
+    }) async {
+      final result = await Process.run(
+        Platform.resolvedExecutable,
+        [
+          if (workingDirectory == null)
+            urlSchemesHook
+          else
+            '${app.path}/$urlSchemesHook',
+        ],
+        workingDirectory: workingDirectory ?? app.path,
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+      return (
+        code: result.exitCode,
+        output: '${result.stdout}'.replaceAll('\r\n', '\n'),
+        errors: '${result.stderr}'.replaceAll('\r\n', '\n'),
+      );
+    }
+
+    // The app with a way to sign in that needs the client of the iOS app,
+    // whose flavors dev, staging and prod flutterfire configured, each in a
+    // project of its own: Google is enabled in the projects of dev and
+    // staging, whose Firebase files have their clients, and not in the one
+    // of prod.
+    setUp(() {
+      app.delete();
+      final of = withWays['google']!;
+      app = DartApp.write(of);
+      plist = of.files[_infoPlist]!.text;
+      fileOf(_infoPlist)
+        ..createSync(recursive: true)
+        ..writeAsStringSync(plist);
+      File(configOf(app)).writeAsStringSync(
+        _configuredByFlavors(const {
+          'dev': 'smf-dev',
+          'staging': 'smf-staging',
+          'prod': 'smf-prod',
+        }),
+      );
+      for (final (flavor, text) in [
+        ('dev', _serviceInfo(withClient: true).replaceAll(_scheme, devScheme)),
+        (
+          'staging',
+          _serviceInfo(withClient: true).replaceAll(_scheme, stagingScheme),
+        ),
+        ('prod', _serviceInfo(withClient: false)),
+      ]) {
+        fileOf(iosFileOf(flavor))
+          ..createSync(recursive: true)
+          ..writeAsStringSync(text);
+      }
+    });
+
+    /// What the script tells of the Firebase file of [flavor], of the
+    /// Firebase project [project], without a client of Google: with the
+    /// command that enables Google in that project, which names the project
+    /// when firebase.json names [several].
+    String noClientOf(String flavor, String project, {required bool several}) =>
+        '${iosFileOf(flavor)}, of the Firebase project $project, has no client '
+        'of Google yet, as in a project in which Google is not enabled, so no '
+        'URL scheme is written for it: $enableSignInCommand'
+        '${several ? ' --project $project' : ''} enables Google there and '
+        'writes it.';
+
+    test(
+        'is the file of the brick of the module as it is, with the paths of '
+        'the app entry and of the script that enables Google', () {
+      final rendered = withWays['google']!.files[urlSchemesHook]!;
+      final unit = parseString(content: rendered.text).unit;
+      final constants = {
+        for (final declaration
+            in unit.declarations.whereType<TopLevelVariableDeclaration>())
+          for (final variable in declaration.variables.variables)
+            variable.name.lexeme:
+                (variable.initializer! as SimpleStringLiteral).value,
+      };
+
+      expect(rendered.owner, const ModuleOrigin(FirebaseAuthModule.id));
+      expect(rendered.text, urlSchemesHookText);
+      expect(constants, {
+        '_infoPlist': AppEntryRole.infoPlistFile,
+        '_enableSignIn': enableSignInCommand,
+      });
+      expect(rendered.text, contains('//     $urlSchemesCommand\n'));
+    });
+
+    test(
+        'writes the scheme of each iOS app of firebase.json whose Firebase '
+        'file has a client of Google into Info.plist, tells of the one that '
+        'has none, and then, run again, changes no byte', () async {
+      final result = await runHook();
+
+      expect(result.code, 0, reason: result.errors);
+      expect(result.errors, isEmpty);
+      // firebase.json names three projects, so the command for the file
+      // without a client names the project, without which the script that
+      // enables Google stops.
+      expect(
+        result.output,
+        '${noClientOf('prod', 'smf-prod', several: true)}\n'
+        'Writing the URL scheme of Google, $devScheme and $stagingScheme, '
+        'into $_infoPlist.\n',
+      );
+      final written = fileOf(_infoPlist).readAsStringSync();
+      expect(_urlSchemesOf(written), [
+        [devScheme],
+        [stagingScheme],
+      ]);
+      expect(
+        {..._plistOf(written)}..remove('CFBundleURLTypes'),
+        _plistOf(plist),
+      );
+
+      final again = await runHook();
+
+      expect(again.code, 0, reason: again.errors);
+      expect(
+        again.output,
+        '${noClientOf('prod', 'smf-prod', several: true)}\n'
+        '$_infoPlist has the URL scheme of Google already.\n',
+      );
+      expect(fileOf(_infoPlist).readAsBytesSync(), utf8.encode(written));
+    });
+
+    test(
+        'runs from any directory, for the app that it is a file of, and adds '
+        'the scheme that Info.plist lacks next to those that it has', () async {
+      fileOf(_infoPlist).writeAsStringSync(
+        plist.replaceFirst(
+          '</dict>\n</plist>',
+          '\t<key>CFBundleURLTypes</key>\n\t<array>\n'
+              '${_urlType('\t\t').replaceAll(_scheme, devScheme)}'
+              '\t</array>\n</dict>\n</plist>',
+        ),
+      );
+
+      final result = await runHook(workingDirectory: inMachine('elsewhere'));
+
+      expect(result.code, 0, reason: result.errors);
+      expect(
+        result.output.split('\n')[1],
+        'Writing the URL scheme of Google, $stagingScheme, into $_infoPlist.',
+      );
+      expect(_urlSchemesOf(fileOf(_infoPlist).readAsStringSync()), [
+        [devScheme],
+        [stagingScheme],
+      ]);
+    });
+
+    test(
+        'takes a scheme for one of the app only among the URL schemes of '
+        'CFBundleURLTypes, as the Google Sign-In SDK does: not among the '
+        'schemes that the app may open, nor in a comment', () async {
+      // The schemes of the clients among those that the app may open with
+      // canOpenURL, and in a comment, which the SDK does not read.
+      final elsewhere = plist.replaceFirst(
+        '</dict>\n</plist>',
+        '\t<key>LSApplicationQueriesSchemes</key>\n\t<array>\n'
+            '\t\t<string>$devScheme</string>\n'
+            '\t\t<string>$stagingScheme</string>\n'
+            '\t</array>\n'
+            '\t<!-- Google sign-in: <string>$devScheme</string> -->\n'
+            '</dict>\n</plist>',
+      );
+      fileOf(_infoPlist).writeAsStringSync(elsewhere);
+
+      final added = await runHook();
+
+      expect(added.code, 0, reason: added.errors);
+      expect(
+        added.output.split('\n')[1],
+        'Writing the URL scheme of Google, $devScheme and $stagingScheme, '
+        'into $_infoPlist.',
+      );
+      expect(_urlSchemesOf(fileOf(_infoPlist).readAsStringSync()), [
+        [devScheme],
+        [stagingScheme],
+      ]);
+    });
+
+    test(
+        'takes a scheme of the URL types in another case for the one of the '
+        'client, as the Google Sign-In SDK compares them in lower case',
+        () async {
+      const mixedCase = 'com.GoogleUserContent.apps.1234567890-Staging';
+      final upper = plist.replaceFirst(
+        '</dict>\n</plist>',
+        '\t<key>CFBundleURLTypes</key>\n\t<array>\n'
+            '${_urlType('\t\t').replaceAll(_scheme, devScheme.toUpperCase())}'
+            '${_urlType('\t\t').replaceAll(_scheme, mixedCase)}'
+            '\t</array>\n</dict>\n</plist>',
+      );
+      fileOf(_infoPlist).writeAsStringSync(upper);
+
+      final there = await runHook();
+
+      expect(there.code, 0, reason: there.errors);
+      expect(
+        there.output.split('\n')[1],
+        '$_infoPlist has the URL scheme of Google already.',
+      );
+      expect(fileOf(_infoPlist).readAsStringSync(), upper);
+    });
+
+    test(
+        'stops at an Info.plist in a form that it does not know, with what '
+        'to add there by hand, and changes nothing', () async {
+      final unknown = plist.replaceFirst(
+        '</dict>\n</plist>',
+        '\t<key>CFBundleURLTypes</key>\n\t<dict/>\n</dict>\n</plist>',
+      );
+      fileOf(_infoPlist).writeAsStringSync(unknown);
+
+      final result = await runHook();
+
+      expect(result.code, 1);
+      expect(
+        result.errors,
+        '$_infoPlist is not in a form in which this script can add the URL '
+        'scheme. Add this to CFBundleURLTypes there by hand:\n'
+        '${_urlType('').replaceAll(_scheme, devScheme)}'
+        '${_urlType('').replaceAll(_scheme, stagingScheme)}',
+      );
+      expect(fileOf(_infoPlist).readAsStringSync(), unknown);
+    });
+
+    test(
+        'writes nothing and exits with 0 without firebase.json, with one '
+        'that names no iOS app, and with Firebase files that are missing or '
+        'have no client, and tells of each', () async {
+      final config = File(configOf(app))..deleteSync();
+
+      final without = await runHook();
+
+      expect(without.code, 0, reason: without.errors);
+      expect(
+        without.output,
+        'firebase.json is missing, so no flavor of the app is configured for '
+        'Firebase yet, and no URL scheme of Google is written.\n',
+      );
+
+      config.writeAsStringSync(
+        jsonEncode({
+          'flutter': {
+            'platforms': {
+              'android': {
+                'default': {
+                  'projectId': 'smf-app',
+                  'appId': _androidApp,
+                  'fileOutput': _androidFile,
+                },
+              },
+            },
+          },
+        }),
+      );
+      final android = await runHook();
+
+      expect(android.code, 0, reason: android.errors);
+      expect(
+        android.output,
+        'firebase.json names no iOS app, so no URL scheme of Google is '
+        'written.\n',
+      );
+
+      // Two flavors in one project: the command names none.
+      config.writeAsStringSync(
+        _configuredByFlavors(const {'staging': 'smf-app', 'qa': 'smf-app'}),
+      );
+      fileOf(iosFileOf('staging'))
+          .writeAsStringSync(_serviceInfo(withClient: false));
+      final noFile = await runHook();
+
+      expect(noFile.code, 0, reason: noFile.errors);
+      expect(
+        noFile.output,
+        '${noClientOf('staging', 'smf-app', several: false)}\n'
+        '${iosFileOf('qa')}, which firebase.json names, is missing, so no URL '
+        'scheme of Google is written for it.\n',
+      );
+      expect(fileOf(_infoPlist).readAsStringSync(), plist);
+    });
+
+    test('stops at a firebase.json that is not JSON, and changes nothing',
+        () async {
+      File(configOf(app)).writeAsStringSync('{"flutter":');
+
+      final result = await runHook();
+
+      expect(result.code, 1);
+      expect(
+        result.errors,
+        allOf(
+          startsWith('firebase.json is not JSON ('),
+          endsWith('), so no URL scheme of Google is written.\n'),
+        ),
+      );
+      expect(fileOf(_infoPlist).readAsStringSync(), plist);
     });
   });
 }

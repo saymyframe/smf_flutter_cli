@@ -99,6 +99,8 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeClockBadgeModule(),
       const FakeClockUserModule(),
       const BottomTabsModule(),
+      // Last, so its start-up runs last in the late phase of the start-up.
+      const FakeStartFailureModule(),
     ];
 
 /// The modules to ask for so that an app has every fixture that fits, with
@@ -150,6 +152,9 @@ List<ModuleId> everyFixture({
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
+      // Last, so its start-up runs last in the late phase of the start-up,
+      // after crash reporting has started.
+      FakeStartFailureModule.id,
     ];
 
 /// The registry of several providers: the modules of the CLI that provide a

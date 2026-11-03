@@ -216,9 +216,10 @@ const _statusBarIcons = Fragment.wrap(
 /// The template of the [AppEntryRole], for what an app has whichever module
 /// provides the role: the guide for coding agents, with the note of the
 /// role itself, the icons of the status bar that suit the theme of the
-/// app, on every screen, with a widget test of them, the section of the
-/// README on the flavors of the app, and in an app with steps by hand the
-/// section of the README that lists them.
+/// app, on every screen, with a widget test of them, the screen of a failed
+/// start, the sections of the README on the flavors of the app and on a
+/// start-up that fails, and in an app with steps by hand the section of the
+/// README that lists them.
 final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
   const _AppEntryTemplate();
 
@@ -236,6 +237,10 @@ final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
         AppEntryRole.readmeSections.entry(
           AppEntryRole.flavorsHeading,
           _flavorsSection(context.appIdentity),
+        ),
+        AppEntryRole.readmeSections.entry(
+          AppEntryRole.failedStartHeading,
+          _failedStartSection,
         ),
       ];
 
@@ -282,6 +287,17 @@ String _setupSection(ManualSetup setup) {
   ].join('\n');
 }
 
+/// The section [AppEntryRole.failedStartHeading] of the README, in every
+/// app: the screen of a failed start, where the error goes, and what the
+/// developer does about it. It names no module, since the error may come
+/// from any.
+final String _failedStartSection = '''
+`${AppEntryRole.bootstrap.name}()` in `${AppEntryRole.bootstrapFile}` runs before the first frame. When it throws, `${AppEntryRole.main.name}()` shows `${AppEntryRole.failedStartApp.name}` of `${AppEntryRole.failedStartFile}` in place of the splash screen, which would otherwise stay. A debug build shows the error and its stack trace there and prints them to the console. Any other build only says that the app could not start.
+
+The error also reaches `FlutterError.onError`, so crash reporting that the start-up set up before the error reports it. An error before that reaches no crash reporter, so reproduce it in a debug build. The error usually says what to do, such as a command to run.
+
+The texts of the screen are in English, since the texts of the app need the start-up that failed. Change them in that file.''';
+
 /// What the section of the steps by hand says below the list of the steps.
 const _repeatStepOfFlavors = 'Repeat a step for each flavor that needs it: a '
     'service knows each id as an app of its own.';
@@ -300,7 +316,7 @@ const String _setupAgentNote = '''
 final String _agentNote = '''
 The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
 
-- `${AppEntryRole.main.name}()` in `${AppEntryRole.mainFile}` initializes the binding, awaits `${AppEntryRole.bootstrap.name}()` and calls `runApp()`, in this order. Start-up code goes into `${AppEntryRole.bootstrap.name}()`.
+- `${AppEntryRole.main.name}()` in `${AppEntryRole.mainFile}` initializes the binding, awaits `${AppEntryRole.bootstrap.name}()` and calls `runApp()`, in this order. When `${AppEntryRole.bootstrap.name}()` throws, `${AppEntryRole.main.name}()` calls `${AppEntryRole.showFailedStart.name}()` of `${AppEntryRole.failedStartFile}` and returns: the app shows `${AppEntryRole.failedStartApp.name}`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await ${AppEntryRole.bootstrap.name}()` in `${AppEntryRole.main.name}()`. Start-up code goes into `${AppEntryRole.bootstrap.name}()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
 - `${AppEntryRole.bootstrap.name}()` in `${AppEntryRole.bootstrapFile}` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `${AppEntryRole.statusBarIconsFile}`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.

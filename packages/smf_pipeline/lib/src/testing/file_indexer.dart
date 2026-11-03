@@ -339,6 +339,62 @@ bool _isAwaited(AstNode node) {
   return current is AwaitExpression;
 }
 
+/// The `try` statements whose try block holds [node], the innermost first,
+/// up to the body of the function, method or closure that holds [node]; see
+/// [IndexedInvocation.tries].
+List<IndexedTry> _triesAround(AstNode node) {
+  final statements = <IndexedTry>[];
+  var child = node;
+  for (var current = node.parent; current != null; current = current.parent) {
+    if (current is FunctionBody) break;
+    if (current is TryStatement && identical(current.body, child)) {
+      final finallyBlock = current.finallyBlock;
+      statements.add(
+        IndexedTry(
+          clauses: List.unmodifiable(current.catchClauses.map(_catchOf)),
+          finallyBlock: finallyBlock == null
+              ? null
+              : IndexedBlock(
+                  offset: finallyBlock.offset,
+                  end: finallyBlock.end,
+                ),
+        ),
+      );
+    }
+    child = current;
+  }
+  return List.unmodifiable(statements);
+}
+
+/// The index of [clause].
+IndexedCatch _catchOf(CatchClause clause) {
+  final throws = _Throws();
+  clause.body.accept(throws);
+  return IndexedCatch(
+    type: clause.exceptionType?.toSource(),
+    exception: clause.exceptionParameter?.name.lexeme,
+    stackTrace: clause.stackTraceParameter?.name.lexeme,
+    throws: throws.found,
+    offset: clause.body.offset,
+    end: clause.body.end,
+  );
+}
+
+/// Finds a `throw` or a `rethrow` outside the functions and closures in
+/// the code that it visits, which run when they are called.
+final class _Throws extends RecursiveAstVisitor<void> {
+  bool found = false;
+
+  @override
+  void visitThrowExpression(ThrowExpression node) => found = true;
+
+  @override
+  void visitRethrowExpression(RethrowExpression node) => found = true;
+
+  @override
+  void visitFunctionExpression(FunctionExpression node) {}
+}
+
 final class _IndexVisitor extends RecursiveAstVisitor<void> {
   final List<IndexedInvocation> invocations = [];
   final List<IndexedReference> references = [];
@@ -371,6 +427,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
         enclosingDeclaration: _enclosing(node),
         enclosingMember: _enclosingMember(node),
         awaited: _isAwaited(node),
+        tries: _triesAround(node),
         offset: node.offset,
       ),
     );
@@ -391,6 +448,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
         enclosingDeclaration: _enclosing(node),
         enclosingMember: _enclosingMember(node),
         awaited: _isAwaited(node),
+        tries: _triesAround(node),
         offset: node.offset,
       ),
     );

@@ -547,6 +547,175 @@ void main() => run();
     expect(order, orderedEquals([...order]..sort()));
   });
 
+  group('indexes the catch clauses around an invocation', () {
+    const source = '''
+Future<void> main() async {
+  first();
+  try {
+    try {
+      await bootstrap();
+      final widget = Screen();
+      run(() => later());
+      void local() {
+        alsoLater();
+        try {
+          inLocal();
+        } catch (_) {}
+      }
+    } on Exception catch (error) {
+      inInner(error);
+    } finally {
+      inFinally();
+    }
+  } on StateError {
+    inOuter();
+  } on Object catch (error, stackTrace) {
+    report(error, stackTrace);
+    return;
+  }
+  after();
+}
+''';
+    final index = DartFileIndexer.index('lib/main.dart', source);
+
+    /// The clauses of the one invocation of [name], each as its type and
+    /// its parameters.
+    List<String> clausesOf(String name) => [
+          for (final clause in index.invocationsOf(name).single.caughtBy)
+            '${clause.type} ${clause.exception} ${clause.stackTrace}',
+        ];
+
+    test('those of the innermost statement first, in their order', () {
+      const all = [
+        'Exception error null',
+        'StateError null null',
+        'Object error stackTrace',
+      ];
+      expect(clausesOf('bootstrap'), all);
+      // A creation, as a call.
+      expect(clausesOf('Screen'), all);
+      // The call that takes the closure, but not what the closure calls.
+      expect(clausesOf('run'), all);
+    });
+
+    test(
+        'none outside the function or closure that holds the invocation, '
+        'which may run after the statement', () {
+      expect(clausesOf('later'), isEmpty);
+      expect(clausesOf('alsoLater'), isEmpty);
+      // A try statement in a local function is around what it calls.
+      expect(clausesOf('inLocal'), ['null _ null']);
+    });
+
+    test(
+        'a clause and a finally block are outside the try block of their '
+        'statement', () {
+      expect(clausesOf('inInner'), [
+        'StateError null null',
+        'Object error stackTrace',
+      ]);
+      expect(clausesOf('inFinally'), [
+        'StateError null null',
+        'Object error stackTrace',
+      ]);
+      expect(clausesOf('inOuter'), isEmpty);
+      expect(clausesOf('report'), isEmpty);
+      expect(clausesOf('first'), isEmpty);
+      expect(clausesOf('after'), isEmpty);
+    });
+
+    test(
+        'with the body of each clause, which tells whether it holds an '
+        'invocation, and whether the clause catches every error', () {
+      final clauses = index.invocationsOf('bootstrap').single.caughtBy;
+      final report = index.invocationsOf('report').single;
+      final inInner = index.invocationsOf('inInner').single;
+
+      expect(
+        [for (final clause in clauses) clause.holds(report.offset)],
+        [false, false, true],
+      );
+      expect(
+        [for (final clause in clauses) clause.holds(inInner.offset)],
+        [true, false, false],
+      );
+      expect(
+        [for (final clause in clauses) clause.catchesEverything],
+        [false, false, true],
+      );
+      // A clause without on catches every error too.
+      expect(
+        index.invocationsOf('inLocal').single.caughtBy.single.catchesEverything,
+        isTrue,
+      );
+      final last = clauses.last;
+      expect(
+        source.substring(last.offset, last.end),
+        '{\n    report(error, stackTrace);\n    return;\n  }',
+      );
+    });
+
+    test('none for an invocation that no try statement holds', () {
+      final invocation = DartFileIndexer.index('lib/a.dart', 'final a = b();')
+          .invocations
+          .single;
+      expect(invocation.tries, isEmpty);
+      expect(invocation.caughtBy, isEmpty);
+    });
+
+    test(
+        'by their statements, the innermost first, each with its finally '
+        'block', () {
+      final tries = index.invocationsOf('bootstrap').single.tries;
+      final inFinally = index.invocationsOf('inFinally').single;
+      final after = index.invocationsOf('after').single;
+
+      expect(
+        [for (final statement in tries) statement.clauses.length],
+        [1, 2],
+      );
+      final block = tries.first.finallyBlock!;
+      expect(
+        source.substring(block.offset, block.end),
+        '{\n      inFinally();\n    }',
+      );
+      expect(block.holds(inFinally.offset), isTrue);
+      expect(block.holds(after.offset), isFalse);
+      expect(tries.last.finallyBlock, isNull);
+    });
+
+    test(
+        'whether a clause throws: with throw or rethrow, but not in a '
+        'function or closure that it holds', () {
+      List<bool> throwsOf(String clauses) => [
+            for (final clause in DartFileIndexer.index('lib/main.dart', '''
+Future<void> main() async {
+  try {
+    await bootstrap();
+  }$clauses
+}
+''').invocationsOf('bootstrap').single.caughtBy) clause.throws,
+          ];
+
+      expect(
+        throwsOf('''
+ on StateError {
+    rethrow;
+  } on FormatException catch (error) {
+    if (error.offset == null) throw StateError('no offset');
+  } on Exception {
+    run(() => throw StateError('later'));
+    void local() {
+      throw StateError('later');
+    }
+  } catch (_) {
+    return;
+  }'''),
+        [true, true, false, false],
+      );
+    });
+  });
+
   test('indexes named constructors called with const or new', () {
     final index = DartFileIndexer.index('lib/a.dart', '''
 import 'package:flutter/widgets.dart' as w;
@@ -744,10 +913,16 @@ final Map<String, Answer<int>> answers = {};
           'lib/main.dart': '''
 import 'package:flutter/widgets.dart';
 import 'package:my_app/bootstrap.dart';
+import 'package:my_app/core/app/failed_start.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(const App());
 }
 ''',
@@ -758,6 +933,182 @@ Future<void> bootstrap() async {}
 ''',
         }),
         isEmpty,
+      );
+    });
+
+    test(
+        'app entry: main() catches every error of bootstrap() and shows the '
+        'screen of a failed start in the clause', () {
+      List<String> problemsOf(String body) => [
+            for (final issue in appEntryIssues({
+              'lib/main.dart': '''
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+$body
+}
+''',
+            }))
+              issue.message,
+          ];
+      const notCaught = 'main() does not catch every error of bootstrap(): '
+          'await it in a try statement with a clause such as "on Object '
+          'catch (error, stackTrace)".';
+      const notShown = 'main() does not call showFailedStart() in the clause '
+          'that catches the errors of bootstrap().';
+
+      // As main() was before the screen of a failed start.
+      expect(
+        problemsOf('  await bootstrap();\n  runApp(const App());'),
+        [notCaught],
+      );
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } on Exception catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());'''),
+        [notCaught],
+      );
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } catch (error) {
+    return;
+  }
+  showFailedStart(error, StackTrace.current);
+  runApp(const App());'''),
+        [notShown],
+      );
+      // A closure in the try block runs when it is called.
+      expect(
+        problemsOf('''
+  try {
+    await Future(() async => await bootstrap());
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());'''),
+        [notCaught],
+      );
+      // runApp() in the try block, or after the statement.
+      for (final body in [
+        '''
+  try {
+    await bootstrap();
+    runApp(const App());
+  } catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+  }''',
+        '''
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());''',
+      ]) {
+        expect(problemsOf(body), isEmpty, reason: body);
+      }
+      // Only in the clause.
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    runApp(const App());
+  }'''),
+        [contains('runApp() in a clause that catches the errors')],
+      );
+    });
+
+    test(
+        'app entry: no clause and no finally block around bootstrap() keeps '
+        'the app on the splash screen or runs its root over the screen of a '
+        'failed start', () {
+      List<String> problemsOf(String body) => [
+            for (final issue in appEntryIssues({
+              'lib/main.dart': '''
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+$body
+}
+''',
+            }))
+              issue.message,
+          ];
+
+      // An exception of a plugin, such as one of Firebase, never reaches the
+      // clause that shows the screen of a failed start.
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } on Exception {
+    return;
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());'''),
+        [
+          equals(
+            'main() catches the errors of bootstrap() of the type Exception '
+            'in a clause that neither calls showFailedStart() nor throws, so '
+            'after such an error the app stays on the splash screen of the '
+            'system.',
+          ),
+        ],
+      );
+      // A clause that rethrows, or shows the screen itself, is fine.
+      expect(
+        problemsOf('''
+  try {
+    try {
+      await bootstrap();
+    } on TimeoutException {
+      rethrow;
+    } on FormatException catch (error, stackTrace) {
+      showFailedStart(error, stackTrace);
+      return;
+    }
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());'''),
+        isEmpty,
+      );
+      // runApp() next to showFailedStart(), or in a finally block, runs the
+      // root of the app over the screen.
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    runApp(const App());
+    return;
+  }
+  runApp(const App());'''),
+        [contains('runApp() in a clause that catches the errors')],
+      );
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+  } finally {
+    runApp(const App());
+  }'''),
+        [contains('runApp() in the finally block')],
       );
     });
 
@@ -1041,6 +1392,10 @@ class App extends StatelessWidget {
         ],
         [
           contains('must return Future<void>'),
+          contains('is missing'),
+          // The file of the screen of a failed start, with its function and
+          // its class.
+          contains('is missing'),
           contains('is missing'),
         ],
       );
