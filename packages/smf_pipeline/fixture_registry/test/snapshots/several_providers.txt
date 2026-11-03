@@ -21943,9 +21943,9 @@ String _listed(List<String> items) => items.length < 2
 /// The URL schemes of the clients of Google of the iOS apps of [app], each
 /// once: `REVERSED_CLIENT_ID` of the Firebase file of each iOS app that
 /// `firebase.json` names, wherever flutterfire writes it there, for each
-/// build configuration and target. It tells of a file that is missing or
-/// that has no client of Google yet, and of a `firebase.json` that names no
-/// iOS app.
+/// build configuration and target. It tells of a file that is missing, and
+/// of one that has no client of Google yet, with the command that enables
+/// Google in its project, and of a `firebase.json` that names no iOS app.
 ///
 /// Throws a [_Stop] when `firebase.json` is not JSON.
 List<String> _schemesOf(Directory app) {
@@ -21966,15 +21966,32 @@ List<String> _schemesOf(Directory app) {
       'Google is written.',
     );
   }
-  final files = <String>{};
+  // The Firebase file of each iOS app, with the project of the app, which
+  // flutterfire writes next to it.
+  final files = <String, String?>{};
   void collect(Object? node) {
     if (node is! Map) return;
-    if (node['fileOutput'] case final String file) files.add(file);
+    if (node['fileOutput'] case final String file) {
+      final project = node['projectId'];
+      files.putIfAbsent(file, () => project is String ? project : null);
+    }
     for (final value in node.values) {
       collect(value);
     }
   }
 
+  // The projects of all the flavors: with several, the script that enables
+  // Google needs the project of a run.
+  final projects = <String>{};
+  void projectsIn(Object? node) {
+    if (node is! Map) return;
+    if (node['projectId'] case final String project) projects.add(project);
+    for (final value in node.values) {
+      projectsIn(value);
+    }
+  }
+
+  if (json case {'flutter': final Object? flutter}) projectsIn(flutter);
   if (json case {'flutter': {'platforms': {'ios': final Object? ios}}}) {
     collect(ios);
   }
@@ -21984,7 +22001,7 @@ List<String> _schemesOf(Directory app) {
     );
   }
   final schemes = <String>{};
-  for (final path in files) {
+  for (final MapEntry(key: path, value: project) in files.entries) {
     final file = File('${app.path}/$path');
     if (!file.existsSync()) {
       stdout.writeln(
@@ -21997,10 +22014,14 @@ List<String> _schemesOf(Directory app) {
       r'<key>REVERSED_CLIENT_ID</key>\s*<string>([A-Za-z0-9.-]+)</string>',
     ).firstMatch(_textOf(file))?[1];
     if (scheme == null) {
+      final command = project != null && projects.length > 1
+          ? '$_enableSignIn --project $project'
+          : _enableSignIn;
       stdout.writeln(
-        '$path has no client of Google yet, as in a Firebase project in '
-        'which Google is not enabled, so no URL scheme is written for it: '
-        '$_enableSignIn enables Google and writes it.',
+        '$path${project == null ? '' : ', of the Firebase project $project,'} '
+        'has no client of Google yet, as in a project in which Google is not '
+        'enabled, so no URL scheme is written for it: $command enables Google '
+        'there and writes it.',
       );
     } else {
       schemes.add(scheme);
@@ -22010,8 +22031,9 @@ List<String> _schemesOf(Directory app) {
 }
 
 /// Writes [schemes] into the URL schemes of [_infoPlist] of [app], those
-/// that it does not have, as a URL type of their own, and leaves the file
-/// as it is when it has them all.
+/// that it does not have as the Google Sign-In SDK reads them
+/// ([_urlSchemesIn]), as a URL type of their own, and leaves the file as it
+/// is when it has them all.
 ///
 /// Throws a [_Stop] with what to add by hand when the file is not in a form
 /// that the script knows, and when it cannot be read or written.
@@ -22029,9 +22051,11 @@ void _writeUrlSchemes(Directory app, List<String> schemes) {
   } on FileSystemException catch (error) {
     throw _Stop('$_infoPlist could not be read (${error.message}).');
   }
+  // In lower case, as the Google Sign-In SDK compares them.
+  final present = _urlSchemesIn(text);
   final missing = [
     for (final scheme in schemes)
-      if (!text.contains('<string>$scheme</string>')) scheme,
+      if (present.add(scheme.toLowerCase())) scheme,
   ];
   if (missing.isEmpty) {
     stdout.writeln('$_infoPlist has the URL scheme of Google already.');
@@ -22059,6 +22083,40 @@ void _writeUrlSchemes(Directory app, List<String> schemes) {
       '${_urlTypesOf(missing, '', newline).trimRight()}',
     );
   }
+}
+
+/// The URL schemes of the app in [text], an Info.plist in XML, in lower
+/// case, as the Google Sign-In SDK reads them (`-signInWithOptions:` of
+/// `GIDSignIn.m` in GoogleSignIn-iOS 9): the strings of the
+/// `CFBundleURLSchemes` of each item of `CFBundleURLTypes`. A scheme under
+/// another key, such as `LSApplicationQueriesSchemes`, or in a comment is
+/// none of them.
+Set<String> _urlSchemesIn(String text) {
+  final plain = text.replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
+  final types = RegExp(
+    r'<key>CFBundleURLTypes</key>\s*(?=<array>)',
+  ).firstMatch(plain);
+  final schemes = <String>{};
+  if (types == null) return schemes;
+  // The URL types end where their array ends, after the arrays within it.
+  var depth = 0;
+  for (final tag in RegExp(r'<(/?)array>').allMatches(plain, types.end)) {
+    depth += tag[1]!.isEmpty ? 1 : -1;
+    if (depth > 0) continue;
+    final of = RegExp(
+      r'<key>CFBundleURLSchemes</key>\s*<array>(.*?)</array>',
+      dotAll: true,
+    ).allMatches(plain.substring(types.end, tag.start));
+    for (final array in of) {
+      for (final scheme in RegExp(
+        '<string>([^<]*)</string>',
+      ).allMatches(array[1]!)) {
+        schemes.add(scheme[1]!.toLowerCase());
+      }
+    }
+    break;
+  }
+  return schemes;
 }
 
 /// The URL types of [schemes] as the items of `CFBundleURLTypes`, each line

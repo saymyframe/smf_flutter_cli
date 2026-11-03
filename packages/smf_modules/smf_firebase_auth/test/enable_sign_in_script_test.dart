@@ -2678,9 +2678,10 @@ void main() {
       });
 
       test(
-          'with --project, registers the debug key, downloads each Firebase '
-          'file once and writes the URL scheme for the flavor of that project '
-          'alone, next to the scheme of the other project', () async {
+          'with --project, registers the debug key and downloads each '
+          'Firebase file once for the flavor of that project alone, and the '
+          'script that it runs then writes the URL scheme of each iOS file '
+          'that the app has, next to those that Info.plist has', () async {
         File(configOf(app)).writeAsStringSync(
           _configuredByFlavors(const {
             'dev': 'smf-dev',
@@ -3154,12 +3155,16 @@ void main() {
       }
     });
 
-    /// What the script tells of the Firebase file of [flavor] without a
-    /// client of Google.
-    String noClientOf(String flavor) => '${iosFileOf(flavor)} has no client '
-        'of Google yet, as in a Firebase project in which Google is not '
-        'enabled, so no URL scheme is written for it: $enableSignInCommand '
-        'enables Google and writes it.';
+    /// What the script tells of the Firebase file of [flavor], of the
+    /// Firebase project [project], without a client of Google: with the
+    /// command that enables Google in that project, which names the project
+    /// when firebase.json names [several].
+    String noClientOf(String flavor, String project, {required bool several}) =>
+        '${iosFileOf(flavor)}, of the Firebase project $project, has no client '
+        'of Google yet, as in a project in which Google is not enabled, so no '
+        'URL scheme is written for it: $enableSignInCommand'
+        '${several ? ' --project $project' : ''} enables Google there and '
+        'writes it.';
 
     test(
         'is the file of the brick of the module as it is, with the paths of '
@@ -3191,9 +3196,12 @@ void main() {
 
       expect(result.code, 0, reason: result.errors);
       expect(result.errors, isEmpty);
+      // firebase.json names three projects, so the command for the file
+      // without a client names the project, without which the script that
+      // enables Google stops.
       expect(
         result.output,
-        '${noClientOf('prod')}\n'
+        '${noClientOf('prod', 'smf-prod', several: true)}\n'
         'Writing the URL scheme of Google, $devScheme and $stagingScheme, '
         'into $_infoPlist.\n',
       );
@@ -3212,7 +3220,7 @@ void main() {
       expect(again.code, 0, reason: again.errors);
       expect(
         again.output,
-        '${noClientOf('prod')}\n'
+        '${noClientOf('prod', 'smf-prod', several: true)}\n'
         '$_infoPlist has the URL scheme of Google already.\n',
       );
       expect(fileOf(_infoPlist).readAsBytesSync(), utf8.encode(written));
@@ -3241,6 +3249,61 @@ void main() {
         [devScheme],
         [stagingScheme],
       ]);
+    });
+
+    test(
+        'takes a scheme for one of the app only among the URL schemes of '
+        'CFBundleURLTypes, as the Google Sign-In SDK does: not among the '
+        'schemes that the app may open, nor in a comment', () async {
+      // The schemes of the clients among those that the app may open with
+      // canOpenURL, and in a comment, which the SDK does not read.
+      final elsewhere = plist.replaceFirst(
+        '</dict>\n</plist>',
+        '\t<key>LSApplicationQueriesSchemes</key>\n\t<array>\n'
+            '\t\t<string>$devScheme</string>\n'
+            '\t\t<string>$stagingScheme</string>\n'
+            '\t</array>\n'
+            '\t<!-- Google sign-in: <string>$devScheme</string> -->\n'
+            '</dict>\n</plist>',
+      );
+      fileOf(_infoPlist).writeAsStringSync(elsewhere);
+
+      final added = await runHook();
+
+      expect(added.code, 0, reason: added.errors);
+      expect(
+        added.output.split('\n')[1],
+        'Writing the URL scheme of Google, $devScheme and $stagingScheme, '
+        'into $_infoPlist.',
+      );
+      expect(_urlSchemesOf(fileOf(_infoPlist).readAsStringSync()), [
+        [devScheme],
+        [stagingScheme],
+      ]);
+    });
+
+    test(
+        'takes a scheme of the URL types in another case for the one of the '
+        'client, as the Google Sign-In SDK compares them in lower case',
+        () async {
+      const mixedCase = 'com.GoogleUserContent.apps.1234567890-Staging';
+      final upper = plist.replaceFirst(
+        '</dict>\n</plist>',
+        '\t<key>CFBundleURLTypes</key>\n\t<array>\n'
+            '${_urlType('\t\t').replaceAll(_scheme, devScheme.toUpperCase())}'
+            '${_urlType('\t\t').replaceAll(_scheme, mixedCase)}'
+            '\t</array>\n</dict>\n</plist>',
+      );
+      fileOf(_infoPlist).writeAsStringSync(upper);
+
+      final there = await runHook();
+
+      expect(there.code, 0, reason: there.errors);
+      expect(
+        there.output.split('\n')[1],
+        '$_infoPlist has the URL scheme of Google already.',
+      );
+      expect(fileOf(_infoPlist).readAsStringSync(), upper);
     });
 
     test(
@@ -3304,8 +3367,9 @@ void main() {
         'written.\n',
       );
 
+      // Two flavors in one project: the command names none.
       config.writeAsStringSync(
-        _configuredByFlavors(const {'staging': 'smf-staging', 'qa': 'smf-qa'}),
+        _configuredByFlavors(const {'staging': 'smf-app', 'qa': 'smf-app'}),
       );
       fileOf(iosFileOf('staging'))
           .writeAsStringSync(_serviceInfo(withClient: false));
@@ -3314,7 +3378,7 @@ void main() {
       expect(noFile.code, 0, reason: noFile.errors);
       expect(
         noFile.output,
-        '${noClientOf('staging')}\n'
+        '${noClientOf('staging', 'smf-app', several: false)}\n'
         '${iosFileOf('qa')}, which firebase.json names, is missing, so no URL '
         'scheme of Google is written for it.\n',
       );

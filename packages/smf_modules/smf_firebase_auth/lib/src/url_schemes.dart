@@ -20,12 +20,16 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// too, once it downloaded the Firebase files with the clients.
 ///
 /// It reads every iOS file of `firebase.json`, of every project, and adds
-/// the scheme of each file that has a client, as a URL type of its own. It
-/// removes none, leaves an Info.plist that has them all as it is, and stops
-/// at one in a form that it does not know, with what to add there by hand.
-/// A file without a client, as in a project in which Google is not enabled,
-/// gets a line that names the script that enables Google, and no failure:
-/// configuring Firebase is not a failure.
+/// the scheme of each file that has a client, as a URL type of its own. A
+/// scheme is there as the Google Sign-In SDK reads it: among the
+/// `CFBundleURLSchemes` of `CFBundleURLTypes`, in any case, and not under
+/// another key or in a comment. It removes none, leaves an Info.plist that
+/// has them all as it is, and stops at one in a form that it does not know,
+/// with what to add there by hand. A file without a client, as in a project
+/// in which Google is not enabled, gets a line that names its project and
+/// the command that enables Google there, with `--project` when
+/// `firebase.json` names several projects, and no failure: configuring
+/// Firebase is not a failure.
 const urlSchemesHook =
     '${FirebaseCoreModule.configuredHooksDirectory}/$urlSchemesHookName';
 
@@ -45,8 +49,9 @@ const urlSchemesCommand = 'dart $urlSchemesHook';
 /// file of its directory. So the render hook of the provider of the module
 /// writes the file into such an app ([RoleOutput.files]), which renders no
 /// mustache, and the file of the brick has none. It stays a Dart file in a
-/// brick, rather than a string here, so that it reads, diffs and formats like
-/// the other scripts of the module.
+/// brick, rather than a string here, so that it reads and diffs as Dart. Like
+/// every file of a brick, it is outside the analysis and the format of the
+/// repository: the generated app formats and analyzes it with its own code.
 final String urlSchemesHookText = utf8.decode(
   base64.decode(
     googleUrlSchemesBundle.files
