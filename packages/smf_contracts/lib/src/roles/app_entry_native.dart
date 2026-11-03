@@ -406,6 +406,7 @@ const _lineSockets = <(SocketRef, String)>[
   (AppEntryRole.infoPlist, AppEntryRole.infoPlistFile),
   (AppEntryRole.iosEntitlements, AppEntryRole.iosEntitlementsFile),
   (AppEntryRole.iosAppDelegateLaunch, AppEntryRole.appDelegateFile),
+  (AppEntryRole.iosAppDelegateEngine, AppEntryRole.appDelegateFile),
   (AppEntryRole.gradleSettingsPlugins, AppEntryRole.gradleSettingsFile),
   (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
   (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),

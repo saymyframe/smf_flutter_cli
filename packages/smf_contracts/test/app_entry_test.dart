@@ -329,7 +329,7 @@ void main() {
       final sockets = appEntryRole.sockets;
       final tags = [for (final socket in sockets) ...socket.tags];
 
-      expect(sockets, hasLength(23));
+      expect(sockets, hasLength(24));
       for (final socket in sockets) {
         expect(socket.role, same(appEntryRole), reason: '$socket');
         expect(socket.problems(), isEmpty, reason: '$socket');
@@ -344,6 +344,7 @@ void main() {
           'smf_app_entry__android_core_library_desugaring_enabled',
           'smf_app_entry__android_core_library_desugaring_library',
           'smf_app_entry__ios_app_delegate_launch',
+          'smf_app_entry__ios_app_delegate_engine',
           'smf_app_entry__android_manifest_application_components',
           'smf_app_entry__gitignore',
         ]),
@@ -414,6 +415,7 @@ void main() {
           'app_entry.bootstrap_phases',
           'app_entry.root_wrappers_in_main',
           'app_entry.launch_code_place',
+          'app_entry.engine_code_place',
           'app_entry.manifest_tag_places',
           'app_entry.tag_lines',
           'app_entry.ios_deployment_target_tag',
@@ -1549,6 +1551,44 @@ void main() {
         [
           equals(
             'socket app_entry.ios_app_delegate_launch is not Dart code and '
+            'takes no imports.',
+          ),
+        ],
+      );
+    });
+
+    test(
+        'the code once the engine of the iOS app exists is Swift without '
+        'imports, the statements of one contribution after those of another',
+        () {
+      const socket = AppEntryRole.iosAppDelegateEngine;
+      const channel = '    FlutterMethodChannel(\n'
+          '      name: "app/channel",\n'
+          '      binaryMessenger: engineBridge.applicationRegistrar.messenger()\n'
+          '    ).setMethodCallHandler { _, result in result(nil) }';
+      const second = '    NSLog("The engine of the app exists.")';
+
+      expect(socket.name, 'ios_app_delegate_engine');
+      expect(socket.tags, ['smf_app_entry__ios_app_delegate_engine']);
+      expect(socket.kind.carriesImports, isFalse);
+      expect(
+        socket.render(const [
+          SocketContribution.code(socket, Fragment(channel)),
+          SocketContribution.code(socket, Fragment(second)),
+        ]),
+        {socket.tag: '$channel\n$second'},
+      );
+      expect(socket.render(const []), {socket.tag: ''});
+      expect(
+        socket.problemsWith(
+          const SocketContribution.code(
+            socket,
+            Fragment(channel, imports: [ImportRef('dart:io')]),
+          ),
+        ),
+        [
+          equals(
+            'socket app_entry.ios_app_delegate_engine is not Dart code and '
             'takes no imports.',
           ),
         ],
@@ -4354,6 +4394,15 @@ Future<void> main() async {
         'ios/Runner/SceneDelegate.swift':
             'class SceneDelegate: FlutterSceneDelegate {\n'
                 '{{{smf_app_entry__ios_app_delegate_launch}}}\n}\n',
+        // In its method, after the registration of the plugins, but on the
+        // line of that call.
+        AppEntryRole.appDelegateFile:
+            '  func didInitializeImplicitFlutterEngine('
+                '_ engineBridge: FlutterImplicitEngineBridge) {\n'
+                '    GeneratedPluginRegistrant.register(with: '
+                'engineBridge.pluginRegistry) '
+                '{{{smf_app_entry__ios_app_delegate_engine}}}\n'
+                '  }\n',
         'android/app/src/debug/AndroidManifest.xml': '<application>\n'
             '{{{smf_app_entry__android_manifest_application_components}}}\n'
             '</application>\n',
@@ -4404,6 +4453,11 @@ Future<void> main() async {
           'The tag {{{smf_app_entry__ios_app_delegate_launch}}} is in '
           'ios/Runner/SceneDelegate.swift, but its lines belong in '
           'ios/Runner/AppDelegate.swift.',
+        ),
+        equals(
+          'The tag {{{smf_app_entry__ios_app_delegate_engine}}} must stand '
+          'alone at the start of a line of ios/Runner/AppDelegate.swift, '
+          'because its contributions render as complete lines.',
         ),
         equals(
           'The tag '
@@ -4557,6 +4611,106 @@ Future<void> main() async {
           ),
         ),
         [noCall],
+      );
+      final issue = issues(moved('    GeneratedPluginRegistrant')).single;
+      expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
+      expect(issue.path, path);
+
+      // An app delegate without the tag: the rule of the lines of the
+      // native files reports a tag in another file.
+      expect(problems('import UIKit\n'), isEmpty);
+    });
+
+    test(
+        'the code once the engine of the iOS app exists runs in '
+        'didInitializeImplicitFlutterEngine(_:), after the registration of '
+        'the plugins, and reads the bridge to the engine as engineBridge', () {
+      const tag = '{{{smf_app_entry__ios_app_delegate_engine}}}';
+      const path = AppEntryRole.appDelegateFile;
+      const method = 'didInitializeImplicitFlutterEngine(_:)';
+      const call = 'GeneratedPluginRegistrant.register(with:)';
+      const registration = '    GeneratedPluginRegistrant.register(with: '
+          'engineBridge.pluginRegistry)\n';
+      List<SmfIssue> issues(String template) => checkModule({path: template});
+      List<String> problems(String template) =>
+          [for (final issue in issues(template)) issue.message];
+      const notInBody = 'The tag $tag is in $path, but not in the body of '
+          '$method, where the code of the modules runs once the engine of the '
+          'app exists.';
+      const notAfter = 'The tag $tag is in the body of $method in $path, but '
+          'not after its call of $call, which registers the plugins of the '
+          'app: the code of the modules runs after it.';
+      const noCall = 'The tag $tag is in the body of $method in $path, which '
+          'has no call of $call: the method registers the plugins of the app '
+          'with that call, before the code of the modules.';
+      const otherName = 'The tag $tag is in the body of $method in $path, '
+          'whose parameter is not named engineBridge: the code of the modules '
+          'reads the bridge to the engine by that name.';
+      String moved(String to) =>
+          _appDelegateTemplate.replaceFirst('$tag\n', '').replaceFirst(
+                to,
+                '$tag\n$to',
+              );
+
+      expect(problems(_appDelegateTemplate), isEmpty);
+      // Without the label of the argument, the method reads the bridge by
+      // the same name.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+              '(_ engineBridge:', '(engineBridge:'),
+        ),
+        isEmpty,
+      );
+      // Braces in the comments and strings of the method do not end it, and
+      // a registration in a comment is no call.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            registration,
+            '    // GeneratedPluginRegistrant.register(with: nil) }\n'
+            '    print("}")\n'
+            '$registration',
+          ),
+        ),
+        isEmpty,
+      );
+      // In the launch of the app, before the engine and the plugins exist.
+      expect(problems(moved('    return super.application')), [notInBody]);
+      // Before the plugins are registered.
+      expect(problems(moved('    GeneratedPluginRegistrant')), [notAfter]);
+      // In a method that registers no plugins, or only in a comment.
+      expect(
+        problems(_appDelegateTemplate.replaceFirst(registration, '')),
+        [noCall],
+      );
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            registration,
+            '    // $registration',
+          ),
+        ),
+        [noCall],
+      );
+      // A method whose parameter has another name, by which no contribution
+      // reads the bridge.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            '(_ engineBridge: FlutterImplicitEngineBridge) {\n$registration',
+            '(_ bridge: FlutterImplicitEngineBridge) {\n'
+                '    GeneratedPluginRegistrant.register(with: '
+                'bridge.pluginRegistry)\n',
+          ),
+        ),
+        [otherName],
+      );
+      // In no method at all.
+      expect(
+        problems('import UIKit\n\nclass AppDelegate: FlutterAppDelegate {\n'
+            '$tag\n}\n'),
+        [notInBody],
       );
       final issue = issues(moved('    GeneratedPluginRegistrant')).single;
       expect(issue.origin, const ModuleOrigin(ModuleId('scaffold')));
@@ -5924,7 +6078,8 @@ const _manifest = r'''
 ''';
 
 /// The app delegate of a provider, that of `flutter create` 3.44 with the
-/// tag of the code that runs before the launch of the app finishes.
+/// tag of the code that runs before the launch of the app finishes and the
+/// tag of the code that runs once the engine of the app exists.
 const _appDelegateTemplate = '''
 import Flutter
 import UIKit
@@ -5941,6 +6096,7 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+{{{smf_app_entry__ios_app_delegate_engine}}}
   }
 }
 ''';
