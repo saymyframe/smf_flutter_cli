@@ -889,6 +889,7 @@ void main() {
           ('flutter_core', AppEntryRole.flavorProjectsHeading),
           ('gen_l10n', GenL10nModule.readmeHeading),
           ('role:app_entry', AppEntryRole.flavorsHeading),
+          ('role:app_entry', AppEntryRole.failedStartHeading),
           ('role:localization', LocalizationRole.readmeHeading),
         ],
       );

@@ -42,11 +42,13 @@
 //   machine for each Android app, and creates that key as the first debug
 //   build would when there is none;
 // - it downloads the Firebase files of those apps again once they have the
-//   clients of Google, to the paths that `firebase.json` names;
+//   clients of Google, to the paths that `firebase.json` names;{{#ios_client}}
 // - it writes the URL scheme of each iOS app, the reversed id of its client
-//   of Google, into `ios/Runner/Info.plist`, which all the flavors share. It
+//   of Google, into `ios/Runner/Info.plist`, which all the flavors share,
+//   with `{{{url_schemes_hook}}}`, which
+//   `{{{configure_script}}}` runs after every run of flutterfire too. It
 //   adds a scheme and removes none, and a file that has it already stays as
-//   it is.
+//   it is.{{/ios_client}}
 // These are the only files of the app that the script changes. Of the
 // other arguments, those calls of the Firebase CLI get only the account.{{/setup}}{{#apple}}
 //
@@ -86,10 +88,12 @@ enum _Need {
 
 /// What the ways to sign in of the app need of the Firebase project. SMF
 /// wrote it from the ways to sign in of the app.
-const _needs = {{{needs}}};
+const _needs = {{{needs}}};{{/setup}}{{#ios_client}}
 
-/// The file of the app with the URL schemes of the iOS app.
-const _infoPlist = 'ios/Runner/Info.plist';{{/setup}}
+/// The script of the app that writes the URL scheme of each iOS app into
+/// `ios/Runner/Info.plist`, which `{{{configure_script}}}` runs after
+/// every run of flutterfire too.
+const _urlSchemes = '{{{url_schemes_hook}}}';{{/ios_client}}
 
 /// The comments of [_sessionFile] and the declarations of `authMode` in it,
 /// in the form that the file keeps: a declaration starts its line and has a
@@ -804,14 +808,17 @@ Future<void> _setUp(
     if (needs.contains(_Need.serverClient)) ...android,
     if (needs.contains(_Need.iosClient)) ...ios,
   ];
-  if (files.isEmpty) return;
-  final schemes = await _downloadFiles(
+  if (files.isEmpty) return;{{^ios_client}}
+  await _downloadFiles(app, cli, files, waitForClients: waitForClients);{{/ios_client}}{{#ios_client}}
+  final withClients = await _downloadFiles(
     app,
     cli,
     files,
     waitForClients: waitForClients,
   );
-  if (schemes != null && schemes.isNotEmpty) _writeUrlSchemes(app, schemes);
+  // The iOS apps need the URL schemes of their clients of Google, which
+  // their files have now.
+  if (withClients && ios.isNotEmpty) await _writeUrlSchemes(app, cli);{{/ios_client}}
 }
 
 /// A hash of a certificate as the script compares it: its hexadecimal
@@ -1017,14 +1024,14 @@ Future<String?> _keytool(_Cli cli) async {
 
 /// Downloads the Firebase files of [files], apps of [app], from the project
 /// of [cli], and writes those that have the clients of Google to their
-/// paths in the app. Returns the URL schemes that the iOS files among them
-/// have, or `null` when a file lacks the clients, which the script then
-/// tells.
+/// paths in the app. Returns whether they all have the clients: a file
+/// that lacks them, as in a project in which Google is not enabled, the
+/// script then tells.
 ///
 /// When [waitForClients], Google was enabled a moment ago, so the script
 /// downloads a file without the clients again, three times at most, five
 /// seconds apart, and fails when it still lacks them.
-Future<List<String>?> _downloadFiles(
+Future<bool> _downloadFiles(
   Directory app,
   _Cli cli,
   List<_App> files, {
@@ -1037,7 +1044,7 @@ Future<List<String>?> _downloadFiles(
   final contents = <_App, String>{};
   for (var attempt = 1;; attempt++) {
     for (final file in files) {
-      if (contents[file] case final text? when _clientsOf(file, text) != null) {
+      if (contents[file] case final text? when _hasClients(file, text)) {
         continue;
       }
       final result = await cli.json(
@@ -1053,7 +1060,7 @@ Future<List<String>?> _downloadFiles(
     }
     final lacking = [
       for (final file in files)
-        if (_clientsOf(file, contents[file]!) == null) file,
+        if (!_hasClients(file, contents[file]!)) file,
     ];
     if (lacking.isEmpty || !waitForClients || attempt > 3) {
       final written = <String>[];
@@ -1066,12 +1073,7 @@ Future<List<String>?> _downloadFiles(
             ? 'The files of the app are as Firebase has them already.'
             : 'Wrote ${_listed(written)}.',
       );
-      if (lacking.isEmpty) {
-        return [
-          for (final file in files)
-            if (file.platform == 'ios') ...?_clientsOf(file, contents[file]!),
-        ];
-      }
+      if (lacking.isEmpty) return true;
       final names = _listed([for (final file in lacking) file.file]);
       if (waitForClients) {
         throw _Failed(
@@ -1084,23 +1086,21 @@ Future<List<String>?> _downloadFiles(
         'is not enabled, so this script has not written $names, and writes '
         'no URL scheme. Enable Google, and run this script again.',
       );
-      return null;
+      return false;
     }
     await Future<void>.delayed(const Duration(seconds: 5));
   }
 }
 
-/// The URL schemes of the clients of Google in [text], the Firebase file of
-/// [file], or `null` if it lacks a client that the app needs: for an iOS
-/// app, `REVERSED_CLIENT_ID`, its client of Google reversed, and for an
-/// Android app none, with the client of the server, an OAuth client of the
-/// type 3.
-List<String>? _clientsOf(_App file, String text) {
+/// Whether [text], the Firebase file of [file], has the clients of Google
+/// that the app needs: for an iOS app, its client of Google, whose id
+/// reversed is `REVERSED_CLIENT_ID`, and for an Android app, the client of
+/// the server, an OAuth client of the type 3.
+bool _hasClients(_App file, String text) {
   if (file.platform == 'ios') {
-    final scheme = RegExp(
-      r'<key>REVERSED_CLIENT_ID</key>\s*<string>([A-Za-z0-9.-]+)</string>',
-    ).firstMatch(text)?[1];
-    return scheme == null ? null : [scheme];
+    return RegExp(
+      r'<key>REVERSED_CLIENT_ID</key>\s*<string>[A-Za-z0-9.-]+</string>',
+    ).hasMatch(text);
   }
   bool hasServer(Object? node) => switch (node) {
         {'client_type': 3} => true,
@@ -1109,9 +1109,9 @@ List<String>? _clientsOf(_App file, String text) {
         _ => false,
       };
   try {
-    return hasServer(jsonDecode(text)) ? const [] : null;
+    return hasServer(jsonDecode(text));
   } on FormatException {
-    return null;
+    return false;
   }
 }
 
@@ -1142,130 +1142,20 @@ bool _write(Directory app, String path, String text) {
     throw _Failed('$path could not be written (${error.message}).');
   }
   return true;
-}
+}{{#ios_client}}
 
-/// Writes [schemes] into the URL schemes of [_infoPlist] of [app], those
-/// that it does not have, as a URL type of their own, and leaves the file
-/// as it is when it has them all.
+/// Runs [_urlSchemes] of [app], the script of the app that writes the URL
+/// scheme of each iOS app of `firebase.json` into `ios/Runner/Info.plist`,
+/// with the Dart VM that runs this script, as `{{{configure_script}}}` runs
+/// it after flutterfire, and prints what it printed.
 ///
-/// Throws a [_Failed] with what to add by hand when the file is not in a
-/// form that the script knows, and when it cannot be read or written.
-void _writeUrlSchemes(Directory app, List<String> schemes) {
-  final file = File('${app.path}/$_infoPlist');
-  if (!file.existsSync()) {
-    throw _Failed(
-      '$_infoPlist is missing, so this script cannot write the URL scheme '
-      'of Google, ${_listed(schemes)}, into it.',
-    );
-  }
-  final String text;
-  try {
-    text = file.readAsStringSync();
-  } on FileSystemException catch (error) {
-    throw _Failed('$_infoPlist could not be read (${error.message}).');
-  }
-  final missing = [
-    for (final scheme in {...schemes})
-      if (!text.contains('<string>$scheme</string>')) scheme,
-  ];
-  if (missing.isEmpty) {
-    stdout.writeln('$_infoPlist has the URL scheme of Google already.');
-    return;
-  }
-  stdout.writeln(
-    'Writing the URL scheme of Google, ${_listed(missing)}, into '
-    '$_infoPlist.',
+/// Throws a [_Failed] when it fails, once it told why.
+Future<void> _writeUrlSchemes(Directory app, _Cli cli) async {
+  final (code, printed, errors) = await cli.run(
+    Platform.resolvedExecutable,
+    ['${app.path}/$_urlSchemes'],
   );
-  final changed = _withUrlSchemes(text, missing);
-  final newline = text.contains('\r\n') ? '\r\n' : '\n';
-  if (changed == null) {
-    throw _Failed(
-      '$_infoPlist is not in a form in which this script can add the URL '
-      'scheme. Add this to CFBundleURLTypes there by hand:\n'
-      '${_urlTypesOf(missing, '', newline).trimRight()}',
-    );
-  }
-  try {
-    file.writeAsStringSync(changed);
-  } on FileSystemException catch (error) {
-    throw _Failed(
-      '$_infoPlist could not be written (${error.message}). Add this to '
-      'CFBundleURLTypes there by hand:\n'
-      '${_urlTypesOf(missing, '', newline).trimRight()}',
-    );
-  }
-}
-
-/// The URL types of [schemes] as the items of `CFBundleURLTypes`, each line
-/// after [indent], one tab further in for each level, and ending with
-/// [newline].
-String _urlTypesOf(List<String> schemes, String indent, String newline) => [
-      for (final scheme in schemes) ...[
-        '$indent<dict>',
-        '$indent\t<key>CFBundleTypeRole</key>',
-        '$indent\t<string>Editor</string>',
-        '$indent\t<key>CFBundleURLSchemes</key>',
-        '$indent\t<array>',
-        '$indent\t\t<string>$scheme</string>',
-        '$indent\t</array>',
-        '$indent</dict>',
-      ],
-    ].map((line) => '$line$newline').join();
-
-/// [text], an Info.plist in XML, with the URL types of [schemes] added: at
-/// the end of `CFBundleURLTypes`, or in a `CFBundleURLTypes` of their own
-/// at the end of the dictionary of the file. Returns `null` when [text] is
-/// not in a form that the script knows.
-String? _withUrlSchemes(String text, List<String> schemes) {
-  final newline = text.contains('\r\n') ? '\r\n' : '\n';
-  // The start of the line of the tag at [index], when only spaces and tabs
-  // come before it there.
-  int? lineOf(int index) {
-    final start = text.lastIndexOf('\n', index - 1) + 1;
-    return text.substring(start, index).trim().isEmpty ? start : null;
-  }
-
-  String insert(int at, String lines) =>
-      '${text.substring(0, at)}$lines${text.substring(at)}';
-  final key = RegExp(r'<key>CFBundleURLTypes</key>\s*');
-  final keys = key.allMatches(text).toList();
-  if (keys.length > 1) return null;
-  if (keys case [final found]) {
-    if (text.startsWith('<array/>', found.end)) {
-      final line = lineOf(found.start);
-      if (line == null) return null;
-      final indent = text.substring(line, found.start);
-      return text.replaceRange(
-        found.end,
-        found.end + '<array/>'.length,
-        '<array>$newline${_urlTypesOf(schemes, '$indent\t', newline)}'
-        '$indent</array>',
-      );
-    }
-    if (!text.startsWith('<array>', found.end)) return null;
-    // The end of that array, after the arrays within it.
-    var depth = 0;
-    for (final tag in RegExp(r'<(/?)array>').allMatches(text, found.end)) {
-      depth += tag[1]!.isEmpty ? 1 : -1;
-      if (depth > 0) continue;
-      final line = lineOf(tag.start);
-      if (line == null) return null;
-      final indent = text.substring(line, tag.start);
-      return insert(line, _urlTypesOf(schemes, '$indent\t', newline));
-    }
-    return null;
-  }
-  // The dictionary of the file ends with its last `</dict>`, right before
-  // `</plist>`.
-  final end = RegExp(r'</dict>\s*</plist>\s*$').firstMatch(text);
-  final line = end == null ? null : lineOf(end.start);
-  if (end == null || line == null) return null;
-  final indent = '${text.substring(line, end.start)}\t';
-  return insert(
-    line,
-    '$indent<key>CFBundleURLTypes</key>$newline'
-    '$indent<array>$newline'
-    '${_urlTypesOf(schemes, '$indent\t', newline)}'
-    '$indent</array>$newline',
-  );
-}{{/setup}}
+  stdout.write(printed);
+  if (errors.isNotEmpty) stderr.writeln(errors);
+  if (code != 0) throw _Failed('$_urlSchemes failed (exit code $code).');
+}{{/ios_client}}{{/setup}}

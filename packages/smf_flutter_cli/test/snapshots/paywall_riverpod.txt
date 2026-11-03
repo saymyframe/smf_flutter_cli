@@ -165,7 +165,7 @@ This guide tells coding agents what the code of this Flutter app does not show. 
 
 The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
 
-- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
@@ -183,7 +183,7 @@ flutter test
 
 Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
 
-- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Every screen is below it, so create no other `MaterialApp` in `lib/`. The only other one is in `FailedStartApp`, which `main()` runs in its place when the start-up fails.
 - The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
@@ -324,6 +324,14 @@ Each flavor is in two places, so change both when you rename, add or remove one:
 In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
 
 On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
+
+## When the start-up fails
+
+`bootstrap()` in `lib/bootstrap.dart` runs before the first frame. When it throws, `main()` shows `FailedStartApp` of `lib/core/app/failed_start.dart` in place of the splash screen, which would otherwise stay. A debug build shows the error and its stack trace there and prints them to the console. Any other build only says that the app could not start.
+
+The error also reaches `FlutterError.onError`, so crash reporting that the start-up set up before the error reports it. An error before that reaches no crash reporter, so reproduce it in a debug build. The error usually says what to do, such as a command to run.
+
+The texts of the screen are in English, since the texts of the app need the start-up that failed. Change them in that file.
 
 ## Run, test and build with .env
 
@@ -716,6 +724,124 @@ import 'package:my_app/core/purchases/app_purchases.dart';
 Future<void> bootstrap() async {
   checkEnvValues(debugPrint);
   await initPurchases();
+}
+=== lib/core/app/failed_start.dart (role:app_entry) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'status_bar_icons.dart';
+
+/// Shows why the app could not start, in place of the splash screen of the
+/// system, which would otherwise stay, and reports [error] with its
+/// [stackTrace] to the handler of the errors of Flutter.
+///
+/// `main()` calls it when `bootstrap()` throws, and then returns: the app
+/// does not start. The screen comes first, so a handler that throws cannot
+/// keep it away. The handlers that the start-up set up before it failed,
+/// such as those of crash reporting, hear of the error, and so does a test
+/// that runs `main()`.
+void showFailedStart(Object error, StackTrace stackTrace) {
+  runApp(FailedStartApp(error: error, stackTrace: stackTrace));
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'the start-up of the app',
+      context: ErrorDescription('while main() awaited bootstrap()'),
+    ),
+  );
+}
+
+/// The app that runs when the start-up failed: a screen that says so, with
+/// [error] and [stackTrace] in a debug build.
+///
+/// It needs nothing of the start-up: it has neither the theme nor the texts
+/// nor the root wrappers of the app, which the start-up sets up, and so its
+/// texts are in English. Change them here.
+class FailedStartApp extends StatelessWidget {
+  /// Creates the app of a start-up that failed with [error] at
+  /// [stackTrace].
+  const FailedStartApp({
+    required this.error,
+    required this.stackTrace,
+    this.showsError = kDebugMode,
+    super.key,
+  });
+
+  /// What `bootstrap()` threw.
+  final Object error;
+
+  /// Where `bootstrap()` threw [error].
+  final StackTrace stackTrace;
+
+  /// Whether the screen shows [error] and [stackTrace]: only in a debug
+  /// build, since the message of an error may hold data of the user and
+  /// means nothing to a user.
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(),
+    darkTheme: ThemeData(brightness: Brightness.dark),
+    builder: (context, child) => StatusBarIcons(child: child!),
+    home: _FailedStartScreen(
+      error: error,
+      stackTrace: stackTrace,
+      showsError: showsError,
+    ),
+  );
+}
+
+class _FailedStartScreen extends StatelessWidget {
+  const _FailedStartScreen({
+    required this.error,
+    required this.stackTrace,
+    required this.showsError,
+  });
+
+  final Object error;
+
+  final StackTrace stackTrace;
+
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = Theme.of(context).textTheme;
+    final code = texts.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Courier'],
+    );
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                'The app could not start',
+                style: texts.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (showsError) ...[
+              Text(
+                'bootstrap() in lib/bootstrap.dart threw:',
+                style: texts.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText('$error', style: code),
+              const SizedBox(height: 16),
+              SelectableText('$stackTrace', style: code),
+            ] else
+              Text('Close the app and open it again.', style: texts.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
 }
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
@@ -6339,10 +6465,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderScope;
 
 import 'app.dart';
 import 'bootstrap.dart';
+import 'core/app/failed_start.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    // The app shows why it could not start, in place of a splash screen
+    // that would stay.
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(ProviderScope(child: const App()));
 }
 === pubspec.yaml (flutter_core) ===

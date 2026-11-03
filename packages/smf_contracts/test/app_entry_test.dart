@@ -63,28 +63,111 @@ IndexedInvocation _root({bool router = false, String? member = 'build'}) =>
       enclosingMember: member,
     );
 
+/// The clause of `main()` that catches every error of `bootstrap()`, from
+/// the offset 25 to 35: `on Object catch (error, stackTrace) { … }`.
+const _catchAll = IndexedCatch(
+  type: 'Object',
+  exception: 'error',
+  stackTrace: 'stackTrace',
+  offset: 25,
+  end: 35,
+);
+
+/// A call of `showFailedStart()` in `main()` at [offset]: by default in
+/// [_catchAll].
+IndexedInvocation _showFailedStart({int offset = 30}) => IndexedInvocation(
+      'showFailedStart',
+      enclosingDeclaration: 'main',
+      offset: offset,
+    );
+
+/// The calls of `main()` of the app entry: `ensureInitialized()` at 10,
+/// `bootstrap()` at 20, awaited and in the try blocks of [tries], by default
+/// one statement whose clauses are [clauses], the call [show] of
+/// `showFailedStart()` if any, and `runApp()` at [runApp].
+List<IndexedInvocation> _mainCalls({
+  List<IndexedCatch> clauses = const [_catchAll],
+  List<IndexedTry>? tries,
+  IndexedInvocation? show = const IndexedInvocation(
+    'showFailedStart',
+    enclosingDeclaration: 'main',
+    offset: 30,
+  ),
+  int runApp = 40,
+}) =>
+    [
+      const IndexedInvocation(
+        'ensureInitialized',
+        target: 'WidgetsFlutterBinding',
+        enclosingDeclaration: 'main',
+        offset: 10,
+      ),
+      IndexedInvocation(
+        'bootstrap',
+        enclosingDeclaration: 'main',
+        awaited: true,
+        tries: tries ?? [if (clauses.isNotEmpty) IndexedTry(clauses: clauses)],
+        offset: 20,
+      ),
+      if (show != null) show,
+      IndexedInvocation('runApp', enclosingDeclaration: 'main', offset: runApp),
+    ];
+
+/// The index of the file of the screen of a failed start of the template
+/// of the role, with what the role requires of it.
+const _failedStart = DartFileIndex(
+  path: AppEntryRole.failedStartFile,
+  declarations: [
+    IndexedDeclaration(
+      name: 'showFailedStart',
+      kind: DeclarationKind.function,
+      type: 'void',
+      parameters: [
+        IndexedParameter(
+          'error',
+          kind: ParameterKind.requiredPositional,
+          type: 'Object',
+        ),
+        IndexedParameter(
+          'stackTrace',
+          kind: ParameterKind.requiredPositional,
+          type: 'StackTrace',
+        ),
+      ],
+    ),
+    IndexedDeclaration(
+      name: 'FailedStartApp',
+      kind: DeclarationKind.classType,
+      constructors: [
+        IndexedConstructor(
+          isConst: true,
+          parameters: [
+            IndexedParameter('error', kind: ParameterKind.requiredNamed),
+            IndexedParameter('stackTrace', kind: ParameterKind.requiredNamed),
+            IndexedParameter('showsError', kind: ParameterKind.optionalNamed),
+            IndexedParameter('key', kind: ParameterKind.optionalNamed),
+          ],
+        ),
+      ],
+      members: [
+        IndexedMember('error', kind: MemberKind.field),
+        IndexedMember('stackTrace', kind: MemberKind.field),
+        IndexedMember('showsError', kind: MemberKind.field),
+      ],
+    ),
+  ],
+);
+
 /// Indexes of a minimal app that satisfies the app entry role: its root
 /// widget, `App` unless [appDeclarations] says otherwise, creates a
-/// `MaterialApp.router` in its `build`, unless [appCalls] says otherwise.
+/// `MaterialApp.router` in its `build`, unless [appCalls] says otherwise,
+/// and its `main()` makes the calls [mainCalls], by default those of
+/// [_mainCalls].
 Map<String, DartFileIndex> _app({
   List<IndexedImport> bootstrapImports = const [
     IndexedImport('package:flutter/foundation.dart'),
   ],
-  List<IndexedInvocation> mainCalls = const [
-    IndexedInvocation(
-      'ensureInitialized',
-      target: 'WidgetsFlutterBinding',
-      enclosingDeclaration: 'main',
-      offset: 10,
-    ),
-    IndexedInvocation(
-      'bootstrap',
-      enclosingDeclaration: 'main',
-      awaited: true,
-      offset: 20,
-    ),
-    IndexedInvocation('runApp', enclosingDeclaration: 'main', offset: 30),
-  ],
+  List<IndexedInvocation>? mainCalls,
   List<IndexedInvocation>? appCalls,
   List<IndexedDeclaration>? appDeclarations,
 }) {
@@ -104,8 +187,9 @@ Map<String, DartFileIndex> _app({
           isAsync: true,
         ),
       ],
-      invocations: mainCalls,
+      invocations: mainCalls ?? _mainCalls(),
     ),
+    AppEntryRole.failedStartFile: _failedStart,
     AppEntryRole.bootstrapFile: DartFileIndex(
       path: AppEntryRole.bootstrapFile,
       imports: bootstrapImports,
@@ -278,14 +362,26 @@ void main() {
       );
     });
 
-    test('requires main(), bootstrap() and FallbackStartScreen', () {
+    test(
+        'requires main(), bootstrap(), FallbackStartScreen and what its '
+        'template shows when the start-up fails', () {
       expect(
         appEntryRole.interface.symbols.map((symbol) => '$symbol'),
         [
           'function main()',
           'function bootstrap()',
           'class FallbackStartScreen',
+          'function showFailedStart()',
+          'class FailedStartApp',
         ],
+      );
+      expect(AppEntryRole.showFailedStart.path, AppEntryRole.failedStartFile);
+      expect(AppEntryRole.failedStartApp.path, AppEntryRole.failedStartFile);
+      expect(AppEntryRole.showFailedStart.whenChosen, isEmpty);
+      expect(AppEntryRole.failedStartApp.whenChosen, isEmpty);
+      expect(
+        AppEntryRole.failedStartApp.importRef.resolveUri('my_app'),
+        'package:my_app/core/app/failed_start.dart',
       );
       expect(
         AppEntryRole.fallbackStartScreen.importRef.resolveUri('my_app'),
@@ -334,7 +430,7 @@ void main() {
     test('report missing files through the required symbols only', () {
       final issues = _check(const {});
 
-      expect(issues, hasLength(3));
+      expect(issues, hasLength(5));
       expect(
         issues.every((issue) => issue.message.contains('is missing')),
         isTrue,
@@ -426,23 +522,27 @@ void main() {
     test('require the calls in order', () {
       final issues = _check(
         _app(
-          mainCalls: const [
-            IndexedInvocation(
+          mainCalls: [
+            const IndexedInvocation(
               'bootstrap',
               enclosingDeclaration: 'main',
               awaited: true,
-              offset: 10,
+              tries: [
+                IndexedTry(clauses: [_catchAll]),
+              ],
+              offset: 20,
             ),
-            IndexedInvocation(
+            _showFailedStart(),
+            const IndexedInvocation(
               'ensureInitialized',
               target: 'WidgetsFlutterBinding',
               enclosingDeclaration: 'main',
-              offset: 20,
+              offset: 40,
             ),
-            IndexedInvocation(
+            const IndexedInvocation(
               'runApp',
               enclosingDeclaration: 'main',
-              offset: 30,
+              offset: 50,
             ),
           ],
         ),
@@ -454,23 +554,276 @@ void main() {
     test('ignore an ensureInitialized() of another target', () {
       final issues = _check(
         _app(
-          mainCalls: const [
-            IndexedInvocation(
+          mainCalls: [
+            const IndexedInvocation(
               'ensureInitialized',
               target: 'SomethingElse',
               enclosingDeclaration: 'main',
             ),
-            IndexedInvocation(
-              'bootstrap',
-              enclosingDeclaration: 'main',
-              awaited: true,
-            ),
-            IndexedInvocation('runApp', enclosingDeclaration: 'main'),
+            ..._mainCalls().skip(1),
           ],
         ),
       );
 
       expect(issues.single.message, contains('ensureInitialized'));
+    });
+
+    group(
+        'require a main() that catches every error of bootstrap() and shows '
+        'the screen of a failed start then', () {
+      /// The messages of what the rules find in an app whose `main()` makes
+      /// the calls [calls].
+      List<String> messagesOf(List<IndexedInvocation> calls) => [
+            for (final issue in _check(_app(mainCalls: calls))) issue.message,
+          ];
+
+      const notCaught = 'main() does not catch every error of bootstrap(): '
+          'await it in a try statement with a clause such as "on Object '
+          'catch (error, stackTrace)".';
+      const notShown = 'main() does not call showFailedStart() in the clause '
+          'that catches the errors of bootstrap().';
+
+      test('accept the main() of a provider', () {
+        expect(messagesOf(_mainCalls()), isEmpty);
+        // A clause without on catches every error too.
+        expect(
+          messagesOf(
+            _mainCalls(
+              clauses: const [
+                IndexedCatch(exception: 'e', offset: 25, end: 35),
+              ],
+            ),
+          ),
+          isEmpty,
+        );
+        // Before the catch-all clause, a clause that shows the screen of a
+        // failed start too, or that throws.
+        expect(
+          messagesOf([
+            ..._mainCalls(
+              clauses: const [
+                IndexedCatch(type: 'TimeoutException', offset: 21, end: 24),
+                IndexedCatch(type: 'StateError', throws: true, offset: 24),
+                _catchAll,
+              ],
+            ),
+            _showFailedStart(offset: 22),
+          ]),
+          isEmpty,
+        );
+        // A catch-all clause of an inner statement that throws, around
+        // which a catch-all clause shows the screen.
+        expect(
+          messagesOf(
+            _mainCalls(
+              tries: const [
+                IndexedTry(
+                  clauses: [
+                    IndexedCatch(throws: true, offset: 21, end: 24),
+                  ],
+                ),
+                IndexedTry(clauses: [_catchAll]),
+              ],
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test(
+          'report a clause before the catch-all clause that neither shows the '
+          'screen of a failed start nor throws, which keeps the app on the '
+          'splash screen', () {
+        String keepsOnSplash(String type) =>
+            'main() catches the errors of bootstrap() of the type $type in a '
+            'clause that neither calls showFailedStart() nor throws, so after '
+            'such an error the app stays on the splash screen of the system.';
+
+        // `on Exception { return; }` before the clause of a provider: an
+        // exception of a plugin would leave the app on the splash screen.
+        final issues = _check(
+          _app(
+            mainCalls: _mainCalls(
+              clauses: const [
+                IndexedCatch(type: 'Exception', offset: 21, end: 24),
+                _catchAll,
+              ],
+            ),
+          ),
+        );
+        expect(issues.map((issue) => issue.message), [
+          keepsOnSplash('Exception'),
+        ]);
+        expect(issues.single.hint, contains('rethrow the error'));
+        // Each such clause, of an inner statement first.
+        expect(
+          messagesOf(
+            _mainCalls(
+              tries: const [
+                IndexedTry(
+                  clauses: [
+                    IndexedCatch(type: 'TimeoutException', offset: 21, end: 22),
+                  ],
+                ),
+                IndexedTry(
+                  clauses: [
+                    IndexedCatch(type: 'StateError', offset: 22, end: 23),
+                    _catchAll,
+                  ],
+                ),
+              ],
+            ),
+          ),
+          [keepsOnSplash('TimeoutException'), keepsOnSplash('StateError')],
+        );
+        // A clause after the catch-all clause gets no error of bootstrap().
+        expect(
+          messagesOf(
+            _mainCalls(
+              clauses: const [
+                _catchAll,
+                IndexedCatch(type: 'Exception', offset: 35, end: 38),
+              ],
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('accept runApp() in the try block or after the statement', () {
+        // In the try block, after bootstrap().
+        expect(messagesOf(_mainCalls(runApp: 22)), isEmpty);
+        // After the statement.
+        expect(messagesOf(_mainCalls()), isEmpty);
+      });
+
+      test('report a bootstrap() that no clause catches every error of', () {
+        // Without a try statement, as main() was before.
+        final issues = _check(_app(mainCalls: _mainCalls(clauses: const [])));
+        expect(issues.map((issue) => issue.message), [notCaught]);
+        expect(issues.single.path, AppEntryRole.mainFile);
+        expect(
+          issues.single.origin,
+          const ModuleOrigin(ModuleId('flutter_core')),
+        );
+        expect(
+          issues.single.hint,
+          'Without it, an app whose start-up fails stays on the splash screen '
+          'of the system. showFailedStart() of lib/core/app/failed_start.dart '
+          'reports the error and shows the screen of a failed start; return '
+          'after it.',
+        );
+        // Only some errors.
+        expect(
+          messagesOf(
+            _mainCalls(
+              clauses: const [
+                IndexedCatch(type: 'Exception', offset: 25, end: 35),
+              ],
+            ),
+          ),
+          [notCaught],
+        );
+      });
+
+      test('report a clause that does not show the failed start', () {
+        expect(messagesOf(_mainCalls(show: null)), [notShown]);
+        // After the statement.
+        expect(
+          messagesOf(_mainCalls(show: _showFailedStart(offset: 37))),
+          [notShown],
+        );
+        // In a clause that catches only some errors.
+        expect(
+          messagesOf(
+            _mainCalls(
+              clauses: const [
+                IndexedCatch(type: 'Exception', offset: 25, end: 35),
+                IndexedCatch(type: 'Object', offset: 35, end: 38),
+              ],
+            ),
+          ),
+          [notShown],
+        );
+        expect(
+          _check(_app(mainCalls: _mainCalls(show: null))).single.hint,
+          contains('return after it'),
+        );
+      });
+
+      test(
+          'report a runApp() that runs the root of the app over the screen of '
+          'a failed start: in a clause, or in a finally block', () {
+        const inClause = 'main() calls runApp() in a clause that catches the '
+            'errors of bootstrap(), so it runs the root of the app over the '
+            'screen of a failed start.';
+        const inFinally = 'main() calls runApp() in the finally block of the '
+            'try statement around bootstrap(), so it runs the root of the app '
+            'over the screen of a failed start too.';
+        const runApp = IndexedInvocation(
+          'runApp',
+          enclosingDeclaration: 'main',
+          offset: 32,
+        );
+
+        // Next to showFailedStart(), also with one after the statement.
+        expect(messagesOf(_mainCalls(runApp: 33)), [inClause]);
+        expect(messagesOf([..._mainCalls(), runApp]), [inClause]);
+        expect(
+          _check(_app(mainCalls: _mainCalls(runApp: 33))).single.hint,
+          contains('call runApp() after the try statement'),
+        );
+        // In the finally block of the statement, or of a statement around
+        // it.
+        for (final tries in const [
+          [
+            IndexedTry(
+              clauses: [_catchAll],
+              finallyBlock: IndexedBlock(offset: 36, end: 45),
+            ),
+          ],
+          [
+            IndexedTry(clauses: [_catchAll]),
+            IndexedTry(finallyBlock: IndexedBlock(offset: 36, end: 45)),
+          ],
+        ]) {
+          expect(
+            messagesOf(_mainCalls(tries: tries)),
+            [inFinally],
+          );
+        }
+        // A finally block without runApp() is fine.
+        expect(
+          messagesOf(
+            _mainCalls(
+              tries: const [
+                IndexedTry(
+                  clauses: [_catchAll],
+                  finallyBlock: IndexedBlock(offset: 36, end: 38),
+                ),
+              ],
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('report a bootstrap() that main() does not await, first', () {
+        expect(
+          messagesOf([
+            for (final call in _mainCalls())
+              call.name == 'bootstrap'
+                  ? IndexedInvocation(
+                      'bootstrap',
+                      enclosingDeclaration: 'main',
+                      tries: call.tries,
+                      offset: call.offset,
+                    )
+                  : call,
+          ]),
+          ['main() does not await bootstrap().'],
+        );
+      });
     });
 
     test('require a MaterialApp at the root of the app', () {
@@ -1562,6 +1915,7 @@ void main() {
       expect(appEntryRole.interface.files, [
         AppEntryRole.agentsFile,
         AppEntryRole.claudeFile,
+        AppEntryRole.failedStartFile,
         AppEntryRole.statusBarIconsFile,
         AppEntryRole.statusBarIconsTestFile,
       ]);
@@ -1659,10 +2013,15 @@ void main() {
       expect(rendered.files.keys, appEntryRole.interface.files);
       expect(rendered.files[AppEntryRole.claudeFile], '@AGENTS.md\n');
       // The widget for the icons of the status bar goes into the builder of
-      // the root, and the flavors into the README, both files of the provider.
+      // the root, and the flavors and a failed start into the README, both
+      // files of the provider.
       expect(
         [for (final fragment in rendered.elsewhere) fragment.socket],
-        [AppEntryRole.appBuilder, AppEntryRole.readmeSections],
+        [
+          AppEntryRole.appBuilder,
+          AppEntryRole.readmeSections,
+          AppEntryRole.readmeSections,
+        ],
       );
       final [title, empty, introduction, ...sections] = guide.split('\n');
       expect(title, '# AGENTS.md');
@@ -1979,11 +2338,11 @@ void main() {
           .whereType<SocketContribution>()
           .singleWhere(
             (contribution) =>
-                contribution.socket == AppEntryRole.readmeSections,
+                contribution.socket == AppEntryRole.readmeSections &&
+                contribution.entryKey == AppEntryRole.flavorsHeading,
           );
       final text = section.entryValue! as String;
 
-      expect(section.entryKey, AppEntryRole.flavorsHeading);
       expect(section.when, isEmpty);
       expect(
         rowsOf(text),
@@ -2013,11 +2372,13 @@ void main() {
       );
     });
 
-    test('come first among the sections of the README, after the steps by hand',
-        () {
+    test(
+        'come first among the sections of the README, after the steps by '
+        'hand, and before the section on a start-up that fails', () {
       const socket = AppEntryRole.readmeSections;
       final rendered = _render(socket, const [
         ('Firebase', 'Run `flutterfire configure`.'),
+        (AppEntryRole.failedStartHeading, 'The screen of a failed start.'),
         (AppEntryRole.flavorProjectsHeading, 'Where they are.'),
         (AppEntryRole.flavorsHeading, 'Three flavors.'),
         (AppEntryRole.setupHeading, 'By hand.'),
@@ -2031,6 +2392,7 @@ void main() {
           AppEntryRole.setupHeading,
           AppEntryRole.flavorsHeading,
           AppEntryRole.flavorProjectsHeading,
+          AppEntryRole.failedStartHeading,
           'Firebase',
         ],
       );
@@ -2446,6 +2808,190 @@ void main() {
     });
   });
 
+  group('the screen of a failed start', () {
+    /// The files of the app that the template of the role renders, by path.
+    late Map<String, String> files;
+
+    setUpAll(() async {
+      files = (await renderTemplate(appEntryRole)).files;
+    });
+
+    /// The code of the file of the screen, parsed.
+    CompilationUnit unit() =>
+        parseString(content: files[AppEntryRole.failedStartFile]!).unit;
+
+    /// The calls of [name] in [node].
+    List<MethodInvocation> calls(AstNode node, String name) {
+      final found = <MethodInvocation>[];
+      node.accept(_Calls(name, found));
+      return found;
+    }
+
+    test(
+        'comes from the template of the role, in every app, with the '
+        'function and the class that the role requires', () {
+      final declarations = unit().declarations;
+      final show = declarations.whereType<FunctionDeclaration>().singleWhere(
+            (function) =>
+                function.name.lexeme == AppEntryRole.showFailedStart.name,
+          );
+      final app = declarations.whereType<ClassDeclaration>().singleWhere(
+            (type) =>
+                type.namePart.typeName.lexeme ==
+                AppEntryRole.failedStartApp.name,
+          );
+      final constructor =
+          app.body.members.whereType<ConstructorDeclaration>().single;
+
+      expect(
+        appEntryRole.interface.files,
+        contains(AppEntryRole.failedStartFile),
+      );
+      expect(show.returnType!.toSource(), 'void');
+      expect(
+        show.functionExpression.parameters!.toSource(),
+        '(Object error, StackTrace stackTrace)',
+      );
+      expect(constructor.constKeyword, isNotNull);
+      expect(
+        constructor.parameters.toSource(),
+        '({required this.error, required this.stackTrace, this.showsError = '
+        'kDebugMode, super.key})',
+      );
+      expect(
+        [
+          for (final field in app.body.members.whereType<FieldDeclaration>())
+            for (final variable in field.fields.variables)
+              '${field.fields.type} ${variable.name.lexeme}',
+        ],
+        ['Object error', 'StackTrace stackTrace', 'bool showsError'],
+      );
+    });
+
+    test(
+        'shows the screen first and then reports the error to the handler of '
+        'the errors of Flutter', () {
+      final show = unit()
+          .declarations
+          .whereType<FunctionDeclaration>()
+          .singleWhere((function) => function.name.lexeme == 'showFailedStart');
+      final body = show.functionExpression.body as BlockFunctionBody;
+
+      expect(
+        [for (final statement in body.block.statements) statement.toSource()],
+        [
+          'runApp(FailedStartApp(error: error, stackTrace: stackTrace));',
+          startsWith('FlutterError.reportError(FlutterErrorDetails('
+              'exception: error, stack: stackTrace,'),
+        ],
+      );
+    });
+
+    test(
+        'runs an app of its own, with the icons of the status bar and no '
+        'theme, texts or wrappers of the app, which the start-up sets up', () {
+      final app = unit().declarations.whereType<ClassDeclaration>().singleWhere(
+            (type) => type.namePart.typeName.lexeme == 'FailedStartApp',
+          );
+      final root = calls(app, 'MaterialApp').single;
+
+      expect(
+        [
+          for (final argument
+              in root.argumentList.arguments.whereType<NamedArgument>())
+            '${argument.name.lexeme}: ${argument.argumentExpression}',
+        ],
+        [
+          'debugShowCheckedModeBanner: false',
+          'theme: ThemeData()',
+          'darkTheme: ThemeData(brightness: Brightness.dark)',
+          'builder: (context, child) => StatusBarIcons(child: child!)',
+          startsWith('home: _FailedStartScreen('),
+        ],
+      );
+    });
+
+    test(
+        'says in English that the app could not start, with the error and '
+        'its stack trace only where it shows the error', () {
+      final screen =
+          unit().declarations.whereType<ClassDeclaration>().singleWhere(
+                (type) => type.namePart.typeName.lexeme == '_FailedStartScreen',
+              );
+      final code = screen.toSource();
+
+      // The title is a header for a screen reader.
+      expect(
+        calls(screen, 'Semantics').single.toSource(),
+        allOf(contains('header: true'), contains("'The app could not start'")),
+      );
+      expect(
+        code,
+        contains(
+          "if (showsError) ...[Text('bootstrap() in lib/bootstrap.dart "
+          "threw:'",
+        ),
+      );
+      expect(
+        [
+          for (final text in calls(screen, 'SelectableText'))
+            text.argumentList.arguments.first.toSource(),
+        ],
+        [r"'$error'", r"'$stackTrace'"],
+      );
+      expect(code, contains("else Text('Close the app and open it again.'"));
+      // A long error and large text scroll.
+      expect(calls(screen, 'ListView'), hasLength(1));
+    });
+
+    test(
+        'has a section of the README of every app, which names no module, '
+        'and a line in the note of the role', () {
+      final contributions = appEntryRole.template.contribute(testContext);
+      final section = contributions.whereType<SocketContribution>().singleWhere(
+            (contribution) =>
+                contribution.socket == AppEntryRole.readmeSections &&
+                contribution.entryKey == AppEntryRole.failedStartHeading,
+          );
+      final text = section.entryValue! as String;
+      final note = contributions
+          .whereType<SocketContribution>()
+          .singleWhere(
+            (contribution) => contribution.socket == AppEntryRole.agentSections,
+          )
+          .entryValue! as AgentNote;
+
+      expect(section.when, isEmpty);
+      expect(
+        AppEntryRole.readmeSections.problemsWith(
+          section.withOrigin(const RoleTemplateOrigin(appEntryRole)),
+        ),
+        isEmpty,
+      );
+      for (final name in [
+        '`bootstrap()` in `lib/bootstrap.dart`',
+        '`main()` shows `FailedStartApp` of `lib/core/app/failed_start.dart`',
+        'A debug build shows the error and its stack trace',
+        '`FlutterError.onError`',
+        'reproduce it in a debug build',
+        'in English',
+      ]) {
+        expect(text, contains(name), reason: name);
+      }
+      expect(
+        note.text,
+        contains(
+          'When `bootstrap()` throws, `main()` calls `showFailedStart()` of '
+          '`lib/core/app/failed_start.dart` and returns',
+        ),
+      );
+      expect(
+        note.text,
+        contains('Keep the `try` around `await bootstrap()` in `main()`.'),
+      );
+    });
+  });
+
   group('the paths of the guide for coding agents', () {
     const guide = AppEntryRole.agentsFile;
 
@@ -2726,6 +3272,7 @@ See `lib/missing.dart`.
         [
           for (final path in [
             AppEntryRole.mainFile,
+            AppEntryRole.failedStartFile,
             AppEntryRole.bootstrapFile,
             AppEntryRole.statusBarIconsFile,
           ])
@@ -3529,10 +4076,16 @@ import 'package:flutter/widgets.dart';
 
 import 'app.dart';
 import 'bootstrap.dart';
+import 'core/app/failed_start.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(
     {{{smf_app_entry__root_wrappers_open}}}const App(){{{smf_app_entry__root_wrappers_close}}},
   );

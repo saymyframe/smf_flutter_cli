@@ -310,6 +310,11 @@ void main() {
           contains('`smf create` offers to configure `dev`'),
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
           contains('`lib/firebase_options_of_flavor.dart`'),
+          // The screen of the app entry role, which shows the error with
+          // the command in a debug build.
+          contains(
+            'A debug build shows that error on the screen of a failed start.',
+          ),
         ),
       );
       expect(

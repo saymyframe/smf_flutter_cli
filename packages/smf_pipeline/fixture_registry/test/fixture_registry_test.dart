@@ -2599,6 +2599,8 @@ const _cases = [
   'fake_clock_user',
   'bottom_tabs (fake_router) with localization',
   'bottom_tabs (go_router) with localization',
+  // The fixture whose start-up fails when a test says so, with no role.
+  'fake_start_failure',
   // The other values of the mode option of the auth role, with the
   // fixture sign-in, which provides it, the first router and the texts of
   // the app, since the role uses the router role and the localization role.

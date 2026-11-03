@@ -15,9 +15,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, whose providers call the listeners of the screen, the DI role, the
 /// events role, the preferences role, the localization role, the theme
 /// role, the app entry role, whose provider builds the root that follows
-/// the theme mode, the auth role, the onboarding screen role, the
-/// notifications role, the push role, the purchases role, the env role and the
-/// REST role.
+/// the theme mode and shows the screen of a failed start, the auth role,
+/// the onboarding screen role, the notifications role, the push role, the
+/// purchases role, the env role and the REST role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -29,8 +29,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// fixture theme, whose colour a test changes, the module that uses the
 /// fixture clock, which shows an hour on a clock of 24 hours or of 12, and
 /// the fixture steps of the onboarding, whose actions note their calls, and
-/// the module that reads values of .env, whose keys a test gives values, and
-/// the module that makes requests through the REST role.
+/// the module that reads values of .env, whose keys a test gives values,
+/// the module that makes requests through the REST role, and the fixture
+/// whose start-up fails when a test says so.
 /// The tests of each role must fail on the providers of the role with a
 /// known bug of `brokenProviders`, first on the expectation that the bug
 /// breaks, whose message has the reason that the registry gives, such as
@@ -341,6 +342,17 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // entry, the test that the CLI keeps: only in the apps with every
       // module, which run flutter test for other tests already.
       await flavorsAppTest(among: (app) => app.everyModuleWith != null),
+      // A start-up that fails, whichever module provides the app entry:
+      // main() shows the screen of a failed start of the template of the
+      // role in place of the app, which it does not run, and reports the
+      // error once, also to the handlers that the start-up set up before it
+      // failed. The fixture whose start-up fails when the test says so is
+      // in the app of its own and in the apps with every module.
+      MatrixAppTest(
+        '$appTests/failed_start',
+        appliesTo: (app) => app.modules.contains(FakeStartFailureModule.id),
+        roles: {appEntryRole},
+      ),
       // The look of the fixture theme, whose themes read a colour from the
       // context of the root, through a widget that the fixture puts around
       // the root: when the test changes the colour, the screens get the

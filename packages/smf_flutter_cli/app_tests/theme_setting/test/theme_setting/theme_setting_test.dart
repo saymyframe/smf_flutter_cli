@@ -44,13 +44,14 @@ const double _height = 4000;
 /// navigator of the page that the user sees.
 ///
 /// main() runs in real time, so a start-up that waits for a timer or for
-/// input and output, as that of a module may, does not keep the fake time
-/// of the test waiting forever. An error of main() fails the test, which
+/// input and output, as that of a module may, does not keep the fake time of
+/// the test waiting forever. An error of main() fails the test, which
 /// tester.runAsync would only report to the handler of the errors of
-/// Flutter. The handlers of errors that the start-up installs, such as
-/// those of crash reporting, and the builder of the widget of an error go
-/// back to those of the test once main() returns, so that flutter_test
-/// reports an expectation that fails as in any test.
+/// Flutter. An error of bootstrap() reaches FlutterError.onError through
+/// main(), which fails the test too. The handlers of errors that the
+/// start-up installs, such as those of crash reporting, and the builder of
+/// the widget of an error go back to those of the test once main() returns,
+/// so that flutter_test reports an expectation that fails as in any test.
 Future<void> _openSettings(WidgetTester tester) async {
   tester.view
     ..physicalSize = const Size(800, _height)
