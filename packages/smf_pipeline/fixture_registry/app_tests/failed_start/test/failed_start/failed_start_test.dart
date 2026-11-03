@@ -3,9 +3,13 @@
 // (fake_start_failure), whichever module provides the app entry: when
 // bootstrap() throws, main() shows the screen of a failed start of the
 // template of the role in place of the app, which it does not run, and
-// reports the error once to the handler of the errors of Flutter. In the
-// apps with every module, crash reporting has started before the error, and
-// its handler calls the handler of the test, so the error reaches both.
+// reports the error once to the handler of the errors of Flutter, and not to
+// the handler of the uncaught errors of the platform, which would report it
+// a second time. In the apps with every module, crash reporting has started
+// before the error, and its handler calls the handler of the test, so the
+// error reaches both; its handler of the uncaught errors of the platform
+// takes the place of that of the test, so only the app of the fixture alone
+// shows a report there.
 //
 // The app starts with main() of lib/main.dart, which the app entry role puts
 // into every app. Each expectation gives its reason, which a provider of the
@@ -33,13 +37,15 @@ void main() {
       failFixtureStart = true;
       addTearDown(() => failFixtureStart = false);
 
-      // What reaches the handler of the errors of Flutter while main() runs
-      // and the app shows its first frame. The handlers that the start-up
-      // installs, such as those of crash reporting, and the builder of the
-      // widget of an error go back to those of the test after that frame
-      // and before any expectation, so that flutter_test reports an
-      // expectation that fails first.
+      // What reaches the handler of the errors of Flutter, and the handler
+      // of the uncaught errors of the platform, while main() runs and the
+      // app shows its first frame. The handlers that the start-up installs,
+      // such as those of crash reporting, and the builder of the widget of
+      // an error go back to those of the test after that frame and before
+      // any expectation, so that flutter_test reports an expectation that
+      // fails first.
       final reports = <FlutterErrorDetails>[];
+      final uncaught = <Object>[];
       final onError = FlutterError.onError;
       final onPlatformError = PlatformDispatcher.instance.onError;
       final errorWidgetBuilder = ErrorWidget.builder;
@@ -47,6 +53,10 @@ void main() {
       StackTrace? stackTrace;
       try {
         FlutterError.onError = reports.add;
+        PlatformDispatcher.instance.onError = (error, stackTrace) {
+          uncaught.add(error);
+          return true;
+        };
         // main() runs in real time, so a start-up that waits for a timer or
         // for input and output, as that of a module may, does not keep the
         // fake time of the test waiting forever.
@@ -105,6 +115,14 @@ void main() {
         reason: 'The error reaches the handler of the errors of Flutter '
             'once, through the handlers that the start-up set up before it '
             'failed.',
+      );
+      expect(
+        uncaught,
+        isEmpty,
+        reason: 'main() reports the error of bootstrap() to the handler of '
+            'the errors of Flutter alone, and not to the handler of the '
+            'uncaught errors of the platform too, which would report it a '
+            'second time.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),
