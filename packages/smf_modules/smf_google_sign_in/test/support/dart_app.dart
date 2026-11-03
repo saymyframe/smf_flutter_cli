@@ -183,7 +183,7 @@ class WidgetsBinding {
 /// `channelAnswers`, what the platform answers each call of a channel with,
 /// by the name of the channel, and `channelCalls`, each call as the name of
 /// its channel and its method. A call of a channel without an answer throws
-/// a [MissingPluginException], as one that nothing on the platform answers
+/// a `MissingPluginException`, as one that nothing on the platform answers
 /// does.
 const _services = r'''
 /// What the platform answers each call of a method channel with, by the

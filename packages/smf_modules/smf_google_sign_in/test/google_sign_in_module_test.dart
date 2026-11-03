@@ -516,7 +516,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
 /// app of the module, on Android and then on iOS, with the answers of the
 /// app delegate that it scripts, and sends back the fields of each setup
 /// and how many calls reached the method channel.
-const _iosSetupScript = r'''
+const _iosSetupScript = '''
 import 'dart:isolate';
 
 import 'package:contract_app/core/google_sign_in/google_sign_in.dart';
@@ -993,7 +993,7 @@ void main() {
           'serviceInfo',
           'urlSchemes',
           'serviceInfoClientId',
-          'infoPlistClientId'
+          'infoPlistClientId',
         },
       );
       expect(
