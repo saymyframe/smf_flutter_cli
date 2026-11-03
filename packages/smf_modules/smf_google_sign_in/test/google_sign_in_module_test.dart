@@ -319,6 +319,163 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Runs `googleCredential()` of the app of the module without the
+/// localization role on iOS, once for each setup of the iOS app that the
+/// app delegate tells of, as the stand-in of the method channel answers
+/// for it, and then once on Android, and sends back what each call
+/// returned or failed with, how many sign-ins of each reached the
+/// platform, the starts of the package after the first call, and the calls
+/// of the method channels.
+///
+/// It uses only `googleCredential()` and the stand-ins, so it runs on an
+/// app whose function asks the Google Sign-In SDK without a check too.
+const _iosScript = r'''
+import 'dart:isolate';
+
+import 'package:contract_app/core/auth/app_session.dart';
+import 'package:contract_app/core/google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+const _channel = 'google_sign_in/ios_setup';
+const _id = '123456789012-abcdef.apps.googleusercontent.com';
+const _scheme = 'com.googleusercontent.apps.123456789012-abcdef';
+const _otherId = '210987654321-fedcba.apps.googleusercontent.com';
+
+/// What a call of googleCredential() ended with: the ID token of the
+/// credential, null, or the reason and the hint of the failure.
+Future<Object?> call() async {
+  try {
+    final credential = await googleCredential();
+    return switch (credential) {
+      null => 'null',
+      IdTokenCredential() => 'credential: ${credential.idToken}',
+    };
+  } on AuthFailure catch (failure) {
+    return 'failed: ${failure.reason.name}: ${failure.developerHint}';
+  } on Object catch (error) {
+    return 'threw: $error';
+  }
+}
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  final result = <String, Object?>{};
+  final outcomes = <String, Object?>{};
+  final signIns = <String, int>{};
+  Future<void> signIn(String name) async {
+    googleAnswers
+      ..clear()
+      ..add(GoogleAnswer('token of $name'));
+    final before = googleSignIns;
+    outcomes[name] = await call();
+    signIns[name] = googleSignIns - before;
+  }
+
+  defaultTargetPlatform = TargetPlatform.iOS;
+  for (final (name, answer) in <(String, Map<String, Object?>?)>[
+    (
+      'a client without its scheme',
+      {
+        'serviceInfo': true,
+        'serviceInfoClientId': _id,
+        'urlSchemes': ['com.example.other'],
+      },
+    ),
+    (
+      'a client and its scheme',
+      {
+        'serviceInfo': true,
+        'serviceInfoClientId': _id,
+        'urlSchemes': ['com.example.other', _scheme],
+      },
+    ),
+    (
+      'its scheme in upper case',
+      {
+        'serviceInfo': true,
+        'serviceInfoClientId': _id,
+        'urlSchemes': [_scheme.toUpperCase()],
+      },
+    ),
+    (
+      'no CLIENT_ID in GoogleService-Info.plist',
+      {
+        'serviceInfo': true,
+        'urlSchemes': [_scheme],
+      },
+    ),
+    (
+      'no GoogleService-Info.plist',
+      {
+        'serviceInfo': false,
+        'urlSchemes': <String>[],
+      },
+    ),
+    (
+      'an empty CLIENT_ID',
+      {
+        'serviceInfo': true,
+        'serviceInfoClientId': '',
+        'urlSchemes': [_scheme],
+      },
+    ),
+    (
+      'GIDClientID alone without its scheme',
+      {
+        'serviceInfo': false,
+        'infoPlistClientId': _id,
+        'urlSchemes': <String>[],
+      },
+    ),
+    (
+      'GIDClientID alone with its scheme',
+      {
+        'serviceInfo': false,
+        'infoPlistClientId': _id,
+        'urlSchemes': [_scheme],
+      },
+    ),
+    (
+      'an empty GIDClientID',
+      {
+        'serviceInfo': false,
+        'infoPlistClientId': '',
+        'urlSchemes': <String>[],
+      },
+    ),
+    (
+      'CLIENT_ID over a GIDClientID whose scheme is there',
+      {
+        'serviceInfo': true,
+        'serviceInfoClientId': _otherId,
+        'infoPlistClientId': _id,
+        'urlSchemes': [_scheme],
+      },
+    ),
+    ('no answer of the app delegate', null),
+  ]) {
+    if (answer == null) {
+      channelAnswers.remove(_channel);
+    } else {
+      channelAnswers[_channel] = answer;
+    }
+    await signIn(name);
+    if (outcomes.length == 1) result['starts after the first'] = googleStarts.length;
+  }
+  final ofIos = [...channelCalls];
+
+  defaultTargetPlatform = TargetPlatform.android;
+  await signIn('on Android');
+
+  result['outcomes'] = outcomes;
+  result['sign-ins'] = signIns;
+  result['calls on iOS'] = ofIos;
+  result['calls on Android'] = channelCalls.length - ofIos.length;
+  port.send(result);
+}
+''';
+
 void main() {
   const module = GoogleSignInModule();
 
@@ -833,6 +990,7 @@ void main() {
   group('the function of the way to sign in', () {
     late Map<Object?, Object?> calls;
     late Map<Object?, Object?> otherZone;
+    late Map<Object?, Object?> onIos;
 
     setUpAll(() async {
       final result = await _resultOf(const [GoogleSignInModule.id]);
@@ -840,9 +998,99 @@ void main() {
       try {
         calls = (await app.run(_script))! as Map<Object?, Object?>;
         otherZone = (await app.run(_otherZoneScript))! as Map<Object?, Object?>;
+        onIos = (await app.run(_iosScript))! as Map<Object?, Object?>;
       } finally {
         app.delete();
       }
+    });
+
+    test(
+        'on iOS, asks the app delegate for the setup that the Google Sign-In '
+        'SDK reads, and fails with notConfigured, without asking the SDK, '
+        'when the SDK would stop the app: without an iOS client of Google, '
+        'with an empty one, or without its URL scheme', () {
+      const scheme = 'com.googleusercontent.apps.123456789012-abcdef';
+      const other = 'com.googleusercontent.apps.210987654321-fedcba';
+      String notConfigured(String problem) => 'failed: notConfigured: Google '
+          'sign-in is not set up for the app ($problem). The Google Sign-In '
+          'SDK stops an iOS app whose setup it cannot use, so the app did not '
+          'ask it. See the section "Google sign-in" of the README of the app.';
+      String noScheme(String scheme, String source) => notConfigured(
+            '${AppEntryRole.infoPlistFile} has no URL scheme $scheme, the '
+            'reversed id of the iOS client of Google in $source, among '
+            'CFBundleURLSchemes of CFBundleURLTypes: add it there',
+          );
+      String noClient(String serviceInfo) => notConfigured(
+            'the iOS app has no iOS client of Google: $serviceInfo, and '
+            '${AppEntryRole.infoPlistFile} has no GIDClientID',
+          );
+      String empty(String source) => notConfigured(
+            'the id of the iOS client of Google in $source is empty',
+          );
+      const serviceInfo = 'CLIENT_ID of GoogleService-Info.plist';
+      const infoPlist = 'GIDClientID of ${AppEntryRole.infoPlistFile}';
+
+      expect(
+        onIos['outcomes'],
+        {
+          'a client without its scheme': noScheme(scheme, serviceInfo),
+          'a client and its scheme': 'credential: token of a client and its '
+              'scheme',
+          'its scheme in upper case': 'credential: token of its scheme in '
+              'upper case',
+          'no CLIENT_ID in GoogleService-Info.plist':
+              noClient('GoogleService-Info.plist has no CLIENT_ID'),
+          'no GoogleService-Info.plist':
+              noClient('the app has no GoogleService-Info.plist'),
+          'an empty CLIENT_ID': empty(serviceInfo),
+          'GIDClientID alone without its scheme': noScheme(scheme, infoPlist),
+          'GIDClientID alone with its scheme': 'credential: token of '
+              'GIDClientID alone with its scheme',
+          'an empty GIDClientID': empty(infoPlist),
+          'CLIENT_ID over a GIDClientID whose scheme is there':
+              noScheme(other, serviceInfo),
+          'no answer of the app delegate': notConfigured(
+            '${AppEntryRole.appDelegateFile} does not answer the method '
+            'channel google_sign_in/ios_setup, through which the app learns '
+            'whether the Google Sign-In SDK finds the iOS client of Google and '
+            'its URL scheme',
+          ),
+          'on Android': 'credential: token of on Android',
+        },
+        reason: 'The Google Sign-In SDK stops an iOS app without its iOS '
+            'client of Google, with an empty one, or without the URL scheme '
+            'of that client, which it compares in lower case; a CLIENT_ID of '
+            'GoogleService-Info.plist comes before the GIDClientID of '
+            'Info.plist. An app delegate that does not answer leaves the app '
+            'unable to tell, so the call fails rather than let the SDK stop '
+            'the app.',
+      );
+      expect(
+        onIos['sign-ins'],
+        {
+          for (final MapEntry(:key, :value)
+              in (onIos['outcomes']! as Map<Object?, Object?>).entries)
+            key: '$value'.startsWith('credential: ') ? 1 : 0,
+        },
+        reason: 'A call that the check fails asks the SDK nothing.',
+      );
+      expect(
+        onIos['starts after the first'],
+        0,
+        reason: 'A call that the check fails does not start google_sign_in '
+            'either.',
+      );
+      expect(
+        onIos['calls on iOS'],
+        List.filled(11, 'google_sign_in/ios_setup read'),
+        reason: 'Each call on iOS asks the app delegate once.',
+      );
+      expect(
+        onIos['calls on Android'],
+        0,
+        reason: 'On Android, which has no such setup, nothing asks the app '
+            'delegate.',
+      );
     });
 
     test(
