@@ -1031,6 +1031,7 @@ void main() {
         googleSignInFile,
         GoogleSignInModule.logoFile,
         AppEntryRole.infoPlistFile,
+        AppEntryRole.appDelegateFile,
       ]) {
         expect(_codeOf(readmeSection), contains(path));
         expect(app.files.keys, contains(path));
@@ -1048,7 +1049,17 @@ void main() {
               'The section of the provider of sign-in in this README tells '
               'which of these it sets up.'),
           contains('fails with the reason `notConfigured`'),
-          contains('On iOS, the Google Sign-In SDK stops the app instead'),
+          contains('On iOS, the Google Sign-In SDK stops the app instead of '
+              'failing when the app has no iOS client of Google, when the id '
+              'of that client is empty, or when the app lacks the URL scheme '
+              'of that client.'),
+          contains('`googleCredential()` first asks '
+              '`${AppEntryRole.appDelegateFile}`'),
+          contains('the handler of the method channel `$iosSetupChannel` in '
+              '`didInitializeImplicitFlutterEngine(_:)` of the app delegate, '
+              'so keep it there'),
+          contains('pass the id of the iOS client to '
+              '`readGoogleSignInIosSetup()` there as well'),
           contains('- `[16] Account reauth failed.`, after the user picked '
               'an account: Google does not know the SHA-1 of the key that '
               'signed this build of the app.'),
@@ -1114,11 +1125,22 @@ void main() {
           'GoogleSignInPlatform',
           'init',
           'authenticate',
+          'readGoogleSignInIosSetup()',
+          iosSetupChannel,
+          'didInitializeImplicitFlutterEngine(_:)',
+          AppEntryRole.appDelegateFile,
+          'problem',
+          'setMockMethodCallHandler',
+          'serviceInfo',
+          'serviceInfoClientId',
+          'urlSchemes',
         ]),
       );
       for (final (name, kind) in [
         ('googleCredential', DeclarationKind.function),
         ('GoogleSignInIcon', DeclarationKind.classType),
+        ('readGoogleSignInIosSetup', DeclarationKind.function),
+        ('GoogleSignInIosSetup', DeclarationKind.classType),
       ]) {
         expect(file.declaration(name)?.kind, kind, reason: name);
       }
@@ -1134,6 +1156,7 @@ void main() {
         'notConfigured',
         'unknown',
         'IconTheme',
+        'problem',
       ]) {
         expect(file.uses(name), isTrue, reason: name);
       }
