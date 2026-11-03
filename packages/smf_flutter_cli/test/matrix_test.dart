@@ -2720,13 +2720,14 @@ Type type() => Types;
 
       final files = appsIn(fileSystem);
       expect(
-          files.keys,
-          unorderedEquals([
-            '/apps/start_app',
-            '/apps/start_app.tool_arguments',
-            '/apps/start_app_riverpod',
-            '/apps/start_app_riverpod.tool_arguments',
-          ]));
+        files.keys,
+        unorderedEquals([
+          '/apps/start_app',
+          '/apps/start_app.tool_arguments',
+          '/apps/start_app_riverpod',
+          '/apps/start_app_riverpod.tool_arguments',
+        ]),
+      );
       // Every app with every module has keys of the env role, so a release
       // build of it needs the arguments of its provider.
       for (final arguments in [
