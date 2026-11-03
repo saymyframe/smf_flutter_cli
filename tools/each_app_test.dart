@@ -122,17 +122,141 @@ void main() {
       ['${temp.path}/missing', record],
       [apps],
       ['--env', '1APP', apps, record],
+      ['--env', '', apps, record],
       ['--env', 'APP', apps],
+      ['--tool-arguments', apps],
+      ['--env'],
     ]) {
       final result = run(arguments);
       expect(result.exitCode, 64, reason: '$arguments');
       expect(
         '${result.stderr}',
-        startsWith('Usage: $script [--env <variable>] <directory of apps> '),
+        startsWith(
+          'Usage: $script [--env <variable>] [--tool-arguments] '
+          '<directory of apps> ',
+        ),
         reason: '$arguments',
       );
     }
     expect(log(), isEmpty);
+  });
+
+  group('with --tool-arguments', () {
+    /// A directory of the apps app_a, app_b and app_c, with the file of the
+    /// tool arguments next to each: two arguments, one with a space, and an
+    /// empty line, which is no argument; none; and one on a line without a
+    /// line break at its end.
+    String appsWithToolArguments() {
+      final apps = directoryOf('SMF apps застосунки é', [
+        'app_a',
+        'app_b',
+        'app_c',
+      ]);
+      File('$apps/app_a.tool_arguments')
+          .writeAsStringSync('--dart-define-from-file=.env\ntwo words\n\n');
+      File('$apps/app_b.tool_arguments').writeAsStringSync('');
+      File('$apps/app_c.tool_arguments').writeAsStringSync('--last');
+      return apps;
+    }
+
+    test(
+        'gives the command of each app the lines of the file next to the app '
+        'after its own arguments', () {
+      final apps = appsWithToolArguments();
+      final record = command(
+        'record',
+        r'''
+line="${PWD##*/}"
+for argument in "$@"; do line="$line [$argument]"; done
+echo "$line ${SMF_TOOL_ARGUMENTS-<unset>}" >> "$LOG"''',
+      );
+
+      final result = run(['--tool-arguments', apps, record, 'own']);
+
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      expect(log(), [
+        'app_a [own] [--dart-define-from-file=.env] [two words] <unset>',
+        'app_b [own] <unset>',
+        'app_c [own] [--last] <unset>',
+      ]);
+      expect(
+        '${result.stdout}',
+        endsWith(
+          'record passed for the 3 apps in $apps: app_a app_b app_c.\n',
+        ),
+      );
+    });
+
+    test(
+        'with --env, before it or after it, gives them to the command in '
+        'SMF_TOOL_ARGUMENTS, one on each line, and no more arguments', () {
+      final apps = appsWithToolArguments();
+      final record = command(
+        'record',
+        r'''
+arguments="$(printf '%s' "${SMF_TOOL_ARGUMENTS-<unset>}" | tr '\n' '|')"
+echo "${APP##*/} $* [$arguments]" >> "$LOG"''',
+      );
+
+      for (final options in [
+        ['--tool-arguments', '--env', 'APP'],
+        ['--env', 'APP', '--tool-arguments'],
+      ]) {
+        File('${temp.path}/log').writeAsStringSync('');
+        final result = run([...options, apps, record, 'own']);
+
+        expect(
+          result.exitCode,
+          0,
+          reason: '$options ${result.stdout}${result.stderr}',
+        );
+        expect(
+          log(),
+          [
+            'app_a own [--dart-define-from-file=.env|two words]',
+            'app_b own []',
+            'app_c own [--last]',
+          ],
+          reason: '$options',
+        );
+      }
+
+      // Without --tool-arguments, the command gets no such variable.
+      File('${temp.path}/log').writeAsStringSync('');
+      expect(run(['--env', 'APP', apps, record]).exitCode, 0);
+      expect(log(), everyElement(endsWith(' [<unset>]')));
+    });
+
+    test(
+        'fails for an app without the file of its tool arguments, without '
+        'running the command for it, and runs it for the others', () {
+      final apps = appsWithToolArguments();
+      File('$apps/app_b.tool_arguments').deleteSync();
+      final record = command('record', r'echo "${PWD##*/} $*" >> "$LOG"');
+
+      final result = run(['--tool-arguments', apps, record]);
+
+      expect(result.exitCode, 1);
+      expect(log(), [
+        'app_a --dart-define-from-file=.env two words',
+        'app_c --last',
+      ]);
+      expect(
+        '${result.stdout}',
+        allOf(
+          contains(
+            '::error::app_b has no file of the arguments of the flutter tool '
+            'that build it with its values, $apps/app_b.tool_arguments, '
+            'which the --create of packages/smf_flutter_cli/tool/matrix.dart '
+            'writes next to the app: record does not run for it without '
+            'them.\n',
+          ),
+          endsWith(
+            '::error::record failed for 1 of the 3 apps in $apps: app_b.\n',
+          ),
+        ),
+      );
+    });
   });
 
   test(
