@@ -1761,7 +1761,7 @@ void main() {
     /// [app], whose package is `my_app`.
     List<String> locationsOf(MatrixApp app) {
       final files = screens.generatedFiles!(app, 'my_app');
-      expect(files.keys, [locationsFromAnyPageFile]);
+      expect(files.keys, [locationsFromAnyPageFile, notFoundOfAppFile]);
       final unit = parseString(content: files[locationsFromAnyPageFile]!).unit;
       expect(
         [
@@ -1838,31 +1838,102 @@ void main() {
   });
 
   group(
-      'the labels of the destinations that the matrix writes for the tests '
-      'of the layout', () {
-    /// The top-level declarations of the Dart [code] by name, each as its
-    /// source, and the URIs of its imports under the name `import`.
-    Map<String, String> declarationsOf(String code) {
-      final unit = parseString(content: code).unit;
-      return {
-        'import': [
-          for (final directive in unit.directives.whereType<ImportDirective>())
-            directive.uri.stringValue,
-        ].join(', '),
-        for (final declaration in unit.declarations)
-          if (declaration case FunctionDeclaration(:final name))
-            name.lexeme: declaration.toSource()
-          else if (declaration
-              case TopLevelVariableDeclaration(:final variables))
-            variables.variables.single.name.lexeme: declaration.toSource(),
-      };
+      'the texts of the not-found screen of the router role that the matrix '
+      'writes for the tests of the screens', () {
+    /// The file of the texts of [app], whose package is `my_app`.
+    Map<String, String> textsOf(MatrixApp app) {
+      final files = named('router_screens').generatedFiles!(app, 'my_app');
+      expect(files.keys, [locationsFromAnyPageFile, notFoundOfAppFile]);
+      return _declarationsOf(files[notFoundOfAppFile]!);
     }
 
+    /// The cell of the app `my_app` on the screen, as the template of the
+    /// router role shows it.
+    const cell = 'const ({String symbol, String number}) notFoundCell = '
+        "(symbol: 'Ma', number: '5');";
+
+    test(
+        'are in each language of an app with the localization role, as the '
+        'template of the router role gives them the role', () {
+      final everyModule = [
+        for (final app in apps)
+          if (app.everyModuleWith != null) app,
+      ];
+
+      expect(everyModule, isNotEmpty);
+      for (final app in everyModule) {
+        expect(named('router_screens').appliesTo(app), isTrue);
+        expect(
+          textsOf(app),
+          {
+            'import': 'package:flutter/widgets.dart, '
+                'package:my_app/core/l10n/app_locale.dart',
+            'notFoundLanguages': 'const List<String> notFoundLanguages = '
+                "['en', 'uk'];",
+            'notFoundTexts': 'const Map<String, ({String title, String '
+                "action})> notFoundTexts = {'en' : (title: 'Page not found', "
+                "action: 'Go to the start screen'), 'uk' : (title: "
+                "'Сторінку не знайдено', action: 'На стартовий екран')};",
+            'notFoundCell': cell,
+            'chooseLanguage': 'Future<void> chooseLanguage(String language) '
+                '=> appLocale.choose(Locale(language));',
+          },
+          reason: app.name,
+        );
+      }
+    });
+
+    test(
+        'are in English alone for an app without the localization role, '
+        'whose file names nothing of that role', () {
+      final english = [
+        for (final app in apps)
+          if (named('router_screens').appliesTo(app) &&
+              !app.hook!.presentRoles.contains(localizationRole))
+            app,
+      ];
+
+      expect(english, isNotEmpty);
+      for (final app in english) {
+        expect(
+          textsOf(app),
+          {
+            'import': '',
+            'notFoundLanguages': 'const List<String> notFoundLanguages = '
+                "['en'];",
+            'notFoundTexts': 'const Map<String, ({String title, String '
+                "action})> notFoundTexts = {'en' : (title: 'Page not found', "
+                "action: 'Go to the start screen')};",
+            'notFoundCell': cell,
+            'chooseLanguage': 'Future<void> chooseLanguage(String language) '
+                'async {}',
+          },
+          reason: app.name,
+        );
+      }
+    });
+
+    test('have the symbol and the number of the name of the app in its cell',
+        () {
+      final app = apps.firstWhere(named('router_screens').appliesTo);
+      final files = named('router_screens').generatedFiles!(app, 'shop');
+
+      expect(
+        _declarationsOf(files[notFoundOfAppFile]!)['notFoundCell'],
+        'const ({String symbol, String number}) notFoundCell = '
+        "(symbol: 'Sh', number: '4');",
+      );
+    });
+  });
+
+  group(
+      'the labels of the destinations that the matrix writes for the tests '
+      'of the layout', () {
     /// The file of the labels of [app], whose package is `my_app`.
     Map<String, String> labelsOf(MatrixApp app) {
       final files = named('layout_screens').generatedFiles!(app, 'my_app');
       expect(files.keys, [destinationLabelsFile]);
-      return declarationsOf(files[destinationLabelsFile]!);
+      return _declarationsOf(files[destinationLabelsFile]!);
     }
 
     test(
@@ -2315,4 +2386,21 @@ void main() {
       expect(test.appliesTo(everyModule), isTrue);
     });
   });
+}
+
+/// The top-level declarations of the Dart [code] by name, each as its
+/// source, and the URIs of its imports under the name `import`.
+Map<String, String> _declarationsOf(String code) {
+  final unit = parseString(content: code).unit;
+  return {
+    'import': [
+      for (final directive in unit.directives.whereType<ImportDirective>())
+        directive.uri.stringValue,
+    ].join(', '),
+    for (final declaration in unit.declarations)
+      if (declaration case FunctionDeclaration(:final name))
+        name.lexeme: declaration.toSource()
+      else if (declaration case TopLevelVariableDeclaration(:final variables))
+        variables.variables.single.name.lexeme: declaration.toSource(),
+  };
 }

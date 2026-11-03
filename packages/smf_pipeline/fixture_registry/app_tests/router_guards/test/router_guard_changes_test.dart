@@ -10,12 +10,14 @@
 // top too, and when it opens again, the router shows the location below
 // the pages that pushes showed, with its query, as go() to it does. For a
 // router that takes locations from the platform, the same holds while it
-// shows a location that no route matches. Each expectation gives its
+// shows a location that no route matches, which is the not-found screen of
+// the router role again once the gate opens. Each expectation gives its
 // reason, which a provider of the role with a known bug fails the test with
 // (brokenProviders of the fixture registry).
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
+import 'package:{{app_name}}/core/router/not_found_screen.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_details_screen.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
 import 'package:{{app_name}}/features/fake_gate/fixture_gate_screens.dart';
@@ -199,6 +201,12 @@ void main() {
         [unknown],
         reason: 'Once a guard allows again, the router shows the location '
             'that no route matches again.',
+      );
+      expect(
+        find.byType(NotFoundScreen),
+        findsOneWidget,
+        reason: 'Once a guard allows again, the location that no route '
+            'matches shows the not-found screen of the router role again.',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),
