@@ -17,7 +17,8 @@ RenderedFile _file(String path, String text) => RenderedFile(
 
 /// An app of the package `shop_app` whose `lib/shop.dart` reads a constant
 /// through a relative import, a file that it reaches through an import of the
-/// package and an export, and a file of Flutter that nothing of it imports.
+/// package and an export, which imports that file too, and a file of Flutter
+/// that nothing of it imports.
 RenderedApp _app({Map<String, String> more = const {}}) => RenderedApp([
       _file('pubspec.yaml', 'name: shop_app\nenvironment:\n  sdk: ^3.6.0\n'),
       _file('lib/shop.dart', r'''
@@ -39,7 +40,11 @@ const int price = bool.hasEnvironment('SHOP_PRICE') || !_release
     : ('The build has no price.' as int);
 '''),
       _file('lib/core/name.dart', "const name = 'Shop';\n"),
-      _file('lib/sale.dart', 'const sale = true;\n'),
+      // A file of the app that two files import.
+      _file(
+        'lib/sale.dart',
+        "import 'core/name.dart';\n\nconst sale = name == 'Shop';\n",
+      ),
       _file('lib/screen.dart', "import 'package:flutter/widgets.dart';\n"),
       for (final MapEntry(:key, :value) in more.entries) _file(key, value),
     ]);
