@@ -76,7 +76,7 @@ Future<MatrixAppTests> smfAppTests() async {
         readsStartProbes: true,
       ),
       // What the start check makes of the first screen of an app, on screens
-      // that the test shows itself, in the app of the app entry alone.
+      // that it shows itself, in the apps whose only role is the app entry.
       await startScreenAppTest(),
       // The start-up of the app initializes Firebase, with the options of the
       // flavor of the tests as flutterfire would write them, and the mocks of

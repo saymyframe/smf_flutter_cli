@@ -984,7 +984,7 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// test of the purchases of the user of the device is for an app without
 /// sign-in, and the app with every module has sign-in. The test of what the
 /// start check makes of the first screen of an app shows the screens itself
-/// and needs no module, so the app whose only role is the app entry runs
+/// and needs no module, so the apps whose only role is the app entry run
 /// it.
 ///
 /// A test of such a role checks that each call of the service of the role
