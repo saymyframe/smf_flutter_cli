@@ -7,6 +7,7 @@
 // choose them, and the plan that the tools print for the workflows.
 import 'dart:convert';
 
+import 'package:file/memory.dart';
 import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
@@ -1100,6 +1101,12 @@ void main() {
             selection: selection,
             withoutExternalSteps: withoutExternalSteps,
           ),
+          env: MatrixEnv(
+            file: '.env',
+            toolArguments: (_) => const [],
+            keys: (_) => const {},
+          ),
+          fileSystem: MemoryFileSystem()..directory('/apps').createSync(),
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {

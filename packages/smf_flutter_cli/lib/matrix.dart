@@ -1640,7 +1640,7 @@ String _matrixFileOf(
 /// has a line break, which their [file] cannot hold.
 void _checkBuildArguments(String file, List<String> buildArguments) {
   for (final argument in buildArguments) {
-    if (argument.isEmpty || argument.contains(RegExp('[\n\r]'))) {
+    if (_notALine(argument)) {
       throw MatrixAppTestException(
         'A build argument of the app is empty or has a line break, which '
         '$file cannot hold.',
@@ -2778,6 +2778,20 @@ Future<int> runMatrix(
   return _exitCode(problems, run.say);
 }
 
+/// What the name of the file that [createEveryModuleApps] writes next to an
+/// app ends with, after the name of the directory of the app, such as
+/// `start_app.tool_arguments` next to `start_app`: the arguments of the
+/// `flutter` tool that build, run or test the app with its values (see
+/// [MatrixEnv.toolArguments]), one on each line, and none for an app that
+/// needs none.
+///
+/// The file is outside the app, so the app stays as `smf create` generated
+/// it. `.github/scripts/each_app.sh` gives a command of CI the arguments of
+/// each app with `--tool-arguments`, so a step that builds the app as a
+/// release, which needs them, names neither the arguments nor the role that
+/// gives them.
+const toolArgumentsExtension = '.tool_arguments';
+
 /// Generates in [directory] the apps with every module of [modules] with
 /// [roleOptions], for CI to build them for Android and iOS and to start
 /// them on devices: each as the [MatrixApp.packageName] of [name], such as
@@ -2785,8 +2799,19 @@ Future<int> runMatrix(
 /// [options], such as `--org com.example`. It analyzes and tests none of
 /// them, which [runMatrix] does.
 ///
+/// Next to each app that it generated, outside the app, it writes the
+/// arguments of the `flutter` tool that build the app with its values,
+/// which [env] gives, one on each line, in a file whose name is that of the
+/// app and [toolArgumentsExtension], such as `start_app.tool_arguments`.
+/// The file of an app that needs none is empty, so a step of CI never
+/// guesses whether an app has them. It first deletes such a file of an
+/// earlier run, so an app that is not generated, or one with an argument
+/// that is empty or has a line break, which the file cannot hold and which
+/// is a problem, has none.
+///
 /// With `--explain` among the [options], `smf create` only prints for each
-/// app what it would generate and whether the machine is ready.
+/// app what it would generate and whether the machine is ready, and the
+/// files stay as they are.
 ///
 /// The apps are those of [apps], each app with every module by default,
 /// such as a pairwise covering of them, one by the name that the plan of CI
@@ -2798,15 +2823,17 @@ Future<int> runMatrix(
 /// otherwise, and 64, without generating an app, when [name] starts with
 /// `-`, which `smf create` would take for an option. The log of [commands]
 /// gets what happens, and their create generates each app; they analyze
-/// and test nothing here.
+/// and test nothing here. The files go into [fileSystem].
 Future<int> createEveryModuleApps(
   List<SmfModule> modules, {
   required String directory,
   required String name,
+  required MatrixEnv env,
   List<String> options = const [],
   Map<String, String?> roleOptions = const {},
   EveryModuleApps apps = const EveryModuleApps(),
   MatrixCommands commands = const MatrixCommands(),
+  FileSystem fileSystem = const LocalFileSystem(),
 }) async {
   // coverage:ignore-start
   // The defaults print to the terminal and create the apps with smf, as CI
@@ -2833,10 +2860,16 @@ Future<int> createEveryModuleApps(
       '${result.contractCase}: ${result.errors.join('; ')}',
     ...apps.selection.problemsOf(selected),
   ];
+  final context = fileSystem.path;
   for (final app in selected) {
     final packageName = app.packageName(name);
     say('\n=== $packageName: $app');
-    final (_, appProblems) = await _generate(
+    final file = fileSystem.file(
+      '${context.normalize(context.join(directory, packageName))}'
+      '$toolArgumentsExtension',
+    );
+    if (!options.contains('--explain') && file.existsSync()) file.deleteSync();
+    final (generated, appProblems) = await _generate(
       generate,
       app,
       packageName,
@@ -2844,9 +2877,25 @@ Future<int> createEveryModuleApps(
       options,
     );
     problems.addAll(appProblems);
+    if (generated != null) {
+      final toolArguments = env.toolArguments(app);
+      if (toolArguments.any(_notALine)) {
+        problems.add(
+          '$packageName ($app): a tool argument of the app is empty or has a '
+          'line break, which ${file.path} cannot hold.',
+        );
+      } else {
+        file.writeAsStringSync(_linesOf(toolArguments));
+      }
+    }
   }
   return _exitCode(problems, say);
 }
+
+/// Whether [argument] cannot be a line of a file of arguments: it is empty
+/// or has a line break.
+bool _notALine(String argument) =>
+    argument.isEmpty || argument.contains(RegExp('[\n\r]'));
 
 /// An app whose tests must fail, and how: of the apps with every module of
 /// the registry [modules], one for each combination of the providers of the

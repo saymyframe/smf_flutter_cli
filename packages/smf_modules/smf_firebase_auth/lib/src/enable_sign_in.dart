@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/src/identity_providers.dart';
+import 'package:smf_firebase_auth/src/url_schemes.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 
 /// The path in the app of the script that enables in the Firebase project
@@ -86,12 +87,15 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 ///   real project found them in the first answer. `--out` refuses a file
 ///   that exists in a run without a terminal
 ///   (`lib/commands/apps-sdkconfig.js`).
-/// - Then it writes the URL scheme of each iOS app, the reversed id of its
-///   client of Google, into `CFBundleURLTypes` of `ios/Runner/Info.plist`,
-///   as text with the libraries of Dart. The flavors share that file, so it
-///   lists the schemes of every project that the script ran for. It adds a
-///   scheme and removes none, and leaves a file that has it as it is. It
-///   stops at a file in any other form, with what to add there by hand.
+/// - Then, once it wrote the Firebase files of the iOS apps with their
+///   clients, it runs [urlSchemesHook], the script of the app that writes
+///   the URL scheme of each iOS app of `firebase.json`, the reversed id of
+///   its client of Google, into `CFBundleURLTypes` of
+///   `ios/Runner/Info.plist`, and which [FirebaseCoreModule.configureScript]
+///   runs after every run of flutterfire too. So the code that writes the
+///   schemes is in one file of the app. The script runs it as a process,
+///   with the Dart VM that runs the script, and prints what it printed; a
+///   failure of it is a step that fails.
 /// - Apple is enabled in the Firebase console, which no command of the
 ///   Firebase CLI does, so in an app with a way to sign in of Apple the
 ///   script tells what to set there, with the code for that alone.
@@ -196,11 +200,16 @@ Map<String, Set<SignInNeed>> firebaseMethodsOf(
 ///   which gives the script the code that sets it up and the needs,
 ///   `needs`, the value of its constant `_needs`: the values of its enum
 ///   `_Need`, which are named after the [SignInNeed]s, in their order, on
-///   one line, as `dart format` writes a set that fits on it.
+///   one line, as `dart format` writes a set that fits on it;
+/// - `ios_client`, whether a way to sign in needs the client of the iOS app
+///   ([needsIosClient]), which gives the script the code that runs
+///   [urlSchemesHook], the script of the app that writes the URL schemes:
+///   the app has that script then, and only then.
 ///
-/// `setup` comes only with `google`: the module sets up what a way to sign
-/// in needs for Google alone (see [identityProviders]), and its provider
-/// refuses an app with another one that needs something.
+/// `setup` comes only with `google`, and `ios_client` only with `setup`:
+/// the module sets up what a way to sign in needs for Google alone (see
+/// [identityProviders]), and its provider refuses an app with another one
+/// that needs something.
 Map<String, Object> scriptVarsOf(Map<String, Set<SignInNeed>> methods) {
   final needs = [
     for (final need in SignInNeed.values)
@@ -212,6 +221,7 @@ Map<String, Object> scriptVarsOf(Map<String, Set<SignInNeed>> methods) {
     'apple': methods.containsKey('apple.com'),
     'setup': needs.isNotEmpty,
     'needs': '{${needs.join(', ')}}',
+    'ios_client': needsIosClient(methods),
   };
 }
 

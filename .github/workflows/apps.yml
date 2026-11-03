@@ -460,13 +460,17 @@ jobs:
       # build for it, 43 MB, and the release build of an app with every
       # module took about a minute on a Mac. The start check adds nothing
       # that Gradle downloads. It only fills the cache: when it fails, the
-      # job Android start downloads the rest, and this job goes on.
+      # job Android start downloads the rest, and this job goes on. Like
+      # the release start, it builds with the arguments of the flutter tool
+      # that give the app its values, which the --create of the matrix tool
+      # writes next to the app and each_app.sh adds with --tool-arguments:
+      # a release build of an app with values needs them.
       - name: Build the app with every module as a release app for the emulator, for the cache of Gradle
         if: steps.gradle_lookup.outcome == 'success' && steps.gradle_lookup.outputs.cache-hit != 'true'
         continue-on-error: true
         run: |
-          .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/android" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" \
-            --release --target-platform android-x64
+          .github/scripts/each_app.sh --tool-arguments "$RUNNER_TEMP/SMF apps/android" \
+            "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --release --target-platform android-x64
 
       # Only after a build that succeeded: a build that failed may have
       # downloaded part of what the app needs, and the key would then stay
@@ -1302,7 +1306,10 @@ jobs:
   # README of the app gives.
   # The test of smf_firebase_crashlytics skips an app that does not depend on
   # firebase_crashlytics, to which flutterfire adds no such phase. It needs
-  # no Firebase project, so it runs without the key too.
+  # no Firebase project, so it runs without the key too. Its archive is a
+  # release build, so it gets the arguments of the flutter tool that give
+  # the app its values, which the --create of the matrix tool writes next
+  # to the app, in SMF_TOOL_ARGUMENTS from each_app.sh --tool-arguments.
   ios-archive:
     name: iOS archive (${{ matrix.app }})
     needs: plan
@@ -1338,7 +1345,7 @@ jobs:
       - name: Archive the app with every module
         working-directory: packages/smf_modules/smf_firebase_crashlytics
         run: |
-          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CRASHLYTICS_APP \
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_CRASHLYTICS_APP --tool-arguments \
             "$RUNNER_TEMP/SMF apps застосунки é/archive" dart test test/crashlytics_archive_test.dart --file-reporter json:build/test-results/crashlytics_archive_test.json
 
       - *annotate
@@ -1414,8 +1421,12 @@ jobs:
       # whether Email/Password is enabled there, as on Linux. This job only
       # asks: the job on Linux is the one that enables the methods, so the
       # test gets neither the key of the service account nor
-      # SMF_FIREBASE_ENABLE_SIGN_IN here.
-      - name: Check the sign-in methods of the app with every module in Firebase
+      # SMF_FIREBASE_ENABLE_SIGN_IN here. In an app with Google sign-in, the
+      # test also checks that the Firebase file of each iOS app has its
+      # client of Google and that ios/Runner/Info.plist has its URL scheme,
+      # which the script that tool/configure_firebase.dart runs after
+      # flutterfire wrote: this is the only job that configures the iOS apps.
+      - name: Check the sign-in methods and the URL schemes of the app with every module in Firebase
         working-directory: packages/smf_modules/smf_firebase_auth
         env:
           SMF_FIREBASE_PROJECT: saymyframe-app-cli
