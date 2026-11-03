@@ -4675,8 +4675,18 @@ Future<void> main() async {
         ),
         isEmpty,
       );
-      // In the launch of the app, before the engine and the plugins exist.
+      // In the launch of the app, before the engine and the plugins exist,
+      // or in a method after the one that the engine calls.
       expect(problems(moved('    return super.application')), [notInBody]);
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst('$tag\n', '').replaceFirst(
+                '  }\n}\n',
+                '  }\n\n  func later() {\n$tag\n  }\n}\n',
+              ),
+        ),
+        [notInBody],
+      );
       // Before the plugins are registered.
       expect(problems(moved('    GeneratedPluginRegistrant')), [notAfter]);
       // In a method that registers no plugins, or only in a comment.
@@ -4702,6 +4712,15 @@ Future<void> main() async {
             '(_ bridge: FlutterImplicitEngineBridge) {\n'
                 '    GeneratedPluginRegistrant.register(with: '
                 'bridge.pluginRegistry)\n',
+          ),
+        ),
+        [otherName],
+      );
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            '(_ engineBridge: FlutterImplicitEngineBridge)',
+            '()',
           ),
         ),
         [otherName],
