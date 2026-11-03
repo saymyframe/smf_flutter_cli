@@ -14,6 +14,17 @@
 #     environment variable, such as for the tests of a package that take
 #     the app from the environment.
 #
+# With --tool-arguments, before or after --env, the command of each app
+# also gets the arguments of the flutter tool that build the app with its
+# values, such as --dart-define-from-file=.env, which a release build of an
+# app with values needs: the lines of <app>.tool_arguments next to the
+# app, outside it, which the --create of
+# packages/smf_flutter_cli/tool/matrix.dart writes, and which are none for
+# an app that needs none. They come after the arguments of the command,
+# or, with --env, in the environment variable SMF_TOOL_ARGUMENTS, one on
+# each line, for a command such as the tests of a package that build the
+# app. The script does not run the command for an app without that file.
+#
 # The script runs the command for every app even when it fails for one,
 # and fails at the end when it failed for any, naming them, or when the
 # directory has no app.
@@ -26,14 +37,33 @@
 # script.
 set -euo pipefail
 
-variable=
-if [ "${1:-}" = --env ] && [ $# -ge 2 ]; then
-  variable="$2"
-  shift 2
-fi
-if [ $# -lt 2 ] || [ ! -d "$1" ] || { [ -n "$variable" ] && [[ ! "$variable" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; }; then
-  echo "Usage: $0 [--env <variable>] <directory of apps> <command>..." >&2
+usage() {
+  echo "Usage: $0 [--env <variable>] [--tool-arguments] <directory of apps> <command>..." >&2
   exit 64
+}
+
+env_given=
+variable=
+tool_arguments=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --env)
+      if [ $# -lt 2 ]; then
+        usage
+      fi
+      env_given=1
+      variable="$2"
+      shift 2
+      ;;
+    --tool-arguments)
+      tool_arguments=1
+      shift
+      ;;
+    *) break ;;
+  esac
+done
+if [ $# -lt 2 ] || [ ! -d "$1" ] || { [ -n "$env_given" ] && [[ ! "$variable" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; }; then
+  usage
 fi
 directory="${1%/}"
 shift
@@ -90,17 +120,48 @@ keep_reports() {
   done
 }
 
+# Reads the tool arguments of the app $1 into the array arguments, one on
+# each line of its file, without the empty lines, and fails when the app
+# has no such file.
+read_tool_arguments() {
+  local file="$1.tool_arguments" argument
+  arguments=()
+  if [ ! -f "$file" ]; then
+    return 1
+  fi
+  while IFS= read -r argument || [ -n "$argument" ]; do
+    if [ -n "$argument" ]; then
+      arguments+=("$argument")
+    fi
+  done < "$file"
+}
+
 command="${1##*/}"
 failed=()
 for app in "${apps[@]}"; do
   name="${app##*/}"
-  echo "=== $name: $*"
+  # The arguments that the command gets after its own; the form keeps an
+  # empty array from an unbound variable in bash 3, which macOS has.
+  arguments=()
+  if [ -n "$tool_arguments" ] && ! read_tool_arguments "$app"; then
+    failed+=("$name")
+    echo "::error::$name has no file of the arguments of the flutter tool that build it with its values, $app.tool_arguments, which the --create of packages/smf_flutter_cli/tool/matrix.dart writes next to the app: $command does not run for it without them."
+    continue
+  fi
   code=0
-  if [ -n "$variable" ]; then
-    env "$variable=$app" "$@" || code=$?
+  if [ -n "$env_given" ]; then
+    assignments=("$variable=$app")
+    if [ -n "$tool_arguments" ]; then
+      assignments+=("SMF_TOOL_ARGUMENTS=$(printf '%s\n' ${arguments[@]+"${arguments[@]}"})")
+      echo "=== $name: $*, with SMF_TOOL_ARGUMENTS=${arguments[*]+"${arguments[*]}"}"
+    else
+      echo "=== $name: $*"
+    fi
+    env "${assignments[@]}" "$@" || code=$?
     keep_reports . "$name"
   else
-    (cd "$app" && "$@") || code=$?
+    echo "=== $name: $* ${arguments[*]+"${arguments[*]}"}"
+    (cd "$app" && "$@" ${arguments[@]+"${arguments[@]}"}) || code=$?
     keep_reports "$app" "$name"
   fi
   if [ "$code" -ne 0 ]; then
