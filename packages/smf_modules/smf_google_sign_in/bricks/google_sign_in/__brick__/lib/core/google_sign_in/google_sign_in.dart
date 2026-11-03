@@ -24,13 +24,14 @@ Future<void>? _start;
 /// in real time.
 bool _started = false;
 
-/// The method channel through which `{{{app_delegate}}}` tells what the
-/// Google Sign-In SDK finds of the setup of the iOS app.
+/// The method channel through which `{{{app_delegate}}}`
+/// tells what the Google Sign-In SDK finds of the setup of the iOS app.
 const MethodChannel _iosSetup = MethodChannel('{{{ios_setup_channel}}}');
 
 /// What the Google Sign-In SDK finds of the setup of the iOS app before it
-/// shows its sheet, as `{{{app_delegate}}}` reads it from the files of the
-/// app: the iOS client of Google and the URL schemes of the app.
+/// shows its sheet, as `{{{app_delegate}}}` reads it from
+/// the files of the app: the iOS client of Google and the URL schemes of
+/// the app.
 ///
 /// The SDK stops the app with an exception that google_sign_in does not
 /// catch when it has no iOS client of Google, when the id of the client is
@@ -51,8 +52,9 @@ final class GoogleSignInIosSetup {
     this.urlSchemes = const [],
   });
 
-  /// Whether `{{{app_delegate}}}` answered. Without its answer the app
-  /// cannot tell whether the SDK would stop it, so [problem] tells of that.
+  /// Whether `{{{app_delegate}}}` answered. Without its
+  /// answer the app cannot tell whether the SDK would stop it, so [problem]
+  /// tells of that.
   final bool answered;
 
   /// Whether the app has `GoogleService-Info.plist`.
@@ -68,8 +70,8 @@ final class GoogleSignInIosSetup {
   /// client.
   final String? source;
 
-  /// The URL schemes of `CFBundleURLTypes` of `{{{info_plist}}}`, in lower
-  /// case.
+  /// The URL schemes of `CFBundleURLTypes` of `{{{info_plist}}}`,
+  /// in lower case.
   final List<String> urlSchemes;
 
   /// The URL scheme that the SDK needs: [clientId] reversed at its dots, in
@@ -99,15 +101,16 @@ final class GoogleSignInIosSetup {
     }
     final scheme = urlScheme!;
     if (urlSchemes.contains(scheme)) return null;
-    return '{{{info_plist}}} has no URL scheme $scheme, the reversed id of '
-        'the iOS client of Google in $source, among CFBundleURLSchemes of '
-        'CFBundleURLTypes: add it there';
+    return '{{{info_plist}}} has no URL scheme $scheme, the reversed '
+        'id of the iOS client of Google in $source, among CFBundleURLSchemes '
+        'of CFBundleURLTypes: add it there';
   }
 }
 
-/// The setup of Google sign-in of the iOS app, as `{{{app_delegate}}}`
-/// answers on the method channel `{{{ios_setup_channel}}}`, or `null` on
-/// another platform, where nothing is asked.
+/// The setup of Google sign-in of the iOS app, as
+/// `{{{app_delegate}}}` answers on the method channel
+/// `{{{ios_setup_channel}}}`, or `null` on another platform, where nothing
+/// is asked.
 ///
 /// [clientId] is the id of the iOS client that the app gives
 /// `GoogleSignIn.instance.initialize()`, which the package takes before the
