@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'app_router.dart' show AppNavigator, AppRouter{{#guards}}, ClosePages, GuardedNavigation, ShowInstead, ShowNothing, ShowOver, guardChanges{{/guards}};
 import 'navigation.dart' show AppLocation;
+import 'not_found_screen.dart' show NotFoundScreen;
 
 /// Creates the router of the app: a [GoRouter] with the routes of the
 /// modules of the app.
@@ -27,10 +28,12 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   @override
   late final GoRouter config = _GoRouter{{^main_navigation}}(
     initialLocation: {{{initial_location}}},
-    observers: _observers(),{{/main_navigation}}{{#main_navigation}}.routingConfig(
+    observers: _observers(),
+    errorBuilder: _notFound,{{/main_navigation}}{{#main_navigation}}.routingConfig(
     routingConfig: _routes,
     initialLocation: {{{initial_location}}},
-    observers: _observers(),{{#guards}}
+    observers: _observers(),
+    errorBuilder: _notFound,{{#guards}}
     own: _own,{{/guards}}
   )..routerDelegate.addListener(_pagesChanged);
 
@@ -144,6 +147,28 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     {{/guards}}{{#main_navigation}}_checkMainNavigation(location, 'replace');
     {{/main_navigation}}{{#guards}}_own(() => {{/guards}}config.pushReplacement<Object?>(location.path){{#guards}}){{/guards}};
   }
+
+  /// Goes to `/`, which shows the screen that the app starts on: the route
+  /// that `/` redirects to, or the fallback start screen of the app entry.{{#guards}}
+  ///
+  /// `/` is no route of a module, so the router asks the guards about it
+  /// with no route, as [go] asks about a location: they let the user see
+  /// it, or answer the target of a gate, which shows in its place. While
+  /// go_router has no page of a route, as on its error screen, the
+  /// `redirect` of go_router asks about it instead, with no pages.{{/guards}}
+  @override
+  void goToStart() {{^guards}}=> config.go('/');{{/guards}}{{#guards}}{
+    if (_withoutPage) return config.go(_guards.start);
+    final shown = switch (_guards.asked(
+      null,
+      _guards.start,
+      onTopOf: [for (final page in _pages) page.route],
+    )) {
+      ShowInstead(:final location) => location,
+      _ => _guards.start,
+    };
+    _own(() => config.go(shown));
+  }{{/guards}}
 
   /// Whether go_router has no page of a route: before it shows its first
   /// location, and while it shows its error screen in place of the whole
@@ -613,6 +638,14 @@ void _callAlone(
   }
 }
 
+/// The page of go_router for a location that it cannot show, one that no
+/// route matches or that the redirect of a route refuses: the screen of the
+/// router role for such a location. go_router builds the page around it, so
+/// the page keeps the key, the name and the empty route match of the error
+/// screen of go_router.
+Widget _notFound(BuildContext context, GoRouterState state) =>
+    const NotFoundScreen();
+
 /// The [GoRouter] of the app, which hears of the back button of the system
 /// through [_BackButton]: go_router takes no dispatcher of the button, so
 /// the router has one of its own in place of that of [GoRouter].
@@ -624,6 +657,7 @@ final class _GoRouter extends GoRouter {
     required this.own,{{/guards}}
     super.initialLocation,
     super.observers,
+    super.errorBuilder,
   }) : super.routingConfig(
          routingConfig: ValueNotifier(
            RoutingConfig(routes: routes{{#guards}}, redirect: redirect{{/guards}}),
@@ -632,7 +666,8 @@ final class _GoRouter extends GoRouter {
   _GoRouter.routingConfig({
     required super.routingConfig,
     super.initialLocation,
-    super.observers,{{#guards}}
+    super.observers,
+    super.errorBuilder,{{#guards}}
     required this.own,{{/guards}}
   }) : super.routingConfig();{{/main_navigation}}{{#guards}}
 
