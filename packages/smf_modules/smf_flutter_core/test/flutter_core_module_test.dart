@@ -568,7 +568,7 @@ void main() {
           AppEntryRole.flavorProjectsHeading,
           // The section of the template of the role on a start-up that
           // fails.
-          'When the start-up fails',
+          AppEntryRole.failedStartHeading,
         ],
       );
     });
@@ -988,13 +988,13 @@ void main() {
           AppEntryRole.setupHeading,
           AppEntryRole.flavorsHeading,
           AppEntryRole.flavorProjectsHeading,
+          AppEntryRole.failedStartHeading,
           'Every socket',
-          'When the start-up fails',
         ],
       );
       expect(
         readme,
-        contains(
+        endsWith(
           '\n## Every socket\n'
           '\n'
           'The app has something in every socket of its entry.\n',

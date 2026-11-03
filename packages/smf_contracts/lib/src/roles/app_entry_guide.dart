@@ -239,7 +239,7 @@ final class _AppEntryTemplate extends RoleTemplate<NoDsl> {
           _flavorsSection(context.appIdentity),
         ),
         AppEntryRole.readmeSections.entry(
-          _failedStartHeading,
+          AppEntryRole.failedStartHeading,
           _failedStartSection,
         ),
       ];
@@ -287,19 +287,16 @@ String _setupSection(ManualSetup setup) {
   ].join('\n');
 }
 
-/// The heading of the section of the README on what the app does when its
-/// start-up fails.
-const _failedStartHeading = 'When the start-up fails';
-
-/// The section [_failedStartHeading] of the README, in every app: the
-/// screen of a failed start, where the error goes, and what the developer
-/// does about it. It names no module, since the error may come from any.
+/// The section [AppEntryRole.failedStartHeading] of the README, in every
+/// app: the screen of a failed start, where the error goes, and what the
+/// developer does about it. It names no module, since the error may come
+/// from any.
 final String _failedStartSection = '''
 `${AppEntryRole.bootstrap.name}()` in `${AppEntryRole.bootstrapFile}` runs before the first frame. When it throws, `${AppEntryRole.main.name}()` shows `${AppEntryRole.failedStartApp.name}` of `${AppEntryRole.failedStartFile}` in place of the splash screen, which would otherwise stay. A debug build shows the error and its stack trace there and prints them to the console. Any other build only says that the app could not start.
 
 The error also reaches `FlutterError.onError`, so crash reporting that the start-up set up before the error reports it. An error before that reaches no crash reporter, so reproduce it in a debug build. The error usually says what to do, such as a command to run.
 
-The texts of the screen are in English, since the texts of the app need the start-up. Change them in that file.''';
+The texts of the screen are in English, since the texts of the app need the start-up that failed. Change them in that file.''';
 
 /// What the section of the steps by hand says below the list of the steps.
 const _repeatStepOfFlavors = 'Repeat a step for each flavor that needs it: a '

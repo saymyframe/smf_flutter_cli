@@ -1770,7 +1770,9 @@ flutter:
         "import 'package:flutter/widgets.dart';".allMatches(main.text),
         hasLength(1),
       );
-      expect("import '".allMatches(main.text), hasLength(3));
+      // Those of the binding, the root, the start-up and the screen of a
+      // failed start.
+      expect("import '".allMatches(main.text), hasLength(4));
       expect(main.addedImports, isEmpty);
     });
 

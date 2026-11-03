@@ -187,6 +187,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// adds or removes one. It follows the section [flavorsHeading].
   static const flavorProjectsHeading = 'Flavors in the native projects';
 
+  /// The heading of the section of [readmeFile] in which the template of
+  /// the role tells what the app does when its start-up fails (see
+  /// [showFailedStart]). It follows the section [flavorProjectsHeading].
+  static const failedStartHeading = 'When the start-up fails';
+
   /// The path of the guide for coding agents that work on the app; see
   /// [agentSections].
   static const agentsFile = 'AGENTS.md';
@@ -721,13 +726,14 @@ final class AppEntryRole extends Role<NoDsl> {
   /// They follow the description of the app as `## <heading>` sections, in
   /// the order of the contributions (see [SocketContribution]), but for the
   /// section [setupHeading] of the steps by hand, which comes first, and the
-  /// sections [flavorsHeading] and [flavorProjectsHeading], which come next.
-  /// A heading is one line without spaces around it, a section has text, and
-  /// two different texts under one heading conflict. Only the template of
-  /// the role contributes the section [setupHeading]. The template puts the
-  /// section [flavorsHeading] here in every app, so the template of every
-  /// provider's README has the tag of this socket, and the pipeline reports a
-  /// provider without it.
+  /// sections [flavorsHeading], [flavorProjectsHeading] and
+  /// [failedStartHeading], which come next. A heading is one line without
+  /// spaces around it, a section has text, and two different texts under
+  /// one heading conflict. Only the template of the role contributes the
+  /// section [setupHeading]. The template puts the sections [flavorsHeading]
+  /// and [failedStartHeading] here in every app, so the template of every
+  /// provider's README has the tag of this socket, and the pipeline reports
+  /// a provider without it.
   static const readmeSections = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'readme_sections',

@@ -289,20 +289,13 @@ void main() {
       final readme = withFirebase.files[AppEntryRole.readmeFile]!;
 
       expect(readme.owner, const ModuleOrigin(FlutterCoreModule.id));
-      // The section of the module comes before that of the template of the
-      // app entry role on a start-up that fails, the last of the README of
-      // an app without the module.
-      const failedStart = '\n## When the start-up fails\n';
-      final [before, after] =
-          without.files[AppEntryRole.readmeFile]!.text.split(failedStart);
       expect(
         readme.text,
-        '$before'
+        '${without.files[AppEntryRole.readmeFile]!.text}'
         '\n'
         '## Firebase\n'
         '\n'
-        '${readmeSection.trim()}\n'
-        '$failedStart$after',
+        '$readmeSection',
       );
       expect(
         readme.text,

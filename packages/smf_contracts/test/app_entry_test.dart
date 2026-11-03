@@ -2257,11 +2257,13 @@ void main() {
       );
     });
 
-    test('come first among the sections of the README, after the steps by hand',
-        () {
+    test(
+        'come first among the sections of the README, after the steps by '
+        'hand, and before the section on a start-up that fails', () {
       const socket = AppEntryRole.readmeSections;
       final rendered = _render(socket, const [
         ('Firebase', 'Run `flutterfire configure`.'),
+        (AppEntryRole.failedStartHeading, 'The screen of a failed start.'),
         (AppEntryRole.flavorProjectsHeading, 'Where they are.'),
         (AppEntryRole.flavorsHeading, 'Three flavors.'),
         (AppEntryRole.setupHeading, 'By hand.'),
@@ -2275,6 +2277,7 @@ void main() {
           AppEntryRole.setupHeading,
           AppEntryRole.flavorsHeading,
           AppEntryRole.flavorProjectsHeading,
+          AppEntryRole.failedStartHeading,
           'Firebase',
         ],
       );
@@ -2833,7 +2836,7 @@ void main() {
       final section = contributions.whereType<SocketContribution>().singleWhere(
             (contribution) =>
                 contribution.socket == AppEntryRole.readmeSections &&
-                contribution.entryKey == 'When the start-up fails',
+                contribution.entryKey == AppEntryRole.failedStartHeading,
           );
       final text = section.entryValue! as String;
       final note = contributions
