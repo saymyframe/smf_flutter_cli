@@ -20,11 +20,15 @@ final String _storeFlavor = AppEntryRole.releaseFlavor.name;
 /// module adds:
 /// - `lib/core/env/app_env.dart` with `AppEnv`, whose static getter of
 ///   each key reads its value with `const String.fromEnvironment` and
-///   returns `null` for an empty one. The getters come from the render
-///   hook of the module, from the keys of the app, and an app without keys
-///   has the class without members. Nothing is generated after an edit of
-///   `.env`, and the analyzer sees the empty values, so a fresh clone of
-///   the app analyzes and builds;
+///   returns `null` for an empty one, and whose `supplied` is
+///   `bool.hasEnvironment` of the keys joined by `||`, which
+///   `--dart-define-from-file` declares for each line of `.env`, also with
+///   an empty value, or `true` in an app without keys. The members come from
+///   the render hook of the module, from the keys of the app. Nothing is
+///   generated after an edit of `.env`, and the analyzer sees the empty
+///   values, so a fresh clone of the app analyzes and builds in debug mode,
+///   and a release build without the argument stops in the check of the
+///   role;
 /// - its argument for the role ([EnvToolArguments]), which code that runs
 ///   such a command for the app takes from [EnvRole.toolArgumentsIn], such
 ///   as the run configurations that the template of the role writes and the
@@ -33,15 +37,16 @@ final String _storeFlavor = AppEntryRole.releaseFlavor.name;
 ///   commands with the argument, a build for a store with the flavor of a
 ///   store ([AppEntryRole.releaseFlavor]), tells that the values are read when
 ///   a command starts, so `flutter run` starts again after an edit of `.env`,
-///   and shows how a getter of a new key reads its value;
+///   what `supplied` needs for a key of your own, how an archive in Xcode
+///   gets the values, and shows how a getter of a new key reads its value;
 /// - a note in the section of the role in the guide for coding agents of
 ///   the app, after what the role says there: the commands with the
-///   argument, the restart after an edit of `.env`, and how a getter reads
-///   its value.
+///   argument, the restart after an edit of `.env`, how a getter reads its
+///   value, and what `supplied` needs for a new key.
 ///
-/// The last line of `smf create` stays `flutter run`: right after the app
-/// is generated, every value of `.env` is empty, so the app is the same
-/// without the argument.
+/// The last line of `smf create` stays `flutter run`, since the pipeline
+/// names no role: a debug build without the argument says at start-up that
+/// it has none of the values, and names the argument.
 final class DartDefineModule extends SmfModule {
   /// Creates the module.
   const DartDefineModule();
@@ -77,7 +82,7 @@ final class DartDefineModule extends SmfModule {
 /// `.env` is for, its keys and the run configurations that pass the argument
 /// are in the section of the role.
 final String _readmeSection = '''
-`AppEnv` in `${EnvRole.readerFile}` reads each value of `${EnvRole.dotEnvFile}` with `String.fromEnvironment`. The `flutter` tool reads `${EnvRole.dotEnvFile}` when a command that builds, runs or tests the app starts, given `$_toolArgument`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
+`AppEnv` in `${EnvRole.readerFile}` reads each value of `${EnvRole.dotEnvFile}` with `String.fromEnvironment`. The `flutter` tool reads `${EnvRole.dotEnvFile}` when a command that builds, runs or tests the app starts, given `$_toolArgument`, and compiles each value into the app. Without the argument, a debug or profile build has every getter of `AppEnv` `null` and says so, and a release build stops with an error that names the argument, so give it to each such command:
 
 ```bash
 flutter run $_toolArgument
@@ -89,7 +94,11 @@ flutter build ipa --flavor $_storeFlavor $_toolArgument
 
 A build without `--flavor` is a release of `${AppEntryRole.defaultFlavor.name}`, under its id, so a build for a store names its flavor. The section "${AppEntryRole.flavorsHeading}" tells more.
 
+Xcode takes the values from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. So before Product > Archive, run `flutter build ios --config-only --flavor $_storeFlavor $_toolArgument`, or archive with `flutter build ipa` as above.
+
 A command reads the values only when it starts: after you change `${EnvRole.dotEnvFile}`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
+
+`AppEnv.supplied` is `true` once the command declared one of the keys that it names, so a key of your own needs no change there. In an app without keys it is `true`: then name your first key there, as `bool.hasEnvironment('MY_SERVICE_KEY')`, so that a release build without the argument stops.
 
 To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
 
@@ -114,14 +123,52 @@ final class _DartDefineProvider extends RoleProvider<EnvData> {
   @override
   RoleOutput render(RoleHookInput<EnvData> input) => RoleOutput(
         vars: {
-          'app_env_getters': Fragment(_gettersOf(envRole.keysIn(input))),
+          'app_env_members': Fragment(_membersOf(envRole.keysIn(input))),
         },
       );
 }
 
-/// The getters of `AppEnv` for [keys], in their order, with an empty line
-/// between two of them.
-String _gettersOf(List<AppEnvKey> keys) => keys.map(_getterOf).join('\n\n');
+/// The members of `AppEnv` for [keys]: whether the command that built the
+/// app gave it the values, and the getters of the keys in their order, with
+/// an empty line between two of them.
+String _membersOf(List<AppEnvKey> keys) =>
+    [_suppliedOf(keys), ...keys.map(_getterOf)].join('\n\n');
+
+/// The width of the lines of the members of `AppEnv`.
+const _width = 80;
+
+/// `AppEnv.supplied` for [keys], with its doc: `true` once
+/// `--dart-define-from-file` declared one of the keys, which it does for each
+/// line of `.env`, also with an empty value, and `true` without keys, since
+/// nothing can tell then. Written as `dart format` writes it.
+String _suppliedOf(List<AppEnvKey> keys) {
+  const declaration = '  static const bool supplied =';
+  if (keys.isEmpty) {
+    return '''
+  /// Whether the command that built the app gave it the values of `.env`:
+  /// `true`, since the app reads no key yet. With the first key of your own,
+  /// make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key, so that
+  /// a release build without `$_toolArgument` stops.
+$declaration true;''';
+  }
+  final terms = [
+    for (final key in keys)
+      'bool.hasEnvironment(${SmfNames.dartString(key.name)})',
+  ];
+  final line = '$declaration ${terms.join(' || ')};';
+  final rest = '      ${terms.join(' || ')};';
+  final value = line.length <= _width
+      ? line
+      : rest.length <= _width
+          ? '$declaration\n$rest'
+          : '$declaration\n      ${terms.join(' ||\n      ')};';
+  return '''
+  /// Whether the command that built the app gave it the values of `.env`:
+  /// `$_toolArgument` declares each key that `.env` has a line
+  /// of, also with an empty value, and this is `true` once it declared one
+  /// of the keys below. A key of your own needs no change here.
+$value''';
+}
 
 /// The getter of `AppEnv` for [key], at the indent of a member of a class:
 /// its description as its doc, and the value of the key, or `null` for an
@@ -137,9 +184,6 @@ String _getterOf(AppEnvKey key) => [
 
 /// The start of a line of the doc of a member of a class.
 const _memberDoc = '  /// ';
-
-/// The width of the lines of the doc of a getter.
-const _width = 80;
 
 /// The lines of the doc of a getter of `AppEnv` with [description], each
 /// without the start of a line of a doc: the description as a sentence,

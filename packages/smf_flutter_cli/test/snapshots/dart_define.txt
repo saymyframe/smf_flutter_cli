@@ -163,13 +163,15 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
 - Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
 - `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+- A release build of an app with keys stops with an error unless its command gives the app the values of `.env`; the note of the provider names the arguments. Never remove or work around the check in `lib/core/env/env_check.dart`, which `bootstrap()` calls in its first phase: give the build the arguments. `AppEnv.supplied` tells whether a build has the values.
 - `.vscode/launch.json` and `.run/<flavor>.run.xml` are the run configurations of VS Code and Android Studio, one for each flavor. Each passes the flavor and the arguments that the values need. In VS Code, F5 starts the selected configuration, while the links above `main()` and above a test and the Testing view always use `dev`, whose configuration alone has `templateFor`. In Android Studio, a test gets none of these arguments.
 
 With `--dart-define-from-file`:
 
-- Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`.
+- Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`, and a release build stops with an error.
 - A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
 - The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
+- `AppEnv.supplied` is `true` once `--dart-define-from-file=.env` declared one of the keys that it names, so a new key needs no change there, unless the app had no key: then name it there as `bool.hasEnvironment('MY_SERVICE_KEY')`.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -212,7 +214,7 @@ On Android, a release build is signed with the debug key until `android/app/buil
 
 ## Run, test and build with .env
 
-`AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
+`AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, a debug or profile build has every getter of `AppEnv` `null` and says so, and a release build stops with an error that names the argument, so give it to each such command:
 
 ```bash
 flutter run --dart-define-from-file=.env
@@ -224,7 +226,11 @@ flutter build ipa --flavor prod --dart-define-from-file=.env
 
 A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
 
+Xcode takes the values from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. So before Product > Archive, run `flutter build ios --config-only --flavor prod --dart-define-from-file=.env`, or archive with `flutter build ipa` as above.
+
 A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
+
+`AppEnv.supplied` is `true` once the command declared one of the keys that it names, so a key of your own needs no change there. In an app without keys it is `true`: then name your first key there, as `bool.hasEnvironment('MY_SERVICE_KEY')`, so that a release build without the argument stops.
 
 To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
 
@@ -240,6 +246,8 @@ The section "Values in .env" tells what goes into `.env`, lists the keys of the 
 ## Values in .env
 
 `.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+Once the app has a key, `flutter build` of a release, and an archive in Xcode, stop with an error unless the command has `--dart-define-from-file=.env` and `.env` has a line of a key of the app, also with an empty value. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
@@ -520,10 +528,15 @@ class App extends StatelessWidget {
   );
 }
 === lib/bootstrap.dart (flutter_core) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/env/env_check.dart';
+
 /// Runs the start-up code of the app before its first frame: first what
 /// must come before anything else, then the platform services, then the
 /// services of the app, then what needs them.
-Future<void> bootstrap() async {}
+Future<void> bootstrap() async {
+  checkEnvValues(debugPrint);
+}
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -810,9 +823,48 @@ class StatusBarIcons extends StatelessWidget {
 /// A command of the `flutter` tool that builds, runs or tests the app reads
 /// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
 /// each value into the app, where `String.fromEnvironment` reads it as a
-/// constant. Without that argument every value is empty, and so every
-/// getter is `null`.
-abstract final class AppEnv {}
+/// constant. Without that argument every value is empty, so every getter
+/// is `null`, and a release build stops, since [supplied] is `false`.
+abstract final class AppEnv {
+  /// Whether the command that built the app gave it the values of `.env`:
+  /// `true`, since the app reads no key yet. With the first key of your own,
+  /// make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key, so that
+  /// a release build without `--dart-define-from-file=.env` stops.
+  static const bool supplied = true;
+}
+=== lib/core/env/env_check.dart (role:env) ===
+// The check that a build of the app has the values of .env, which bootstrap()
+// calls in its first phase. It is plain Dart, so that a test compiles it with
+// the Dart SDK alone.
+import 'app_env.dart';
+
+/// Whether this is a release build, which the compiler of a release build
+/// declares.
+const _release = bool.fromEnvironment('dart.vm.product');
+
+/// Whether the command that built the app gave it the values of `.env`, as
+/// [AppEnv.supplied] says. A release build without them cannot evaluate
+/// this constant, so it stops here, and the compiler quotes the text.
+const bool _supplied = AppEnv.supplied || !_release
+    ? AppEnv.supplied
+    : ('A release build of this app needs the values of .env: build it '
+              'with --dart-define-from-file=.env, from a .env with the keys of '
+              '.env.example.'
+          as bool);
+
+/// Tells a debug or profile build that has none of the values of `.env`,
+/// through [report], that every getter of [AppEnv] is `null`, and how to
+/// give the values; `bootstrap()` calls it in its first phase, with
+/// `debugPrint`.
+void checkEnvValues(void Function(String message) report) {
+  if (_supplied) return;
+  report(
+    'This build has none of the values of .env, so every getter of AppEnv is '
+    'null. Run it with --dart-define-from-file=.env, from a .env with the '
+    'keys of .env.example, as the run configurations in .vscode/launch.json '
+    'and .run/ do.',
+  );
+}
 === lib/main.dart (flutter_core) ===
 import 'package:flutter/widgets.dart';
 

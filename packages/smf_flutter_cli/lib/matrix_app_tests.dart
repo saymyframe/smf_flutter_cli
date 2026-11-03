@@ -1617,7 +1617,9 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
 /// for the apps with the role that have keys, whichever module provides the
 /// role, that [among] accepts, or all of them: for each key of
 /// the app, the getter of `AppEnv` returns the value that `.env` gives the
-/// key, and `null` when `.env` leaves the value empty or lacks the key.
+/// key, and `null` when `.env` leaves the value empty or lacks the key; and
+/// `AppEnv.supplied` is `true`, since `flutter test` has the tool arguments
+/// of the provider and `.env` has a line of a key.
 ///
 /// The test only reads: it parses the file of the values of the app
 /// ([EnvRole.dotEnvFile]), in the forms of a value that the role names, as

@@ -20,13 +20,13 @@ RenderedFile _file(String path, String text) => RenderedFile(
 /// package and an export, and a file of Flutter that nothing of it imports.
 RenderedApp _app({Map<String, String> more = const {}}) => RenderedApp([
       _file('pubspec.yaml', 'name: shop_app\nenvironment:\n  sdk: ^3.6.0\n'),
-      _file('lib/shop.dart', '''
+      _file('lib/shop.dart', r'''
 import 'dart:core';
 
 import 'core/price.dart';
 import 'package:shop_app/core/name.dart';
 
-String describe() => '\$name: \$price';
+String describe() => '$name: $price';
 '''),
       _file('lib/core/price.dart', '''
 export '../sale.dart';

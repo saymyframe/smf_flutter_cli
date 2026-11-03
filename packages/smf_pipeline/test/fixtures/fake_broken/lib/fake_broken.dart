@@ -1476,6 +1476,104 @@ final class _BrokenEnvProvider extends RoleProvider<EnvData> {
   }
 }
 
+/// A provider of the env role with one known bug: the fixture values of
+/// `.env`, whose `AppEnv.supplied` asks whether the command that built the
+/// app declared the names of the getters of the keys rather than the keys,
+/// so it is `false` in every build of an app with keys, also one with the
+/// tool arguments of the role.
+///
+/// `AppEnv` still declares `supplied` and a static getter for every key, as
+/// the rule `env.keys_rendered` of the role wants, and the app analyzes and
+/// builds in debug mode: only a running app shows the bug, or a release
+/// build, which stops though the command gave it the values.
+final class BrokenEnvNeverSuppliedModule extends SmfModule {
+  /// Creates the module.
+  const BrokenEnvNeverSuppliedModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_env_never_supplied');
+
+  /// The fixture values of `.env`, whose bricks this module contributes.
+  static const _fixture = FakeEnvModule();
+
+  @override
+  ModuleDescriptor get descriptor {
+    final fixture = _fixture.descriptor;
+    return ModuleDescriptor(
+      id: id,
+      description: 'The values of .env, never supplied (fixture)',
+      kind: fixture.kind,
+      providers: [
+        // The fixture provides only the env role.
+        _BrokenEnvSuppliedProvider(
+          fixture.providers.single as RoleProvider<EnvData>,
+        ),
+      ],
+    );
+  }
+
+  @override
+  List<Contribution> contribute(ModuleContext context) =>
+      _fixture.contribute(context);
+}
+
+/// Renders the members of `AppEnv` as the fixture values of `.env` do, but
+/// with a `supplied` that asks for the names of the getters of the keys.
+final class _BrokenEnvSuppliedProvider extends RoleProvider<EnvData> {
+  const _BrokenEnvSuppliedProvider(this._fixture);
+
+  /// The provider of the fixture values of `.env`.
+  final RoleProvider<EnvData> _fixture;
+
+  /// The start of the declaration of `supplied` of the fixture, which ends
+  /// at the next semicolon.
+  static const _supplied = 'static const bool supplied =';
+
+  @override
+  Role<EnvData> get role => envRole;
+
+  /// The output of [_fixture], whose `supplied` asks for the getter of each
+  /// key where it asks for the key. The output stays as it is in an app
+  /// without keys, whose `supplied` is `true`. Throws a [StateError] when
+  /// [_fixture] renders `supplied` otherwise, so the app would not have the
+  /// bug.
+  @override
+  RoleOutput render(RoleHookInput<EnvData> input) {
+    final output = _fixture.render(input);
+    final keys = envRole.keysIn(input);
+    if (keys.isEmpty) return output;
+    final members = output.vars['fixture_env_members']! as Fragment;
+    final start = members.code.indexOf(_supplied);
+    final end = start < 0 ? -1 : members.code.indexOf(';', start);
+    var declaration = end < 0 ? '' : members.code.substring(start, end + 1);
+    for (final key in keys) {
+      final asked = 'bool.hasEnvironment(${SmfNames.dartString(key.name)})';
+      if (!declaration.contains(asked)) {
+        throw StateError(
+          'fake_env does not render what ${BrokenEnvNeverSuppliedModule.id} '
+          'changes, so its app would not have its bug: $asked in '
+          '$_supplied',
+        );
+      }
+      declaration = declaration.replaceFirst(
+        asked,
+        'bool.hasEnvironment(${SmfNames.dartString(key.getter)})',
+      );
+    }
+    return RoleOutput(
+      fragments: output.fragments,
+      vars: {
+        ...output.vars,
+        'fixture_env_members': Fragment(
+          members.code.replaceRange(start, end + 1, declaration),
+          imports: members.imports,
+        ),
+      },
+      files: output.files,
+    );
+  }
+}
+
 /// A provider of the settings screen role with one known bug: a feature
 /// whose screen creates the widget of every entry of the role, in a list of
 /// its file, but shows them all but the last one.

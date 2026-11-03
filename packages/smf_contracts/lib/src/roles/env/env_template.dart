@@ -6,22 +6,28 @@ const _gitignoreComment =
 
 /// The note of the env role in the guide for coding agents, whichever
 /// module provides the role: how code reads a value, that no secret goes
-/// into the file of the values, and what a new key needs. How a provider
-/// gives `AppEnv` the getter of a new key is for its own note.
+/// into the file of the values, what a new key needs, and that a release
+/// build of an app with keys stops without the values. How a provider gives
+/// `AppEnv` the getter of a new key, and which arguments give a build the
+/// values, is for its own note.
 const _agentNote = '''
 - Read a value of `${EnvRole.dotEnvFile}` only through a static getter of `$_appEnv` in `${EnvRole.readerFile}`. The getter is the key in lowerCamelCase: `$_appEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `${EnvRole.dotEnvFile}` or `${EnvRole.exampleFile}` from code.
 - Every value ends up in the app, where anyone can read it. Never put a secret into `${EnvRole.dotEnvFile}`, such as the secret key of a server, a password or a private key.
 - `${EnvRole.dotEnvFile}` stays out of git. A new key goes into both `${EnvRole.exampleFile}` and `${EnvRole.dotEnvFile}`, in UPPER_SNAKE_CASE with a comment line above it, and `$_appEnv` gets a getter for it.
+- A release build of an app with keys stops with an error unless its command gives the app the values of `${EnvRole.dotEnvFile}`; the note of the provider names the arguments. Never remove or work around the check in `${EnvRole.checkFile}`, which `bootstrap()` calls in its first phase: give the build the arguments. `$_appEnv.$_supplied` tells whether a build has the values.
 ''';
 
 /// The section of the role in the README of the app, whichever module
 /// provides the role: what the two files are for, that a value is no
-/// secret and that an empty one counts as missing, that the file is not tied
-/// to a flavor, the [keys] of the app, each with its getter, its owner and
-/// its description, and the run configurations.
-String _readmeSection(List<AppEnvKey> keys) {
+/// secret and that an empty one counts as missing, that a release build
+/// stops without the values, with the [toolArguments] of the app, that the
+/// file is not tied to a flavor, the [keys] of the app, each with its getter,
+/// its owner and its description, and the run configurations.
+String _readmeSection(List<AppEnvKey> keys, List<String> toolArguments) {
   final buffer = StringBuffer('''
 `${EnvRole.dotEnvFile}` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `$_appEnv` in `${EnvRole.readerFile}`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+${_releaseReadme(keys, toolArguments)}
 
 `.gitignore` lists `${EnvRole.dotEnvFile}`, so it stays out of git. `${EnvRole.exampleFile}` is in git and has the same keys without values: after a clone, run `cp ${EnvRole.exampleFile} ${EnvRole.dotEnvFile}` and fill in `${EnvRole.dotEnvFile}`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
@@ -48,6 +54,28 @@ String _readmeSection(List<AppEnvKey> keys) {
   return '$buffer';
 }
 
+/// The paragraph of the section of the role in the README of the app on a
+/// release build without the values, which names the [toolArguments] of the
+/// app: that it stops with an error in an app with [keys], and once the app
+/// has a key in an app without them.
+String _releaseReadme(List<AppEnvKey> keys, List<String> toolArguments) {
+  final given = toolArguments.isEmpty
+      ? 'the command gives the app the values of `${EnvRole.dotEnvFile}`'
+      : 'the command has `${toolArguments.map(shellWord).join(' ')}`';
+  final stops = '`flutter build` of a release, and an archive in Xcode, stop '
+      'with an error unless $given and `${EnvRole.dotEnvFile}` has a line of '
+      'a key of the app, also with an empty value';
+  const check = '`${EnvRole.checkFile}` holds the check, which `bootstrap()` '
+      'calls in its first phase, and `$_appEnv.$_supplied` tells whether a '
+      'build has the values.';
+  return keys.isEmpty
+      ? 'Once the app has a key, $stops. $check'
+      : 'A release build needs the values: $stops. So a build for a store '
+          'never goes out without them by mistake. A debug or profile build '
+          'without them starts with every getter `null` and says so in the '
+          'console. $check';
+}
+
 /// How the README of the app names [owner], who gave the app a key: only
 /// modules and the templates of roles give the role keys.
 String _readmeOwnerOf(ContributionOrigin owner) => switch (owner) {
@@ -69,6 +97,34 @@ String _keyLines(List<AppEnvKey> keys) => [
       for (final key in keys) '\n# ${key.description}\n${key.name}=',
     ].join('\n');
 
+/// The import of [EnvRole.checkFile], by its path below `lib/`.
+const _checkFileUri = 'core/env/env_check.dart';
+
+/// [text] as adjacent string literals of Dart, one on each line, joined by a
+/// line break and [indent]: each piece of the text but the last ends with a
+/// space, and each literal has at most [width] characters, but one whose
+/// word alone is longer.
+String _literalLines(
+  String text, {
+  required int width,
+  required String indent,
+}) {
+  final pieces = <String>[];
+  var piece = '';
+  for (final word in text.split(' ')) {
+    final longer = piece.isEmpty ? word : '$piece $word';
+    // The literal of the piece and the space that it ends with, if a word
+    // follows.
+    if (piece.isEmpty || SmfNames.dartString('$longer ').length <= width) {
+      piece = longer;
+    } else {
+      pieces.add('$piece ');
+      piece = word;
+    }
+  }
+  return [...pieces, piece].map(SmfNames.dartString).join('\n$indent');
+}
+
 /// The template of the [EnvRole]: the file of the values and the file of
 /// the keys, which the `.gitignore` of the app tells apart, the run
 /// configurations of the IDEs, the section of the role in the README of the
@@ -84,6 +140,16 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
         AppEntryRole.agentSections.entry(
           envRole.description,
           AgentNote.ofRole('$_agentNote$_runConfigurationsNote'),
+        ),
+        const SocketContribution.code(
+          AppEntryRole.bootstrapEarly,
+          Fragment(
+            'checkEnvValues(debugPrint);',
+            imports: [
+              ImportRef('package:flutter/foundation.dart'),
+              ImportRef.app(_checkFileUri),
+            ],
+          ),
         ),
       ];
 
@@ -149,23 +215,41 @@ final class _EnvTemplate extends RoleTemplate<EnvData> {
     return issues;
   }
 
-  /// The lines of the keys in the files of the template, the section of the
-  /// role in the README of the app, and the run configurations of the IDEs.
+  /// The lines of the keys in the files of the template, the texts of
+  /// [EnvRole.checkFile] with the tool arguments of the provider, the section
+  /// of the role in the README of the app, and the run configurations of the
+  /// IDEs.
   @override
   RoleOutput render(RoleHookInput<EnvData> input) {
     final keys = envRole.keysIn(input);
+    final toolArguments = envRole.toolArgumentsIn(input);
     return RoleOutput(
-      vars: {'env_keys': Fragment(_keyLines(keys))},
+      vars: {
+        'env_keys': Fragment(_keyLines(keys)),
+        // The first line of each follows the code of the template, which
+        // has the indent of the others as `dart format` writes them.
+        'env_release_error': Fragment(
+          _literalLines(
+            EnvRole.releaseErrorOf(toolArguments),
+            width: 66,
+            indent: ' ' * 14,
+          ),
+        ),
+        'env_no_values_message': Fragment(
+          _literalLines(
+            EnvRole.noValuesMessageOf(toolArguments),
+            width: 75,
+            indent: ' ' * 4,
+          ),
+        ),
+      },
       fragments: [
         AppEntryRole.readmeSections.entry(
           EnvRole.readmeHeading,
-          _readmeSection(keys),
+          _readmeSection(keys, toolArguments),
         ),
       ],
-      files: _runConfigurationsOf(
-        input.context.appName,
-        envRole.toolArgumentsIn(input),
-      ),
+      files: _runConfigurationsOf(input.context.appName, toolArguments),
     );
   }
 }

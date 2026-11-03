@@ -405,6 +405,45 @@ final class DartFiles {
     }
   }
 
+  /// Compiles [script], a Dart program that imports the files by the package
+  /// of the test app, to kernel with `dart compile kernel`, which evaluates
+  /// the constants of the program as a release build does: it declares
+  /// `dart.vm.product`, and each of [defines] as `-D<key>=<value>`. Returns
+  /// whether it compiled, and what the compiler printed.
+  Future<({bool compiled, String output})> compile(
+    String script, {
+    Map<String, String> defines = const {},
+  }) async {
+    final file = File('${_root.path}/compiled.dart')..writeAsStringSync(script);
+    final result = await Process.run(
+      Platform.resolvedExecutable,
+      [
+        'compile',
+        'kernel',
+        '--packages=$_appPath/.dart_tool/package_config.json',
+        for (final MapEntry(:key, :value) in defines.entries) '-D$key=$value',
+        '-o',
+        '${_root.path}/compiled.dill',
+        file.path,
+      ],
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    );
+    return (
+      compiled: result.exitCode == 0,
+      output: '${result.stdout}${result.stderr}',
+    );
+  }
+
+  /// Whether `dart format` leaves the file at [path] of the app as it is.
+  Future<bool> isFormatted(String path) async {
+    final result = await Process.run(
+      Platform.resolvedExecutable,
+      ['format', '--output=none', '--set-exit-if-changed', '$_appPath/$path'],
+    );
+    return result.exitCode == 0;
+  }
+
   /// Deletes the directory of the files.
   void delete() => _root.deleteSync(recursive: true);
 }
