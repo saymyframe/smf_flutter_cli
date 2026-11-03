@@ -13,5 +13,6 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+{{{smf_app_entry__ios_app_delegate_engine}}}
   }
 }
