@@ -254,10 +254,16 @@ import 'package:flutter/widgets.dart';
 
 import 'app.dart';
 import 'bootstrap.dart';
+import 'core/app/failed_start.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(
     {{{smf_app_entry__root_wrappers_open}}}const App(){{{smf_app_entry__root_wrappers_close}}},
   );

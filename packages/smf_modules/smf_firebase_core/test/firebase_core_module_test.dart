@@ -289,13 +289,20 @@ void main() {
       final readme = withFirebase.files[AppEntryRole.readmeFile]!;
 
       expect(readme.owner, const ModuleOrigin(FlutterCoreModule.id));
+      // The section of the module comes before that of the template of the
+      // app entry role on a start-up that fails, the last of the README of
+      // an app without the module.
+      const failedStart = '\n## When the start-up fails\n';
+      final [before, after] =
+          without.files[AppEntryRole.readmeFile]!.text.split(failedStart);
       expect(
         readme.text,
-        '${without.files[AppEntryRole.readmeFile]!.text}'
+        '$before'
         '\n'
         '## Firebase\n'
         '\n'
-        '$readmeSection',
+        '${readmeSection.trim()}\n'
+        '$failedStart$after',
       );
       expect(
         readme.text,
@@ -310,6 +317,11 @@ void main() {
           contains('`smf create` offers to configure `dev`'),
           contains('flutterfire_cli 1.4.1 or a later 1.x'),
           contains('`lib/firebase_options_of_flavor.dart`'),
+          // The screen of the app entry role, which shows the error with
+          // the command in a debug build.
+          contains(
+            'A debug build shows that error on the screen of a failed start.',
+          ),
         ),
       );
       expect(

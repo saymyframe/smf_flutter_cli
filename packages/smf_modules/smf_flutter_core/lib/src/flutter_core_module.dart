@@ -10,7 +10,8 @@ import 'package:smf_flutter_core/src/readme.dart';
 /// Its brick has the files of `flutter create` for Android and iOS, with the
 /// flavors of [AppEntryRole.flavors] added to both as plain text, and:
 /// - `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs `App`
-///   inside the root wrappers of the modules;
+///   inside the root wrappers of the modules, or, when `bootstrap()`
+///   throws, calls [AppEntryRole.showFailedStart] and returns;
 /// - `lib/bootstrap.dart`, with the start-up code of the modules in the
 ///   order of its phases;
 /// - `lib/app.dart`, the root widget `App`: a `MaterialApp.router` with the

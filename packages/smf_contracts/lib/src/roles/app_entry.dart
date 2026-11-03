@@ -16,8 +16,10 @@ const appEntryRole = AppEntryRole._();
 ///
 /// Every app has exactly one provider, the scaffold module, which generates:
 /// - `lib/main.dart`, whose `main()` calls
-///   `WidgetsFlutterBinding.ensureInitialized()`, then awaits `bootstrap()`,
-///   then calls `runApp()`;
+///   `WidgetsFlutterBinding.ensureInitialized()`, then awaits `bootstrap()`
+///   in a `try` statement, then calls `runApp()`; the clause of that
+///   statement that catches every error calls [showFailedStart] and runs no
+///   root of the app;
 /// - `lib/bootstrap.dart`, whose `Future<void> bootstrap()` runs the
 ///   start-up code of all modules and imports neither `material` nor
 ///   `cupertino`;
@@ -74,6 +76,19 @@ const appEntryRole = AppEntryRole._();
 /// with an `AppBar` gets the icons that suit its bar. The test is in every
 /// app, so `flutter test` has a test to run in an app whose modules bring
 /// none.
+///
+/// When the start-up fails, the app shows why, in place of the splash
+/// screen of the system, which would otherwise stay: the template of the
+/// role generates [failedStartFile], whose [showFailedStart] runs
+/// [failedStartApp] and reports the error to `FlutterError.onError`, so the
+/// handlers that the start-up set up before it failed, such as those of
+/// crash reporting, hear of it. The screen needs nothing of the start-up,
+/// so it has neither the theme nor the texts of the app, and is in English.
+/// It shows the error and its stack trace only in a debug build. The
+/// structural rule `app_entry.main_sequence` checks that `main()` catches
+/// every error of `bootstrap()` and calls [showFailedStart] then. Whether
+/// `main()` stops after it only a running app shows: the fixture registry
+/// keeps the test of the role that does, `failed_start`.
 ///
 /// In an app with steps of the setup that its developer does by hand (see
 /// [ManualStep]), the template lists them in the section [setupHeading] of
@@ -908,7 +923,11 @@ final class AppEntryRole extends Role<NoDsl> {
           id: 'app_entry.main_sequence',
           description:
               'main() calls WidgetsFlutterBinding.ensureInitialized(), '
-              'awaits bootstrap(), then calls runApp(), in this order.',
+              'awaits bootstrap() in the try block of a try statement with a '
+              'clause that catches every error and calls showFailedStart(), '
+              'and calls runApp() outside that clause, in this order. Whether '
+              'main() stops after showFailedStart() only a running app '
+              'shows.',
           check: _checkMainSequence,
         ),
         StructuralRule(
@@ -1239,40 +1258,77 @@ const _outOfOrder =
     'main() must call WidgetsFlutterBinding.ensureInitialized(), '
     'bootstrap() and runApp() in this order.';
 
+/// The hint of a problem of the clause of `main()` that catches the errors
+/// of `bootstrap()`.
+const _failedStartHint = 'Without it, an app whose start-up fails stays on '
+    'the splash screen of the system. showFailedStart() of '
+    '${AppEntryRole.failedStartFile} reports the error and shows the screen '
+    'of a failed start; return after it.';
+
 List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
   const path = AppEntryRole.mainFile;
   final file = input.files[path];
   if (file == null) return const [];
+  final main = AppEntryRole.main.name;
 
-  IndexedInvocation? call(String name, {String? target}) {
-    for (final invocation in file.invocationsOf(name, within: 'main')) {
-      if (target == null || invocation.target == target) return invocation;
-    }
-    return null;
-  }
+  Iterable<IndexedInvocation> calls(String name, {String? target}) =>
+      file.invocationsOf(name, within: main).where(
+            (invocation) => target == null || invocation.target == target,
+          );
 
   final ensureInitialized =
-      call('ensureInitialized', target: 'WidgetsFlutterBinding');
-  final bootstrap = call('bootstrap');
-  final runApp = call('runApp');
-  final problems = [
+      calls('ensureInitialized', target: 'WidgetsFlutterBinding').firstOrNull;
+  final bootstrap = calls(AppEntryRole.bootstrap.name).firstOrNull;
+  // The clauses that catch the errors of bootstrap(), and of them those
+  // that catch every error.
+  final clauses = bootstrap?.caughtBy ?? const <IndexedCatch>[];
+  final catchAll = [
+    for (final clause in clauses)
+      if (clause.catchesEverything) clause,
+  ];
+  final shows = calls(AppEntryRole.showFailedStart.name).any(
+    (show) => catchAll.any((clause) => clause.holds(show.offset)),
+  );
+  // A runApp() in a clause runs only when the start-up failed.
+  final runApps = calls('runApp');
+  final runApp = runApps
+      .where((call) => !clauses.any((clause) => clause.holds(call.offset)))
+      .firstOrNull;
+  SmfIssue issue(String problem, {String? hint}) =>
+      SmfIssue(problem, hint: hint, origin: input.owners[path], path: path);
+  return [
     if (ensureInitialized == null)
-      'main() does not call WidgetsFlutterBinding.ensureInitialized().',
+      issue('main() does not call WidgetsFlutterBinding.ensureInitialized().'),
     if (bootstrap == null)
-      'main() does not call bootstrap().'
+      issue('main() does not call bootstrap().')
     else if (!bootstrap.awaited)
-      'main() does not await bootstrap().',
-    if (runApp == null) 'main() does not call runApp().',
+      issue('main() does not await bootstrap().')
+    else if (catchAll.isEmpty)
+      issue(
+        'main() does not catch every error of bootstrap(): await it in a try '
+        'statement with a clause such as "on Object catch (error, '
+        'stackTrace)".',
+        hint: _failedStartHint,
+      )
+    else if (!shows)
+      issue(
+        'main() does not call showFailedStart() in the clause that catches '
+        'the errors of bootstrap().',
+        hint: _failedStartHint,
+      ),
+    if (runApps.isEmpty)
+      issue('main() does not call runApp().')
+    else if (runApp == null)
+      issue(
+        'main() calls runApp() only in a clause that catches the errors of '
+        'bootstrap(), so it runs the app only when the start-up failed.',
+      ),
     if (ensureInitialized != null &&
         bootstrap != null &&
         runApp != null &&
         !(ensureInitialized.offset < bootstrap.offset &&
             bootstrap.offset < runApp.offset))
-      _outOfOrder,
-  ];
-  return [
-    for (final problem in problems)
-      SmfIssue(problem, origin: input.owners[path], path: path),
+      issue(_outOfOrder),
   ];
 }
 

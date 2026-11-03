@@ -863,10 +863,16 @@ final Map<String, Answer<int>> answers = {};
           'lib/main.dart': '''
 import 'package:flutter/widgets.dart';
 import 'package:my_app/bootstrap.dart';
+import 'package:my_app/core/app/failed_start.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(const App());
 }
 ''',
@@ -877,6 +883,98 @@ Future<void> bootstrap() async {}
 ''',
         }),
         isEmpty,
+      );
+    });
+
+    test(
+        'app entry: main() catches every error of bootstrap() and shows the '
+        'screen of a failed start in the clause', () {
+      List<String> problemsOf(String body) => [
+            for (final issue in appEntryIssues({
+              'lib/main.dart': '''
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+$body
+}
+''',
+            }))
+              issue.message,
+          ];
+      const notCaught = 'main() does not catch every error of bootstrap(): '
+          'await it in a try statement with a clause such as "on Object '
+          'catch (error, stackTrace)".';
+      const notShown = 'main() does not call showFailedStart() in the clause '
+          'that catches the errors of bootstrap().';
+
+      // As main() was before the screen of a failed start.
+      expect(
+        problemsOf('  await bootstrap();\n  runApp(const App());'),
+        [notCaught],
+      );
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } on Exception catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());'''),
+        [notCaught],
+      );
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } catch (error) {
+    return;
+  }
+  showFailedStart(error, StackTrace.current);
+  runApp(const App());'''),
+        [notShown],
+      );
+      // A closure in the try block runs when it is called.
+      expect(
+        problemsOf('''
+  try {
+    await Future(() async => await bootstrap());
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());'''),
+        [notCaught],
+      );
+      // runApp() in the try block, or after the statement.
+      for (final body in [
+        '''
+  try {
+    await bootstrap();
+    runApp(const App());
+  } catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+  }''',
+        '''
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());''',
+      ]) {
+        expect(problemsOf(body), isEmpty, reason: body);
+      }
+      // Only in the clause.
+      expect(
+        problemsOf('''
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    showFailedStart(error, stackTrace);
+    runApp(const App());
+  }'''),
+        [contains('runApp() only in a clause')],
       );
     });
 
@@ -1160,6 +1258,10 @@ class App extends StatelessWidget {
         ],
         [
           contains('must return Future<void>'),
+          contains('is missing'),
+          // The file of the screen of a failed start, with its function and
+          // its class.
+          contains('is missing'),
           contains('is missing'),
         ],
       );

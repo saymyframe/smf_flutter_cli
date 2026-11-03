@@ -333,15 +333,51 @@ void main() {
       );
     });
 
-    test('runs the app after bootstrap() without wrappers', () {
+    test(
+        'runs the app after bootstrap() without wrappers, and shows the '
+        'screen of a failed start when bootstrap() throws', () {
+      final unit = parseString(content: texts['lib/main.dart']!).unit;
+      final main = unit.declarations
+          .whereType<FunctionDeclaration>()
+          .singleWhere((function) => function.name.lexeme == 'main');
+      final body = main.functionExpression.body as BlockFunctionBody;
+      final [initialize, start, run] = body.block.statements;
+      final TryStatement(
+        body: tried,
+        catchClauses: [clause],
+        :finallyBlock,
+      ) = start as TryStatement;
+
       expect(
-        texts['lib/main.dart'],
-        allOf(
-          contains('WidgetsFlutterBinding.ensureInitialized();\n'
-              '  await bootstrap();\n'),
-          contains('runApp(\n    const App(),\n  );'),
-        ),
+        [
+          for (final directive in unit.directives.whereType<ImportDirective>())
+            directive.uri.stringValue,
+        ],
+        contains('core/app/failed_start.dart'),
       );
+      expect(
+        initialize.toSource(),
+        'WidgetsFlutterBinding.ensureInitialized();',
+      );
+      expect(
+        [for (final statement in tried.statements) statement.toSource()],
+        ['await bootstrap();'],
+      );
+      expect(clause.exceptionType?.toSource(), 'Object');
+      expect(
+        [
+          clause.exceptionParameter?.name.lexeme,
+          clause.stackTraceParameter?.name.lexeme,
+        ],
+        ['error', 'stackTrace'],
+      );
+      // Once the screen shows, main() runs no root of the app over it.
+      expect(
+        [for (final statement in clause.body.statements) statement.toSource()],
+        ['showFailedStart(error, stackTrace);', 'return;'],
+      );
+      expect(finallyBlock, isNull);
+      expect(run.toSource(), 'runApp(const App());');
     });
 
     test('has an empty bootstrap() without imports', () {
@@ -509,7 +545,8 @@ void main() {
 
     test(
         'names the app, and Say My Frame as what generated it, in a README '
-        'whose sections are the two on the flavors', () {
+        'whose sections are the two on the flavors and the one on a start-up '
+        'that fails', () {
       expect(
         texts['README.md'],
         startsWith(
@@ -526,7 +563,13 @@ void main() {
         RegExp(r'^## (.+)$', multiLine: true)
             .allMatches(texts['README.md']!)
             .map((match) => match[1]),
-        [AppEntryRole.flavorsHeading, AppEntryRole.flavorProjectsHeading],
+        [
+          AppEntryRole.flavorsHeading,
+          AppEntryRole.flavorProjectsHeading,
+          // The section of the template of the role on a start-up that
+          // fails.
+          'When the start-up fails',
+        ],
       );
     });
 
@@ -596,7 +639,9 @@ void main() {
             for (final call in DartFileIndexer.index(path, text).invocations)
               if (call.name == 'MaterialApp') path,
       ];
-      expect(creating, [root]);
+      // And the screen of a failed start of the template of the role, which
+      // the note names too.
+      expect(creating, [AppEntryRole.failedStartFile, root]..sort());
       expect(
         DartFileIndexer.index(root, texts[root]!).declaration('App')?.kind,
         DeclarationKind.classType,
@@ -618,10 +663,11 @@ void main() {
         },
         {'android', 'ios', 'lib', 'test'},
       );
-      for (final given in const [
+      for (final given in [
         '`lib/app.dart`',
         '`App`',
         '`MaterialApp`',
+        '`${AppEntryRole.failedStartApp.name}`',
         '`lib/<path>.dart`',
         '`test/<path>_test.dart`',
         '`android/`',
@@ -943,11 +989,12 @@ void main() {
           AppEntryRole.flavorsHeading,
           AppEntryRole.flavorProjectsHeading,
           'Every socket',
+          'When the start-up fails',
         ],
       );
       expect(
         readme,
-        endsWith(
+        contains(
           '\n## Every socket\n'
           '\n'
           'The app has something in every socket of its entry.\n',
