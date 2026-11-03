@@ -8,6 +8,7 @@ import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
+import 'package:smf_flutter_cli/matrix_env.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
@@ -2616,6 +2617,8 @@ Type type() => Types;
       created = [];
     });
 
+    /// Creates the apps with a create that generates each in [fileSystem],
+    /// when it is given, as an empty directory.
     Future<int> create({
       List<SmfModule> modules = smfModules,
       String name = 'start_app',
@@ -2625,6 +2628,8 @@ Type type() => Types;
       bool generates = true,
       List<LeftOut> leftOut = const [],
       List<SkippedStep> skippedSteps = const [],
+      MatrixEnv? env,
+      MemoryFileSystem? fileSystem,
     }) =>
         createEveryModuleApps(
           modules,
@@ -2632,11 +2637,16 @@ Type type() => Types;
           name: name,
           options: options,
           apps: EveryModuleApps(withoutExternalSteps: withoutExternalSteps),
+          env: env,
+          fileSystem: fileSystem ?? MemoryFileSystem(),
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {
               created.add(arguments);
               if (generates) {
+                fileSystem
+                    ?.directory('/apps/${arguments[1]}')
+                    .createSync(recursive: true);
                 onCreated(
                   GeneratedApp(
                     name: arguments[1],
@@ -2650,6 +2660,136 @@ Type type() => Types;
             },
           ),
         );
+
+    /// The values of the apps, whose tool arguments are [toolArguments].
+    MatrixEnv envWith(List<String> Function(MatrixApp app) toolArguments) =>
+        MatrixEnv(
+          file: '.env',
+          toolArguments: toolArguments,
+          keys: (_) => const {},
+        );
+
+    /// The paths of the files and the directories right in /apps of
+    /// [fileSystem], each with the text of a file.
+    Map<String, String?> appsIn(MemoryFileSystem fileSystem) => {
+          for (final entity in fileSystem.directory('/apps').listSync())
+            entity.path: switch (entity) {
+              final File file => file.readAsStringSync(),
+              _ => null,
+            },
+        };
+
+    test(
+        'writes next to each app, outside it, the arguments of the flutter '
+        'tool that build the app with its values, one on each line, and an '
+        'empty file for an app that needs none', () async {
+      final fileSystem = MemoryFileSystem();
+      fileSystem.file('/apps/start_app_riverpod.tool_arguments')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('--of-an-earlier-run\n');
+
+      expect(
+        await create(
+          env: envWith(
+            (app) => app.modules.contains(RiverpodModule.id)
+                ? const ['--dart-define-from-file=.env', 'two words']
+                : const [],
+          ),
+          fileSystem: fileSystem,
+        ),
+        0,
+      );
+
+      expect(appsIn(fileSystem), {
+        '/apps/start_app': null,
+        '/apps/start_app$toolArgumentsExtension': '',
+        '/apps/start_app_riverpod': null,
+        '/apps/start_app_riverpod$toolArgumentsExtension':
+            '--dart-define-from-file=.env\ntwo words\n',
+      });
+      expect(fileSystem.directory('/apps/start_app').listSync(), isEmpty);
+      expect(log, isNot(contains('Problems:')));
+    });
+
+    test(
+        'the tool of the matrix gives each app with every module of the CLI '
+        'the arguments of the provider of its values', () async {
+      final fileSystem = MemoryFileSystem();
+
+      expect(await create(env: matrixEnv, fileSystem: fileSystem), 0);
+
+      final files = appsIn(fileSystem);
+      expect(
+          files.keys,
+          unorderedEquals([
+            '/apps/start_app',
+            '/apps/start_app.tool_arguments',
+            '/apps/start_app_riverpod',
+            '/apps/start_app_riverpod.tool_arguments',
+          ]));
+      // Every app with every module has keys of the env role, so a release
+      // build of it needs the arguments of its provider.
+      for (final arguments in [
+        files['/apps/start_app.tool_arguments'],
+        files['/apps/start_app_riverpod.tool_arguments'],
+      ]) {
+        expect(arguments, matches(RegExp(r'^(\S[^\n]*\n)+$')));
+      }
+    });
+
+    test(
+        'writes no file of the tool arguments for an argument that the file '
+        'cannot hold, without the values of the apps, or with --explain',
+        () async {
+      for (final argument in ['', 'two\nlines', 'a\rb']) {
+        final fileSystem = MemoryFileSystem();
+        expect(
+          await create(
+            env: envWith((_) => ['--first', argument]),
+            fileSystem: fileSystem,
+          ),
+          1,
+          reason: argument,
+        );
+        expect(
+          log.sublist(log.lastIndexOf('Problems:') + 1),
+          [
+            for (final app in ['start_app', 'start_app_riverpod'])
+              allOf(
+                startsWith('$app (every module ('),
+                endsWith(
+                  'a tool argument of the app is empty or has a line break, '
+                  'which /apps/$app.tool_arguments cannot hold.',
+                ),
+              ),
+          ],
+          reason: argument,
+        );
+        expect(
+          appsIn(fileSystem),
+          {'/apps/start_app': null, '/apps/start_app_riverpod': null},
+        );
+      }
+
+      final withoutEnv = MemoryFileSystem();
+      expect(await create(fileSystem: withoutEnv), 0);
+      expect(
+        appsIn(withoutEnv),
+        {'/apps/start_app': null, '/apps/start_app_riverpod': null},
+      );
+
+      final explained = MemoryFileSystem()..directory('/apps').createSync();
+      expect(
+        await create(
+          options: const ['--explain'],
+          generates: false,
+          env: envWith((_) => const ['--a']),
+          fileSystem: explained,
+        ),
+        0,
+      );
+      expect(appsIn(explained), isEmpty);
+    });
 
     test(
         'generates each app with every module under a name of its own, '
