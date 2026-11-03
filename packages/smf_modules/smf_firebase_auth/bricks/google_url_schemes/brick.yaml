@@ -1,0 +1,15 @@
+name: google_url_schemes
+description: "The script of an SMF app with Google sign-in that writes the URL schemes of Google into the Info.plist of the iOS app."
+
+# A brick of the SMF module model that no contribution renders. A brick has
+# the same files in every app, and this script belongs only in an app whose
+# ways to sign in need the client of the iOS app, since
+# tool/configure_firebase.dart runs every Dart file of its directory. So the
+# render hook of the provider of the module writes its one file into such an
+# app as it is, with no mustache rendered. The file stays a Dart file here,
+# rather than a string in lib/, so that it reads, diffs and formats like the
+# other scripts of the module.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

@@ -868,6 +868,7 @@ void main() {
         'anonymous_mode',
         'minimum_firebase_cli',
         'configure_script',
+        'url_schemes_hook',
       ]);
       final language = brick.vars['email_language']! as RoleVar;
       expect(language.role, localizationRole);
@@ -2645,10 +2646,52 @@ void main() {
     });
 
     test(
-        'renders a script that type-checks with the Dart SDK alone, with '
-        'ways to sign in, with what they need and without it', () async {
+        'gives the scripts that tool/configure_firebase.dart runs after '
+        'flutterfire the one that writes the URL schemes of Google, only in '
+        'an app with a way to sign in that needs the client of the iOS app',
+        () async {
+      // The script that the hook of the provider writes, in the directory
+      // whose every Dart file tool/configure_firebase.dart runs.
+      const hook = '${FirebaseCoreModule.configuredHooksDirectory}/'
+          'write_google_url_schemes.dart';
+      final google = await withWays([WayOfTest.google]);
+      final onAndroid = await withWays([WayOfTest.googleOnAndroid]);
+      final googleAlone = await withWays([WayOfTest.googleAlone]);
+      final apple = await withWays([WayOfTest.apple]);
+      final without = await _resultOf(const [FirebaseAuthModule.id]);
+
+      for (final result in [google, both]) {
+        expect(result.errors.map((issue) => '$issue'), isEmpty);
+        expect(
+          result.app!.files[hook]?.owner,
+          const ModuleOrigin(FirebaseAuthModule.id),
+          reason: '${result.contractCase}',
+        );
+      }
+      // Google for Android alone needs no URL scheme, though the script sets
+      // up the rest of what it needs.
+      for (final result in [onAndroid, googleAlone, apple, without]) {
+        expect(
+          [
+            for (final path in result.app!.files.keys)
+              if (path.startsWith(
+                '${FirebaseCoreModule.configuredHooksDirectory}/',
+              ))
+                path,
+          ],
+          isEmpty,
+          reason: '${result.contractCase}',
+        );
+      }
+    });
+
+    test(
+        'renders scripts that type-check with the Dart SDK alone, with ways '
+        'to sign in, with what they need, with what they need but the client '
+        'of the iOS app, and without it', () async {
       for (final result in [
         both,
+        await withWays([WayOfTest.googleOnAndroid]),
         await withWays([WayOfTest.googleAlone, WayOfTest.apple]),
         await withWays([WayOfTest.apple]),
       ]) {
@@ -2669,13 +2712,14 @@ void main() {
 
     test(
         'gives the brick of the script the section that enables Google, the '
-        'section that sets up what the ways to sign in need, and the needs',
-        () {
+        'section that sets up what the ways to sign in need, the needs, and '
+        'the section that runs the script that writes the URL schemes', () {
       expect(scriptVarsOf(const {}), {
         'google': false,
         'apple': false,
         'setup': false,
         'needs': '{}',
+        'ios_client': false,
       });
       expect(
         scriptVarsOf(const {
@@ -2690,6 +2734,19 @@ void main() {
           'apple': true,
           'setup': true,
           'needs': '{_Need.androidCertificate, _Need.serverClient}',
+          'ios_client': false,
+        },
+      );
+      expect(
+        scriptVarsOf(const {
+          'google.com': {SignInNeed.iosClient},
+        }),
+        {
+          'google': true,
+          'apple': false,
+          'setup': true,
+          'needs': '{_Need.iosClient}',
+          'ios_client': true,
         },
       );
       expect(scriptVarsOf(const {'apple.com': {}}), {
@@ -2697,12 +2754,14 @@ void main() {
         'apple': true,
         'setup': false,
         'needs': '{}',
+        'ios_client': false,
       });
       expect(scriptVarsOf(const {'google.com': {}}), {
         'google': true,
         'apple': false,
         'setup': false,
         'needs': '{}',
+        'ios_client': false,
       });
       expect(
         firebaseMethodsOf(

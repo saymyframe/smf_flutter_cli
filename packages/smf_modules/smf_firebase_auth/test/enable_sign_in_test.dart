@@ -46,6 +46,15 @@
 // a new one in each run, and the test deletes its hashes again. It deletes
 // the hashes of that key alone, which the script prints, so that two runs
 // at the same time do not delete each other's.
+//
+// In an app whose ways to sign in need the client of the iOS app, every run
+// also expects the Firebase file of each iOS app of the project to have its
+// client of Google, and ios/Runner/Info.plist to have its URL scheme, without
+// which the Google Sign-In SDK stops the iOS app. The project of CI has
+// Google enabled, so its iOS apps have their clients. Only the job on macOS
+// configures the iOS apps, and that job never runs the script: the scheme is
+// what tool/firebase_configured/write_google_url_schemes.dart wrote, which
+// tool/configure_firebase.dart runs after every run of flutterfire.
 @TestOn('vm')
 library;
 
@@ -54,6 +63,7 @@ import 'dart:io';
 
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/src/enable_sign_in.dart';
+import 'package:smf_firebase_auth/src/url_schemes.dart';
 import 'package:test/test.dart';
 
 import 'support/app_pubspec.dart';
@@ -209,6 +219,12 @@ void main() {
         reason: '${AuthRole.sessionFile} of the app does not tell its mode.',
       );
 
+      // What the ways to sign in of the app need of the project, as the
+      // script of the app names them.
+      final (:google, :needs) = scriptWaysOf(
+        File('$app/$enableSignInScript').readAsStringSync(),
+      );
+
       if (enables) {
         expect(
           serviceAccount,
@@ -228,11 +244,8 @@ void main() {
         final configured = config.readAsBytesSync();
         final entries = _entriesOf(app);
         final files = _filesOf(app);
-        // What the ways to sign in of the app need of the project, for its
-        // apps in the project: those of each flavor that is configured.
-        final (:google, :needs) = scriptWaysOf(
-          File('$app/$enableSignInScript').readAsStringSync(),
-        );
+        // The apps of the app in the project: those of each flavor that is
+        // configured.
         final apps = firebaseAppsOf(config.readAsStringSync(), project!);
         final android = [
           for (final app in apps)
@@ -401,25 +414,52 @@ void main() {
           }
         }
         for (final firebaseApp in apps) {
-          final file = File('$app/${firebaseApp.file}').readAsStringSync();
           if (firebaseApp.platform == 'android' &&
               needs.contains('serverClient')) {
             expect(
-              hasServerClient(file),
+              hasServerClient(
+                File('$app/${firebaseApp.file}').readAsStringSync(),
+              ),
               isTrue,
               reason: '${firebaseApp.file} has no client of the server of '
                   'Google.',
             );
           }
-          if (firebaseApp.platform == 'ios' && needs.contains('iosClient')) {
-            final scheme = reversedClientIdOf(file);
-            expect(scheme, isNotNull, reason: firebaseApp.file);
-            expect(
-              File('$app/ios/Runner/Info.plist').readAsStringSync(),
-              contains('<string>$scheme</string>'),
-              reason: 'The script did not write the URL scheme of Google.',
-            );
-          }
+        }
+      }
+
+      // In an app whose ways to sign in need the client of the iOS app, the
+      // Firebase file of each iOS app of the project has its client, and
+      // Info.plist has its URL scheme, without which the Google Sign-In SDK
+      // stops the app. Only the job on macOS configures the iOS apps, and
+      // there no run enables the methods: the script that
+      // tool/configure_firebase.dart runs after every run of flutterfire
+      // wrote the schemes.
+      if (needs.contains('iosClient')) {
+        final infoPlist =
+            File('$app/${AppEntryRole.infoPlistFile}').readAsStringSync();
+        for (final firebaseApp in firebaseAppsOf(
+          File('$app/firebase.json').readAsStringSync(),
+          project!,
+        )) {
+          if (firebaseApp.platform != 'ios') continue;
+          final scheme = reversedClientIdOf(
+            File('$app/${firebaseApp.file}').readAsStringSync(),
+          );
+          expect(
+            scheme,
+            isNotNull,
+            reason: '${firebaseApp.file} has no client of Google: Google is '
+                'not enabled in the Firebase project $project, or it gave '
+                'the iOS app no client.',
+          );
+          expect(
+            infoPlist,
+            contains('<string>$scheme</string>'),
+            reason: '$urlSchemesHook did not write the URL scheme of '
+                '${firebaseApp.file} into ${AppEntryRole.infoPlistFile} after '
+                'flutterfire.',
+          );
         }
       }
 

@@ -23,6 +23,16 @@ final class WayOfTest extends SmfModule {
     },
   );
 
+  /// A way to sign in of Google for Android alone: it needs the certificate
+  /// of the Android app and the client of the server, and not the client of
+  /// the iOS app.
+  static const googleOnAndroid = WayOfTest(
+    ModuleId('google_on_android_of_test'),
+    'https://accounts.google.com',
+    AppStoreLogin.thirdParty,
+    needs: {SignInNeed.androidCertificate, SignInNeed.serverClient},
+  );
+
   /// A way to sign in of Google that needs nothing of the backend.
   static const googleAlone = WayOfTest(
     ModuleId('google_alone_of_test'),
@@ -59,6 +69,7 @@ final class WayOfTest extends SmfModule {
   /// The modules of these ways to sign in.
   static const List<WayOfTest> all = [
     google,
+    googleOnAndroid,
     googleAlone,
     apple,
     appleWithServer,
