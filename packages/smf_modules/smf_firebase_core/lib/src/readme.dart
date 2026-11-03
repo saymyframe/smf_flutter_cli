@@ -7,7 +7,7 @@ const readmeHeading = 'Firebase';
 
 /// The section of the module in the README of the app.
 final String readmeSection = '''
-The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below.
+The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below. A debug build shows that error on the screen of a failed start.
 
 `smf create` offers to configure `${AppEntryRole.defaultFlavor.name}`, and otherwise leaves the command for later. To configure a flavor, or to configure it again, such as for another project or on another machine, run in the directory of the app:
 

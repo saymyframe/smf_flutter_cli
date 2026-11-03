@@ -290,6 +290,7 @@ String _renderReadmeSections(List<MapEntry<String, String>> entries) {
     AppEntryRole.setupHeading,
     AppEntryRole.flavorsHeading,
     AppEntryRole.flavorProjectsHeading,
+    AppEntryRole.failedStartHeading,
   ];
   return [
     for (final heading in first) ...entries.where((e) => e.key == heading),

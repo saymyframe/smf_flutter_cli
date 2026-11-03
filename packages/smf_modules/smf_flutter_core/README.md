@@ -3,7 +3,7 @@
 The SMF module that creates the Flutter app every SMF app starts from. It provides the app entry role of SMF, which every app has exactly one provider of:
 
 - the Android and iOS projects of `flutter create`, with the flavors `dev`, `staging` and `prod` as plain text, which install next to each other on a device;
-- `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs the root widget inside the wrappers of other modules;
+- `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs the root widget inside the wrappers of other modules, or, when `bootstrap()` throws, shows the screen of a failed start instead;
 - `lib/bootstrap.dart`, where modules put their start-up code, phase by phase;
 - `lib/app.dart`, the root `MaterialApp`, which becomes `MaterialApp.router` when the app has a router;
 - the fallback start screen with a widget test, which only an app that no route starts gets;

@@ -12,7 +12,14 @@ The module adds flutter_riverpod to the `pubspec.yaml` of the app, and a `Provid
 ```dart
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    // The app shows why it could not start, in place of a splash screen
+    // that would stay.
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(ProviderScope(child: const App()));
 }
 ```

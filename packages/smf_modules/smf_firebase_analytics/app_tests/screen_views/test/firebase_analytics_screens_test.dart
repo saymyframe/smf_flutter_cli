@@ -31,10 +31,12 @@ void main() {
     // The start-up of the app may replace the handlers of the errors, as
     // that of an app that reports crashes sends the errors of Flutter and
     // those that nothing catches to its crash reporters, which this test
-    // does not look at, and the widget that shows the errors of a build.
-    // The test takes them back once main() returns, so that flutter_test
-    // reports the errors of the frames that follow, and an expectation
-    // that fails, as in any test, and finds its own widget of the errors.
+    // does not look at, and the widget that shows the errors of a build. The
+    // test takes them back once main() returns, so that flutter_test reports
+    // the errors of the frames that follow, and an expectation that fails,
+    // as in any test, and finds its own widget of the errors. An error of
+    // bootstrap() reaches FlutterError.onError through main(), which fails
+    // the test too.
     final onError = FlutterError.onError;
     final onPlatformError = PlatformDispatcher.instance.onError;
     final errorWidgetBuilder = ErrorWidget.builder;
