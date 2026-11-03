@@ -286,7 +286,7 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The app that [showFailedStart] runs, created as
   /// `FailedStartApp(error: error, stackTrace: stackTrace)`: a screen that
   /// says that the app could not start, with the error and its stack trace
-  /// in a debug build, or also where `showsError` says so.
+  /// when `showsError` holds, by default in a debug build only.
   ///
   /// It needs nothing of the start-up that failed, so it has neither the
   /// theme nor the texts nor the root wrappers of the app, and its texts are
