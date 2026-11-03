@@ -27,7 +27,10 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// gets a line that names the script that enables Google, and no failure:
 /// configuring Firebase is not a failure.
 const urlSchemesHook =
-    '${FirebaseCoreModule.configuredHooksDirectory}/write_google_url_schemes.dart';
+    '${FirebaseCoreModule.configuredHooksDirectory}/$urlSchemesHookName';
+
+/// The name of the file of [urlSchemesHook].
+const urlSchemesHookName = 'write_google_url_schemes.dart';
 
 /// The command of [urlSchemesHook] as the user types it in the directory of
 /// the app.

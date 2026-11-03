@@ -12,6 +12,7 @@ import 'package:smf_firebase_auth/src/agents.dart';
 import 'package:smf_firebase_auth/src/enable_sign_in.dart';
 import 'package:smf_firebase_auth/src/identity_providers.dart';
 import 'package:smf_firebase_auth/src/readme.dart';
+import 'package:smf_firebase_auth/src/url_schemes.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_gen_l10n/smf_gen_l10n.dart';
@@ -2893,15 +2894,26 @@ void main() {
           contains('\n- It downloads the Firebase files of those apps again, '
               'once they have the clients of Google, and writes them to the '
               'paths that `firebase.json` names.'),
-          contains('\n- It writes the URL scheme of each of those iOS apps, '
-              '`REVERSED_CLIENT_ID` of its `GoogleService-Info.plist`, into '
-              '`CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors '
-              'share that file, so it lists a scheme for each iOS app that '
-              'the script ran for'),
+          contains('\n- Then it runs `$urlSchemesHook`, which writes the '
+              'URL schemes of the iOS apps (see below).\n'),
           contains('\n\nAfter you configure a flavor, run the script again '
               'for its project, even when another flavor already uses that '
               'project: an earlier run could not set up an app that '
               '`firebase.json` did not name yet.\n'),
+          // The script that writes the URL schemes after every
+          // configuration of a flavor, for the apps of every project.
+          contains('\n\nThe Google Sign-In SDK stops an iOS app whose '
+              '`ios/Runner/Info.plist` lacks the URL scheme of its client of '
+              'Google. `$urlSchemesHook` writes that scheme, '
+              '`REVERSED_CLIENT_ID` of the `GoogleService-Info.plist`, into '
+              '`CFBundleURLTypes` there for each iOS app that `firebase.json` '
+              'names. `dart ${FirebaseCoreModule.configureScript}` runs it '
+              'each time it configures a flavor'),
+          contains('The flavors share `ios/Runner/Info.plist`, so it holds a '
+              'scheme for each iOS app, in the build of every flavor.'),
+          contains('remove the scheme of the former project there by hand. '
+              'If you change a `GoogleService-Info.plist` some other way, run '
+              'it yourself:\n\n```bash\n$urlSchemesCommand\n```\n'),
           isNot(contains('flutterfire')),
           contains('under Test and release > App integrity in the Play '
               'Console.'),
@@ -2944,6 +2956,17 @@ void main() {
           isNot(contains('SHA')),
           isNot(contains('Info.plist')),
           isNot(contains('Apple')),
+          isNot(contains('\n\n\n')),
+        ]),
+      );
+      // Google for Android alone: the script sets up the rest, and nothing
+      // writes a URL scheme.
+      expect(
+        readmeSectionOf({'google.com': WayOfTest.googleOnAndroid.needs}),
+        allOf([
+          contains('It downloads the Firebase files of those apps again'),
+          isNot(contains('URL scheme')),
+          isNot(contains(urlSchemesHook)),
           isNot(contains('\n\n\n')),
         ]),
       );
@@ -2991,7 +3014,12 @@ void main() {
         allOf(
           startsWith('- For Google sign-in, `$enableSignInScript` also '
               'registers the SHA of the Android debug key'),
-          contains('run it only when asked.'),
+          contains('Run it only when asked.\n- `$urlSchemesHook` writes the '
+              'URL scheme of Google of each iOS app into '
+              '`ios/Runner/Info.plist`'),
+          contains('It needs no account and changes only that file, so after '
+              'a `GoogleService-Info.plist` changes some other way, run '
+              '`$urlSchemesCommand`.\n'),
           contains('\n- Apple is enabled in the Firebase console by hand'),
           contains('never put it into the app or its repository.\n'),
         ),
@@ -2999,16 +3027,30 @@ void main() {
       // The paths that it names are files of the app.
       expect(
         _codeOf(note),
-        containsAll([enableSignInScript, 'ios/Runner/Info.plist']),
+        containsAll([
+          enableSignInScript,
+          'ios/Runner/Info.plist',
+          urlSchemesHook,
+        ]),
       );
       expect(note, contains('`${FirebaseCoreModule.configureScript}`'));
       for (final path in [
         enableSignInScript,
         FirebaseCoreModule.configureScript,
         'ios/Runner/Info.plist',
+        urlSchemesHook,
       ]) {
         expect(withBoth.files.keys, contains(path));
       }
+      // Without the client of the iOS app, the note names no script that
+      // the app does not have.
+      expect(
+        methodsAgentNote({'google.com': WayOfTest.googleOnAndroid.needs}),
+        allOf(
+          startsWith('- For Google sign-in,'),
+          isNot(contains(urlSchemesHook)),
+        ),
+      );
       expect(methodsAgentNote(const {}), isNull);
       expect(
         methodsAgentNote(const {'apple.com': {}}),
