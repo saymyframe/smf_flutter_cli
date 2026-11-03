@@ -339,6 +339,31 @@ bool _isAwaited(AstNode node) {
   return current is AwaitExpression;
 }
 
+/// The catch clauses of the `try` statements whose try block holds [node],
+/// those of the innermost statement first, up to the body of the function,
+/// method or closure that holds [node]; see [IndexedInvocation.caughtBy].
+List<IndexedCatch> _caughtBy(AstNode node) {
+  final clauses = <IndexedCatch>[];
+  var child = node;
+  for (var current = node.parent; current != null; current = current.parent) {
+    if (current is FunctionBody) break;
+    if (current is TryStatement && identical(current.body, child)) {
+      clauses.addAll(current.catchClauses.map(_catchOf));
+    }
+    child = current;
+  }
+  return List.unmodifiable(clauses);
+}
+
+/// The index of [clause].
+IndexedCatch _catchOf(CatchClause clause) => IndexedCatch(
+      type: clause.exceptionType?.toSource(),
+      exception: clause.exceptionParameter?.name.lexeme,
+      stackTrace: clause.stackTraceParameter?.name.lexeme,
+      offset: clause.body.offset,
+      end: clause.body.end,
+    );
+
 final class _IndexVisitor extends RecursiveAstVisitor<void> {
   final List<IndexedInvocation> invocations = [];
   final List<IndexedReference> references = [];
@@ -371,6 +396,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
         enclosingDeclaration: _enclosing(node),
         enclosingMember: _enclosingMember(node),
         awaited: _isAwaited(node),
+        caughtBy: _caughtBy(node),
         offset: node.offset,
       ),
     );
@@ -391,6 +417,7 @@ final class _IndexVisitor extends RecursiveAstVisitor<void> {
         enclosingDeclaration: _enclosing(node),
         enclosingMember: _enclosingMember(node),
         awaited: _isAwaited(node),
+        caughtBy: _caughtBy(node),
         offset: node.offset,
       ),
     );

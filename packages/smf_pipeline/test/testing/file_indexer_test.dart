@@ -547,6 +547,125 @@ void main() => run();
     expect(order, orderedEquals([...order]..sort()));
   });
 
+  group('indexes the catch clauses around an invocation', () {
+    const source = '''
+Future<void> main() async {
+  first();
+  try {
+    try {
+      await bootstrap();
+      final widget = Screen();
+      run(() => later());
+      void local() {
+        alsoLater();
+        try {
+          inLocal();
+        } catch (_) {}
+      }
+    } on Exception catch (error) {
+      inInner(error);
+    } finally {
+      inFinally();
+    }
+  } on StateError {
+    inOuter();
+  } on Object catch (error, stackTrace) {
+    report(error, stackTrace);
+    return;
+  }
+  after();
+}
+''';
+    final index = DartFileIndexer.index('lib/main.dart', source);
+
+    /// The clauses of the one invocation of [name], each as its type and
+    /// its parameters.
+    List<String> clausesOf(String name) => [
+          for (final clause in index.invocationsOf(name).single.caughtBy)
+            '${clause.type} ${clause.exception} ${clause.stackTrace}',
+        ];
+
+    test('those of the innermost statement first, in their order', () {
+      const all = [
+        'Exception error null',
+        'StateError null null',
+        'Object error stackTrace',
+      ];
+      expect(clausesOf('bootstrap'), all);
+      // A creation, as a call.
+      expect(clausesOf('Screen'), all);
+      // The call that takes the closure, but not what the closure calls.
+      expect(clausesOf('run'), all);
+    });
+
+    test(
+        'none outside the function or closure that holds the invocation, '
+        'which may run after the statement', () {
+      expect(clausesOf('later'), isEmpty);
+      expect(clausesOf('alsoLater'), isEmpty);
+      // A try statement in a local function is around what it calls.
+      expect(clausesOf('inLocal'), ['null _ null']);
+    });
+
+    test(
+        'a clause and a finally block are outside the try block of their '
+        'statement', () {
+      expect(clausesOf('inInner'), [
+        'StateError null null',
+        'Object error stackTrace',
+      ]);
+      expect(clausesOf('inFinally'), [
+        'StateError null null',
+        'Object error stackTrace',
+      ]);
+      expect(clausesOf('inOuter'), isEmpty);
+      expect(clausesOf('report'), isEmpty);
+      expect(clausesOf('first'), isEmpty);
+      expect(clausesOf('after'), isEmpty);
+    });
+
+    test(
+        'with the body of each clause, which tells whether it holds an '
+        'invocation, and whether the clause catches every error', () {
+      final clauses = index.invocationsOf('bootstrap').single.caughtBy;
+      final report = index.invocationsOf('report').single;
+      final inInner = index.invocationsOf('inInner').single;
+
+      expect(
+        [for (final clause in clauses) clause.holds(report.offset)],
+        [false, false, true],
+      );
+      expect(
+        [for (final clause in clauses) clause.holds(inInner.offset)],
+        [true, false, false],
+      );
+      expect(
+        [for (final clause in clauses) clause.catchesEverything],
+        [false, false, true],
+      );
+      // A clause without on catches every error too.
+      expect(
+        index.invocationsOf('inLocal').single.caughtBy.single.catchesEverything,
+        isTrue,
+      );
+      final last = clauses.last;
+      expect(
+        source.substring(last.offset, last.end),
+        '{\n    report(error, stackTrace);\n    return;\n  }',
+      );
+    });
+
+    test('none for an invocation that no try statement holds', () {
+      expect(
+        DartFileIndexer.index('lib/a.dart', 'final a = b();')
+            .invocations
+            .single
+            .caughtBy,
+        isEmpty,
+      );
+    });
+  });
+
   test('indexes named constructors called with const or new', () {
     final index = DartFileIndexer.index('lib/a.dart', '''
 import 'package:flutter/widgets.dart' as w;
