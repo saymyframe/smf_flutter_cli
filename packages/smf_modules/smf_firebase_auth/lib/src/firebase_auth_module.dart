@@ -4,6 +4,7 @@ import 'package:smf_firebase_auth/src/agents.dart';
 import 'package:smf_firebase_auth/src/enable_sign_in.dart';
 import 'package:smf_firebase_auth/src/identity_providers.dart';
 import 'package:smf_firebase_auth/src/readme.dart';
+import 'package:smf_firebase_auth/src/url_schemes.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 
 /// The module that signs the users of the app in with Firebase
@@ -68,7 +69,11 @@ import 'package:smf_firebase_core/smf_firebase_core.dart';
 /// in of Google, the script also sets up what it needs: the SHA of the
 /// debug key of the machine in the project, the Firebase files of the app
 /// with the clients of Google, and the URL scheme of the iOS app in
-/// `ios/Runner/Info.plist`. After generation, once
+/// `ios/Runner/Info.plist`. For a way to sign in that needs the client of
+/// the iOS app, the provider also writes [urlSchemesHook] into the app, a
+/// script that writes that URL scheme after every run of flutterfire, and
+/// which the script that enables the methods runs too. After generation,
+/// once
 /// [FirebaseCoreModule.configureScript] configured the default flavor of the
 /// app, the module runs the script:
 /// its step continues [FirebaseCoreModule.configureStep], and a run in a
@@ -214,8 +219,10 @@ final class FirebaseAuthModule extends SmfModule {
             'anonymous_mode': AuthMode.anonymous.name,
             'minimum_firebase_cli': firstFirebaseCliWithSignIn,
             // And the script that the messages of the script name, which
-            // writes firebase.json.
+            // writes firebase.json, and the script that writes the URL
+            // schemes of Google, which it runs in an app with that script.
             'configure_script': FirebaseCoreModule.configureScript,
+            'url_schemes_hook': urlSchemesHook,
           },
         ),
         const PubspecContribution.hosted('firebase_auth', '^6.7.0'),
@@ -319,7 +326,11 @@ final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
 
   /// The ways to sign in of the app for the script, the section of the
   /// module in the README of the app, which tells what the script does for
-  /// them, and a second note for coding agents in an app with them.
+  /// them, and a second note for coding agents in an app with them. In an
+  /// app whose ways to sign in need the client of the iOS app, also
+  /// [urlSchemesHook], the script that writes the URL schemes of Google after
+  /// every run of flutterfire, which a brick cannot generate for only some
+  /// apps.
   @override
   RoleOutput render(RoleHookInput<AuthData> input) {
     final methods = firebaseMethodsOf(authRole.methodsIn(input));
@@ -337,6 +348,9 @@ final class _FirebaseAuthProvider extends RoleProvider<AuthData> {
           ),
       ],
       vars: scriptVarsOf(methods),
+      files: {
+        if (needsIosClient(methods)) urlSchemesHook: urlSchemesHookText,
+      },
     );
   }
 }
