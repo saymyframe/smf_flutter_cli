@@ -1564,7 +1564,8 @@ void main() {
       const socket = AppEntryRole.iosAppDelegateEngine;
       const channel = '    FlutterMethodChannel(\n'
           '      name: "app/channel",\n'
-          '      binaryMessenger: engineBridge.applicationRegistrar.messenger()\n'
+          '      binaryMessenger: '
+          'engineBridge.applicationRegistrar.messenger()\n'
           '    ).setMethodCallHandler { _, result in result(nil) }';
       const second = '    NSLog("The engine of the app exists.")';
 
@@ -4396,13 +4397,10 @@ Future<void> main() async {
                 '{{{smf_app_entry__ios_app_delegate_launch}}}\n}\n',
         // In its method, after the registration of the plugins, but on the
         // line of that call.
-        AppEntryRole.appDelegateFile:
-            '  func didInitializeImplicitFlutterEngine('
-                '_ engineBridge: FlutterImplicitEngineBridge) {\n'
-                '    GeneratedPluginRegistrant.register(with: '
-                'engineBridge.pluginRegistry) '
-                '{{{smf_app_entry__ios_app_delegate_engine}}}\n'
-                '  }\n',
+        AppEntryRole.appDelegateFile: _appDelegateTemplate.replaceFirst(
+          'pluginRegistry)\n{{{',
+          'pluginRegistry) {{{',
+        ),
         'android/app/src/debug/AndroidManifest.xml': '<application>\n'
             '{{{smf_app_entry__android_manifest_application_components}}}\n'
             '</application>\n',
@@ -4658,7 +4656,9 @@ Future<void> main() async {
       expect(
         problems(
           _appDelegateTemplate.replaceFirst(
-              '(_ engineBridge:', '(engineBridge:'),
+            '(_ engineBridge:',
+            '(engineBridge:',
+          ),
         ),
         isEmpty,
       );
