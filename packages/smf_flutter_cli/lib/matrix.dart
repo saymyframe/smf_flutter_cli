@@ -2804,13 +2804,14 @@ const toolArgumentsExtension = '.tool_arguments';
 /// which [env] gives, one on each line, in a file whose name is that of the
 /// app and [toolArgumentsExtension], such as `start_app.tool_arguments`.
 /// The file of an app that needs none is empty, so a step of CI never
-/// guesses whether an app has them. An argument that is empty or has a
-/// line break, which the file cannot hold, is a problem, and the app gets
-/// no file. Without [env] it writes no such file.
+/// guesses whether an app has them. It first deletes such a file of an
+/// earlier run, so an app that is not generated, or one with an argument
+/// that is empty or has a line break, which the file cannot hold and which
+/// is a problem, has none.
 ///
 /// With `--explain` among the [options], `smf create` only prints for each
-/// app what it would generate and whether the machine is ready, and no file
-/// is written.
+/// app what it would generate and whether the machine is ready, and the
+/// files stay as they are.
 ///
 /// The apps are those of [apps], each app with every module by default,
 /// such as a pairwise covering of them, one by the name that the plan of CI
@@ -2827,10 +2828,10 @@ Future<int> createEveryModuleApps(
   List<SmfModule> modules, {
   required String directory,
   required String name,
+  required MatrixEnv env,
   List<String> options = const [],
   Map<String, String?> roleOptions = const {},
   EveryModuleApps apps = const EveryModuleApps(),
-  MatrixEnv? env,
   MatrixCommands commands = const MatrixCommands(),
   FileSystem fileSystem = const LocalFileSystem(),
 }) async {
@@ -2859,9 +2860,15 @@ Future<int> createEveryModuleApps(
       '${result.contractCase}: ${result.errors.join('; ')}',
     ...apps.selection.problemsOf(selected),
   ];
+  final context = fileSystem.path;
   for (final app in selected) {
     final packageName = app.packageName(name);
     say('\n=== $packageName: $app');
+    final file = fileSystem.file(
+      '${context.normalize(context.join(directory, packageName))}'
+      '$toolArgumentsExtension',
+    );
+    if (!options.contains('--explain') && file.existsSync()) file.deleteSync();
     final (generated, appProblems) = await _generate(
       generate,
       app,
@@ -2870,17 +2877,15 @@ Future<int> createEveryModuleApps(
       options,
     );
     problems.addAll(appProblems);
-    if (generated != null && env != null) {
+    if (generated != null) {
       final toolArguments = env.toolArguments(app);
-      final file =
-          '${fileSystem.path.normalize(generated.path)}$toolArgumentsExtension';
       if (toolArguments.any(_notALine)) {
         problems.add(
           '$packageName ($app): a tool argument of the app is empty or has a '
-          'line break, which $file cannot hold.',
+          'line break, which ${file.path} cannot hold.',
         );
       } else {
-        fileSystem.file(file).writeAsStringSync(_linesOf(toolArguments));
+        file.writeAsStringSync(_linesOf(toolArguments));
       }
     }
   }

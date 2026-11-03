@@ -2617,8 +2617,17 @@ Type type() => Types;
       created = [];
     });
 
-    /// Creates the apps with a create that generates each in [fileSystem],
-    /// when it is given, as an empty directory.
+    /// The values of the apps, whose tool arguments are [toolArguments].
+    MatrixEnv envWith(List<String> Function(MatrixApp app) toolArguments) =>
+        MatrixEnv(
+          file: '.env',
+          toolArguments: toolArguments,
+          keys: (_) => const {},
+        );
+
+    /// Creates the apps, with the values of [env], none by default, in
+    /// [fileSystem], a new one by default, with a create that generates
+    /// each app there as an empty directory.
     Future<int> create({
       List<SmfModule> modules = smfModules,
       String name = 'start_app',
@@ -2630,44 +2639,38 @@ Type type() => Types;
       List<SkippedStep> skippedSteps = const [],
       MatrixEnv? env,
       MemoryFileSystem? fileSystem,
-    }) =>
-        createEveryModuleApps(
-          modules,
-          directory: '/apps',
-          name: name,
-          options: options,
-          apps: EveryModuleApps(withoutExternalSteps: withoutExternalSteps),
-          env: env,
-          fileSystem: fileSystem ?? MemoryFileSystem(),
-          commands: MatrixCommands(
-            log: log.add,
-            create: (arguments, onCreated) async {
-              created.add(arguments);
-              if (generates) {
-                fileSystem
-                    ?.directory('/apps/${arguments[1]}')
-                    .createSync(recursive: true);
-                onCreated(
-                  GeneratedApp(
-                    name: arguments[1],
-                    path: '/apps/${arguments[1]}',
-                    leftOut: leftOut,
-                    skippedSteps: skippedSteps,
-                  ),
-                );
-              }
-              return code;
-            },
-          ),
-        );
-
-    /// The values of the apps, whose tool arguments are [toolArguments].
-    MatrixEnv envWith(List<String> Function(MatrixApp app) toolArguments) =>
-        MatrixEnv(
-          file: '.env',
-          toolArguments: toolArguments,
-          keys: (_) => const {},
-        );
+    }) {
+      final apps = fileSystem ?? MemoryFileSystem();
+      return createEveryModuleApps(
+        modules,
+        directory: '/apps',
+        name: name,
+        options: options,
+        apps: EveryModuleApps(withoutExternalSteps: withoutExternalSteps),
+        env: env ?? envWith((_) => const []),
+        fileSystem: apps,
+        commands: MatrixCommands(
+          log: log.add,
+          create: (arguments, onCreated) async {
+            created.add(arguments);
+            if (generates) {
+              apps
+                  .directory('/apps/${arguments[1]}')
+                  .createSync(recursive: true);
+              onCreated(
+                GeneratedApp(
+                  name: arguments[1],
+                  path: '/apps/${arguments[1]}',
+                  leftOut: leftOut,
+                  skippedSteps: skippedSteps,
+                ),
+              );
+            }
+            return code;
+          },
+        ),
+      );
+    }
 
     /// The paths of the files and the directories right in /apps of
     /// [fileSystem], each with the text of a file.
@@ -2738,12 +2741,24 @@ Type type() => Types;
       }
     });
 
+    /// A file system with a file of the tool arguments of an earlier run
+    /// next to each app.
+    MemoryFileSystem withEarlierFiles() {
+      final fileSystem = MemoryFileSystem();
+      for (final app in ['start_app', 'start_app_riverpod']) {
+        fileSystem.file('/apps/$app$toolArgumentsExtension')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('--of-an-earlier-run\n');
+      }
+      return fileSystem;
+    }
+
     test(
-        'writes no file of the tool arguments for an argument that the file '
-        'cannot hold, without the values of the apps, or with --explain',
-        () async {
+        'deletes the file of the tool arguments of an earlier run, and writes '
+        'none for an argument that the file cannot hold or an app that is not '
+        'generated; with --explain the files stay', () async {
       for (final argument in ['', 'two\nlines', 'a\rb']) {
-        final fileSystem = MemoryFileSystem();
+        final fileSystem = withEarlierFiles();
         expect(
           await create(
             env: envWith((_) => ['--first', argument]),
@@ -2772,14 +2787,20 @@ Type type() => Types;
         );
       }
 
-      final withoutEnv = MemoryFileSystem();
-      expect(await create(fileSystem: withoutEnv), 0);
+      final notGenerated = withEarlierFiles();
       expect(
-        appsIn(withoutEnv),
-        {'/apps/start_app': null, '/apps/start_app_riverpod': null},
+        await create(
+          code: 1,
+          generates: false,
+          env: envWith((_) => const ['--a']),
+          fileSystem: notGenerated,
+        ),
+        1,
       );
+      expect(appsIn(notGenerated), isEmpty);
 
-      final explained = MemoryFileSystem()..directory('/apps').createSync();
+      final explained = withEarlierFiles();
+      final earlier = appsIn(explained);
       expect(
         await create(
           options: const ['--explain'],
@@ -2789,7 +2810,7 @@ Type type() => Types;
         ),
         0,
       );
-      expect(appsIn(explained), isEmpty);
+      expect(appsIn(explained), earlier);
     });
 
     test(
