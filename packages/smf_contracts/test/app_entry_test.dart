@@ -82,11 +82,12 @@ IndexedInvocation _showFailedStart({int offset = 30}) => IndexedInvocation(
     );
 
 /// The calls of `main()` of the app entry: `ensureInitialized()` at 10,
-/// `bootstrap()` at 20, awaited and in a try block whose clauses are
-/// [clauses], the call [show] of `showFailedStart()` if any, and `runApp()`
-/// at [runApp].
+/// `bootstrap()` at 20, awaited and in the try blocks of [tries], by default
+/// one statement whose clauses are [clauses], the call [show] of
+/// `showFailedStart()` if any, and `runApp()` at [runApp].
 List<IndexedInvocation> _mainCalls({
   List<IndexedCatch> clauses = const [_catchAll],
+  List<IndexedTry>? tries,
   IndexedInvocation? show = const IndexedInvocation(
     'showFailedStart',
     enclosingDeclaration: 'main',
@@ -105,7 +106,7 @@ List<IndexedInvocation> _mainCalls({
         'bootstrap',
         enclosingDeclaration: 'main',
         awaited: true,
-        caughtBy: clauses,
+        tries: tries ?? [if (clauses.isNotEmpty) IndexedTry(clauses: clauses)],
         offset: 20,
       ),
       if (show != null) show,
@@ -526,7 +527,9 @@ void main() {
               'bootstrap',
               enclosingDeclaration: 'main',
               awaited: true,
-              caughtBy: [_catchAll],
+              tries: [
+                IndexedTry(clauses: [_catchAll]),
+              ],
               offset: 20,
             ),
             _showFailedStart(),
@@ -593,14 +596,93 @@ void main() {
           ),
           isEmpty,
         );
-        // Before the catch-all clause, the statement may catch an error of
-        // its own.
+        // Before the catch-all clause, a clause that shows the screen of a
+        // failed start too, or that throws.
+        expect(
+          messagesOf([
+            ..._mainCalls(
+              clauses: const [
+                IndexedCatch(type: 'TimeoutException', offset: 21, end: 24),
+                IndexedCatch(type: 'StateError', throws: true, offset: 24),
+                _catchAll,
+              ],
+            ),
+            _showFailedStart(offset: 22),
+          ]),
+          isEmpty,
+        );
+        // A catch-all clause of an inner statement that throws, around
+        // which a catch-all clause shows the screen.
+        expect(
+          messagesOf(
+            _mainCalls(
+              tries: const [
+                IndexedTry(
+                  clauses: [
+                    IndexedCatch(throws: true, offset: 21, end: 24),
+                  ],
+                ),
+                IndexedTry(clauses: [_catchAll]),
+              ],
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test(
+          'report a clause before the catch-all clause that neither shows the '
+          'screen of a failed start nor throws, which keeps the app on the '
+          'splash screen', () {
+        String keepsOnSplash(String type) =>
+            'main() catches the errors of bootstrap() of the type $type in a '
+            'clause that neither calls showFailedStart() nor throws, so after '
+            'such an error the app stays on the splash screen of the system.';
+
+        // `on Exception { return; }` before the clause of a provider: an
+        // exception of a plugin would leave the app on the splash screen.
+        final issues = _check(
+          _app(
+            mainCalls: _mainCalls(
+              clauses: const [
+                IndexedCatch(type: 'Exception', offset: 21, end: 24),
+                _catchAll,
+              ],
+            ),
+          ),
+        );
+        expect(issues.map((issue) => issue.message), [
+          keepsOnSplash('Exception'),
+        ]);
+        expect(issues.single.hint, contains('rethrow the error'));
+        // Each such clause, of an inner statement first.
+        expect(
+          messagesOf(
+            _mainCalls(
+              tries: const [
+                IndexedTry(
+                  clauses: [
+                    IndexedCatch(type: 'TimeoutException', offset: 21, end: 22),
+                  ],
+                ),
+                IndexedTry(
+                  clauses: [
+                    IndexedCatch(type: 'StateError', offset: 22, end: 23),
+                    _catchAll,
+                  ],
+                ),
+              ],
+            ),
+          ),
+          [keepsOnSplash('TimeoutException'), keepsOnSplash('StateError')],
+        );
+        // A clause after the catch-all clause gets no error of bootstrap().
         expect(
           messagesOf(
             _mainCalls(
               clauses: const [
-                IndexedCatch(type: 'TimeoutException', offset: 22, end: 24),
                 _catchAll,
+                IndexedCatch(type: 'Exception', offset: 35, end: 38),
               ],
             ),
           ),
@@ -611,19 +693,8 @@ void main() {
       test('accept runApp() in the try block or after the statement', () {
         // In the try block, after bootstrap().
         expect(messagesOf(_mainCalls(runApp: 22)), isEmpty);
-        // After the statement, and also in the clause: the call outside the
-        // clause counts.
-        expect(
-          messagesOf([
-            ..._mainCalls(),
-            const IndexedInvocation(
-              'runApp',
-              enclosingDeclaration: 'main',
-              offset: 32,
-            ),
-          ]),
-          isEmpty,
-        );
+        // After the statement.
+        expect(messagesOf(_mainCalls()), isEmpty);
       });
 
       test('report a bootstrap() that no clause catches every error of', () {
@@ -680,16 +751,60 @@ void main() {
         );
       });
 
-      test('report a runApp() only in a clause that catches the errors', () {
+      test(
+          'report a runApp() that runs the root of the app over the screen of '
+          'a failed start: in a clause, or in a finally block', () {
+        const inClause = 'main() calls runApp() in a clause that catches the '
+            'errors of bootstrap(), so it runs the root of the app over the '
+            'screen of a failed start.';
+        const inFinally = 'main() calls runApp() in the finally block of the '
+            'try statement around bootstrap(), so it runs the root of the app '
+            'over the screen of a failed start too.';
+        const runApp = IndexedInvocation(
+          'runApp',
+          enclosingDeclaration: 'main',
+          offset: 32,
+        );
+
+        // Next to showFailedStart(), also with one after the statement.
+        expect(messagesOf(_mainCalls(runApp: 33)), [inClause]);
+        expect(messagesOf([..._mainCalls(), runApp]), [inClause]);
         expect(
-          messagesOf(_mainCalls(runApp: 33)),
+          _check(_app(mainCalls: _mainCalls(runApp: 33))).single.hint,
+          contains('call runApp() after the try statement'),
+        );
+        // In the finally block of the statement, or of a statement around
+        // it.
+        for (final tries in const [
           [
-            equals(
-              'main() calls runApp() only in a clause that catches the errors '
-              'of bootstrap(), so it runs the app only when the start-up '
-              'failed.',
+            IndexedTry(
+              clauses: [_catchAll],
+              finallyBlock: IndexedBlock(offset: 36, end: 45),
             ),
           ],
+          [
+            IndexedTry(clauses: [_catchAll]),
+            IndexedTry(finallyBlock: IndexedBlock(offset: 36, end: 45)),
+          ],
+        ]) {
+          expect(
+            messagesOf(_mainCalls(tries: tries)),
+            [inFinally],
+          );
+        }
+        // A finally block without runApp() is fine.
+        expect(
+          messagesOf(
+            _mainCalls(
+              tries: const [
+                IndexedTry(
+                  clauses: [_catchAll],
+                  finallyBlock: IndexedBlock(offset: 36, end: 38),
+                ),
+              ],
+            ),
+          ),
+          isEmpty,
         );
       });
 
@@ -701,7 +816,7 @@ void main() {
                   ? IndexedInvocation(
                       'bootstrap',
                       enclosingDeclaration: 'main',
-                      caughtBy: call.caughtBy,
+                      tries: call.tries,
                       offset: call.offset,
                     )
                   : call,

@@ -326,7 +326,7 @@ final class IndexedInvocation {
     this.enclosingDeclaration,
     this.enclosingMember,
     this.awaited = false,
-    this.caughtBy = const [],
+    this.tries = const [],
     this.offset = 0,
   });
 
@@ -365,20 +365,57 @@ final class IndexedInvocation {
   /// Whether the invocation is the operand of an `await`.
   final bool awaited;
 
-  /// The catch clauses of each `try` statement whose try block holds the
-  /// invocation: those of the innermost statement first, and the clauses
-  /// of a statement in their order. An invocation in a catch clause or in
-  /// a `finally` block is not in the try block of its statement.
+  /// The `try` statements whose try block holds the invocation, the
+  /// innermost first. An invocation in a catch clause or in a `finally`
+  /// block is not in the try block of its statement.
   ///
-  /// The index has no control flow, so it lists the clauses that the code
-  /// as written puts around the invocation. It stops at the body of the
-  /// function, method or closure that holds the invocation: a closure or a
-  /// local function runs when it is called, which may be after the `try`
-  /// statement around it, so the clauses outside it do not count.
-  final List<IndexedCatch> caughtBy;
+  /// The index has no control flow, so it lists the statements that the
+  /// code as written puts around the invocation. It stops at the body of
+  /// the function, method or closure that holds the invocation: a closure
+  /// or a local function runs when it is called, which may be after the
+  /// `try` statement around it, so the statements outside it do not count.
+  final List<IndexedTry> tries;
+
+  /// The catch clauses of [tries]: those of the innermost statement first,
+  /// and the clauses of a statement in their order, which is the order in
+  /// which they are asked about an error of the invocation.
+  List<IndexedCatch> get caughtBy => [
+        for (final statement in tries) ...statement.clauses,
+      ];
 
   /// The offset of the invocation in the file.
   final int offset;
+}
+
+/// A `try` statement around an invocation in an indexed file; see
+/// [IndexedInvocation.tries].
+final class IndexedTry {
+  /// Creates the index of a `try` statement with [clauses] and
+  /// [finallyBlock].
+  const IndexedTry({this.clauses = const [], this.finallyBlock});
+
+  /// The catch clauses of the statement, in their order.
+  final List<IndexedCatch> clauses;
+
+  /// The `finally` block of the statement, which runs whether the try block
+  /// threw or not, or `null` if the statement has none.
+  final IndexedBlock? finallyBlock;
+}
+
+/// A block of code in an indexed file, from its opening brace to just after
+/// its closing brace.
+final class IndexedBlock {
+  /// Creates the index of the block from [offset] to [end].
+  const IndexedBlock({this.offset = 0, this.end = 0});
+
+  /// The offset in the file of the opening brace.
+  final int offset;
+
+  /// The offset in the file just after the closing brace.
+  final int end;
+
+  /// Whether the block holds the code at [offset].
+  bool holds(int offset) => offset >= this.offset && offset < end;
 }
 
 /// A catch clause of a `try` statement in an indexed file, such as
@@ -389,6 +426,7 @@ final class IndexedCatch {
     this.type,
     this.exception,
     this.stackTrace,
+    this.throws = false,
     this.offset = 0,
     this.end = 0,
   });
@@ -404,6 +442,10 @@ final class IndexedCatch {
   /// The name of the parameter of the stack trace, or `null` if the clause
   /// has none.
   final String? stackTrace;
+
+  /// Whether the body of the clause has a `throw` or a `rethrow`, outside a
+  /// function or closure in it, so that an error may leave the clause.
+  final bool throws;
 
   /// The offset in the file of the body of the clause, its opening brace.
   final int offset;

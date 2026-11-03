@@ -931,9 +931,11 @@ final class AppEntryRole extends Role<NoDsl> {
               'main() calls WidgetsFlutterBinding.ensureInitialized(), '
               'awaits bootstrap() in the try block of a try statement with a '
               'clause that catches every error and calls showFailedStart(), '
-              'and calls runApp() outside that clause, in this order. Whether '
-              'main() stops after showFailedStart() only a running app '
-              'shows.',
+              'and calls runApp() outside the clauses and the finally blocks '
+              'of the try statements around bootstrap(), in this order. A '
+              'clause before that one shows the screen of a failed start too, '
+              'or throws. Whether main() stops after showFailedStart() only a '
+              'running app shows.',
           check: _checkMainSequence,
         ),
         StructuralRule(
@@ -1285,23 +1287,41 @@ List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
   final ensureInitialized =
       calls('ensureInitialized', target: 'WidgetsFlutterBinding').firstOrNull;
   final bootstrap = calls(AppEntryRole.bootstrap.name).firstOrNull;
-  // The clauses that catch the errors of bootstrap(), and of them those
-  // that catch every error.
+  // The try statements around bootstrap(), and their clauses in the order
+  // in which they are asked about an error of it.
+  final statements = bootstrap?.tries ?? const <IndexedTry>[];
   final clauses = bootstrap?.caughtBy ?? const <IndexedCatch>[];
-  final catchAll = [
-    for (final clause in clauses)
-      if (clause.catchesEverything) clause,
-  ];
-  final shows = calls(AppEntryRole.showFailedStart.name).any(
-    (show) => catchAll.any((clause) => clause.holds(show.offset)),
-  );
-  // A runApp() in a clause runs only when the start-up failed.
-  final runApps = calls('runApp');
-  final runApp = runApps
-      .where((call) => !clauses.any((clause) => clause.holds(call.offset)))
-      .firstOrNull;
+  final shows = calls(AppEntryRole.showFailedStart.name).toList();
+  bool showsIn(IndexedCatch clause) =>
+      shows.any((show) => clause.holds(show.offset));
+  // An error of bootstrap() goes to the first clause that catches it: it
+  // ends at a clause that shows the screen of a failed start or keeps the
+  // app on the splash screen, unless the clause throws.
+  final keepsOnSplash = <IndexedCatch>[];
+  var shown = false;
+  for (final clause in clauses) {
+    if (showsIn(clause)) {
+      if (clause.catchesEverything) {
+        shown = true;
+        break;
+      }
+    } else if (!clause.throws) {
+      if (clause.catchesEverything) break;
+      keepsOnSplash.add(clause);
+    }
+  }
+  final runApps = calls('runApp').toList();
+  bool inClause(IndexedInvocation call) =>
+      clauses.any((clause) => clause.holds(call.offset));
+  bool inFinally(IndexedInvocation call) => statements.any(
+        (statement) => statement.finallyBlock?.holds(call.offset) ?? false,
+      );
+  // The runApp() that runs the app once the start-up succeeded.
+  final runApp =
+      runApps.where((call) => !inClause(call) && !inFinally(call)).firstOrNull;
   SmfIssue issue(String problem, {String? hint}) =>
       SmfIssue(problem, hint: hint, origin: input.owners[path], path: path);
+  final awaited = bootstrap != null && bootstrap.awaited;
   return [
     if (ensureInitialized == null)
       issue('main() does not call WidgetsFlutterBinding.ensureInitialized().'),
@@ -1309,26 +1329,48 @@ List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
       issue('main() does not call bootstrap().')
     else if (!bootstrap.awaited)
       issue('main() does not await bootstrap().')
-    else if (catchAll.isEmpty)
+    else if (!clauses.any((clause) => clause.catchesEverything))
       issue(
         'main() does not catch every error of bootstrap(): await it in a try '
         'statement with a clause such as "on Object catch (error, '
         'stackTrace)".',
         hint: _failedStartHint,
       )
-    else if (!shows)
+    else if (!shown)
       issue(
         'main() does not call showFailedStart() in the clause that catches '
         'the errors of bootstrap().',
         hint: _failedStartHint,
       ),
-    if (runApps.isEmpty)
-      issue('main() does not call runApp().')
-    else if (runApp == null)
-      issue(
-        'main() calls runApp() only in a clause that catches the errors of '
-        'bootstrap(), so it runs the app only when the start-up failed.',
-      ),
+    if (awaited)
+      for (final clause in keepsOnSplash)
+        issue(
+          'main() catches the errors of bootstrap() of the type '
+          '${clause.type} in a clause that neither calls showFailedStart() '
+          'nor throws, so after such an error the app stays on the splash '
+          'screen of the system.',
+          hint: 'Call showFailedStart() there too and return, or rethrow '
+              'the error, or leave it to the clause that catches every '
+              'error.',
+        ),
+    if (runApps.isEmpty) issue('main() does not call runApp().'),
+    for (final call in runApps)
+      if (inClause(call))
+        issue(
+          'main() calls runApp() in a clause that catches the errors of '
+          'bootstrap(), so it runs the root of the app over the screen of a '
+          'failed start.',
+          hint: 'Return after showFailedStart(), and call runApp() after the '
+              'try statement.',
+        )
+      else if (inFinally(call))
+        issue(
+          'main() calls runApp() in the finally block of the try statement '
+          'around bootstrap(), so it runs the root of the app over the '
+          'screen of a failed start too.',
+          hint: 'Return after showFailedStart(), and call runApp() after the '
+              'try statement.',
+        ),
     if (ensureInitialized != null &&
         bootstrap != null &&
         runApp != null &&
