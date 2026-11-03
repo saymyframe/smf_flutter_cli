@@ -31,6 +31,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:{{app_name}}/main.dart' as app;
 
 import 'start_probes.dart';
+import 'start_screen.dart';
 
 /// How long main() of the app may take.
 const _mainLimit = Duration(seconds: 60);
@@ -79,9 +80,12 @@ Future<void> main() async {
     if (await _settle(binding) case final problem?) {
       problems.add(problem);
     } else {
-      problems
-        ..addAll(_problemsOnScreen(binding.rootElement))
-        ..addAll(await _problemsOfProbes(binding));
+      problems.addAll(
+        await problemsOfFirstScreen(
+          binding.rootElement,
+          probes: () => _problemsOfProbes(binding),
+        ),
+      );
     }
   }
   final result = problems.isEmpty ? 'passed' : 'failed: ${problems.join('; ')}';
@@ -182,29 +186,6 @@ final class _Unsettled implements Exception {
 
   @override
   String toString() => problem;
-}
-
-/// The problems of the widgets under [root]: the app has a [WidgetsApp],
-/// which MaterialApp and CupertinoApp build, and no [ErrorWidget] is on
-/// the screen.
-List<String> _problemsOnScreen(Element? root) {
-  var widgetsApps = 0;
-  final errors = <String>[];
-  void visit(Element element) {
-    switch (element.widget) {
-      case WidgetsApp():
-        widgetsApps++;
-      case ErrorWidget(:final message):
-        errors.add(_firstLine(message));
-    }
-    element.visitChildren(visit);
-  }
-
-  if (root != null) visit(root);
-  return [
-    if (widgetsApps == 0) 'the screen has no WidgetsApp',
-    for (final error in errors) 'the screen shows an ErrorWidget: $error',
-  ];
 }
 
 /// The first line of the text of [error].
