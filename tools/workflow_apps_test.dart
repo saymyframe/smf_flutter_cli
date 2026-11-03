@@ -53,8 +53,20 @@
 // the --app or the --shard of a step does not come from the matrix of its
 // job that the plan gives; and when a job or a step computes its
 // timeout-minutes, as from the number of apps that it takes.
+//
+// A release build of an app with values, such as the keys of a service,
+// needs the arguments of the flutter tool that give the app its values,
+// which the provider of the role of the values of the app names. So the
+// check also fails when a step builds an app as a release, with flutter
+// build or build_apk.sh, or runs a test that does, without the arguments
+// that the --create of the matrix tool of the CLI writes next to the app:
+// .github/scripts/each_app.sh gives them to the command of each app with
+// --tool-arguments, so a step names neither the arguments nor the role.
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -1618,6 +1630,397 @@ List<String> apkBuildProblemsOf(String workflow, {required String file}) {
   }
   return problems;
 }
+
+/// The option of .github/scripts/each_app.sh that gives the command of each
+/// app the arguments of the `flutter` tool that build the app with its
+/// values, such as `--dart-define-from-file=.env`: the lines of
+/// `<app>.tool_arguments`, which the --create of the matrix tool of the CLI
+/// writes next to the app, after the arguments of the command, or, with
+/// --env, in [toolArgumentsVariable].
+const toolArgumentsOption = '--tool-arguments';
+
+/// The variable in which .github/scripts/each_app.sh gives a command with
+/// --env the arguments of [toolArgumentsOption], one on each line.
+const toolArgumentsVariable = 'SMF_TOOL_ARGUMENTS';
+
+/// The problems of the release builds in [workflow], the text of the
+/// workflow [file] of GitHub Actions: a step that builds an app as a
+/// release, with `flutter build` or [buildApk], or runs a test that does,
+/// without the arguments of the `flutter` tool that build the app with its
+/// values, which a release build of an app with values needs. Such a step
+/// runs the build for each app of its directory with
+/// .github/scripts/each_app.sh and [toolArgumentsOption], without --env,
+/// and a test with --env too, which gives the test the arguments in
+/// [toolArgumentsVariable]. A test that builds a release must add those
+/// arguments to that build, and a test file that the check cannot find is a
+/// problem too.
+///
+/// [testSource] gives the text of a test file that a step runs with
+/// `dart test`, by its path from the root of the repository, or `null` for
+/// a file that does not exist. The path is that of the directory of the
+/// command and the path of the test, or the path after the root of the
+/// workspace, `$GITHUB_WORKSPACE` or `${{ github.workspace }}`. The
+/// directory of a command is the working directory of the step, after each
+/// `cd` before the command to a relative path or into the workspace; a `cd`
+/// to another path, such as one in a subshell, leaves it as it is. The check
+/// finds the release builds of a test as [releaseBuildsOfTest] does, and
+/// only in the test files that a step names.
+///
+/// The check reads a step as its shell does, so it does not see a build in
+/// the script of `sh -c` or `bash -c`, a `flutter` that a variable holds, a
+/// global option of `flutter` with a value of its own before `build`, or a
+/// test that a step names by a variable without `.dart` at its end or by a
+/// directory.
+List<String> releaseBuildProblemsOf(
+  String workflow, {
+  required String file,
+  required String? Function(String path) testSource,
+}) {
+  final problems = <String>[];
+  final root = loadYaml(workflow) as YamlMap;
+  for (final MapEntry(key: job, :value) in (root['jobs'] as YamlMap).entries) {
+    final definition = value as YamlMap;
+    for (final step in definition['steps'] as YamlList? ?? YamlList()) {
+      final where = '$file, job $job, step "${_nameOf(step as YamlMap)}"';
+      final directory = step['working-directory'] ??
+          _default(definition, 'working-directory') ??
+          _default(root, 'working-directory');
+      final powerShell = _isPowerShell(
+        step['shell'] ??
+            _default(definition, 'shell') ??
+            _default(root, 'shell'),
+      );
+      var current = directory == null ? '' : '$directory';
+      for (final words in commandsOf(
+        '${step['run'] ?? ''}',
+        powerShell: powerShell,
+      )) {
+        if (words case ['cd', final path]) {
+          current = _directoryAfterCd(current, path);
+          continue;
+        }
+        final (:options, :command) = _eachAppOf(words);
+        final given = options.contains(toolArgumentsOption);
+        final inVariable = options.contains('--env');
+        if (_releaseBuildIn(command) case final build?
+            when !given || inVariable) {
+          problems.add(_releaseWithout(where, build));
+        }
+        for (final test in _testsRunBy(command, current)) {
+          final source = test.contains(r'$') ? null : testSource(test);
+          if (source == null) {
+            problems.add(_testNotFound(where, test));
+            continue;
+          }
+          for (final (:build, :takesArguments) in releaseBuildsOfTest(source)) {
+            if (!given || !inVariable) {
+              problems.add(_testReleaseWithout(where, test, build));
+            }
+            if (!takesArguments) {
+              problems.add(_testIgnoresArguments(where, test, build));
+            }
+          }
+        }
+      }
+    }
+  }
+  return problems;
+}
+
+/// The scripts of .github/scripts that may build an app as a release, by
+/// their paths from the root of the repository, with the reason. The check
+/// of the steps holds the steps that run them to the tool arguments of the
+/// app.
+const releaseBuildScripts = {
+  '.github/scripts/build_apk.sh': 'Runs flutter build apk with the '
+      'arguments of the step or the script that runs it, which give it the '
+      'mode and the tool arguments of the app.',
+  '.github/scripts/start_app.sh': 'Builds the app with the arguments of '
+      'integration_test/start_build_arguments, which --add-app-tests --app '
+      'of the matrix tool of the CLI writes from the tool arguments of the '
+      'app, and fails before the build when the app has no such file.',
+};
+
+/// The release builds of [script], the text of a script of
+/// .github/scripts, of bash, or of PowerShell with [powerShell], each as
+/// [_releaseBuildIn] names it, such as `flutter build ipa`.
+List<String> scriptReleaseBuildsOf(String script, {bool powerShell = false}) =>
+    [
+      for (final words in commandsOf(script, powerShell: powerShell))
+        if (_releaseBuildIn(words) case final build?) build,
+    ];
+
+/// The problems of the release builds of [script], the text of the script
+/// [file] of .github/scripts, of bash, or of PowerShell with [powerShell]:
+/// a release build in a script other than those of [releaseBuildScripts],
+/// whose step the check of the steps cannot hold to the tool arguments of
+/// the app.
+List<String> scriptReleaseBuildProblemsOf(
+  String script, {
+  required String file,
+  bool powerShell = false,
+}) =>
+    [
+      if (!releaseBuildScripts.containsKey(file))
+        for (final build in scriptReleaseBuildsOf(
+          script,
+          powerShell: powerShell,
+        ))
+          _scriptRelease(file, build),
+    ];
+
+/// The problem that the script [file] builds an app as a release with
+/// [build].
+String _scriptRelease(String file, String build) =>
+    '$file builds an app as a release with $build. Build it in the step of a '
+    'workflow with .github/scripts/each_app.sh $toolArgumentsOption, which '
+    'gives it the arguments of the flutter tool that build the app with its '
+    'values, or, for a script that takes them as the step that runs it gives '
+    'them, make it an exception of releaseBuildScripts with the reason.';
+
+/// The release builds that the Dart test [source] runs with the `flutter`
+/// tool, each as [_releaseBuildIn] names it, such as `flutter build ipa`, and
+/// whether it takes the arguments that .github/scripts/each_app.sh gives the
+/// test in [toolArgumentsVariable]: each call of `Process.run`,
+/// `Process.runSync` or `Process.start` whose executable is `flutter` and
+/// whose arguments are a list literal that builds a release, as a step of a
+/// workflow does, with an element that is no string, such as `flavor.name`,
+/// standing for itself. A build takes the arguments when one of its elements
+/// is a spread of an expression that reads [toolArgumentsVariable], or of a
+/// variable whose value does.
+///
+/// A call of `Process` with a prefix of its import, such as `io.Process`,
+/// and a call whose arguments are no list literal, such as a variable, are
+/// not found.
+List<({String build, bool takesArguments})> releaseBuildsOfTest(
+  String source,
+) {
+  final calls = _ProcessCalls();
+  parseString(content: source, throwIfDiagnostics: false).unit.accept(calls);
+  bool takes(Expression spread) =>
+      _readsToolArguments(spread) ||
+      spread is SimpleIdentifier && calls.readers.contains(spread.name);
+  return [
+    for (final (:words, :spreads) in calls.commands)
+      if (_releaseBuildIn(words) case final build?)
+        (build: build, takesArguments: spreads.any(takes)),
+  ];
+}
+
+/// Whether [node] has the text of [toolArgumentsVariable] as a string.
+bool _readsToolArguments(AstNode node) {
+  final strings = _Strings();
+  node.accept(strings);
+  return strings.values.contains(toolArgumentsVariable);
+}
+
+/// The values of the simple strings of a node.
+final class _Strings extends RecursiveAstVisitor<void> {
+  final values = <String>{};
+
+  @override
+  void visitSimpleStringLiteral(SimpleStringLiteral node) {
+    values.add(node.value);
+    super.visitSimpleStringLiteral(node);
+  }
+}
+
+/// The commands of the calls of `Process.run`, `Process.runSync` and
+/// `Process.start` with an executable and a list literal of arguments: the
+/// executable and the arguments, each string as its value and any other
+/// element as its source, with the expressions of the spreads among the
+/// arguments; and the [readers], the variables whose value reads
+/// [toolArgumentsVariable].
+final class _ProcessCalls extends RecursiveAstVisitor<void> {
+  final commands = <({List<String> words, List<Expression> spreads})>[];
+  final readers = <String>{};
+
+  @override
+  void visitVariableDeclaration(VariableDeclaration node) {
+    if (node.initializer case final initializer?
+        when _readsToolArguments(initializer)) {
+      readers.add(node.name.lexeme);
+    }
+    super.visitVariableDeclaration(node);
+  }
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.target case SimpleIdentifier(name: 'Process')
+        when const {'run', 'runSync', 'start'}.contains(node.methodName.name)) {
+      if (node.argumentList.arguments
+          case [
+            SimpleStringLiteral(value: final executable),
+            ListLiteral(:final elements),
+            ...,
+          ]) {
+        commands.add(
+          (
+            words: [
+              executable,
+              for (final element in elements)
+                element is SimpleStringLiteral ? element.value : '$element',
+            ],
+            spreads: [
+              for (final element in elements)
+                if (element is SpreadElement) element.expression,
+            ],
+          ),
+        );
+      }
+    }
+    super.visitMethodInvocation(node);
+  }
+}
+
+/// The options that the command [words] gives .github/scripts/each_app.sh
+/// before its directory, with --env without its variable, and the command
+/// that the script runs for each app, after the directory; no options and
+/// [words] themselves for a command that does not run the script.
+({Set<String> options, List<String> command}) _eachAppOf(List<String> words) {
+  final script = words.indexWhere((word) => word.endsWith('each_app.sh'));
+  if (script < 0) return (options: const {}, command: words);
+  final options = <String>{};
+  var index = script + 1;
+  while (index < words.length && words[index].startsWith('--')) {
+    options.add(words[index]);
+    index += words[index] == '--env' ? 2 : 1;
+  }
+  return (options: options, command: words.skip(index + 1).toList());
+}
+
+/// What the command [words] builds as a release, such as
+/// `flutter build ipa`, or `null` for a command that builds none:
+/// `flutter build` of a target, also with global options of `flutter`
+/// before `build`, such as `--no-version-check`, or [buildApk], or the
+/// function `build_apk` that it defines for a script that sources it, which
+/// run `flutter build apk` with their arguments; unless an argument asks for
+/// a debug or a profile build, or the target is `ios` for the simulator,
+/// which `flutter build` builds for debug unless an argument asks for a
+/// release.
+String? _releaseBuildIn(List<String> words) {
+  for (final (index, word) in words.indexed) {
+    var build = index + 1;
+    if (word == 'flutter') {
+      while (build < words.length && words[build].startsWith('-')) {
+        build++;
+      }
+    }
+    final (target, arguments) = switch (word) {
+      'flutter'
+          when build + 1 < words.length &&
+              words[build] == 'build' &&
+              !words[build + 1].startsWith('-') =>
+        (words[build + 1], words.skip(build + 2)),
+      _ when word.endsWith(buildApk.split('/').last) || word == 'build_apk' => (
+          'apk',
+          words.skip(index + 1)
+        ),
+      _ => (null, const <String>[]),
+    };
+    if (target == null) continue;
+    final release = arguments.contains('--release') ||
+        (!arguments.contains('--debug') &&
+            !arguments.contains('--profile') &&
+            !(target == 'ios' && arguments.contains('--simulator')));
+    return release ? 'flutter build $target' : null;
+  }
+  return null;
+}
+
+/// The root of the workspace at the start of a path, `$GITHUB_WORKSPACE`,
+/// `${GITHUB_WORKSPACE}` or `${{ github.workspace }}`, with the separator
+/// after it, if the path goes on.
+final _workspace = RegExp(
+  r'^\$(?:GITHUB_WORKSPACE|\{GITHUB_WORKSPACE\}|\{\{\s*github\.workspace\s*\}\})(?:/|$)',
+);
+
+/// The directory, from the root of the repository, of the commands after
+/// `cd` [path] from [directory]: [path] after the root of the workspace that
+/// it starts with, or [path] from [directory] when it is relative, or else
+/// [directory], for a path that the check cannot follow.
+String _directoryAfterCd(String directory, String path) {
+  if (_workspace.hasMatch(path)) return path.replaceFirst(_workspace, '');
+  if (path.contains(r'$') || path.startsWith('/')) return directory;
+  final segments = [
+    for (final segment in directory.split('/'))
+      if (segment.isNotEmpty) segment,
+  ];
+  for (final segment in path.split('/')) {
+    if (segment == '..' && segments.isNotEmpty) {
+      segments.removeLast();
+    } else if (segment.isNotEmpty && segment != '.' && segment != '..') {
+      segments.add(segment);
+    }
+  }
+  return segments.join('/');
+}
+
+/// The test files that the command [words] runs with `dart test`, by their
+/// paths from the root of the repository: those of the arguments that end
+/// with `.dart`, after [directory], the directory of the command from the
+/// root of the repository, or after the root of the workspace that they
+/// start with.
+List<String> _testsRunBy(List<String> words, String directory) {
+  final dart = words.indexed.where(
+    (word) =>
+        word.$2 == 'dart' &&
+        word.$1 + 1 < words.length &&
+        words[word.$1 + 1] == 'test',
+  );
+  if (dart.isEmpty) return const [];
+  return [
+    for (final word in words.skip(dart.first.$1 + 2))
+      if (!word.startsWith('-') && word.endsWith('.dart'))
+        if (_workspace.hasMatch(word))
+          word.replaceFirst(_workspace, '')
+        else if (word.contains(r'$'))
+          // A path that the check cannot follow, which it reports.
+          directory.isEmpty ? word : '$directory/$word'
+        else
+          _directoryAfterCd(directory, word),
+  ];
+}
+
+/// The problem that [where] builds an app as a release with [build] without
+/// the arguments of the flutter tool of the app.
+String _releaseWithout(String where, String build) =>
+    '$where builds the app as a release with $build without the arguments '
+    'of the flutter tool that build the app with its values, which a '
+    'release build of an app with values needs. Run the build for each app '
+    'of the directory with .github/scripts/each_app.sh $toolArgumentsOption, '
+    'without --env: it adds the arguments that the --create of '
+    'packages/smf_flutter_cli/tool/matrix.dart writes next to the app.';
+
+/// The problem that [where] runs [test], which builds the app it gets as a
+/// release with [build], without the arguments of the flutter tool of the
+/// app.
+String _testReleaseWithout(String where, String test, String build) =>
+    '$where runs $test, which builds the app as a release with $build, '
+    'without the arguments of the flutter tool that build the app with its '
+    'values, which a release build of an app with values needs. Run the '
+    'test for each app of the directory with .github/scripts/each_app.sh '
+    '--env <variable> $toolArgumentsOption, which gives the test the '
+    'arguments that the --create of packages/smf_flutter_cli/tool/matrix.dart '
+    'writes next to the app in $toolArgumentsVariable, and have the test add '
+    'them to its build.';
+
+/// The problem that [where] runs [test], whose release build [build] does
+/// not take the arguments of [toolArgumentsVariable].
+String _testIgnoresArguments(String where, String test, String build) =>
+    '$where runs $test, whose release build with $build does not take the '
+    'arguments of the flutter tool that build the app with its values, '
+    'which .github/scripts/each_app.sh gives the test in '
+    '$toolArgumentsVariable: add them to the arguments of that build, as a '
+    'spread of a variable that reads $toolArgumentsVariable.';
+
+/// The problem that [where] runs [test], a test file that the check does not
+/// find.
+String _testNotFound(String where, String test) =>
+    '$where runs $test, a test file that the check of the release builds '
+    'does not find, so it cannot tell whether the test builds the app as a '
+    'release. Name the test by its path from the directory that the step '
+    'runs it in, or from the root of the workspace.';
 
 /// Whether [step] puts [mavenCentralMirror] into ~/.gradle/init.d, where
 /// every build of Gradle of the user runs it.
@@ -3863,6 +4266,291 @@ jobs:
     });
   });
 
+  group('the release builds', () {
+    test(
+        'finds a step that builds an app as a release without the tool '
+        'arguments of the app, also with global options of flutter, and '
+        'passes the debug and profile builds', () {
+      const workflow = r'''
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release for the cache
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" \
+            --release --target-platform android-x64
+      - name: Bundle
+        run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build appbundle --flavor prod
+      - name: By hand
+        run: for app in "$RUNNER_TEMP/apps"/*/; do (cd "$app" && flutter build apk); done
+      - name: In a variable
+        run: .github/scripts/each_app.sh --env APP --tool-arguments "$RUNNER_TEMP/apps" flutter build ipa
+      - name: Global options
+        run: .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter --no-version-check -v build ipa
+      - name: Passes
+        run: |
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --debug
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build apk --profile
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter --no-version-check build apk --debug
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" flutter build ios --simulator --no-codesign
+          .github/scripts/each_app.sh --tool-arguments "$RUNNER_TEMP/apps" \
+            "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --release --target-platform android-x64
+          .github/scripts/each_app.sh --tool-arguments "$RUNNER_TEMP/apps" flutter build ipa --flavor prod
+          flutter build --help
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 release
+''';
+
+      expect(
+        releaseBuildProblemsOf(
+          workflow,
+          file: 'apps.yml',
+          testSource: (_) => null,
+        ),
+        [
+          equals(
+            'apps.yml, job android, step "Release for the cache" builds the '
+            'app as a release with flutter build apk without the arguments of '
+            'the flutter tool that build the app with its values, which a '
+            'release build of an app with values needs. Run the build for '
+            'each app of the directory with .github/scripts/each_app.sh '
+            '--tool-arguments, without --env: it adds the arguments that the '
+            '--create of packages/smf_flutter_cli/tool/matrix.dart writes '
+            'next to the app.',
+          ),
+          startsWith(
+            'apps.yml, job android, step "Bundle" builds the app as a release '
+            'with flutter build appbundle without ',
+          ),
+          startsWith(
+            'apps.yml, job android, step "By hand" builds the app as a '
+            'release with flutter build apk without ',
+          ),
+          startsWith(
+            'apps.yml, job android, step "In a variable" builds the app as a '
+            'release with flutter build ipa without ',
+          ),
+          startsWith(
+            'apps.yml, job android, step "Global options" builds the app as a '
+            'release with flutter build ipa without ',
+          ),
+        ],
+      );
+    });
+
+    test(
+        'finds a step that runs a test which builds the app as a release, '
+        'unless each_app.sh gives the test the tool arguments of the app in '
+        'its variable and the test adds them to that build, and a test file '
+        'that it does not find', () {
+      const archive = '''
+import 'dart:io';
+
+Future<void> main() async {
+  final flavor = (name: 'prod');
+  final toolArguments = argumentsOf(Platform.environment['SMF_TOOL_ARGUMENTS']);
+  await Process.run(
+    'flutter',
+    ['build', 'ipa', '--no-codesign', '--flavor', flavor.name, ...toolArguments],
+    workingDirectory: app,
+  );
+  Process.runSync('git', ['status']);
+}
+''';
+      const direct = r'''
+import 'dart:io';
+
+void main() {
+  Process.runSync('flutter', [
+    'build',
+    'appbundle',
+    ...Platform.environment['SMF_TOOL_ARGUMENTS']!.split('\n'),
+  ]);
+}
+''';
+      const ignoring = '''
+import 'dart:io';
+
+void main() {
+  final toolArguments = argumentsOf(Platform.environment['SMF_TOOL_ARGUMENTS']);
+  final other = ['--split-debug-info=build'];
+  Process.run('flutter', ['build', 'ipa', '--no-codesign']);
+  Process.run('flutter', ['build', 'apk', ...other]);
+}
+''';
+      const debug = '''
+import 'dart:io';
+
+void main() {
+  Process.start('flutter', ['build', 'apk', '--debug']);
+  Process.run('flutter', arguments);
+  Process.run('flutter', ['test']);
+}
+''';
+      const sources = {
+        'packages/a/test/archive_test.dart': archive,
+        'packages/a/test/direct_test.dart': direct,
+        'packages/a/test/ignoring_test.dart': ignoring,
+        'packages/a/test/debug_test.dart': debug,
+      };
+      const workflow = r'''
+jobs:
+  archive:
+    runs-on: macos-26
+    steps:
+      - name: Without the arguments
+        working-directory: packages/a
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env APP \
+            "$RUNNER_TEMP/apps" dart test test/archive_test.dart --file-reporter json:build/archive.json
+      - name: As arguments of dart test
+        working-directory: packages/a/
+        run: .github/scripts/each_app.sh --tool-arguments "$RUNNER_TEMP/apps" dart test ./test/archive_test.dart
+      - name: From the root
+        run: dart test packages/a/test/archive_test.dart
+      - name: Ignores them
+        working-directory: packages/a
+        run: .github/scripts/each_app.sh --env APP --tool-arguments "$RUNNER_TEMP/apps" dart test test/ignoring_test.dart
+      - name: Not found
+        working-directory: packages/a
+        run: |
+          dart test test/missing_test.dart
+          dart test "$TESTS/archive_test.dart"
+          cd "$GITHUB_WORKSPACE/packages"
+          dart test a/test/gone_test.dart
+      - name: Passes
+        working-directory: packages/b
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env APP --tool-arguments \
+            "$RUNNER_TEMP/apps" dart test "$GITHUB_WORKSPACE/packages/a/test/archive_test.dart" \
+            '${{ github.workspace }}/packages/a/test/direct_test.dart' --file-reporter json:build/archive.json
+          dart test "${GITHUB_WORKSPACE}/packages/a/test/debug_test.dart"
+          (cd "$RUNNER_TEMP" && flutter create my_app)
+          cd ..
+          cd a/../a
+          dart test test/debug_test.dart
+''';
+
+      expect(releaseBuildsOfTest(archive), [
+        (build: 'flutter build ipa', takesArguments: true),
+      ]);
+      expect(releaseBuildsOfTest(direct), [
+        (build: 'flutter build appbundle', takesArguments: true),
+      ]);
+      expect(releaseBuildsOfTest(ignoring), [
+        (build: 'flutter build ipa', takesArguments: false),
+        (build: 'flutter build apk', takesArguments: false),
+      ]);
+      expect(releaseBuildsOfTest(debug), isEmpty);
+      expect(
+        releaseBuildProblemsOf(
+          workflow,
+          file: 'apps.yml',
+          testSource: (path) => sources[path],
+        ),
+        [
+          equals(
+            'apps.yml, job archive, step "Without the arguments" runs '
+            'packages/a/test/archive_test.dart, which builds the app as a '
+            'release with flutter build ipa, without the arguments of the '
+            'flutter tool that build the app with its values, which a release '
+            'build of an app with values needs. Run the test for each app of '
+            'the directory with .github/scripts/each_app.sh --env <variable> '
+            '--tool-arguments, which gives the test the arguments that the '
+            '--create of packages/smf_flutter_cli/tool/matrix.dart writes '
+            'next to the app in SMF_TOOL_ARGUMENTS, and have the test add '
+            'them to its build.',
+          ),
+          startsWith(
+            'apps.yml, job archive, step "As arguments of dart test" runs '
+            'packages/a/test/archive_test.dart, which builds ',
+          ),
+          startsWith(
+            'apps.yml, job archive, step "From the root" runs '
+            'packages/a/test/archive_test.dart, which builds ',
+          ),
+          equals(
+            'apps.yml, job archive, step "Ignores them" runs '
+            'packages/a/test/ignoring_test.dart, whose release build with '
+            'flutter build ipa does not take the arguments of the flutter '
+            'tool that build the app with its values, which '
+            '.github/scripts/each_app.sh gives the test in SMF_TOOL_ARGUMENTS: '
+            'add them to the arguments of that build, as a spread of a '
+            'variable that reads SMF_TOOL_ARGUMENTS.',
+          ),
+          startsWith(
+            'apps.yml, job archive, step "Ignores them" runs '
+            'packages/a/test/ignoring_test.dart, whose release build with '
+            'flutter build apk does not take ',
+          ),
+          equals(
+            'apps.yml, job archive, step "Not found" runs '
+            'packages/a/test/missing_test.dart, a test file that the check of '
+            'the release builds does not find, so it cannot tell whether the '
+            'test builds the app as a release. Name the test by its path from '
+            'the directory that the step runs it in, or from the root of the '
+            'workspace.',
+          ),
+          startsWith(
+            'apps.yml, job archive, step "Not found" runs '
+            r'packages/a/$TESTS/archive_test.dart, a test file that the check '
+            'of the release builds does not find,',
+          ),
+          startsWith(
+            'apps.yml, job archive, step "Not found" runs '
+            'packages/a/test/gone_test.dart, a test file that the check of the '
+            'release builds does not find,',
+          ),
+        ],
+      );
+    });
+
+    test(
+        'finds a release build in a script of .github/scripts, but in the '
+        'scripts that it lists with their reasons', () {
+      const script = r'''
+#!/usr/bin/env bash
+flutter --suppress-analytics build ipa --flavor prod
+flutter build apk --debug "$@"
+build_apk --release "$@"
+flutter build ios --simulator
+''';
+
+      expect(scriptReleaseBuildsOf(script), [
+        'flutter build ipa',
+        'flutter build apk',
+      ]);
+      expect(
+        scriptReleaseBuildProblemsOf(
+          script,
+          file: '.github/scripts/release.sh',
+        ),
+        [
+          equals(
+            '.github/scripts/release.sh builds an app as a release with '
+            'flutter build ipa. Build it in the step of a workflow with '
+            '.github/scripts/each_app.sh --tool-arguments, which gives it the '
+            'arguments of the flutter tool that build the app with its '
+            'values, or, for a script that takes them as the step that runs '
+            'it gives them, make it an exception of releaseBuildScripts with '
+            'the reason.',
+          ),
+          startsWith(
+            '.github/scripts/release.sh builds an app as a release with '
+            'flutter build apk.',
+          ),
+        ],
+      );
+      expect(
+        scriptReleaseBuildProblemsOf(
+          script,
+          file: '.github/scripts/start_app.sh',
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   test(
       'finds the answers that a step or a script gives start_app.sh, also '
       'through a variable or an array, and those that no probe asks for', () {
@@ -4002,6 +4690,10 @@ jobs:
     expect(workflows, isNotEmpty);
     expect(scripts, isNotEmpty);
     final used = <Object>{};
+    String? testSource(String path) => switch (File('$root/$path')) {
+          final file when file.existsSync() => file.readAsStringSync(),
+          _ => null,
+        };
 
     for (final file in workflows) {
       final name = file.uri.pathSegments.last;
@@ -4012,9 +4704,38 @@ jobs:
           ...nativeCacheProblemsOf(file.readAsStringSync(), file: name),
           ...mavenCentralProblemsOf(file.readAsStringSync(), file: name),
           ...apkBuildProblemsOf(file.readAsStringSync(), file: name),
+          ...releaseBuildProblemsOf(
+            file.readAsStringSync(),
+            file: name,
+            testSource: testSource,
+          ),
         ],
         isEmpty,
         reason: name,
+      );
+    }
+    // The check sees the release builds of the workflows, of a step and of a
+    // test, which take the tool arguments from each_app.sh.
+    final withoutToolArguments = releaseBuildProblemsOf(
+      File('$root/.github/workflows/apps.yml')
+          .readAsStringSync()
+          .replaceAll(' $toolArgumentsOption', ''),
+      file: 'apps.yml',
+      testSource: testSource,
+    );
+    expect(
+      withoutToolArguments,
+      containsAll([
+        contains(' builds the app as a release with flutter build '),
+        contains(', which builds the app as a release with flutter build '),
+      ]),
+    );
+    // Each script that may build a release does.
+    for (final script in releaseBuildScripts.keys) {
+      expect(
+        scriptReleaseBuildsOf(File('$root/$script').readAsStringSync()),
+        isNotEmpty,
+        reason: '$script builds no release: remove its exception.',
       );
     }
     expect(File('$root/$mavenCentralMirror').existsSync(), isTrue);
@@ -4032,6 +4753,11 @@ jobs:
       expect(
         [
           ...scriptProblemsOf(
+            file.readAsStringSync(),
+            file: name,
+            powerShell: powerShell,
+          ),
+          ...scriptReleaseBuildProblemsOf(
             file.readAsStringSync(),
             file: name,
             powerShell: powerShell,
