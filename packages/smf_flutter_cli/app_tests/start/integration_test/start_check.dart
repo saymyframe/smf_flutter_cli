@@ -3,17 +3,21 @@
 // on an Android emulator and on an iOS simulator: the app starts. It runs
 // main() of the app, with what its modules put into bootstrap(), waits for
 // the first screen to settle and looks at the widgets on it: the app shows
-// its first screen without an error. Then it runs the probes of the tests
-// of the app, which go through the roles of the app, such as the walk of
-// its routes, within a minute together. The matrix of SMF lists them in
-// start_probes.dart next to it, the probes of the tests that go into the
-// app with the check (MatrixAppTest.startProbe).
+// its first screen without an error (start_screen.dart, next to it). Then it
+// runs the probes of the tests of the app, which go through the roles of the
+// app, such as the walk of its routes, within a minute together. The matrix
+// of SMF lists them in start_probes.dart next to it, the probes of the tests
+// that go into the app with the check (MatrixAppTest.startProbe). When the
+// start-up of the app failed, the first screen is the screen of a failed
+// start, which fails the check with the first line of the error, and no
+// probe runs.
 //
 // It knows no module, only what every app has: main() in lib/main.dart,
 // which the app entry role puts there (AppEntryRole.mainFile), whichever
-// module provides it, and a WidgetsApp at the root, which MaterialApp and
-// CupertinoApp build. So the CLI keeps it rather than the module of the
-// app entry, and it applies to every app.
+// module provides it, a WidgetsApp at the root, which MaterialApp and
+// CupertinoApp build, and the screen of a failed start of the role
+// (AppEntryRole.failedStartApp). So the CLI keeps it rather than the module
+// of the app entry, and it applies to every app.
 //
 // Nothing connects to the app to run the check, unlike a test of
 // `flutter test`, which sometimes never reaches the app on the devices of

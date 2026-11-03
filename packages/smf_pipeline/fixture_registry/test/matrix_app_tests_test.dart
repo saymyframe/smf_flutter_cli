@@ -2072,10 +2072,12 @@ void main() {
         ]),
       );
       // The test of the purchases of the user of the device is for an app
-      // without sign-in.
+      // without sign-in, and the test of what the start check makes of the
+      // first screen of an app needs no module, so the app whose only role
+      // is the app entry runs it.
       expect(
         [for (final test in severalProviders.tests) nameOf(test)],
-        isNot(contains('purchases_device')),
+        isNot(anyOf(contains('purchases_device'), contains('start_screen'))),
       );
       for (final test in severalProviders.tests) {
         expect(test.appliesTo(everyModule), isTrue, reason: test.directory);

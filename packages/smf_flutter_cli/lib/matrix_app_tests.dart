@@ -75,6 +75,9 @@ Future<MatrixAppTests> smfAppTests() async {
         appliesTo: (_) => true,
         readsStartProbes: true,
       ),
+      // What the start check makes of the first screen of an app, on screens
+      // that the test shows itself, in the app of the app entry alone.
+      await startScreenAppTest(),
       // The start-up of the app initializes Firebase, with the options of the
       // flavor of the tests as flutterfire would write them, and the mocks of
       // Firebase Core, which the matrix sets up for the tests of every module
@@ -712,6 +715,27 @@ Future<MatrixAppTests> smfAppTests() async {
     },
   );
 }
+
+/// The test of the start check that the CLI keeps in its
+/// `app_tests/start_screen`: what the check makes of the first screen of an
+/// app (`problemsOfFirstScreen()` of `integration_test/start_screen.dart` of
+/// its app test `start`, which every app has). The screen of a failed start,
+/// `FailedStartApp` of the app entry role, which `main()` shows when
+/// `bootstrap()` throws, is a problem with the first line of the error, and
+/// no probe runs after it; a screen without a `WidgetsApp` and an
+/// `ErrorWidget` are problems too.
+///
+/// A widget test that shows those screens itself, since the check runs on a
+/// device, where no test framework sees it. It needs no module and starts
+/// no app, so it runs in the apps whose only role is the app entry,
+/// whichever module provides it, such as the app of `flutter_core` alone.
+/// For the same reason the app of several providers of the fixture registry
+/// leaves it out.
+Future<MatrixAppTest> startScreenAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/start_screen',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.difference({appEntryRole}).isEmpty,
+    );
 
 /// The test of the splash role that the CLI keeps in its
 /// `app_tests/splash_role`, for the apps with the role, whichever module
