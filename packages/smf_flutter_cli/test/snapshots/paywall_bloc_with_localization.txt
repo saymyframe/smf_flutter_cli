@@ -296,7 +296,7 @@ With `--dart-define-from-file`:
 - Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`, and a release build stops with an error.
 - A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
 - The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
-- `AppEnv.supplied` is `true` once `--dart-define-from-file=.env` declared one of the keys that it names, so a new key needs no change there, unless the app had no key: then name it there as `bool.hasEnvironment('MY_SERVICE_KEY')`.
+- `AppEnv.supplied` is `true` once `--dart-define-from-file=.env` declared one of the keys that it names, so a new key needs no change there. An app without keys has `true` there: with its first key, make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -369,7 +369,7 @@ Xcode takes the values from `ios/Flutter/Generated.xcconfig`, which the last `fl
 
 A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
-`AppEnv.supplied` is `true` once the command declared one of the keys that it names, so a key of your own needs no change there. In an app without keys it is `true`: then name your first key there, as `bool.hasEnvironment('MY_SERVICE_KEY')`, so that a release build without the argument stops.
+`AppEnv.supplied` is `true` once the command declared one of the keys that it names, so a key of your own needs no change there. An app without keys has `true` there, since nothing can tell. With the first key of your own, make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key, so that a release build without the argument stops.
 
 To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
 
