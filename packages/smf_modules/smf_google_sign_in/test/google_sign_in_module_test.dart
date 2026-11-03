@@ -14,6 +14,7 @@ import 'package:smf_gen_l10n/smf_gen_l10n.dart';
 import 'package:smf_google_sign_in/bundles/google_sign_in_bundle.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_google_sign_in/src/agents.dart';
+import 'package:smf_google_sign_in/src/ios_setup.dart';
 import 'package:smf_google_sign_in/src/readme.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
@@ -110,6 +111,41 @@ final class _CatchClauses extends RecursiveAstVisitor<void> {
   void visitCatchClause(CatchClause node) {
     if (node.exceptionType case final type?) _found(type.toSource());
     super.visitCatchClause(node);
+  }
+}
+
+/// The keys of the answer of the app delegate that [code], the file of the
+/// module, reads: the keys of the map patterns of its code, and the indexes
+/// of `answer`.
+Set<String> _answerKeysReadBy(String code) {
+  final keys = <String>{};
+  parseString(content: code).unit.accept(_AnswerKeys(keys.add));
+  return keys;
+}
+
+/// Gives each key of the answer of the app delegate that the code reads to
+/// [_found].
+final class _AnswerKeys extends RecursiveAstVisitor<void> {
+  _AnswerKeys(this._found);
+
+  final void Function(String key) _found;
+
+  @override
+  void visitIndexExpression(IndexExpression node) {
+    if ((node.target, node.index)
+        case (
+          SimpleIdentifier(name: 'answer'),
+          SimpleStringLiteral(:final value)
+        )) {
+      _found(value);
+    }
+    super.visitIndexExpression(node);
+  }
+
+  @override
+  void visitMapPatternEntry(MapPatternEntry node) {
+    if (node.key case SimpleStringLiteral(:final value)) _found(value);
+    super.visitMapPatternEntry(node);
   }
 }
 
@@ -476,6 +512,65 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Reads the setup of the iOS app with `readGoogleSignInIosSetup()` of the
+/// app of the module, on Android and then on iOS, with the answers of the
+/// app delegate that it scripts, and sends back the fields of each setup
+/// and how many calls reached the method channel.
+const _iosSetupScript = r'''
+import 'dart:isolate';
+
+import 'package:contract_app/core/google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
+const _channel = 'google_sign_in/ios_setup';
+
+Object? fieldsOf(GoogleSignInIosSetup? setup) => setup == null
+    ? null
+    : {
+        'answered': setup.answered,
+        'hasServiceInfo': setup.hasServiceInfo,
+        'clientId': setup.clientId,
+        'source': setup.source,
+        'urlSchemes': setup.urlSchemes,
+        'urlScheme': setup.urlScheme,
+        'problem': setup.problem,
+      };
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  final result = <String, Object?>{};
+  channelAnswers[_channel] = {
+    'serviceInfo': true,
+    'serviceInfoClientId': 'one.apps.googleusercontent.com',
+    'infoPlistClientId': 'two.apps.googleusercontent.com',
+    'urlSchemes': [
+      'Com.GoogleUserContent.Apps.Three',
+      7,
+      'com.googleusercontent.apps.one',
+    ],
+  };
+  result['on Android'] = fieldsOf(await readGoogleSignInIosSetup());
+  final onAndroid = channelCalls.length;
+
+  defaultTargetPlatform = TargetPlatform.iOS;
+  result['from the files'] = fieldsOf(await readGoogleSignInIosSetup());
+  result['with a clientId of the app'] = fieldsOf(
+    await readGoogleSignInIosSetup(
+      clientId: 'three.apps.googleusercontent.com',
+    ),
+  );
+  result['with an empty clientId of the app'] =
+      fieldsOf(await readGoogleSignInIosSetup(clientId: ''));
+  channelAnswers[_channel] = null;
+  result['an answer without values'] =
+      fieldsOf(await readGoogleSignInIosSetup());
+  channelAnswers.remove(_channel);
+  result['no answer'] = fieldsOf(await readGoogleSignInIosSetup());
+  result['calls'] = [onAndroid, channelCalls.length];
+  port.send(result);
+}
+''';
+
 void main() {
   const module = GoogleSignInModule();
 
@@ -499,12 +594,13 @@ void main() {
     });
 
     test(
-        'contributes its brick, google_sign_in, the logo of Google among the '
+        'contributes its brick, the code of the app delegate that tells the '
+        'setup of the iOS app, google_sign_in, the logo of Google among the '
         'assets, its way to sign in with its label, its section of the '
         'README and its note for coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(7));
+      expect(contributions, hasLength(8));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(googleSignInBundle));
       expect(brick.bundle.name, 'google_sign_in');
@@ -516,17 +612,26 @@ void main() {
         'issuer': 'https://accounts.google.com',
         'logo': 'lib/core/google_sign_in/assets/google_logo.png',
         'readme': 'Google sign-in',
+        'ios_setup_channel': 'google_sign_in/ios_setup',
+        'info_plist': 'ios/Runner/Info.plist',
+        'app_delegate': 'ios/Runner/AppDelegate.swift',
       });
-      final dependency = contributions[1] as PubspecDependency;
+      expect(brick.vars['ios_setup_channel'], iosSetupChannel);
+      final delegate = contributions[1] as SocketContribution;
+      expect(delegate.socket, AppEntryRole.iosAppDelegateEngine);
+      expect(delegate.fragment!.code, iosSetupReader);
+      expect(delegate.fragment!.imports, isEmpty);
+      expect(delegate.when, isEmpty);
+      final dependency = contributions[2] as PubspecDependency;
       expect(
         (dependency.package, dependency.constraint, dependency.dev),
         ('google_sign_in', '^7.2.0', false),
       );
-      final flutter = contributions[2] as PubspecFlutter;
+      final flutter = contributions[3] as PubspecFlutter;
       expect(flutter.assets, [GoogleSignInModule.logoFile]);
       expect(flutter.fonts, isEmpty);
 
-      final data = contributions[3] as RoleData<Object>;
+      final data = contributions[4] as RoleData<Object>;
       expect(data.role, authRole);
       final method = data.value as SignInMethod;
       expect(method.issuer, 'https://accounts.google.com');
@@ -554,16 +659,16 @@ void main() {
       expect(method.icon, const TypeRef('GoogleSignInIcon', import: file));
       expect(method.problems(), isEmpty);
 
-      final texts = contributions[4] as RoleData<Object>;
+      final texts = contributions[5] as RoleData<Object>;
       expect(texts.role, localizationRole);
       expect((texts.value as TextsData).texts, [GoogleSignInModule.label]);
 
-      final readme = contributions[5] as SocketContribution;
+      final readme = contributions[6] as SocketContribution;
       expect(readme.socket, AppEntryRole.readmeSections);
       expect(readme.entryKey, 'Google sign-in');
       expect(readme.entryValue, readmeSection);
 
-      final note = contributions[6] as SocketContribution;
+      final note = contributions[7] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, 'Google sign-in');
       expect(note.entryValue, AgentNote(agentNote));
@@ -749,7 +854,15 @@ void main() {
           localization,
         ]),
       );
-      expect(changed[appEntry], {'pubspec.yaml', AppEntryRole.readmeFile});
+      expect(
+        changed[appEntry],
+        {
+          'pubspec.yaml',
+          AppEntryRole.readmeFile,
+          // The code that tells the setup of the iOS app.
+          AppEntryRole.appDelegateFile,
+        },
+      );
       expect(
         changed['${const RoleTemplateOrigin(appEntryRole)}'],
         {AppEntryRole.agentsFile},
@@ -839,6 +952,55 @@ void main() {
             'Add such a way to sign in on iOS, such as Sign in with Apple.',
           ),
         ],
+      );
+    });
+
+    test(
+        'gives the app delegate the code that answers the method channel of '
+        'the setup of the iOS app, with the keys that the function of the '
+        'module reads', () {
+      expect(
+        [
+          for (final collected in app
+              .socketOrders[AppEntryRole.iosAppDelegateEngine]!.contributions)
+            (
+              collected.origin,
+              (collected.contribution as SocketContribution).fragment!.code,
+            ),
+        ],
+        [(_module, iosSetupReader)],
+      );
+      expect(iosSetupReader, contains('name: "$iosSetupChannel",'));
+      // The lines of the body of the method are indented by four spaces.
+      expect(
+        [
+          for (final line in iosSetupReader.split('\n'))
+            if (!line.startsWith('    ')) line,
+        ],
+        isEmpty,
+      );
+      final answered = {
+        for (final match in RegExp(r'^\s*"(\w+)": ', multiLine: true)
+            .allMatches(iosSetupReader))
+          match[1]!,
+        for (final match
+            in RegExp(r'\bsetup\["(\w+)"\]').allMatches(iosSetupReader))
+          match[1]!,
+      };
+      expect(
+        answered,
+        {
+          'serviceInfo',
+          'urlSchemes',
+          'serviceInfoClientId',
+          'infoPlistClientId'
+        },
+      );
+      expect(
+        _answerKeysReadBy(app.files[googleSignInFile]!.text),
+        answered,
+        reason: 'The function of the module reads what the app delegate '
+            'answers.',
       );
     });
 
@@ -977,7 +1139,7 @@ void main() {
       }
       expect(
         _caughtTypesOf(app.files[googleSignInFile]!.text),
-        ['GoogleSignInException', 'Object'],
+        ['MissingPluginException', 'GoogleSignInException', 'Object'],
       );
       expect(file.uses('rawNonce'), isFalse);
       expect(
@@ -991,6 +1153,7 @@ void main() {
     late Map<Object?, Object?> calls;
     late Map<Object?, Object?> otherZone;
     late Map<Object?, Object?> onIos;
+    late Map<Object?, Object?> iosSetup;
 
     setUpAll(() async {
       final result = await _resultOf(const [GoogleSignInModule.id]);
@@ -999,6 +1162,7 @@ void main() {
         calls = (await app.run(_script))! as Map<Object?, Object?>;
         otherZone = (await app.run(_otherZoneScript))! as Map<Object?, Object?>;
         onIos = (await app.run(_iosScript))! as Map<Object?, Object?>;
+        iosSetup = (await app.run(_iosSetupScript))! as Map<Object?, Object?>;
       } finally {
         app.delete();
       }
@@ -1082,7 +1246,7 @@ void main() {
       );
       expect(
         onIos['calls on iOS'],
-        List.filled(11, 'google_sign_in/ios_setup read'),
+        List.filled(11, '$iosSetupChannel read'),
         reason: 'Each call on iOS asks the app delegate once.',
       );
       expect(
@@ -1091,6 +1255,72 @@ void main() {
         reason: 'On Android, which has no such setup, nothing asks the app '
             'delegate.',
       );
+    });
+
+    test(
+        'reads the setup of the iOS app as the Google Sign-In SDK takes it: '
+        'the clientId of the app before CLIENT_ID of GoogleService-Info.plist '
+        'before GIDClientID of Info.plist, and the URL schemes in lower case; '
+        'and on another platform reads nothing', () {
+      const fromApp = 'the clientId that the app gives initialize()';
+      const schemes = [
+        'com.googleusercontent.apps.three',
+        'com.googleusercontent.apps.one',
+      ];
+      expect(iosSetup, {
+        'on Android': null,
+        'from the files': {
+          'answered': true,
+          'hasServiceInfo': true,
+          'clientId': 'one.apps.googleusercontent.com',
+          'source': 'CLIENT_ID of GoogleService-Info.plist',
+          'urlSchemes': schemes,
+          'urlScheme': 'com.googleusercontent.apps.one',
+          'problem': null,
+        },
+        'with a clientId of the app': {
+          'answered': true,
+          'hasServiceInfo': true,
+          'clientId': 'three.apps.googleusercontent.com',
+          'source': fromApp,
+          'urlSchemes': schemes,
+          'urlScheme': 'com.googleusercontent.apps.three',
+          'problem': null,
+        },
+        'with an empty clientId of the app': {
+          'answered': true,
+          'hasServiceInfo': true,
+          'clientId': '',
+          'source': fromApp,
+          'urlSchemes': schemes,
+          'urlScheme': '',
+          'problem': 'the id of the iOS client of Google in $fromApp is empty',
+        },
+        'an answer without values': {
+          'answered': true,
+          'hasServiceInfo': false,
+          'clientId': null,
+          'source': null,
+          'urlSchemes': <String>[],
+          'urlScheme': null,
+          'problem': 'the iOS app has no iOS client of Google: the app has no '
+              'GoogleService-Info.plist, and ${AppEntryRole.infoPlistFile} has '
+              'no GIDClientID',
+        },
+        'no answer': {
+          'answered': false,
+          'hasServiceInfo': false,
+          'clientId': null,
+          'source': null,
+          'urlSchemes': <String>[],
+          'urlScheme': null,
+          'problem': '${AppEntryRole.appDelegateFile} does not answer the '
+              'method channel $iosSetupChannel, through which the app learns '
+              'whether the Google Sign-In SDK finds the iOS client of Google '
+              'and its URL scheme',
+        },
+        'calls': [0, 5],
+      });
     });
 
     test(
