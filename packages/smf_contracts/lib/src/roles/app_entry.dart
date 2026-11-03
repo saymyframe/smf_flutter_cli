@@ -193,6 +193,11 @@ final class AppEntryRole extends Role<NoDsl> {
   static const statusBarIconsTestFile =
       'test/core/app/status_bar_icons_test.dart';
 
+  /// The path of the file with [showFailedStart] and [failedStartApp], what
+  /// the app shows when its start-up fails, which the template of the role
+  /// generates in every app.
+  static const failedStartFile = 'lib/core/app/failed_start.dart';
+
   /// The native flavors of every app, in the order from development to the
   /// stores: a constant of the role rather than an option, so that every
   /// app has the same ones.
@@ -241,6 +246,38 @@ final class AppEntryRole extends Role<NoDsl> {
     'main',
     path: mainFile,
     returnType: 'Future<void>',
+  );
+
+  /// `void showFailedStart(Object error, StackTrace stackTrace)` of the
+  /// template of the role, which `main()` calls when `bootstrap()` throws.
+  ///
+  /// It runs [failedStartApp] with the error, in place of the splash screen
+  /// of the system, which would otherwise stay, and then reports the error
+  /// to `FlutterError.onError`. So the handlers that the start-up set up
+  /// before it failed, such as those of crash reporting, hear of it, and a
+  /// test that runs `main()` fails on it.
+  static const showFailedStart = RequiredFunction(
+    'showFailedStart',
+    path: failedStartFile,
+    returnType: 'void',
+    positionalArguments: 2,
+  );
+
+  /// The app that [showFailedStart] runs, created as
+  /// `FailedStartApp(error: error, stackTrace: stackTrace)`: a screen that
+  /// says that the app could not start, with the error and its stack trace
+  /// in a debug build, or also where `showsError` says so.
+  ///
+  /// It needs nothing of the start-up that failed, so it has neither the
+  /// theme nor the texts nor the root wrappers of the app, and its texts are
+  /// in English. Code that looks at the screen of a failed start, such as a
+  /// test, finds it by its type and reads `error` and `stackTrace` from it.
+  static const failedStartApp = RequiredClass(
+    'FailedStartApp',
+    path: failedStartFile,
+    namedParameters: ['error', 'stackTrace', 'showsError'],
+    constConstructor: true,
+    getters: ['error', 'stackTrace'],
   );
 
   /// Start-up code that runs first in `bootstrap()`, before any platform
@@ -786,10 +823,17 @@ final class AppEntryRole extends Role<NoDsl> {
         files: [
           agentsFile,
           claudeFile,
+          failedStartFile,
           statusBarIconsFile,
           statusBarIconsTestFile,
         ],
-        symbols: [main, bootstrap, fallbackStartScreen],
+        symbols: [
+          main,
+          bootstrap,
+          fallbackStartScreen,
+          showFailedStart,
+          failedStartApp,
+        ],
       );
 
   @override

@@ -25,6 +25,7 @@ import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_sign_in_method_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
+import 'package:fake_infra/bundles/fake_start_failure_bundle.dart';
 import 'package:fake_infra/bundles/fake_steps_bundle.dart';
 import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -605,6 +606,46 @@ final class FakeSlowStartModule extends SmfModule {
           Fragment(
             'await startFixture();',
             imports: [ImportRef.app('core/fixture_start/fixture_start.dart')],
+          ),
+        ),
+      ];
+}
+
+/// A module whose start-up fails when a test says so, after the rest of the
+/// start-up, with an error of its own after an asynchronous gap, as a
+/// plugin that fails to start does. Otherwise it returns at once, so it
+/// leaves no timer to the tests of the other modules.
+///
+/// It provides, requires and uses no role. Its code runs last in the late
+/// phase of `bootstrap()` when the registry lists it last, after crash
+/// reporting has started, so the test of a failed start sees the error
+/// reach the handlers that the start-up set up too.
+final class FakeStartFailureModule extends SmfModule {
+  /// Creates the module.
+  const FakeStartFailureModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_start_failure');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A start-up that fails when a test says so (fixture)',
+        kind: ModuleKinds.infrastructure,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeStartFailureBundle),
+        const SocketContribution.code(
+          AppEntryRole.bootstrapLate,
+          Fragment(
+            'await startFixtureOrFail();',
+            imports: [
+              ImportRef.app(
+                'core/fixture_start_failure/fixture_start_failure.dart',
+              ),
+            ],
           ),
         ),
       ];
