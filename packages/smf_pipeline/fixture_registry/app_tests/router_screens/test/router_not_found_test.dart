@@ -77,14 +77,23 @@ void main() {
   /// Shows a new not-found screen over the app, on the navigator at its
   /// root, without a transition of the route, so that its first frame is
   /// the first frame of the screen as it comes in; [close] takes it away
-  /// again.
-  void showNew(WidgetTester tester) => unawaited(
+  /// again. With [textScale], the screen gets the text at that size,
+  /// whatever the root of the app does with the size that the device asks
+  /// for.
+  void showNew(WidgetTester tester, {double? textScale}) => unawaited(
     tester
         .state<NavigatorState>(find.byType(Navigator).first)
         .push(
           PageRouteBuilder<void>(
             pageBuilder: (context, animation, secondaryAnimation) =>
-                const NotFoundScreen(),
+                textScale == null
+                ? const NotFoundScreen()
+                : MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(textScale)),
+                    child: const NotFoundScreen(),
+                  ),
             transitionDuration: Duration.zero,
             reverseTransitionDuration: Duration.zero,
           ),
@@ -241,14 +250,16 @@ void main() {
         );
       }
 
-      // A small phone with insets and the text at three times its size.
+      await close(tester);
+
+      // A small phone with insets, and the text at three times its size.
       const insets = FakeViewPadding(top: _inset, bottom: _inset);
       tester.view
         ..physicalSize = _phone
         ..devicePixelRatio = 1
         ..padding = insets
         ..viewPadding = insets;
-      tester.platformDispatcher.textScaleFactorTestValue = 3;
+      showNew(tester, textScale: 3);
       await tester.pumpAndSettle();
       expect(
         tester.takeException(),
@@ -259,8 +270,7 @@ void main() {
       expect(
         MediaQuery.textScalerOf(tester.element(screen)).scale(10),
         30,
-        reason: 'The not-found screen is shown with the text at three times '
-            'its size.',
+        reason: 'The not-found screen gets the text at three times its size.',
       );
       for (final text in [notFoundCell.symbol, notFoundCell.number]) {
         expect(
@@ -295,7 +305,6 @@ void main() {
       );
       await close(tester);
       tester.view.reset();
-      tester.platformDispatcher.clearTextScaleFactorTestValue();
       await tester.pumpAndSettle();
 
       // In an app that asks for less motion, a new not-found screen is there
