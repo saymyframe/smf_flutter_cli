@@ -116,9 +116,11 @@ Future<void> inRealTime(
 /// waits for its first screen and goes to the screen of the module.
 ///
 /// main() runs in real time, as the start-up of a module may wait for a
-/// timer or for input and output. The handlers of errors that the start-up
-/// installs, such as those of crash reporting, and the builder of the
-/// widget of an error go back to those of the test once main() returns.
+/// timer or for input and output. An error of bootstrap() reaches
+/// FlutterError.onError through main(), which fails the test too. The
+/// handlers of errors that the start-up installs, such as those of crash
+/// reporting, and the builder of the widget of an error go back to those of
+/// the test once main() returns.
 ///
 /// The app may start on another screen, so the test goes to the route of
 /// the module from the navigator of the page that the user sees, as code

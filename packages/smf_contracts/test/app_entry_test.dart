@@ -2985,7 +2985,10 @@ void main() {
           '`lib/core/app/failed_start.dart` and returns',
         ),
       );
-      expect(note.text, contains('Keep that `try` in `main()`.'));
+      expect(
+        note.text,
+        contains('Keep the `try` around `await bootstrap()` in `main()`.'),
+      );
     });
   });
 

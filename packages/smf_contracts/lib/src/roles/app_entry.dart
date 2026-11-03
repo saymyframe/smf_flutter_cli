@@ -86,7 +86,9 @@ const appEntryRole = AppEntryRole._();
 /// so it has neither the theme nor the texts of the app, and is in English.
 /// It shows the error and its stack trace only in a debug build. The
 /// structural rule `app_entry.main_sequence` checks that `main()` catches
-/// every error of `bootstrap()` and calls [showFailedStart] then. Whether
+/// every error of `bootstrap()` and calls [showFailedStart] then, that no
+/// clause before keeps the app on the splash screen, and that no `runApp()`
+/// in a clause or a `finally` block runs the root over the screen. Whether
 /// `main()` stops after it only a running app shows: the fixture registry
 /// keeps the test of the role that does, `failed_start`.
 ///

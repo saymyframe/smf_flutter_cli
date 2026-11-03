@@ -217,12 +217,14 @@ Future<void> inRealTime(
 /// waits for its first screen.
 ///
 /// main() runs in real time, so a start-up that waits for a timer or for
-/// input and output, as that of a module may, does not keep the fake time
-/// of the test waiting forever. An error of main() fails the test. The
-/// handlers of errors that the start-up installs, such as those of crash
-/// reporting, and the builder of the widget of an error go back to those
-/// of the test once main() returns, so that flutter_test reports the
-/// errors of the frames that follow, such as a widget that does not fit.
+/// input and output, as that of a module may, does not keep the fake time of
+/// the test waiting forever. An error of main() fails the test. An error of
+/// bootstrap() reaches FlutterError.onError through main(), which fails the
+/// test too. The handlers of errors that the start-up installs, such as
+/// those of crash reporting, and the builder of the widget of an error go
+/// back to those of the test once main() returns, so that flutter_test
+/// reports the errors of the frames that follow, such as a widget that does
+/// not fit.
 ///
 /// A test file starts the app once: the start-up of an app may not run
 /// twice, and the entrance of a page of the sign-in counts the time from
