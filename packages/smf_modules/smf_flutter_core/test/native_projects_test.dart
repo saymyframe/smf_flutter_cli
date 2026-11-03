@@ -305,7 +305,8 @@ void main() {
           '$engine'
           '    FlutterMethodChannel(\n'
           '      name: "every_socket",\n'
-          '      binaryMessenger: engineBridge.applicationRegistrar.messenger()\n'
+          '      binaryMessenger: '
+          'engineBridge.applicationRegistrar.messenger()\n'
           '    ).setMethodCallHandler { _, result in result(nil) }\n'
           '  }\n',
         ),
