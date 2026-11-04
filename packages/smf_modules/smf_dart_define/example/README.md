@@ -7,10 +7,13 @@ dart pub global activate smf_flutter_cli
 smf create my_app -m dart_define --no-input
 ```
 
-The modules of an app declare the values that a developer fills in, as keys of the env role. The role writes `.env` with one line for each key, such as `SHOP_API_KEY=`, and `.env.example`, which has the same keys and stays in git while `.env` does not. This module adds `lib/core/env/app_env.dart`, with a static getter of `AppEnv` for each key:
+The modules of an app declare the values that a developer fills in, as keys of the env role. The role writes `.env` with one line for each key, such as `SHOP_API_KEY=`, and `.env.example`, which has the same keys and stays in git while `.env` does not. This module adds `lib/core/env/app_env.dart`, with a static getter of `AppEnv` for each key and `supplied`, which tells whether the command that built the app gave it `.env`:
 
 ```dart
 abstract final class AppEnv {
+  /// Whether the command that built the app gave it the values of `.env`.
+  static const bool supplied = bool.hasEnvironment('SHOP_API_KEY');
+
   /// The public API key of the shop.
   static String? get shopApiKey {
     const value = String.fromEnvironment('SHOP_API_KEY');
@@ -25,7 +28,7 @@ A getter is `null` while its value in `.env` is empty or missing, so the app bui
 flutter run --dart-define-from-file=.env
 ```
 
-`flutter test` and `flutter build` take the same argument. A build for a store also names its flavor, as in `flutter build appbundle --flavor prod --dart-define-from-file=.env`: without it, the build is a release of `dev`.
+`flutter test` and `flutter build` take the same argument. Without the argument, a debug build starts with every getter `null` and says so in the console, and a release build stops with an error that names the argument, since `supplied` is `false` then. A build for a store also names its flavor, as in `flutter build appbundle --flavor prod --dart-define-from-file=.env`: without it, the build is a release of `dev`.
 
 The env role writes run configurations that pass the argument, one for each flavor: `.vscode/launch.json` for VS Code and `.run/<flavor>.run.xml` for Android Studio. In VS Code, the links above `main()` and above a test and the Testing view always use `dev`. A test that you run from Android Studio gets no argument.
 
