@@ -1464,7 +1464,10 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
         contains(
           'before you fill anything in.\n'
           '\n'
-          'Once the app has a key, `flutter build` of a release, and an '
+          'While the app has no key, a release build goes out without the '
+          'values: `AppEnv.supplied` is `true`, since nothing can tell '
+          'whether a build has them. Once `AppEnv.supplied` checks for a key '
+          'of the app, `flutter build` of a release, and an '
           'archive in Xcode, stop with an error unless the command gives the '
           'app the values of `.env` and `.env` has a line of a key of the '
           'app, also with an empty value. `lib/core/env/env_check.dart` holds '

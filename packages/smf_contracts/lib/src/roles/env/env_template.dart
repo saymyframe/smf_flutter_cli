@@ -56,8 +56,9 @@ ${_releaseReadme(keys, toolArguments)}
 
 /// The paragraph of the section of the role in the README of the app on a
 /// release build without the values, which names the [toolArguments] of the
-/// app: that it stops with an error in an app with [keys], and once the app
-/// has a key in an app without them.
+/// app: that it stops with an error in an app with [keys], and in an app
+/// without them once `AppEnv.supplied` checks for a key, which it need not do
+/// before.
 String _releaseReadme(List<AppEnvKey> keys, List<String> toolArguments) {
   final given = toolArguments.isEmpty
       ? 'the command gives the app the values of `${EnvRole.dotEnvFile}`'
@@ -69,7 +70,10 @@ String _releaseReadme(List<AppEnvKey> keys, List<String> toolArguments) {
       'calls in its first phase, and `$_appEnv.$_supplied` tells whether a '
       'build has the values.';
   return keys.isEmpty
-      ? 'Once the app has a key, $stops. $check'
+      ? 'While the app has no key, a release build goes out without the '
+          'values: `$_appEnv.$_supplied` is `true`, since nothing can tell '
+          'whether a build has them. Once `$_appEnv.$_supplied` checks for a '
+          'key of the app, $stops. $check'
       : 'A release build needs the values: $stops. So a build for a store '
           'never goes out without them by mistake. A debug or profile build '
           'without them starts with every getter `null` and says so in the '
