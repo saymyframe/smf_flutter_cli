@@ -153,9 +153,21 @@ const bool quoted = !_release || ($literal as bool);
       expect(built.compiled, isFalse);
       expect(built.output, contains('Error: Constant evaluation error'));
       expect(built.output, isNot(contains('special meaning')));
-      expect(built.output, contains(compilerQuoteOf(text)));
+      final quoted = compilerQuoteOf(text);
+      // On Windows, `dart compile kernel` prints each character beyond ASCII
+      // as its bytes of UTF-8 read in the code page of the system, such as
+      // `Ã¼` for `ü`, so there the output has the quote only up to the
+      // first such character.
       expect(
-        compilerQuoteOf(text),
+        built.output,
+        contains(
+          Platform.isWindows
+              ? quoted.substring(0, quoted.indexOf('ü'))
+              : quoted,
+        ),
+      );
+      expect(
+        quoted,
         "\"A \\\\ \\\" \\n \\r \\t \\b \\f \\u0001 \\u000b \x7F \$ ' ü 😀 end\"",
       );
     });

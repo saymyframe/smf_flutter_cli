@@ -51,36 +51,7 @@ final class DartOnlyApp {
   /// `pubspec.yaml` with a name.
   factory DartOnlyApp.write(RenderedApp app, Iterable<String> paths) {
     final package = _packageOf(app);
-    final files = <String>{};
-    final pending = [
-      for (final path in paths) (path: path, importedBy: null as String?),
-    ];
-    while (pending.isNotEmpty) {
-      final (:path, :importedBy) = pending.removeLast();
-      if (!files.add(path)) continue;
-      final file = app.files[path];
-      if (file == null) {
-        throw ArgumentError(
-          importedBy == null
-              ? 'The app has no file $path.'
-              : '$importedBy imports $path, which the app does not have.',
-        );
-      }
-      final index = DartFileIndexer.index(path, file.text);
-      for (final directive in [...index.imports, ...index.exports]) {
-        final uri = directive.uri;
-        if (uri.startsWith('dart:')) continue;
-        final target = _pathOf(uri, path, package);
-        if (target == null) {
-          throw ArgumentError(
-            '$path imports $uri, a package other than the app, which needs '
-            'more than the Dart SDK.',
-          );
-        }
-        pending.add((path: target, importedBy: path));
-      }
-    }
-
+    final files = _filesOf(app, paths, package);
     final root = Directory.systemTemp.createTempSync('smf_dart_only_app_');
     void write(String path, String text) => File('${root.path}/$path')
       ..createSync(recursive: true)
@@ -106,6 +77,60 @@ final class DartOnlyApp {
     return DartOnlyApp._(root, Set.unmodifiable(files));
   }
 
+  /// The files of [app] at [paths] and those that they import or export,
+  /// directly or not, as [package], the package of the app, by their paths
+  /// from the root of the app. It throws as [DartOnlyApp.write] does.
+  static Set<String> _filesOf(
+    RenderedApp app,
+    Iterable<String> paths,
+    String package,
+  ) {
+    final files = <String>{};
+    final pending = [
+      for (final path in paths) (path: path, importedBy: null as String?),
+    ];
+    while (pending.isNotEmpty) {
+      final (:path, :importedBy) = pending.removeLast();
+      if (!files.add(path)) continue;
+      final file = app.files[path];
+      if (file == null) {
+        throw ArgumentError(
+          importedBy == null
+              ? 'The app has no file $path.'
+              : '$importedBy imports $path, which the app does not have.',
+        );
+      }
+      for (final target in _importedBy(path, file.text, package)) {
+        pending.add((path: target, importedBy: path));
+      }
+    }
+    return files;
+  }
+
+  /// The files of the app that the Dart file at [path] with [text] imports
+  /// or exports, by their paths from the root of the app, [package] being
+  /// the package of the app. Throws an [ArgumentError] for an import of
+  /// another package.
+  static Iterable<String> _importedBy(
+    String path,
+    String text,
+    String package,
+  ) sync* {
+    final index = DartFileIndexer.index(path, text);
+    for (final directive in [...index.imports, ...index.exports]) {
+      final uri = directive.uri;
+      if (uri.startsWith('dart:')) continue;
+      final target = _pathOf(uri, path, package);
+      if (target == null) {
+        throw ArgumentError(
+          '$path imports $uri, a package other than the app, which needs '
+          'more than the Dart SDK.',
+        );
+      }
+      yield target;
+    }
+  }
+
   /// The path of the package config of the app in the directory.
   static const _packageConfig = 'app/.dart_tool/package_config.json';
 
@@ -129,7 +154,8 @@ final class DartOnlyApp {
   /// `-D<key>=<value>`, as the `flutter` tool declares the value of a line
   /// `KEY=value` of `.env` with `--dart-define-from-file`, and does not
   /// declare `dart.vm.product`, as a debug build does not. Returns what the
-  /// program printed.
+  /// program printed, with each line break as `\n`, also on Windows, where
+  /// `dart` prints `\r\n`.
   ///
   /// Throws a [StateError] with what it printed if the program fails.
   Future<String> run(
@@ -147,7 +173,7 @@ final class DartOnlyApp {
         '${result.stderr}',
       );
     }
-    return '${result.stdout}';
+    return '${result.stdout}'.replaceAll('\r\n', '\n');
   }
 
   /// Compiles [script], a Dart program that imports the files of the app by
