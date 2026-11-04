@@ -373,7 +373,7 @@ flutter build ipa --flavor prod --dart-define-from-file=.env
 
 A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
 
-Xcode takes the values from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. So before Product > Archive, run `flutter build ios --config-only --flavor prod --dart-define-from-file=.env`, or archive with `flutter build ipa` as above.
+Xcode takes the values from `ios/Flutter/Generated.xcconfig`. Only a `flutter` command that builds or runs the iOS app writes them there, and a fresh app has none. So before Product > Archive, run `flutter build ios --config-only --flavor prod --dart-define-from-file=.env`, or archive with `flutter build ipa` as above.
 
 A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
