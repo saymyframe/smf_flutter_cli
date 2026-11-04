@@ -1104,9 +1104,12 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// are checked with a second provider of the role there. The test of the
 /// onboarding screen role, which the fixture registry keeps, runs there
 /// too, with the onboarding of the CLI, which provides that role, and the
-/// fixture steps. Of the tests that the CLI keeps, only the test of the
-/// purchases of the user of the device is left out: it is for an app
-/// without sign-in, and the app with every module has sign-in.
+/// fixture steps. Of the tests that the CLI keeps, two are left out. The
+/// test of the purchases of the user of the device is for an app without
+/// sign-in, and the app with every module has sign-in. The test of what the
+/// start check makes of the first screen of an app shows the screens itself
+/// and needs no module, so the apps whose only role is the app entry run
+/// it.
 ///
 /// A test of such a role checks that each call of the service of the role
 /// reaches every provider once, whatever the other providers do with it. So
@@ -1117,11 +1120,14 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// the platform side of the other fixture providers.
 Future<MatrixAppTests> severalProvidersAppTests() async {
   final appTests = await appTestsDirectoryOf('fixture_registry');
-  final ofDevice = (await purchasesDeviceAppTest()).directory;
+  final leftOut = {
+    (await purchasesDeviceAppTest()).directory,
+    (await startScreenAppTest()).directory,
+  };
   return MatrixAppTests(
     [
       for (final test in (await smfAppTests()).tests)
-        if (test.directory != ofDevice) test,
+        if (!leftOut.contains(test.directory)) test,
       ...await _fixtureMocks(),
       // Each call of the analytics service of the app reaches every
       // analytics service once. A service that fails, or that changes the

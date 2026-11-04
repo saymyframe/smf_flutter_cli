@@ -2076,6 +2076,52 @@ void main() {
   });
 
   test(
+      'the test of what the start check makes of the first screen of an app '
+      'applies to the apps whose only role is the app entry, whichever '
+      'module provides it, and takes the file of the check from the test of '
+      'the start check, which every app has', () async {
+    MatrixApp appWith(Set<Role> roles) => MatrixApp(
+          'roles',
+          const [ModuleId('roles')],
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await startScreenAppTest();
+
+    expect(p.basename(test.directory), 'start_screen');
+    expect(named('start_screen').directory, test.directory);
+    expect(test.roles, isEmpty);
+    expect(test.appliesTo(appWith({appEntryRole})), isTrue);
+    expect(test.appliesTo(appWith({appEntryRole, themeRole})), isFalse);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    expect(test.mocks, isNull);
+    expect(test.startProbe, isNull);
+    // The matrix of the CLI runs it in the app of the app entry alone, and
+    // in that of firebase_core, which provides no role.
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      ['flutter_core', 'firebase_core'],
+    );
+    // Its widget test imports the file of the start check that the test of
+    // the check puts into every app it applies to.
+    final check = named('start').directory;
+    expect(
+      File(p.join(check, 'integration_test', 'start_screen.dart')).existsSync(),
+      isTrue,
+    );
+    for (final app in apps.where(test.appliesTo)) {
+      expect(named('start').appliesTo(app), isTrue, reason: app.name);
+    }
+  });
+
+  test(
       'the start check runs the probes of the tests that go into an app '
       'with it, the flavor of the app, the walk of the routes, the services '
       'of the DI role, the '
