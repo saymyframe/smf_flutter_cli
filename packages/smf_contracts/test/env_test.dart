@@ -3,6 +3,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/bundles/env_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
@@ -1324,6 +1326,39 @@ final described = describe(${vars['env_feed_url']!.absent});
         expect(text.imports, isEmpty, reason: name);
         expect(text.code, startsWith("'"), reason: name);
         expect(text.code, endsWith("'"), reason: name);
+      }
+    });
+
+    test(
+        'keeps each run of spaces of the texts of the check whole where a '
+        'literal ends in it', () {
+      /// The text of [code], adjacent string literals of Dart.
+      String valueOf(String code) {
+        final unit = parseString(content: 'const text = $code;').unit;
+        final declaration =
+            unit.declarations.single as TopLevelVariableDeclaration;
+        return (declaration.variables.variables.single.initializer!
+                as StringLiteral)
+            .stringValue!;
+      }
+
+      // An argument with two spaces and one, whose length moves the spaces
+      // over the end of every literal of each text.
+      for (var length = 1; length <= 80; length++) {
+        final toolArguments = ['--values-from', '${'x' * length}  y z'];
+        final output = envRole.template.render(
+          inputOf(envRole, data: [_toolArguments(toolArguments)]),
+        );
+        for (final (name, text) in [
+          ('env_release_error', EnvRole.releaseErrorOf(toolArguments)),
+          ('env_no_values_message', EnvRole.noValuesMessageOf(toolArguments)),
+        ]) {
+          expect(
+            valueOf((output.vars[name]! as Fragment).code),
+            text,
+            reason: '$name with $length characters before the spaces',
+          );
+        }
       }
     });
 

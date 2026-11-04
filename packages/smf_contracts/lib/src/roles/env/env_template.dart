@@ -101,9 +101,9 @@ String _keyLines(List<AppEnvKey> keys) => [
 const _checkFileUri = 'core/env/env_check.dart';
 
 /// [text] as adjacent string literals of Dart, one on each line, joined by a
-/// line break and [indent]: each piece of the text but the last ends with a
-/// space, and each literal has at most [width] characters, but one whose
-/// word alone is longer.
+/// line break and [indent]: each piece of the text but the last ends with
+/// the spaces after its last word, and each literal has at most [width]
+/// characters, but one whose word alone is longer.
 String _literalLines(
   String text, {
   required int width,
@@ -111,19 +111,25 @@ String _literalLines(
 }) {
   final pieces = <String>[];
   var piece = '';
-  for (final word in text.split(' ')) {
-    final longer = piece.isEmpty ? word : '$piece $word';
+  // Each word with the spaces after it, so that a run of spaces stays whole
+  // in one piece.
+  for (final word in text.split(_afterSpaces)) {
+    final longer = '$piece$word';
     // The literal of the piece and the space that it ends with, if a word
     // follows.
-    if (piece.isEmpty || SmfNames.dartString('$longer ').length <= width) {
+    final ended = longer.endsWith(' ') ? longer : '$longer ';
+    if (piece.isEmpty || SmfNames.dartString(ended).length <= width) {
       piece = longer;
     } else {
-      pieces.add('$piece ');
+      pieces.add(piece);
       piece = word;
     }
   }
   return [...pieces, piece].map(SmfNames.dartString).join('\n$indent');
 }
+
+/// The places in a text after a run of spaces and before the next word.
+final _afterSpaces = RegExp('(?<= )(?=[^ ])');
 
 /// The template of the [EnvRole]: the file of the values and the file of
 /// the keys, which the `.gitignore` of the app tells apart, the run
