@@ -409,7 +409,7 @@ The section "Languages" tells where else the new language goes.
 
 `.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
 
-A release build needs the values: `flutter build` of a release, and an archive in Xcode, stop with an error unless the command has `--dart-define-from-file=.env` and `.env` has a line of a key of the app, also with an empty value. So a build for a store never goes out without them by mistake. A debug or profile build without them starts with every getter `null` and says so in the console. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
+A release build needs `.env`: `flutter build` of a release, and an archive in Xcode, stop with an error unless the command has `--dart-define-from-file=.env` and `.env` has a line of a key of the app, also with an empty value. So a build for a store never goes out by mistake from a command that did not give it `.env`. A debug or profile build without it starts with every getter `null` and says so in the console. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
@@ -1204,7 +1204,8 @@ class StatusBarIcons extends StatelessWidget {
 /// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
 /// each value into the app, where `String.fromEnvironment` reads it as a
 /// constant. Without that argument every value is empty, so every getter
-/// is `null`, and a release build stops, since [supplied] is `false`.
+/// is `null`, and a release build of an app with keys stops, since
+/// [supplied] is `false` then.
 abstract final class AppEnv {
   /// Whether the command that built the app gave it the values of `.env`:
   /// `--dart-define-from-file=.env` declares each key that `.env` has a line
@@ -1251,9 +1252,10 @@ abstract final class AppEnv {
   }
 }
 === lib/core/env/env_check.dart (role:env) ===
-// The check that a build of the app has the values of .env, which bootstrap()
-// calls in its first phase. It is plain Dart, so that a test compiles it with
-// the Dart SDK alone.
+// The check that the command that built the app gave it .env, which
+// bootstrap() calls in its first phase. It does not look at whether the values
+// are filled in. It is plain Dart, so that a test compiles it with the Dart
+// SDK alone.
 import 'app_env.dart';
 
 /// Whether this is a release build, which the compiler of a release build

@@ -284,7 +284,7 @@ With `google_sign_in`:
 
 - `googleCredential()` in `lib/core/google_sign_in/google_sign_in.dart` is the function of the way to sign in with Google in `appSignInMethods`, on Android and iOS. In `lib/`, only that file imports the package. It starts the package once with `GoogleSignIn.instance.initialize()`, without ids, so that the package reads the ids of the clients of Google from the files of the app, and then calls `GoogleSignIn.instance.authenticate()`. It returns an `IdTokenCredential` with the `idToken` of the account and no `rawNonce`.
 - A closed sheet, `GoogleSignInExceptionCode.canceled`, returns `null`. These fail with `notConfigured`: a `canceled` whose description has `Account reauth failed`, which Credential Manager answers on Android when Google does not know the SHA-1 of the key that signed the app or the device cannot reach Google; `clientConfigurationError`; `providerConfigurationError`; and an `unknownError` whose description has the code `28444`, which Credential Manager answers when Google does not take the server client of the app as a web client of the Google project. Any other error fails with `unknown`.
-- On iOS, the Google Sign-In SDK stops an app that has no iOS client of Google, an empty one, or no URL scheme for it, and the package does not catch that. So on iOS the function first calls `readGoogleSignInIosSetup()`, which asks the handler of the method channel `google_sign_in/ios_setup` in `didInitializeImplicitFlutterEngine(_:)` of `ios/Runner/AppDelegate.swift`. If the setup has a `problem`, the function fails with `notConfigured` without asking the SDK. It fails the same way when the app delegate does not answer.
+- On iOS, the Google Sign-In SDK stops an app that has no iOS client of Google, an empty one, or no URL scheme for it, and the package does not catch that. So on iOS the function first calls `readGoogleSignInIosSetup()`, which asks the handler of the method channel `google_sign_in/ios_setup` in `didInitializeImplicitFlutterEngine(_:)` of `ios/Runner/AppDelegate.swift`. If the setup has a `problem`, the function fails with `notConfigured` without asking the SDK. It fails the same way when the app delegate does not answer. The id of an iOS client of the app's own goes into `_iosClientId` of that file, which the function gives both `initialize()` and `readGoogleSignInIosSetup()`.
 - `GoogleSignInIcon` shows the logo of Google, `lib/core/google_sign_in/assets/google_logo.png`, which `pubspec.yaml` declares among the assets of the app, at the size of the `IconTheme` around it. The branding guidelines of Google allow no other colours or shape of the logo.
 - In a test, the package asks `GoogleSignInPlatform.instance` of google_sign_in_platform_interface, which the test replaces with a subclass of `GoogleSignInPlatform` that answers `init` and `authenticate`, before the first call of `googleCredential()`: the app starts the package once in a test file. On iOS the function asks the method channel `google_sign_in/ios_setup` before the package, so a test answers it with `setMockMethodCallHandler` the way the app delegate of a set-up app does: `serviceInfo`, `serviceInfoClientId` and `urlSchemes` with the reversed client id.
 
@@ -827,7 +827,7 @@ Google sign-in needs the Google project of the app to know the app, and the app 
 - On iOS, the app needs the id of its iOS client of Google, and the reversed id of that client as a URL scheme in `CFBundleURLTypes` of `ios/Runner/Info.plist`, through which the sheet of Google returns to the app.
 - On both, Google issues the ID token to the web client of the Google project, the server client, against which the backend of the provider of sign-in checks the token.
 
-`googleCredential()` starts google_sign_in with `GoogleSignIn.instance.initialize()` without ids, so google_sign_in reads them from the files of the app: on iOS `CLIENT_ID` of `GoogleService-Info.plist`, or `GIDClientID` of `ios/Runner/Info.plist`, and on Android the string resource `default_web_client_id`. The section of the provider of sign-in in this README tells which of these it sets up. To use ids of your own, pass them to `initialize()` in `googleCredential()` of `lib/core/google_sign_in/google_sign_in.dart`, and pass the id of the iOS client to `readGoogleSignInIosSetup()` there as well. Until Google sign-in is set up, signing in with Google fails with the reason `notConfigured`, and the `developerHint` of the failure tells what Google answered.
+`googleCredential()` starts google_sign_in with `GoogleSignIn.instance.initialize()` without ids, so google_sign_in reads them from the files of the app: on iOS `CLIENT_ID` of `GoogleService-Info.plist`, or `GIDClientID` of `ios/Runner/Info.plist`, and on Android the string resource `default_web_client_id`. The section of the provider of sign-in in this README tells which of these it sets up. To use an iOS client of your own, set `_iosClientId` in `lib/core/google_sign_in/google_sign_in.dart`: `googleCredential()` gives that id to both `initialize()` and `readGoogleSignInIosSetup()`, which checks the setup of the iOS app for it. To use a server client of your own, pass its id to `initialize()` in `googleCredential()` as `serverClientId`. Until Google sign-in is set up, signing in with Google fails with the reason `notConfigured`, and the `developerHint` of the failure tells what Google answered.
 
 On iOS, the Google Sign-In SDK stops the app instead of failing when the app has no iOS client of Google, when the id of that client is empty, or when the app lacks the URL scheme of that client. google_sign_in does not catch that. So on iOS, `googleCredential()` first asks `ios/Runner/AppDelegate.swift`, which reads `GoogleService-Info.plist` and `ios/Runner/Info.plist` the way the SDK does. When something is missing, the call fails with `notConfigured` without asking the SDK, and the `developerHint` names what is missing and where. The code that answers is the handler of the method channel `google_sign_in/ios_setup` in `didInitializeImplicitFlutterEngine(_:)` of the app delegate, so keep it there. Without it, signing in with Google on iOS always fails with `notConfigured`.
 
@@ -842,7 +842,7 @@ The icon of the button, `GoogleSignInIcon` in `lib/core/google_sign_in/google_si
 
 `.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
 
-A release build needs the values: `flutter build` of a release, and an archive in Xcode, stop with an error unless the command has `--dart-define-from-file=.env` and `.env` has a line of a key of the app, also with an empty value. So a build for a store never goes out without them by mistake. A debug or profile build without them starts with every getter `null` and says so in the console. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
+A release build needs `.env`: `flutter build` of a release, and an archive in Xcode, stop with an error unless the command has `--dart-define-from-file=.env` and `.env` has a line of a key of the app, also with an empty value. So a build for a store never goes out by mistake from a command that did not give it `.env`. A debug or profile build without it starts with every getter `null` and says so in the console. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
@@ -4200,7 +4200,8 @@ abstract interface class ServiceLocator {
 /// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
 /// each value into the app, where `String.fromEnvironment` reads it as a
 /// constant. Without that argument every value is empty, so every getter
-/// is `null`, and a release build stops, since [supplied] is `false`.
+/// is `null`, and a release build of an app with keys stops, since
+/// [supplied] is `false` then.
 abstract final class AppEnv {
   /// Whether the command that built the app gave it the values of `.env`:
   /// `--dart-define-from-file=.env` declares each key that `.env` has a line
@@ -4255,9 +4256,10 @@ abstract final class AppEnv {
   }
 }
 === lib/core/env/env_check.dart (role:env) ===
-// The check that a build of the app has the values of .env, which bootstrap()
-// calls in its first phase. It is plain Dart, so that a test compiles it with
-// the Dart SDK alone.
+// The check that the command that built the app gave it .env, which
+// bootstrap() calls in its first phase. It does not look at whether the values
+// are filled in. It is plain Dart, so that a test compiles it with the Dart
+// SDK alone.
 import 'app_env.dart';
 
 /// Whether this is a release build, which the compiler of a release build
@@ -4786,6 +4788,12 @@ const String _issuer = 'https://accounts.google.com';
 /// `2.0x/` and `3.0x/` next to it for a screen with more pixels.
 const String _logo = 'lib/core/google_sign_in/assets/google_logo.png';
 
+/// The id of the iOS client of Google that [googleCredential] gives
+/// `GoogleSignIn.instance.initialize()` and [readGoogleSignInIosSetup], or
+/// `null`, with which google_sign_in reads the id from the files of the app.
+/// An id of your own goes here, so that both take the same one.
+const String? _iosClientId = null;
+
 /// The start of google_sign_in, which [googleCredential] waits for: the
 /// package is started once, before its first sign-in.
 Future<void>? _start;
@@ -4887,24 +4895,28 @@ final class GoogleSignInIosSetup {
 ///
 /// [clientId] is the id of the iOS client that the app gives
 /// `GoogleSignIn.instance.initialize()`, which the package takes before the
-/// ids of the files of the app. [googleCredential] gives none, so it reads
-/// the setup without one; a change that gives `initialize()` an id gives it
-/// here too.
+/// ids of the files of the app: [_iosClientId] by default, which
+/// [googleCredential] gives `initialize()` too.
 ///
-/// An app delegate that does not answer gives a setup whose
-/// [GoogleSignInIosSetup.problem] says so: then the app cannot tell whether
-/// the SDK would stop it.
+/// An app delegate that does not answer, whose handler fails, or whose
+/// answer is no map gives a setup whose [GoogleSignInIosSetup.problem] says
+/// that it does not answer: then the app cannot tell whether the SDK would
+/// stop it.
 Future<GoogleSignInIosSetup?> readGoogleSignInIosSetup({
-  String? clientId,
+  String? clientId = _iosClientId,
 }) async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
-  final Map<String, Object?> answer;
+  const noAnswer = GoogleSignInIosSetup._(answered: false);
+  final Object? answered;
   try {
-    answer =
-        await _iosSetup.invokeMapMethod<String, Object?>('read') ?? const {};
+    answered = await _iosSetup.invokeMethod<Object?>('read');
   } on MissingPluginException {
-    return const GoogleSignInIosSetup._(answered: false);
+    return noAnswer;
+  } on PlatformException {
+    return noAnswer;
   }
+  final answer = answered ?? const <Object?, Object?>{};
+  if (answer is! Map<Object?, Object?>) return noAnswer;
   final (String?, String?) client = switch (answer) {
     _ when clientId != null => (
       clientId,
@@ -4926,8 +4938,9 @@ Future<GoogleSignInIosSetup?> readGoogleSignInIosSetup({
     clientId: client.$1,
     source: client.$2,
     urlSchemes: [
-      for (final scheme in answer['urlSchemes'] as List<Object?>? ?? const [])
-        if (scheme is String) scheme.toLowerCase(),
+      if (answer['urlSchemes'] case final List<Object?> schemes)
+        for (final scheme in schemes)
+          if (scheme is String) scheme.toLowerCase(),
     ],
   );
 }
@@ -4936,10 +4949,10 @@ Future<GoogleSignInIosSetup?> readGoogleSignInIosSetup({
 /// returns it, or `null` when the user closed the sheet.
 ///
 /// The first call starts google_sign_in with `GoogleSignIn.instance
-/// .initialize()`, without the ids of the clients of Google, so the package
-/// finds them in the files of the app where the provider of sign-in puts
-/// them. The credential is the ID token of the Google account that the user
-/// chose.
+/// .initialize()`, with [_iosClientId] and no other id of a client of
+/// Google, so the package finds the ids that it lacks in the files of the
+/// app where the provider of sign-in puts them. The credential is the ID
+/// token of the Google account that the user chose.
 ///
 /// A client of Google that is missing in the app, or a Google project that
 /// does not know the app, fails with `notConfigured`, with a hint at the
@@ -4970,7 +4983,9 @@ Future<SignInCredential?> googleCredential() async {
   final GoogleSignInAccount account;
   try {
     if (!_started) {
-      await (_start ??= GoogleSignIn.instance.initialize());
+      await (_start ??= GoogleSignIn.instance.initialize(
+        clientId: _iosClientId,
+      ));
       _started = true;
     }
     account = await GoogleSignIn.instance.authenticate();
