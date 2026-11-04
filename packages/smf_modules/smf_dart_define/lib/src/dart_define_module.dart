@@ -94,7 +94,7 @@ flutter build ipa --flavor $_storeFlavor $_toolArgument
 
 A build without `--flavor` is a release of `${AppEntryRole.defaultFlavor.name}`, under its id, so a build for a store names its flavor. The section "${AppEntryRole.flavorsHeading}" tells more.
 
-Xcode takes the values from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. So before Product > Archive, run `flutter build ios --config-only --flavor $_storeFlavor $_toolArgument`, or archive with `flutter build ipa` as above.
+Xcode takes the values from `ios/Flutter/Generated.xcconfig`. Only a `flutter` command that builds or runs the iOS app writes them there, and a fresh app has none. So before Product > Archive, run `flutter build ios --config-only --flavor $_storeFlavor $_toolArgument`, or archive with `flutter build ipa` as above.
 
 A command reads the values only when it starts: after you change `${EnvRole.dotEnvFile}`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
 
