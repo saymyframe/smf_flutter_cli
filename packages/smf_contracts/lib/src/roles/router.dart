@@ -158,6 +158,12 @@ final class RouterRole extends Role<RoutesData> {
 
   /// The title of [notFoundScreen], which the template gives the
   /// localization role as a text of its own.
+  ///
+  /// The template gives the two texts of the screen in every app with a
+  /// router, and the localization role takes the languages of an app from
+  /// its texts. So an app with a router and the localization role is in
+  /// Ukrainian too, even when no module of it has a Ukrainian text, unless
+  /// `--locales` names its languages.
   static const notFoundTitle = LocalizedText(
     'notFoundTitle',
     en: 'Page not found',
