@@ -87,6 +87,9 @@ Future<void> main() async {
       problems.addAll(
         await problemsOfFirstScreen(
           binding.rootElement,
+          // A function, which problemsOfFirstScreen() calls only once the
+          // screen is no failed start: nothing else would keep the probes
+          // from running after a failed start.
           probes: () => _problemsOfProbes(binding),
         ),
       );
