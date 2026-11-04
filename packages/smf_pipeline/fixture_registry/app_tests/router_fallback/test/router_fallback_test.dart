@@ -85,9 +85,8 @@ void main() {
       reason: 'goToStart() keeps the user on the fallback screen, the screen '
           'that an app starts on when no route starts it.',
     );
-    final stays = tester
-        .elementList(find.byType(FallbackStartScreen))
-        .contains(fallback);
+    final stays =
+        tester.elementList(find.byType(FallbackStartScreen)).contains(fallback);
     expect(
       fixtureScreenLog,
       [(null, '/'), if (!stays) (null, '/')],

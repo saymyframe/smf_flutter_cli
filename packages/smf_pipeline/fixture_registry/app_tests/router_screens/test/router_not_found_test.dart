@@ -81,24 +81,23 @@ void main() {
   /// whatever the root of the app does with the size that the device asks
   /// for.
   void showNew(WidgetTester tester, {double? textScale}) => unawaited(
-    tester
-        .state<NavigatorState>(find.byType(Navigator).first)
-        .push(
-          PageRouteBuilder<void>(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                textScale == null
-                ? const NotFoundScreen()
-                : MediaQuery(
-                    data: MediaQuery.of(
-                      context,
-                    ).copyWith(textScaler: TextScaler.linear(textScale)),
-                    child: const NotFoundScreen(),
-                  ),
-            transitionDuration: Duration.zero,
-            reverseTransitionDuration: Duration.zero,
-          ),
-        ),
-  );
+        tester.state<NavigatorState>(find.byType(Navigator).first).push(
+              PageRouteBuilder<void>(
+                pageBuilder: (context, animation, secondaryAnimation) =>
+                    textScale == null
+                        ? const NotFoundScreen()
+                        : MediaQuery(
+                            data: MediaQuery.of(
+                              context,
+                            ).copyWith(
+                                textScaler: TextScaler.linear(textScale)),
+                            child: const NotFoundScreen(),
+                          ),
+                transitionDuration: Duration.zero,
+                reverseTransitionDuration: Duration.zero,
+              ),
+            ),
+      );
   Future<void> close(WidgetTester tester) async {
     Navigator.of(tester.element(screen)).pop();
     await tester.pumpAndSettle();
