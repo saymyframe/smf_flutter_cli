@@ -5,7 +5,8 @@
 /// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
 /// each value into the app, where `String.fromEnvironment` reads it as a
 /// constant. Without that argument every value is empty, so every getter
-/// is `null`, and a release build stops, since [supplied] is `false`.
+/// is `null`, and a release build of an app with keys stops, since
+/// [supplied] is `false` then.
 abstract final class AppEnv {
 {{{app_env_members}}}
 }
