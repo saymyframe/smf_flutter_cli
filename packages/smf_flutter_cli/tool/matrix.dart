@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:mirrors';
 
+import 'package:file/local.dart';
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/core.dart';
 // The app entry, whose providers own the native projects of the apps: the
@@ -301,7 +302,7 @@ Future<int> _create(
 }) async {
   final code = await createEveryModuleApps(
     smfModules,
-    directory: directory,
+    directory: const LocalFileSystem().directory(directory),
     name: name,
     options: options,
     apps: EveryModuleApps(

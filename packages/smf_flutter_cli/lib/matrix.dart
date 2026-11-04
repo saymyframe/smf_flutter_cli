@@ -2792,12 +2792,12 @@ Future<int> runMatrix(
 /// gives them.
 const toolArgumentsExtension = '.tool_arguments';
 
-/// Generates in [directory] the apps with every module of [modules] with
-/// [roleOptions], for CI to build them for Android and iOS and to start
-/// them on devices: each as the [MatrixApp.packageName] of [name], such as
-/// `start_app` and `start_app_riverpod`, with the options of CI and then
-/// [options], such as `--org com.example`. It analyzes and tests none of
-/// them, which [runMatrix] does.
+/// Generates in [directory] the apps with every module of [modules], for
+/// CI to build them for Android and iOS and to start them on devices: each
+/// as the [MatrixApp.packageName] of [name], such as `start_app` and
+/// `start_app_riverpod`, with the options of CI and then [options], such as
+/// `--org com.example`. It analyzes and tests none of them, which
+/// [runMatrix] does.
 ///
 /// Next to each app that it generated, outside the app, it writes the
 /// arguments of the `flutter` tool that build the app with its values,
@@ -2823,17 +2823,16 @@ const toolArgumentsExtension = '.tool_arguments';
 /// otherwise, and 64, without generating an app, when [name] starts with
 /// `-`, which `smf create` would take for an option. The log of [commands]
 /// gets what happens, and their create generates each app; they analyze
-/// and test nothing here. The files go into [fileSystem].
+/// and test nothing here. The files go into the file system of
+/// [directory].
 Future<int> createEveryModuleApps(
   List<SmfModule> modules, {
-  required String directory,
+  required Directory directory,
   required String name,
   required MatrixEnv env,
   List<String> options = const [],
-  Map<String, String?> roleOptions = const {},
   EveryModuleApps apps = const EveryModuleApps(),
   MatrixCommands commands = const MatrixCommands(),
-  FileSystem fileSystem = const LocalFileSystem(),
 }) async {
   // coverage:ignore-start
   // The defaults print to the terminal and create the apps with smf, as CI
@@ -2851,7 +2850,7 @@ Future<int> createEveryModuleApps(
   }
   final (apps: every, :failed) = await everyModuleAppsOf(
     modules,
-    roleOptions: roleOptions,
+    roleOptions: apps.roleOptions,
     withoutExternalSteps: apps.withoutExternalSteps,
   );
   final selected = apps.selection.select(every, modules);
@@ -2860,12 +2859,13 @@ Future<int> createEveryModuleApps(
       '${result.contractCase}: ${result.errors.join('; ')}',
     ...apps.selection.problemsOf(selected),
   ];
+  final fileSystem = directory.fileSystem;
   final context = fileSystem.path;
   for (final app in selected) {
     final packageName = app.packageName(name);
     say('\n=== $packageName: $app');
     final file = fileSystem.file(
-      '${context.normalize(context.join(directory, packageName))}'
+      '${context.normalize(context.join(directory.path, packageName))}'
       '$toolArgumentsExtension',
     );
     if (!options.contains('--explain') && file.existsSync()) file.deleteSync();
@@ -2873,7 +2873,7 @@ Future<int> createEveryModuleApps(
       generate,
       app,
       packageName,
-      directory,
+      directory.path,
       options,
     );
     problems.addAll(appProblems);

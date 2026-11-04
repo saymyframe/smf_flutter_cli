@@ -600,10 +600,12 @@ final class MatrixSelection {
 /// whose steps need an external service (see [everyModuleAppsOf]).
 final class EveryModuleApps {
   /// Creates the apps of [selection], with the modules whose steps need an
-  /// external service unless [withoutExternalSteps].
+  /// external service unless [withoutExternalSteps], generated with
+  /// [roleOptions].
   const EveryModuleApps({
     this.selection = EveryModuleCombinations.all,
     this.withoutExternalSteps = false,
+    this.roleOptions = const {},
   });
 
   /// The apps to take, such as a pairwise covering of the apps with every
@@ -614,6 +616,10 @@ final class EveryModuleApps {
   /// Whether the apps leave out the modules whose steps need an external
   /// service, so that they start as they are generated.
   final bool withoutExternalSteps;
+
+  /// The values of role options by name that every app gets, which
+  /// `smf create` gets as its options (see [everyModuleAppsOf]).
+  final Map<String, String?> roleOptions;
 }
 
 /// The options of a matrix tool that choose the apps of its run, which come

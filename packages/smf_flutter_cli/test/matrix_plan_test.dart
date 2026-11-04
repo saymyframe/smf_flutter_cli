@@ -1095,7 +1095,8 @@ void main() {
     }) =>
         createEveryModuleApps(
           modules,
-          directory: '/apps',
+          directory: (MemoryFileSystem()..directory('/apps').createSync())
+              .directory('/apps'),
           name: 'start_app',
           apps: EveryModuleApps(
             selection: selection,
@@ -1106,7 +1107,6 @@ void main() {
             toolArguments: (_) => const [],
             keys: (_) => const {},
           ),
-          fileSystem: MemoryFileSystem()..directory('/apps').createSync(),
           commands: MatrixCommands(
             log: log.add,
             create: (arguments, onCreated) async {

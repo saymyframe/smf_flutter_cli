@@ -2649,12 +2649,11 @@ Type type() => Types;
       final apps = fileSystem ?? MemoryFileSystem();
       return createEveryModuleApps(
         modules,
-        directory: '/apps',
+        directory: apps.directory('/apps'),
         name: name,
         options: options,
         apps: EveryModuleApps(withoutExternalSteps: withoutExternalSteps),
         env: env ?? envWith((_) => const []),
-        fileSystem: apps,
         commands: MatrixCommands(
           log: log.add,
           create: (arguments, onCreated) async {
