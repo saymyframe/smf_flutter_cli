@@ -154,8 +154,7 @@ final class DartOnlyApp {
   /// `-D<key>=<value>`, as the `flutter` tool declares the value of a line
   /// `KEY=value` of `.env` with `--dart-define-from-file`, and does not
   /// declare `dart.vm.product`, as a debug build does not. Returns what the
-  /// program printed, with each line break as `\n`, also on Windows, where
-  /// `dart` prints `\r\n`.
+  /// program printed.
   ///
   /// Throws a [StateError] with what it printed if the program fails.
   Future<String> run(
@@ -173,7 +172,7 @@ final class DartOnlyApp {
         '${result.stderr}',
       );
     }
-    return '${result.stdout}'.replaceAll('\r\n', '\n');
+    return result.stdout;
   }
 
   /// Compiles [script], a Dart program that imports the files of the app by
@@ -212,13 +211,25 @@ final class DartOnlyApp {
   /// The option of `dart` that gives a program the package of the app.
   String get _packages => '--packages=$path/.dart_tool/package_config.json';
 
-  /// Runs `dart` with [arguments].
-  Future<ProcessResult> _dart(List<String> arguments) => Process.run(
-        Platform.resolvedExecutable,
-        arguments,
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
-      );
+  /// Runs `dart` with [arguments], and returns its exit code and what it
+  /// printed, with each line break as `\n`, also on Windows, where `dart`
+  /// prints `\r\n`.
+  Future<({int exitCode, String stdout, String stderr})> _dart(
+    List<String> arguments,
+  ) async {
+    final result = await Process.run(
+      Platform.resolvedExecutable,
+      arguments,
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    );
+    String lines(Object? text) => '$text'.replaceAll('\r\n', '\n');
+    return (
+      exitCode: result.exitCode,
+      stdout: lines(result.stdout),
+      stderr: lines(result.stderr),
+    );
+  }
 
   static List<String> _definesOf(Map<String, String> defines) => [
         for (final MapEntry(:key, :value) in defines.entries) '-D$key=$value',
