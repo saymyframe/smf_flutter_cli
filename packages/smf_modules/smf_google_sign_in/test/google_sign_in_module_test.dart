@@ -525,6 +525,41 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Signs in once on iOS, with the answers of the app delegate that it
+/// scripts: `GoogleService-Info.plist` has a client without its URL scheme,
+/// and the app has the URL scheme of another client, the iOS client of the
+/// app's own. Sends back what the call returned or failed with, and the
+/// arguments of the start of google_sign_in.
+const _ownClientScript = r'''
+import 'dart:isolate';
+
+import 'package:contract_app/core/auth/app_session.dart';
+import 'package:contract_app/core/google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+Future<void> main(List<String> arguments, SendPort port) async {
+  defaultTargetPlatform = TargetPlatform.iOS;
+  channelAnswers['google_sign_in/ios_setup'] = {
+    'serviceInfo': true,
+    'serviceInfoClientId': 'files.apps.googleusercontent.com',
+    'urlSchemes': ['com.googleusercontent.apps.own'],
+  };
+  googleAnswers.add(GoogleAnswer('token'));
+  Object? outcome;
+  try {
+    outcome = switch (await googleCredential()) {
+      final IdTokenCredential credential => credential.idToken,
+      final other => '$other',
+    };
+  } on AuthFailure catch (failure) {
+    outcome = 'failed: ${failure.developerHint}';
+  }
+  port.send({'outcome': outcome, 'starts': googleStarts});
+}
+''';
+
 /// Reads the setup of the iOS app with `readGoogleSignInIosSetup()` of the
 /// app of the module, on Android and then on iOS, with the answers of the
 /// app delegate that it scripts, and sends back the fields of each setup
@@ -1092,8 +1127,9 @@ void main() {
           contains('the handler of the method channel `$iosSetupChannel` in '
               '`didInitializeImplicitFlutterEngine(_:)` of the app delegate, '
               'so keep it there'),
-          contains('pass the id of the iOS client to '
-              '`readGoogleSignInIosSetup()` there as well'),
+          contains('To use an iOS client of your own, set `_iosClientId` in '
+              '`$googleSignInFile`: `googleCredential()` gives that id to '
+              'both `initialize()` and `readGoogleSignInIosSetup()`'),
           contains('- `[16] Account reauth failed.`, after the user picked '
               'an account: Google does not know the SHA-1 of the key that '
               'signed this build of the app.'),
@@ -1102,8 +1138,8 @@ void main() {
               'Google does not take the server client of the app as a web '
               'client of the Google project'),
           contains('such as the one of the `sign_in` module'),
-          contains('pass them to `initialize()` in `googleCredential()` of '
-              '`$googleSignInFile`'),
+          contains('pass its id to `initialize()` in `googleCredential()` '
+              'as `serverClientId`'),
           contains('the logo of the Google Sign-In SDK (Apache License 2.0)'),
           contains('keep the image as it is'),
         ]),
@@ -1160,6 +1196,8 @@ void main() {
           'init',
           'authenticate',
           'readGoogleSignInIosSetup()',
+          '_iosClientId',
+          'initialize()',
           iosSetupChannel,
           'didInitializeImplicitFlutterEngine(_:)',
           AppEntryRole.appDelegateFile,
@@ -1175,6 +1213,7 @@ void main() {
         ('GoogleSignInIcon', DeclarationKind.classType),
         ('readGoogleSignInIosSetup', DeclarationKind.function),
         ('GoogleSignInIosSetup', DeclarationKind.classType),
+        ('_iosClientId', DeclarationKind.variable),
       ]) {
         expect(file.declaration(name)?.kind, kind, reason: name);
       }
@@ -1225,6 +1264,49 @@ void main() {
         otherZone = (await app.run(_otherZoneScript))! as Map<Object?, Object?>;
         onIos = (await app.run(_iosScript))! as Map<Object?, Object?>;
         iosSetup = (await app.run(_iosSetupScript))! as Map<Object?, Object?>;
+      } finally {
+        app.delete();
+      }
+    });
+
+    test(
+        "gives the iOS client of the app's own, _iosClientId, to both the "
+        'start of google_sign_in and the check of the setup of the iOS app',
+        () async {
+      const declaration = 'const String? _iosClientId = null;';
+      final result = await _resultOf(const [GoogleSignInModule.id]);
+      final rendered = result.app!;
+      expect(rendered.files[googleSignInFile]!.text, contains(declaration));
+      final app = await DartApp.write(
+        RenderedApp([
+          for (final file in rendered.files.values)
+            file.path == googleSignInFile
+                ? RenderedFile(
+                    path: file.path,
+                    bytes: utf8.encode(
+                      file.text.replaceFirst(
+                        declaration,
+                        'const String? _iosClientId = '
+                        "'own.apps.googleusercontent.com';",
+                      ),
+                    ),
+                    owner: file.owner,
+                  )
+                : file,
+        ]),
+      );
+      try {
+        expect(await app.run(_ownClientScript), {
+          'outcome': 'token',
+          'starts': [
+            {
+              'clientId': 'own.apps.googleusercontent.com',
+              'serverClientId': null,
+              'nonce': null,
+              'hostedDomain': null,
+            },
+          ],
+        });
       } finally {
         app.delete();
       }

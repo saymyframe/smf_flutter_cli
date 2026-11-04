@@ -13,6 +13,12 @@ const String _issuer = '{{{issuer}}}';
 /// `2.0x/` and `3.0x/` next to it for a screen with more pixels.
 const String _logo = '{{{logo}}}';
 
+/// The id of the iOS client of Google that [googleCredential] gives
+/// `GoogleSignIn.instance.initialize()` and [readGoogleSignInIosSetup], or
+/// `null`, with which google_sign_in reads the id from the files of the app.
+/// An id of your own goes here, so that both take the same one.
+const String? _iosClientId = null;
+
 /// The start of google_sign_in, which [googleCredential] waits for: the
 /// package is started once, before its first sign-in.
 Future<void>? _start;
@@ -114,16 +120,15 @@ final class GoogleSignInIosSetup {
 ///
 /// [clientId] is the id of the iOS client that the app gives
 /// `GoogleSignIn.instance.initialize()`, which the package takes before the
-/// ids of the files of the app. [googleCredential] gives none, so it reads
-/// the setup without one; a change that gives `initialize()` an id gives it
-/// here too.
+/// ids of the files of the app: [_iosClientId] by default, which
+/// [googleCredential] gives `initialize()` too.
 ///
 /// An app delegate that does not answer, whose handler fails, or whose
 /// answer is no map gives a setup whose [GoogleSignInIosSetup.problem] says
 /// that it does not answer: then the app cannot tell whether the SDK would
 /// stop it.
 Future<GoogleSignInIosSetup?> readGoogleSignInIosSetup({
-  String? clientId,
+  String? clientId = _iosClientId,
 }) async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
   const noAnswer = GoogleSignInIosSetup._(answered: false);
@@ -169,10 +174,10 @@ Future<GoogleSignInIosSetup?> readGoogleSignInIosSetup({
 /// returns it, or `null` when the user closed the sheet.
 ///
 /// The first call starts google_sign_in with `GoogleSignIn.instance
-/// .initialize()`, without the ids of the clients of Google, so the package
-/// finds them in the files of the app where the provider of sign-in puts
-/// them. The credential is the ID token of the Google account that the user
-/// chose.
+/// .initialize()`, with [_iosClientId] and no other id of a client of
+/// Google, so the package finds the ids that it lacks in the files of the
+/// app where the provider of sign-in puts them. The credential is the ID
+/// token of the Google account that the user chose.
 ///
 /// A client of Google that is missing in the app, or a Google project that
 /// does not know the app, fails with `notConfigured`, with a hint at the
@@ -202,7 +207,8 @@ Future<SignInCredential?> googleCredential() async {
   final GoogleSignInAccount account;
   try {
     if (!_started) {
-      await (_start ??= GoogleSignIn.instance.initialize());
+      await (_start ??=
+          GoogleSignIn.instance.initialize(clientId: _iosClientId));
       _started = true;
     }
     account = await GoogleSignIn.instance.authenticate();
