@@ -28,12 +28,14 @@ import 'package:smf_firebase_messaging/src/readme.dart';
 /// - the address and the message that launched the app are `null` where
 ///   the package fails, as it does on iOS before the token of the Apple
 ///   Push Notification service comes;
-/// - on iOS it tells of the first address once that token comes, of which
-///   the package tells the app only when the registration token changed,
-///   which it does not at a later start of the app: while the app listens
-///   to the new addresses, it asks iOS for the token, a read without the
-///   network, with waits that double from half a second up to eight
-///   seconds, for at most two minutes;
+/// - on iOS it tells of the first address once that token comes, also to
+///   a listener that comes after the start of Firebase: the package tells
+///   of the registration token once at each start, at a later launch even
+///   before that token comes, on a stream that keeps nothing for a later
+///   listener. While the app listens to the new addresses, the service
+///   asks iOS for the token, a read without the network, with waits that
+///   double from half a second up to eight seconds, for at most two
+///   minutes;
 /// - a value of the data of a message that is no string, which iOS may
 ///   give, is its JSON;
 /// - on iOS it sets the presentation options of a notification in the

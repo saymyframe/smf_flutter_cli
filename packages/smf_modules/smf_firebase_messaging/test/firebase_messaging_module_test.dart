@@ -799,9 +799,9 @@ void main() {
 
       test(
           'on iOS tells of the first registration token once iOS has the '
-          'token of the Apple Push Notification service, which the plugin '
-          'tells of no token for, and asks iOS for it only while something '
-          'listens to the address changes', () {
+          'token of the Apple Push Notification service, also when the '
+          'plugin tells of no token then, and asks iOS for it only while '
+          'something listens to the address changes', () {
         expect(sent['address before the APNs token'], ['getAPNSToken()']);
         expect(
           sent['calls until the APNs token came'],

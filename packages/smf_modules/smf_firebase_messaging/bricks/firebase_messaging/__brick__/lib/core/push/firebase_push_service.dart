@@ -65,10 +65,16 @@ const _longestWatch = Duration(minutes: 2);
 /// On iOS the registration token needs the token of the Apple Push
 /// Notification service, which may come a while after the app started, or
 /// never, as on a build that is not signed for push messages: [address] is
-/// `null` until then. When that token comes, firebase_messaging tells the
-/// app of the registration token only if it changed, which it does not at
-/// a later start of the app. So while something listens to
-/// [addressChanges], the service asks iOS for the token now and then, which
+/// `null` until then, since the plugin fails before it asks Firebase while
+/// iOS has not given that token to the app in this launch.
+/// firebase_messaging 17 tells of the registration token on
+/// `onTokenRefresh` once at each start of Firebase: on the first launch
+/// once Firebase has fetched it after that token came, and at a later
+/// launch at once, with the token that Firebase kept, even before that
+/// token comes. That stream keeps nothing for a listener that comes later,
+/// and the service listens to it only while something listens to
+/// [addressChanges], which may begin after that event. So while something
+/// listens, the service also asks iOS for the token now and then, which
 /// needs no network, for at most two minutes, and tells of the registration
 /// token once iOS has the token. [addressChanges] also tells of each new
 /// token that Firebase gives the device.

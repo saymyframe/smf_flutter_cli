@@ -51,9 +51,9 @@ class FirebaseException implements Exception {
 ///   asks the platform, and `getAPNSToken()` reads that token, which is
 ///   `null` on Android;
 /// - the stream of the new tokens tells of none when the device gets the
-///   token of the Apple Push Notification service, as the iOS plugin does
-///   at a later start of the app, when the registration token stays the
-///   same;
+///   token of the Apple Push Notification service, as the iOS plugin tells
+///   of none to a listener that came after it told of the registration
+///   token at the start of Firebase;
 /// - `setForegroundNotificationPresentationOptions()` reaches the platform
 ///   only on iOS and macOS;
 /// - the streams of the messages, the taps and the tokens are broadcast
