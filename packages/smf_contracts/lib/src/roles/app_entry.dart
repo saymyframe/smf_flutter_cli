@@ -1433,6 +1433,71 @@ const _failedStartHint = 'Without it, an app whose start-up fails stays on '
     '${AppEntryRole.failedStartFile} reports the error and shows the screen '
     'of a failed start; return after it.';
 
+/// What `main()` does wrong with the errors of `bootstrap()`, whose call
+/// in `main()` is [bootstrap]: [clauses] are the clauses of the try
+/// statements around it, in the order in which they are asked about an
+/// error of it, and [shows] the calls of `showFailedStart()` in `main()`.
+List<SmfIssue> _bootstrapIssues(
+  IndexedInvocation? bootstrap,
+  List<IndexedCatch> clauses,
+  List<IndexedInvocation> shows,
+  SmfIssue Function(String problem, {String? hint}) issue,
+) {
+  if (bootstrap == null) return [issue('main() does not call bootstrap().')];
+  if (!bootstrap.awaited) return [issue('main() does not await bootstrap().')];
+  final (:shown, :keepsOnSplash) = _endsOfAnError(clauses, shows);
+  return [
+    if (!clauses.any((clause) => clause.catchesEverything))
+      issue(
+        'main() does not catch every error of bootstrap(): await it in a try '
+        'statement with a clause such as "on Object catch (error, '
+        'stackTrace)".',
+        hint: _failedStartHint,
+      )
+    else if (!shown)
+      issue(
+        'main() does not call showFailedStart() in the clause that catches '
+        'the errors of bootstrap().',
+        hint: _failedStartHint,
+      ),
+    for (final clause in keepsOnSplash)
+      issue(
+        'main() catches the errors of bootstrap() of the type '
+        '${clause.type} in a clause that neither calls showFailedStart() '
+        'nor throws, so after such an error the app stays on the splash '
+        'screen of the system.',
+        hint: 'Call showFailedStart() there too and return, or rethrow the '
+            'error, or leave it to the clause that catches every error.',
+      ),
+  ];
+}
+
+/// Where an error of `bootstrap()` ends among [clauses], the clauses that
+/// are asked about it in order, with [shows], the calls of
+/// `showFailedStart()`: it goes to the first clause that catches it, and
+/// ends at a clause that shows the screen of a failed start or keeps the
+/// app on the splash screen, unless the clause throws. `shown` says
+/// whether the clause that catches every error shows the screen, and
+/// `keepsOnSplash` has the clauses before it that keep the app on the
+/// splash screen.
+({bool shown, List<IndexedCatch> keepsOnSplash}) _endsOfAnError(
+  List<IndexedCatch> clauses,
+  List<IndexedInvocation> shows,
+) {
+  final keepsOnSplash = <IndexedCatch>[];
+  for (final clause in clauses) {
+    if (shows.any((show) => clause.holds(show.offset))) {
+      if (clause.catchesEverything) {
+        return (shown: true, keepsOnSplash: keepsOnSplash);
+      }
+    } else if (!clause.throws) {
+      if (clause.catchesEverything) break;
+      keepsOnSplash.add(clause);
+    }
+  }
+  return (shown: false, keepsOnSplash: keepsOnSplash);
+}
+
 List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
   const path = AppEntryRole.mainFile;
   final file = input.files[path];
@@ -1451,25 +1516,6 @@ List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
   // in which they are asked about an error of it.
   final statements = bootstrap?.tries ?? const <IndexedTry>[];
   final clauses = bootstrap?.caughtBy ?? const <IndexedCatch>[];
-  final shows = calls(AppEntryRole.showFailedStart.name).toList();
-  bool showsIn(IndexedCatch clause) =>
-      shows.any((show) => clause.holds(show.offset));
-  // An error of bootstrap() goes to the first clause that catches it: it
-  // ends at a clause that shows the screen of a failed start or keeps the
-  // app on the splash screen, unless the clause throws.
-  final keepsOnSplash = <IndexedCatch>[];
-  var shown = false;
-  for (final clause in clauses) {
-    if (showsIn(clause)) {
-      if (clause.catchesEverything) {
-        shown = true;
-        break;
-      }
-    } else if (!clause.throws) {
-      if (clause.catchesEverything) break;
-      keepsOnSplash.add(clause);
-    }
-  }
   final runApps = calls('runApp').toList();
   bool inClause(IndexedInvocation call) =>
       clauses.any((clause) => clause.holds(call.offset));
@@ -1481,38 +1527,15 @@ List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
       runApps.where((call) => !inClause(call) && !inFinally(call)).firstOrNull;
   SmfIssue issue(String problem, {String? hint}) =>
       SmfIssue(problem, hint: hint, origin: input.owners[path], path: path);
-  final awaited = bootstrap != null && bootstrap.awaited;
   return [
     if (ensureInitialized == null)
       issue('main() does not call WidgetsFlutterBinding.ensureInitialized().'),
-    if (bootstrap == null)
-      issue('main() does not call bootstrap().')
-    else if (!bootstrap.awaited)
-      issue('main() does not await bootstrap().')
-    else if (!clauses.any((clause) => clause.catchesEverything))
-      issue(
-        'main() does not catch every error of bootstrap(): await it in a try '
-        'statement with a clause such as "on Object catch (error, '
-        'stackTrace)".',
-        hint: _failedStartHint,
-      )
-    else if (!shown)
-      issue(
-        'main() does not call showFailedStart() in the clause that catches '
-        'the errors of bootstrap().',
-        hint: _failedStartHint,
-      ),
-    if (awaited)
-      for (final clause in keepsOnSplash)
-        issue(
-          'main() catches the errors of bootstrap() of the type '
-          '${clause.type} in a clause that neither calls showFailedStart() '
-          'nor throws, so after such an error the app stays on the splash '
-          'screen of the system.',
-          hint: 'Call showFailedStart() there too and return, or rethrow '
-              'the error, or leave it to the clause that catches every '
-              'error.',
-        ),
+    ..._bootstrapIssues(
+      bootstrap,
+      clauses,
+      calls(AppEntryRole.showFailedStart.name).toList(),
+      issue,
+    ),
     if (runApps.isEmpty) issue('main() does not call runApp().'),
     for (final call in runApps)
       if (inClause(call))
