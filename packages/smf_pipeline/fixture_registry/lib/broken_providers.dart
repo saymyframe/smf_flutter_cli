@@ -195,6 +195,34 @@ const _goRouterDroppingItsNotFoundScreen = BrokenModule(
   ],
 );
 
+/// The router of go_router whose `goToStart()` goes to the screen that the
+/// app starts on without asking the guards of the routes, within the calls
+/// of the router, in which its redirect asks nothing either. The fixture
+/// router has such a bug of its own
+/// (`BrokenModule.routerGoingToStartPastGuards`), but go_router asks the
+/// guards about `goToStart()` in code of its own, so this broken router
+/// changes the module of the CLI, made here as the broken app entry is.
+const _goRouterGoingToStartPastGuards = BrokenModule(
+  GoRouterModule(),
+  id: ModuleId('broken_go_router_goes_to_start_past_guards'),
+  description: 'go_router that goes to its start past the guards (fixture)',
+  file: RouterRole.appRouterFactoryFile,
+  changes: [
+    (
+      '    final shown = switch (_guards.asked(\n'
+          '      null,\n'
+          '      _guards.start,\n'
+          '      onTopOf: [for (final page in _pages) page.route],\n'
+          '    )) {\n'
+          '      ShowInstead(:final location) => location,\n'
+          '      _ => _guards.start,\n'
+          '    };\n'
+          '    _own(() => config.go(shown));\n',
+      '    _own(() => config.go(_guards.start));\n',
+    ),
+  ],
+);
+
 /// The splash screen whose configuration sets `android_min_sdk` to the lowest
 /// version of Android that the apps run on: native_splash with that one line.
 /// flutter_native_splash then writes `drawable/launch_background.xml` alone,
@@ -463,6 +491,23 @@ List<BrokenProvider> brokenProviders() => const [
       ),
       BrokenProvider(
         BrokenModule.routerGoingToStartPastGuards,
+        role: routerRole,
+        bug: 'Its goToStart() shows the screen that the app starts on without '
+            'asking the guards of the routes, so a gate that does not allow '
+            'keeps the user from nothing there.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'goToStart() while a guard does not allow shows the target of the '
+                'guard.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _goRouterGoingToStartPastGuards,
         role: routerRole,
         bug: 'Its goToStart() shows the screen that the app starts on without '
             'asking the guards of the routes, so a gate that does not allow '

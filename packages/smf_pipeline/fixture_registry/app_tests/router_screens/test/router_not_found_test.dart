@@ -349,6 +349,19 @@ void main() {
           reason: 'A router that takes no locations from the platform has no '
               'location that it cannot show.',
         );
+        // A router that takes locations from the platform and stays where
+        // it is for one that no route matches would pass the lines above,
+        // so a location of a route tells them apart.
+        await tester.binding.handlePushRoute('/fake_feature/details/3');
+        await tester.pumpAndSettle();
+        expect(
+          heard(),
+          isEmpty,
+          reason: 'A router that shows a location of a route from the '
+              'platform shows the not-found screen for one that no route '
+              'matches. Only a router that takes no locations from the '
+              'platform stays where it is for both.',
+        );
         return;
       }
       expect(
