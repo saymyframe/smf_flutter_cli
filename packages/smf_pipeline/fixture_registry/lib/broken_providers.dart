@@ -1895,6 +1895,25 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenEnvNeverSuppliedModule(),
+        role: envRole,
+        bug: 'Its AppEnv.supplied asks whether the command that built the app '
+            'declared the names of the getters of the keys rather than the '
+            'keys, so it is false in every build, also one with the tool '
+            'arguments of the role, and a release build of the app stops.',
+        // The module that reads values of .env, so that the app has keys.
+        app: [FakeEnvUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/env_role/env_role_test.dart',
+            'AppEnv.supplied is true in a build whose command had the tool '
+                'arguments of the provider, while .env has a line of a key of '
+                'the app',
+            '.env has a line of a key of the app, so AppEnv.supplied is true',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.restDecodingQuery,
         role: restRole,
         bug: 'Its transport sends the query of an address decoded, so a value '

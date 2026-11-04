@@ -347,8 +347,10 @@ jobs:
     # writes an entry of the cache of Gradle from an empty cache, it also
     # downloads about 1.8 GB and builds a release app, a few minutes more. The
     # commands of the CI of the app add a minute, and the first job of the
-    # matrix builds a release app once more.
-    timeout-minutes: 25
+    # matrix builds a release app twice more: once in the clone of its CI,
+    # and once in the check that a release build stops without the values of
+    # .env.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -498,6 +500,33 @@ jobs:
             dart run packages/smf_flutter_cli/tool/matrix.dart --ci-commands --app "$APP" \
               ${{ strategy.job-index == 0 && '--build' || '' }} "${app%/}"
           done
+
+      # Only in the first job of the matrix: a release build of the app stops
+      # without the arguments of the flutter tool that give it the values of
+      # .env, with the text of the env role, and builds with them, for x86_64
+      # alone. The check of the role stops it only while the compiler of a
+      # release build of Flutter evaluates its constant, which no test with
+      # the Dart SDK alone shows, so the nightly run checks it with each
+      # version of Flutter. each_app.sh gives the test the app in
+      # SMF_RELEASE_APP and its tool arguments in SMF_TOOL_ARGUMENTS, from the
+      # file that the --create of the matrix tool writes next to the app. The
+      # build without them stops within a minute, and the build with them
+      # takes a few minutes on top of the debug build.
+      - name: Check that a release build of the app with every module stops without the values of .env and builds with them
+        if: strategy.job-index == 0
+        working-directory: packages/smf_contracts
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/each_app.sh" --env SMF_RELEASE_APP --tool-arguments \
+            "$RUNNER_TEMP/SMF apps/android" dart test test/env_release_build_test.dart --file-reporter json:build/test-results/env_release_build_test.json
+
+      # The tests of the packages that failed, as annotations that the page
+      # of the run lists at the top rather than as lines in the long log of
+      # a step; see tools/test_annotations.dart. Also after a failed step and
+      # in a cancelled job, whenever Flutter is there.
+      - &annotate
+        name: Annotate the failed tests
+        if: ${{ always() && steps.flutter.outcome == 'success' }}
+        run: dart tools/test_annotations.dart
 
   # An app with every module but the modules whose steps need an external
   # service, such as the Firebase project that flutterfire configures an
@@ -717,14 +746,7 @@ jobs:
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/start" \
             "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 release
 
-      # The tests of the packages that failed, as annotations that the page
-      # of the run lists at the top rather than as lines in the long log of
-      # a step; see tools/test_annotations.dart. Also after a failed step and
-      # in a cancelled job, whenever Flutter is there.
-      - &annotate
-        name: Annotate the failed tests
-        if: ${{ always() && steps.flutter.outcome == 'success' }}
-        run: dart tools/test_annotations.dart
+      - *annotate
 
   # An app with Firebase starts only once flutterfire configured it: the
   # placeholder of its options throws at start-up. The script of the app runs

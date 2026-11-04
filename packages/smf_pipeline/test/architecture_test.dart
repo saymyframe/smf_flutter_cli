@@ -26,7 +26,8 @@ void main() {
   // The pipeline knows no concrete role and no module, and reaches the
   // machine only through the seams of SmfHost; only the checks of the
   // packages of modules, which tests run, read the local file system
-  // themselves.
+  // themselves, and only DartOnlyApp, which tests run too, writes the files
+  // of an app and runs the Dart SDK on them.
   final directives = _directives();
 
   test('finds the files of the pipeline', () {
@@ -46,10 +47,17 @@ void main() {
     }
   });
 
-  test('does not touch dart:io', () {
-    for (final MapEntry(key: file, value: uris) in directives.entries) {
-      expect(uris, isNot(contains('dart:io')), reason: file);
-    }
+  test(
+      'does not touch dart:io, but to run the Dart SDK on the files of an '
+      'app, in tests', () {
+    expect(
+      [
+        for (final MapEntry(key: file, value: uris) in directives.entries)
+          if (uris.contains('dart:io'))
+            file.replaceAll(Platform.pathSeparator, '/'),
+      ],
+      ['lib/src/testing/dart_only_app.dart'],
+    );
   });
 
   test(

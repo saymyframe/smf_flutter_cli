@@ -536,6 +536,8 @@ void main() {
         'text_none',
         'text_failed',
         'env_keys',
+        'env_release_error',
+        'env_no_values_message',
         'rest_tokens',
       };
       for (final role in withTemplates) {

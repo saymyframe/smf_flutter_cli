@@ -408,6 +408,8 @@ linter:
 /// role.
 const _appEnv = '''
 abstract final class AppEnv {
+  static const bool supplied = true;
+
   static String? get restBaseUrl => 'https://env.example.com/v1';
 }
 ''';

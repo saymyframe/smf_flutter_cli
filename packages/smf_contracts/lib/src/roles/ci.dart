@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/ci_role_env_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contracts/src/roles/shell_words.dart';
 
 part 'ci/ci_pipeline.dart';
 part 'ci/ci_rules.dart';
@@ -118,7 +119,7 @@ final class CiRole extends Role<NoDsl> {
     final hasEnv = input.has(envRole);
     final arguments = [
       for (final argument in envRole.toolArgumentsIn(input))
-        _shellWord(argument),
+        shellWord(argument),
     ].join(' ');
     String withArguments(String command) =>
         arguments.isEmpty ? command : '$command $arguments';

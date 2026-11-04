@@ -1,7 +1,10 @@
 // A test that continuous integration runs in the apps with the env role
 // that have keys, whichever module provides the role: for each
 // key of the app, the getter of AppEnv returns the value that .env gives
-// the key, and null when .env leaves the value empty or lacks the key.
+// the key, and null when .env leaves the value empty or lacks the key; and
+// AppEnv.supplied is true, since the command had the tool arguments of the
+// provider and .env has a line of a key, so the check of the role would let
+// a release build of the same command go.
 //
 // It only reads. The matrix writes into .env the values that the tests of
 // the modules of the app give their keys, and removes the line of a key that
@@ -10,7 +13,8 @@
 // of a value that the role names: a plain value, without white space, # or
 // quotes, and any other value in double quotes, each after KEY= and before a
 // comment, if the line has one. The matrix writes the keys of the app, from
-// the data of the role, into keys.dart next to the test. It reads AppEnv
+// the data of the role, into keys.dart next to the test, with what
+// AppEnv.supplied is. It reads AppEnv
 // without starting the app, since the role says that the getters return the
 // values before any code of the app runs, main() included.
 import 'dart:io';
@@ -83,6 +87,22 @@ void main() {
     for (final key in appKeys)
       if (!values.containsKey(key.name)) key,
   ];
+
+  test(
+    'AppEnv.supplied is true in a build whose command had the tool arguments '
+    'of the provider, while .env has a line of a key of the app',
+    () {
+      expect(
+        envSupplied,
+        isTrue,
+        reason: '$dotEnvFile has a line of a key of the app, so '
+            'AppEnv.supplied is true',
+      );
+    },
+    skip: given.isEmpty && empty.isEmpty
+        ? 'No key of the app has a line in $dotEnvFile.'
+        : null,
+  );
 
   test(
     'AppEnv returns the value that .env gives each key, under the getter of '

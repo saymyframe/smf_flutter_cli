@@ -87,13 +87,16 @@ List<SmfIssue> _variableIssues(
 
 /// The keys of the app that the provider of the role does not render: those
 /// for which the `AppEnv` of the provider declares no static getter of the
-/// name of their getter.
+/// name of their getter; and `AppEnv` without the static field `supplied`,
+/// which [EnvRole.checkFile] reads.
 ///
-/// So no provider leaves out a key that a module gives the role, and the
-/// tests of the modules need not look into the files of any provider.
-/// Without the descriptor of a provider in [input], or without its
-/// `AppEnv`, which the check of the interface of the role reports, there is
-/// nothing to check.
+/// So no provider leaves out a key that a module gives the role, or the
+/// field that tells whether a build has the values, and the tests of the
+/// modules need not look into the files of any provider. The index records
+/// neither the type nor the constness of a field, so the compiler of the
+/// app checks those where [EnvRole.checkFile] reads the field. Without the
+/// descriptor of a provider in [input], or without its `AppEnv`, which the
+/// check of the interface of the role reports, there is nothing to check.
 List<SmfIssue> _checkKeysRendered(StructuralRuleInput<EnvData> input) {
   if (!input.modules.any((module) => module.provides.contains(envRole))) {
     return const [];
@@ -101,15 +104,23 @@ List<SmfIssue> _checkKeysRendered(StructuralRuleInput<EnvData> input) {
   const path = EnvRole.readerFile;
   final declaration = input.files[path]?.declaration(_appEnv);
   if (declaration == null) return const [];
-  bool declares(String getter) => declaration.members.any(
+  bool declares(String name, MemberKind kind) => declaration.members.any(
         (member) =>
-            member.name == getter &&
-            member.isStatic &&
-            member.kind == MemberKind.getter,
+            member.name == name && member.isStatic && member.kind == kind,
       );
   return [
+    if (!declares(_supplied, MemberKind.field))
+      SmfIssue(
+        'The provider of the $envRole does not tell whether a build has the '
+        'values: $_appEnv in $path declares no static field $_supplied.',
+        hint: 'Declare static const bool $_supplied, true once the command '
+            'that built the app gave it the values of ${EnvRole.dotEnvFile}, '
+            'and true in an app without keys; see EnvRole.appEnv.',
+        origin: input.owners[path],
+        path: path,
+      ),
     for (final key in envRole.keysIn(input.roleInput))
-      if (!declares(key.getter))
+      if (!declares(key.getter, MemberKind.getter))
         SmfIssue(
           'The provider of the $envRole does not render the $key: $_appEnv '
           'in $path declares no static getter ${key.getter}.',
@@ -182,7 +193,8 @@ List<SmfIssue> _keyAccessIssuesOf(
   };
   return [
     for (final access in file.memberAccesses)
-      if (_isAppEnv(access.target))
+      // Any file may read whether the build has the values, which is no key.
+      if (_isAppEnv(access.target) && access.name != _supplied)
         if (_readIssueOf(
           path,
           '${access.target}.${access.name}',

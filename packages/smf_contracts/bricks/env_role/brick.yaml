@@ -1,5 +1,5 @@
 name: env_role
-description: "The template of the env role of SMF: .env, with the values that the modules of the app read, and .env.example, with their keys."
+description: "The template of the env role of SMF: .env, with the values that the modules of the app read, .env.example, with their keys, and the check that stops a release build without the values."
 
 # The template of a role in the module model. Its files are relative to the
 # root of the generated app. The pipeline renders it with app_name, org_name,

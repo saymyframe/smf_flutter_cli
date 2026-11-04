@@ -1649,7 +1649,9 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
 /// for the apps with the role that have keys, whichever module provides the
 /// role, that [among] accepts, or all of them: for each key of
 /// the app, the getter of `AppEnv` returns the value that `.env` gives the
-/// key, and `null` when `.env` leaves the value empty or lacks the key.
+/// key, and `null` when `.env` leaves the value empty or lacks the key; and
+/// `AppEnv.supplied` is `true`, since `flutter test` has the tool arguments
+/// of the provider and `.env` has a line of a key.
 ///
 /// The test only reads: it parses the file of the values of the app
 /// ([EnvRole.dotEnvFile]), in the forms of a value that the role names, as
@@ -1686,10 +1688,10 @@ List<AppEnvKey> _envKeysOf(MatrixApp app) {
 
 /// The path in an app of what the matrix writes for the test of the env
 /// role: `dotEnvFile`, the path of the file of the values of the app from
-/// its root ([EnvRole.dotEnvFile]), and `appKeys`, the keys of the app in
-/// the order of the role ([EnvRole.keysIn]), each an `AppKey` with its
-/// name, the name of its getter of `AppEnv` and a function that reads the
-/// getter.
+/// its root ([EnvRole.dotEnvFile]), `appKeys`, the keys of the app in the
+/// order of the role ([EnvRole.keysIn]), each an `AppKey` with its name, the
+/// name of its getter of `AppEnv` and a function that reads the getter, and
+/// `envSupplied`, what `AppEnv.supplied` is (see [EnvRole.appEnv]).
 const envKeysFile = 'test/env_role/keys.dart';
 
 /// The file at [envKeysFile] of [app], an app of the matrix with the env
@@ -1720,6 +1722,10 @@ typedef AppKey = ({String name, String getter, String? Function() read});
 /// The keys of the app, in the order of the env role.
 final List<AppKey> appKeys = [
 $keys];
+
+/// Whether the command that built the app gave AppEnv the values of the file
+/// of the values.
+final bool envSupplied = AppEnv.supplied;
 ''',
   };
 }

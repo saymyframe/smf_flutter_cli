@@ -5700,9 +5700,10 @@ void main() {
       );
       expect(
         index.declarations.map((declaration) => declaration.name),
-        ['dotEnvFile', 'AppKey', 'appKeys'],
+        ['dotEnvFile', 'AppKey', 'appKeys', 'envSupplied'],
       );
       expect(text, contains("const String dotEnvFile = '.env';"));
+      expect(text, contains('final bool envSupplied = AppEnv.supplied;'));
       expect(
         text,
         contains(
