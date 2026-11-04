@@ -508,6 +508,16 @@ final class EverySocketModule extends SmfModule {
           AppEntryRole.iosAppDelegateLaunch,
           Fragment('    UNUserNotificationCenter.current().delegate = self'),
         ),
+        const SocketContribution.code(
+          AppEntryRole.iosAppDelegateEngine,
+          Fragment(
+            '    FlutterMethodChannel(\n'
+            '      name: "every_socket",\n'
+            '      binaryMessenger: '
+            'engineBridge.applicationRegistrar.messenger()\n'
+            '    ).setMethodCallHandler { _, result in result(nil) }',
+          ),
+        ),
         AppEntryRole.gradleSettingsPlugins.entry(
           'io.github.ben-manes.versions',
           '0.64.0',

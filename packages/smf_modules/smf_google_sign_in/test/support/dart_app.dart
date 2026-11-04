@@ -12,10 +12,13 @@ import 'package:yaml/yaml.dart';
 
 /// A stand-in for the part of Flutter's foundation library that the file of
 /// the module and the files of the auth role use, with the signatures of
-/// Flutter 3.44. The app runs in debug mode, and the platform that it runs
-/// on, which Flutter has as a getter, is a variable here.
+/// Flutter 3.44. The app runs in debug mode and not on the web, and the
+/// platform that it runs on, which Flutter has as a getter, is a variable
+/// here.
 const _foundation = '''
 const bool kDebugMode = true;
+
+const bool kIsWeb = false;
 
 void debugPrint(String? message, {int? wrapWidth}) {}
 
@@ -172,6 +175,55 @@ class WidgetsBinding {
 }
 ''';
 
+/// A stand-in for the part of Flutter's services library that the file of
+/// the module uses: a method channel to the platform, with the signatures
+/// of Flutter 3.44.
+///
+/// A script scripts and reads it through the top-level names:
+/// `channelAnswers`, what the platform answers each call of a channel with,
+/// by the name of the channel, and `channelCalls`, each call as the name of
+/// its channel and its method. A call of a channel without an answer throws
+/// a `MissingPluginException`, as one that nothing on the platform answers
+/// does.
+const _services = r'''
+/// What the platform answers each call of a method channel with, by the
+/// name of the channel.
+final Map<String, Object?> channelAnswers = {};
+
+/// The calls of the method channels, each as the name of its channel and
+/// its method.
+final List<String> channelCalls = [];
+
+class MissingPluginException implements Exception {
+  MissingPluginException([this.message]);
+
+  final String? message;
+
+  @override
+  String toString() => 'MissingPluginException($message)';
+}
+
+class MethodChannel {
+  const MethodChannel(this.name);
+
+  final String name;
+
+  Future<Map<K, V>?> invokeMapMethod<K, V>(
+    String method, [
+    dynamic arguments,
+  ]) async {
+    channelCalls.add('$name $method');
+    await null;
+    if (!channelAnswers.containsKey(name)) {
+      throw MissingPluginException(
+        'No implementation found for method $method on channel $name',
+      );
+    }
+    return (channelAnswers[name] as Map<Object?, Object?>?)?.cast<K, V>();
+  }
+}
+''';
+
 /// A stand-in for the part of google_sign_in that the module uses, with
 /// the signatures of google_sign_in 7.2: the start of the package, a
 /// sign-in with the sheet of Google, and what it fails with.
@@ -310,6 +362,7 @@ final class DartApp {
     }
     write('flutter/lib/foundation.dart', _foundation);
     write('flutter/lib/widgets.dart', _widgets);
+    write('flutter/lib/services.dart', _services);
     write('google_sign_in/lib/google_sign_in.dart', _googleSignIn);
     write('app/pubspec.yaml', 'name: contract_app\n');
     // The stand-ins are in the language of the app too.

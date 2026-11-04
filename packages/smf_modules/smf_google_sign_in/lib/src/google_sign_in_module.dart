@@ -1,6 +1,7 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_google_sign_in/bundles/google_sign_in_bundle.dart';
 import 'package:smf_google_sign_in/src/agents.dart';
+import 'package:smf_google_sign_in/src/ios_setup.dart';
 import 'package:smf_google_sign_in/src/readme.dart';
 
 /// The module that gives the auth role a way to sign in with Google sign-in
@@ -21,6 +22,13 @@ import 'package:smf_google_sign_in/src/readme.dart';
 /// account of the user with the issuer [issuer]. A closed sheet returns
 /// `null`, and an error with which Google refuses an app that is not set up
 /// for it fails with `notConfigured`.
+///
+/// On iOS, the Google Sign-In SDK stops the app, rather than fail, when the
+/// app has no iOS client of Google, an empty one, or not its URL scheme.
+/// So the module also puts a handler of a method channel into the app
+/// delegate ([AppEntryRole.iosAppDelegateEngine]), which tells what the SDK
+/// finds of the setup of the app, and the function asks it first and fails
+/// with `notConfigured` in place of the SDK.
 ///
 /// The module knows no provider of the role: it requires the role, and
 /// states what its way to sign in needs of the backend of the provider, as
@@ -88,7 +96,14 @@ final class GoogleSignInModule extends SmfModule {
             'issuer': issuer,
             'logo': logoFile,
             'readme': readmeHeading,
+            'ios_setup_channel': iosSetupChannel,
+            'info_plist': AppEntryRole.infoPlistFile,
+            'app_delegate': AppEntryRole.appDelegateFile,
           },
+        ),
+        const SocketContribution.code(
+          AppEntryRole.iosAppDelegateEngine,
+          Fragment(iosSetupReader),
         ),
         // The latest release. The Android plugin that it resolves for the
         // Flutter of the apps, 7.2.12 or later, builds with the built-in

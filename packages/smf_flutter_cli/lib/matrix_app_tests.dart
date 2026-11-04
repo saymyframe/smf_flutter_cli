@@ -165,13 +165,17 @@ Future<MatrixAppTests> smfAppTests() async {
       // ids of the clients of Google, and the credential is the ID token of
       // the Google account; a closed sheet returns null, the errors with
       // which Google refuses an app that is not set up for it fail with
-      // notConfigured, and any other error with unknown; and the app lists
-      // it on Android and iOS, with the logo of Google from its assets. The
-      // mocks replace the platform implementation of the package with
-      // Google for one account, and the matrix sets them up for the tests
-      // of every module of the app, such as the test of the ways to sign in
-      // of the auth role. The test has no probe for the start check: nobody
-      // can sign in on a device.
+      // notConfigured, and any other error with unknown; on iOS, the app
+      // asks its app delegate first and fails with notConfigured, without
+      // asking the Google Sign-In SDK, where the SDK would stop the app; and
+      // the app lists it on Android and iOS, with the logo of Google from
+      // its assets. The mocks replace the platform implementation of the
+      // package with Google for one account, and answer for the app
+      // delegate of an iOS app that is set up, and the matrix sets them up
+      // for the tests of every module of the app, such as the test of the
+      // ways to sign in of the auth role. Its probe signs nobody in: on an
+      // iOS device it checks that the app delegate answers, and that an app
+      // with an iOS client of Google has its URL scheme.
       MatrixAppTest(
         '$googleSignIn/google_sign_in',
         appliesTo: _has(GoogleSignInModule.id),
@@ -179,6 +183,10 @@ Future<MatrixAppTests> smfAppTests() async {
         mocks: const MatrixMocks(
           'test/google_sign_in_mocks.dart',
           'mockGoogleSignIn',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/google_sign_in/probe.dart',
+          'probeGoogleSignIn',
         ),
       ),
       // The way to sign in with Apple of the module, on the real
