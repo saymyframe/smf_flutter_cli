@@ -1028,7 +1028,6 @@ class NotFoundScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     return Scaffold(
       body: SafeArea(
         child: TweenAnimationBuilder<double>(
@@ -1068,49 +1067,32 @@ class NotFoundScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Semantics(
-                    button: true,
-                    child: Material(
-                      color: colors.surfaceContainer,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: colors.outlineVariant),
+                  // The button takes its look from the theme of the app.
+                  ElevatedButton(
+                    onPressed: () => appRouter.navigatorOf(context).goToStart(),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: () => appRouter.navigatorOf(context).goToStart(),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                // The label grows at most by half, so that
-                                // its words keep to the width of a phone.
-                                child: MediaQuery.withClampedTextScaling(
-                                  maxScaleFactor: 1.5,
-                                  child: Text(
-                                    'Go to the start screen',
-                                    textAlign: TextAlign.center,
-                                    style: theme.textTheme.labelLarge?.copyWith(
-                                      color: colors.onSurface,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 18,
-                                color: colors.onSurfaceVariant,
-                              ),
-                            ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          // The label grows at most by half, so that its
+                          // words keep to the width of a phone.
+                          child: MediaQuery.withClampedTextScaling(
+                            maxScaleFactor: 1.5,
+                            child: Text(
+                              'Go to the start screen',
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_forward_rounded, size: 18),
+                      ],
                     ),
                   ),
                 ],
