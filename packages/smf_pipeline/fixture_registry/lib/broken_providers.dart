@@ -195,6 +195,33 @@ const _goRouterDroppingItsNotFoundScreen = BrokenModule(
   ],
 );
 
+/// The router of go_router that stays where it is for a location from the
+/// platform that it cannot show, rather than show the screen of the router
+/// role: the constructor of its `GoRouter` in an app without a main
+/// navigation gives go_router a handler of its exceptions in place of the
+/// builder of that screen, and go_router then keeps its pages for such a
+/// location. It still shows a location of a route from the platform. The
+/// router of a fixture takes no location from the platform, so this broken
+/// router changes the module of the CLI, made here as the broken app entry
+/// is.
+const _goRouterDroppingUnknownLinks = BrokenModule(
+  GoRouterModule(),
+  id: ModuleId('broken_go_router_drops_unknown_links'),
+  description: 'go_router that stays where it is for an unknown link (fixture)',
+  file: RouterRole.appRouterFactoryFile,
+  changes: [
+    (
+      '    super.observers,\n'
+          '    super.errorBuilder,\n'
+          '  }) : super.routingConfig(\n',
+      '    super.observers,\n'
+          '    GoRouterWidgetBuilder? errorBuilder,\n'
+          '  }) : super.routingConfig(\n'
+          '         onException: (context, state, router) {},\n',
+    ),
+  ],
+);
+
 /// The router of go_router whose `goToStart()` goes to the screen that the
 /// app starts on without asking the guards of the routes, within the calls
 /// of the router, in which its redirect asks nothing either. The fixture
@@ -486,6 +513,30 @@ List<BrokenProvider> brokenProviders() => const [
             _notFoundTest,
             'For a location from the platform that no route matches, the '
                 'router shows the not-found screen of the router role.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _goRouterDroppingUnknownLinks,
+        role: routerRole,
+        bug: 'It stays where it is for a location from the platform that no '
+            'route matches, rather than show the not-found screen of the '
+            'router role, though it shows a location of a route from the '
+            'platform.',
+        app: [
+          FakeFeatureModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_not_found_test.dart',
+            _notFoundTest,
+            'A router that shows a location of a route from the platform '
+                'shows the not-found screen for one that no route matches.',
           ),
         ],
       ),
