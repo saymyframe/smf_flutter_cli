@@ -1339,8 +1339,9 @@ void main() {
       const infoPlist = 'GIDClientID of ${AppEntryRole.infoPlistFile}';
       final noAnswer = notConfigured(
         '${AppEntryRole.appDelegateFile} does not answer, or fails, on the '
-        'method channel google_sign_in/ios_setup, through which the app learns whether the '
-        'Google Sign-In SDK finds the iOS client of Google and its URL scheme',
+        'method channel google_sign_in/ios_setup, through which the app '
+        'learns whether the Google Sign-In SDK finds the iOS client of Google '
+        'and its URL scheme',
       );
 
       expect(
