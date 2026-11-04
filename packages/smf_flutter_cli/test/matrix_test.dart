@@ -347,9 +347,10 @@ void main() {
       'the matrix of the CLI has the app of flutter_core with and without the '
       'router and the localization, which gets the preferences and is the '
       'app of the localization alone, the app of the router with the '
-      'layout, one for each state manager, the apps of home, of settings '
-      'and of the layout with the localization, which get the router and '
-      'the preferences, the apps of home and of settings without it, the '
+      'layout, with the localization, which gets the preferences, and '
+      'without it, one for each state manager, the apps of home and of '
+      'settings with the localization, which get the router and the '
+      'preferences, the apps of home and of settings without it, the '
       'apps of the theme with the settings screen and the localization and '
       'without each, which all get the preferences, the app of the DI '
       'container, the apps of the events and of the preferences with the '
@@ -425,8 +426,13 @@ void main() {
         'shared_preferences)',
       ),
       'flutter_core (flutter_core)',
+      // The router with the layout and the localization, which its role
+      // uses, and with the layout alone.
+      equals(
+        'go_router with layout, localization (go_router, bottom_tabs, '
+        'gen_l10n, flutter_core, shared_preferences)',
+      ),
       'go_router with layout (go_router, bottom_tabs, flutter_core)',
-      localized('bottom_tabs'),
       localized('home'),
       'home (home, flutter_core, go_router)',
       localized('settings'),

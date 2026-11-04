@@ -355,7 +355,7 @@ void main() {
 
       expect(localizationRole.textsIn(input), hasLength(4));
       expect(
-        () => localizationRole.textsIn(inputOf(routerRole, data: data)),
+        () => localizationRole.textsIn(inputOf(diRole, data: data)),
         throwsArgumentError,
       );
     });
@@ -888,7 +888,7 @@ void main() {
 
     test('is for a role that requires or uses the role, and for an owner', () {
       expect(
-        () => localizationRole.expressionOf(inputOf(routerRole), home, _title),
+        () => localizationRole.expressionOf(inputOf(diRole), home, _title),
         throwsArgumentError,
       );
       expect(
@@ -2135,7 +2135,7 @@ void main() {
         'the role', () {
       expect(
         check(
-          const RoleTemplateOrigin(routerRole),
+          const RoleTemplateOrigin(diRole),
           accesses: const [IndexedMemberAccess('l10n', 'name')],
         ),
         isEmpty,

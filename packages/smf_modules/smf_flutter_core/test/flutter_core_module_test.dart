@@ -789,8 +789,14 @@ void main() {
         ],
         isEmpty,
       );
-      // Without a text of its own, the app is in English alone.
-      expect(localizationRole.localesIn(input), ['en']);
+      // Without a text of its own, the app has those of the screen of the
+      // router role for a location that it cannot show alone, and is in
+      // their languages.
+      expect(
+        {for (final text in localizationRole.textsIn(input)) text.owner},
+        {const RoleTemplateOrigin(routerRole)},
+      );
+      expect(localizationRole.localesIn(input), ['en', 'uk']);
     });
 
     test(

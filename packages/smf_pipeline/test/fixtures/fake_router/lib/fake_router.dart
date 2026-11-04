@@ -33,7 +33,12 @@
 /// a stack. When the main navigation leaves the stack, by an answer of the
 /// guards or by a navigation, the branches get new navigators, so that a
 /// main navigation that comes back before the transition to the page that
-/// took its place is over shares no key with the one that left.
+/// took its place is over shares no key with the one that left. Its
+/// `goToStart()` shows the screen that the app starts on in place of its
+/// stack, as a location that the guards answer, after it asked the guards
+/// about that screen in an app with guards. It takes no location from the
+/// platform, so it has none that it cannot show, and never shows the screen
+/// of the router role for such a location.
 library;
 
 import 'package:fake_router/bundles/fake_router_bundle.dart';

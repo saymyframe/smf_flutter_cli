@@ -1240,7 +1240,7 @@ void main() {
         // preferences.
         'flutter_core with router, localization',
         'flutter_core with localization',
-        'bottom_tabs with localization',
+        'go_router with layout, localization',
         'home with localization',
         'settings with localization',
         // The onboarding requires the preferences.
@@ -1375,7 +1375,7 @@ void main() {
         // shows the labels of the destinations in the language of the app.
         'flutter_core with router, localization',
         'flutter_core with localization',
-        'bottom_tabs with localization',
+        'go_router with layout, localization',
         'home with localization',
         'settings with localization',
         'onboarding with localization',
@@ -1430,7 +1430,7 @@ void main() {
         'flutter_core with localization': ['en', 'uk'],
         'home with localization': ['en', 'uk'],
         'settings with localization': ['en', 'uk'],
-        'bottom_tabs with localization': ['en', 'uk'],
+        'go_router with layout, localization': ['en', 'uk'],
         'material_theme with settings_screen, localization': ['en', 'uk'],
         'material_theme with localization': ['en', 'uk'],
         for (final app in [_rcAll, _rcAuthL10n, _rcSettingsL10n, _rcL10n])
