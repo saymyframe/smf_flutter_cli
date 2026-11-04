@@ -71,12 +71,13 @@ const envRole = EnvRole._();
 /// configuration or a test tool, takes them from [toolArgumentsIn] without
 /// knowing the provider.
 ///
-/// A release build cannot go out without the values. The provider says in
-/// `AppEnv.supplied` whether the command that built the app gave it the
-/// values (see [appEnv]), and the template generates [checkFile], whose
-/// `checkEnvValues` `bootstrap()` calls in its first phase,
-/// [AppEntryRole.bootstrapEarly], so that every build of every app with the
-/// role compiles the check. A
+/// A release build of an app with keys cannot go out without the arguments
+/// that give it [dotEnvFile]; whether its values are filled in is not
+/// checked. The provider says in `AppEnv.supplied` whether the command that
+/// built the app gave it the values (see [appEnv]), and the template
+/// generates [checkFile], whose `checkEnvValues` `bootstrap()` calls in its
+/// first phase, [AppEntryRole.bootstrapEarly], so that every build of every
+/// app with the role compiles the check. A
 /// release build without the values stops there with a compile error, the
 /// text of [releaseErrorOf], which names the arguments of [toolArgumentsIn].
 /// A debug or profile build, `flutter test` and the analyzer build without

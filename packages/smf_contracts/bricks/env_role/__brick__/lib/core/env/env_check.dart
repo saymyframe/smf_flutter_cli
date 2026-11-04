@@ -1,6 +1,7 @@
-// The check that a build of the app has the values of .env, which bootstrap()
-// calls in its first phase. It is plain Dart, so that a test compiles it with
-// the Dart SDK alone.
+// The check that the command that built the app gave it .env, which
+// bootstrap() calls in its first phase. It does not look at whether the values
+// are filled in. It is plain Dart, so that a test compiles it with the Dart
+// SDK alone.
 import 'app_env.dart';
 
 /// Whether this is a release build, which the compiler of a release build

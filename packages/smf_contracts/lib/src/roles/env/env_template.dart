@@ -74,10 +74,11 @@ String _releaseReadme(List<AppEnvKey> keys, List<String> toolArguments) {
           'values: `$_appEnv.$_supplied` is `true`, since nothing can tell '
           'whether a build has them. Once `$_appEnv.$_supplied` checks for a '
           'key of the app, $stops. $check'
-      : 'A release build needs the values: $stops. So a build for a store '
-          'never goes out without them by mistake. A debug or profile build '
-          'without them starts with every getter `null` and says so in the '
-          'console. $check';
+      : 'A release build needs `${EnvRole.dotEnvFile}`: $stops. So a build '
+          'for a store never goes out by mistake from a command that did not '
+          'give it `${EnvRole.dotEnvFile}`. A debug or profile build without '
+          'it starts with every getter `null` and says so in the console. '
+          '$check';
 }
 
 /// How the README of the app names [owner], who gave the app a key: only
