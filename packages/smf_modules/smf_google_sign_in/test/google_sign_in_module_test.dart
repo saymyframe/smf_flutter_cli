@@ -1004,6 +1004,27 @@ void main() {
       );
     });
 
+    test(
+        'reads the setup of the iOS app under the names by which '
+        'google_sign_in_ios and the Google Sign-In SDK read it', () {
+      // GoogleSignInPlugin.swift of google_sign_in_ios 6.3.8 reads CLIENT_ID
+      // of GoogleService-Info.plist. GIDSignIn.m of GoogleSignIn-iOS 9.2.0
+      // reads GIDClientID of Info.plist, and GIDSignInCallbackSchemes.m of
+      // the same release reads the schemes of each entry of CFBundleURLTypes.
+      // With one name misspelled, the app delegate would find no iOS client
+      // in any app, so every sign-in on iOS would fail, and the probe of the
+      // start check would pass whatever the setup.
+      for (final name in [
+        'Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist")',
+        'serviceInfo?["CLIENT_ID"] as? String',
+        'Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String',
+        'Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes")',
+        r'$0["CFBundleURLSchemes"] as? [String]',
+      ]) {
+        expect(iosSetupReader, contains(name));
+      }
+    });
+
     test('reads the label in English in an app without the localization role',
         () async {
       final english = (await _resultOf(const [GoogleSignInModule.id])).app!;
