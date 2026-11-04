@@ -118,20 +118,25 @@ final class GoogleSignInIosSetup {
 /// the setup without one; a change that gives `initialize()` an id gives it
 /// here too.
 ///
-/// An app delegate that does not answer gives a setup whose
-/// [GoogleSignInIosSetup.problem] says so: then the app cannot tell whether
-/// the SDK would stop it.
+/// An app delegate that does not answer, whose handler fails, or whose
+/// answer is no map gives a setup whose [GoogleSignInIosSetup.problem] says
+/// that it does not answer: then the app cannot tell whether the SDK would
+/// stop it.
 Future<GoogleSignInIosSetup?> readGoogleSignInIosSetup({
   String? clientId,
 }) async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
-  final Map<String, Object?> answer;
+  const noAnswer = GoogleSignInIosSetup._(answered: false);
+  final Object? answered;
   try {
-    answer =
-        await _iosSetup.invokeMapMethod<String, Object?>('read') ?? const {};
+    answered = await _iosSetup.invokeMethod<Object?>('read');
   } on MissingPluginException {
-    return const GoogleSignInIosSetup._(answered: false);
+    return noAnswer;
+  } on PlatformException {
+    return noAnswer;
   }
+  final answer = answered ?? const <Object?, Object?>{};
+  if (answer is! Map<Object?, Object?>) return noAnswer;
   final (String?, String?) client = switch (answer) {
     _ when clientId != null => (
         clientId,
@@ -153,8 +158,9 @@ Future<GoogleSignInIosSetup?> readGoogleSignInIosSetup({
     clientId: client.$1,
     source: client.$2,
     urlSchemes: [
-      for (final scheme in answer['urlSchemes'] as List<Object?>? ?? const [])
-        if (scheme is String) scheme.toLowerCase(),
+      if (answer['urlSchemes'] case final List<Object?> schemes)
+        for (final scheme in schemes)
+          if (scheme is String) scheme.toLowerCase(),
     ],
   );
 }

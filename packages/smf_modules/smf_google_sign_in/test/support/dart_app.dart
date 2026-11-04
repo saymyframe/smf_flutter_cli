@@ -184,7 +184,8 @@ class WidgetsBinding {
 /// by the name of the channel, and `channelCalls`, each call as the name of
 /// its channel and its method. A call of a channel without an answer throws
 /// a `MissingPluginException`, as one that nothing on the platform answers
-/// does.
+/// does, and one whose answer is a `PlatformException` throws it, as one
+/// whose handler fails does.
 const _services = r'''
 /// What the platform answers each call of a method channel with, by the
 /// name of the channel.
@@ -203,15 +204,25 @@ class MissingPluginException implements Exception {
   String toString() => 'MissingPluginException($message)';
 }
 
+class PlatformException implements Exception {
+  PlatformException({required this.code, this.message, this.details});
+
+  final String code;
+
+  final String? message;
+
+  final Object? details;
+
+  @override
+  String toString() => 'PlatformException($code, $message, $details, null)';
+}
+
 class MethodChannel {
   const MethodChannel(this.name);
 
   final String name;
 
-  Future<Map<K, V>?> invokeMapMethod<K, V>(
-    String method, [
-    dynamic arguments,
-  ]) async {
+  Future<T?> invokeMethod<T>(String method, [dynamic arguments]) async {
     channelCalls.add('$name $method');
     await null;
     if (!channelAnswers.containsKey(name)) {
@@ -219,8 +230,17 @@ class MethodChannel {
         'No implementation found for method $method on channel $name',
       );
     }
-    return (channelAnswers[name] as Map<Object?, Object?>?)?.cast<K, V>();
+    final answer = channelAnswers[name];
+    if (answer is PlatformException) throw answer;
+    return answer as T?;
   }
+
+  Future<Map<K, V>?> invokeMapMethod<K, V>(
+    String method, [
+    dynamic arguments,
+  ]) async =>
+      (await invokeMethod<Map<Object?, Object?>>(method, arguments))
+          ?.cast<K, V>();
 }
 ''';
 

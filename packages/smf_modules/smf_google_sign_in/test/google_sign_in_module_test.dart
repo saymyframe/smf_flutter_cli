@@ -409,7 +409,7 @@ Future<void> main(List<String> arguments, SendPort port) async {
   }
 
   defaultTargetPlatform = TargetPlatform.iOS;
-  for (final (name, answer) in <(String, Map<String, Object?>?)>[
+  for (final (name, answer) in <(String, Object?)>[
     (
       'a client without its scheme',
       {
@@ -490,6 +490,19 @@ Future<void> main(List<String> arguments, SendPort port) async {
       },
     ),
     ('no answer of the app delegate', null),
+    (
+      'an error of the app delegate',
+      PlatformException(code: 'error', message: 'The setup failed.'),
+    ),
+    ('an answer of the app delegate that is no map', 'setup'),
+    (
+      'URL schemes that are no list',
+      {
+        'serviceInfo': true,
+        'serviceInfoClientId': _id,
+        'urlSchemes': _scheme,
+      },
+    ),
   ]) {
     if (answer == null) {
       channelAnswers.remove(_channel);
@@ -1183,7 +1196,12 @@ void main() {
       }
       expect(
         _caughtTypesOf(app.files[googleSignInFile]!.text),
-        ['MissingPluginException', 'GoogleSignInException', 'Object'],
+        [
+          'MissingPluginException',
+          'PlatformException',
+          'GoogleSignInException',
+          'Object',
+        ],
       );
       expect(file.uses('rawNonce'), isFalse);
       expect(
@@ -1237,6 +1255,11 @@ void main() {
           );
       const serviceInfo = 'CLIENT_ID of GoogleService-Info.plist';
       const infoPlist = 'GIDClientID of ${AppEntryRole.infoPlistFile}';
+      final noAnswer = notConfigured(
+        '${AppEntryRole.appDelegateFile} does not answer the method channel '
+        'google_sign_in/ios_setup, through which the app learns whether the '
+        'Google Sign-In SDK finds the iOS client of Google and its URL scheme',
+      );
 
       expect(
         onIos['outcomes'],
@@ -1257,21 +1280,19 @@ void main() {
           'an empty GIDClientID': empty(infoPlist),
           'CLIENT_ID over a GIDClientID whose scheme is there':
               noScheme(other, serviceInfo),
-          'no answer of the app delegate': notConfigured(
-            '${AppEntryRole.appDelegateFile} does not answer the method '
-            'channel google_sign_in/ios_setup, through which the app learns '
-            'whether the Google Sign-In SDK finds the iOS client of Google and '
-            'its URL scheme',
-          ),
+          'no answer of the app delegate': noAnswer,
+          'an error of the app delegate': noAnswer,
+          'an answer of the app delegate that is no map': noAnswer,
+          'URL schemes that are no list': noScheme(scheme, serviceInfo),
           'on Android': 'credential: token of on Android',
         },
         reason: 'The Google Sign-In SDK stops an iOS app without its iOS '
             'client of Google, with an empty one, or without the URL scheme '
             'of that client, which it compares in lower case; a CLIENT_ID of '
             'GoogleService-Info.plist comes before the GIDClientID of '
-            'Info.plist. An app delegate that does not answer leaves the app '
-            'unable to tell, so the call fails rather than let the SDK stop '
-            'the app.',
+            'Info.plist. An app delegate that does not answer, fails or gives '
+            'an answer of another form leaves the app unable to tell, so the '
+            'call fails rather than let the SDK stop the app.',
       );
       expect(
         onIos['sign-ins'],
@@ -1290,7 +1311,7 @@ void main() {
       );
       expect(
         onIos['calls on iOS'],
-        List.filled(11, '$iosSetupChannel read'),
+        List.filled(14, '$iosSetupChannel read'),
         reason: 'Each call on iOS asks the app delegate once.',
       );
       expect(
