@@ -626,7 +626,9 @@ final class AppEntryRole extends Role<NoDsl> {
   /// need not keep the channel.
   ///
   /// The module rule `app_entry.engine_code_place` checks that the tag of
-  /// the provider is in that method, after the registration of the plugins.
+  /// the provider is in that method, after the registration of the plugins,
+  /// and that the class of the method conforms to
+  /// `FlutterImplicitEngineDelegate`, without which Flutter never calls it.
   static const iosAppDelegateEngine = SocketRef<CodeSocket>.role(
     appEntryRole,
     'ios_app_delegate_engine',
@@ -924,7 +926,8 @@ final class AppEntryRole extends Role<NoDsl> {
           description: 'The tag of the code that runs once the engine of '
               'the iOS app exists is in the body of '
               'didInitializeImplicitFlutterEngine(_ engineBridge:) in '
-              'ios/Runner/AppDelegate.swift, after its call of '
+              'ios/Runner/AppDelegate.swift, in a class that conforms to '
+              'FlutterImplicitEngineDelegate, after its call of '
               'GeneratedPluginRegistrant.register(with:), which registers '
               'the plugins of the app.',
           check: _checkEngineCodePlace,
@@ -1199,8 +1202,13 @@ String _codeOf(String template) =>
 ({int start, int end})? _bodyAfter(String template, RegExp declaration) {
   final code = _codeOf(template);
   final found = declaration.firstMatch(code);
-  if (found == null) return null;
-  final start = found.end - 1;
+  return found == null ? null : _bodyFrom(code, found.end - 1);
+}
+
+/// The offsets from the opening brace at [start] of [code], code without
+/// tags, comments and strings, to the brace that closes it, or `null` if
+/// none does.
+({int start, int end})? _bodyFrom(String code, int start) {
   var depth = 0;
   for (var i = start; i < code.length; i++) {
     switch (code[i]) {
@@ -1286,6 +1294,33 @@ const _engineBridge = 'engineBridge';
 final _pluginRegistration =
     RegExp(r'\bGeneratedPluginRegistrant\s*\.\s*register\s*\(');
 
+/// The declaration of a class or an extension in the template of a Swift
+/// file, up to the brace that opens its body: the name of its type as the
+/// first group, and what follows its colon, if it has one, as the second.
+final _swiftType = RegExp(r'\b(?:class|extension)\s+(\w+)\s*(?::([^{]*))?\{');
+
+/// The protocol of an app delegate on which Flutter calls
+/// `didInitializeImplicitFlutterEngine(_:)`.
+final _engineDelegate = RegExp(r'\bFlutterImplicitEngineDelegate\b');
+
+/// Whether [code], the code of the template of a Swift file, declares the
+/// type of the innermost class or extension around [offset] as conforming
+/// to `FlutterImplicitEngineDelegate`, in that declaration or in another
+/// declaration of the same type.
+bool _conformsToEngineDelegate(String code, int offset) {
+  final types = _swiftType.allMatches(code).toList();
+  String? holder;
+  for (final type in types) {
+    final body = _bodyFrom(code, type.end - 1);
+    if (body != null && body.start < offset && offset < body.end) {
+      holder = type[1];
+    }
+  }
+  return types.any(
+    (type) => type[1] == holder && _engineDelegate.hasMatch(type[2] ?? ''),
+  );
+}
+
 List<SmfIssue> _checkEngineCodePlace(ModuleRuleInput<NoDsl> input) {
   const path = AppEntryRole.appDelegateFile;
   const method = 'didInitializeImplicitFlutterEngine(_:)';
@@ -1306,6 +1341,15 @@ List<SmfIssue> _checkEngineCodePlace(ModuleRuleInput<NoDsl> input) {
     ];
   }
   final code = _codeOf(text);
+  if (!_conformsToEngineDelegate(code, body.start)) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, but no declaration '
+        'of its class conforms to FlutterImplicitEngineDelegate: Flutter '
+        'calls the method only on an app delegate that does.',
+      ),
+    ];
+  }
   // The name by which the body reads the parameter: the word before its
   // type, after the label of the argument, if it has one.
   final parameters = _engineMethod.firstMatch(code)![1]!;

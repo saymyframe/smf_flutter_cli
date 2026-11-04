@@ -4644,6 +4644,11 @@ Future<void> main() async {
       const otherName = 'The tag $tag is in the body of $method in $path, '
           'whose parameter is not named engineBridge: the code of the modules '
           'reads the bridge to the engine by that name.';
+      const notDelegate = 'The tag $tag is in the body of $method in $path, '
+          'but no declaration of its class conforms to '
+          'FlutterImplicitEngineDelegate: Flutter calls the method only on an '
+          'app delegate that does.';
+      const conformance = 'FlutterAppDelegate, FlutterImplicitEngineDelegate {';
       String moved(String to) =>
           _appDelegateTemplate.replaceFirst('$tag\n', '').replaceFirst(
                 to,
@@ -4724,6 +4729,73 @@ Future<void> main() async {
           ),
         ),
         [otherName],
+      );
+      // In a class that does not conform to the delegate, or only in a
+      // comment, whose method Flutter never calls.
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            conformance,
+            'FlutterAppDelegate {',
+          ),
+        ),
+        [notDelegate],
+      );
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(
+            conformance,
+            'FlutterAppDelegate /* FlutterImplicitEngineDelegate */ {',
+          ),
+        ),
+        [notDelegate],
+      );
+      // In a class whose extension conforms, or in an extension that
+      // conforms; a nested type that conforms is another class.
+      const methodStart = '  func didInitializeImplicitFlutterEngine(';
+      final split = _appDelegateTemplate.indexOf(methodStart);
+      final head = _appDelegateTemplate
+          .substring(0, split)
+          .replaceFirst(conformance, 'FlutterAppDelegate {');
+      final tail = _appDelegateTemplate.substring(split);
+      expect(
+        problems(
+          '$head}\n\nextension AppDelegate: FlutterImplicitEngineDelegate {\n'
+          '$tail',
+        ),
+        isEmpty,
+      );
+      expect(
+        problems(
+          '${head.replaceFirst('FlutterAppDelegate {', conformance)}}\n\n'
+          'extension AppDelegate {\n$tail',
+        ),
+        isEmpty,
+      );
+      expect(
+        problems(
+          '$head  class Engine: FlutterImplicitEngineDelegate {}\n\n$tail',
+        ),
+        [notDelegate],
+      );
+      expect(
+        problems(
+          '$head}\n\nextension AppDelegate {\n$tail\n'
+          'class Other: FlutterImplicitEngineDelegate {}\n',
+        ),
+        [notDelegate],
+      );
+      // A method at the top level, outside a class, as when a brace ends
+      // the class early, and a class whose body does not end.
+      expect(
+        problems('$head}\n\n$tail'.replaceFirst(RegExp(r'\}\n$'), '')),
+        [notDelegate],
+      );
+      expect(
+        problems(
+          _appDelegateTemplate.replaceFirst(RegExp(r'\}\n$'), ''),
+        ),
+        [notDelegate],
       );
       // In no method at all.
       expect(
