@@ -5,6 +5,30 @@ import 'package:smf_pipeline/src/render.dart';
 import 'package:smf_pipeline/src/testing/file_indexer.dart';
 import 'package:yaml/yaml.dart';
 
+/// [text], the value of a constant that the compiler cannot evaluate, as
+/// [DartOnlyApp.compile] and the compiler of a release build of Flutter
+/// quote it in their error: in double quotes, with each backslash doubled and
+/// each double quote and control character escaped. A test looks for the
+/// text of such an error, such as `EnvRole.releaseErrorOf`, in this form in
+/// what a build printed.
+String compilerQuoteOf(String text) {
+  final escaped = text.replaceAllMapped(
+    RegExp(r'[\\"\x00-\x1f]'),
+    (match) => switch (match[0]!) {
+      r'\' => r'\\',
+      '"' => r'\"',
+      '\n' => r'\n',
+      '\r' => r'\r',
+      '\t' => r'\t',
+      '\b' => r'\b',
+      '\f' => r'\f',
+      final control =>
+        '\\u${control.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}',
+    },
+  );
+  return '"$escaped"';
+}
+
 /// Dart files of a rendered app that need nothing but the Dart SDK, written
 /// to a temporary directory as the package of the app, so that a test
 /// compiles them as a release build does, or runs them, without Flutter.

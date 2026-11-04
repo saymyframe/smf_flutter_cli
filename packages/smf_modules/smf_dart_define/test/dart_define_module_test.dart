@@ -435,7 +435,9 @@ void main() => print(
       expect(built.compiled, isFalse);
       expect(
         built.output,
-        contains(EnvRole.releaseErrorOf(_toolArgumentsOf(result))),
+        contains(
+          compilerQuoteOf(EnvRole.releaseErrorOf(_toolArgumentsOf(result))),
+        ),
       );
       expect(
         EnvRole.releaseErrorOf(_toolArgumentsOf(result)),

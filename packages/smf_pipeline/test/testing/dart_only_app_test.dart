@@ -126,6 +126,40 @@ void main() {
       expect(given.compiled, isTrue, reason: given.output);
     });
 
+    test('quotes the text of a constant as the compiler does in its error',
+        () async {
+      // Each character that the compiler escapes, and some that it does not.
+      const text = 'A \\ " \n \r \t \b \f \x01 \v \x7F \$ \' ü 😀 end';
+      // The text as a literal of Dart, which JSON writes but for the `$`.
+      final literal = jsonEncode(text).replaceAll(r'$', r'\$');
+      final app = DartOnlyApp.write(
+        _app(
+          more: {
+            'lib/quoted.dart': '''
+const _release = bool.fromEnvironment('dart.vm.product');
+
+const bool quoted = !_release || ($literal as bool);
+''',
+          },
+        ),
+        ['lib/quoted.dart'],
+      );
+      addTearDown(app.delete);
+
+      final built = await app.compile(
+        "import 'package:shop_app/quoted.dart';\n\n"
+        'void main() => print(quoted);\n',
+      );
+      expect(built.compiled, isFalse);
+      expect(built.output, contains('Error: Constant evaluation error'));
+      expect(built.output, isNot(contains('special meaning')));
+      expect(built.output, contains(compilerQuoteOf(text)));
+      expect(
+        compilerQuoteOf(text),
+        "\"A \\\\ \\\" \\n \\r \\t \\b \\f \\u0001 \\u000b \x7F \$ ' ü 😀 end\"",
+      );
+    });
+
     test(
         'refuses a file that the app lacks, an import of another package and '
         'an import of a file that the app lacks, naming the file', () {

@@ -79,7 +79,11 @@ void main() {
       expect(built.compiled, isFalse, reason: 'It compiled.');
       expect(
         built.output,
-        contains(EnvRole.releaseErrorOf(envRole.toolArgumentsIn(input))),
+        contains(
+          compilerQuoteOf(
+            EnvRole.releaseErrorOf(envRole.toolArgumentsIn(input)),
+          ),
+        ),
       );
     });
 

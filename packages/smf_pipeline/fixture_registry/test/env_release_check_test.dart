@@ -52,14 +52,16 @@ Future<String?> _problemOfRelease(
   ContractResult result,
   RenderedApp app,
 ) async {
-  final text = EnvRole.releaseErrorOf(
-    envRole.toolArgumentsIn(envRole.hookInput(result.hook!)),
+  final text = compilerQuoteOf(
+    EnvRole.releaseErrorOf(
+      envRole.toolArgumentsIn(envRole.hookInput(result.hook!)),
+    ),
   );
   final built = await _releaseOf(app);
   if (built.compiled) return 'A release build without the values compiled.';
   return built.output.contains(text)
       ? null
-      : 'The compiler did not quote "$text": ${built.output}';
+      : 'The compiler did not quote $text: ${built.output}';
 }
 
 /// The keys of the lines of the `.env` of [app], as the template of the role
