@@ -18,6 +18,8 @@ import 'dart:io';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
+import 'dart_files.dart';
+
 /// The arguments in [given], one on each line, without the empty lines.
 List<String> _argumentsOf(String? given) => [
       for (final line in const LineSplitter().convert(given ?? ''))
@@ -92,7 +94,10 @@ void main() {
         isNot(0),
         reason: 'A release build without $toolArguments built: $printed',
       );
-      expect(printed, contains(EnvRole.releaseErrorOf(toolArguments)));
+      expect(
+        printed,
+        contains(compilerQuoteOf(EnvRole.releaseErrorOf(toolArguments))),
+      );
 
       final built = await _releaseBuild(app, withToolArguments: true);
       expect(

@@ -293,8 +293,12 @@ final class EnvRole extends Role<EnvData> {
   /// [toolArgumentsIn] of the app, each as one word of a POSIX shell and
   /// joined by spaces, and that [dotEnvFile] needs the keys of [exampleFile].
   ///
-  /// The compiler quotes it in its error, so a test of a build without the
-  /// values looks for it in what the build printed.
+  /// The compiler quotes it in its error, in double quotes, with each `\`
+  /// doubled and each `"` escaped, so a test of a build without the values
+  /// looks for it in that form in what the build printed. So for a tool
+  /// argument with `\` or `"`, or with `'`, which [shellWord] writes as
+  /// `'\''`, the developer sees a command with more escapes than a shell
+  /// takes, and not the command of this text.
   static String releaseErrorOf(List<String> toolArguments) =>
       'A release build of this app needs the values of $dotEnvFile: build it'
       '${_withArguments(toolArguments)} from a $dotEnvFile with the keys of '

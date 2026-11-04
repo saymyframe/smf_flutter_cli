@@ -9,6 +9,32 @@ import 'package:analyzer/diagnostic/diagnostic.dart';
 
 import 'support.dart';
 
+/// [text], the value of a constant that the compiler cannot evaluate, as
+/// `dart compile` and the compiler of a release build of Flutter quote it in
+/// their error: in double quotes, with each backslash doubled and each double
+/// quote and control character escaped.
+///
+/// The same as `compilerQuoteOf` of `package:smf_pipeline/testing.dart`,
+/// whose tests hold it to the compiler: this package cannot depend on the
+/// pipeline.
+String compilerQuoteOf(String text) {
+  final escaped = text.replaceAllMapped(
+    RegExp(r'[\\"\x00-\x1f]'),
+    (match) => switch (match[0]!) {
+      r'\' => r'\\',
+      '"' => r'\"',
+      '\n' => r'\n',
+      '\r' => r'\r',
+      '\t' => r'\t',
+      '\b' => r'\b',
+      '\f' => r'\f',
+      final control =>
+        '\\u${control.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}',
+    },
+  );
+  return '"$escaped"';
+}
+
 /// A stand-in for the part of Flutter's foundation library that the
 /// templates of the roles use, with the signatures of Flutter 3.44: the app
 /// runs in debug mode, and what it prints goes to `debugPrinted`.

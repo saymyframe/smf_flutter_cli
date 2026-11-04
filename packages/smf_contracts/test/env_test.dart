@@ -1091,7 +1091,10 @@ final described = describe(${vars['env_feed_url']!.absent});
     });
 
     group('in the file of the template', () {
-      const toolArguments = ['--dart-define-from-file', '.env'];
+      // An argument with the characters that the shell and the compiler
+      // quote: the compiler quotes the text with more escapes than a shell
+      // takes.
+      const toolArguments = ['--values-from', r'''Tom's "a\b".env'''];
       late Map<String, String> files;
 
       setUpAll(() async {
@@ -1130,7 +1133,7 @@ final described = describe(${vars['env_feed_url']!.absent});
         expect(without.compiled, isFalse, reason: without.output);
         expect(
           without.output,
-          contains(EnvRole.releaseErrorOf(toolArguments)),
+          contains(compilerQuoteOf(EnvRole.releaseErrorOf(toolArguments))),
         );
 
         final with_ = await appWith(supplied: true).compile(script);
