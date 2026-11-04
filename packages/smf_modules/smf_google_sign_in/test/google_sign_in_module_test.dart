@@ -1338,8 +1338,8 @@ void main() {
       const serviceInfo = 'CLIENT_ID of GoogleService-Info.plist';
       const infoPlist = 'GIDClientID of ${AppEntryRole.infoPlistFile}';
       final noAnswer = notConfigured(
-        '${AppEntryRole.appDelegateFile} does not answer the method channel '
-        'google_sign_in/ios_setup, through which the app learns whether the '
+        '${AppEntryRole.appDelegateFile} does not answer, or fails, on the '
+        'method channel google_sign_in/ios_setup, through which the app learns whether the '
         'Google Sign-In SDK finds the iOS client of Google and its URL scheme',
       );
 
@@ -1461,10 +1461,10 @@ void main() {
           'source': null,
           'urlSchemes': <String>[],
           'urlScheme': null,
-          'problem': '${AppEntryRole.appDelegateFile} does not answer the '
-              'method channel $iosSetupChannel, through which the app learns '
-              'whether the Google Sign-In SDK finds the iOS client of Google '
-              'and its URL scheme',
+          'problem': '${AppEntryRole.appDelegateFile} does not answer, or '
+              'fails, on the method channel $iosSetupChannel, through which '
+              'the app learns whether the Google Sign-In SDK finds the iOS '
+              'client of Google and its URL scheme',
         },
         'calls': [0, 5],
       });

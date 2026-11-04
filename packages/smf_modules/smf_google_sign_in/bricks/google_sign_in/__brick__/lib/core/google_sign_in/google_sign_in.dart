@@ -89,8 +89,8 @@ final class GoogleSignInIosSetup {
   /// SDK can show its sheet.
   String? get problem {
     if (!answered) {
-      return '{{{app_delegate}}} does not answer the method channel '
-          '{{{ios_setup_channel}}}, through which the app learns whether the '
+      return '{{{app_delegate}}} does not answer, or fails, on the method '
+          'channel {{{ios_setup_channel}}}, through which the app learns whether the '
           'Google Sign-In SDK finds the iOS client of Google and its URL '
           'scheme';
     }
