@@ -29,9 +29,9 @@
 // identity provider takes seconds, and an anonymous user keeps the id.
 // While the call is on its way, its button spins, and neither another
 // button nor the form takes a tap; in an app that asks for less motion the
-// button is disabled with its label instead. A
-// call that failed shows its failure below the buttons, not above the button
-// of the form. An app without ways to sign in shows no button and no "or".
+// button is disabled with its label instead. A call that failed shows its
+// failure below the buttons, not above the button of the form. An app
+// without ways to sign in shows no button and no "or".
 // When the user closes the sheet of a way to sign in, the screen is as it
 // was before the tap: the mocks of a way to sign in always give a
 // credential, so the tests of the package of the module check that, with a
