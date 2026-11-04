@@ -1,10 +1,13 @@
 /// The contract test harness of the module model: checks that modules and
 /// role templates follow the rules of their roles, and renders the apps
-/// they make in memory. `ModulePackage` checks what the package of a module
-/// imports and depends on, `roleClassNameProblems` that the code of
-/// packages of modules takes the names of the classes of roles from the
-/// roles, and `roleNoteProblems` that what the template of a role says in a
-/// socket of notes names nothing of the modules that provide the roles.
+/// they make in memory. `DartOnlyApp` writes the files of a rendered app
+/// that need only the Dart SDK as a package, so that a test compiles them as
+/// a release build does, or runs them. `ModulePackage` checks what the
+/// package of a module imports and depends on, `roleClassNameProblems` that
+/// the code of packages of modules takes the names of the classes of roles
+/// from the roles, and `roleNoteProblems` that what the template of a role
+/// says in a socket of notes names nothing of the modules that provide the
+/// roles.
 ///
 /// It runs without `package:test`, so both the tests of this package and the
 /// contract tests of the CLI can use it.
@@ -32,6 +35,7 @@ export 'src/templates.dart'
         missingTemplateTags,
         scanTemplate,
         templateFilesOf;
+export 'src/testing/dart_only_app.dart';
 export 'src/testing/file_indexer.dart';
 export 'src/testing/harness.dart';
 export 'src/testing/module_package.dart';

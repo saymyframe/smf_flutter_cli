@@ -90,7 +90,7 @@ void main() {
     expect(shape(routerRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
-      'uses': {'layout'},
+      'uses': {'layout', 'localization'},
     });
     expect(shape(layoutRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -505,6 +505,10 @@ void main() {
       final known = {
         'facade',
         'guards',
+        'app_symbol',
+        'app_number',
+        'text_not_found_title',
+        'text_not_found_action',
         'destinations',
         'steps',
         'labels',
@@ -532,6 +536,8 @@ void main() {
         'text_none',
         'text_failed',
         'env_keys',
+        'env_release_error',
+        'env_no_values_message',
         'rest_tokens',
       };
       for (final role in withTemplates) {

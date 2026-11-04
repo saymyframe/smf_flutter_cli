@@ -165,7 +165,7 @@ This guide tells coding agents what the code of this Flutter app does not show. 
 
 The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
 
-- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. Start-up code goes into `bootstrap()`.
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
@@ -183,7 +183,7 @@ flutter test
 
 Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
 
-- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Create no other in `lib/`: every screen is below it.
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Every screen is below it, so create no other `MaterialApp` in `lib/`. The only other one is in `FailedStartApp`, which `main()` runs in its place when the start-up fails.
 - The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
 - Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
 - The app has only an Android and an iOS project, in `android/` and `ios/`.
@@ -263,6 +263,7 @@ With `purchases_flutter`:
   3. the route itself, where the provider of the router declares its routes.
 - A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
 - `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
+- `NotFoundScreen` in `lib/core/router/not_found_screen.dart` is the page that the router shows for a location that it cannot show, such as a link to a page that the app does not have. Change its look there, and keep its `const` constructor without arguments. `appRouter.navigatorOf(context).goToStart()` shows the screen that the app starts on, as `go()` shows a location.
 
 - `routeGuards` in `lib/core/router/app_router.dart` lists the guards of the routes, each a `RouteGuard`, in the order the router asks them. A guard without `routes` is a gate over the whole app. The gates come first, and the first one whose `allows` is `false` decides: the router asks no guard after it. A guard with `routes` keeps the user only from the routes that it names there, each as `<feature>.<route>`, and comes after the gates.
 - To keep the user from the rest of the app, add a gate to that list, never a redirect to the files of the router. Put it at the place among the gates where its screen comes on a first launch: a guard of the first launch goes before one that asks who the user is. Make its `redirectTo` a top-level route outside the main navigation. To keep the user from some routes only, add their names to the `routes` of the guard that stands for what they need, or add such a guard after the gates. Add the name of each route below such a route too: a route does not ask because the route above it does. The `routes` are outside the main navigation and outside every `flow`, and the screen that the app starts on is none of them.
@@ -292,13 +293,15 @@ With `flutter_bloc`:
 - Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
 - Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
 - `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+- A release build of an app with keys stops with an error unless its command gives the app the values of `.env`; the note of the provider names the arguments. Never remove or work around the check in `lib/core/env/env_check.dart`, which `bootstrap()` calls in its first phase: give the build the arguments. `AppEnv.supplied` tells whether a build has the values.
 - `.vscode/launch.json` and `.run/<flavor>.run.xml` are the run configurations of VS Code and Android Studio, one for each flavor. Each passes the flavor and the arguments that the values need. In VS Code, F5 starts the selected configuration, while the links above `main()` and above a test and the Testing view always use `dev`, whose configuration alone has `templateFor`. In Android Studio, a test gets none of these arguments.
 
 With `--dart-define-from-file`:
 
-- Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`.
+- Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`, and a release build stops with an error.
 - A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
 - The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
+- `AppEnv.supplied` is `true` once `--dart-define-from-file=.env` declared one of the keys that it names, so a new key needs no change there. An app without keys has `true` there: with its first key, make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key.
 === CLAUDE.md (role:app_entry) ===
 @AGENTS.md
 === README.md (flutter_core) ===
@@ -349,13 +352,21 @@ Each flavor is in two places, so change both when you rename, add or remove one:
 - Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
 - iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
 
-In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which the last `flutter` command wrote. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
+In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which has one only after a `flutter` command that builds or runs the iOS app with a flavor. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
 
 On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
 
+## When the start-up fails
+
+`bootstrap()` in `lib/bootstrap.dart` runs before the first frame. When it throws, `main()` shows `FailedStartApp` of `lib/core/app/failed_start.dart` in place of the splash screen, which would otherwise stay. A debug build shows the error and its stack trace there and prints them to the console. Any other build only says that the app could not start.
+
+The error also reaches `FlutterError.onError`, so crash reporting that the start-up set up before the error reports it. An error before that reaches no crash reporter, so reproduce it in a debug build. The error usually says what to do, such as a command to run.
+
+The texts of the screen are in English, since the texts of the app need the start-up that failed. Change them in that file.
+
 ## Run, test and build with .env
 
-`AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, every getter of `AppEnv` is `null`, so give it to each such command:
+`AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, a debug or profile build has every getter of `AppEnv` `null` and says so, and a release build stops with an error that names the argument, so give it to each such command:
 
 ```bash
 flutter run --dart-define-from-file=.env
@@ -367,7 +378,11 @@ flutter build ipa --flavor prod --dart-define-from-file=.env
 
 A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
 
+Xcode takes the values from `ios/Flutter/Generated.xcconfig`. Only a `flutter` command that builds or runs the iOS app writes them there, and in a fresh app the file has no values. So before Product > Archive, run `flutter build ios --config-only --flavor prod --dart-define-from-file=.env`, or archive with `flutter build ipa` as above.
+
 A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
+
+`AppEnv.supplied` is `true` once the command declared one of the keys that it names, so a key of your own needs no change there. An app without keys has `true` there, since nothing can tell. With the first key of your own, make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key, so that a release build without the argument stops.
 
 To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
 
@@ -383,6 +398,8 @@ The section "Values in .env" tells what goes into `.env`, lists the keys of the 
 ## Values in .env
 
 `.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+A release build needs `.env`: `flutter build` of a release, and an archive in Xcode, stop with an error unless the command has `--dart-define-from-file=.env` and `.env` has a line of a key of the app, also with an empty value. So a build for a store never goes out by mistake from a command that did not give it `.env`. A debug or profile build without it starts with every getter `null` and says so in the console. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
@@ -728,6 +745,8 @@ class App extends StatelessWidget {
   );
 }
 === lib/bootstrap.dart (flutter_core) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/env/env_check.dart';
 import 'package:my_app/core/preferences/app_preferences.dart';
 import 'package:my_app/core/purchases/app_purchases.dart';
 
@@ -735,8 +754,127 @@ import 'package:my_app/core/purchases/app_purchases.dart';
 /// must come before anything else, then the platform services, then the
 /// services of the app, then what needs them.
 Future<void> bootstrap() async {
+  checkEnvValues(debugPrint);
   await initPreferences();
   await initPurchases();
+}
+=== lib/core/app/failed_start.dart (role:app_entry) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'status_bar_icons.dart';
+
+/// Shows why the app could not start, in place of the splash screen of the
+/// system, which would otherwise stay, and reports [error] with its
+/// [stackTrace] to the handler of the errors of Flutter.
+///
+/// `main()` calls it when `bootstrap()` throws, and then returns: the app
+/// does not start. The screen comes first, so a handler that throws cannot
+/// keep it away. The handlers that the start-up set up before it failed,
+/// such as those of crash reporting, hear of the error, and so does a test
+/// that runs `main()`.
+void showFailedStart(Object error, StackTrace stackTrace) {
+  runApp(FailedStartApp(error: error, stackTrace: stackTrace));
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'the start-up of the app',
+      context: ErrorDescription('while main() awaited bootstrap()'),
+    ),
+  );
+}
+
+/// The app that runs when the start-up failed: a screen that says so, with
+/// [error] and [stackTrace] in a debug build.
+///
+/// It needs nothing of the start-up: it has neither the theme nor the texts
+/// nor the root wrappers of the app, which the start-up sets up, and so its
+/// texts are in English. Change them here.
+class FailedStartApp extends StatelessWidget {
+  /// Creates the app of a start-up that failed with [error] at
+  /// [stackTrace].
+  const FailedStartApp({
+    required this.error,
+    required this.stackTrace,
+    this.showsError = kDebugMode,
+    super.key,
+  });
+
+  /// What `bootstrap()` threw.
+  final Object error;
+
+  /// Where `bootstrap()` threw [error].
+  final StackTrace stackTrace;
+
+  /// Whether the screen shows [error] and [stackTrace]: only in a debug
+  /// build, since the message of an error may hold data of the user and
+  /// means nothing to a user.
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(),
+    darkTheme: ThemeData(brightness: Brightness.dark),
+    builder: (context, child) => StatusBarIcons(child: child!),
+    home: _FailedStartScreen(
+      error: error,
+      stackTrace: stackTrace,
+      showsError: showsError,
+    ),
+  );
+}
+
+class _FailedStartScreen extends StatelessWidget {
+  const _FailedStartScreen({
+    required this.error,
+    required this.stackTrace,
+    required this.showsError,
+  });
+
+  final Object error;
+
+  final StackTrace stackTrace;
+
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = Theme.of(context).textTheme;
+    final code = texts.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Courier'],
+    );
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                'The app could not start',
+                style: texts.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (showsError) ...[
+              Text(
+                'bootstrap() in lib/bootstrap.dart threw:',
+                style: texts.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText('$error', style: code),
+              const SizedBox(height: 16),
+              SelectableText('$stackTrace', style: code),
+            ] else
+              Text('Close the app and open it again.', style: texts.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
 }
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
 import 'package:flutter/material.dart';
@@ -1024,9 +1162,21 @@ class StatusBarIcons extends StatelessWidget {
 /// A command of the `flutter` tool that builds, runs or tests the app reads
 /// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
 /// each value into the app, where `String.fromEnvironment` reads it as a
-/// constant. Without that argument every value is empty, and so every
-/// getter is `null`.
+/// constant. Without that argument every value is empty, so every getter
+/// is `null`, and a release build of an app with keys stops, since
+/// [supplied] is `false` then.
 abstract final class AppEnv {
+  /// Whether the command that built the app gave it the values of `.env`:
+  /// `--dart-define-from-file=.env` declares each key that `.env` has a line
+  /// of, also with an empty value, and this is `true` once it declared one
+  /// of the keys below. A key of your own needs no change here.
+  static const bool supplied =
+      bool.hasEnvironment('PAYWALL_TERMS_URL') ||
+      bool.hasEnvironment('PAYWALL_PRIVACY_URL') ||
+      bool.hasEnvironment('REVENUECAT_APPLE_KEY') ||
+      bool.hasEnvironment('REVENUECAT_GOOGLE_KEY') ||
+      bool.hasEnvironment('REVENUECAT_TEST_KEY');
+
   /// The address of the terms of use that the paywall links to.
   static String? get paywallTermsUrl {
     const value = String.fromEnvironment('PAYWALL_TERMS_URL');
@@ -1059,6 +1209,40 @@ abstract final class AppEnv {
     const value = String.fromEnvironment('REVENUECAT_TEST_KEY');
     return value.isEmpty ? null : value;
   }
+}
+=== lib/core/env/env_check.dart (role:env) ===
+// The check that the command that built the app gave it .env, which
+// bootstrap() calls in its first phase. It does not look at whether the values
+// are filled in. It is plain Dart, so that a test compiles it with the Dart
+// SDK alone.
+import 'app_env.dart';
+
+/// Whether this is a release build, which the compiler of a release build
+/// declares.
+const _release = bool.fromEnvironment('dart.vm.product');
+
+/// Whether the command that built the app gave it the values of `.env`, as
+/// [AppEnv.supplied] says. A release build without them cannot evaluate
+/// this constant, so it stops here, and the compiler quotes the text.
+const bool _supplied = AppEnv.supplied || !_release
+    ? AppEnv.supplied
+    : ('A release build of this app needs the values of .env: build it '
+              'with --dart-define-from-file=.env, from a .env with the keys of '
+              '.env.example.'
+          as bool);
+
+/// Tells a debug or profile build that has none of the values of `.env`,
+/// through [report], that every getter of [AppEnv] is `null`, and how to
+/// give the values; `bootstrap()` calls it in its first phase, with
+/// `debugPrint`.
+void checkEnvValues(void Function(String message) report) {
+  if (_supplied) return;
+  report(
+    'This build has none of the values of .env, so every getter of AppEnv is '
+    'null. Run it with --dart-define-from-file=.env, from a .env with the '
+    'keys of .env.example, as the run configurations in .vscode/launch.json '
+    'and .run/ do.',
+  );
 }
 === lib/core/onboarding/onboarding_steps.dart (role:onboarding_screen) ===
 import 'package:flutter/material.dart';
@@ -2760,6 +2944,14 @@ abstract interface class AppNavigator {
   /// page shown over the main navigation: this throws a [StateError] and
   /// leaves the stack as it is, so [go] to the location instead.
   void replace(AppLocation location);
+
+  /// Shows the screen that the app starts on, as [go] shows a location: the
+  /// route that the app starts on, or the fallback start screen of the app
+  /// entry in an app that no route starts.
+  ///
+  /// The guards of the routes are asked about it as [go] asks about a
+  /// location: while a gate does not allow, its target shows instead.
+  void goToStart();
 }
 
 /// A guard of the routes of the app. Without [routes] it is a gate: while
@@ -3256,6 +3448,7 @@ import 'app_router.dart'
         ShowOver,
         guardChanges;
 import 'navigation.dart' show AppLocation;
+import 'not_found_screen.dart' show NotFoundScreen;
 
 /// Creates the router of the app: a [GoRouter] with the routes of the
 /// modules of the app.
@@ -3278,6 +3471,7 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
   late final GoRouter config = _GoRouter(
     initialLocation: '/',
     observers: _observers(),
+    errorBuilder: _notFound,
     redirect: (context, state) =>
         _redirect(state.topRoute?.name, '${state.uri}'),
     routes: [
@@ -3386,6 +3580,28 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
     if (_withoutPage) return go(location);
     if (_redirected(location, again: () => replace(location))) return;
     _own(() => config.pushReplacement<Object?>(location.path));
+  }
+
+  /// Goes to `/`, which shows the screen that the app starts on: the route
+  /// that `/` redirects to, or the fallback start screen of the app entry.
+  ///
+  /// `/` is no route of a module, so the router asks the guards about it
+  /// with no route, as [go] asks about a location: they let the user see
+  /// it, or answer the target of a gate, which shows in its place. While
+  /// go_router has no page of a route, as on its error screen, the
+  /// `redirect` of go_router asks about it instead, with no pages.
+  @override
+  void goToStart() {
+    if (_withoutPage) return config.go(_guards.start);
+    final shown = switch (_guards.asked(
+      null,
+      _guards.start,
+      onTopOf: [for (final page in _pages) page.route],
+    )) {
+      ShowInstead(:final location) => location,
+      _ => _guards.start,
+    };
+    _own(() => config.go(shown));
   }
 
   /// Whether go_router has no page of a route: before it shows its first
@@ -3764,6 +3980,14 @@ void _callAlone(
   }
 }
 
+/// The page of go_router for a location that it cannot show, one that no
+/// route matches or that the redirect of a route refuses: the screen of the
+/// router role for such a location. go_router builds the page around it, so
+/// the page keeps the key, the name and the empty route match of the error
+/// screen of go_router.
+Widget _notFound(BuildContext context, GoRouterState state) =>
+    const NotFoundScreen();
+
 /// The [GoRouter] of the app, which hears of the back button of the system
 /// through [_BackButton]: go_router takes no dispatcher of the button, so
 /// the router has one of its own in place of that of [GoRouter].
@@ -3775,6 +3999,7 @@ final class _GoRouter extends GoRouter {
     required this.own,
     super.initialLocation,
     super.observers,
+    super.errorBuilder,
   }) : super.routingConfig(
          routingConfig: ValueNotifier(
            RoutingConfig(routes: routes, redirect: redirect),
@@ -3972,6 +4197,264 @@ final class OnboardingRoutes {
   /// The route `onboarding.onboarding`: `/onboarding`.
   NavLink onboarding() =>
       NavLink(_context, const OnboardingOnboardingLocation());
+}
+=== lib/core/router/not_found_screen.dart (role:router) ===
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+import 'app_router.dart';
+
+/// The symbol of the app in its cell, as an element of the periodic table
+/// has one: the first letters of the first two words of its name, or the
+/// first two letters of a name of one word.
+const _appSymbol = 'Ma';
+
+/// The number in the cell of the app: how many letters and digits its name
+/// has.
+const _appNumber = 5;
+
+/// The monospaced font of the device, for the number of the cell.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen that the router shows for a location that it cannot show:
+/// one that no route of the app matches, such as a link to a page that the
+/// app does not have, and one without a value that its route requires.
+///
+/// It shows the cell of the app next to an empty cell, the page that is not
+/// there, says so in the language of the app, and its button shows the
+/// screen that the app starts on. Every router of the app shows this screen
+/// as `const NotFoundScreen()`, so change its look here, and keep its
+/// constructor `const` and without arguments.
+class NotFoundScreen extends StatelessWidget {
+  /// Creates the screen.
+  const NotFoundScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  const ExcludeSemantics(child: _Cells()),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    namesRoute: true,
+                    // The title grows at most by half with a larger text.
+                    child: MediaQuery.withClampedTextScaling(
+                      maxScaleFactor: 1.5,
+                      child: Text(
+                        'Page not found',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineSmall,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // The button takes its look from the theme of the app.
+                  ElevatedButton(
+                    onPressed: () => appRouter.navigatorOf(context).goToStart(),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          // The label grows at most by half, so that its
+                          // words keep to the width of a phone.
+                          child: MediaQuery.withClampedTextScaling(
+                            maxScaleFactor: 1.5,
+                            child: Text(
+                              'Go to the start screen',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_forward_rounded, size: 18),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The cell of the app, as an element of a table, among smaller cells, next
+/// to an empty cell with a dashed edge and a question mark: the page that
+/// is not there.
+///
+/// The letters are part of the picture, so they keep their size with a
+/// larger text.
+class _Cells extends StatelessWidget {
+  const _Cells();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    Widget cell(
+      double left,
+      double top,
+      double side, {
+      Color? fill,
+      Color? edge,
+    }) => Positioned(
+      left: left,
+      top: top,
+      child: Container(
+        width: side,
+        height: side,
+        decoration: BoxDecoration(
+          color: fill,
+          border: edge == null ? null : Border.all(color: edge),
+        ),
+      ),
+    );
+
+    return MediaQuery.withNoTextScaling(
+      child: SizedBox(
+        width: 252,
+        height: 156,
+        child: Stack(
+          children: [
+            cell(0, 18, 40, fill: colors.secondaryContainer),
+            cell(168, 0, 28, edge: colors.outline),
+            cell(218, 122, 34, fill: colors.tertiaryContainer),
+            // The cell of the app.
+            Positioned(
+              left: 40,
+              top: 20,
+              child: Container(
+                width: 116,
+                height: 116,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerLowest,
+                  border: Border.all(color: colors.onSurface, width: 1.5),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 7,
+                      right: 10,
+                      child: Text(
+                        '$_appNumber',
+                        style: _mono.copyWith(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: colors.onSurface,
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Text(
+                        _appSymbol,
+                        style: theme.textTheme.displayMedium?.copyWith(
+                          fontSize: 54,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -2,
+                          color: colors.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // The empty cell of the page that is not there.
+            Positioned(
+              left: 168,
+              top: 44,
+              child: CustomPaint(
+                painter: _DashedEdge(colors.outline),
+                child: SizedBox.square(
+                  dimension: 72,
+                  child: Center(
+                    child: Text(
+                      '?',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints a dashed edge around the box that it is given, in [color].
+class _DashedEdge extends CustomPainter {
+  const _DashedEdge(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const dash = 6.0;
+    const gap = 4.0;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5;
+    final edge = (Offset.zero & size).deflate(0.75);
+    for (final (from, to) in [
+      (edge.topLeft, edge.topRight),
+      (edge.topRight, edge.bottomRight),
+      (edge.bottomRight, edge.bottomLeft),
+      (edge.bottomLeft, edge.topLeft),
+    ]) {
+      final length = (to - from).distance;
+      final along = (to - from) / length;
+      for (var start = 0.0; start < length; start += dash + gap) {
+        canvas.drawLine(
+          from + along * start,
+          from + along * math.min(start + dash, length),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
 }
 === lib/features/onboarding/onboarding_pages.dart (onboarding) ===
 import 'package:flutter/material.dart';
@@ -7756,10 +8239,18 @@ import 'package:my_app/features/paywall/paywall_composition.dart'
 
 import 'app.dart';
 import 'bootstrap.dart';
+import 'core/app/failed_start.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    // The app shows why it could not start, in place of a splash screen
+    // that would stay.
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(BlocProvider(create: (_) => createPremiumCubit(), child: const App()));
 }
 === pubspec.yaml (flutter_core) ===

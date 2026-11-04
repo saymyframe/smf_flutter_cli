@@ -805,9 +805,9 @@ void main() {
       'Localization: which module provides it?',
     );
     // The roles come in the order in which the modules of the list bring
-    // them. The router brings the layout, which its role uses, and the
-    // layout the localization, in which it shows the labels of its
-    // destinations. So the question comes after those of the roles that
+    // them. The router brings the layout and the localization, which its
+    // role uses, the second for the texts of the screen of a location that
+    // it cannot show. So the question comes after those of the roles that
     // require the router, and before that of the theme, the next role that
     // the modules of the list bring.
     expect(
@@ -830,9 +830,10 @@ void main() {
     ]);
     final app = run.files.directory('/work/my_app');
     // The texts of the app are those of the start screen, after the label
-    // of that screen in a main navigation, in English and in Ukrainian, so
-    // the app is in both. The app starts on that screen, so it has no
-    // fallback start screen, and none of its texts.
+    // of that screen in a main navigation, and those of the screen of the
+    // router for a location that it cannot show, in English and in
+    // Ukrainian, so the app is in both. The app starts on that screen, so
+    // it has no fallback start screen, and none of its texts.
     for (final (language, label) in [('en', 'Home'), ('uk', 'Головна')]) {
       final texts = jsonDecode(
         app.childFile('lib/l10n/app_$language.arb').readAsStringSync(),
@@ -842,7 +843,11 @@ void main() {
       expect(texts['homeLabel'], label);
       expect(
         texts.keys.skip(1),
-        texts.keys.where((key) => key.startsWith('home')),
+        [
+          ...texts.keys.where((key) => key.startsWith('home')),
+          'routerNotFoundTitle',
+          'routerNotFoundAction',
+        ],
         reason: language,
       );
     }

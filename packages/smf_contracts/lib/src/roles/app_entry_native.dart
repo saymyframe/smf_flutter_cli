@@ -290,6 +290,7 @@ String _renderReadmeSections(List<MapEntry<String, String>> entries) {
     AppEntryRole.setupHeading,
     AppEntryRole.flavorsHeading,
     AppEntryRole.flavorProjectsHeading,
+    AppEntryRole.failedStartHeading,
   ];
   return [
     for (final heading in first) ...entries.where((e) => e.key == heading),
@@ -405,6 +406,7 @@ const _lineSockets = <(SocketRef, String)>[
   (AppEntryRole.infoPlist, AppEntryRole.infoPlistFile),
   (AppEntryRole.iosEntitlements, AppEntryRole.iosEntitlementsFile),
   (AppEntryRole.iosAppDelegateLaunch, AppEntryRole.appDelegateFile),
+  (AppEntryRole.iosAppDelegateEngine, AppEntryRole.appDelegateFile),
   (AppEntryRole.gradleSettingsPlugins, AppEntryRole.gradleSettingsFile),
   (AppEntryRole.gradleAppPlugins, AppEntryRole.gradleAppFile),
   (AppEntryRole.gradleAppDependencies, AppEntryRole.gradleAppFile),

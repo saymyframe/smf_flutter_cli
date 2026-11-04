@@ -114,6 +114,16 @@ import 'package:smf_go_router/src/go_routes.dart';
 /// a push showed over a page is a page of go_router, which pushes over it
 /// and replaces it like any other.
 ///
+/// go_router shows the screen of the router role for a location that it
+/// cannot show, `NotFoundScreen`, through its `errorBuilder`: go_router
+/// builds the page of its error screen around that screen, with the key,
+/// the name and the empty route match that it gives the page, so the router
+/// does on that screen what it did before. `goToStart()` goes to `/`, which
+/// redirects to the route that the app starts on or shows the fallback
+/// screen. In an app with guards, the router first asks them about `/`, as
+/// it asks about the location of `go()`, and on the error screen, where
+/// go_router has no page of a route, the `redirect` of go_router asks.
+///
 /// In an app whose modules declare guards, the router asks them as the
 /// router role says, through the `GuardedNavigation` of the role, which
 /// keeps the location that the user comes back to: the router remembers

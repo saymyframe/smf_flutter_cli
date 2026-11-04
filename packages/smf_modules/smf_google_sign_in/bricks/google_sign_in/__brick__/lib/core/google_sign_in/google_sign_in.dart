@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -11,6 +13,12 @@ const String _issuer = '{{{issuer}}}';
 /// `2.0x/` and `3.0x/` next to it for a screen with more pixels.
 const String _logo = '{{{logo}}}';
 
+/// The id of the iOS client of Google that [googleCredential] gives
+/// `GoogleSignIn.instance.initialize()` and [readGoogleSignInIosSetup], or
+/// `null`, with which google_sign_in reads the id from the files of the app.
+/// An id of your own goes here, so that both take the same one.
+const String? _iosClientId = null;
+
 /// The start of google_sign_in, which [googleCredential] waits for: the
 /// package is started once, before its first sign-in.
 Future<void>? _start;
@@ -22,21 +30,166 @@ Future<void>? _start;
 /// in real time.
 bool _started = false;
 
+/// The method channel through which `{{{app_delegate}}}`
+/// tells what the Google Sign-In SDK finds of the setup of the iOS app.
+const MethodChannel _iosSetup = MethodChannel('{{{ios_setup_channel}}}');
+
+/// What the Google Sign-In SDK finds of the setup of the iOS app before it
+/// shows its sheet, as `{{{app_delegate}}}` reads it from
+/// the files of the app: the iOS client of Google and the URL schemes of
+/// the app.
+///
+/// The SDK stops the app with an exception that google_sign_in does not
+/// catch when it has no iOS client of Google, when the id of the client is
+/// empty, or when the reversed id of the client is not among the URL
+/// schemes of the app, which it compares in lower case. That is
+/// `-signInWithOptions:` of `GIDSignIn.m` in the Google Sign-In SDK 9,
+/// which google_sign_in_ios 6.3 resolves. [problem] tells which of them the
+/// app lacks, so that [googleCredential] fails in place of the SDK. A later
+/// version of the SDK may stop the app for something else, so read that
+/// method again when google_sign_in moves to another version.
+@immutable
+final class GoogleSignInIosSetup {
+  const GoogleSignInIosSetup._({
+    required this.answered,
+    this.hasServiceInfo = false,
+    this.clientId,
+    this.source,
+    this.urlSchemes = const [],
+  });
+
+  /// Whether `{{{app_delegate}}}` answered. Without its
+  /// answer the app cannot tell whether the SDK would stop it, so [problem]
+  /// tells of that.
+  final bool answered;
+
+  /// Whether the app has `GoogleService-Info.plist`.
+  final bool hasServiceInfo;
+
+  /// The id of the iOS client of Google that the SDK takes: the `clientId`
+  /// that the app gives `initialize()`, or else `CLIENT_ID` of
+  /// `GoogleService-Info.plist`, or else `GIDClientID` of
+  /// `{{{info_plist}}}`; `null` when none has one.
+  final String? clientId;
+
+  /// Where [clientId] comes from, as a hint names it, or `null` without a
+  /// client.
+  final String? source;
+
+  /// The URL schemes of `CFBundleURLTypes` of `{{{info_plist}}}`,
+  /// in lower case.
+  final List<String> urlSchemes;
+
+  /// The URL scheme that the SDK needs: [clientId] reversed at its dots, in
+  /// lower case, or `null` without a client.
+  String? get urlScheme =>
+      clientId?.split('.').reversed.join('.').toLowerCase();
+
+  /// What the app lacks for which the SDK would stop it, or `null` when the
+  /// SDK can show its sheet.
+  String? get problem {
+    if (!answered) {
+      return '{{{app_delegate}}} does not answer, or fails, on the method '
+          'channel {{{ios_setup_channel}}}, through which the app learns '
+          'whether the Google Sign-In SDK finds the iOS client of Google and '
+          'its URL scheme';
+    }
+    final clientId = this.clientId;
+    if (clientId == null) {
+      final serviceInfo = hasServiceInfo
+          ? 'GoogleService-Info.plist has no CLIENT_ID'
+          : 'the app has no GoogleService-Info.plist';
+      return 'the iOS app has no iOS client of Google: $serviceInfo, and '
+          '{{{info_plist}}} has no GIDClientID';
+    }
+    if (clientId.isEmpty) {
+      return 'the id of the iOS client of Google in $source is empty';
+    }
+    final scheme = urlScheme!;
+    if (urlSchemes.contains(scheme)) return null;
+    return '{{{info_plist}}} has no URL scheme $scheme, the reversed '
+        'id of the iOS client of Google in $source, among CFBundleURLSchemes '
+        'of CFBundleURLTypes: add it there';
+  }
+}
+
+/// The setup of Google sign-in of the iOS app, as
+/// `{{{app_delegate}}}` answers on the method channel
+/// `{{{ios_setup_channel}}}`, or `null` on another platform, where nothing
+/// is asked.
+///
+/// [clientId] is the id of the iOS client that the app gives
+/// `GoogleSignIn.instance.initialize()`, which the package takes before the
+/// ids of the files of the app: [_iosClientId] by default, which
+/// [googleCredential] gives `initialize()` too.
+///
+/// An app delegate that does not answer, whose handler fails, or whose
+/// answer is no map gives a setup whose [GoogleSignInIosSetup.problem] says
+/// that it does not answer: then the app cannot tell whether the SDK would
+/// stop it.
+Future<GoogleSignInIosSetup?> readGoogleSignInIosSetup({
+  String? clientId = _iosClientId,
+}) async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
+  const noAnswer = GoogleSignInIosSetup._(answered: false);
+  final Object? answered;
+  try {
+    answered = await _iosSetup.invokeMethod<Object?>('read');
+  } on MissingPluginException {
+    return noAnswer;
+  } on PlatformException {
+    return noAnswer;
+  }
+  final answer = answered ?? const <Object?, Object?>{};
+  if (answer is! Map<Object?, Object?>) return noAnswer;
+  final (String?, String?) client = switch (answer) {
+    _ when clientId != null => (
+        clientId,
+        'the clientId that the app gives initialize()',
+      ),
+    {'serviceInfoClientId': final String id} => (
+        id,
+        'CLIENT_ID of GoogleService-Info.plist',
+      ),
+    {'infoPlistClientId': final String id} => (
+        id,
+        'GIDClientID of {{{info_plist}}}',
+      ),
+    _ => (null, null),
+  };
+  return GoogleSignInIosSetup._(
+    answered: true,
+    hasServiceInfo: answer['serviceInfo'] == true,
+    clientId: client.$1,
+    source: client.$2,
+    urlSchemes: [
+      if (answer['urlSchemes'] case final List<Object?> schemes)
+        for (final scheme in schemes)
+          if (scheme is String) scheme.toLowerCase(),
+    ],
+  );
+}
+
 /// Asks Google for a credential with the sheet of Google sign-in, and
 /// returns it, or `null` when the user closed the sheet.
 ///
 /// The first call starts google_sign_in with `GoogleSignIn.instance
-/// .initialize()`, without the ids of the clients of Google, so the package
-/// finds them in the files of the app where the provider of sign-in puts
-/// them. The credential is the ID token of the Google account that the user
-/// chose.
+/// .initialize()`, with [_iosClientId] and no other id of a client of
+/// Google, so the package finds the ids that it lacks in the files of the
+/// app where the provider of sign-in puts them. The credential is the ID
+/// token of the Google account that the user chose.
 ///
 /// A client of Google that is missing in the app, or a Google project that
 /// does not know the app, fails with `notConfigured`, with a hint at the
 /// section of the README of the app on it, "{{{readme}}}". Any other error
-/// fails with `unknown`. On iOS, the Google Sign-In SDK stops the app
-/// instead when the app has no iOS client of Google or not its URL scheme,
-/// since the package does not catch what the SDK throws then.
+/// fails with `unknown`.
+///
+/// On iOS, the Google Sign-In SDK stops the app rather than fail when the
+/// app has no iOS client of Google, an empty one, or not its URL scheme,
+/// and the package does not catch what the SDK throws then. So each call on
+/// iOS first reads the setup of the app with [readGoogleSignInIosSetup],
+/// and fails with `notConfigured`, with the [GoogleSignInIosSetup.problem]
+/// in its hint, without asking the SDK.
 ///
 /// On Android, Credential Manager answers a key that Google does not know
 /// as a cancel, after the user picked an account. Its description tells it
@@ -44,10 +197,18 @@ bool _started = false;
 /// Cancelled by user.". A device that cannot reach Google gets the same
 /// answer, so the hint names both.
 Future<SignInCredential?> googleCredential() async {
+  if ((await readGoogleSignInIosSetup())?.problem case final problem?) {
+    throw _notConfigured(
+      problem,
+      cause: 'The Google Sign-In SDK stops an iOS app whose setup it cannot '
+          'use, so the app did not ask it.',
+    );
+  }
   final GoogleSignInAccount account;
   try {
     if (!_started) {
-      await (_start ??= GoogleSignIn.instance.initialize());
+      await (_start ??=
+          GoogleSignIn.instance.initialize(clientId: _iosClientId));
       _started = true;
     }
     account = await GoogleSignIn.instance.authenticate();

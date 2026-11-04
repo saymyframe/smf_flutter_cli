@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:mirrors';
 
+import 'package:file/local.dart';
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/core.dart';
 // The app entry, whose providers own the native projects of the apps: the
@@ -57,9 +58,15 @@ import 'package:yaml/yaml.dart';
 /// `--without-external-steps` after `--create`, it leaves out the modules
 /// whose steps need an external service, such as a network account, so the
 /// apps start without it. Any further argument is an option of
-/// `smf create`, such as `--org com.example`. CI builds these apps for
+/// `smf create`, such as `--org com.example`. Next to each app, outside it,
+/// it writes the arguments of the `flutter` tool that build the app with
+/// its values, from the provider of the env role of the app, one on each
+/// line, such as `start_app.tool_arguments`, and an empty file for an app
+/// that needs none; see `toolArgumentsExtension`. CI builds these apps for
 /// Android and iOS and starts them on devices, and a second provider of a
-/// role gets its own app there without a change of CI.
+/// role gets its own app there without a change of CI: a step that builds
+/// one as a release takes its arguments from that file, through
+/// `.github/scripts/each_app.sh --tool-arguments`.
 ///
 /// With `--app-tests` alone, it prints the directory of each of its
 /// `MatrixAppTest`s on a line of its own instead. With `--app-tests --json`,
@@ -284,7 +291,8 @@ Never _usage([String? problem]) {
 }
 
 /// Generates the apps with every module of [selection] in [directory] as
-/// [name], with the [options] of `smf create`; returns the exit code.
+/// [name], with the [options] of `smf create`, and the file of the tool
+/// arguments of each next to it; returns the exit code.
 Future<int> _create(
   String directory,
   String name,
@@ -294,13 +302,14 @@ Future<int> _create(
 }) async {
   final code = await createEveryModuleApps(
     smfModules,
-    directory: directory,
+    directory: const LocalFileSystem().directory(directory),
     name: name,
     options: options,
     apps: EveryModuleApps(
       selection: selection,
       withoutExternalSteps: withoutExternalSteps,
     ),
+    env: matrixEnv,
   );
   await Future.wait<void>([stdout.flush(), stderr.flush()]);
   return code;

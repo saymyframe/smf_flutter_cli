@@ -1,13 +1,26 @@
 part of '../router.dart';
 
 /// The template of the [RouterRole]: the `AppRouter` interface, the
-/// `appRouter` instance and the navigation facade.
+/// `appRouter` instance, the navigation facade, and the screen of a
+/// location that the router cannot show.
 final class _RouterTemplate extends RoleTemplate<RoutesData> {
   const _RouterTemplate();
 
+  /// The texts of the screen of a location that the router cannot show,
+  /// which every app with the role has, each by the variable of the brick
+  /// that reads it.
+  static const Map<String, LocalizedText> _texts = {
+    'text_not_found_title': RouterRole.notFoundTitle,
+    'text_not_found_action': RouterRole.notFoundAction,
+  };
+
+  /// The brick of the role, the texts of the screen of a location that the
+  /// router cannot show, which it gives the localization role, and its note
+  /// for coding agents.
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(routerRoleBundle),
+        localizationRole.data(TextsData([..._texts.values])),
         AppEntryRole.agentSections.entry(
           routerRole.description,
           AgentNote.ofRole(_agentNote),
@@ -234,14 +247,31 @@ final class _RouterTemplate extends RoleTemplate<RoutesData> {
         _ => const {},
       };
 
-  /// The navigation facade of the app, and the code of its guards with the
-  /// note of the role about them in the guide for coding agents, which an
-  /// app without guards has none of.
+  /// The navigation facade of the app; for the screen of a location that
+  /// the router cannot show, the symbol and the number of the cell of the
+  /// app, which every screen that shows the app as such a cell takes from
+  /// its name, and the code that reads each text of the screen, which is a
+  /// text of the app in an app with the localization role and the English
+  /// text in one without it; and the code of its guards with the note of
+  /// the role about them in the guide for coding agents, which an app
+  /// without guards has none of.
   @override
   RoleOutput render(RoleHookInput<RoutesData> input) {
     final facade = routerRole.facadeOf(input);
+    final appName = input.context.appName;
     return RoleOutput(
-      vars: {'facade': facade.toDart(), 'guards': _guardsCode(facade)},
+      vars: {
+        'facade': facade.toDart(),
+        'guards': _guardsCode(facade),
+        'app_symbol': SmfNames.dartString(SmfNames.elementSymbolOf(appName)),
+        'app_number': '${SmfNames.elementNumberOf(appName)}',
+        for (final MapEntry(key: variable, value: text) in _texts.entries)
+          variable: localizationRole.expressionOf(
+            input,
+            const RoleTemplateOrigin(routerRole),
+            text,
+          ),
+      },
       fragments: [
         if (facade.guards.isNotEmpty)
           AppEntryRole.agentSections.entry(
@@ -264,6 +294,7 @@ const String _agentNote = '''
   3. the route itself, where the provider of the router declares its routes.
 - A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
 - `appRouter` of `${RouterRole.appRouterFile}` is the one router of the app: create no other.
+- `NotFoundScreen` in `${RouterRole.notFoundScreenFile}` is the page that the router shows for a location that it cannot show, such as a link to a page that the app does not have. Change its look there, and keep its `const` constructor without arguments. `appRouter.navigatorOf(context).goToStart()` shows the screen that the app starts on, as `go()` shows a location.
 ''';
 
 /// The note of the router role about the guards, in the guide for coding

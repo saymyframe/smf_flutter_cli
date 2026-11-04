@@ -16,8 +16,10 @@ const appEntryRole = AppEntryRole._();
 ///
 /// Every app has exactly one provider, the scaffold module, which generates:
 /// - `lib/main.dart`, whose `main()` calls
-///   `WidgetsFlutterBinding.ensureInitialized()`, then awaits `bootstrap()`,
-///   then calls `runApp()`;
+///   `WidgetsFlutterBinding.ensureInitialized()`, then awaits `bootstrap()`
+///   in a `try` statement, then calls `runApp()`; the clause of that
+///   statement that catches every error calls [showFailedStart] and runs no
+///   root of the app;
 /// - `lib/bootstrap.dart`, whose `Future<void> bootstrap()` runs the
 ///   start-up code of all modules and imports neither `material` nor
 ///   `cupertino`;
@@ -75,6 +77,21 @@ const appEntryRole = AppEntryRole._();
 /// app, so `flutter test` has a test to run in an app whose modules bring
 /// none.
 ///
+/// When the start-up fails, the app shows why, in place of the splash
+/// screen of the system, which would otherwise stay: the template of the
+/// role generates [failedStartFile], whose [showFailedStart] runs
+/// [failedStartApp] and reports the error to `FlutterError.onError`, so the
+/// handlers that the start-up set up before it failed, such as those of
+/// crash reporting, hear of it. The screen needs nothing of the start-up,
+/// so it has neither the theme nor the texts of the app, and is in English.
+/// It shows the error and its stack trace only in a debug build. The
+/// structural rule `app_entry.main_sequence` checks that `main()` catches
+/// every error of `bootstrap()` and calls [showFailedStart] then, that no
+/// clause before keeps the app on the splash screen, and that no `runApp()`
+/// in a clause or a `finally` block runs the root over the screen. Whether
+/// `main()` stops after it only a running app shows: the fixture registry
+/// keeps the test of the role that does, `failed_start`.
+///
 /// In an app with steps of the setup that its developer does by hand (see
 /// [ManualStep]), the template lists them in the section [setupHeading] of
 /// [readmeFile], the first of its sections, and tells coding agents in the
@@ -84,15 +101,16 @@ const appEntryRole = AppEntryRole._();
 ///
 /// The keyed sockets of the native files, of [gitignoreFile] and of the
 /// README, [mainActivityIntentFilters],
-/// [androidManifestApplicationComponents], [iosAppDelegateLaunch] and both
-/// places of [androidCoreLibraryDesugaring] render complete lines, so their
-/// tags stand alone at the start of a line of their file, like the tags of
-/// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
-/// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The
-/// module rules of the role check these tags in the templates of its
-/// provider, the element of the Android manifest that holds each tag of the
-/// manifest, and the place of the tag of [iosAppDelegateLaunch] in its
-/// method, and its structural rules check that the native files name every
+/// [androidManifestApplicationComponents], [iosAppDelegateLaunch],
+/// [iosAppDelegateEngine] and both places of [androidCoreLibraryDesugaring]
+/// render complete lines, so their tags stand alone at the start of a line
+/// of their file, like the tags of [PipelineSockets]. The tag of
+/// [iosDeploymentTarget] stands where the version goes, as in
+/// `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module rules of the role
+/// check these tags in the templates of its provider, the element of the
+/// Android manifest that holds each tag of the manifest, and the places of
+/// the tags of [iosAppDelegateLaunch] and [iosAppDelegateEngine] in their
+/// methods, and its structural rules check that the native files name every
 /// key once, that the app target signs with [iosEntitlementsFile], and that
 /// an app with an entitlement of [paidTeamEntitlements] lists
 /// [iosAppIdStep].
@@ -131,7 +149,7 @@ final class AppEntryRole extends Role<NoDsl> {
   static const iosEntitlementsFile = 'ios/Runner/Runner.entitlements';
 
   /// The path of the app delegate of the iOS app, in Swift; see
-  /// [iosAppDelegateLaunch].
+  /// [iosAppDelegateLaunch] and [iosAppDelegateEngine].
   static const appDelegateFile = 'ios/Runner/AppDelegate.swift';
 
   /// The path of the README of the app.
@@ -172,6 +190,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// adds or removes one. It follows the section [flavorsHeading].
   static const flavorProjectsHeading = 'Flavors in the native projects';
 
+  /// The heading of the section of [readmeFile] in which the template of
+  /// the role tells what the app does when its start-up fails (see
+  /// [showFailedStart]). It follows the section [flavorProjectsHeading].
+  static const failedStartHeading = 'When the start-up fails';
+
   /// The path of the guide for coding agents that work on the app; see
   /// [agentSections].
   static const agentsFile = 'AGENTS.md';
@@ -192,6 +215,11 @@ final class AppEntryRole extends Role<NoDsl> {
   /// modules bring none.
   static const statusBarIconsTestFile =
       'test/core/app/status_bar_icons_test.dart';
+
+  /// The path of the file with [showFailedStart] and [failedStartApp], what
+  /// the app shows when its start-up fails, which the template of the role
+  /// generates in every app.
+  static const failedStartFile = 'lib/core/app/failed_start.dart';
 
   /// The native flavors of every app, in the order from development to the
   /// stores: a constant of the role rather than an option, so that every
@@ -241,6 +269,38 @@ final class AppEntryRole extends Role<NoDsl> {
     'main',
     path: mainFile,
     returnType: 'Future<void>',
+  );
+
+  /// `void showFailedStart(Object error, StackTrace stackTrace)` of the
+  /// template of the role, which `main()` calls when `bootstrap()` throws.
+  ///
+  /// It runs [failedStartApp] with the error, in place of the splash screen
+  /// of the system, which would otherwise stay, and then reports the error
+  /// to `FlutterError.onError`. So the handlers that the start-up set up
+  /// before it failed, such as those of crash reporting, hear of it, and a
+  /// test that runs `main()` fails on it.
+  static const showFailedStart = RequiredFunction(
+    'showFailedStart',
+    path: failedStartFile,
+    returnType: 'void',
+    positionalArguments: 2,
+  );
+
+  /// The app that [showFailedStart] runs, created as
+  /// `FailedStartApp(error: error, stackTrace: stackTrace)`: a screen that
+  /// says that the app could not start, with the error and its stack trace
+  /// when `showsError` holds, by default in a debug build only.
+  ///
+  /// It needs nothing of the start-up that failed, so it has neither the
+  /// theme nor the texts nor the root wrappers of the app, and its texts are
+  /// in English. Code that looks at the screen of a failed start, such as a
+  /// test, finds it by its type and reads `error` and `stackTrace` from it.
+  static const failedStartApp = RequiredClass(
+    'FailedStartApp',
+    path: failedStartFile,
+    namedParameters: ['error', 'stackTrace', 'showsError'],
+    constConstructor: true,
+    getters: ['error', 'stackTrace'],
   );
 
   /// Start-up code that runs first in `bootstrap()`, before any platform
@@ -535,12 +595,43 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The app of `flutter create` has the scene lifecycle of UIKit, under
   /// which Flutter registers the plugins once the scene of the app
   /// connects, after this method. So the statements have no registry of
-  /// plugins, no channel and no `FlutterViewController`. The module rule
+  /// plugins, no channel and no `FlutterViewController`: a method channel
+  /// of the app goes into [iosAppDelegateEngine]. The module rule
   /// `app_entry.launch_code_place` checks that the tag of the provider is
   /// in that method, before the call.
   static const iosAppDelegateLaunch = SocketRef<CodeSocket>.role(
     appEntryRole,
     'ios_app_delegate_launch',
+    CodeSocket.text(),
+  );
+
+  /// Swift statements that run in `didInitializeImplicitFlutterEngine(_:)`
+  /// of the app delegate in [appDelegateFile], after its call of
+  /// `GeneratedPluginRegistrant.register(with:)`, which registers the
+  /// plugins of the app: what needs the engine of the app, such as a method
+  /// channel that the Dart code of the app asks, as in
+  /// `FlutterMethodChannel(name: …, binaryMessenger:
+  /// engineBridge.applicationRegistrar.messenger())`.
+  ///
+  /// Under the scene lifecycle of UIKit, which the app of `flutter create`
+  /// has, Flutter calls the method once it created the engine of the app,
+  /// when the scene of the app connects, and before the Dart code of the
+  /// app runs. The statements read the bridge to the engine as
+  /// `engineBridge`, the parameter of the method, and the app delegate as
+  /// `self`. Each contribution indents its lines by four spaces, as the
+  /// body of the method is, and declares no name outside a block of its
+  /// own, so the statements of two contributions cannot clash. The socket
+  /// takes no imports, and the file imports `Flutter` and `UIKit`. The
+  /// binary messenger keeps the handler of a channel, so a contribution
+  /// need not keep the channel.
+  ///
+  /// The module rule `app_entry.engine_code_place` checks that the tag of
+  /// the provider is in that method, after the registration of the plugins,
+  /// and that the class of the method conforms to
+  /// `FlutterImplicitEngineDelegate`, without which Flutter never calls it.
+  static const iosAppDelegateEngine = SocketRef<CodeSocket>.role(
+    appEntryRole,
+    'ios_app_delegate_engine',
     CodeSocket.text(),
   );
 
@@ -669,13 +760,14 @@ final class AppEntryRole extends Role<NoDsl> {
   /// They follow the description of the app as `## <heading>` sections, in
   /// the order of the contributions (see [SocketContribution]), but for the
   /// section [setupHeading] of the steps by hand, which comes first, and the
-  /// sections [flavorsHeading] and [flavorProjectsHeading], which come next.
-  /// A heading is one line without spaces around it, a section has text, and
-  /// two different texts under one heading conflict. Only the template of
-  /// the role contributes the section [setupHeading]. The template puts the
-  /// section [flavorsHeading] here in every app, so the template of every
-  /// provider's README has the tag of this socket, and the pipeline reports a
-  /// provider without it.
+  /// sections [flavorsHeading], [flavorProjectsHeading] and
+  /// [failedStartHeading], which come next. A heading is one line without
+  /// spaces around it, a section has text, and two different texts under
+  /// one heading conflict. Only the template of the role contributes the
+  /// section [setupHeading]. The template puts the sections [flavorsHeading]
+  /// and [failedStartHeading] here in every app, so the template of every
+  /// provider's README has the tag of this socket, and the pipeline reports
+  /// a provider without it.
   static const readmeSections = SocketRef<KeyedSocket<String>>.role(
     appEntryRole,
     'readme_sections',
@@ -772,6 +864,7 @@ final class AppEntryRole extends Role<NoDsl> {
         infoPlist,
         iosEntitlements,
         iosAppDelegateLaunch,
+        iosAppDelegateEngine,
         gradleSettingsPlugins,
         gradleAppPlugins,
         gradleAppDependencies,
@@ -786,10 +879,17 @@ final class AppEntryRole extends Role<NoDsl> {
         files: [
           agentsFile,
           claudeFile,
+          failedStartFile,
           statusBarIconsFile,
           statusBarIconsTestFile,
         ],
-        symbols: [main, bootstrap, fallbackStartScreen],
+        symbols: [
+          main,
+          bootstrap,
+          fallbackStartScreen,
+          showFailedStart,
+          failedStartApp,
+        ],
       );
 
   @override
@@ -820,6 +920,17 @@ final class AppEntryRole extends Role<NoDsl> {
               'ios/Runner/AppDelegate.swift, before its call of '
               'super.application, which hands the launch to Flutter.',
           check: _checkLaunchCodePlace,
+        ),
+        ModuleRule(
+          id: 'app_entry.engine_code_place',
+          description: 'The tag of the code that runs once the engine of '
+              'the iOS app exists is in the body of '
+              'didInitializeImplicitFlutterEngine(_ engineBridge:) in '
+              'ios/Runner/AppDelegate.swift, in a class that conforms to '
+              'FlutterImplicitEngineDelegate, after its call of '
+              'GeneratedPluginRegistrant.register(with:), which registers '
+              'the plugins of the app.',
+          check: _checkEngineCodePlace,
         ),
         ModuleRule(
           id: 'app_entry.manifest_tag_places',
@@ -864,7 +975,13 @@ final class AppEntryRole extends Role<NoDsl> {
           id: 'app_entry.main_sequence',
           description:
               'main() calls WidgetsFlutterBinding.ensureInitialized(), '
-              'awaits bootstrap(), then calls runApp(), in this order.',
+              'awaits bootstrap() in the try block of a try statement with a '
+              'clause that catches every error and calls showFailedStart(), '
+              'and calls runApp() outside the clauses and the finally blocks '
+              'of the try statements around bootstrap(), in this order. A '
+              'clause before that one shows the screen of a failed start too, '
+              'or throws. Whether main() stops after showFailedStart() only a '
+              'running app shows.',
           check: _checkMainSequence,
         ),
         StructuralRule(
@@ -1085,8 +1202,13 @@ String _codeOf(String template) =>
 ({int start, int end})? _bodyAfter(String template, RegExp declaration) {
   final code = _codeOf(template);
   final found = declaration.firstMatch(code);
-  if (found == null) return null;
-  final start = found.end - 1;
+  return found == null ? null : _bodyFrom(code, found.end - 1);
+}
+
+/// The offsets from the opening brace at [start] of [code], code without
+/// tags, comments and strings, to the brace that closes it, or `null` if
+/// none does.
+({int start, int end})? _bodyFrom(String code, int start) {
   var depth = 0;
   for (var i = start; i < code.length; i++) {
     switch (code[i]) {
@@ -1155,6 +1277,115 @@ List<SmfIssue> _checkLaunchCodePlace(ModuleRuleInput<NoDsl> input) {
 /// app to Flutter.
 final _superLaunch = RegExp(r'\bsuper\s*\.\s*application\s*\(');
 
+/// The declaration of `didInitializeImplicitFlutterEngine(_:)` in the
+/// template of an app delegate in Swift, with its parameters as the first
+/// group, up to the brace that opens its body.
+final _engineMethod = RegExp(
+  r'\bfunc\s+didInitializeImplicitFlutterEngine\s*\(([^)]*)\)[^{]*\{',
+);
+
+/// The name of the parameter of `didInitializeImplicitFlutterEngine(_:)`
+/// by which the code of the modules reads the bridge to the engine.
+const _engineBridge = 'engineBridge';
+
+/// The call of `GeneratedPluginRegistrant.register(with:)` with which
+/// `didInitializeImplicitFlutterEngine(_:)` registers the plugins of the
+/// app.
+final _pluginRegistration =
+    RegExp(r'\bGeneratedPluginRegistrant\s*\.\s*register\s*\(');
+
+/// The declaration of a class or an extension in the template of a Swift
+/// file, up to the brace that opens its body: the name of its type as the
+/// first group, and what follows its colon, if it has one, as the second.
+final _swiftType = RegExp(r'\b(?:class|extension)\s+(\w+)\s*(?::([^{]*))?\{');
+
+/// The protocol of an app delegate on which Flutter calls
+/// `didInitializeImplicitFlutterEngine(_:)`.
+final _engineDelegate = RegExp(r'\bFlutterImplicitEngineDelegate\b');
+
+/// Whether [code], the code of the template of a Swift file, declares the
+/// type of the innermost class or extension around [offset] as conforming
+/// to `FlutterImplicitEngineDelegate`, in that declaration or in another
+/// declaration of the same type.
+bool _conformsToEngineDelegate(String code, int offset) {
+  final types = _swiftType.allMatches(code).toList();
+  String? holder;
+  for (final type in types) {
+    final body = _bodyFrom(code, type.end - 1);
+    if (body != null && body.start < offset && offset < body.end) {
+      holder = type[1];
+    }
+  }
+  return types.any(
+    (type) => type[1] == holder && _engineDelegate.hasMatch(type[2] ?? ''),
+  );
+}
+
+List<SmfIssue> _checkEngineCodePlace(ModuleRuleInput<NoDsl> input) {
+  const path = AppEntryRole.appDelegateFile;
+  const method = 'didInitializeImplicitFlutterEngine(_:)';
+  const call = 'GeneratedPluginRegistrant.register(with:)';
+  final tag = '{{{${AppEntryRole.iosAppDelegateEngine.tag}}}}';
+  final text = _templatesOf(input.contributions)[path] ?? '';
+  final offset = text.indexOf(tag);
+  if (offset < 0) return const [];
+  SmfIssue issue(String problem) =>
+      SmfIssue(problem, origin: ModuleOrigin(input.module.id), path: path);
+  final body = _bodyAfter(text, _engineMethod);
+  if (body == null || offset < body.start || offset > body.end) {
+    return [
+      issue(
+        'The tag $tag is in $path, but not in the body of $method, where the '
+        'code of the modules runs once the engine of the app exists.',
+      ),
+    ];
+  }
+  final code = _codeOf(text);
+  if (!_conformsToEngineDelegate(code, body.start)) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, but no declaration '
+        'of its class conforms to FlutterImplicitEngineDelegate: Flutter '
+        'calls the method only on an app delegate that does.',
+      ),
+    ];
+  }
+  // The name by which the body reads the parameter: the word before its
+  // type, after the label of the argument, if it has one.
+  final parameters = _engineMethod.firstMatch(code)![1]!;
+  if (RegExp(r'(\w+)\s*:').firstMatch(parameters)?[1] != _engineBridge) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, whose parameter is '
+        'not named $_engineBridge: the code of the modules reads the bridge '
+        'to the engine by that name.',
+      ),
+    ];
+  }
+  final registration = _pluginRegistration
+      .firstMatch(code.substring(body.start, body.end))
+      ?.start;
+  if (registration == null) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, which has no call '
+        'of $call: the method registers the plugins of the app with that '
+        'call, before the code of the modules.',
+      ),
+    ];
+  }
+  if (body.start + registration > offset) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, but not after its '
+        'call of $call, which registers the plugins of the app: the code of '
+        'the modules runs after it.',
+      ),
+    ];
+  }
+  return const [];
+}
+
 /// The parts of the template of a Dart file that are not code: the tags of
 /// the template, comments and strings, raw or not, on one line or on
 /// several.
@@ -1195,40 +1426,140 @@ const _outOfOrder =
     'main() must call WidgetsFlutterBinding.ensureInitialized(), '
     'bootstrap() and runApp() in this order.';
 
+/// The hint of a problem of the clause of `main()` that catches the errors
+/// of `bootstrap()`.
+const _failedStartHint = 'Without it, an app whose start-up fails stays on '
+    'the splash screen of the system. showFailedStart() of '
+    '${AppEntryRole.failedStartFile} reports the error and shows the screen '
+    'of a failed start; return after it.';
+
+/// What `main()` does wrong with the errors of `bootstrap()`, whose call
+/// in `main()` is [bootstrap]: [clauses] are the clauses of the try
+/// statements around it, in the order in which they are asked about an
+/// error of it, and [shows] the calls of `showFailedStart()` in `main()`.
+List<SmfIssue> _bootstrapIssues(
+  IndexedInvocation? bootstrap,
+  List<IndexedCatch> clauses,
+  List<IndexedInvocation> shows,
+  SmfIssue Function(String problem, {String? hint}) issue,
+) {
+  if (bootstrap == null) return [issue('main() does not call bootstrap().')];
+  if (!bootstrap.awaited) return [issue('main() does not await bootstrap().')];
+  final (:shown, :keepsOnSplash) = _endsOfAnError(clauses, shows);
+  return [
+    if (!clauses.any((clause) => clause.catchesEverything))
+      issue(
+        'main() does not catch every error of bootstrap(): await it in a try '
+        'statement with a clause such as "on Object catch (error, '
+        'stackTrace)".',
+        hint: _failedStartHint,
+      )
+    else if (!shown)
+      issue(
+        'main() does not call showFailedStart() in the clause that catches '
+        'the errors of bootstrap().',
+        hint: _failedStartHint,
+      ),
+    for (final clause in keepsOnSplash)
+      issue(
+        'main() catches the errors of bootstrap() of the type '
+        '${clause.type} in a clause that neither calls showFailedStart() '
+        'nor throws, so after such an error the app stays on the splash '
+        'screen of the system.',
+        hint: 'Call showFailedStart() there too and return, or rethrow the '
+            'error, or leave it to the clause that catches every error.',
+      ),
+  ];
+}
+
+/// Where an error of `bootstrap()` ends among [clauses], the clauses that
+/// are asked about it in order, with [shows], the calls of
+/// `showFailedStart()`: it goes to the first clause that catches it, and
+/// ends at a clause that shows the screen of a failed start or keeps the
+/// app on the splash screen, unless the clause throws. `shown` says
+/// whether the clause that catches every error shows the screen, and
+/// `keepsOnSplash` has the clauses before it that keep the app on the
+/// splash screen.
+({bool shown, List<IndexedCatch> keepsOnSplash}) _endsOfAnError(
+  List<IndexedCatch> clauses,
+  List<IndexedInvocation> shows,
+) {
+  final keepsOnSplash = <IndexedCatch>[];
+  for (final clause in clauses) {
+    if (shows.any((show) => clause.holds(show.offset))) {
+      if (clause.catchesEverything) {
+        return (shown: true, keepsOnSplash: keepsOnSplash);
+      }
+    } else if (!clause.throws) {
+      if (clause.catchesEverything) break;
+      keepsOnSplash.add(clause);
+    }
+  }
+  return (shown: false, keepsOnSplash: keepsOnSplash);
+}
+
 List<SmfIssue> _checkMainSequence(StructuralRuleInput<NoDsl> input) {
   const path = AppEntryRole.mainFile;
   final file = input.files[path];
   if (file == null) return const [];
+  final main = AppEntryRole.main.name;
 
-  IndexedInvocation? call(String name, {String? target}) {
-    for (final invocation in file.invocationsOf(name, within: 'main')) {
-      if (target == null || invocation.target == target) return invocation;
-    }
-    return null;
-  }
+  Iterable<IndexedInvocation> calls(String name, {String? target}) =>
+      file.invocationsOf(name, within: main).where(
+            (invocation) => target == null || invocation.target == target,
+          );
 
   final ensureInitialized =
-      call('ensureInitialized', target: 'WidgetsFlutterBinding');
-  final bootstrap = call('bootstrap');
-  final runApp = call('runApp');
-  final problems = [
+      calls('ensureInitialized', target: 'WidgetsFlutterBinding').firstOrNull;
+  final bootstrap = calls(AppEntryRole.bootstrap.name).firstOrNull;
+  // The try statements around bootstrap(), and their clauses in the order
+  // in which they are asked about an error of it.
+  final statements = bootstrap?.tries ?? const <IndexedTry>[];
+  final clauses = bootstrap?.caughtBy ?? const <IndexedCatch>[];
+  final runApps = calls('runApp').toList();
+  bool inClause(IndexedInvocation call) =>
+      clauses.any((clause) => clause.holds(call.offset));
+  bool inFinally(IndexedInvocation call) => statements.any(
+        (statement) => statement.finallyBlock?.holds(call.offset) ?? false,
+      );
+  // The runApp() that runs the app once the start-up succeeded.
+  final runApp =
+      runApps.where((call) => !inClause(call) && !inFinally(call)).firstOrNull;
+  SmfIssue issue(String problem, {String? hint}) =>
+      SmfIssue(problem, hint: hint, origin: input.owners[path], path: path);
+  return [
     if (ensureInitialized == null)
-      'main() does not call WidgetsFlutterBinding.ensureInitialized().',
-    if (bootstrap == null)
-      'main() does not call bootstrap().'
-    else if (!bootstrap.awaited)
-      'main() does not await bootstrap().',
-    if (runApp == null) 'main() does not call runApp().',
+      issue('main() does not call WidgetsFlutterBinding.ensureInitialized().'),
+    ..._bootstrapIssues(
+      bootstrap,
+      clauses,
+      calls(AppEntryRole.showFailedStart.name).toList(),
+      issue,
+    ),
+    if (runApps.isEmpty) issue('main() does not call runApp().'),
+    for (final call in runApps)
+      if (inClause(call))
+        issue(
+          'main() calls runApp() in a clause that catches the errors of '
+          'bootstrap(), so it runs the root of the app over the screen of a '
+          'failed start.',
+          hint: 'Return after showFailedStart(), and call runApp() after the '
+              'try statement.',
+        )
+      else if (inFinally(call))
+        issue(
+          'main() calls runApp() in the finally block of the try statement '
+          'around bootstrap(), so it runs the root of the app over the '
+          'screen of a failed start too.',
+          hint: 'Return after showFailedStart(), and call runApp() after the '
+              'try statement.',
+        ),
     if (ensureInitialized != null &&
         bootstrap != null &&
         runApp != null &&
         !(ensureInitialized.offset < bootstrap.offset &&
             bootstrap.offset < runApp.offset))
-      _outOfOrder,
-  ];
-  return [
-    for (final problem in problems)
-      SmfIssue(problem, origin: input.owners[path], path: path),
+      issue(_outOfOrder),
   ];
 }
 

@@ -24,12 +24,14 @@
 // as tall, with "or" between them and the form, and a line of text that asks
 // how to sign in. A screen reader reads each as one button with its label. A
 // tap calls the way to sign in, whose module answers with its mocks, and
-// gives the credential to the session: the router leaves the sign-in, and
-// an anonymous user keeps the id. While the call is on its way, its button
-// spins, and neither another button nor the form takes a tap; in an app that
-// asks for less motion the button is disabled with its label instead. A
-// call that failed shows its failure below the buttons, not above the button
-// of the form. An app without ways to sign in shows no button and no "or".
+// gives the credential to the session: the router leaves the sign-in, with
+// no page of it below the app, also when the call takes frames, as a real
+// identity provider takes seconds, and an anonymous user keeps the id.
+// While the call is on its way, its button spins, and neither another
+// button nor the form takes a tap; in an app that asks for less motion the
+// button is disabled with its label instead. A call that failed shows its
+// failure below the buttons, not above the button of the form. An app
+// without ways to sign in shows no button and no "or".
 // When the user closes the sheet of a way to sign in, the screen is as it
 // was before the tap: the mocks of a way to sign in always give a
 // credential, so the tests of the package of the module check that, with a
@@ -481,10 +483,25 @@ Future<void> _expectWaysToSignIn(
     await tester.pumpAndSettle();
 
     // A sign-in with each way to sign in: the router leaves the
-    // sign-in, and an anonymous user keeps the id.
+    // sign-in, and an anonymous user keeps the id. The service holds the
+    // call back for frames, with the button spinning, as a real identity
+    // provider and a real backend take seconds: the router leaves the
+    // sign-in then too, with no page of it below the app.
     for (final method in methodsHere()) {
       final before = appSession.value;
+      final hold = service.hold = Completer<void>();
       await tester.tap(methodButton(method));
+      for (var frame = 0; frame < 5; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        appSession.hasAccount.value,
+        isFalse,
+        reason: 'While the service holds the call of the way to sign in of '
+            '${method.issuer} back, the user has no account yet.',
+      );
+      hold.complete();
+      service.hold = null;
       await tester.pumpAndSettle();
       final after = appSession.value;
       expect(
@@ -504,8 +521,9 @@ Future<void> _expectWaysToSignIn(
         ),
         (0, 1),
         reason: 'Once the user has an account through a way to sign in, '
-            'the router leaves the sign-in, and the app shows the screen '
-            'that it starts on: no screen closes itself.',
+            'whose call took frames, the router leaves the sign-in, with no '
+            'page of it below the app, and the app shows the screen that it '
+            'starts on: no screen closes itself.',
       );
       await appSession.signOut();
       await tester.pumpAndSettle();

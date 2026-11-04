@@ -3,7 +3,7 @@
 The SMF module that creates the Flutter app every SMF app starts from. It provides the app entry role of SMF, which every app has exactly one provider of:
 
 - the Android and iOS projects of `flutter create`, with the flavors `dev`, `staging` and `prod` as plain text, which install next to each other on a device;
-- `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs the root widget inside the wrappers of other modules;
+- `lib/main.dart`, whose `main()` awaits `bootstrap()` and runs the root widget inside the wrappers of other modules, or, when `bootstrap()` throws, shows the screen of a failed start instead;
 - `lib/bootstrap.dart`, where modules put their start-up code, phase by phase;
 - `lib/app.dart`, the root `MaterialApp`, which becomes `MaterialApp.router` when the app has a router;
 - the fallback start screen with a widget test, which only an app that no route starts gets;
@@ -35,7 +35,7 @@ The files in `bricks/flutter_core/__brick__` are those that `flutter create --pl
 - `IPHONEOS_DEPLOYMENT_TARGET`, in each build configuration of `project.pbxproj`, is the tag of the minimum iOS version, and the project has no `DEVELOPMENT_TEAM`.
 - The Android manifest, `Info.plist` and the Gradle files hold the tags of the native sockets of the app entry role, each alone on its line. The Gradle file of the app ends with a `dependencies` block for the dependencies of the modules. `flutter create` does not write that block, and it stays empty when no module adds one. The file also has the two tags of core library desugaring, the switch in `compileOptions` and the library in `dependencies`. A tag that gets nothing leaves no line, so an app without a module that needs desugaring has the `compileOptions` of `flutter create`.
 - The `.gitignore` at the root of the app ends with the tag of the patterns that the modules keep out of git, on a line of its own. A tag that gets nothing leaves no line, so an app without such a pattern has the `.gitignore` of `flutter create`.
-- `ios/Runner/AppDelegate.swift` holds the tag of the code that runs before the launch of the app finishes. The tag is in `application(_:didFinishLaunchingWithOptions:)`, before `return super.application(...)`. Without such code the file is the one of `flutter create`.
+- `ios/Runner/AppDelegate.swift` holds two tags. The tag of the code that runs before the launch of the app finishes is in `application(_:didFinishLaunchingWithOptions:)`, before `return super.application(...)`. The tag of the code that needs the engine of the app, such as a method channel, is in `didInitializeImplicitFlutterEngine(_:)`, after `GeneratedPluginRegistrant.register(with:)`. Without such code the file is the one of `flutter create`.
 - `ios/Runner/Runner.entitlements` belongs to the brick. It holds the tag of the entitlements of the app and is empty when no module adds any. Every build configuration of the Runner target signs with it (`CODE_SIGN_ENTITLEMENTS`), and the Runner group of `project.pbxproj` refers to it, the way Xcode does when it adds a capability.
 - `lib/`, `test/`, `pubspec.yaml`, `README.md` and `analysis_options.yaml` are SMF's own.
 

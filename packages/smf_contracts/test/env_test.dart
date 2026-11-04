@@ -3,6 +3,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:smf_contracts/bundles/env_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
@@ -57,10 +59,12 @@ List<String> _messages(List<SmfIssue> issues) => [
 
 /// The `AppEnv` that a provider generates for the keys `SHOP_APPLE_KEY` and
 /// `FEED_URL`, as the role asks: an abstract final class without a
-/// constructor, with a static getter for each key that is `null` while the
-/// value is missing.
+/// constructor, with whether a build has the values and a static getter for
+/// each key that is `null` while the value is missing.
 const _appEnvFile = '''
 abstract final class AppEnv {
+  static const bool supplied = true;
+
   static String? get shopAppleKey => _value('');
 
   static String? get feedUrl => _value('https://example.com/feed');
@@ -132,9 +136,11 @@ void main() {
         ],
         ['.run/dev.run.xml', '.run/staging.run.xml', '.run/prod.run.xml'],
       );
+      expect(EnvRole.checkFile, 'lib/core/env/env_check.dart');
       expect(envRole.interface.files, [
         EnvRole.dotEnvFile,
         EnvRole.exampleFile,
+        EnvRole.checkFile,
       ]);
       expect(envRole.interface.symbols, [EnvRole.appEnv]);
       expect(EnvRole.appEnv.name, 'AppEnv');
@@ -167,6 +173,14 @@ void main() {
       expect(
         envRole.structuralRules.last.description,
         contains('no value that it reads through another expression'),
+      );
+      expect(
+        envRole.structuralRules.first.description,
+        endsWith('and the static field supplied.'),
+      );
+      expect(
+        envRole.structuralRules.last.description,
+        contains('any of them may read AppEnv.supplied, which is no key'),
       );
     });
   });
@@ -691,9 +705,18 @@ final described = describe(${vars['env_feed_url']!.absent});
     IndexedMember getter(String name) =>
         IndexedMember(name, kind: MemberKind.getter, isStatic: true);
 
-    test('passes an AppEnv with a static getter for every key', () {
+    const supplied = IndexedMember(
+      'supplied',
+      kind: MemberKind.field,
+      isStatic: true,
+    );
+
+    test(
+        'passes an AppEnv with a static getter for every key and the static '
+        'field supplied', () {
       expect(
         check([
+          supplied,
           getter('shopAppleKey'),
           getter('shopGoogleKey'),
           getter('feedUrl'),
@@ -705,9 +728,45 @@ final described = describe(${vars['env_feed_url']!.absent});
     });
 
     test(
+        'reports an AppEnv without the static field supplied, which the '
+        'check of the template reads, also one with a getter or an instance '
+        'field of that name', () {
+      final keys = [
+        getter('shopAppleKey'),
+        getter('shopGoogleKey'),
+        getter('feedUrl'),
+      ];
+
+      for (final members in [
+        keys,
+        [...keys, getter('supplied')],
+        [
+          ...keys,
+          const IndexedMember('supplied', kind: MemberKind.field),
+        ],
+      ]) {
+        final issue = check(members).single;
+        expect(
+          '${issue.origin}: ${issue.message}',
+          'reader: The provider of the env role does not tell whether a '
+              'build has the values: AppEnv in lib/core/env/app_env.dart declares '
+              'no static field supplied.',
+        );
+        expect(issue.path, EnvRole.readerFile);
+        expect(
+          issue.hint,
+          'Declare static const bool supplied, true once the command that '
+          'built the app gave it the values of .env, and true in an app '
+          'without keys; see EnvRole.appEnv.',
+        );
+      }
+    });
+
+    test(
         'reports a key without a static getter, also one whose name the '
         'class has for another member', () {
       final issues = check([
+        supplied,
         getter('shopAppleKey'),
         const IndexedMember('shopGoogleKey', kind: MemberKind.getter),
         const IndexedMember(
@@ -842,6 +901,33 @@ final described = describe(${vars['env_feed_url']!.absent});
       );
     });
 
+    test(
+        'lets every file that it looks at read AppEnv.supplied, which is no '
+        'key, with or without a prefix, but not call it', () {
+      const read = [
+        IndexedMemberAccess('AppEnv', 'supplied'),
+        IndexedMemberAccess('env.AppEnv', 'supplied'),
+      ];
+
+      for (final owner in [
+        ofShop,
+        const ModuleOrigin(ModuleId('feed')),
+        RoleTemplateOrigin(_boardRole),
+        const RoleTemplateOrigin(envRole),
+        const PipelineOrigin(),
+      ]) {
+        expect(check(owner, accesses: read), isEmpty, reason: '$owner');
+      }
+      expect(
+        check(
+          ofShop,
+          invocations: const [IndexedInvocation('supplied', target: 'AppEnv')],
+        ).single.message,
+        'lib/file.dart calls AppEnv.supplied(), but the values of the app are '
+        'getters, each named by the role.',
+      );
+    });
+
     test('reports a module that reads a key of another module', () {
       final issue = check(
         const ModuleOrigin(ModuleId('paywall')),
@@ -963,19 +1049,155 @@ final described = describe(${vars['env_feed_url']!.absent});
     });
   });
 
+  group('the check of the values of a build', () {
+    test(
+        'has a text for a release build without the values that names the '
+        'tool arguments, each as one word of the shell', () {
+      expect(
+        EnvRole.releaseErrorOf(const ['--dart-define-from-file=.env']),
+        'A release build of this app needs the values of .env: build it with '
+        '--dart-define-from-file=.env, from a .env with the keys of '
+        '.env.example.',
+      );
+      expect(
+        EnvRole.releaseErrorOf(const ['--values-from', "Tom's .env"]),
+        'A release build of this app needs the values of .env: build it with '
+        r"--values-from 'Tom'\''s .env', from a .env with the keys of "
+        '.env.example.',
+      );
+      expect(
+        EnvRole.releaseErrorOf(const []),
+        'A release build of this app needs the values of .env: build it from '
+        'a .env with the keys of .env.example.',
+      );
+    });
+
+    test(
+        'has a message for a debug or profile build without the values that '
+        'names the tool arguments and the run configurations that pass them',
+        () {
+      expect(
+        EnvRole.noValuesMessageOf(const ['--dart-define-from-file=.env']),
+        'This build has none of the values of .env, so every getter of '
+        'AppEnv is null. Run it with --dart-define-from-file=.env, from a '
+        '.env with the keys of .env.example, as the run configurations in '
+        '.vscode/launch.json and .run/ do.',
+      );
+      expect(
+        EnvRole.noValuesMessageOf(const []),
+        'This build has none of the values of .env, so every getter of '
+        'AppEnv is null. Run it from a .env with the keys of .env.example.',
+      );
+    });
+
+    group('in the file of the template', () {
+      // An argument with the characters that the shell and the compiler
+      // quote: the compiler quotes the text with more escapes than a shell
+      // takes.
+      const toolArguments = ['--values-from', r'''Tom's "a\b".env'''];
+      late Map<String, String> files;
+
+      setUpAll(() async {
+        files = (await renderTemplate(
+          envRole,
+          data: [..._appKeys, _toolArguments(toolArguments)],
+        ))
+            .files;
+      });
+
+      /// The files of the check and of an `AppEnv` whose `supplied` is
+      /// [supplied], written as a test app.
+      DartFiles appWith({required bool supplied}) {
+        final app = DartFiles.write({
+          EnvRole.checkFile: files[EnvRole.checkFile]!,
+          EnvRole.readerFile: _appEnvFile.replaceFirst(
+            'supplied = true',
+            'supplied = $supplied',
+          ),
+        });
+        addTearDown(app.delete);
+        return app;
+      }
+
+      final checkUri = 'package:${testContext.appName}/'
+          '${EnvRole.checkFile.substring('lib/'.length)}';
+
+      test(
+          'stops a release build whose AppEnv.supplied is false, with the '
+          'text of the role, and lets one build whose AppEnv.supplied is '
+          'true', () async {
+        final script = "import '$checkUri';\n\n"
+            'void main() => checkEnvValues(print);\n';
+
+        final without = await appWith(supplied: false).compile(script);
+        expect(without.compiled, isFalse, reason: without.output);
+        expect(
+          without.output,
+          contains(compilerQuoteOf(EnvRole.releaseErrorOf(toolArguments))),
+        );
+
+        final with_ = await appWith(supplied: true).compile(script);
+        expect(with_.compiled, isTrue, reason: with_.output);
+      });
+
+      test(
+          'prints the message of the role once in a debug build whose '
+          'AppEnv.supplied is false, and nothing when it is true', () async {
+        final script = "import 'dart:isolate';\n\n"
+            "import '$checkUri';\n\n"
+            'void main(List<String> arguments, SendPort port) {\n'
+            '  final reported = <String>[];\n'
+            '  checkEnvValues(reported.add);\n'
+            '  port.send(reported);\n'
+            '}\n';
+
+        expect(
+          await appWith(supplied: false).run(script),
+          [EnvRole.noValuesMessageOf(toolArguments)],
+        );
+        expect(await appWith(supplied: true).run(script), isEmpty);
+      });
+
+      test(
+          'imports only the file of AppEnv, and is formatted and analyzes '
+          'without a diagnostic, as it is in an app', () async {
+        expect(
+          [
+            for (final directive
+                in RegExp("^import '([^']+)';", multiLine: true)
+                    .allMatches(files[EnvRole.checkFile]!))
+              directive[1],
+          ],
+          ['app_env.dart'],
+        );
+        for (final supplied in [false, true]) {
+          final app = appWith(supplied: supplied);
+          expect(await app.isFormatted(EnvRole.checkFile), isTrue);
+          expect(
+            await app.analysisProblems(
+              infos: true,
+              only: (file) => file == EnvRole.checkFile,
+            ),
+            isEmpty,
+          );
+        }
+      });
+    });
+  });
+
   group('the template of the env role', () {
     test(
         'generates the files of the role, keeps the file of the values out '
         'of git, and adds the note of the role', () {
       final contributions = envRole.template.contribute(testContext);
 
-      expect(contributions, hasLength(3));
+      expect(contributions, hasLength(4));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(envRoleBundle));
       expect(brick.when, isEmpty);
       expect(
         templatesOf(envRoleBundle).keys.toSet(),
-        {EnvRole.dotEnvFile, EnvRole.exampleFile},
+        {EnvRole.dotEnvFile, EnvRole.exampleFile, EnvRole.checkFile},
       );
 
       final pattern = contributions[1] as SocketContribution;
@@ -993,6 +1215,23 @@ final described = describe(${vars['env_feed_url']!.absent});
       expect(note.entryKey, envRole.description);
       expect((note.entryValue! as AgentNote).isOfRole, isTrue);
       expect(note.when, isEmpty);
+
+      // Every app with the role calls the check first in bootstrap(), so
+      // every build of it compiles the check, whichever modules read AppEnv.
+      final check = contributions[3] as SocketContribution;
+      expect(check.socket, AppEntryRole.bootstrapEarly);
+      expect(check.when, isEmpty);
+      expect(check.fragment!.code, 'checkEnvValues(debugPrint);');
+      expect(
+        [
+          for (final import in check.fragment!.imports)
+            import.resolveUri(testContext.appName),
+        ],
+        [
+          'package:flutter/foundation.dart',
+          'package:${testContext.appName}/core/env/env_check.dart',
+        ],
+      );
     });
 
     test(
@@ -1016,6 +1255,7 @@ final described = describe(${vars['env_feed_url']!.absent});
       expect(rendered.files.keys.toSet(), {
         EnvRole.dotEnvFile,
         EnvRole.exampleFile,
+        EnvRole.checkFile,
       });
       expect(
         rendered.files[EnvRole.exampleFile],
@@ -1044,7 +1284,10 @@ final described = describe(${vars['env_feed_url']!.absent});
         '$keys',
       );
       // Every line is a comment, empty, or a key without a value.
-      for (final file in rendered.files.values) {
+      for (final file in [
+        rendered.files[EnvRole.dotEnvFile]!,
+        rendered.files[EnvRole.exampleFile]!,
+      ]) {
         for (final line in file.split('\n')) {
           expect(
             line,
@@ -1070,6 +1313,59 @@ final described = describe(${vars['env_feed_url']!.absent});
     });
 
     test(
+        'renders the texts of the check as adjacent literals of Dart, which '
+        'need no import', () {
+      final output = envRole.template.render(
+        inputOf(
+          envRole,
+          data: [
+            _toolArguments(const ['--values=.env']),
+          ],
+        ),
+      );
+
+      for (final name in ['env_release_error', 'env_no_values_message']) {
+        final text = output.vars[name]! as Fragment;
+        expect(text.imports, isEmpty, reason: name);
+        expect(text.code, startsWith("'"), reason: name);
+        expect(text.code, endsWith("'"), reason: name);
+      }
+    });
+
+    test(
+        'keeps each run of spaces of the texts of the check whole where a '
+        'literal ends in it', () {
+      /// The text of [code], adjacent string literals of Dart.
+      String valueOf(String code) {
+        final unit = parseString(content: 'const text = $code;').unit;
+        final declaration =
+            unit.declarations.single as TopLevelVariableDeclaration;
+        return (declaration.variables.variables.single.initializer!
+                as StringLiteral)
+            .stringValue!;
+      }
+
+      // An argument with two spaces and one, whose length moves the spaces
+      // over the end of every literal of each text.
+      for (var length = 1; length <= 80; length++) {
+        final toolArguments = ['--values-from', '${'x' * length}  y z'];
+        final output = envRole.template.render(
+          inputOf(envRole, data: [_toolArguments(toolArguments)]),
+        );
+        for (final (name, text) in [
+          ('env_release_error', EnvRole.releaseErrorOf(toolArguments)),
+          ('env_no_values_message', EnvRole.noValuesMessageOf(toolArguments)),
+        ]) {
+          expect(
+            valueOf((output.vars[name]! as Fragment).code),
+            text,
+            reason: '$name with $length characters before the spaces',
+          );
+        }
+      }
+    });
+
+    test(
         'writes the section of the role in the README, with the keys of the '
         'app and their owners', () {
       final output = envRole.template.render(
@@ -1082,6 +1378,8 @@ final described = describe(${vars['env_feed_url']!.absent});
       expect(AppEntryRole.readmeSections.problemsWith(section), isEmpty);
       expect(section.entryValue, '''
 `.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+A release build needs `.env`: `flutter build` of a release, and an archive in Xcode, stop with an error unless the command gives the app the values of `.env` and `.env` has a line of a key of the app, also with an empty value. So a build for a store never goes out by mistake from a command that did not give it `.env`. A debug or profile build without it starts with every getter `null` and says so in the console. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
 
 `.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
 
@@ -1160,6 +1458,49 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
         ),
       );
       expect(section, isNot(contains('The keys of the app')));
+      // Nothing can tell whether a build without keys has the values.
+      expect(
+        section,
+        contains(
+          'before you fill anything in.\n'
+          '\n'
+          'While the app has no key, a release build goes out without the '
+          'values: `AppEnv.supplied` is `true`, since nothing can tell '
+          'whether a build has them. Once `AppEnv.supplied` checks for a key '
+          'of the app, `flutter build` of a release, and an '
+          'archive in Xcode, stop with an error unless the command gives the '
+          'app the values of `.env` and `.env` has a line of a key of the '
+          'app, also with an empty value. `lib/core/env/env_check.dart` holds '
+          'the check, which `bootstrap()` calls in its first phase, and '
+          '`AppEnv.supplied` tells whether a build has the values.\n',
+        ),
+      );
+    });
+
+    test(
+        'names in the README the tool arguments of the provider that a '
+        'release build needs, each as one word of the shell', () {
+      final section = envRole.template
+          .render(
+            inputOf(
+              envRole,
+              data: [
+                ..._appKeys,
+                _toolArguments(const ['--values-from', 'my .env']),
+              ],
+            ),
+          )
+          .fragments
+          .single
+          .entryValue! as String;
+
+      expect(
+        section,
+        contains(
+          'stop with an error unless the command has `--values-from '
+          "'my .env'` and `.env` has a line of a key of the app",
+        ),
+      );
     });
 
     test(
@@ -1170,7 +1511,7 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
       expectNamesOfCode(
         note,
         {
-          EnvRole.readerFile: ['AppEnv'],
+          EnvRole.readerFile: ['AppEnv', 'AppEnv.supplied'],
         },
         files: const {EnvRole.readerFile: _appEnvFile},
       );
@@ -1181,6 +1522,11 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
           contains('`String?`'),
           contains('Never put a secret into `.env`'),
           contains('`.env.example` and `.env`'),
+          contains(
+            'Never remove or work around the check in '
+            '`${EnvRole.checkFile}`, which `bootstrap()` calls in its first '
+            'phase',
+          ),
         ),
       );
       final named = const EnvKey('MY_SERVICE_KEY', description: 'x').getter;

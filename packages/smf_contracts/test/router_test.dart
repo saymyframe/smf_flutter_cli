@@ -4,6 +4,9 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:mason/mason.dart' show MasonBundle, MasonBundledFile;
 import 'package:smf_contracts/bundles/router_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -558,13 +561,25 @@ void main() {
   group('the router template', () {
     final template = routerRole.template;
 
-    test('contributes its brick and its note for coding agents', () {
+    test(
+        'contributes its brick, the texts of the screen of a location that '
+        'the router cannot show, and its note for coding agents', () {
       final contributions = template.contribute(testContext);
 
-      expect(contributions, hasLength(2));
+      expect(contributions, hasLength(3));
       expect(
         (contributions.first as BrickContribution).bundle.name,
         'router_role',
+      );
+      // Every app with the role has the screen, so the texts need no
+      // condition: the localization role takes them where it is.
+      final texts = contributions[1] as RoleData<Object>;
+      expect(texts.role, localizationRole);
+      expect(texts.when, isEmpty);
+      expect(texts.whenChosen, isEmpty);
+      expect(
+        (texts.value as TextsData).texts,
+        [RouterRole.notFoundTitle, RouterRole.notFoundAction],
       );
       final note = contributions.last as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
@@ -595,7 +610,12 @@ void main() {
               'AppLocation.path',
               'AppLocation.parent',
             ],
-            RouterRole.appRouterFile: ['appRouter'],
+            RouterRole.appRouterFile: [
+              'appRouter',
+              'AppRouter.navigatorOf',
+              'AppNavigator.goToStart',
+            ],
+            RouterRole.notFoundScreenFile: ['NotFoundScreen'],
           },
           files: rendered.files,
         );
@@ -721,7 +741,14 @@ void main() {
       final output = template.render(inputOf(routerRole, data: _data));
 
       expect(output.fragments, isEmpty);
-      expect(output.vars.keys, ['facade', 'guards']);
+      expect(output.vars.keys, [
+        'facade',
+        'guards',
+        'app_symbol',
+        'app_number',
+        'text_not_found_title',
+        'text_not_found_action',
+      ]);
       expect(output.vars['facade'], _facade().toDart());
       final guards = output.vars['guards']! as Fragment;
       expect(guards.code, isEmpty);
@@ -734,6 +761,7 @@ void main() {
       expect(rendered.files.keys, [
         RouterRole.appRouterFile,
         RouterRole.navigationFile,
+        RouterRole.notFoundScreenFile,
       ]);
       for (final MapEntry(key: path, value: code) in rendered.files.entries) {
         expectParses(code, reason: path);
@@ -745,6 +773,165 @@ void main() {
       expect(
         rendered.files[RouterRole.appRouterFile],
         contains('final AppRouter appRouter = createAppRouter();'),
+      );
+    });
+  });
+
+  group('the screen of a location that the router cannot show', () {
+    late RenderedTemplate localized;
+    late RenderedTemplate plain;
+
+    setUpAll(() async {
+      localized = await renderTemplate(
+        routerRole,
+        data: _data,
+        present: {localizationRole},
+      );
+      plain = await renderTemplate(routerRole, data: _data);
+    });
+
+    /// The class of the screen in [rendered].
+    ClassDeclaration screenOf(RenderedTemplate rendered) => parseString(
+          content: rendered.files[RouterRole.notFoundScreenFile]!,
+        ).unit.declarations.whereType<ClassDeclaration>().singleWhere(
+              (declaration) =>
+                  declaration.namePart.typeName.lexeme == 'NotFoundScreen',
+            );
+
+    test(
+        'is a widget of a file that every app with the role has, whose const '
+        'constructor takes no arguments, so that every provider creates it '
+        'as a constant', () {
+      expect(
+        RouterRole.notFoundScreenFile,
+        'lib/core/router/not_found_screen.dart',
+      );
+      expect(routerRole.interface.files, [
+        RouterRole.appRouterFile,
+        RouterRole.navigationFile,
+        RouterRole.notFoundScreenFile,
+      ]);
+      expect(routerRole.interface.symbols, [
+        RouterRole.createAppRouter,
+        RouterRole.notFoundScreen,
+      ]);
+      expect(RouterRole.notFoundScreen.name, 'NotFoundScreen');
+      expect(RouterRole.notFoundScreen.path, RouterRole.notFoundScreenFile);
+      expect(RouterRole.notFoundScreen.constConstructor, isTrue);
+      expect(RouterRole.notFoundScreen.namedParameters, isEmpty);
+
+      for (final rendered in [localized, plain]) {
+        final screen = screenOf(rendered);
+        final constructor =
+            screen.body.members.whereType<ConstructorDeclaration>().single;
+
+        expect(screen.extendsClause!.superclass.toSource(), 'StatelessWidget');
+        expect(constructor.constKeyword, isNotNull);
+        expect(constructor.name, isNull);
+        expect(constructor.parameters.toSource(), '({super.key})');
+      }
+    });
+
+    test(
+        'reads its title and the label of its button from the texts of the '
+        'app in an app with the localization role, and shows them in '
+        'English in an app without it', () {
+      final texts = [RouterRole.notFoundTitle, RouterRole.notFoundAction];
+      final withRole = _TextsOf();
+      screenOf(localized).accept(withRole);
+      final without = _TextsOf();
+      screenOf(plain).accept(without);
+
+      expect(withRole.texts, [
+        'context.l10n.routerNotFoundTitle',
+        'context.l10n.routerNotFoundAction',
+      ]);
+      expect(without.texts, [for (final text in texts) "'${text.en}'"]);
+      // Only the code of an app with the role reads the texts of the app.
+      const l10n = "import 'package:my_app/core/l10n/l10n.dart';";
+      expect(
+        localized.files[RouterRole.notFoundScreenFile],
+        contains(l10n),
+      );
+      expect(
+        plain.files[RouterRole.notFoundScreenFile],
+        isNot(contains(l10n)),
+      );
+      expect(
+        LocalizationRole.textsFile,
+        'lib/core/l10n/l10n.dart',
+        reason: 'The import above is that of the file of the texts.',
+      );
+    });
+
+    test(
+        'gives the localization role its title and the label of its button, '
+        'in English and in Ukrainian', () {
+      expect(RouterRole.notFoundTitle.name, 'notFoundTitle');
+      expect(RouterRole.notFoundAction.name, 'notFoundAction');
+      final data = [
+        for (final contribution in routerRole.template.contribute(testContext))
+          if (contribution case final RoleData<Object> data
+              when data.role == localizationRole)
+            data.withOrigin(const RoleTemplateOrigin(routerRole)),
+      ];
+      final input = inputOf(localizationRole, data: data);
+
+      expect(localizationRole.template.validate(input), isEmpty);
+      expect(
+        [
+          for (final text in localizationRole.textsIn(input))
+            (
+              getter: text.getter,
+              en: text.text.en,
+              uk: text.text.translations['uk'],
+              owner: text.owner,
+            ),
+        ],
+        [
+          (
+            getter: 'routerNotFoundTitle',
+            en: 'Page not found',
+            uk: 'Сторінку не знайдено',
+            owner: const RoleTemplateOrigin(routerRole),
+          ),
+          (
+            getter: 'routerNotFoundAction',
+            en: 'Go to the start screen',
+            uk: 'На стартовий екран',
+            owner: const RoleTemplateOrigin(routerRole),
+          ),
+        ],
+      );
+      expect(localizationRole.localesIn(input), ['en', 'uk']);
+      // So the role uses the localization role, whose code that reads a
+      // text is for a role that requires or uses it.
+      expect(routerRole.uses, {layoutRole, localizationRole});
+    });
+
+    test(
+        'shows the cell of the app with the symbol and the number of its '
+        'name, and a button that shows the screen that the app starts on', () {
+      final unit = parseString(
+        content: plain.files[RouterRole.notFoundScreenFile]!,
+      ).unit;
+      final constants = {
+        for (final declaration
+            in unit.declarations.whereType<TopLevelVariableDeclaration>())
+          for (final variable in declaration.variables.variables)
+            variable.name.lexeme: variable.initializer!.toSource(),
+      };
+      final calls = _CallsOf('goToStart');
+      unit.accept(calls);
+
+      // `my_app`, the app of the tests.
+      expect(SmfNames.elementSymbolOf(testContext.appName), 'Ma');
+      expect(constants['_appSymbol'], "'Ma'");
+      expect(constants['_appNumber'], '5');
+      expect(calls.targets, ['appRouter.navigatorOf(context)']);
+      expect(
+        declarationsOf(plain.files[RouterRole.appRouterFile]!),
+        contains('AppNavigator.goToStart'),
       );
     });
   });
@@ -2621,4 +2808,41 @@ class DetailsScreen extends StatelessWidget {
       );
     });
   });
+}
+
+/// The texts of the `Text` widgets of a declaration, in order: the code of
+/// the first argument of each.
+final class _TextsOf extends RecursiveAstVisitor<void> {
+  final List<String> texts = [];
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.target == null && node.methodName.name == 'Text') {
+      texts.add(node.argumentList.arguments.first.toSource());
+    }
+    super.visitMethodInvocation(node);
+  }
+
+  @override
+  void visitInstanceCreationExpression(InstanceCreationExpression node) {
+    if (node.constructorName.type.name.lexeme == 'Text') {
+      texts.add(node.argumentList.arguments.first.toSource());
+    }
+    super.visitInstanceCreationExpression(node);
+  }
+}
+
+/// The targets of the calls of the method [name] in a unit, in order.
+final class _CallsOf extends RecursiveAstVisitor<void> {
+  _CallsOf(this.name);
+
+  final String name;
+
+  final List<String> targets = [];
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.methodName.name == name) targets.add('${node.target}');
+    super.visitMethodInvocation(node);
+  }
 }

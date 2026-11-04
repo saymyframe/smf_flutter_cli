@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:meta/meta.dart';
 import 'package:smf_contracts/bundles/env_role_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
+import 'package:smf_contracts/src/roles/shell_words.dart';
 
 part 'env/env_dsl.dart';
 part 'env/env_rules.dart';
@@ -70,6 +71,21 @@ const envRole = EnvRole._();
 /// configuration or a test tool, takes them from [toolArgumentsIn] without
 /// knowing the provider.
 ///
+/// A release build of an app with keys cannot go out without the arguments
+/// that give it [dotEnvFile]; whether its values are filled in is not
+/// checked. The provider says in `AppEnv.supplied` whether the command that
+/// built the app gave it the values (see [appEnv]), and the template
+/// generates [checkFile], whose `checkEnvValues` `bootstrap()` calls in its
+/// first phase, [AppEntryRole.bootstrapEarly], so that every build of every
+/// app with the role compiles the check. A
+/// release build without the values stops there with a compile error, the
+/// text of [releaseErrorOf], which names the arguments of [toolArgumentsIn].
+/// A debug or profile build, `flutter test` and the analyzer build without
+/// them as before, and a debug or profile build prints [noValuesMessageOf]
+/// once at start-up. [readerFile] and [checkFile] import nothing but `dart:`
+/// libraries and each other, so that a check of the role compiles them with
+/// the Dart SDK alone.
+///
 /// Every value ends up in the app, where anyone who has the app can read
 /// it. So no secret goes into [dotEnvFile], such as the secret key of a
 /// server, a password or a private key: only values that may be public,
@@ -98,6 +114,13 @@ final class EnvRole extends Role<EnvData> {
 
   /// The path of the provider's file with [appEnv].
   static const readerFile = 'lib/core/env/app_env.dart';
+
+  /// The path of the file of the template with `checkEnvValues`, which
+  /// `bootstrap()` calls in its first phase: a release build of an app whose
+  /// `AppEnv.supplied` is `false` stops there with the compile error
+  /// [releaseErrorOf], and a debug or profile build prints
+  /// [noValuesMessageOf] through the function that it gets.
+  static const checkFile = 'lib/core/env/env_check.dart';
 
   /// The heading of the section of the README of the app in which the
   /// template tells what [dotEnvFile] and [exampleFile] are for and lists
@@ -145,9 +168,29 @@ final class EnvRole extends Role<EnvData> {
   /// [dotEnvFile] changes. So a provider whose values need code generation
   /// after an edit of [dotEnvFile] does not keep this contract either.
   ///
+  /// `AppEnv` also declares `supplied`, a `static const bool` that is no
+  /// key:
+  ///
+  /// ```dart
+  /// static const bool supplied = ...;
+  /// ```
+  ///
+  /// It is `true` when the command that built the app gave `AppEnv` the
+  /// values of [dotEnvFile] and the file has a line of at least one key of
+  /// the app, also with an empty value, and `false` for a command without
+  /// the arguments of [toolArgumentsIn] and for a [dotEnvFile] without a line
+  /// of a key. In an app without keys, nothing can tell whether the command
+  /// gave the values, so it is `true` there. How a provider tells is up to
+  /// the provider, as long as the compiler evaluates it; [checkFile] stops a
+  /// release build where it is `false`. Its name has one word, so no getter
+  /// of a key, which has two words or more, clashes with it.
+  ///
   /// The rule `env.keys_rendered` checks that `AppEnv` has the getter of
-  /// every key; a test of the role in a running app shows that each returns
-  /// its value. Import the class with [RequiredSymbol.importRef].
+  /// every key and the static field `supplied`, whose type and constness
+  /// the compiler of the app checks where [checkFile] reads it; a test of the
+  /// role in a running app shows that each getter returns its value and that
+  /// `supplied` is `true` in a build with the arguments. Any code may read
+  /// `supplied`. Import the class with [RequiredSymbol.importRef].
   static const appEnv = RequiredClass(_appEnv, path: readerFile);
 
   @override
@@ -167,7 +210,7 @@ final class EnvRole extends Role<EnvData> {
 
   @override
   RoleInterface get interface => const RoleInterface(
-        files: [dotEnvFile, exampleFile],
+        files: [dotEnvFile, exampleFile, checkFile],
         symbols: [appEnv],
       );
 
@@ -196,7 +239,8 @@ final class EnvRole extends Role<EnvData> {
         StructuralRule(
           id: 'env.keys_rendered',
           description: 'The AppEnv of the provider of the role declares a '
-              'static getter for every key of the app.',
+              'static getter for every key of the app, and the static field '
+              'supplied.',
           check: _checkKeysRendered,
         ),
         StructuralRule(
@@ -205,9 +249,10 @@ final class EnvRole extends Role<EnvData> {
               'read from AppEnv only the getters of its own keys and of the '
               'keys of the modules it depends on, the files of the template '
               'of a role only those of its own keys, and the files of the '
-              'pipeline none. The rule sees what a file reads from AppEnv, '
-              'with or without the prefix of an import, and no value that it '
-              'reads through another expression.',
+              'pipeline none; any of them may read AppEnv.supplied, which is '
+              'no key. The rule sees what a file reads from AppEnv, with or '
+              'without the prefix of an import, and no value that it reads '
+              'through another expression.',
           check: _checkKeyAccess,
         ),
       ];
@@ -242,6 +287,36 @@ final class EnvRole extends Role<EnvData> {
         for (final data in dataIn(input))
           if (data.value case EnvToolArguments(:final arguments)) ...arguments,
       ];
+
+  /// The text of the compile error with which a release build of an app
+  /// whose `AppEnv.supplied` is `false` stops in [checkFile]: that the build
+  /// needs the values of [dotEnvFile], with [toolArguments], the arguments of
+  /// [toolArgumentsIn] of the app, each as one word of a POSIX shell and
+  /// joined by spaces, and that [dotEnvFile] needs the keys of [exampleFile].
+  ///
+  /// The compiler quotes it in its error, in double quotes, with each `\`
+  /// doubled and each `"` escaped, so a test of a build without the values
+  /// looks for it in that form in what the build printed. So for a tool
+  /// argument with `\` or `"`, or with `'`, which [shellWord] writes as
+  /// `'\''`, the developer sees a command with more escapes than a shell
+  /// takes, and not the command of this text.
+  static String releaseErrorOf(List<String> toolArguments) =>
+      'A release build of this app needs the values of $dotEnvFile: build it'
+      '${_withArguments(toolArguments)} from a $dotEnvFile with the keys of '
+      '$exampleFile.';
+
+  /// The message that a debug or profile build of an app whose
+  /// `AppEnv.supplied` is `false` prints once at start-up through
+  /// `checkEnvValues` of [checkFile]: that every getter of `AppEnv` is
+  /// `null`, and how to run the app with the values, with [toolArguments] as
+  /// [releaseErrorOf] names them, as the run configurations of the template
+  /// pass them.
+  static String noValuesMessageOf(List<String> toolArguments) =>
+      'This build has none of the values of $dotEnvFile, so every getter of '
+      '$_appEnv is null. Run it${_withArguments(toolArguments)} from a '
+      '$dotEnvFile with the keys of $exampleFile'
+      '${toolArguments.isEmpty ? '' : ', as the run configurations in '
+          '$vscodeLaunchFile and .run/ do'}.';
 
   /// The variables that read the values of the [keys] of [module] in a
   /// brick of the module: for each key, `env_<key>` with the key in lower
@@ -278,6 +353,16 @@ final class EnvRole extends Role<EnvData> {
 
 /// The name of the class of [EnvRole.appEnv].
 const _appEnv = 'AppEnv';
+
+/// The name of the static field of `AppEnv` that tells whether the command
+/// that built the app gave it the values; see [EnvRole.appEnv].
+const _supplied = 'supplied';
+
+/// ` with `, [toolArguments], each as one word of a POSIX shell and joined
+/// by spaces, and a comma, or nothing without arguments.
+String _withArguments(List<String> toolArguments) => toolArguments.isEmpty
+    ? ''
+    : ' with ${toolArguments.map(shellWord).join(' ')},';
 
 /// The code that reads the value of the key whose getter is [getter].
 Fragment _read(String getter) =>

@@ -69,6 +69,26 @@ const _appEntryBuildingRootOnce = BrokenModule(
   ],
 );
 
+/// The app entry whose `main()` runs the root of the app after a failed
+/// start: flutter_core, the app entry of the fixtures, without the `return`
+/// after its call of `showFailedStart()`. So when `bootstrap()` throws, the
+/// screen of the failed start shows for a moment, and then the root of the
+/// app runs over it, on services that the start-up did not set up.
+///
+/// `main()` still awaits `bootstrap()` in a `try` statement whose clause
+/// catches every error and calls `showFailedStart()`, as the rule
+/// `app_entry.main_sequence` of the role wants, and the app analyzes: only a
+/// running app shows the bug. It is made here for the reason that the app
+/// entry above is.
+const _appEntryRunningRootAfterFailedStart = BrokenModule(
+  FlutterCoreModule(),
+  id: ModuleId('broken_app_entry_runs_root_after_failed_start'),
+  description: 'Flutter app that runs its root after a failed start '
+      '(fixture)',
+  file: 'lib/main.dart',
+  changes: [('    return;\n', '')],
+);
+
 /// The app icon whose image for the App Store has alpha: launcher_icons, the
 /// provider of the app icon role of the CLI, with the foreground as the image
 /// of the icon and without what takes the alpha away. So the tool only warns,
@@ -147,6 +167,86 @@ const _goRouterAskingWithinItsCalls = BrokenModule(
   file: RouterRole.appRouterFactoryFile,
   changes: [
     ('    if (_asking > 0) return null;', '    if (_asking < 0) return null;'),
+  ],
+);
+
+/// The router of go_router that shows the error page of go_router for a
+/// location that it cannot show, in English, rather than the screen of the
+/// router role: the constructor of its `GoRouter` in an app without a main
+/// navigation takes the builder of that screen and does not pass it on to
+/// go_router. That is what every app of go_router showed before the role had
+/// the screen. The router of a fixture takes no location from the platform,
+/// so it has none that it cannot show, and this broken router changes the
+/// module of the CLI, made here as the broken app entry is.
+const _goRouterDroppingItsNotFoundScreen = BrokenModule(
+  GoRouterModule(),
+  id: ModuleId('broken_go_router_drops_not_found_screen'),
+  description: 'go_router that shows its own error page in English (fixture)',
+  file: RouterRole.appRouterFactoryFile,
+  changes: [
+    (
+      '    super.observers,\n'
+          '    super.errorBuilder,\n'
+          '  }) : super.routingConfig(\n',
+      '    super.observers,\n'
+          '    GoRouterWidgetBuilder? errorBuilder,\n'
+          '  }) : super.routingConfig(\n',
+    ),
+  ],
+);
+
+/// The router of go_router that stays where it is for a location from the
+/// platform that it cannot show, rather than show the screen of the router
+/// role: the constructor of its `GoRouter` in an app without a main
+/// navigation gives go_router a handler of its exceptions in place of the
+/// builder of that screen, and go_router then keeps its pages for such a
+/// location. It still shows a location of a route from the platform. The
+/// router of a fixture takes no location from the platform, so this broken
+/// router changes the module of the CLI, made here as the broken app entry
+/// is.
+const _goRouterDroppingUnknownLinks = BrokenModule(
+  GoRouterModule(),
+  id: ModuleId('broken_go_router_drops_unknown_links'),
+  description: 'go_router that stays where it is for an unknown link (fixture)',
+  file: RouterRole.appRouterFactoryFile,
+  changes: [
+    (
+      '    super.observers,\n'
+          '    super.errorBuilder,\n'
+          '  }) : super.routingConfig(\n',
+      '    super.observers,\n'
+          '    GoRouterWidgetBuilder? errorBuilder,\n'
+          '  }) : super.routingConfig(\n'
+          '         onException: (context, state, router) {},\n',
+    ),
+  ],
+);
+
+/// The router of go_router whose `goToStart()` goes to the screen that the
+/// app starts on without asking the guards of the routes, within the calls
+/// of the router, in which its redirect asks nothing either. The fixture
+/// router has such a bug of its own
+/// (`BrokenModule.routerGoingToStartPastGuards`), but go_router asks the
+/// guards about `goToStart()` in code of its own, so this broken router
+/// changes the module of the CLI, made here as the broken app entry is.
+const _goRouterGoingToStartPastGuards = BrokenModule(
+  GoRouterModule(),
+  id: ModuleId('broken_go_router_goes_to_start_past_guards'),
+  description: 'go_router that goes to its start past the guards (fixture)',
+  file: RouterRole.appRouterFactoryFile,
+  changes: [
+    (
+      '    final shown = switch (_guards.asked(\n'
+          '      null,\n'
+          '      _guards.start,\n'
+          '      onTopOf: [for (final page in _pages) page.route],\n'
+          '    )) {\n'
+          '      ShowInstead(:final location) => location,\n'
+          '      _ => _guards.start,\n'
+          '    };\n'
+          '    _own(() => config.go(shown));\n',
+      '    _own(() => config.go(_guards.start));\n',
+    ),
   ],
 );
 
@@ -390,6 +490,87 @@ List<BrokenProvider> brokenProviders() => const [
             _walkTest,
             'Each location shows the screen of its route, or the screen that '
                 'the app starts on if it is in a flow that is over.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _goRouterDroppingItsNotFoundScreen,
+        role: routerRole,
+        bug: 'It shows the error page of go_router, in English, for a '
+            'location from the platform that it cannot show, rather than the '
+            'not-found screen of the router role.',
+        app: [
+          FakeFeatureModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_not_found_test.dart',
+            _notFoundTest,
+            'For a location from the platform that no route matches, the '
+                'router shows the not-found screen of the router role.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _goRouterDroppingUnknownLinks,
+        role: routerRole,
+        bug: 'It stays where it is for a location from the platform that no '
+            'route matches, rather than show the not-found screen of the '
+            'router role, though it shows a location of a route from the '
+            'platform.',
+        app: [
+          FakeFeatureModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_not_found_test.dart',
+            _notFoundTest,
+            'A router that shows a location of a route from the platform '
+                'shows the not-found screen for one that no route matches.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerGoingToStartPastGuards,
+        role: routerRole,
+        bug: 'Its goToStart() shows the screen that the app starts on without '
+            'asking the guards of the routes, so a gate that does not allow '
+            'keeps the user from nothing there.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'goToStart() while a guard does not allow shows the target of the '
+                'guard.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _goRouterGoingToStartPastGuards,
+        role: routerRole,
+        bug: 'Its goToStart() shows the screen that the app starts on without '
+            'asking the guards of the routes, so a gate that does not allow '
+            'keeps the user from nothing there.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'goToStart() while a guard does not allow shows the target of the '
+                'guard.',
           ),
         ],
       ),
@@ -1466,6 +1647,24 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        _appEntryRunningRootAfterFailedStart,
+        role: appEntryRole,
+        bug: 'Its main() shows the screen of a failed start when bootstrap() '
+            'throws, and then runs the root of the app over it, with the '
+            'services that the start-up did not set up.',
+        // The fixture whose start-up fails when the test says so.
+        app: [FakeStartFailureModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/failed_start/failed_start_test.dart',
+            'a start-up that throws shows the screen of a failed start in '
+                'place of the app, and reports the error once',
+            'A failed start shows the screen of the failed start, and main() '
+                'runs no root of the app over it.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         _splashWithAndroidMinSdk,
         role: splashRole,
         bug: 'Its configuration sets android_min_sdk, so the tool leaves the '
@@ -1788,6 +1987,25 @@ List<BrokenProvider> brokenProviders() => const [
             'FAKE_ENV_USER_SECOND is empty in .env, so '
                 'AppEnv.fakeEnvUserSecond is null: an empty value counts as '
                 'missing.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenEnvNeverSuppliedModule(),
+        role: envRole,
+        bug: 'Its AppEnv.supplied asks whether the command that built the app '
+            'declared the names of the getters of the keys rather than the '
+            'keys, so it is false in every build, also one with the tool '
+            'arguments of the role, and a release build of the app stops.',
+        // The module that reads values of .env, so that the app has keys.
+        app: [FakeEnvUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/env_role/env_role_test.dart',
+            'AppEnv.supplied is true in a build whose command had the tool '
+                'arguments of the provider, while .env has a line of a key of '
+                'the app',
+            '.env has a line of a key of the app, so AppEnv.supplied is true',
           ),
         ],
       ),
@@ -2236,6 +2454,12 @@ const _restSessionTests = 'test/rest_session/session_token_test.dart';
 
 /// The name of the test of the probe of the REST role, and its reason.
 const _restProbeTest = 'the probe of the role finds no problem';
+
+/// The test of the not-found screen of the router role and of goToStart().
+const _notFoundTest =
+    'goToStart() shows the screen that the app starts on, and the not-found '
+    'screen of the router role shows for a location that the router cannot '
+    'show, in the language of the app, and leads there';
 const _restProbe =
     'The stack of a provider reaches a server on the device, stops an '
     'exchange, and fails as a connection fails for a closed port and for a '

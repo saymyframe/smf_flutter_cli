@@ -95,6 +95,26 @@ final class _FixtureDelegate extends RouterDelegate<Object>
   /// `null` before the first screen; see [_top].
   (int, AppLocation?)? _shown;
 
+  /// Shows [location] in place of the whole stack and of the stacks of
+  /// every branch of the main navigation, each of which is back on its
+  /// destination; `null` is the fallback screen. The push of each page that
+  /// leaves completes with `null`, so [location] is no page that a push
+  /// showed, as the target of a guard is that was open over a page.
+  void _go(AppLocation? location) {
+    for (final result in _results.values) {
+      result.complete(null);
+    }
+    _results.clear();
+    _stack.clear();
+    for (final (index, branch) in _branches.indexed) {
+      branch
+        ..clear()
+        ..add(_destinations[index]);
+    }
+    if (location != null) _show(location);
+    notifyListeners();
+  }
+
 {{#guards}}  /// The guards of the app as the router asks them, which keep the location
   /// that the user comes back to once they allow it. The router knows a
   /// location as an [AppLocation], and the fallback screen, which has none,
@@ -128,26 +148,6 @@ final class _FixtureDelegate extends RouterDelegate<Object>
             ),
         if (_overFallback) (route: null, location: null, pushed: false),
       ];
-
-  /// Shows [location] in place of the whole stack and of the stacks of
-  /// every branch of the main navigation, each of which is back on its
-  /// destination; `null` is the fallback screen. The push of each page that
-  /// leaves completes with `null`, so [location] is no page that a push
-  /// showed, as the target of a guard is that was open over a page.
-  void _go(AppLocation? location) {
-    for (final result in _results.values) {
-      result.complete(null);
-    }
-    _results.clear();
-    _stack.clear();
-    for (final (index, branch) in _branches.indexed) {
-      branch
-        ..clear()
-        ..add(_destinations[index]);
-    }
-    if (location != null) _show(location);
-    notifyListeners();
-  }
 
   /// What the guards answer for [location], which [go], [push] or [replace]
   /// is asked to show on top of the pages of the router.
@@ -470,6 +470,25 @@ final class _FixtureDelegate extends RouterDelegate<Object>
     _results[location] = result;
     notifyListeners();
     return result.future.then((value) => value as T?);
+  }
+
+  /// Shows the screen that the app starts on in place of the stack, as
+  /// [_go] does: its start route, or the fallback screen.{{#guards}} That
+  /// screen asks for no condition and is in no flow, so the guards let the
+  /// user see it, or answer the target of a gate, which shows in its
+  /// place.{{/guards}}
+  @override
+  void goToStart() {
+    {{#guards}}final start = _guards.start;
+    if (_guards.asked(
+      start?.routeName,
+      start,
+      onTopOf: [for (final page in _pages) page.route],
+    )
+        case ShowInstead(:final location)) {
+      return _go(location);
+    }
+    {{/guards}}_go(<AppLocation>[{{{start}}}].firstOrNull);
   }
 
   @override

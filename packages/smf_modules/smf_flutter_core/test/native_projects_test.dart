@@ -284,6 +284,30 @@ void main() {
           'FlutterImplicitEngineBridge) {\n'
           '    GeneratedPluginRegistrant.register(with: '
           'engineBridge.pluginRegistry)\n'
+          '    FlutterMethodChannel(',
+        ),
+      );
+    });
+
+    test(
+        'run the code of the modules that needs the engine of the iOS app '
+        'once the plugins are registered', () {
+      const engine = 'func didInitializeImplicitFlutterEngine(_ engineBridge: '
+          'FlutterImplicitEngineBridge) {\n'
+          '    GeneratedPluginRegistrant.register(with: '
+          'engineBridge.pluginRegistry)\n';
+
+      // As flutter create writes it.
+      expect(alone[appDelegate], contains('$engine  }\n'));
+      expect(
+        every[appDelegate],
+        contains(
+          '$engine'
+          '    FlutterMethodChannel(\n'
+          '      name: "every_socket",\n'
+          '      binaryMessenger: '
+          'engineBridge.applicationRegistrar.messenger()\n'
+          '    ).setMethodCallHandler { _, result in result(nil) }\n'
           '  }\n',
         ),
       );

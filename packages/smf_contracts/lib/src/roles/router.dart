@@ -27,7 +27,12 @@ const routerRole = RouterRole._();
 ///   the stack the route's chain of parents (see [FacadeRoute.chain]),
 ///   `push<T>()` shows the route on top and completes with its result, and
 ///   `replace()` replaces the top of the stack. Every route has a location
-///   class, such as `HomeDetailsLocation`, which providers match on.
+///   class, such as `HomeDetailsLocation`, which providers match on;
+/// - `lib/core/router/not_found_screen.dart`: [notFoundScreen], the screen
+///   of a location that the router cannot show. Its title and its button
+///   are the texts [notFoundTitle] and [notFoundAction], in the language of
+///   the app, which the template gives the localization role, a role that
+///   this role uses. The button shows the screen that the app starts on.
 ///
 /// A provider renders the routes from [facadeOf], so it agrees with the
 /// facade on every path and name. It:
@@ -65,6 +70,17 @@ const routerRole = RouterRole._();
 ///   it over that screen and completes with the value of its page; or,
 ///   when the provider has no page there to push over, in place of that
 ///   screen, as `go()` does, and completes with `null` at once;
+/// - shows [notFoundScreen], created as `const NotFoundScreen()`, as the
+///   page of its error screen, for each location from the platform that it
+///   cannot show: one that no route matches, and one without a value that
+///   its route requires. A router that takes no location from the platform
+///   has no such location;
+/// - implements `AppNavigator.goToStart()`, which shows the screen that the
+///   app starts on as `go()` shows a location: the route of [startIn], or
+///   the fallback screen of the app entry where [noStartRoute] holds. It
+///   asks the guards of the routes about that screen as `go()` asks about a
+///   location, so while a gate does not allow, the target of the gate
+///   shows instead;
 /// - calls every factory of [observers] for each navigator it creates;
 /// - calls the listeners of [screenListeners] each time the screen the user
 ///   sees changes, each on its own, so that a listener that throws keeps no
@@ -122,6 +138,45 @@ final class RouterRole extends Role<RoutesData> {
     'createAppRouter',
     path: appRouterFactoryFile,
     returnType: 'AppRouter',
+  );
+
+  /// The path of the file of [notFoundScreen], which the role's template
+  /// generates in every app with the role.
+  static const notFoundScreenFile = 'lib/core/router/not_found_screen.dart';
+
+  /// `NotFoundScreen`, the screen of a location that the router cannot
+  /// show, which a provider creates as `const NotFoundScreen()`.
+  ///
+  /// The developer of the app changes its look in its file, and keeps its
+  /// `const` constructor without arguments, so every router shows the same
+  /// screen.
+  static const notFoundScreen = RequiredClass(
+    'NotFoundScreen',
+    path: notFoundScreenFile,
+    constConstructor: true,
+  );
+
+  /// The title of [notFoundScreen], which the template gives the
+  /// localization role as a text of its own.
+  ///
+  /// The template gives the two texts of the screen in every app with a
+  /// router, and the localization role takes the languages of an app from
+  /// its texts. So an app with a router and the localization role is in
+  /// Ukrainian too, even when no module of it has a Ukrainian text, unless
+  /// `--locales` names its languages.
+  static const notFoundTitle = LocalizedText(
+    'notFoundTitle',
+    en: 'Page not found',
+    translations: {'uk': 'Сторінку не знайдено'},
+  );
+
+  /// The label of the button of [notFoundScreen], which shows the screen
+  /// that the app starts on. The template gives the localization role this
+  /// text as one of its own too.
+  static const notFoundAction = LocalizedText(
+    'notFoundAction',
+    en: 'Go to the start screen',
+    translations: {'uk': 'На стартовий екран'},
   );
 
   /// The name of the list of the guards of an app with guards, which the
@@ -657,7 +712,7 @@ final class RouterRole extends Role<RoutesData> {
   RoleCardinality get cardinality => RoleCardinality.atMostOne;
 
   @override
-  Set<Role> get uses => {layoutRole};
+  Set<Role> get uses => {layoutRole, localizationRole};
 
   @override
   List<SocketRef> get sockets => const [observers, screenListeners];
@@ -668,8 +723,8 @@ final class RouterRole extends Role<RoutesData> {
 
   @override
   RoleInterface get interface => const RoleInterface(
-        files: [appRouterFile, navigationFile],
-        symbols: [createAppRouter],
+        files: [appRouterFile, navigationFile, notFoundScreenFile],
+        symbols: [createAppRouter, notFoundScreen],
       );
 
   @override

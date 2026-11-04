@@ -23,16 +23,23 @@ lib/main.dart
 test/core/app/fallback_start_screen_test.dart
 ```
 
-The template of the app entry role adds two more files, whichever module provides the role: `lib/core/app/status_bar_icons.dart`, the widget that asks the system for the icons of the status bar that suit the theme, and its widget test, `test/core/app/status_bar_icons_test.dart`.
+The template of the app entry role adds three more files, whichever module provides the role: `lib/core/app/status_bar_icons.dart`, the widget that asks the system for the icons of the status bar that suit the theme, its widget test, `test/core/app/status_bar_icons_test.dart`, and `lib/core/app/failed_start.dart`, the screen that the app shows when its start-up fails.
 
 An app with this module alone starts on the fallback start screen. For `my_app` it shows a cell with the symbol `Ma` and the number `5`, both made from the name of the app. Below the cell are `My App`, a hint that the app has no start screen yet, and the path of the file of the screen, which a tap copies. Add a feature whose route can start the app, such as `home`, and the app starts there instead. It then has no fallback start screen and no test of it.
 
-`main()` runs `bootstrap()` before the first frame. Other modules put their start-up code into `bootstrap()`, such as the start of Firebase, and their wrappers around the root widget, such as the `ProviderScope` of Riverpod:
+`main()` runs `bootstrap()` before the first frame. Other modules put their start-up code into `bootstrap()`, such as the start of Firebase, and their wrappers around the root widget, such as the `ProviderScope` of Riverpod. When `bootstrap()` throws, `main()` shows the screen of a failed start in place of the splash screen, with the error in a debug build:
 
 ```dart
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await bootstrap();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    // The app shows why it could not start, in place of a splash screen
+    // that would stay.
+    showFailedStart(error, stackTrace);
+    return;
+  }
   runApp(const App());
 }
 ```

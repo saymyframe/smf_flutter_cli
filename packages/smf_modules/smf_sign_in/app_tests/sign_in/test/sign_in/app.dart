@@ -217,12 +217,14 @@ Future<void> inRealTime(
 /// waits for its first screen.
 ///
 /// main() runs in real time, so a start-up that waits for a timer or for
-/// input and output, as that of a module may, does not keep the fake time
-/// of the test waiting forever. An error of main() fails the test. The
-/// handlers of errors that the start-up installs, such as those of crash
-/// reporting, and the builder of the widget of an error go back to those
-/// of the test once main() returns, so that flutter_test reports the
-/// errors of the frames that follow, such as a widget that does not fit.
+/// input and output, as that of a module may, does not keep the fake time of
+/// the test waiting forever. An error of main() fails the test. An error of
+/// bootstrap() reaches FlutterError.onError through main(), which fails the
+/// test too. The handlers of errors that the start-up installs, such as
+/// those of crash reporting, and the builder of the widget of an error go
+/// back to those of the test once main() returns, so that flutter_test
+/// reports the errors of the frames that follow, such as a widget that does
+/// not fit.
 ///
 /// A test file starts the app once: the start-up of an app may not run
 /// twice, and the entrance of a page of the sign-in counts the time from
@@ -343,24 +345,39 @@ Future<void> fill(
 }
 
 /// Taps [target], which starts a call of the module that provides the
-/// sign-in, in real time, and waits there until [holds], for three seconds
-/// at most, with a frame after each wait: the platform side of that module
-/// may answer in real time. Then the screen settles, unless [settle] is
-/// `false`, for a screen whose button may still spin. A test expects what
-/// [holds] says, with its reason.
+/// sign-in, in real time, and waits in real time until [until], for three
+/// seconds at most, with a frame after each wait: the platform side of that
+/// module may answer in real time. Then the screen settles, unless [settle]
+/// is `false`, for a screen whose button may still spin. A test expects what
+/// [until] says, with its reason.
+///
+/// The frames are shown in the fake time of the test, outside the real
+/// time of the tap and of the waits. A frame in real time would start the
+/// transitions of the navigator there, such as that of the screen that the
+/// router shows once the user has signed in, and the future that tells the
+/// navigator that a transition is over would complete in real time too.
+/// The fake time of the test never runs it, so the navigator would keep the
+/// page that the router took away, below the new one, until the next wait
+/// in real time: as if the router had left the sign-in below the app.
 Future<void> tapInRealTime(
   WidgetTester tester,
   Finder target, {
   required bool Function() until,
   bool settle = true,
 }) async {
-  await inRealTime(tester, 'a tap that starts a call of sign-in', () async {
-    await tester.tap(target);
-    for (var turn = 0; turn < 300 && !until(); turn++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      await tester.pump();
-    }
-  });
+  await inRealTime(
+    tester,
+    'a tap that starts a call of sign-in',
+    () => tester.tap(target),
+  );
+  for (var turn = 0; turn < 300 && !until(); turn++) {
+    await inRealTime(
+      tester,
+      'a wait for a call of sign-in',
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
+  }
   if (settle) await tester.pumpAndSettle();
 }
 

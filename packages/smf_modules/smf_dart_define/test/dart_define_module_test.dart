@@ -51,6 +51,14 @@ const _feed = KeysModule(
   requiresEnv: false,
 );
 
+/// A module with two keys of short names, whose `bool.hasEnvironment` fit on
+/// one line, but not after the start of the declaration of
+/// `AppEnv.supplied`.
+const _pair = KeysModule('pair', [
+  EnvKey('PAIR_A', description: 'The first value of the pair'),
+  EnvKey('PAIR_B', description: 'The second value of the pair'),
+]);
+
 /// The modules of the tests: flutter_core, which creates the app, this
 /// module, and two modules with keys.
 const List<SmfModule> _modules = [
@@ -61,6 +69,17 @@ const List<SmfModule> _modules = [
 ];
 
 const _module = ModuleOrigin(DartDefineModule.id);
+
+/// The template of the env role, whose check reads `AppEnv.supplied`.
+const _template = RoleTemplateOrigin(envRole);
+
+/// A program that imports the check of the env role, which `bootstrap()`
+/// calls in its first phase, and calls it as `bootstrap()` does, with `print`.
+const _bootstrap = '''
+import 'package:contract_app/core/env/env_check.dart';
+
+void main() => checkEnvValues(print);
+''';
 
 /// The paths of the run configurations of the IDEs, which the template of the
 /// role writes.
@@ -207,14 +226,15 @@ void main() {
       ];
       expect(withModule, hasLength(3));
       for (final result in withModule) {
-        final app = DartApp.write(result.app!);
+        final app = DartApp.write(result.app!, {
+          _module,
+          _template,
+          ModuleOrigin(_shop.id),
+          ModuleOrigin(_feed.id),
+        });
         addTearDown(app.delete);
         expect(
-          await app.analysisProblems({
-            _module,
-            ModuleOrigin(_shop.id),
-            ModuleOrigin(_feed.id),
-          }),
+          await app.analysisProblems(),
           isEmpty,
           reason: '${result.contractCase}',
         );
@@ -237,18 +257,40 @@ void main() {
 
   group('AppEnv', () {
     test(
-        'has no member in an app without keys, so it has no helper that '
-        'nothing uses', () async {
+        'has only supplied, true, in an app without keys, so it has no helper '
+        'that nothing uses, and tells how to name the first key there',
+        () async {
       final result = await _rendered(const [DartDefineModule.id]);
       final file = result.app!.files[EnvRole.readerFile]!;
 
       expect(envRole.keysIn(envRole.hookInput(result.hook!)), isEmpty);
       expect(file.owner, _module);
-      expect(file.text, endsWith('\nabstract final class AppEnv {\n}\n'));
+      expect(
+        file.text,
+        endsWith(
+          '\nabstract final class AppEnv {\n'
+          '  /// Whether the command that built the app gave it the values of '
+          '`.env`:\n'
+          '  /// `true`, since the app reads no key yet. With the first key of '
+          'your own,\n'
+          "  /// make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key, "
+          'so that\n'
+          '  /// a release build without `--dart-define-from-file=.env` '
+          'stops.\n'
+          '  static const bool supplied = true;\n'
+          '}\n',
+        ),
+      );
       final appEnv = DartFileIndexer.index(EnvRole.readerFile, file.text)
           .declaration(EnvRole.appEnv.name)!;
       expect(appEnv.kind, DeclarationKind.classType);
-      expect(appEnv.members, isEmpty);
+      expect(
+        [
+          for (final member in appEnv.members)
+            (member.name, member.kind, member.isStatic),
+        ],
+        [('supplied', MemberKind.field, true)],
+      );
       expect(appEnv.constructors, isEmpty);
     });
 
@@ -268,6 +310,7 @@ void main() {
             (member.name, member.kind, member.isStatic),
         ],
         [
+          ('supplied', MemberKind.field, true),
           for (final key in keys) (key.getter, MemberKind.getter, true),
         ],
       );
@@ -290,6 +333,20 @@ void main() {
         text,
         contains(
           'abstract final class AppEnv {\n'
+          '  /// Whether the command that built the app gave it the values of '
+          '`.env`:\n'
+          '  /// `--dart-define-from-file=.env` declares each key that `.env` '
+          'has a line\n'
+          '  /// of, also with an empty value, and this is `true` once it '
+          'declared one\n'
+          '  /// of the keys below. A key of your own needs no change here.\n'
+          '  static const bool supplied =\n'
+          "      bool.hasEnvironment('SHOP_APPLE_KEY') ||\n"
+          "      bool.hasEnvironment('SHOP_TERMS_URL') ||\n"
+          "      bool.hasEnvironment('SHOP_BANNER_TEXT') ||\n"
+          "      bool.hasEnvironment('SHOP_CODE_TEXT') ||\n"
+          "      bool.hasEnvironment('FEED_URL');\n"
+          '\n'
           '  /// The public key of the App Store app of the shop (appl_…).\n'
           '  static String? get shopAppleKey {\n'
           "    const value = String.fromEnvironment('SHOP_APPLE_KEY');\n"
@@ -336,7 +393,7 @@ void main() {
         'a key that it gives an empty value or none, as it does for KEY= '
         'and for a key that .env lacks', () async {
       final result = await _rendered([_shop.id, _feed.id]);
-      final app = DartApp.write(result.app!);
+      final app = DartApp.write(result.app!, {_module});
       addTearDown(app.delete);
 
       final printed = await app.run(
@@ -362,6 +419,106 @@ void main() => print(
       );
 
       expect(jsonDecode(printed), ['appl_123', null, 'Ціни # без змін', null]);
+    });
+  });
+
+  group('a release build', () {
+    test(
+        'stops in the check of the role without the values, with the text of '
+        'the role, which names the argument of the module', () async {
+      final result = await _rendered([_shop.id, _feed.id]);
+      final app = DartApp.write(result.app!, {_template});
+      addTearDown(app.delete);
+
+      final built = await app.compile(_bootstrap);
+
+      expect(built.compiled, isFalse);
+      expect(
+        built.output,
+        contains(
+          compilerQuoteOf(EnvRole.releaseErrorOf(_toolArgumentsOf(result))),
+        ),
+      );
+      expect(
+        EnvRole.releaseErrorOf(_toolArgumentsOf(result)),
+        contains('build it with --dart-define-from-file=.env,'),
+      );
+    });
+
+    test(
+        'builds with what the argument declares for the lines of .env: every '
+        'key, also with an empty value, or only one of them', () async {
+      final result = await _rendered([_shop.id, _feed.id]);
+      final app = DartApp.write(result.app!, {_template});
+      addTearDown(app.delete);
+      final lines = [
+        for (final line in const LineSplitter()
+            .convert(result.app!.files[EnvRole.dotEnvFile]!.text))
+          if (RegExp('^([A-Z0-9_]+)=').firstMatch(line) case final key?)
+            key[1]!,
+      ];
+      expect(lines, hasLength(5));
+
+      for (final defines in [
+        {for (final key in lines) key: ''},
+        {'FEED_URL': 'https://feed.example'},
+      ]) {
+        final built = await app.compile(_bootstrap, defines);
+        expect(built.compiled, isTrue, reason: '$defines: ${built.output}');
+      }
+    });
+
+    test('builds an app without keys, which has nothing to check', () async {
+      final result = await _rendered(const [DartDefineModule.id]);
+      final app = DartApp.write(result.app!, {_template});
+      addTearDown(app.delete);
+
+      final built = await app.compile(_bootstrap);
+
+      expect(built.compiled, isTrue, reason: built.output);
+    });
+
+    test(
+        'has AppEnv.supplied false without the argument and true with it, '
+        'once it declared a key of the app', () async {
+      final result = await _rendered([_shop.id, _feed.id]);
+      final app = DartApp.write(result.app!, {_module});
+      addTearDown(app.delete);
+      const script = '''
+import 'package:contract_app/core/env/app_env.dart';
+
+void main() => print(AppEnv.supplied);
+''';
+
+      expect(await app.run(script, const {}), 'false\n');
+      expect(await app.run(script, const {'FEED_URL': ''}), 'true\n');
+      expect(await app.run(script, const {'OTHER_KEY': 'x'}), 'false\n');
+    });
+
+    test(
+        'has AppEnv written as dart format writes it, for no key, one key, '
+        'two short keys and many', () async {
+      final harness = ContractHarness(ModuleRegistry([..._modules, _pair]));
+      for (final modules in [
+        const [DartDefineModule.id],
+        [_feed.id, DartDefineModule.id],
+        [_pair.id],
+        [_shop.id, _feed.id],
+      ]) {
+        final result = await harness.check(
+          ContractCase(modules.join(', '), requested: modules),
+        );
+        final file = File(
+          '${Directory.systemTemp.createTempSync('smf_dart_define_').path}'
+          '/app_env.dart',
+        )..writeAsStringSync(result.app!.files[EnvRole.readerFile]!.text);
+        addTearDown(() => file.parent.deleteSync(recursive: true));
+        final format = await Process.run(
+          Platform.resolvedExecutable,
+          ['format', '--output=none', '--set-exit-if-changed', file.path],
+        );
+        expect(format.exitCode, 0, reason: '$modules: ${format.stdout}');
+      }
     });
   });
 
@@ -498,18 +655,28 @@ void main() => print(
 
     test(
         'names the file of the app that reads the values, the class through '
-        'which code reads a value, and no run configuration, which the section '
-        'of the role names', () {
+        'which code reads a value, the configuration that Xcode takes the '
+        'values from, and no run configuration, which the section of the role '
+        'names', () {
       final paths = {
         for (final code in _inlineCodeOf(section))
           if (code.contains('/')) code,
       };
 
-      expect(paths, {EnvRole.readerFile});
-      for (final path in paths) {
-        expect(result.app!.files, contains(path));
-      }
+      // The flutter tool writes the configuration of Xcode, which no brick
+      // generates.
+      const xcode = 'ios/Flutter/Generated.xcconfig';
+      expect(paths, {EnvRole.readerFile, xcode});
+      expect(result.app!.files, contains(EnvRole.readerFile));
       expect(_inlineCodeOf(section), contains(EnvRole.appEnv.name));
+      expect(
+        _inlineCodeOf(section),
+        contains(
+          'flutter build ios --config-only --flavor '
+          '${AppEntryRole.releaseFlavor.name} '
+          '${_toolArgumentsOf(result).single}',
+        ),
+      );
     });
 
     test('shows the getter of a new key as the module writes the getters', () {
@@ -587,6 +754,9 @@ void main() => print(
         EnvRole.readerFile,
         "const String.fromEnvironment('MY_SERVICE_KEY')",
         'MY_SERVICE_KEY',
+        'AppEnv.supplied',
+        'true',
+        "bool.hasEnvironment('MY_SERVICE_KEY')",
       });
       expect(app.files, contains(EnvRole.readerFile));
       final index = DartFileIndexer.index(

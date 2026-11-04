@@ -9,6 +9,32 @@ import 'package:analyzer/diagnostic/diagnostic.dart';
 
 import 'support.dart';
 
+/// [text], the value of a constant that the compiler cannot evaluate, as
+/// `dart compile` and the compiler of a release build of Flutter quote it in
+/// their error: in double quotes, with each backslash doubled and each double
+/// quote and control character escaped.
+///
+/// The same as `compilerQuoteOf` of `package:smf_pipeline/testing.dart`,
+/// whose tests hold it to the compiler: this package cannot depend on the
+/// pipeline.
+String compilerQuoteOf(String text) {
+  final escaped = text.replaceAllMapped(
+    RegExp(r'[\\"\x00-\x1f]'),
+    (match) => switch (match[0]!) {
+      r'\' => r'\\',
+      '"' => r'\"',
+      '\n' => r'\n',
+      '\r' => r'\r',
+      '\t' => r'\t',
+      '\b' => r'\b',
+      '\f' => r'\f',
+      final control =>
+        '\\u${control.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}',
+    },
+  );
+  return '"$escaped"';
+}
+
 /// A stand-in for the part of Flutter's foundation library that the
 /// templates of the roles use, with the signatures of Flutter 3.44: the app
 /// runs in debug mode, and what it prints goes to `debugPrinted`.
@@ -403,6 +429,45 @@ final class DartFiles {
       errors.close();
       exits.close();
     }
+  }
+
+  /// Compiles [script], a Dart program that imports the files by the package
+  /// of the test app, to kernel with `dart compile kernel`, which evaluates
+  /// the constants of the program as a release build does: it declares
+  /// `dart.vm.product`, and each of [defines] as `-D<key>=<value>`. Returns
+  /// whether it compiled, and what the compiler printed.
+  Future<({bool compiled, String output})> compile(
+    String script, {
+    Map<String, String> defines = const {},
+  }) async {
+    final file = File('${_root.path}/compiled.dart')..writeAsStringSync(script);
+    final result = await Process.run(
+      Platform.resolvedExecutable,
+      [
+        'compile',
+        'kernel',
+        '--packages=$_appPath/.dart_tool/package_config.json',
+        for (final MapEntry(:key, :value) in defines.entries) '-D$key=$value',
+        '-o',
+        '${_root.path}/compiled.dill',
+        file.path,
+      ],
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    );
+    return (
+      compiled: result.exitCode == 0,
+      output: '${result.stdout}${result.stderr}',
+    );
+  }
+
+  /// Whether `dart format` leaves the file at [path] of the app as it is.
+  Future<bool> isFormatted(String path) async {
+    final result = await Process.run(
+      Platform.resolvedExecutable,
+      ['format', '--output=none', '--set-exit-if-changed', '$_appPath/$path'],
+    );
+    return result.exitCode == 0;
   }
 
   /// Deletes the directory of the files.

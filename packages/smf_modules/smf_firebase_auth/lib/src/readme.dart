@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_firebase_auth/src/enable_sign_in.dart';
+import 'package:smf_firebase_auth/src/url_schemes.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 
 /// The heading of the section of the module in the README of the app.
@@ -74,8 +75,10 @@ When an anonymous user signs in to an account that exists already, the anonymous
 /// What the README tells of the way to sign in of Google, if [google], and
 /// of what the script sets up in the project and in the app for [needs],
 /// which it does only for the apps that `firebase.json` names in the project
-/// of the run, and of the keys of a release for the certificate of the Android
-/// app, which the section of the steps by hand lists (see
+/// of the run, of [urlSchemesHook] for the client of the iOS app, which
+/// writes the URL schemes of the iOS apps of every project after every run
+/// of flutterfire, and of the keys of a release for the certificate of the
+/// Android app, which the section of the steps by hand lists (see
 /// `FirebaseAuthModule.googleReleaseShaStep`).
 String _googleOf(bool google, Set<SignInNeed> needs) {
   const brand = '''
@@ -92,13 +95,8 @@ For Google sign-in, the script also gives Google the name of the app and the ema
   const files = 'It downloads the Firebase files of those apps again, once '
       'they have the clients of Google, and writes them to the paths that '
       '`firebase.json` names.';
-  const scheme = 'It writes the URL scheme of each of those iOS apps, '
-      '`REVERSED_CLIENT_ID` of its `GoogleService-Info.plist`, into '
-      '`CFBundleURLTypes` of `ios/Runner/Info.plist`. The flavors share that '
-      'file, so it lists a scheme for each iOS app that the script ran for, '
-      'in the build of every flavor. It adds a scheme and removes none: after '
-      'a flavor moves to another project, remove the scheme of the former '
-      'project there by hand.';
+  const scheme = 'Then it runs `$urlSchemesHook`, which writes the URL '
+      'schemes of the iOS apps (see below).';
   final steps = [
     if (needs.contains(SignInNeed.androidCertificate)) debugKey,
     if (needs.contains(SignInNeed.serverClient) ||
@@ -126,9 +124,18 @@ firebase apps:android:sha:create <appId> <sha> --project=<id>
 
 The section ${AppEntryRole.setupHeading} lists this among the steps that you do by hand.
 ''';
+  const urlSchemes = '''
+
+The Google Sign-In SDK stops an iOS app whose `ios/Runner/Info.plist` lacks the URL scheme of its client of Google. `$urlSchemesHook` writes that scheme, `REVERSED_CLIENT_ID` of the `GoogleService-Info.plist`, into `CFBundleURLTypes` there for each iOS app that `firebase.json` names. `dart ${FirebaseCoreModule.configureScript}` runs it each time it configures a flavor, and the script above runs it once it has downloaded the Firebase files. A `GoogleService-Info.plist` has that client only once Google is enabled in its project. Until then, `$urlSchemesHookName` writes no scheme for that app and prints the command that enables Google. The flavors share `ios/Runner/Info.plist`, so it holds a scheme for each iOS app, in the build of every flavor. The script adds schemes and removes none: after a flavor moves to another project, remove the scheme of the former project there by hand. If you change a `GoogleService-Info.plist` some other way, run it yourself:
+
+```bash
+$urlSchemesCommand
+```
+''';
   return [
     if (google) brand,
     setup,
+    if (needs.contains(SignInNeed.iosClient)) urlSchemes,
     if (needs.contains(SignInNeed.androidCertificate)) release,
   ].join();
 }

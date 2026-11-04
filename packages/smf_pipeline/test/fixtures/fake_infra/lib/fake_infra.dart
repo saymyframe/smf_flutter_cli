@@ -25,6 +25,7 @@ import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_sign_in_method_bundle.dart';
 import 'package:fake_infra/bundles/fake_slow_start_bundle.dart';
 import 'package:fake_infra/bundles/fake_sockets_bundle.dart';
+import 'package:fake_infra/bundles/fake_start_failure_bundle.dart';
 import 'package:fake_infra/bundles/fake_steps_bundle.dart';
 import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
@@ -610,6 +611,46 @@ final class FakeSlowStartModule extends SmfModule {
       ];
 }
 
+/// A module whose start-up fails when a test says so, after the rest of the
+/// start-up, with an error of its own after an asynchronous gap, as a
+/// plugin that fails to start does. Otherwise it returns at once, so it
+/// leaves no timer to the tests of the other modules.
+///
+/// It provides, requires and uses no role. Its code runs last in the late
+/// phase of `bootstrap()` when the registry lists it last, after crash
+/// reporting has started, so the test of a failed start sees the error
+/// reach the handlers that the start-up set up too.
+final class FakeStartFailureModule extends SmfModule {
+  /// Creates the module.
+  const FakeStartFailureModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_start_failure');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A start-up that fails when a test says so (fixture)',
+        kind: ModuleKinds.infrastructure,
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeStartFailureBundle),
+        const SocketContribution.code(
+          AppEntryRole.bootstrapLate,
+          Fragment(
+            'await startFixtureOrFail();',
+            imports: [
+              ImportRef.app(
+                'core/fixture_start_failure/fixture_start_failure.dart',
+              ),
+            ],
+          ),
+        ),
+      ];
+}
+
 /// A provider of the events role, which has at most one provider, whose
 /// channel opens asynchronously.
 final class FakeEventsModule extends SmfModule {
@@ -1150,11 +1191,13 @@ final class FakePurchasesModule extends SmfModule {
 /// given `--dart-define-from-file .env` (the flag and the path as two
 /// arguments, which it gives the role), and a static getter of each key
 /// returns its value from the map, or `null` while it is empty or missing.
+/// Its `supplied` is `true` once the command declared a key of the app, and
+/// `true` in an app without keys.
 ///
-/// Its render hook writes the getters and the map for the keys of the app,
-/// and an app without keys has the class without members. The template of
-/// the role does the rest, whichever module provides it: `.env`,
-/// `.env.example` and the entry of `.env` in `.gitignore`.
+/// Its render hook writes `supplied`, the getters and the map for the keys of
+/// the app. The template of the role does the rest, whichever module provides
+/// it: `.env`, `.env.example`, the entry of `.env` in `.gitignore` and the
+/// check that stops a release build without the values.
 final class FakeEnvModule extends SmfModule {
   /// Creates the module.
   const FakeEnvModule();
@@ -1196,16 +1239,31 @@ final class _FakeEnvProvider extends RoleProvider<EnvData> {
     return RoleOutput(
       vars: {
         'fixture_env_members': Fragment(
-          keys.isEmpty
-              ? ''
-              : [
-                  for (final key in keys) _getterOf(key),
-                  _valuesOf(keys),
-                  _valueOf,
-                ].join('\n\n'),
+          [
+            _suppliedOf(keys),
+            if (keys.isNotEmpty) ...[
+              for (final key in keys) _getterOf(key),
+              _valuesOf(keys),
+              _valueOf,
+            ],
+          ].join('\n\n'),
         ),
       },
     );
+  }
+
+  /// `supplied` for [keys]: whether the command that built the app declared
+  /// one of them, or `true` without keys, which nothing can tell.
+  static String _suppliedOf(List<AppEnvKey> keys) {
+    final terms = [
+      for (final key in keys)
+        'bool.hasEnvironment(${SmfNames.dartString(key.name)})',
+    ];
+    final value =
+        terms.isEmpty ? ' true' : '\n      ${terms.join(' ||\n      ')}';
+    return '  /// Whether the command that built the app gave it the values of '
+        '`.env`.\n'
+        '  static const bool supplied =$value;';
   }
 
   /// The getter of [key], which reads its value from the map.

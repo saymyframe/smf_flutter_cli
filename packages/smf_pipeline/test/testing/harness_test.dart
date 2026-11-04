@@ -5522,8 +5522,8 @@ final class _FilesProvider extends RoleProvider<NoDsl> {
 }
 
 /// A stand-in for a provider of the env role: its render hook generates
-/// `AppEnv` with a static getter for each key of the app, which is `null`
-/// as for a value that is missing.
+/// `AppEnv` that says that a build has the values, with a static getter for
+/// each key of the app, which is `null` as for a value that is missing.
 final class _EnvProvider extends RoleProvider<EnvData> {
   const _EnvProvider();
 
@@ -5535,6 +5535,7 @@ final class _EnvProvider extends RoleProvider<EnvData> {
         files: {
           EnvRole.readerFile: [
             'abstract final class AppEnv {',
+            '  static const bool supplied = true;',
             for (final key in envRole.keysIn(input)) ...[
               '  /// ${key.description}.',
               '  static String? get ${key.getter} => null;',

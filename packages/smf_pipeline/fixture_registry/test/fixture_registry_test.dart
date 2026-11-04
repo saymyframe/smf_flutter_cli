@@ -1283,6 +1283,10 @@ on request staging
           'fakeSecondOutside: text outside of the module fake_second',
           // The label of the destination of the feature.
           'fakeSecondLabel: text label of the module fake_second',
+          // The texts of the screen of a location that the router cannot
+          // show, which the template of the router role gives the role.
+          for (final name in ['Title', 'Action'])
+            'routerNotFound$name: text notFound$name of $_routerTemplate',
         ],
       );
       // The app is in no language in which Flutter has no texts for its
@@ -1399,6 +1403,10 @@ on request staging
           'fakeSecondOutside',
           'fakeSecondLabel',
           'fakeSecondSetting',
+          // The texts of the screen of a location that the router cannot
+          // show, which the template of the router role gives the role.
+          'routerNotFoundTitle',
+          'routerNotFoundAction',
           // The texts of the setting of the language, which the template
           // of the role gives it in such an app.
           'localizationLanguage',
@@ -1429,10 +1437,13 @@ on request staging
       // setting nor its text.
       final without = await checked(withRole);
       expect(without.app!.files.keys, isNot(contains(setting)));
-      expect(
-        gettersOf(without),
-        ['fakeSecondTitle', 'fakeSecondOutside', 'fakeSecondLabel'],
-      );
+      expect(gettersOf(without), [
+        'fakeSecondTitle',
+        'fakeSecondOutside',
+        'fakeSecondLabel',
+        'routerNotFoundTitle',
+        'routerNotFoundAction',
+      ]);
     });
 
     test(
@@ -2478,7 +2489,13 @@ const _cases = [
   // The app of the fixture texts alone.
   'flutter_core with localization',
   'flutter_core',
+  // Each router with the roles that the router role uses: the app of a
+  // layout with the texts of the app, whose main navigation shows the
+  // labels of the destinations in the language of the app, is that of the
+  // router, which comes before the layout among the fixtures.
+  'fake_router with layout, localization',
   'fake_router with layout',
+  'go_router with layout, localization',
   'go_router with layout',
   'fake_di',
   'get_it',
@@ -2597,8 +2614,8 @@ const _cases = [
   'fake_clock_badge',
   'fake_clock_user with clock, badge',
   'fake_clock_user',
-  'bottom_tabs (fake_router) with localization',
-  'bottom_tabs (go_router) with localization',
+  // The fixture whose start-up fails when a test says so, with no role.
+  'fake_start_failure',
   // The other values of the mode option of the auth role, with the
   // fixture sign-in, which provides it, the first router and the texts of
   // the app, since the role uses the router role and the localization role.
@@ -2613,6 +2630,9 @@ const _cases = [
 /// option have.
 const _authOfModes = 'auth by fake_auth (fake_router) with router, '
     'localization';
+
+/// The template of the router role, as a text of the app names its owner.
+final String _routerTemplate = 'the template of the $routerRole';
 
 /// Whether [text] is a text of the app entry of the fixtures, which every
 /// app has besides the texts of the fixtures.

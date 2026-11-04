@@ -107,8 +107,8 @@ void main() {
     // and the dependency on Flutter first, and the template of the app
     // entry role its brick, its note for coding agents, its widget for the
     // icons of the status bar, the dependencies on Flutter and on flutter_test
-    // of the widget and its test, and the section of the README on the
-    // flavors last.
+    // of the widget and its test, and the sections of the README on the
+    // flavors and on a start-up that fails last.
     expect(
       [for (final c in collection.all) c.applies],
       [
@@ -117,6 +117,7 @@ void main() {
         true,
         true,
         false,
+        true,
         true,
         true,
         true,

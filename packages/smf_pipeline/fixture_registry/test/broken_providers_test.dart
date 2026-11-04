@@ -289,6 +289,8 @@ Future<void> _expectFailuresAmongTests(MatrixFailingApp failing) async {
 /// fake_second have a translation into a language that no app can be in,
 /// and a text without a translation, on purpose.
 const _warningApps = <String, List<String>>{
+  'broken_router_goes_to_start_past_guards': ['router.no_main_navigation'],
+  'broken_go_router_goes_to_start_past_guards': ['router.no_main_navigation'],
   'broken_router_asks_guards_at_start': ['router.no_main_navigation'],
   'broken_router_ignores_guard_changes': ['router.no_main_navigation'],
   'broken_router_keeps_page_on_guarded_replace': [

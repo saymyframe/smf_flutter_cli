@@ -200,8 +200,10 @@ void main() {
         // The app of the provider of the localization alone.
         'flutter_core with localization',
         'flutter_core',
+        // The app of the router with the roles that the router role uses,
+        // whose case comes before that of the layout.
+        'go_router with layout, localization',
         'go_router with layout',
-        'bottom_tabs with localization',
         'inbox with localization',
         'inbox',
         'search',

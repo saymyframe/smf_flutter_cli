@@ -165,8 +165,10 @@ void main() {
       // their modules too. They
       // lack Firebase, whose configuration needs an account, and so
       // Firebase Authentication and Firebase Cloud Messaging, which depend
-      // on it, with their probes, and the push messages, which only Firebase
-      // Cloud Messaging provides.
+      // on it, with their probes, Google sign-in, which requires the auth
+      // role that only Firebase Authentication provides there, with its
+      // probe, and the push messages, which only Firebase Cloud Messaging
+      // provides.
       final list = read(app, startProbesFile);
       expect(
         [
@@ -177,6 +179,7 @@ void main() {
         [
           for (final (index, (name, function)) in [
             if (!withoutExternalSteps) ('firebase_auth', 'probeFirebaseAuth'),
+            if (!withoutExternalSteps) ('google_sign_in', 'probeGoogleSignIn'),
             if (!withoutExternalSteps)
               ('firebase_messaging', 'probeFirebaseMessaging'),
             ('revenuecat', 'probeRevenueCat'),
@@ -226,6 +229,12 @@ void main() {
           read(app, 'integration_test/firebase_auth/probe.dart'),
           contains("import 'package:start_app/core/auth/app_session.dart';"),
         );
+        expect(
+          read(app, 'integration_test/google_sign_in/probe.dart'),
+          contains(
+            "import 'package:start_app/core/google_sign_in/google_sign_in.dart';",
+          ),
+        );
       }
       const status = 'features/onboarding/onboarding_status.dart';
       expect(
@@ -243,12 +252,13 @@ void main() {
         read(app, 'integration_test/shared_preferences/probe.dart'),
         contains("import 'package:start_app/$implementation';"),
       );
-      // The tests of shared_preferences and of Firebase Authentication,
-      // which come with their probes, each need a dev dependency, which the
-      // tool adds with flutter in the app.
+      // The tests of shared_preferences, of Firebase Authentication and of
+      // Google sign-in, which come with their probes, each need a dev
+      // dependency, which the tool adds with flutter in the app.
       final pubAdd = [
         'flutter pub add',
         if (!withoutExternalSteps) 'dev:firebase_auth_platform_interface',
+        if (!withoutExternalSteps) 'dev:google_sign_in_platform_interface',
         'dev:shared_preferences_platform_interface in ',
       ].join(' ');
       final call = calls().single;
