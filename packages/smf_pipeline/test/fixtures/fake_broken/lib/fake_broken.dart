@@ -193,6 +193,32 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fake router whose `goToStart()` shows the screen that the app
+  /// starts on without asking the guards of the routes about it: while a
+  /// gate does not allow, the user comes to that screen rather than to the
+  /// target of the gate.
+  static const routerGoingToStartPastGuards = BrokenModule._(
+    FakeRouterModule(),
+    ModuleId('broken_router_goes_to_start_past_guards'),
+    'A plain navigator that goes to its start past the guards (fixture)',
+    RouterRole.appRouterFactoryFile,
+    [
+      (
+        '    {{#guards}}final start = _guards.start;\n'
+            '    if (_guards.asked(\n'
+            '      start?.routeName,\n'
+            '      start,\n'
+            '      onTopOf: [for (final page in _pages) page.route],\n'
+            '    )\n'
+            '        case ShowInstead(:final location)) {\n'
+            '      return _go(location);\n'
+            '    }\n'
+            '    {{/guards}}_go(<AppLocation>[{{{start}}}].firstOrNull);\n',
+        '    _go(<AppLocation>[{{{start}}}].firstOrNull);\n',
+      ),
+    ],
+  );
+
   /// The fake router that tells the guards of the routes of its pages when
   /// one of them starts or stops allowing, and does not show what they
   /// answer. So the target of a guard stays once the guard allows, and the

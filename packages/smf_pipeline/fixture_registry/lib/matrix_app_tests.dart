@@ -51,10 +51,16 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // configuration of the router, which it creates once, whichever
       // module provides the router: the tests start the app with main()
       // and navigate through the navigation facade of the router role.
+      // And the screen of the role for a location that the router cannot
+      // show, which the router shows as the page of that error screen, in
+      // the language of the app, whose button shows the screen that the
+      // app starts on: the matrix writes the texts of the screen for the
+      // tests in each language of the app, from the data of the router
+      // role and of the localization role, and the cell of the app.
       MatrixAppTest(
         '$appTests/router_screens',
         appliesTo: _hearsScreens,
-        generatedFiles: _locationsFromAnyPageOf,
+        generatedFiles: _routerScreensFilesOf,
         roles: {routerRole},
       ),
       // The listeners of the screen, which the router calls each on its
@@ -886,6 +892,124 @@ Future<void> chooseLanguage(String language) async {}
 Future<void> followDevice() async {}
 ''';
 
+/// The files that the matrix writes for the tests of the screens of [app],
+/// an app of the matrix with a router, whose package is [packageName]: the
+/// file at [locationsFromAnyPageFile], and the file at [notFoundOfAppFile].
+Map<String, String> _routerScreensFilesOf(
+  MatrixApp app,
+  String packageName,
+) =>
+    {
+      ..._locationsFromAnyPageOf(app, packageName),
+      ..._notFoundOfApp(app, packageName),
+    };
+
+/// The path in an app of what the matrix writes for the tests of the screen
+/// of the router role for a location that the router cannot show:
+/// `notFoundLanguages`, the codes of the languages that the tests read the
+/// texts of the screen in, those of the app in their order
+/// ([LocalizationRole.localesIn]), or English alone for an app without the
+/// localization role; `notFoundTexts`, the title of the screen and the label
+/// of its button in each of these languages, by its code; `notFoundCell`,
+/// the symbol and the number of the cell of the app on the screen, which
+/// the template of the router role takes from the name of the app
+/// ([SmfNames.elementSymbolOf] and [SmfNames.elementNumberOf]); and
+/// `chooseLanguage()`, which puts the app into one of these languages and
+/// does nothing in an app without the localization role.
+const notFoundOfAppFile = 'test/not_found_of_app.dart';
+
+/// The file at [notFoundOfAppFile] of [app], an app of the matrix with a
+/// router, whose package is [packageName].
+///
+/// The screen shows a text of the template of the router role in a
+/// language as the template reads it: the text that the template gave the
+/// localization role, in that language or in English where it has no
+/// translation ([LocalizationRole.appTextOf]), and its English text in an
+/// app without that role.
+Map<String, String> _notFoundOfApp(MatrixApp app, String packageName) {
+  final hook = app.hook!;
+  final input = routerRole.hookInput(hook);
+  final localized = hook.presentRoles.contains(localizationRole);
+  final languages = localized
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  String textOf(LocalizedText text, String language) {
+    final given = localizationRole
+        .appTextOf(input, const RoleTemplateOrigin(routerRole), text)
+        ?.text;
+    return SmfNames.dartString(
+      given == null ? text.en : given.textIn(language) ?? given.en,
+    );
+  }
+
+  final texts = StringBuffer();
+  for (final language in languages) {
+    final code = SmfNames.dartString(language);
+    final title = textOf(RouterRole.notFoundTitle, language);
+    final action = textOf(RouterRole.notFoundAction, language);
+    texts.writeln('  $code: (title: $title, action: $action),');
+  }
+  final codes = [
+    for (final language in languages) SmfNames.dartString(language),
+  ].join(', ');
+  // The file of the language of the app, which only an app with the
+  // localization role has.
+  final appLocale = ImportRef.app(
+    LocalizationRole.appLocaleFile.substring('lib/'.length),
+  ).resolveUri(packageName);
+  final directives = [
+    "import 'package:flutter/widgets.dart';",
+    "import '$appLocale';",
+  ]..sort();
+  final imports = localized ? '${directives.join('\n')}\n\n' : '';
+  final symbol = SmfNames.dartString(SmfNames.elementSymbolOf(packageName));
+  final number =
+      SmfNames.dartString('${SmfNames.elementNumberOf(packageName)}');
+  return {
+    notFoundOfAppFile: '''
+// The texts of the screen of the router role for a location that the router
+// cannot show in each language of the app, and the cell of the app on it,
+// which the matrix of SMF writes from the data of the router role and of
+// the localization role of the app for the tests of that screen,
+// router_not_found_test.dart.
+$imports/// The codes of the languages that the tests read the texts of the screen
+/// in: those of the app, in their order, or English alone for an app without
+/// the localization role.
+const List<String> notFoundLanguages = [$codes];
+
+/// The title of the screen and the label of its button in each language of
+/// [notFoundLanguages], by the code of the language.
+const Map<String, ({String title, String action})> notFoundTexts = {
+$texts};
+
+/// The symbol and the number in the cell of the app on the screen.
+const ({String symbol, String number}) notFoundCell = (
+  symbol: $symbol,
+  number: $number,
+);
+${localized ? _withNotFoundLanguages : _withoutNotFoundLanguages}''',
+  };
+}
+
+/// What [notFoundOfAppFile] has in an app with the localization role, to
+/// put the app into a language.
+const _withNotFoundLanguages = '''
+
+/// Puts the app into [language], one of [notFoundLanguages], as a choice of
+/// the user does.
+Future<void> chooseLanguage(String language) =>
+    appLocale.choose(Locale(language));
+''';
+
+/// What [notFoundOfAppFile] has in an app without the localization role,
+/// which is in English, the one language of `notFoundLanguages`.
+const _withoutNotFoundLanguages = '''
+
+/// Does nothing: the app has no localization role, so the screen is in
+/// English, the one language of [notFoundLanguages].
+Future<void> chooseLanguage(String language) async {}
+''';
+
 /// The file of the tests of the screens that the matrix writes for an app
 /// with a router from the routes of the app: `locationsFromAnyPage`, the
 /// locations that a router shows from any page, one of which the tests ask
@@ -980,9 +1104,12 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// are checked with a second provider of the role there. The test of the
 /// onboarding screen role, which the fixture registry keeps, runs there
 /// too, with the onboarding of the CLI, which provides that role, and the
-/// fixture steps. Of the tests that the CLI keeps, only the test of the
-/// purchases of the user of the device is left out: it is for an app
-/// without sign-in, and the app with every module has sign-in.
+/// fixture steps. Of the tests that the CLI keeps, two are left out. The
+/// test of the purchases of the user of the device is for an app without
+/// sign-in, and the app with every module has sign-in. The test of what the
+/// start check makes of the first screen of an app shows the screens itself
+/// and needs no module, so the apps whose only role is the app entry run
+/// it.
 ///
 /// A test of such a role checks that each call of the service of the role
 /// reaches every provider once, whatever the other providers do with it. So
@@ -993,11 +1120,14 @@ const MatrixSelection severalProvidersApps = MatrixSelection(
 /// the platform side of the other fixture providers.
 Future<MatrixAppTests> severalProvidersAppTests() async {
   final appTests = await appTestsDirectoryOf('fixture_registry');
-  final ofDevice = (await purchasesDeviceAppTest()).directory;
+  final leftOut = {
+    (await purchasesDeviceAppTest()).directory,
+    (await startScreenAppTest()).directory,
+  };
   return MatrixAppTests(
     [
       for (final test in (await smfAppTests()).tests)
-        if (test.directory != ofDevice) test,
+        if (!leftOut.contains(test.directory)) test,
       ...await _fixtureMocks(),
       // Each call of the analytics service of the app reaches every
       // analytics service once. A service that fails, or that changes the

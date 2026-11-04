@@ -416,13 +416,16 @@ esac''');
   });
 
   test('fails with the problems that the start check found', () {
-    final result = run(seconds: 30, result: 'failed: main() threw a bug');
+    final result = run(
+      seconds: 30,
+      result: 'failed: the start-up failed: Bad state: a bug',
+    );
 
     expect(result.exitCode, 1);
     expect(
       '${result.stdout}',
-      endsWith('::error::The start check of the app failed: main() threw a '
-          'bug\n'),
+      endsWith('::error::The start check of the app failed: the start-up '
+          'failed: Bad state: a bug\n'),
     );
   });
 
@@ -747,14 +750,14 @@ esac''');
       final result = run(
         seconds: 30,
         mode: 'release',
-        result: 'failed: main() threw a bug',
+        result: 'failed: the start-up failed: Bad state: a bug',
       );
 
       expect(result.exitCode, 1);
       expect(
         '${result.stdout}',
-        endsWith('::error::The start check of the app failed: main() threw a '
-            'bug\n'),
+        endsWith('::error::The start check of the app failed: the start-up '
+            'failed: Bad state: a bug\n'),
       );
     });
 

@@ -101,15 +101,16 @@ const appEntryRole = AppEntryRole._();
 ///
 /// The keyed sockets of the native files, of [gitignoreFile] and of the
 /// README, [mainActivityIntentFilters],
-/// [androidManifestApplicationComponents], [iosAppDelegateLaunch] and both
-/// places of [androidCoreLibraryDesugaring] render complete lines, so their
-/// tags stand alone at the start of a line of their file, like the tags of
-/// [PipelineSockets]. The tag of [iosDeploymentTarget] stands where the
-/// version goes, as in `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The
-/// module rules of the role check these tags in the templates of its
-/// provider, the element of the Android manifest that holds each tag of the
-/// manifest, and the place of the tag of [iosAppDelegateLaunch] in its
-/// method, and its structural rules check that the native files name every
+/// [androidManifestApplicationComponents], [iosAppDelegateLaunch],
+/// [iosAppDelegateEngine] and both places of [androidCoreLibraryDesugaring]
+/// render complete lines, so their tags stand alone at the start of a line
+/// of their file, like the tags of [PipelineSockets]. The tag of
+/// [iosDeploymentTarget] stands where the version goes, as in
+/// `IPHONEOS_DEPLOYMENT_TARGET = {{{tag}}};`. The module rules of the role
+/// check these tags in the templates of its provider, the element of the
+/// Android manifest that holds each tag of the manifest, and the places of
+/// the tags of [iosAppDelegateLaunch] and [iosAppDelegateEngine] in their
+/// methods, and its structural rules check that the native files name every
 /// key once, that the app target signs with [iosEntitlementsFile], and that
 /// an app with an entitlement of [paidTeamEntitlements] lists
 /// [iosAppIdStep].
@@ -148,7 +149,7 @@ final class AppEntryRole extends Role<NoDsl> {
   static const iosEntitlementsFile = 'ios/Runner/Runner.entitlements';
 
   /// The path of the app delegate of the iOS app, in Swift; see
-  /// [iosAppDelegateLaunch].
+  /// [iosAppDelegateLaunch] and [iosAppDelegateEngine].
   static const appDelegateFile = 'ios/Runner/AppDelegate.swift';
 
   /// The path of the README of the app.
@@ -594,12 +595,41 @@ final class AppEntryRole extends Role<NoDsl> {
   /// The app of `flutter create` has the scene lifecycle of UIKit, under
   /// which Flutter registers the plugins once the scene of the app
   /// connects, after this method. So the statements have no registry of
-  /// plugins, no channel and no `FlutterViewController`. The module rule
+  /// plugins, no channel and no `FlutterViewController`: a method channel
+  /// of the app goes into [iosAppDelegateEngine]. The module rule
   /// `app_entry.launch_code_place` checks that the tag of the provider is
   /// in that method, before the call.
   static const iosAppDelegateLaunch = SocketRef<CodeSocket>.role(
     appEntryRole,
     'ios_app_delegate_launch',
+    CodeSocket.text(),
+  );
+
+  /// Swift statements that run in `didInitializeImplicitFlutterEngine(_:)`
+  /// of the app delegate in [appDelegateFile], after its call of
+  /// `GeneratedPluginRegistrant.register(with:)`, which registers the
+  /// plugins of the app: what needs the engine of the app, such as a method
+  /// channel that the Dart code of the app asks, as in
+  /// `FlutterMethodChannel(name: …, binaryMessenger:
+  /// engineBridge.applicationRegistrar.messenger())`.
+  ///
+  /// Under the scene lifecycle of UIKit, which the app of `flutter create`
+  /// has, Flutter calls the method once it created the engine of the app,
+  /// when the scene of the app connects, and before the Dart code of the
+  /// app runs. The statements read the bridge to the engine as
+  /// `engineBridge`, the parameter of the method, and the app delegate as
+  /// `self`. Each contribution indents its lines by four spaces, as the
+  /// body of the method is, and declares no name outside a block of its
+  /// own, so the statements of two contributions cannot clash. The socket
+  /// takes no imports, and the file imports `Flutter` and `UIKit`. The
+  /// binary messenger keeps the handler of a channel, so a contribution
+  /// need not keep the channel.
+  ///
+  /// The module rule `app_entry.engine_code_place` checks that the tag of
+  /// the provider is in that method, after the registration of the plugins.
+  static const iosAppDelegateEngine = SocketRef<CodeSocket>.role(
+    appEntryRole,
+    'ios_app_delegate_engine',
     CodeSocket.text(),
   );
 
@@ -832,6 +862,7 @@ final class AppEntryRole extends Role<NoDsl> {
         infoPlist,
         iosEntitlements,
         iosAppDelegateLaunch,
+        iosAppDelegateEngine,
         gradleSettingsPlugins,
         gradleAppPlugins,
         gradleAppDependencies,
@@ -887,6 +918,16 @@ final class AppEntryRole extends Role<NoDsl> {
               'ios/Runner/AppDelegate.swift, before its call of '
               'super.application, which hands the launch to Flutter.',
           check: _checkLaunchCodePlace,
+        ),
+        ModuleRule(
+          id: 'app_entry.engine_code_place',
+          description: 'The tag of the code that runs once the engine of '
+              'the iOS app exists is in the body of '
+              'didInitializeImplicitFlutterEngine(_ engineBridge:) in '
+              'ios/Runner/AppDelegate.swift, after its call of '
+              'GeneratedPluginRegistrant.register(with:), which registers '
+              'the plugins of the app.',
+          check: _checkEngineCodePlace,
         ),
         ModuleRule(
           id: 'app_entry.manifest_tag_places',
@@ -1227,6 +1268,79 @@ List<SmfIssue> _checkLaunchCodePlace(ModuleRuleInput<NoDsl> input) {
 /// `application(_:didFinishLaunchingWithOptions:)` hands the launch of the
 /// app to Flutter.
 final _superLaunch = RegExp(r'\bsuper\s*\.\s*application\s*\(');
+
+/// The declaration of `didInitializeImplicitFlutterEngine(_:)` in the
+/// template of an app delegate in Swift, with its parameters as the first
+/// group, up to the brace that opens its body.
+final _engineMethod = RegExp(
+  r'\bfunc\s+didInitializeImplicitFlutterEngine\s*\(([^)]*)\)[^{]*\{',
+);
+
+/// The name of the parameter of `didInitializeImplicitFlutterEngine(_:)`
+/// by which the code of the modules reads the bridge to the engine.
+const _engineBridge = 'engineBridge';
+
+/// The call of `GeneratedPluginRegistrant.register(with:)` with which
+/// `didInitializeImplicitFlutterEngine(_:)` registers the plugins of the
+/// app.
+final _pluginRegistration =
+    RegExp(r'\bGeneratedPluginRegistrant\s*\.\s*register\s*\(');
+
+List<SmfIssue> _checkEngineCodePlace(ModuleRuleInput<NoDsl> input) {
+  const path = AppEntryRole.appDelegateFile;
+  const method = 'didInitializeImplicitFlutterEngine(_:)';
+  const call = 'GeneratedPluginRegistrant.register(with:)';
+  final tag = '{{{${AppEntryRole.iosAppDelegateEngine.tag}}}}';
+  final text = _templatesOf(input.contributions)[path] ?? '';
+  final offset = text.indexOf(tag);
+  if (offset < 0) return const [];
+  SmfIssue issue(String problem) =>
+      SmfIssue(problem, origin: ModuleOrigin(input.module.id), path: path);
+  final body = _bodyAfter(text, _engineMethod);
+  if (body == null || offset < body.start || offset > body.end) {
+    return [
+      issue(
+        'The tag $tag is in $path, but not in the body of $method, where the '
+        'code of the modules runs once the engine of the app exists.',
+      ),
+    ];
+  }
+  final code = _codeOf(text);
+  // The name by which the body reads the parameter: the word before its
+  // type, after the label of the argument, if it has one.
+  final parameters = _engineMethod.firstMatch(code)![1]!;
+  if (RegExp(r'(\w+)\s*:').firstMatch(parameters)?[1] != _engineBridge) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, whose parameter is '
+        'not named $_engineBridge: the code of the modules reads the bridge '
+        'to the engine by that name.',
+      ),
+    ];
+  }
+  final registration = _pluginRegistration
+      .firstMatch(code.substring(body.start, body.end))
+      ?.start;
+  if (registration == null) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, which has no call '
+        'of $call: the method registers the plugins of the app with that '
+        'call, before the code of the modules.',
+      ),
+    ];
+  }
+  if (body.start + registration > offset) {
+    return [
+      issue(
+        'The tag $tag is in the body of $method in $path, but not after its '
+        'call of $call, which registers the plugins of the app: the code of '
+        'the modules runs after it.',
+      ),
+    ];
+  }
+  return const [];
+}
 
 /// The parts of the template of a Dart file that are not code: the tags of
 /// the template, comments and strings, raw or not, on one line or on

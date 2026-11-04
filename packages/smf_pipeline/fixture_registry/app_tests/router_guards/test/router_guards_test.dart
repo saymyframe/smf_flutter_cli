@@ -7,7 +7,8 @@
 // place of the location the app starts on, and of each location that go(),
 // push() and replace() of the navigation of the role are asked to show,
 // from the target and from another page of the flow of the guard, but for
-// the routes of that flow. Once the gate opens, it shows the latest
+// the routes of that flow, and in place of the screen that the app starts
+// on that goToStart() asks for. Once the gate opens, it shows the latest
 // location that was asked for, with its query, whichever of go(),
 // replace() and push() asked for it, and then forgets it. The test knows
 // only the role and the fixtures, so it applies to a new provider of the
@@ -16,6 +17,7 @@
 // fixture registry).
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:{{app_name}}/core/router/app_router.dart';
 import 'package:{{app_name}}/core/router/navigation.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_details_screen.dart';
 import 'package:{{app_name}}/features/fake_feature/fixture_home_screen.dart';
@@ -93,8 +95,16 @@ void main() {
             'the user from.',
       );
 
-      // go(), push() and replace() of a location outside the flow of the
-      // guard, from its target.
+      // goToStart(), which asks the guards about the screen that the app
+      // starts on as go() asks about a location: the guard keeps the user
+      // from it too. And go(), push() and replace() of a location outside
+      // the flow of the guard, from its target, each of which the router
+      // remembers in place of the one before.
+      await staysOnTheTarget(
+        (gate) async => appRouter.navigatorOf(gate).goToStart(),
+        reason: 'goToStart() while a guard does not allow shows the target of '
+            'the guard.',
+      );
       await staysOnTheTarget(
         (gate) async => gate.nav.fakeFeature.details(id: 1).go(),
         reason: 'go() to a location that a guard keeps the user from shows '

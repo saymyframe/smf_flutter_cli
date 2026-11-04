@@ -44,5 +44,13 @@ abstract interface class AppNavigator {
   /// page shown over the main navigation: this throws a [StateError] and
   /// leaves the stack as it is, so [go] to the location instead.
   void replace(AppLocation location);
+
+  /// Shows the screen that the app starts on, as [go] shows a location: the
+  /// route that the app starts on, or the fallback start screen of the app
+  /// entry in an app that no route starts.
+  ///
+  /// The guards of the routes are asked about it as [go] asks about a
+  /// location: while a gate does not allow, its target shows instead.
+  void goToStart();
 }
 {{{guards}}}

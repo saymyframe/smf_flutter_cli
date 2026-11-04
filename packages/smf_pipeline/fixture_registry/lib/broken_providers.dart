@@ -170,6 +170,31 @@ const _goRouterAskingWithinItsCalls = BrokenModule(
   ],
 );
 
+/// The router of go_router that shows the error page of go_router for a
+/// location that it cannot show, in English, rather than the screen of the
+/// router role: the constructor of its `GoRouter` in an app without a main
+/// navigation takes the builder of that screen and does not pass it on to
+/// go_router. That is what every app of go_router showed before the role had
+/// the screen. The router of a fixture takes no location from the platform,
+/// so it has none that it cannot show, and this broken router changes the
+/// module of the CLI, made here as the broken app entry is.
+const _goRouterDroppingItsNotFoundScreen = BrokenModule(
+  GoRouterModule(),
+  id: ModuleId('broken_go_router_drops_not_found_screen'),
+  description: 'go_router that shows its own error page in English (fixture)',
+  file: RouterRole.appRouterFactoryFile,
+  changes: [
+    (
+      '    super.observers,\n'
+          '    super.errorBuilder,\n'
+          '  }) : super.routingConfig(\n',
+      '    super.observers,\n'
+          '    GoRouterWidgetBuilder? errorBuilder,\n'
+          '  }) : super.routingConfig(\n',
+    ),
+  ],
+);
+
 /// The splash screen whose configuration sets `android_min_sdk` to the lowest
 /// version of Android that the apps run on: native_splash with that one line.
 /// flutter_native_splash then writes `drawable/launch_background.xml` alone,
@@ -410,6 +435,46 @@ List<BrokenProvider> brokenProviders() => const [
             _walkTest,
             'Each location shows the screen of its route, or the screen that '
                 'the app starts on if it is in a flow that is over.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        _goRouterDroppingItsNotFoundScreen,
+        role: routerRole,
+        bug: 'It shows the error page of go_router, in English, for a '
+            'location from the platform that it cannot show, rather than the '
+            'not-found screen of the router role.',
+        app: [
+          FakeFeatureModule.id,
+          FakeBlocModule.id,
+          FakeDiModule.id,
+          FakeAnalyticsModule.id,
+          FakeCrashModule.id,
+          FakeServiceLogModule.id,
+        ],
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_not_found_test.dart',
+            _notFoundTest,
+            'For a location from the platform that no route matches, the '
+                'router shows the not-found screen of the router role.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.routerGoingToStartPastGuards,
+        role: routerRole,
+        bug: 'Its goToStart() shows the screen that the app starts on without '
+            'asking the guards of the routes, so a gate that does not allow '
+            'keeps the user from nothing there.',
+        app: _appWithGates,
+        failures: [
+          MatrixExpectedFailure(
+            'test/router_guards_test.dart',
+            'a guard that does not allow shows its target in place of every '
+                'location outside its flow',
+            'goToStart() while a guard does not allow shows the target of the '
+                'guard.',
           ),
         ],
       ),
@@ -2293,6 +2358,12 @@ const _restSessionTests = 'test/rest_session/session_token_test.dart';
 
 /// The name of the test of the probe of the REST role, and its reason.
 const _restProbeTest = 'the probe of the role finds no problem';
+
+/// The test of the not-found screen of the router role and of goToStart().
+const _notFoundTest =
+    'goToStart() shows the screen that the app starts on, and the not-found '
+    'screen of the router role shows for a location that the router cannot '
+    'show, in the language of the app, and leads there';
 const _restProbe =
     'The stack of a provider reaches a server on the device, stops an '
     'exchange, and fails as a connection fails for a closed port and for a '

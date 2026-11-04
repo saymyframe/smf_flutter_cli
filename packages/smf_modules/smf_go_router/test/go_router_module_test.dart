@@ -459,6 +459,7 @@ const String _constructorOfRoutes = '''
     required List<RouteBase> routes,
     super.initialLocation,
     super.observers,
+    super.errorBuilder,
   }) : super.routingConfig(
          routingConfig: ValueNotifier(RoutingConfig(routes: routes)),
        );
@@ -474,6 +475,7 @@ const String _constructorOfGuardedRoutes = '''
     required this.own,
     super.initialLocation,
     super.observers,
+    super.errorBuilder,
   }) : super.routingConfig(
          routingConfig: ValueNotifier(
            RoutingConfig(routes: routes, redirect: redirect),
@@ -489,6 +491,7 @@ const String _constructorOfRoutingConfig = '''
     required super.routingConfig,
     super.initialLocation,
     super.observers,
+    super.errorBuilder,
   }) : super.routingConfig();
 ''';
 
@@ -499,6 +502,7 @@ const String _constructorOfGuardedRoutingConfig = '''
     required super.routingConfig,
     super.initialLocation,
     super.observers,
+    super.errorBuilder,
     required this.own,
   }) : super.routingConfig();
 ''';
@@ -547,6 +551,49 @@ const String _replaceWithoutPage = 'if (_withoutPage) return go(location);';
 /// The body of `_withoutPage` of the router, as the analyzer prints it.
 const String _expectedWithoutPage =
     '=> config.routerDelegate.currentConfiguration.matches.isEmpty;';
+
+/// `_notFound`, the builder of the page of go_router for a location that it
+/// cannot show, as the analyzer prints its declaration: it creates the screen
+/// of the router role for such a location.
+final String _expectedNotFound = parseString(
+  content: '''
+Widget _notFound(BuildContext context, GoRouterState state) =>
+    const NotFoundScreen();
+''',
+).unit.declarations.single.toSource();
+
+/// The body of `goToStart()` of the router in an app whose modules declare
+/// guards, as the analyzer prints it: while go_router has no page of a route,
+/// its redirect asks the guards about `/`; otherwise the router asks them
+/// itself, with no route and its pages, and goes to what they answer.
+final String _expectedGuardedGoToStart = parseString(
+  content: '''
+class _GoAppRouter {
+  void goToStart() {
+    if (_withoutPage) return config.go(_guards.start);
+    final shown = switch (_guards.asked(
+      null,
+      _guards.start,
+      onTopOf: [for (final page in _pages) page.route],
+    )) {
+      ShowInstead(:final location) => location,
+      _ => _guards.start,
+    };
+    _own(() => config.go(shown));
+  }
+}
+''',
+)
+    .unit
+    .declarations
+    .whereType<ClassDeclaration>()
+    .single
+    .body
+    .members
+    .whereType<MethodDeclaration>()
+    .single
+    .body
+    .toSource();
 
 /// The path of the file of `createAppRouter()`.
 const String _factory = RouterRole.appRouterFactoryFile;
@@ -820,6 +867,43 @@ void _expectPagesChanged(CompilationUnit unit) {
       shell: _shellOf(unit) != null,
       guards: _asksGuards(unit),
     ),
+  );
+}
+
+/// Checks that go_router in [unit] shows the screen of the router role for a
+/// location that it cannot show, one that no route matches or that the
+/// redirect of a route refuses: `errorBuilder` of the `GoRouter` is
+/// `_notFound`, which creates the screen. So go_router builds the page of its
+/// error screen as before, with its key, its name and its empty route match,
+/// around that screen.
+void _expectNotFound(CompilationUnit unit) {
+  expect(
+    _argument(_goRouterOf(unit), 'errorBuilder')?.toSource(),
+    '_notFound',
+    reason: 'go_router builds the page of its error screen around the widget '
+        'of errorBuilder.',
+  );
+  expect(_argument(_goRouterOf(unit), 'errorPageBuilder'), isNull);
+  expect(
+    [
+      for (final function in unit.declarations.whereType<FunctionDeclaration>())
+        if (function.name.lexeme == '_notFound') function.toSource(),
+    ],
+    [_expectedNotFound],
+  );
+  expect(
+    [
+      for (final directive in unit.directives.whereType<ImportDirective>())
+        if (directive.uri.stringValue == 'not_found_screen.dart')
+          directive.toSource(),
+    ],
+    ["import 'not_found_screen.dart' show NotFoundScreen;"],
+  );
+  expect(
+    RouterRole.notFoundScreenFile,
+    'lib/core/router/not_found_screen.dart',
+    reason: 'The router imports the screen from the file of the role next to '
+        'its own.',
   );
 }
 
@@ -1150,6 +1234,7 @@ void main() {
       const routerFiles = {
         RouterRole.appRouterFile,
         RouterRole.navigationFile,
+        RouterRole.notFoundScreenFile,
         RouterRole.appRouterFactoryFile,
       };
       expect(
@@ -1568,6 +1653,21 @@ void main() {
         expect(app.files[_factory]!.text, isNot(contains(name)));
       }
     });
+
+    test(
+        'shows the screen of the router role for a location that it cannot '
+        'show, in the page that go_router builds for its error screen', () {
+      _expectNotFound(unit);
+    });
+
+    test(
+        'goes to /, which shows the screen that the app starts on, for '
+        'goToStart()', () {
+      expect(
+        _bodyOf(_routerClassOf(unit), 'goToStart'),
+        "=> config.go('/');",
+      );
+    });
   });
 
   group('an app with guards', () {
@@ -1732,6 +1832,17 @@ void main() {
     });
 
     test(
+        'asks the guards about /, the screen that the app starts on, before '
+        'goToStart() hands it to go_router, and goes to what they answer; '
+        'on the error screen, which has no page, the redirect asks', () {
+      expect(
+        _bodyOf(_routerClassOf(unit), 'goToStart'),
+        _expectedGuardedGoToStart,
+      );
+      _expectNotFound(unit);
+    });
+
+    test(
         'still keeps the back button of the system from go_router while it '
         'has no page, with a router that takes the redirect of the guards', () {
       _expectBackButton(unit, _constructorOfGuardedRoutes, guards: true);
@@ -1893,6 +2004,16 @@ void main() {
             (argument as NamedArgument).name.lexeme,
         ],
         ['routes'],
+      );
+    });
+
+    test(
+        'shows the screen of the router role for a location that it cannot '
+        'show, with a main navigation too, and goes to / for goToStart()', () {
+      _expectNotFound(unit);
+      expect(
+        _bodyOf(_routerClassOf(unit), 'goToStart'),
+        "=> config.go('/');",
       );
     });
 

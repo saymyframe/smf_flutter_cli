@@ -1240,7 +1240,7 @@ void main() {
         // preferences.
         'flutter_core with router, localization',
         'flutter_core with localization',
-        'bottom_tabs with localization',
+        'go_router with layout, localization',
         'home with localization',
         'settings with localization',
         // The onboarding requires the preferences.
@@ -1375,7 +1375,7 @@ void main() {
         // shows the labels of the destinations in the language of the app.
         'flutter_core with router, localization',
         'flutter_core with localization',
-        'bottom_tabs with localization',
+        'go_router with layout, localization',
         'home with localization',
         'settings with localization',
         'onboarding with localization',
@@ -1430,7 +1430,7 @@ void main() {
         'flutter_core with localization': ['en', 'uk'],
         'home with localization': ['en', 'uk'],
         'settings with localization': ['en', 'uk'],
-        'bottom_tabs with localization': ['en', 'uk'],
+        'go_router with layout, localization': ['en', 'uk'],
         'material_theme with settings_screen, localization': ['en', 'uk'],
         'material_theme with localization': ['en', 'uk'],
         for (final app in [_rcAll, _rcAuthL10n, _rcSettingsL10n, _rcL10n])
@@ -2076,11 +2076,58 @@ void main() {
   });
 
   test(
+      'the test of what the start check makes of the first screen of an app '
+      'applies to the apps whose only role is the app entry, whichever '
+      'module provides it, and takes the file of the check from the test of '
+      'the start check, which every app has', () async {
+    MatrixApp appWith(Set<Role> roles) => MatrixApp(
+          'roles',
+          const [ModuleId('roles')],
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await startScreenAppTest();
+
+    expect(p.basename(test.directory), 'start_screen');
+    expect(named('start_screen').directory, test.directory);
+    expect(test.roles, isEmpty);
+    expect(test.appliesTo(appWith({appEntryRole})), isTrue);
+    expect(test.appliesTo(appWith({appEntryRole, themeRole})), isFalse);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    expect(test.mocks, isNull);
+    expect(test.startProbe, isNull);
+    // The matrix of the CLI runs it in the app of the app entry alone, and
+    // in that of firebase_core, which provides no role.
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      ['flutter_core', 'firebase_core'],
+    );
+    // Its widget test imports the file of the start check that the test of
+    // the check puts into every app it applies to.
+    final check = named('start').directory;
+    expect(
+      File(p.join(check, 'integration_test', 'start_screen.dart')).existsSync(),
+      isTrue,
+    );
+    for (final app in apps.where(test.appliesTo)) {
+      expect(named('start').appliesTo(app), isTrue, reason: app.name);
+    }
+  });
+
+  test(
       'the start check runs the probes of the tests that go into an app '
       'with it, the flavor of the app, the walk of the routes, the services '
       'of the DI role, the '
       'preferences of the role, those of shared_preferences once they are '
-      'opened again, the user of Firebase Authentication, the onboarding '
+      'opened again, the user of Firebase Authentication, the setup of '
+      'Google sign-in on iOS, the onboarding '
       'of a first launch, the languages of the localization role, the '
       'permission of the notifications role and the channel of '
       'local_notifications, the push messages of the role and the address '
@@ -2099,6 +2146,8 @@ void main() {
         'rest_role': 'integration_test/rest_role/probe.dart probeRest',
         'firebase_auth':
             'integration_test/firebase_auth/probe.dart probeFirebaseAuth',
+        'google_sign_in':
+            'integration_test/google_sign_in/probe.dart probeGoogleSignIn',
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
             'probeFirebaseMessaging',
         'revenuecat': 'integration_test/revenuecat/probe.dart probeRevenueCat',
@@ -2146,9 +2195,9 @@ void main() {
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
     // the routes of the app past it. Those of Firebase Authentication, of
-    // Firebase Cloud Messaging, of RevenueCat, of the notifications role,
-    // of local_notifications, of the push role and of the purchases role
-    // only read, so they hold wherever they come.
+    // Google sign-in, of Firebase Cloud Messaging, of RevenueCat, of the
+    // notifications role, of local_notifications, of the push role and of
+    // the purchases role only read, so they hold wherever they come.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
@@ -2156,6 +2205,7 @@ void main() {
       [
         'start',
         'firebase_auth',
+        'google_sign_in',
         'firebase_messaging',
         'revenuecat',
         'onboarding',
@@ -2206,38 +2256,40 @@ void main() {
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
         'probe0: firebase_auth/probe.dart',
-        'probe1: firebase_messaging/probe.dart',
-        'probe2: revenuecat/probe.dart',
-        'probe3: onboarding/probe.dart',
-        'probe4: shared_preferences/probe.dart',
-        'probe5: local_notifications/probe.dart',
-        'probe6: di_role/probe.dart',
-        'probe7: preferences_role/probe.dart',
-        'probe8: notifications_role/probe.dart',
-        'probe9: push_role/probe.dart',
-        'probe10: purchases_role/probe.dart',
-        'probe11: router_walk/walk.dart',
-        'probe12: localization_role/probe.dart',
-        'probe13: flavors/probe.dart',
-        'probe14: rest_role/probe.dart',
+        'probe1: google_sign_in/probe.dart',
+        'probe2: firebase_messaging/probe.dart',
+        'probe3: revenuecat/probe.dart',
+        'probe4: onboarding/probe.dart',
+        'probe5: shared_preferences/probe.dart',
+        'probe6: local_notifications/probe.dart',
+        'probe7: di_role/probe.dart',
+        'probe8: preferences_role/probe.dart',
+        'probe9: notifications_role/probe.dart',
+        'probe10: push_role/probe.dart',
+        'probe11: purchases_role/probe.dart',
+        'probe12: router_walk/walk.dart',
+        'probe13: localization_role/probe.dart',
+        'probe14: flavors/probe.dart',
+        'probe15: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
       ('firebase_auth', 'probe0.probeFirebaseAuth'),
-      ('firebase_messaging', 'probe1.probeFirebaseMessaging'),
-      ('revenuecat', 'probe2.probeRevenueCat'),
-      ('onboarding', 'probe3.probeOnboarding'),
-      ('shared_preferences', 'probe4.probeSharedPreferences'),
-      ('local_notifications', 'probe5.probeLocalNotifications'),
-      ('di_role', 'probe6.probeServices'),
-      ('preferences_role', 'probe7.probePreferences'),
-      ('notifications_role', 'probe8.probeNotifications'),
-      ('push_role', 'probe9.probePush'),
-      ('purchases_role', 'probe10.probePurchases'),
-      ('router_walk', 'probe11.probeRoutes'),
-      ('localization_role', 'probe12.probeLanguages'),
-      ('flavors', 'probe13.probeFlavor'),
-      ('rest_role', 'probe14.probeRest'),
+      ('google_sign_in', 'probe1.probeGoogleSignIn'),
+      ('firebase_messaging', 'probe2.probeFirebaseMessaging'),
+      ('revenuecat', 'probe3.probeRevenueCat'),
+      ('onboarding', 'probe4.probeOnboarding'),
+      ('shared_preferences', 'probe5.probeSharedPreferences'),
+      ('local_notifications', 'probe6.probeLocalNotifications'),
+      ('di_role', 'probe7.probeServices'),
+      ('preferences_role', 'probe8.probePreferences'),
+      ('notifications_role', 'probe9.probeNotifications'),
+      ('push_role', 'probe10.probePush'),
+      ('purchases_role', 'probe11.probePurchases'),
+      ('router_walk', 'probe12.probeRoutes'),
+      ('localization_role', 'probe13.probeLanguages'),
+      ('flavors', 'probe14.probeFlavor'),
+      ('rest_role', 'probe15.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -4076,7 +4128,7 @@ void main() {
       'the test of Google sign-in applies to the apps with the module, '
       'whatever else they have, in every mode of the auth role, and declares '
       'the mocks of its platform side for the tests of every module of those '
-      'apps, with no probe for the start check', () {
+      'apps, and a probe for the start check that signs nobody in', () {
     final test = named('google_sign_in');
 
     expect(
@@ -4104,8 +4156,20 @@ void main() {
       ).existsSync(),
       isTrue,
     );
-    // Nobody can sign in on a device.
-    expect(test.startProbe, isNull);
+    // Nobody can sign in on a device, so the probe only reads the setup of
+    // the iOS app, and needs no answer of CI.
+    expect(
+      (
+        test.startProbe!.path,
+        test.startProbe!.function,
+        test.startProbe!.answer,
+      ),
+      (
+        'integration_test/google_sign_in/probe.dart',
+        'probeGoogleSignIn',
+        null,
+      ),
+    );
   });
 
   test(

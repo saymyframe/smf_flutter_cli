@@ -29,8 +29,18 @@
 // completes at once, it checks no client of the app, no key that signs it
 // and no URL scheme, and it has no network that could fail. A test scripts
 // such a failure with failNext(), as the plugin of a platform throws it.
+//
+// On iOS, the app asks its app delegate what the Google Sign-In SDK finds
+// of the setup of the app before it asks Google, through the method channel
+// google_sign_in/ios_setup. The mocks answer it as the app delegate of an
+// app that is set up does: GoogleService-Info.plist with the iOS client of
+// Google of the tests, and Info.plist with the URL scheme of that client. A
+// test scripts another setup with iosSetup, where null stands for an app
+// delegate that does not answer.
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 
 /// The issuer of the ID tokens of Google.
@@ -41,6 +51,27 @@ const googleTestUser = 'google-sign-in-tests-user';
 
 /// The email address of that account.
 const googleTestEmail = 'google-sign-in-tests@gmail.com';
+
+/// The id of the iOS client of Google of the tests.
+const googleTestIosClient = 'google-sign-in-tests.apps.googleusercontent.com';
+
+/// The URL scheme of that client: its id reversed at its dots.
+const googleTestIosScheme = 'com.googleusercontent.apps.google-sign-in-tests';
+
+/// What the app delegate of an iOS app that is set up for Google sign-in
+/// answers on the method channel google_sign_in/ios_setup: it has
+/// GoogleService-Info.plist with the iOS client of Google of the tests in
+/// CLIENT_ID, no GIDClientID in Info.plist, and the URL scheme of that
+/// client among those of Info.plist.
+const googleTestIosSetup = <String, Object?>{
+  'serviceInfo': true,
+  'serviceInfoClientId': googleTestIosClient,
+  'urlSchemes': [googleTestIosScheme],
+};
+
+/// The method channel through which the app asks its app delegate what the
+/// Google Sign-In SDK finds of the setup of the iOS app.
+const _iosSetupChannel = MethodChannel('google_sign_in/ios_setup');
 
 /// Google in the tests of the app, which [mockGoogleSignIn] sets up.
 final MockGoogleSignIn googleSignIn = MockGoogleSignIn._();
@@ -54,6 +85,16 @@ final class MockGoogleSignIn extends GoogleSignInPlatform {
 
   /// How many sign-ins reached Google.
   int signIns = 0;
+
+  /// What the app delegate of the iOS app answers when the app asks it for
+  /// the setup that the Google Sign-In SDK finds: [googleTestIosSetup]
+  /// unless a test scripts another, and `null` for an app delegate that does
+  /// not answer.
+  Map<String, Object?>? iosSetup = googleTestIosSetup;
+
+  /// How many times the app asked its app delegate for the setup of the iOS
+  /// app.
+  int iosSetupReads = 0;
 
   /// The errors that the next sign-ins fail with, in turn.
   final List<Object> _failures = [];
@@ -157,5 +198,18 @@ String _testToken(String? nonce) {
 }
 
 /// Answers google_sign_in as Google, with [googleSignIn] as its platform
-/// implementation.
-void mockGoogleSignIn() => GoogleSignInPlatform.instance = googleSignIn;
+/// implementation, and the method channel of the setup of the iOS app as
+/// the app delegate does, with [MockGoogleSignIn.iosSetup].
+void mockGoogleSignIn() {
+  GoogleSignInPlatform.instance = googleSignIn;
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(_iosSetupChannel, (call) async {
+    googleSignIn.iosSetupReads++;
+    final setup = googleSignIn.iosSetup;
+    // A method channel that the platform does not answer.
+    if (call.method != 'read' || setup == null) {
+      throw MissingPluginException();
+    }
+    return setup;
+  });
+}

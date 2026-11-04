@@ -75,6 +75,9 @@ Future<MatrixAppTests> smfAppTests() async {
         appliesTo: (_) => true,
         readsStartProbes: true,
       ),
+      // What the start check makes of the first screen of an app, on screens
+      // that it shows itself, in the apps whose only role is the app entry.
+      await startScreenAppTest(),
       // The start-up of the app initializes Firebase, with the options of the
       // flavor of the tests as flutterfire would write them, and the mocks of
       // Firebase Core, which the matrix sets up for the tests of every module
@@ -162,13 +165,17 @@ Future<MatrixAppTests> smfAppTests() async {
       // ids of the clients of Google, and the credential is the ID token of
       // the Google account; a closed sheet returns null, the errors with
       // which Google refuses an app that is not set up for it fail with
-      // notConfigured, and any other error with unknown; and the app lists
-      // it on Android and iOS, with the logo of Google from its assets. The
-      // mocks replace the platform implementation of the package with
-      // Google for one account, and the matrix sets them up for the tests
-      // of every module of the app, such as the test of the ways to sign in
-      // of the auth role. The test has no probe for the start check: nobody
-      // can sign in on a device.
+      // notConfigured, and any other error with unknown; on iOS, the app
+      // asks its app delegate first and fails with notConfigured, without
+      // asking the Google Sign-In SDK, where the SDK would stop the app; and
+      // the app lists it on Android and iOS, with the logo of Google from
+      // its assets. The mocks replace the platform implementation of the
+      // package with Google for one account, and answer for the app
+      // delegate of an iOS app that is set up, and the matrix sets them up
+      // for the tests of every module of the app, such as the test of the
+      // ways to sign in of the auth role. Its probe signs nobody in: on an
+      // iOS device it checks that the app delegate answers, and that an app
+      // with an iOS client of Google has its URL scheme.
       MatrixAppTest(
         '$googleSignIn/google_sign_in',
         appliesTo: _has(GoogleSignInModule.id),
@@ -176,6 +183,10 @@ Future<MatrixAppTests> smfAppTests() async {
         mocks: const MatrixMocks(
           'test/google_sign_in_mocks.dart',
           'mockGoogleSignIn',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/google_sign_in/probe.dart',
+          'probeGoogleSignIn',
         ),
       ),
       // The way to sign in with Apple of the module, on the real
@@ -712,6 +723,27 @@ Future<MatrixAppTests> smfAppTests() async {
     },
   );
 }
+
+/// The test of the start check that the CLI keeps in its
+/// `app_tests/start_screen`: what the check makes of the first screen of an
+/// app (`problemsOfFirstScreen()` of `integration_test/start_screen.dart` of
+/// its app test `start`, which every app has). The screen of a failed start,
+/// `FailedStartApp` of the app entry role, which `main()` shows when
+/// `bootstrap()` throws, is a problem with the first line of the error, and
+/// no probe runs after it; a screen without a `WidgetsApp` and an
+/// `ErrorWidget` are problems too.
+///
+/// A widget test that shows those screens itself, since the check runs on a
+/// device, where no test framework sees it. It needs no module and starts
+/// no app, so it runs in the apps whose only role is the app entry,
+/// whichever module provides it, such as the app of `flutter_core` alone.
+/// For the same reason the app of several providers of the fixture registry
+/// leaves it out.
+Future<MatrixAppTest> startScreenAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/start_screen',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.difference({appEntryRole}).isEmpty,
+    );
 
 /// The test of the splash role that the CLI keeps in its
 /// `app_tests/splash_role`, for the apps with the role, whichever module

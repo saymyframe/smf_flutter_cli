@@ -341,6 +341,7 @@ class RoutingConfig {
 class GoRouter implements RouterConfig<RouteMatchList> {
   factory GoRouter({
     required List<RouteBase> routes,
+    GoRouterWidgetBuilder? errorBuilder,
     GoRouterRedirect? redirect,
     String? initialLocation,
     List<NavigatorObserver>? observers,
@@ -349,6 +350,7 @@ class GoRouter implements RouterConfig<RouteMatchList> {
 
   GoRouter.routingConfig({
     required ValueListenable<RoutingConfig> routingConfig,
+    GoRouterWidgetBuilder? errorBuilder,
     String? initialLocation,
     List<NavigatorObserver>? observers,
   }) : backButtonDispatcher = RootBackButtonDispatcher();
@@ -390,7 +392,9 @@ class GoException implements Exception {
 /// It checks the files of every owner but the app entry, its provider and
 /// the template of its role, which the app needs for the names they declare
 /// and whose code is their own to check, so the stand-ins have only what
-/// the router and the features use.
+/// the router and the features use. For the same reason it leaves out the
+/// screen of a location that the router cannot show, whose widgets are
+/// those of the template of the router role: the router only creates it.
 /// It checks the types of the generated code with the Dart SDK alone, as
 /// the tests of the package run without the Flutter SDK.
 Future<List<String>> analysisProblems(RenderedApp app) async {
@@ -437,7 +441,10 @@ Future<List<String>> analysisProblems(RenderedApp app) async {
     try {
       final problems = <String>[];
       for (final file in dartFiles) {
-        if (_appEntry.contains(file.owner)) continue;
+        if (_appEntry.contains(file.owner) ||
+            file.path == RouterRole.notFoundScreenFile) {
+          continue;
+        }
         // The analyzer takes only the paths of the system, such as
         // C:\app\lib\main.dart on Windows.
         final path = Uri.directory(appPath).resolve(file.path).toFilePath();

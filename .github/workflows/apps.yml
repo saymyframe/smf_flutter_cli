@@ -316,7 +316,8 @@ jobs:
     if: inputs.broken_providers
     runs-on: ubuntu-latest
     # Its small apps run one after another, about 60 of them at about 20 seconds
-    # each, or 20 minutes in all, so this timeout leaves room for a few more.
+    # each, or 20 minutes in all, and the tests of the router role are longer
+    # in about 20 of them, so this timeout leaves room for a few more.
     timeout-minutes: 40
     env: *linux_env
 
