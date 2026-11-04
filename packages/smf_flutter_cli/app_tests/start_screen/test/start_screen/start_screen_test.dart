@@ -1,5 +1,5 @@
-// A test that continuous integration runs in the app of the app entry
-// alone, whichever module provides the app entry, of what the start check of
+// A test that continuous integration runs in the apps whose only role is the
+// app entry, whichever module provides it, of what the start check of
 // the CLI makes of the first screen of an app: problemsOfFirstScreen() of
 // integration_test/start_screen.dart, which the app test start puts into
 // every app next to the check. The check runs on a device, where no test
@@ -7,9 +7,10 @@
 // a failed start, which main() of the app shows when bootstrap() throws, an
 // app that started, and an ErrorWidget without an app.
 //
-// It needs no module and starts no app, so the app of the app entry alone
-// runs it, and the app of several providers of the fixture registry does
-// not.
+// It needs no module and starts no app, so it runs in the apps whose only
+// role is the app entry, such as the app of flutter_core alone and the app of
+// firebase_core, and the app of several providers of the fixture registry
+// does not.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/app/failed_start.dart';
