@@ -157,11 +157,14 @@ $declaration true;''';
   ];
   final line = '$declaration ${terms.join(' || ')};';
   final rest = '      ${terms.join(' || ')};';
-  final value = line.length <= _width
-      ? line
-      : rest.length <= _width
-          ? '$declaration\n$rest'
-          : '$declaration\n      ${terms.join(' ||\n      ')};';
+  final String value;
+  if (line.length <= _width) {
+    value = line;
+  } else if (rest.length <= _width) {
+    value = '$declaration\n$rest';
+  } else {
+    value = '$declaration\n      ${terms.join(' ||\n      ')};';
+  }
   return '''
   /// Whether the command that built the app gave it the values of `.env`:
   /// `$_toolArgument` declares each key that `.env` has a line
