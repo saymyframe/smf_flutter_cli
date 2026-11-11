@@ -101,15 +101,15 @@ Future<void> main(List<String> arguments, SendPort port) async {
   final compressed = await send('GET', '/compressed');
   final redirect = await send('GET', '/redirect');
 
-  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-  final closedPort = socket.port;
-  await socket.close();
+  // The discard port, where nothing listens. A port that the program freed
+  // could go to the server of another test first, since the files of tests run
+  // at once and every server binds port 0, which takes a port far above 9.
   Object? failure;
   try {
     await transport.send(
       RestExchange(
         method: 'GET',
-        uri: Uri.parse('http://127.0.0.1:$closedPort/?key=secret'),
+        uri: Uri.parse('http://127.0.0.1:9/?key=secret'),
         headers: const {},
         stop: Completer<void>().future,
       ),
