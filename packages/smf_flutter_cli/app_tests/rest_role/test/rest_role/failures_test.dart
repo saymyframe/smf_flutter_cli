@@ -201,15 +201,13 @@ void main() {
 
   test('a port where nothing listens is the reason network, for each method',
       () async {
-    final address = await closedAddress();
-
     expect(
-      await outcomeOf(client.post('$address/notes')),
+      await outcomeOf(client.post('$closedAddress/notes')),
       failsWith(RestFailureReason.network),
       reason: 'A failure to connect is RestConnectionFailed.',
     );
     expect(
-      await outcomeOf(client.get('$address/notes')),
+      await outcomeOf(client.get('$closedAddress/notes')),
       failsWith(RestFailureReason.network),
       reason: 'A failure to connect is RestConnectionFailed, also once the '
           'repeats of a GET are over.',

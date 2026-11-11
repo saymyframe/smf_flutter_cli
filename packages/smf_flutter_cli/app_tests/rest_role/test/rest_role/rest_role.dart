@@ -92,13 +92,15 @@ final class ScriptedTokens implements RestTokens {
   }
 }
 
-/// The address of a port of this machine where nothing listens.
-Future<String> closedAddress() async {
-  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-  final address = 'http://${socket.address.address}:${socket.port}';
-  await socket.close();
-  return address;
-}
+/// The address of a port of this machine where nothing listens: the discard
+/// port, 9, on the loopback address.
+///
+/// A port that a test frees is no such port: the files of tests run at once,
+/// and the system may give that port to the server of another test before the
+/// request of this test, so the request reaches that server. Every server of
+/// the tests binds port 0, and the systems give such a socket a port from their
+/// range of ephemeral ports, which starts far above 9.
+const String closedAddress = 'http://127.0.0.1:9';
 
 /// A server for what a [RestTestServer] does not do: it reads no more than the
 /// head of a request, and answers as [answer] says, on the socket itself.

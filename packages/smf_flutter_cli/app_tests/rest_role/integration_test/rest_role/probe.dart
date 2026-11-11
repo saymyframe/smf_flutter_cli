@@ -145,13 +145,15 @@ Future<List<String>> _problemsOfStop(RestTransport transport) async {
   }
 }
 
+/// What is wrong with a request to the discard port, 9, on the loopback address,
+/// where nothing listens. A port that the probe freed is no such port: under
+/// flutter test the files of tests run at once, and the system may give that
+/// port to the server of another test first. Every server binds port 0, which
+/// takes a port from the range of ephemeral ports, far above 9.
 Future<List<String>> _problemsOfClosedPort(RestTransport transport) async {
-  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-  final port = socket.port;
-  await socket.close();
   final client = AppRestClient(
     transport: transport,
-    baseAddress: 'http://127.0.0.1:$port/probe',
+    baseAddress: 'http://127.0.0.1:9/probe',
     timeout: _requestTime,
   );
   try {
