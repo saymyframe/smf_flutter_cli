@@ -23,7 +23,7 @@ void main() {
     // a request.
     final before = AppRestClient(
       transport: createRestTransport(),
-      baseAddress: await closedAddress(),
+      baseAddress: closedAddress,
     );
     await outcomeOf(before.post('notes'));
 
