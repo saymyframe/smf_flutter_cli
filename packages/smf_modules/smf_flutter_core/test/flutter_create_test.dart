@@ -65,6 +65,23 @@ final _entitlementsReference = RegExp(
   r'\n[^\n]*/\* Runner\.entitlements \*/[^\n]*',
 );
 
+/// The versions of the Android build that the brick may take later than
+/// `flutter create` of the Flutter that it follows, and not earlier, each
+/// by the file that has it: Gradle, in the wrapper, and the Android Gradle
+/// plugin, in the settings. Flutter 3.50 fails the build of a project with
+/// those of the template of Flutter 3.44, so the brick takes the lowest
+/// that Flutter 3.50 builds with, which Flutter 3.44 builds with too.
+final _androidBuildVersions = {
+  'android/gradle/wrapper/gradle-wrapper.properties': (
+    'Gradle',
+    RegExp(r'gradle-([\d.]+)-all\.zip'),
+  ),
+  'android/settings.gradle.kts': (
+    'the Android Gradle plugin',
+    RegExp(r'id\("com\.android\.application"\) version "([\d.]+)"'),
+  ),
+};
+
 /// A build configuration of a flavor in the Xcode project of the brick,
 /// which `flutter create` does not write: an object whose id starts with
 /// `F1A5`, unlike the ids of `flutter create`. So the comparison leaves the
@@ -129,35 +146,45 @@ String _withoutFlavors(String path, String text) {
 /// - the app target signs with the entitlements of the app, which the
 ///   project shows in the group of the target;
 /// - the empty `dependencies` block of the app's Gradle file holds a
-///   socket.
-String _normalized(String path, String text) => switch (path) {
-      'android/app/src/main/AndroidManifest.xml' => text.replaceAll(
-          'android:label="my_app"',
-          r'android:label="${appName}"',
+///   socket;
+/// - the versions of Gradle and the Android Gradle plugin may be later (see
+///   [_androidBuildVersions]).
+String _normalized(String path, String text) {
+  if (_androidBuildVersions[path] case (_, final version)?) {
+    return text.replaceAllMapped(
+      version,
+      (match) => match[0]!.replaceFirst(match[1]!, '<version>'),
+    );
+  }
+  return switch (path) {
+    'android/app/src/main/AndroidManifest.xml' => text.replaceAll(
+        'android:label="my_app"',
+        r'android:label="${appName}"',
+      ),
+    'ios/Runner/Info.plist' => text
+        .replaceAll(
+          '<key>CFBundleName</key>\n\t<string>my_app</string>',
+          '<key>CFBundleName</key>\n\t<string>MyApp</string>',
+        )
+        .replaceAll(
+          '<key>CFBundleDisplayName</key>\n\t<string>My App</string>',
+          '<key>CFBundleDisplayName</key>\n'
+              '\t<string>\$(APP_DISPLAY_NAME)</string>',
         ),
-      'ios/Runner/Info.plist' => text
-          .replaceAll(
-            '<key>CFBundleName</key>\n\t<string>my_app</string>',
-            '<key>CFBundleName</key>\n\t<string>MyApp</string>',
-          )
-          .replaceAll(
-            '<key>CFBundleDisplayName</key>\n\t<string>My App</string>',
-            '<key>CFBundleDisplayName</key>\n'
-                '\t<string>\$(APP_DISPLAY_NAME)</string>',
-          ),
-      'ios/Runner.xcodeproj/project.pbxproj' => text
-          .replaceAll('com.example.myApp', 'com.example.my-app')
-          .replaceAll(
-            RegExp(r'IPHONEOS_DEPLOYMENT_TARGET = [\d.]+;'),
-            'IPHONEOS_DEPLOYMENT_TARGET = <minimum>;',
-          )
-          .replaceAll(RegExp(r'\n\t*DEVELOPMENT_TEAM = \w+;'), '')
-          .replaceAll(_signsWithEntitlements, '')
-          .replaceAll(_entitlementsReference, ''),
-      'android/app/build.gradle.kts' =>
-        text.replaceAll('\n\ndependencies {\n}\n', '\n'),
-      _ => text,
-    };
+    'ios/Runner.xcodeproj/project.pbxproj' => text
+        .replaceAll('com.example.myApp', 'com.example.my-app')
+        .replaceAll(
+          RegExp(r'IPHONEOS_DEPLOYMENT_TARGET = [\d.]+;'),
+          'IPHONEOS_DEPLOYMENT_TARGET = <minimum>;',
+        )
+        .replaceAll(RegExp(r'\n\t*DEVELOPMENT_TEAM = \w+;'), '')
+        .replaceAll(_signsWithEntitlements, '')
+        .replaceAll(_entitlementsReference, ''),
+    'android/app/build.gradle.kts' =>
+      text.replaceAll('\n\ndependencies {\n}\n', '\n'),
+    _ => text,
+  };
+}
 
 void main() {
   final created = Platform.environment[_createdApp];
@@ -262,6 +289,19 @@ void main() {
             problems.add(
               '$path: flutter create asks for iOS ${above.join(', ')}, more '
               'than the brick',
+            );
+          }
+        }
+        if (_androidBuildVersions[path] case (final what, final pattern)?) {
+          // The brick may take a later version than Flutter, not an earlier.
+          final ofBrick = pattern.firstMatch(brick.text)?[1];
+          final ofFlutter = pattern.firstMatch(utf8.decode(bytes))?[1];
+          if (ofBrick == null ||
+              ofFlutter == null ||
+              _compare(ofFlutter, ofBrick) > 0) {
+            problems.add(
+              '$path: flutter create takes $what $ofFlutter, and the brick '
+              '$ofBrick',
             );
           }
         }

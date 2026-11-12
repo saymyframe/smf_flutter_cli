@@ -57,6 +57,36 @@ void main() {
       );
     });
 
+    test(
+        'take at least the Gradle and the Android Gradle plugin that Flutter '
+        '3.50 builds an Android app with', () {
+      // The minimums of DependencyVersionChecker.kt of the Gradle plugin of
+      // Flutter 3.50, which fails the build of a project with older ones.
+      // The apps allow every Flutter from 3.44 on.
+      const minimums = {
+        'android/gradle/wrapper/gradle-wrapper.properties': (
+          'Gradle',
+          r'gradle-([\d.]+)-all\.zip',
+          '9.3.1',
+        ),
+        settingsGradle: (
+          'the Android Gradle plugin',
+          r'id\("com\.android\.application"\) version "([\d.]+)"',
+          '9.1.1',
+        ),
+      };
+      for (final MapEntry(key: path, value: (what, pattern, minimum))
+          in minimums.entries) {
+        final version = RegExp(pattern).firstMatch(templates[path]!)![1]!;
+        expect(
+          _compareVersions(version, minimum),
+          greaterThanOrEqualTo(0),
+          reason: '$path has $what $version, and Flutter 3.50 builds with '
+              '$minimum or later.',
+        );
+      }
+    });
+
     test('have the projects of the platforms of the app only', () {
       // The directories of the platforms of flutter create.
       const flutterPlatforms = {
@@ -693,4 +723,17 @@ final class _XcodeProject {
         ).allMatches(block))
           match[1]!: match[2]!,
       };
+}
+
+/// Compares the versions [a] and [b], such as `9.1.0` and `9.3.1`, part by
+/// part.
+int _compareVersions(String a, String b) {
+  final left = a.split('.').map(int.parse).toList();
+  final right = b.split('.').map(int.parse).toList();
+  for (var i = 0; i < left.length || i < right.length; i++) {
+    final order = (i < left.length ? left[i] : 0)
+        .compareTo(i < right.length ? right[i] : 0);
+    if (order != 0) return order;
+  }
+  return 0;
 }
