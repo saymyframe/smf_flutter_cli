@@ -2302,7 +2302,10 @@ void main() {
       final sockets = contributions().whereType<SocketContribution>().toList();
       const flutterLocalizations = ImportRef(
         'package:flutter_localizations/flutter_localizations.dart',
+        prefix: 'flutter_localizations',
       );
+      String delegateOf(String kind) =>
+          'flutter_localizations.Global${kind}Localizations.delegate';
 
       final wrapper = sockets
           .singleWhere((socket) => socket.socket == AppEntryRole.rootWrappers)
@@ -2320,9 +2323,8 @@ void main() {
         [
           'locale: AppLocaleScope.of(context)',
           'supportedLocales: ...appLocales',
-          'localizationsDelegates: GlobalMaterialLocalizations.delegate',
-          'localizationsDelegates: GlobalWidgetsLocalizations.delegate',
-          'localizationsDelegates: GlobalCupertinoLocalizations.delegate',
+          for (final kind in const ['Material', 'Widgets', 'Cupertino'])
+            'localizationsDelegates: ${delegateOf(kind)}',
         ],
       );
       expect(
@@ -2344,6 +2346,75 @@ void main() {
       expect(package.source, PubspecSource.sdk);
       expect(package.sdk, 'flutter');
       expect(package.dev, isFalse);
+    });
+
+    test(
+        'gives the root delegates that no other library of the root makes '
+        'ambiguous, such as package:material_ui, which dart fix of Flutter '
+        "3.50 imports in place of Flutter's material library", () async {
+      final delegates = [
+        for (final socket in contributions().whereType<SocketContribution>())
+          if (socket.argName == 'localizationsDelegates') socket.fragment!,
+      ];
+      final appName = testContext.appName;
+      final imports = ImportRef.merge(
+        [
+          for (final delegate in delegates) ...delegate.imports,
+          const ImportRef('package:material_ui/material_ui.dart'),
+          const ImportRef('package:cupertino_ui/cupertino_ui.dart'),
+        ],
+        appName: appName,
+      );
+      // Flutter's localizations, and the libraries that Flutter 3.50 gives
+      // the same names, each with classes of its own.
+      String library(List<String> classes, {String? widget}) => [
+            for (final name in classes)
+              '''
+class $name {
+  static const Object delegate = $name._();
+  const $name._();
+}
+''',
+            if (widget != null) 'const Object $widget = Object();\n',
+          ].join('\n');
+      final app = DartFiles.write(
+        {
+          'lib/app.dart': [
+            for (final import in imports) import.toDirective(appName),
+            '',
+            // The root uses the two libraries for its widgets.
+            'const widgets = <Object>[materialApp, cupertinoApp];',
+            'final delegates = <Object>[',
+            for (final delegate in delegates) '  ${delegate.code},',
+            '];',
+            '',
+          ].join('\n'),
+        },
+        packages: {
+          'flutter_localizations': library(const [
+            'GlobalMaterialLocalizations',
+            'GlobalWidgetsLocalizations',
+            'GlobalCupertinoLocalizations',
+          ]),
+          'material_ui': library(
+            const ['GlobalMaterialLocalizations'],
+            widget: 'materialApp',
+          ),
+          'cupertino_ui': library(
+            const ['GlobalCupertinoLocalizations'],
+            widget: 'cupertinoApp',
+          ),
+        },
+      );
+      addTearDown(app.delete);
+
+      expect(
+        await app.analysisProblems(),
+        isEmpty,
+        reason: 'An app on Flutter 3.50 that smf create ran the whole dart '
+            'fix in has both libraries in its root, and the delegates must '
+            'still compile there.',
+      );
     });
 
     test(
