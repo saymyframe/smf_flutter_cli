@@ -3,6 +3,55 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 2026-11-12
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - There are no breaking changes in this release.
+
+Packages with other changes:
+
+ - [`smf_contracts` - `v0.8.1`](#smf_contracts---v081)
+ - [`smf_firebase_core` - `v0.5.1`](#smf_firebase_core---v051)
+ - [`smf_flutter_cli` - `v0.8.1`](#smf_flutter_cli---v081)
+ - [`smf_flutter_core` - `v0.7.1`](#smf_flutter_core---v071)
+ - [`smf_gen_l10n` - `v0.6.1`](#smf_gen_l10n---v061)
+ - [`smf_pipeline` - `v0.8.1`](#smf_pipeline---v081)
+
+---
+
+#### `smf_contracts` - `v0.8.1`
+
+ - **FIX**(contracts): import flutter_localizations with a prefix, so that the root still compiles after dart fix of Flutter 3.50 ([#328](https://github.com/saymyframe/smf_flutter_cli/issues/328)). ([4a851e22](https://github.com/saymyframe/smf_flutter_cli/commit/4a851e22cbcc4047b2a36b2a84ffb3e02eefbfe0))
+
+#### `smf_firebase_core` - `v0.5.1`
+
+ - **FIX**(flutter_core): build for Android with Gradle 9.3.1 and the Android Gradle plugin 9.1.1, which Flutter 3.50 asks for at least ([#329](https://github.com/saymyframe/smf_flutter_cli/issues/329)). ([b4252617](https://github.com/saymyframe/smf_flutter_cli/commit/b42526172d6474a16476aa202d1de9be6fc8dd4e))
+
+#### `smf_flutter_cli` - `v0.8.1`
+
+ - **FIX**(flutter_core): build for Android with Gradle 9.3.1 and the Android Gradle plugin 9.1.1, which Flutter 3.50 asks for at least ([#329](https://github.com/saymyframe/smf_flutter_cli/issues/329)). ([b4252617](https://github.com/saymyframe/smf_flutter_cli/commit/b42526172d6474a16476aa202d1de9be6fc8dd4e))
+ - **FIX**(contracts): import flutter_localizations with a prefix, so that the root still compiles after dart fix of Flutter 3.50 ([#328](https://github.com/saymyframe/smf_flutter_cli/issues/328)). ([4a851e22](https://github.com/saymyframe/smf_flutter_cli/commit/4a851e22cbcc4047b2a36b2a84ffb3e02eefbfe0))
+
+#### `smf_flutter_core` - `v0.7.1`
+
+ - **FIX**(flutter_core): build for Android with Gradle 9.3.1 and the Android Gradle plugin 9.1.1, which Flutter 3.50 asks for at least ([#329](https://github.com/saymyframe/smf_flutter_cli/issues/329)). ([b4252617](https://github.com/saymyframe/smf_flutter_cli/commit/b42526172d6474a16476aa202d1de9be6fc8dd4e))
+
+#### `smf_gen_l10n` - `v0.6.1`
+
+ - **FIX**(contracts): import flutter_localizations with a prefix, so that the root still compiles after dart fix of Flutter 3.50 ([#328](https://github.com/saymyframe/smf_flutter_cli/issues/328)). ([4a851e22](https://github.com/saymyframe/smf_flutter_cli/commit/4a851e22cbcc4047b2a36b2a84ffb3e02eefbfe0))
+
+#### `smf_pipeline` - `v0.8.1`
+
+ - **FIX**(pipeline): clean up the imports after the full dart fix, once the app has the packages that the fix added ([#330](https://github.com/saymyframe/smf_flutter_cli/issues/330)). ([cb879738](https://github.com/saymyframe/smf_flutter_cli/commit/cb8797389906ca7b19ec0cc66f0516ef6da4e34c))
+ - **FIX**(flutter_core): build for Android with Gradle 9.3.1 and the Android Gradle plugin 9.1.1, which Flutter 3.50 asks for at least ([#329](https://github.com/saymyframe/smf_flutter_cli/issues/329)). ([b4252617](https://github.com/saymyframe/smf_flutter_cli/commit/b42526172d6474a16476aa202d1de9be6fc8dd4e))
+ - **FIX**(contracts): import flutter_localizations with a prefix, so that the root still compiles after dart fix of Flutter 3.50 ([#328](https://github.com/saymyframe/smf_flutter_cli/issues/328)). ([4a851e22](https://github.com/saymyframe/smf_flutter_cli/commit/4a851e22cbcc4047b2a36b2a84ffb3e02eefbfe0))
+
+
 ## 2026-11-02
 
 ### Changes

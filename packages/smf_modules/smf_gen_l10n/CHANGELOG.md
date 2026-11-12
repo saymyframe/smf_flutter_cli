@@ -1,3 +1,7 @@
+## 0.6.1
+
+ - **FIX**(contracts): import flutter_localizations with a prefix, so that the root still compiles after dart fix of Flutter 3.50 ([#328](https://github.com/saymyframe/smf_flutter_cli/issues/328)). ([4a851e22](https://github.com/saymyframe/smf_flutter_cli/commit/4a851e22cbcc4047b2a36b2a84ffb3e02eefbfe0))
+
 ## 0.6.0
 
 > Note: This release has breaking changes.

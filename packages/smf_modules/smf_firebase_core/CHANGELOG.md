@@ -1,3 +1,7 @@
+## 0.5.1
+
+ - **FIX**(flutter_core): build for Android with Gradle 9.3.1 and the Android Gradle plugin 9.1.1, which Flutter 3.50 asks for at least ([#329](https://github.com/saymyframe/smf_flutter_cli/issues/329)). ([b4252617](https://github.com/saymyframe/smf_flutter_cli/commit/b42526172d6474a16476aa202d1de9be6fc8dd4e))
+
 ## 0.5.0
 
 > Note: This release has breaking changes.
