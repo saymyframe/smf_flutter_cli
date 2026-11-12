@@ -103,8 +103,8 @@ void main() {
       'flutter pub get',
       'dart run build_runner build --force-jit',
       'dart run tool',
-      'dart fix --apply --code=${importCleanupCodes.join(',')}',
       'dart fix --apply',
+      'dart fix --apply --code=${importCleanupCodes.join(',')}',
       'dart format .',
       'flutter pub get',
     ]);
