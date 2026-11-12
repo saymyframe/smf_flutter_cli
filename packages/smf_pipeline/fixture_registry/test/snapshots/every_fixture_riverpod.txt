@@ -896,7 +896,8 @@ import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/theme/app_theme.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'
+    as flutter_localizations;
 
 import 'core/router/app_router.dart';
 
@@ -914,9 +915,9 @@ class App extends StatelessWidget {
     locale: AppLocaleScope.of(context),
     localizationsDelegates: [
       FixtureTexts.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
+      flutter_localizations.GlobalMaterialLocalizations.delegate,
+      flutter_localizations.GlobalWidgetsLocalizations.delegate,
+      flutter_localizations.GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: [...appLocales],
     routerConfig: appRouter.config,

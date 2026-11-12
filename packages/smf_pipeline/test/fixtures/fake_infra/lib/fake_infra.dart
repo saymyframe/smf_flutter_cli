@@ -34,11 +34,16 @@ const _foundation = ImportRef('package:flutter/foundation.dart');
 
 /// The delegate of the texts of the Material widgets of Flutter, which are
 /// in every language that Flutter's widgets are translated into, so in
-/// each language of an app.
+/// each language of an app. It is the delegate of the template of the
+/// localization role as that template writes it, with the same prefix, so
+/// the root of an app with both has it once.
 const _materialDelegate = Fragment(
-  'GlobalMaterialLocalizations.delegate',
+  'flutter_localizations.GlobalMaterialLocalizations.delegate',
   imports: [
-    ImportRef('package:flutter_localizations/flutter_localizations.dart'),
+    ImportRef(
+      'package:flutter_localizations/flutter_localizations.dart',
+      prefix: 'flutter_localizations',
+    ),
   ],
 );
 
