@@ -2187,8 +2187,8 @@ on request staging
       expect(runner.lines, [
         'flutter pub get',
         'dart run build_runner build --force-jit',
-        'dart fix --apply --code=$_importCodes',
         'dart fix --apply',
+        'dart fix --apply --code=$_importCodes',
         'dart format .',
         'flutter pub get',
       ]);
