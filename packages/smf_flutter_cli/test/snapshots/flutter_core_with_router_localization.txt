@@ -449,7 +449,8 @@ nullable-getter: false
 use-escaping: false
 === lib/app.dart (flutter_core) ===
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'
+    as flutter_localizations;
 import 'package:my_app/core/app/status_bar_icons.dart';
 import 'package:my_app/core/l10n/app_locale.dart';
 import 'package:my_app/l10n/app_localizations.dart';
@@ -467,9 +468,9 @@ class App extends StatelessWidget {
     locale: AppLocaleScope.of(context),
     localizationsDelegates: [
       AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
+      flutter_localizations.GlobalMaterialLocalizations.delegate,
+      flutter_localizations.GlobalWidgetsLocalizations.delegate,
+      flutter_localizations.GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: [...appLocales],
     routerConfig: appRouter.config,

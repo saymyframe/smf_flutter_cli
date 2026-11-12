@@ -491,7 +491,7 @@ on request staging
       // The two modules and the template of the localization role each
       // give the root the delegate of the texts of the Material widgets.
       expect(
-        'GlobalMaterialLocalizations.delegate'.allMatches(
+        'flutter_localizations.GlobalMaterialLocalizations.delegate'.allMatches(
           rendered(result, AppEntryRole.appArgs).values.single,
         ),
         hasLength(1),
@@ -1525,9 +1525,9 @@ on request staging
           'locale: AppLocaleScope.of(context),',
           'localizationsDelegates: [${[
             'FixtureTexts.delegate',
-            'GlobalMaterialLocalizations.delegate',
-            'GlobalWidgetsLocalizations.delegate',
-            'GlobalCupertinoLocalizations.delegate',
+            'flutter_localizations.GlobalMaterialLocalizations.delegate',
+            'flutter_localizations.GlobalWidgetsLocalizations.delegate',
+            'flutter_localizations.GlobalCupertinoLocalizations.delegate',
           ].join(', ')}],',
           'supportedLocales: [...appLocales],',
         ],

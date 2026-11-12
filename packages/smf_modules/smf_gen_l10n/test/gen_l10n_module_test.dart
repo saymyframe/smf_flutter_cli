@@ -481,9 +481,18 @@ void main() {
         ],
         [
           ('gen_l10n', 'AppLocalizations.delegate'),
-          ('role:localization', 'GlobalMaterialLocalizations.delegate'),
-          ('role:localization', 'GlobalWidgetsLocalizations.delegate'),
-          ('role:localization', 'GlobalCupertinoLocalizations.delegate'),
+          (
+            'role:localization',
+            'flutter_localizations.GlobalMaterialLocalizations.delegate',
+          ),
+          (
+            'role:localization',
+            'flutter_localizations.GlobalWidgetsLocalizations.delegate',
+          ),
+          (
+            'role:localization',
+            'flutter_localizations.GlobalCupertinoLocalizations.delegate',
+          ),
         ],
       );
     });

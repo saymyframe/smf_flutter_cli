@@ -2,16 +2,23 @@ part of '../localization.dart';
 
 const _appLocale = ImportRef.app('core/l10n/app_locale.dart');
 
+/// Flutter's own localizations, with a prefix. From Flutter 3.50 on,
+/// `package:material_ui` and `package:cupertino_ui` declare classes of the
+/// same names, and the whole `dart fix` of such a Flutter imports them in the
+/// root in place of Flutter's material and cupertino libraries. Without the
+/// prefix, the names of the delegates would be ambiguous there, and the app
+/// would not compile.
 const _flutterLocalizations = ImportRef(
   'package:flutter_localizations/flutter_localizations.dart',
+  prefix: 'flutter_localizations',
 );
 
 /// The delegates of Flutter's own localizations, which support every
 /// language that Flutter's widgets are translated into.
 const _flutterDelegates = [
-  'GlobalMaterialLocalizations.delegate',
-  'GlobalWidgetsLocalizations.delegate',
-  'GlobalCupertinoLocalizations.delegate',
+  'flutter_localizations.GlobalMaterialLocalizations.delegate',
+  'flutter_localizations.GlobalWidgetsLocalizations.delegate',
+  'flutter_localizations.GlobalCupertinoLocalizations.delegate',
 ];
 
 /// The key of the `Info.plist` of the iOS app with the languages of the
