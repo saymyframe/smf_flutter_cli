@@ -68,7 +68,13 @@ const codegenArguments = ['run', 'build_runner', 'build', '--force-jit'];
 /// A template may import a library that only some of its branches use, and
 /// a fragment may import a library that its file imports anyway. `dart fix`
 /// cleans the imports of a file only when it makes no other fix in the file
-/// in the same run, so the cleanup runs alone, before the full `dart fix`.
+/// in the same run, so the cleanup runs alone, after the full `dart fix`.
+/// That run may import a library twice itself: the `dart fix` of Flutter
+/// 3.50, which deprecates Flutter's material library, imports
+/// `package:material_ui` once in place of that library and once more for a
+/// deprecated name that the new library declares too. It also adds the new
+/// package to the pubspec, and the cleanup sees the second import only once
+/// the app has the package, so the packages are got again before it.
 const importCleanupCodes = [
   'duplicate_import',
   'unnecessary_import',
@@ -84,8 +90,9 @@ const importCleanupCodes = [
 /// 3. the post-generation [steps] of the modules, in their order, each
 ///    with the steps that continue it right after it (see
 ///    [PostGenStep.followUpOf] and [bindSteps]);
-/// 4. `dart fix --apply` for the imports only; see [importCleanupCodes];
-/// 5. `dart fix --apply` for everything, unless [fullDartFix] is `false`;
+/// 4. `dart fix --apply` for everything, unless [fullDartFix] is `false`,
+///    and `flutter pub get` again when that changed the pubspec;
+/// 5. `dart fix --apply` for the imports only; see [importCleanupCodes];
 /// 6. `dart format .`.
 ///
 /// A step that needs a terminal in a run that cannot ask the user, or
@@ -152,18 +159,35 @@ Future<List<SkippedStep>> runPostGen({
     await moduleSteps.run(step);
   }
 
-  await commands.tryRun(
-    'Cleaning up the imports',
-    const ToolRef('dart'),
-    ['fix', '--apply', '--code=${importCleanupCodes.join(',')}'],
-  );
   if (fullDartFix) {
+    final fileSystem = environment.fileSystem;
+    final pubspec = fileSystem.file(
+      fileSystem.path.join(directory, 'pubspec.yaml'),
+    );
+    String? textOf() =>
+        pubspec.existsSync() ? pubspec.readAsStringSync() : null;
+    final before = textOf();
     await commands.tryRun(
       'Applying dart fix',
       const ToolRef('dart'),
       const ['fix', '--apply'],
     );
+    // A package that dart fix added to the pubspec, such as material_ui of
+    // Flutter 3.50, has to be in the app before the cleanup can resolve,
+    // and so see, the imports of it (see [importCleanupCodes]).
+    if (textOf() != before) {
+      await commands.tryRun(
+        'Getting the packages that dart fix added',
+        const ToolRef('flutter'),
+        const ['pub', 'get'],
+      );
+    }
   }
+  await commands.tryRun(
+    'Cleaning up the imports',
+    const ToolRef('dart'),
+    ['fix', '--apply', '--code=${importCleanupCodes.join(',')}'],
+  );
   await commands.tryRun(
     'Formatting the code',
     const ToolRef('dart'),

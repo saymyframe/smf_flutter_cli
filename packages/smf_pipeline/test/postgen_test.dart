@@ -99,8 +99,8 @@ void main() {
       'dart run build_runner build --force-jit',
       'firebase --version',
       'dart pub global run x:x go',
-      cleanup,
       'dart fix --apply',
+      cleanup,
       'dart format .',
     ]);
     for (final call in runner.calls) {
@@ -151,6 +151,39 @@ void main() {
         ),
       ),
     );
+  });
+
+  test(
+      'cleans up the imports after the full dart fix, once the app has the '
+      'packages that the fix added to its pubspec', () async {
+    // The dart fix of Flutter 3.50 imports package:material_ui in place of
+    // Flutter's material library, once more for a name that the new library
+    // declares too, and adds the package to the pubspec. The second import
+    // is a duplicate only once the import resolves.
+    final pubspec = host.fileSystem.file('/tmp/app/pubspec.yaml')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('name: my_app\n');
+    runner.onRun = (call) {
+      if (call.arguments.join(' ') == 'fix --apply') {
+        pubspec.writeAsStringSync('name: my_app\ndependencies:\n'
+            '  material_ui: any\n');
+      }
+      return const SmfProcessResult(exitCode: 0);
+    };
+
+    await runPostGen(
+      directory: '/tmp/app',
+      environment: environment,
+      steps: const [],
+    );
+
+    expect(runner.lines, [
+      'flutter pub get',
+      'dart fix --apply',
+      'flutter pub get',
+      cleanup,
+      'dart format .',
+    ]);
   });
 
   test('without code generation and the full dart fix', () async {
@@ -269,11 +302,11 @@ void main() {
     );
 
     expect(host.logger.warnings, [
+      startsWith('dart fix --apply failed, so run it in the app yourself'),
       startsWith(
         '$cleanup failed, so run it in the app yourself: it exited with code '
         '1',
       ),
-      startsWith('dart fix --apply failed, so run it in the app yourself'),
       startsWith('dart format . failed, so run it in the app yourself'),
     ]);
   });
