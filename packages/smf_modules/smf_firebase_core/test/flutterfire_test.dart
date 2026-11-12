@@ -147,7 +147,7 @@ void main() {
       expect(
         configured.settings,
         contains(
-          '    id("com.android.application") version "9.0.1" apply false\n'
+          '    id("com.android.application") version "9.1.1" apply false\n'
           '    // START: FlutterFire Configuration\n'
           '    id("com.google.gms.google-services") version("4.4.4") '
           'apply false\n'
