@@ -37,6 +37,7 @@ The files in `bricks/flutter_core/__brick__` are those that `flutter create --pl
 - The `.gitignore` at the root of the app ends with the tag of the patterns that the modules keep out of git, on a line of its own. A tag that gets nothing leaves no line, so an app without such a pattern has the `.gitignore` of `flutter create`.
 - `ios/Runner/AppDelegate.swift` holds the tag of the code that runs before the launch of the app finishes. The tag is in `application(_:didFinishLaunchingWithOptions:)`, before `return super.application(...)`. Without such code the file is the one of `flutter create`.
 - `ios/Runner/Runner.entitlements` belongs to the brick. It holds the tag of the entitlements of the app and is empty when no module adds any. Every build configuration of the Runner target signs with it (`CODE_SIGN_ENTITLEMENTS`), and the Runner group of `project.pbxproj` refers to it, the way Xcode does when it adds a capability.
+- The Gradle wrapper takes Gradle 9.3.1 and `settings.gradle.kts` the Android Gradle plugin 9.1.1, later than those of Flutter 3.44.2. Flutter 3.50 fails the build of a project with older ones, and Flutter 3.44 builds with these too.
 - `lib/`, `test/`, `pubspec.yaml`, `README.md` and `analysis_options.yaml` are SMF's own.
 
 `gradlew`, `gradle-wrapper.jar`, `local.properties`, `.idea/` and the `.iml` files are left out: Flutter writes the Gradle wrapper when it builds the app, and the rest belongs to one machine.
@@ -50,7 +51,7 @@ To move to a newer Flutter:
 5. Update the minimum Flutter and iOS versions of `FlutterCoreModule`, and the Flutter of the CI workflow with the SHA-256 of its archive.
 6. Bundle the bricks with `melos bootstrap`.
 
-`test/flutter_create_test.dart` takes the flavors out of the brick and compares the rest with the app of `flutter create`, allowing only the changes above, and fails when Flutter asks for a later iOS than the brick. It runs when `SMF_FLUTTER_CREATE_APP` names that app, as the CI job `Generated apps (real)` does with the Flutter it pins:
+`test/flutter_create_test.dart` takes the flavors out of the brick and compares the rest with the app of `flutter create`, allowing only the changes above, and fails when Flutter asks for a later iOS, Gradle or Android Gradle plugin than the brick. `test/native_projects_test.dart` holds the brick to the Gradle and the Android Gradle plugin that the newest Flutter of the apps builds with. It runs when `SMF_FLUTTER_CREATE_APP` names that app, as the CI job `Generated apps (real)` does with the Flutter it pins:
 
 ```bash
 flutter create --platforms=android,ios --org com.example --no-pub my_app
