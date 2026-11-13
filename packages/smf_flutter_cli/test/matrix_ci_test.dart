@@ -289,6 +289,50 @@ void main() {
         expect(code, 0, reason: output);
       });
 
+      test(
+          'lets pass the infos of Flutter 3.50 that its material library is '
+          'deprecated in flutter analyze, and in no other command', () async {
+        // flutter of the test, which prints the analysis of an app whose
+        // only issue is such an info and fails, as flutter analyze of
+        // Flutter 3.50 does, whatever its arguments.
+        final bin = '${temp.path}/bin';
+        File('$bin/flutter')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(
+            '#!/bin/sh\nprintf "%s\\n" "\$ANALYSIS"\nexit 1\n',
+          );
+        expect(Process.runSync('chmod', ['+x', '$bin/flutter']).exitCode, 0);
+        final environment = {
+          'PATH': '$bin:${Platform.environment['PATH']}',
+          'ANALYSIS': "   info • 'package:flutter/material.dart' is "
+              "deprecated and shouldn't be used. Use "
+              'package:material_ui/material_ui.dart instead • '
+              'lib/app.dart:6:1 • deprecated_member_use\n\n1 issue found.',
+        };
+
+        final (code, output) = await runCiCommands(
+          app,
+          ['flutter analyze', 'echo after'],
+          environment: environment,
+        );
+
+        expect(code, 0, reason: output);
+        expect(output, contains('\nThe analyzer found only 1 info of'));
+        expect(output, contains('\nafter\n'));
+
+        final (tested, testOutput) = await runCiCommands(
+          app,
+          ['flutter test'],
+          environment: environment,
+        );
+
+        expect(tested, 1, reason: testOutput);
+        expect(
+          testOutput.trim().split('\n').last,
+          'This command of CI exited with 1: flutter test',
+        );
+      });
+
       test('has what a command prints in both of its streams', () async {
         final (_, output) = await runCiCommands(app, [
           'echo to out; echo to error >&2',

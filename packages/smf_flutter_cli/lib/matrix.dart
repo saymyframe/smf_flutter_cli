@@ -22,6 +22,7 @@ import 'package:smf_flutter_cli/src/ci_commands.dart';
 import 'package:smf_flutter_cli/src/cli.dart';
 import 'package:smf_flutter_cli/src/expected_failures.dart';
 import 'package:smf_flutter_cli/src/matrix_plan.dart';
+import 'package:smf_flutter_cli/src/tolerated_analysis.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:smf_pipeline/testing.dart';
 
@@ -29,6 +30,7 @@ export 'src/ci_commands.dart';
 export 'src/expected_failures.dart';
 export 'src/flutter_versions.dart';
 export 'src/matrix_plan.dart';
+export 'src/tolerated_analysis.dart';
 
 /// An app of the matrix: the modules to ask for, which name every module of
 /// the app so that no question is left, and the options of its roles.
@@ -2190,7 +2192,10 @@ Future<(int, String)> _addAndRun(
     output.writeln(values.summary);
   }
   for (final arguments in commands) {
-    final (code, text) = await flutter(arguments, generated.path);
+    final ran = await flutter(arguments, generated.path);
+    final (code, text) = arguments.length == 1 && arguments.single == 'analyze'
+        ? toleratingAnalysis(ran)
+        : ran;
     output.write(text);
     if (code != 0) {
       output.write('\nflutter ${arguments.join(' ')} exited with $code.');
@@ -3184,7 +3189,8 @@ final class _MatrixRun {
       directory,
     );
     if (generated == null) return problems;
-    final (analyzed, output) = await analyze(generated.path);
+    final (analyzed, output) =
+        toleratingAnalysis(await analyze(generated.path));
     say(output.trim());
     if (analyzed != 0) {
       return problems
@@ -3229,6 +3235,23 @@ List<String> matrixCommand(List<String> arguments, String directory) =>
             directory.runes.any((rune) => rune > 0x7F)
         ? const ['dart', 'analyze', '--fatal-infos']
         : ['flutter', ...arguments];
+
+/// Analyzes the app in [directory] as the matrix analyzes its apps: with
+/// [flutter], `flutter analyze` or the command of [matrixCommand] in its
+/// place, letting pass what [toleratingAnalysis] lets pass. Gives the output
+/// to [say] and returns the exit code. `tool/analyze_app.dart` runs it for
+/// the steps of CI that analyze an app outside a run of the matrix, such as
+/// an app of the CLI from pub.dev.
+Future<int> analyzeApp(
+  String directory, {
+  MatrixFlutter flutter = _flutter,
+  void Function(String line) say = _print,
+}) async {
+  final (code, output) =
+      toleratingAnalysis(await flutter(const ['analyze'], directory));
+  say(output.trim());
+  return code;
+}
 
 // Tests have no Flutter SDK, and they give their own log.
 // coverage:ignore-start
