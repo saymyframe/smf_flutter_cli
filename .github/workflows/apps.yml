@@ -1016,10 +1016,16 @@ jobs:
       - *maven_central_mirror
       - *restore_gradle
 
+      # packages/smf_flutter_cli/tool/analyze_app.dart of the workspace
+      # analyzes each app as the matrix analyzes its apps, with flutter
+      # analyze, and lets pass what the matrix lets pass: with Flutter 3.50,
+      # the code that gen-l10n writes into the app uses names that Flutter
+      # deprecates for package:material_ui and package:cupertino_ui, which
+      # the apps cannot use while they allow Flutter 3.44.
       - name: Analyze and test the apps of the CLI from pub.dev, and build them for Android
         run: |
           apps="$RUNNER_TEMP/SMF apps from pub.dev"
-          .github/scripts/each_app.sh "$apps" flutter analyze
+          .github/scripts/each_app.sh "$apps" dart "$GITHUB_WORKSPACE/packages/smf_flutter_cli/tool/analyze_app.dart"
           .github/scripts/each_app.sh "$apps" flutter test
           .github/scripts/each_app.sh "$apps" "$GITHUB_WORKSPACE/.github/scripts/build_apk.sh" --debug
 
@@ -1632,6 +1638,9 @@ jobs:
       # As a user runs smf create, with the full dart fix of the app: the
       # matrix tool generates the app with every module with the options of
       # CI, and --dart-fix after them turns the full dart fix back on.
+      # packages/smf_flutter_cli/tool/analyze_app.dart analyzes the app as
+      # the matrix does, with dart analyze in this directory, and lets pass
+      # what the matrix lets pass, as in the job CLI from pub.dev.
       - name: Generate the app with every module in a directory with letters beyond ASCII
         env: *app_env
         run: |
@@ -1647,8 +1656,8 @@ jobs:
             if (-not $output.Contains("cd `"$($app.FullName)`"")) {
               throw "SMF does not say how to go to $($app.Name)."
             }
+            dart run packages/smf_flutter_cli/tool/analyze_app.dart $app.FullName
             Push-Location $app.FullName
-            dart analyze --fatal-infos
             flutter test
             Pop-Location
           }

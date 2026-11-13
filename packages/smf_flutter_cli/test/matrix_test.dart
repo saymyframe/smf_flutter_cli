@@ -1840,6 +1840,7 @@ Type type() => Types;
       List<LeftOut> leftOut = const [],
       List<SkippedStep> skippedSteps = const [],
       int analyzeCode = 0,
+      String? analyzeOutput,
       List<MatrixAppTest> appTests = const [],
       Set<Role> testedRoles = const {},
       int testCode = 0,
@@ -1874,7 +1875,8 @@ Type type() => Types;
               }
               return createCode;
             },
-            analyze: (directory) async => (analyzeCode, 'Analyzed $directory'),
+            analyze: (directory) async =>
+                (analyzeCode, analyzeOutput ?? 'Analyzed $directory'),
             test: (generated, app, tests, {env}) async {
               tested.add(
                 '${generated.name} (${app.name}): '
@@ -1914,6 +1916,37 @@ Type type() => Types;
 
       expect(await run(analyzeCode: 3), 1);
       expect(log.last, contains('flutter analyze exited with 3.'));
+    });
+
+    test(
+        'passes an app whose analysis has only the infos of Flutter 3.50 '
+        'that its material library is deprecated', () async {
+      const deprecated = "   info • 'package:flutter/material.dart' is "
+          "deprecated and shouldn't be used. Use "
+          'package:material_ui/material_ui.dart instead • lib/app.dart:6:1 • '
+          'deprecated_member_use';
+
+      expect(
+        await run(
+          analyzeCode: 1,
+          analyzeOutput: '$deprecated\n\n1 issue found.',
+        ),
+        0,
+      );
+      expect(
+        log,
+        contains(contains('The analyzer found only 1 info of Flutter 3.50')),
+      );
+      expect(
+        await run(
+          analyzeCode: 1,
+          analyzeOutput: '$deprecated\n'
+              '   info • Unused import • lib/app.dart:1:8 • unused_import\n'
+              '\n2 issues found.',
+        ),
+        1,
+      );
+      expect(log.last, contains('flutter analyze exited with 1.'));
     });
 
     test('fails when a step failed, not when CI leaves it for later', () async {
@@ -2993,6 +3026,63 @@ Type type() => Types;
     );
   });
 
+  group('analyzeApp', () {
+    const deprecated = "   info • 'package:flutter/material.dart' is "
+        "deprecated and shouldn't be used. Use "
+        'package:material_ui/material_ui.dart instead • lib/app.dart:6:1 • '
+        'deprecated_member_use';
+
+    /// Analyzes an app whose analysis exits with [code] and prints
+    /// [printed], and returns the exit code, the commands that it ran and
+    /// what it said.
+    Future<(int, List<String>, List<String>)> analyze(
+      int code,
+      String printed,
+    ) async {
+      final commands = <String>[];
+      final said = <String>[];
+      final analyzed = await analyzeApp(
+        '/tmp/SMF apps/app_1',
+        flutter: (arguments, directory) async {
+          commands.add('${arguments.join(' ')} in $directory');
+          return (code, printed);
+        },
+        say: said.add,
+      );
+      return (analyzed, commands, said);
+    }
+
+    test('analyzes the app as the matrix does, and says what it found',
+        () async {
+      final (code, commands, said) = await analyze(0, 'No issues found!\n');
+
+      expect(code, 0);
+      expect(commands, ['analyze in /tmp/SMF apps/app_1']);
+      expect(said, ['No issues found!']);
+    });
+
+    test(
+        'lets pass the infos of Flutter 3.50 that its material library is '
+        'deprecated, as the matrix does', () async {
+      final (code, _, said) = await analyze(1, '$deprecated\n\n1 issue found.');
+
+      expect(code, 0);
+      expect(said.single, startsWith(deprecated.trim()));
+      expect(said.single, contains('The analyzer found only 1 info of'));
+    });
+
+    test('fails with the exit code of an analysis with any other issue',
+        () async {
+      const unused = '   info • Unused import • lib/app.dart:1:8 • '
+          'unused_import';
+      final (code, _, said) =
+          await analyze(1, '$deprecated\n$unused\n\n2 issues found.');
+
+      expect(code, 1);
+      expect(said.single, endsWith('2 issues found.'));
+    });
+  });
+
   test('the tests of an app go into it with their placeholders filled', () {
     final fileSystem = MemoryFileSystem();
     fileSystem.file('/tests/core/test/core_test.dart')
@@ -3908,6 +3998,35 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         fileSystem.file('/apps/app_1/test/core_test.dart').readAsStringSync(),
         '// my_app\n',
       );
+    });
+
+    test(
+        'goes on after an analysis with only the infos of Flutter 3.50 that '
+        'its material library is deprecated', () async {
+      final tests = [MatrixAppTest('/tests/core', appliesTo: (app) => true)];
+
+      final (code, output) = await runAppTests(
+        generated,
+        app,
+        tests,
+        fileSystem: fileSystem,
+        flutter: (arguments, directory) async {
+          commands.add(arguments.join(' '));
+          return arguments.join(' ') == 'analyze'
+              ? (
+                  1,
+                  "   info • 'package:flutter/material.dart' is deprecated "
+                      "and shouldn't be used. Use "
+                      'package:material_ui/material_ui.dart instead • '
+                      'test/core_test.dart:1:1 • deprecated_member_use\n'
+                      '\n1 issue found.\n',
+                )
+              : (0, '');
+        },
+      );
+
+      expect(code, 0, reason: output);
+      expect(commands, ['analyze', 'test']);
     });
 
     test('stops at the first command that fails, and names it', () async {

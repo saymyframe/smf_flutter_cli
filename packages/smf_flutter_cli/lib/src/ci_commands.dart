@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:smf_flutter_cli/src/tolerated_analysis.dart';
+
 /// Runs [commands] one after another, each with `bash -c`, in a clone of a
 /// commit of the app in [directory], as a job of CI runs them on a runner, and
 /// removes the clone. Returns 0 and the output, or the exit code of the first
@@ -12,6 +14,9 @@ import 'dart:io';
 /// repository of that commit is in a temporary directory too, so the app stays
 /// as it was. What the machine ignores, signs or checks in its own
 /// configuration of git has no part in it.
+///
+/// The command `flutter analyze` lets pass what [toleratingAnalysis] lets
+/// pass, as the analysis of an app of the matrix does.
 ///
 /// Each command gets the variables of [environment] in its process, next to
 /// those of this one. With [artifact], a path in the clone, a run whose
@@ -31,13 +36,18 @@ Future<(int, String)> runCiCommands(
     if (cloned != 0) return (cloned, output.toString());
     for (final command in commands) {
       output.writeln('\$ $command');
-      final code = await _run(
+      final printed = StringBuffer();
+      final ran = await _run(
         'bash',
         ['-c', command],
         clone,
-        output,
+        printed,
         environment: environment,
       );
+      final (code, text) = command == 'flutter analyze'
+          ? toleratingAnalysis((ran, printed.toString()))
+          : (ran, printed.toString());
+      output.write(text);
       if (code != 0) {
         output.writeln('This command of CI exited with $code: $command');
         return (code, output.toString());
