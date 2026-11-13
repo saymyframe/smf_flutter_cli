@@ -16,7 +16,10 @@ import 'package:smf_gen_l10n/src/agents.dart';
 ///   pubspec, with which `flutter pub get` generates the `AppLocalizations`
 ///   class in [arbDirectory] in a new app and in a fresh clone of one.
 ///   After a change of the ARB files, `flutter gen-l10n` generates it
-///   again;
+///   again. Its header ignores `deprecated_member_use` in the files of
+///   gen-l10n, whose code still uses the localizations of Material and
+///   Cupertino that Flutter 3.50 deprecates for `material_ui` and
+///   `cupertino_ui`, which need a later Flutter than the apps allow;
 /// - an ARB file in [arbDirectory] for each language of the app: the
 ///   template, [templateArbFile], with every text of the app in English,
 ///   and the file of each other language with the texts that have a
