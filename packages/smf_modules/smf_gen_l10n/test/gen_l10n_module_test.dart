@@ -522,6 +522,8 @@ void main() {
         // not by default; the option keeps the texts as they are when a
         // later Flutter has another default.
         'use-escaping': false,
+        // See the next test.
+        'header': '// ignore_for_file: deprecated_member_use',
       });
       expect(
         _arbFilesOf(app)[GenL10nModule.templateArbFile],
@@ -534,6 +536,48 @@ void main() {
         '${GenL10nModule.arbDirectory}/app_en.arb',
       );
       expect(app.files.keys, contains(GenL10nModule.templateArbFile));
+    });
+
+    test(
+        'put a header into the files of gen-l10n, with which the analyzer '
+        'reports nothing of the localizations of Material and Cupertino '
+        'that they use and Flutter 3.50 deprecates', () async {
+      final options = app.files['l10n.yaml']!.text;
+      final header = (_yamlOf(options)! as Map<String, Object?>)['header'];
+      final withoutHeader = [
+        for (final line in options.split('\n'))
+          if (!line.startsWith('header:')) line,
+      ].join('\n');
+
+      expect(await generatedLocalizationsDiagnostics(app), isEmpty);
+      expect(header, '// ignore_for_file: deprecated_member_use');
+      // Without the header, the analyzer reports both, as flutter analyze
+      // of Flutter 3.50 does in an app whose l10n.yaml has none. The apps
+      // allow Flutter 3.44, so they cannot use material_ui and
+      // cupertino_ui, which need Flutter 3.47.
+      expect(
+        (_yamlOf(withoutHeader)! as Map<String, Object?>).keys,
+        isNot(contains('header')),
+      );
+      expect(
+        await generatedLocalizationsDiagnostics(app, options: withoutHeader),
+        [
+          allOf(
+            startsWith(generatedLocalizationsOf(app).path),
+            contains(
+              "deprecated_member_use: 'GlobalMaterialLocalizations' is "
+              'deprecated',
+            ),
+          ),
+          allOf(
+            startsWith(generatedLocalizationsOf(app).path),
+            contains(
+              "deprecated_member_use: 'GlobalCupertinoLocalizations' is "
+              'deprecated',
+            ),
+          ),
+        ],
+      );
     });
 
     test(

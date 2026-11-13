@@ -8,7 +8,7 @@ final genL10nBundle = MasonBundle.fromJson(<String, dynamic>{
     {
       "path": "l10n.yaml",
       "data":
-          "YXJiLWRpcjogbGliL2wxMG4KdGVtcGxhdGUtYXJiLWZpbGU6IGFwcF9lbi5hcmIKb3V0cHV0LWxvY2FsaXphdGlvbi1maWxlOiBhcHBfbG9jYWxpemF0aW9ucy5kYXJ0Cm51bGxhYmxlLWdldHRlcjogZmFsc2UKdXNlLWVzY2FwaW5nOiBmYWxzZQo=",
+          "YXJiLWRpcjogbGliL2wxMG4KdGVtcGxhdGUtYXJiLWZpbGU6IGFwcF9lbi5hcmIKb3V0cHV0LWxvY2FsaXphdGlvbi1maWxlOiBhcHBfbG9jYWxpemF0aW9ucy5kYXJ0Cm51bGxhYmxlLWdldHRlcjogZmFsc2UKdXNlLWVzY2FwaW5nOiBmYWxzZQojIFRoZSBjb2RlIHRoYXQgZ2VuLWwxMG4gb2YgRmx1dHRlciAzLjUwIHdyaXRlcyBzdGlsbCB1c2VzIHRoZSBsb2NhbGl6YXRpb25zCiMgb2YgTWF0ZXJpYWwgYW5kIEN1cGVydGlubyBvZiBmbHV0dGVyX2xvY2FsaXphdGlvbnMsIHdoaWNoIEZsdXR0ZXIgMy41MAojIGRlcHJlY2F0ZXMgZm9yIHRob3NlIG9mIG1hdGVyaWFsX3VpIGFuZCBjdXBlcnRpbm9fdWkuIFRoZSBoZWFkZXIga2VlcHMKIyBmbHV0dGVyIGFuYWx5emUgZnJvbSByZXBvcnRpbmcgdGhlbSBpbiB0aGUgZmlsZXMgdGhhdCBnZW4tbDEwbiB3cml0ZXMuCmhlYWRlcjogJy8vIGlnbm9yZV9mb3JfZmlsZTogZGVwcmVjYXRlZF9tZW1iZXJfdXNlJwo=",
       "type": "text"
     },
     {

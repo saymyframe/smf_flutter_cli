@@ -788,6 +788,11 @@ template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
 nullable-getter: false
 use-escaping: false
+# The code that gen-l10n of Flutter 3.50 writes still uses the localizations
+# of Material and Cupertino of flutter_localizations, which Flutter 3.50
+# deprecates for those of material_ui and cupertino_ui. The header keeps
+# flutter analyze from reporting them in the files that gen-l10n writes.
+header: '// ignore_for_file: deprecated_member_use'
 === lib/app.dart (flutter_core) ===
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'
