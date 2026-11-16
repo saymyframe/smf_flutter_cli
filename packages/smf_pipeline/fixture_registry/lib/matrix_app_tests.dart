@@ -17,7 +17,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode and shows the screen of a failed start, the auth role,
 /// the onboarding screen role, the notifications role, the push role, the
-/// purchases role, the env role, the REST role and the remote config role.
+/// purchases role, the env role, the REST role, the remote config role and
+/// the analytics role, whose providers keep the setting of collection.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -25,8 +26,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// for a condition, the fixture gates and the fixture late gate, whose
 /// guards of the routes a test closes and opens, the fixture analytics and
 /// the fixture screen log, whose listeners of the screen note what they
-/// hear, the fixture setting, whose restorers note what they read, the
-/// fixture theme, whose colour a test changes, the module that uses the
+/// hear, the platform side of the fixture analytics, which a test answers
+/// as a device, the fixture setting, whose restorers note what they read,
+/// the fixture theme, whose colour a test changes, the module that uses the
 /// fixture clock, which shows an hour on a clock of 24 hours or of 12, and
 /// the fixture steps of the onboarding, whose actions note their calls, and
 /// the module that reads values of .env, whose keys a test gives values,
@@ -506,6 +508,22 @@ Future<MatrixAppTests> fixtureAppTests() async {
         '$appTests/rest_consumer',
         appliesTo: (app) => app.modules.contains(FakeRestUserModule.id),
       ),
+      // Whether an app collects analytics before its code chose, the mode
+      // option of the analytics role, --analytics-collection, and what the
+      // code chose, which every provider keeps across starts, whichever
+      // modules provide the role: in the apps with every module, which the
+      // matrix has once more for the other value of the option. The value
+      // comes from the choice of the role. The test looks at the fixture
+      // analytics, whose platform side it answers as a device that keeps
+      // the setting as the SDK of a provider does.
+      MatrixAppTest(
+        '$appTests/analytics_collection',
+        appliesTo: (app) => _withEveryModule(app, analyticsRole),
+        values: (app) => {
+          'collected_from_first_start': '${_collectedFromFirstStartOf(app)}',
+        },
+        roles: {analyticsRole},
+      ),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
       // role chose, 24 or 12, and the module shows an hour as that clock
@@ -538,6 +556,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       envRole,
       restRole,
       remoteConfigRole,
+      analyticsRole,
     },
   );
 }
@@ -546,6 +565,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
 /// remote config role, in the order of the role ([RemoteConfigRole.keysIn]).
 List<AppRemoteConfigKey> _parametersOf(MatrixApp app) =>
     remoteConfigRole.keysIn(remoteConfigRole.hookInput(app.hook!));
+
+/// Whether [app], an app with the analytics role, collects analytics from
+/// its first start, as the role chose (`--analytics-collection`): from the
+/// choice of the role, which an app that got no value of the option has too,
+/// not from the options that the matrix gives `smf create`.
+bool _collectedFromFirstStartOf(MatrixApp app) =>
+    analyticsRole.collectionIn(analyticsRole.hookInput(app.hook!)) ==
+    AnalyticsCollection.on;
 
 /// The values that the test of the module that reads values of .env gives
 /// its keys in the file of the values of an app: a value that goes into the

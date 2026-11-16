@@ -163,9 +163,9 @@ void main() {
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
       'of the auth role, of the onboarding screen role, of the notifications '
-      'role, of the push role, of the purchases role, of the env role and of '
-      'the remote config role with every provider of each, which they tell '
-      'apart by the roles of the app only', () {
+      'role, of the push role, of the purchases role, of the env role, of the '
+      'remote config role and of the analytics role with every provider of '
+      'each, which they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -184,8 +184,12 @@ void main() {
         purchasesRole,
         envRole,
         remoteConfigRole,
+        analyticsRole,
       ]),
     );
+    // The test of the setting of collection checks that every provider of
+    // the analytics role keeps it, and follows what the role chose.
+    expect(named('analytics_collection').roles, {analyticsRole});
     expect(named('auth_role').roles, {authRole});
     expect(named('auth_methods').roles, {authRole});
     expect(
@@ -359,9 +363,10 @@ void main() {
     ]);
     // One for each combination of the providers of the roles that take one,
     // and each once more for every other combination of the values of the
-    // two mode options of the fixtures: the three modes of the auth role
-    // and the two of the fixture clock.
-    expect(everyModule, hasLength(48));
+    // three mode options of the fixtures: the two of the collection of the
+    // analytics role, the three modes of the auth role and the two of the
+    // fixture clock.
+    expect(everyModule, hasLength(96));
     expect(everyModule.where((app) => app.modes.isEmpty), hasLength(8));
     for (final app in everyModule) {
       expect(
@@ -393,11 +398,65 @@ void main() {
   });
 
   test(
+      'the test of the setting of analytics collection applies to the apps '
+      'with every module that have the analytics role, those of the other '
+      'value of its mode option among them, and gets whether the app '
+      'collects from its first start from the choice of the role', () {
+    final collection = named('analytics_collection');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    expect(appsOf(collection), [for (final app in everyModule) app.name]);
+    expect(
+      {for (final app in everyModule) app.name: collection.values!(app)},
+      {
+        for (final app in everyModule)
+          app.name: {
+            'collected_from_first_start':
+                '${!app.name.contains(' --analytics-collection=off')}',
+          },
+      },
+    );
+    // Half of the apps with every module collect nothing before their code
+    // chose.
+    expect(
+      [
+        for (final app in everyModule)
+          if (collection.values!(app)['collected_from_first_start'] == 'false')
+            app,
+      ],
+      hasLength(48),
+    );
+    // The value comes from the choice of the role, which an app has without
+    // the option too, and from nothing else of the app.
+    final byDefault = everyModule.first;
+    expect(
+      collection.values!(
+        MatrixApp(
+          byDefault.name,
+          byDefault.modules,
+          everyModuleWith: byDefault.everyModuleWith,
+          hook: byDefault.hook,
+        ),
+      ),
+      {'collected_from_first_start': 'true'},
+    );
+    // The matrix writes no file for it, and it has neither mocks nor a
+    // probe for the start check.
+    expect(collection.generatedFiles, isNull);
+    expect(collection.mocks, isNull);
+    expect(collection.startProbe, isNull);
+  });
+
+  test(
       'the test of the hours of the fixture clock applies to the apps with '
       'every module, which have the clock and the module that uses it, and '
       'gets the hours that the clock role chose for each: 24 in an app that '
       'got no value of the option of the role, and 12 in the app of the '
-      'other value, in each mode of the auth role', () {
+      'other value, in each combination of the collection of the analytics '
+      'role and of the mode of the auth role', () {
     final clockHours = named('clock_hours');
     final everyModule = [
       for (final app in apps)
@@ -416,15 +475,16 @@ void main() {
           },
       },
     );
-    // Each app with every module has a clock of 12 hours once in each of
-    // the three modes of the auth role, whose option comes before that of
-    // the clock in the name of an app.
+    // Each app with every module has a clock of 12 hours once in each
+    // combination of the two values of the collection of the analytics role
+    // and the three modes of the auth role, whose options come before that
+    // of the clock in the name of an app.
     expect(
       [
         for (final app in everyModule)
           if (clockHours.values!(app)['clock_hours'] == '12') app.name,
       ],
-      hasLength(24),
+      hasLength(48),
     );
     // The hours come from the choice of the role, which an app has without
     // the option too.
@@ -1210,7 +1270,8 @@ void main() {
     // default mode and one in each other mode, the two of the fixture way
     // to sign in, the two of the fixture purchases with the role and the one
     // of the fixture REST with the role in the default mode, and each app
-    // with every module with a clock of 24 hours and with one of 12.
+    // with every module with a clock of 24 hours and with one of 12, each
+    // also collecting nothing before its code chose.
     expect(
       {
         for (final mode in AuthMode.values)
@@ -1218,7 +1279,7 @@ void main() {
               .where((app) => authTest.values!(app)['auth_mode'] == mode.name)
               .length,
       },
-      {'required': 27, 'guest': 17, 'anonymous': 17},
+      {'required': 43, 'guest': 33, 'anonymous': 33},
     );
     // The mode comes from the choice of the role, which an app has without
     // the option too.
@@ -2129,9 +2190,11 @@ void main() {
     test(
         'is the app with every module with the first state manager, in the '
         'first mode of the auth role, which Firebase Authentication provides '
-        'there: the matrix of the registry has such an app for each of the '
-        'two state managers that the sign-in has a variant for, and each '
-        'once more for each other mode, all of which the tool leaves out', () {
+        'there, and collecting analytics from its first start: the matrix of '
+        'the registry has such an app for each of the two state managers '
+        'that the sign-in has a variant for, and each once more for each '
+        'other combination of the mode and of the collection, all of which '
+        'the tool leaves out', () {
       expect(
         [
           for (final app in matrix)
@@ -2140,21 +2203,33 @@ void main() {
         [
           'every module (bloc)',
           'every module (riverpod)',
-          'every module (bloc) --auth-mode=guest',
-          'every module (bloc) --auth-mode=anonymous',
-          'every module (riverpod) --auth-mode=guest',
-          'every module (riverpod) --auth-mode=anonymous',
+          for (final stateManager in const ['bloc', 'riverpod'])
+            for (final collection in const ['', ' --analytics-collection=off'])
+              for (final mode in const [
+                '',
+                ' --auth-mode=guest',
+                ' --auth-mode=anonymous',
+              ])
+                if ('$collection$mode'.isNotEmpty)
+                  'every module ($stateManager)$collection$mode',
         ],
       );
       expect(everyModule.name, 'every module (bloc)');
       expect(everyModule.everyModuleWith, isEmpty);
       expect(everyModule.modes, isEmpty);
-      // It gets no value of the option, so the role chooses the first mode,
-      // as for a user who does not give the option.
-      expect(everyModule.roleOptions.keys, isNot(contains('auth-mode')));
+      // It gets no value of the options, so the roles choose their first
+      // values, as for a user who does not give the options.
+      expect(
+        everyModule.roleOptions.keys,
+        isNot(anyOf(contains('auth-mode'), contains('analytics-collection'))),
+      );
       expect(
         authRole.modeIn(authRole.hookInput(everyModule.hook!)),
         AuthMode.required,
+      );
+      expect(
+        analyticsRole.collectionIn(analyticsRole.hookInput(everyModule.hook!)),
+        AnalyticsCollection.on,
       );
     });
 

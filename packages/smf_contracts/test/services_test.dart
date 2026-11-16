@@ -31,6 +31,13 @@ RoleData<Object> _data(
       module: SmfNames.snakeCaseOf(name),
     );
 
+/// The choice of [role] in an app generated without its options: whether the
+/// app collects from its first start, for the [analyticsRole], whose mode
+/// option has `on` as its first value, and none for the other service roles,
+/// which choose nothing.
+Object? _choiceOf(Role role) =>
+    identical(role, analyticsRole) ? AnalyticsCollection.on : null;
+
 /// The issues of the module rule of [role] for a module that [provides] the
 /// role or only uses it, and contributes [implementations], the data of the
 /// role.
@@ -70,6 +77,58 @@ Map<String, FunctionDeclaration> _functionsOf(String code) => {
           .whereType<FunctionDeclaration>())
         function.name.lexeme: function,
     };
+
+/// Renders the template of the analytics role in an app with the
+/// implementations of [data], where the roles in [present] are present too,
+/// and that collects from its first start as [collection] says.
+Future<RenderedTemplate> _renderAnalytics(
+  List<RoleData<Object>> data, {
+  Set<Role> present = const {},
+  AnalyticsCollection collection = AnalyticsCollection.on,
+}) =>
+    renderTemplate(
+      analyticsRole,
+      data: data,
+      present: present,
+      choice: collection,
+    );
+
+/// The fragments that [rendered], the template of the analytics role, gives
+/// the phases of `bootstrap()`, in the order of the hook.
+List<SocketContribution> _startUpOf(RenderedTemplate rendered) => [
+      for (final fragment in rendered.elsewhere)
+        if (const [
+          AppEntryRole.bootstrapEarly,
+          AppEntryRole.bootstrapPlatform,
+          AppEntryRole.bootstrapDi,
+          AppEntryRole.bootstrapLate,
+        ].contains(fragment.socket))
+          fragment,
+    ];
+
+/// The section of the analytics role in the README of the app that
+/// [rendered], the template of the role, writes.
+String _analyticsSectionOf(RenderedTemplate rendered) => rendered.elsewhere
+    .singleWhere(
+      (fragment) =>
+          fragment.socket == AppEntryRole.readmeSections &&
+          fragment.entryKey == AnalyticsRole.readmeHeading,
+    )
+    .entryValue! as String;
+
+/// The declaration of `analyticsCollectedFromFirstStart` in [code], the file
+/// of the analytics role, as the analyzer parses it.
+TopLevelVariableDeclaration _collectedFromFirstStartIn(String code) =>
+    parseString(content: code)
+        .unit
+        .declarations
+        .whereType<TopLevelVariableDeclaration>()
+        .singleWhere(
+          (declaration) => declaration.variables.variables.any(
+            (variable) =>
+                variable.name.lexeme == 'analyticsCollectedFromFirstStart',
+          ),
+        );
 
 final class _Container extends DiProvider {
   const _Container();
@@ -324,6 +383,10 @@ void main() {
             '_analyticsServices',
             // How an entry of the list of the providers looks.
             '_createAlone',
+            // The one switch of collection, and what the app does before its
+            // code chose.
+            'AnalyticsService.setAnalyticsCollectionEnabled',
+            'analyticsCollectedFromFirstStart',
           ],
         ),
         (
@@ -338,8 +401,11 @@ void main() {
           ],
         ),
       ]) {
-        final rendered =
-            await renderTemplate(role, data: [_data(role, 'Console')]);
+        final rendered = await renderTemplate(
+          role,
+          data: [_data(role, 'Console')],
+          choice: _choiceOf(role),
+        );
         final note = agentNoteOf(role);
         final file = role.interface.files.single;
 
@@ -358,6 +424,7 @@ void main() {
               _data(role, 'Console'),
               _data(role, 'Delayed', async: true),
             ],
+            choice: _choiceOf(role),
           );
           expectNamesOfCode(
             note,
@@ -450,9 +517,8 @@ void main() {
 
   group('the analytics template', () {
     test('forwards to all implementations', () async {
-      final rendered = await renderTemplate(
-        analyticsRole,
-        data: [
+      final rendered = await _renderAnalytics(
+        [
           _data(analyticsRole, 'ConsoleAnalytics'),
           _data(analyticsRole, 'OtherAnalytics'),
         ],
@@ -475,20 +541,17 @@ void main() {
       expect(code, contains('final class _AnalyticsServices'));
       expect(code, isNot(contains('initAnalytics')));
       expect(_functionsOf(code), isNot(contains('_startAlone')));
-      expect(rendered.elsewhere, isEmpty);
+      expect(_startUpOf(rendered), isEmpty);
     });
 
     test(
         'creates each implementation on its own, and leaves out one whose '
         'factory throws or whose start fails, printing its error in debug '
         'mode', () async {
-      final rendered = await renderTemplate(
-        analyticsRole,
-        data: [
-          _data(analyticsRole, 'ConsoleAnalytics'),
-          _data(analyticsRole, 'DelayedAnalytics', async: true),
-        ],
-      );
+      final rendered = await _renderAnalytics([
+        _data(analyticsRole, 'ConsoleAnalytics'),
+        _data(analyticsRole, 'DelayedAnalytics', async: true),
+      ]);
       final code = rendered.files[AnalyticsRole.file]!;
 
       expectParses(code);
@@ -537,13 +600,10 @@ void main() {
     });
 
     test('adds the asynchronous implementations in bootstrap', () async {
-      final rendered = await renderTemplate(
-        analyticsRole,
-        data: [
-          _data(analyticsRole, 'ConsoleAnalytics'),
-          _data(analyticsRole, 'DelayedAnalytics', async: true),
-        ],
-      );
+      final rendered = await _renderAnalytics([
+        _data(analyticsRole, 'ConsoleAnalytics'),
+        _data(analyticsRole, 'DelayedAnalytics', async: true),
+      ]);
       final code = rendered.files[AnalyticsRole.file]!;
 
       expectParses(code);
@@ -566,27 +626,24 @@ void main() {
         ),
       );
       expect(
-        rendered.elsewhere.single.fragment!.code,
+        _startUpOf(rendered).single.fragment!.code,
         'await initAnalytics();',
       );
     });
 
     test('imports each implementation with its own prefix', () async {
-      final rendered = await renderTemplate(
-        analyticsRole,
-        data: [
-          dataOf(
-            analyticsRole,
-            const RoleImplementation(
-              type: TypeRef('Vendor'),
-              create: FactoryRef(
-                'createVendor',
-                import: ImportRef.app('vendor.dart', prefix: 'vendor'),
-              ),
+      final rendered = await _renderAnalytics([
+        dataOf(
+          analyticsRole,
+          const RoleImplementation(
+            type: TypeRef('Vendor'),
+            create: FactoryRef(
+              'createVendor',
+              import: ImportRef.app('vendor.dart', prefix: 'vendor'),
             ),
           ),
-        ],
-      );
+        ),
+      ]);
       final code = rendered.files[AnalyticsRole.file]!;
 
       expectParses(code);
@@ -596,6 +653,285 @@ void main() {
       );
       expect(code, contains("import 'package:my_app/vendor.dart' as impl0;"));
       expect(code, isNot(contains('vendor.createVendor')));
+    });
+  });
+
+  group('the collection of the analytics role', () {
+    const option = AnalyticsRole.collectionOption;
+
+    /// The choice of the role with [value] for its option, in [environment],
+    /// or without a terminal.
+    Future<Object?> choose(String? value, {SmfEnvironment? environment}) =>
+        analyticsRole.template.choose(
+          analyticsRole.choiceContext(
+            RoleChoiceRequest(
+              data: const [],
+              presentRoles: {analyticsRole},
+              optionValues: {option.name: value},
+              environment: environment ?? FakeEnvironment(),
+              context: testContext,
+            ),
+          ),
+        );
+
+    test(
+        'is the mode option --analytics-collection, whose values are on, the '
+        'first, and off', () {
+      expect(analyticsRole.options, const [option]);
+      expect(option.name, 'analytics-collection');
+      expect(option.isMode, isTrue);
+      expect(option.allowed, ['on', 'off']);
+      expect(
+        option.allowed,
+        [for (final collection in AnalyticsCollection.values) collection.name],
+      );
+      expect(
+        option.help,
+        allOf(contains('(on, the default)'), contains('(off)')),
+      );
+    });
+
+    test('is the value of the option, which nothing asks for then', () async {
+      for (final collection in AnalyticsCollection.values) {
+        // The environment without a terminal fails when it is asked.
+        expect(await choose(collection.name), collection);
+        final terminal = PromptingEnvironment(pick: 1);
+        expect(
+          await choose(collection.name, environment: terminal),
+          collection,
+        );
+        expect(terminal.asked, isEmpty);
+      }
+    });
+
+    test(
+        'is on in a run without a terminal and without the option, which '
+        'neither fails nor asks', () async {
+      expect(await choose(null), AnalyticsCollection.on);
+    });
+
+    test(
+        'is asked for in a terminal without the option, with on as the first '
+        'item and as the one that Enter takes', () async {
+      for (final (pick, collection) in AnalyticsCollection.values.indexed) {
+        final terminal = PromptingEnvironment(pick: pick);
+
+        expect(await choose(null, environment: terminal), collection);
+        expect(
+          terminal.asked,
+          ['Does the app collect analytics before the user agrees?'],
+        );
+        expect(terminal.shown, [
+          'Yes, from its first start',
+          'No: only once your code turns it on, as after the user agrees',
+        ]);
+        expect(terminal.shownDefault, terminal.shown.first);
+      }
+    });
+
+    test(
+        'has the option for every choice, with which a run without a '
+        'terminal makes the same choice', () async {
+      for (final collection in AnalyticsCollection.values) {
+        final options = analyticsRole.template.optionsOf(collection);
+
+        expect(options, {'analytics-collection': collection.name});
+        expect(await choose(options[option.name]), collection);
+      }
+    });
+
+    test('reaches the render hooks of the role and of its providers', () {
+      for (final collection in AnalyticsCollection.values) {
+        expect(
+          analyticsRole.collectionIn(
+            inputOf(analyticsRole, choice: collection),
+          ),
+          collection,
+        );
+      }
+    });
+
+    test(
+        'is the constant analyticsCollectedFromFirstStart of the file of the '
+        'role, which the setter of the service names', () async {
+      for (final collection in AnalyticsCollection.values) {
+        final code = (await _renderAnalytics(
+          [_data(analyticsRole, 'ConsoleAnalytics')],
+          collection: collection,
+        ))
+            .files[AnalyticsRole.file]!;
+
+        expectParses(code);
+        final declaration = _collectedFromFirstStartIn(code);
+        final variable = declaration.variables.variables.single;
+        expect(declaration.variables.isConst, isTrue);
+        expect('${declaration.variables.type}', 'bool');
+        expect(
+          (variable.initializer! as BooleanLiteral).value,
+          collection == AnalyticsCollection.on,
+          reason: collection.name,
+        );
+        expect(
+          '${declaration.documentationComment?.tokens.join('\n')}',
+          allOf(
+            contains('[AnalyticsService.setAnalyticsCollectionEnabled]'),
+            contains('`--analytics-collection` of `smf create`'),
+            contains('A provider whose SDK starts'),
+          ),
+        );
+        // The setter tells what the constant is for.
+        final setter = parseString(content: code)
+            .unit
+            .declarations
+            .whereType<ClassDeclaration>()
+            .singleWhere(
+              (type) => type.namePart.typeName.lexeme == 'AnalyticsService',
+            )
+            .body
+            .members
+            .whereType<MethodDeclaration>()
+            .singleWhere(
+              (method) => method.name.lexeme == 'setAnalyticsCollectionEnabled',
+            );
+        expect(
+          '${setter.documentationComment?.tokens.join('\n')}',
+          allOf(
+            contains('no provider sends anything to its'),
+            contains('Every provider keeps the setting on the device'),
+            contains('[analyticsCollectedFromFirstStart]'),
+          ),
+        );
+      }
+    });
+
+    test(
+        'makes bootstrap() of a debug build print, in an app that collects '
+        'nothing before its code chose, that collection waits for the code',
+        () async {
+      final off = await _renderAnalytics(
+        [_data(analyticsRole, 'ConsoleAnalytics')],
+        collection: AnalyticsCollection.off,
+      );
+      final on = await _renderAnalytics(
+        [_data(analyticsRole, 'ConsoleAnalytics')],
+      );
+
+      expect(_startUpOf(on), isEmpty);
+      final print = _startUpOf(off).single;
+      expect(print.socket, AppEntryRole.bootstrapEarly);
+      expect(print.when, isEmpty);
+      final statement = parseString(
+        content: 'void main() {${print.fragment!.code}}',
+      ).unit.declarations.whereType<FunctionDeclaration>().single;
+      final body = statement.functionExpression.body as BlockFunctionBody;
+      final check = body.block.statements.single as IfStatement;
+      expect(
+        '${check.expression}',
+        'kDebugMode && !analyticsCollectedFromFirstStart',
+      );
+      final call = ((check.thenStatement as Block).statements.single
+              as ExpressionStatement)
+          .expression as MethodInvocation;
+      expect(call.methodName.name, 'debugPrint');
+      final message =
+          (call.argumentList.arguments.single as StringLiteral).stringValue!;
+      expect(message, isNot(contains('\n')));
+      expect(
+        message,
+        allOf(
+          startsWith('Analytics: this app collects nothing on a device until '
+              'its code turns collection on there with '
+              'setAnalyticsCollectionEnabled(true)'),
+          contains('See the section Analytics of README.md.'),
+        ),
+      );
+      expect(print.fragment!.imports, const [
+        ImportRef('package:flutter/foundation.dart'),
+        ImportRef.app('core/analytics/analytics_service.dart'),
+      ]);
+    });
+
+    test(
+        'writes the section of the role in the README of the app, which tells '
+        'what the app does before its code chose, the switch, consent and '
+        'what the setting does not cover, and names no provider', () async {
+      for (final collection in AnalyticsCollection.values) {
+        final rendered = await _renderAnalytics(
+          [_data(analyticsRole, 'ConsoleAnalytics')],
+          collection: collection,
+        );
+        final section = _analyticsSectionOf(rendered);
+        final other = AnalyticsCollection.values.singleWhere(
+          (value) => value != collection,
+        );
+
+        expect(
+          section,
+          startsWith(
+            'This app was generated with '
+            '`--analytics-collection=${collection.name}`: ',
+          ),
+          reason: collection.name,
+        );
+        expect(
+          section,
+          contains(
+            '`analyticsCollectedFromFirstStart` in '
+            '`${AnalyticsRole.file}` is '
+            '`${collection == AnalyticsCollection.on}`',
+          ),
+        );
+        expect(
+          section,
+          isNot(contains('`--analytics-collection=${other.name}`: ')),
+        );
+        expect(
+          section,
+          allOf([
+            contains('`setAnalyticsCollectionEnabled()` of the analytics '
+                'service is the one switch'),
+            contains('Every provider keeps the setting on the device'),
+            contains('Off means that nothing is sent. It does not mean that '
+                'no SDK writes to the device'),
+            contains('the native lines of each provider whose SDK starts '
+                'before Dart, which its section of this README names'),
+            contains('In the European Economic Area, the ePrivacy rules'),
+            contains('In the UK, the Privacy and Electronic Communications '
+                'Regulations, as the Data (Use and Access) Act 2025 amended '
+                'them'),
+            contains('The guidance of the ICO tells what qualifies.'),
+            contains('SMF shows no consent dialog.'),
+            contains('5.1.1(ii)'),
+            contains('give the settings screen a switch that calls '
+                '`setAnalyticsCollectionEnabled()`'),
+            contains('a link to a privacy policy'),
+            contains('Crash reports are another role'),
+            endsWith('This is not legal advice.\n'),
+          ]),
+          reason: collection.name,
+        );
+        // A debug build says so only in an app that collects nothing before
+        // its code chose.
+        expect(
+          section.contains('a debug build prints a line at each start'),
+          collection == AnalyticsCollection.off,
+        );
+        expectNamesOfCodeIn(
+          section,
+          {
+            AnalyticsRole.file: [
+              'analyticsCollectedFromFirstStart',
+              'AnalyticsService.setAnalyticsCollectionEnabled',
+            ],
+          },
+          files: rendered.files,
+        );
+        // It holds whichever modules provide the role.
+        expect(
+          section.toLowerCase(),
+          allOf(isNot(contains('firebase')), isNot(contains('console'))),
+        );
+      }
     });
   });
 

@@ -550,6 +550,7 @@ void main() {
         'env_release_error',
         'env_no_values_message',
         'rest_tokens',
+        'analytics_collected_from_first_start',
         'remote_config_defaults',
         'remote_config_getters',
       };

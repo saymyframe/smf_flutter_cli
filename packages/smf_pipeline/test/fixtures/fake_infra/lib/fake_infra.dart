@@ -408,6 +408,12 @@ final class _FakeL10nProvider extends RoleProvider<TextsData> {
 /// mocks of its app tests answer, with a navigator observer for every
 /// navigator of the router, which notes the routes that come on its
 /// navigator, and a listener of the screen the user sees.
+///
+/// Its start sends the platform side whether the app collects before its
+/// code chose (`analyticsCollectedFromFirstStart` of the role), as
+/// `collectByDefault`. The platform side, like the SDK of a provider, keeps
+/// the setting of collection across starts, and takes that default only
+/// when it has kept nothing.
 final class FakeAnalyticsModule extends SmfModule {
   /// Creates the module.
   const FakeAnalyticsModule();
@@ -587,6 +593,10 @@ final class FakeCrashModule extends SmfModule {
 /// of those roles read, and misbehave when a test says so: their factories
 /// throw, they throw as they are called or return a future that fails, and
 /// the analytics service changes the map of parameters that it gets.
+///
+/// Its analytics service sends nothing to a backend, so it keeps the
+/// guarantee of the analytics role about collection by nature: with
+/// collection off, it sends nothing, as with collection on.
 ///
 /// The tests of a role that an app can have several providers of look at
 /// what reaches it, next to the other providers of the role, whose own

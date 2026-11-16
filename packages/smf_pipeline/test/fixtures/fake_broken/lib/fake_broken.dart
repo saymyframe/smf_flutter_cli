@@ -684,6 +684,78 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture analytics whose start sets its platform side up with
+  /// collection on, as a provider does that starts its SDK with collection
+  /// on at each start, rather than leave it to the setting that the SDK
+  /// keeps and to `analyticsCollectedFromFirstStart` of the role: an app
+  /// that collects nothing before its code chose collects at its first
+  /// start, and a collection that the code turned off is on again at the
+  /// next start.
+  static const analyticsCollectingAtEachStart = BrokenModule._(
+    FakeAnalyticsModule(),
+    ModuleId('broken_analytics_collects_at_each_start'),
+    'Analytics that turns collection on at each start (fixture)',
+    'lib/core/fixture_analytics/fixture_analytics.dart',
+    [
+      (
+        "    {'collectByDefault': analyticsCollectedFromFirstStart},\n",
+        "    {'collectByDefault': true},\n",
+      ),
+      (
+        '  return const FixtureAnalytics();\n',
+        '  await fixtureAnalyticsChannel.invokeMethod<void>(\n'
+            "    'setAnalyticsCollectionEnabled',\n"
+            "    {'enabled': true},\n"
+            '  );\n'
+            '  return const FixtureAnalytics();\n',
+      ),
+    ],
+  );
+
+  /// The fixture analytics that keeps the opt-out in Dart memory alone, as
+  /// a provider does that stops sending events while the code turned
+  /// collection off but never tells its SDK: only a call that turns
+  /// collection on reaches its platform side. So the setting holds while
+  /// the app runs, and at the next start the SDK collects again, a session
+  /// among what it records itself.
+  static const analyticsKeepingOptOutInMemory = BrokenModule._(
+    FakeAnalyticsModule(),
+    ModuleId('broken_analytics_keeps_opt_out_in_memory'),
+    'Analytics that keeps the opt-out in memory alone (fixture)',
+    'lib/core/fixture_analytics/fixture_analytics.dart',
+    [
+      (
+        '  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>\n'
+            "      _record('setAnalyticsCollectionEnabled', "
+            "{'enabled': enabled});\n",
+        '  Future<void> setAnalyticsCollectionEnabled(bool enabled) async {\n'
+            '    _optedOut = !enabled;\n'
+            '    if (enabled) {\n'
+            "      await _send('setAnalyticsCollectionEnabled', "
+            "{'enabled': enabled});\n"
+            '    }\n'
+            '  }\n'
+            '\n'
+            '  static bool _optedOut = false;\n',
+      ),
+      (
+        '  Future<void> _record(String method, Map<String, Object?> arguments) '
+            '=>\n'
+            '      fixtureAnalyticsChannel.invokeMethod<void>(method, '
+            'arguments);\n',
+        '  Future<void> _record(String method, Map<String, Object?> arguments) '
+            'async {\n'
+            '    if (!_optedOut) await _send(method, arguments);\n'
+            '  }\n'
+            '\n'
+            '  Future<void> _send(String method, '
+            'Map<String, Object?> arguments) =>\n'
+            '      fixtureAnalyticsChannel.invokeMethod<void>(method, '
+            'arguments);\n',
+      ),
+    ],
+  );
+
   /// The fixture crash reporting whose start sets the handler of the errors
   /// of Flutter to a report of its own, as the guide of a crash reporting
   /// SDK may tell an app to do, rather than leaving the handlers to the
