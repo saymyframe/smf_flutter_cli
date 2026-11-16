@@ -115,8 +115,11 @@ void main() {
 
   test(
       'creating the analytics service of the module sends nothing to Firebase '
-      'Analytics, so the setting of collection that it keeps holds', () {
+      'Analytics, so the setting of collection that it keeps holds', () async {
     createFirebaseAnalyticsService();
+    // A turn of the event loop, so that what the service would send once it
+    // is created, without waiting, reaches the mocks too.
+    await Future<void>.delayed(Duration.zero);
 
     expect(
       analyticsCalls,

@@ -2455,14 +2455,45 @@ List<BrokenProvider> brokenProviders() => const [
             'at its first start, the app collects analytics exactly when it '
                 'was generated to collect from its first start',
             'An app that collects nothing before its code chose collects '
-                'nothing at its first start.',
+                'nothing at its first start, not even a session that its SDK '
+                'would record itself.',
           ),
           MatrixExpectedFailure(
             'test/analytics_collection/next_start_test.dart',
             'a collection that the code turned off stays off at the next '
                 'start',
             'A collection that the code turned off stays off at the next '
-                'start.',
+                'start, also for a session that the SDK records itself.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.analyticsKeepingOptOutInMemory,
+        role: analyticsRole,
+        bug: 'It keeps the opt-out in Dart memory alone: a call that turns '
+            'collection off never reaches its platform side, which collects '
+            'again at the next start, a session among what it records itself.',
+        // The tests of the analytics role and of the crash reporting role
+        // that the app of several providers runs apply to the app too, and
+        // use the files of the service log of the fixtures and of the
+        // fixture crash reporting.
+        app: [FakeServiceLogModule.id, FakeCrashModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/analytics_collection/next_start_test.dart',
+            'a collection that the code turned off stays off at the next '
+                'start',
+            'A collection that the code turned off stays off at the next '
+                'start, also for a session that the SDK records itself.',
+          ),
+          // The call that turns collection off does not reach its platform
+          // side, nor do the calls after it.
+          MatrixExpectedFailure(
+            'test/analytics_role_test.dart',
+            'the analytics service of the app forwards each call to every '
+                'analytics service once',
+            'Each call reaches every analytics service once, in the order of '
+                'the calls.',
           ),
         ],
       ),

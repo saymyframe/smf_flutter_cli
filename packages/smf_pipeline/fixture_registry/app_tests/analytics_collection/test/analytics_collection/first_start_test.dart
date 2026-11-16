@@ -1,8 +1,9 @@
 // A test of the analytics role that continuous integration runs in the apps
 // with every module whose modules give the app the analytics role,
 // whichever modules provide it there: at its first start, an app collects
-// analytics exactly when the role chose that it collects from its first
-// start (--analytics-collection), and in a debug build, an app that collects
+// analytics, what its code logs and what an SDK records itself, exactly
+// when the role chose that it collects from its first start
+// (--analytics-collection), and in a debug build, an app that collects
 // nothing before its code chose says so at its start.
 //
 // The role has a mode option, and the matrix has each of these apps once
@@ -39,12 +40,13 @@ void main() {
 
     expect(
       device.collected,
-      collectedFromFirstStart ? ['smf_first_start'] : isEmpty,
+      collectedFromFirstStart ? [sessionStart, 'smf_first_start'] : isEmpty,
       reason: collectedFromFirstStart
           ? 'An app that collects from its first start collects at its '
-              'first start.'
+              'first start, a session that its SDK records itself too.'
           : 'An app that collects nothing before its code chose collects '
-              'nothing at its first start.',
+              'nothing at its first start, not even a session that its SDK '
+              'would record itself.',
     );
   });
 

@@ -1393,6 +1393,8 @@ void main() {
                 '`setAnalyticsCollectionEnabled()` chose on the device, '
                 'across starts.'),
             contains('in an app generated with `--analytics-collection=off`'),
+            contains('An app generated with `--analytics-collection=on`, or '
+                'without the option, has neither line.'),
             contains('`firebase_analytics_collection_enabled` is `false` in '
                 '`${AppEntryRole.androidManifestFile}`'),
             contains('`FIREBASE_ANALYTICS_COLLECTION_ENABLED` is `false` in '

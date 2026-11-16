@@ -1,8 +1,9 @@
 // What the tests of the setting of analytics collection share: a device
 // that answers the platform side of the fixture analytics as the SDK of a
 // provider does, which keeps the setting of collection across the starts of
-// the app, the start-up of the app, and the start of the fixture analytics
-// at the next launch.
+// the app and records a session itself at each start while it collects,
+// the start-up of the app, and the start of the fixture analytics at the
+// next launch.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -17,10 +18,16 @@ import 'package:{{app_name}}/core/fixture_analytics/fixture_analytics.dart';
 final bool collectedFromFirstStart =
     bool.parse('{{collected_from_first_start}}');
 
+/// The event that the device records itself at each start while it
+/// collects, as an SDK records the start of a session or the first open of
+/// the app before any code of the app runs.
+const sessionStart = 'session_start';
+
 /// The platform side of the fixture analytics as a device on which the app
 /// never ran: it answers the fixture analytics as the SDK of a provider
 /// does, which keeps on the device the setting of collection that the code
-/// chose, across the starts of the app.
+/// chose, across the starts of the app, and records [sessionStart] itself
+/// at each start while it collects.
 ///
 /// It replaces the mocks of the fixture that the matrix set up.
 final class FixtureAnalyticsDevice {
@@ -38,7 +45,8 @@ final class FixtureAnalyticsDevice {
   /// code of the app decided.
   bool collects = false;
 
-  /// The names of the events that the device collected, in order.
+  /// The names of the events that the device collected, in order, those
+  /// that it recorded itself among them.
   final List<String> collected = [];
 
   Future<Object?> _answer(MethodCall call) async {
@@ -48,6 +56,7 @@ final class FixtureAnalyticsDevice {
         // A start takes the default of the app only while the device kept
         // nothing, and an SDK collects when nothing says otherwise.
         collects = kept ?? (arguments?['collectByDefault'] as bool?) ?? true;
+        if (collects) collected.add(sessionStart);
       case 'setAnalyticsCollectionEnabled':
         final enabled = arguments!['enabled']! as bool;
         kept = enabled;

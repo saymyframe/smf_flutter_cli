@@ -3,7 +3,9 @@
 // whichever modules provide it there: what the code of the app chose with
 // setAnalyticsCollectionEnabled() holds at the next start, whatever the app
 // collects before its code chose, since every provider keeps it on the
-// device.
+// device. A provider that keeps it only in memory would collect a session
+// at the next start, which its SDK records itself before any code of the
+// app runs.
 //
 // The test looks at the fixture analytics, whose platform side it answers
 // as a device that keeps the setting of collection as the SDK of a provider
@@ -38,7 +40,7 @@ void main() {
       device.collected,
       isEmpty,
       reason: 'A collection that the code turned off stays off at the next '
-          'start.',
+          'start, also for a session that the SDK records itself.',
     );
   });
 
@@ -52,7 +54,7 @@ void main() {
 
     expect(
       device.collected,
-      ['smf_after_on'],
+      [sessionStart, 'smf_after_on'],
       reason: 'A collection that the code turned on stays on at the next '
           'start.',
     );
