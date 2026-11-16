@@ -167,8 +167,9 @@ void main() {
       // Firebase Authentication and Firebase Cloud Messaging, which depend
       // on it, with their probes, Google sign-in, which requires the auth
       // role that only Firebase Authentication provides there, with its
-      // probe, and the push messages, which only Firebase Cloud Messaging
-      // provides.
+      // probe, the push messages, which only Firebase Cloud Messaging
+      // provides, and Firebase Remote Config, with its probe, which comes
+      // before that of the REST role.
       final list = read(app, startProbesFile);
       expect(
         [
@@ -194,6 +195,8 @@ void main() {
             ('router_walk', 'probeRoutes'),
             ('localization_role', 'probeLanguages'),
             ('flavors', 'probeFlavor'),
+            if (!withoutExternalSteps)
+              ('firebase_remote_config', 'probeFirebaseRemoteConfig'),
             ('rest_role', 'probeRest'),
           ].indexed)
             (name, index, function),
@@ -202,16 +205,18 @@ void main() {
       );
       // The answers of CI that the probes ask for, in the order of the
       // tests: that of Firebase Cloud Messaging, which only the apps with
-      // external steps have, and that of RevenueCat, each by its name alone,
-      // since the app gives the verdict on both (a line of an answer whose
-      // exit code is the verdict has exit-code after the name); and the
+      // external steps have, that of RevenueCat, and that of Firebase Remote
+      // Config, which only the apps with external steps have too, each by
+      // its name alone, since the app gives the verdict on each (a line of
+      // an answer whose exit code is the verdict has exit-code after the
+      // name); and the
       // argument of the provider of the env role, dart_define, that builds
       // the app with its .env.
       expect(
         read(app, startAnswersFile),
         withoutExternalSteps
             ? 'revenuecat\n'
-            : 'firebase_messaging\nrevenuecat\n',
+            : 'firebase_messaging\nrevenuecat\nfirebase_remote_config\n',
         reason: reason,
       );
       expect(
@@ -254,14 +259,18 @@ void main() {
         read(app, 'integration_test/shared_preferences/probe.dart'),
         contains("import 'package:start_app/$implementation';"),
       );
-      // The tests of shared_preferences, of Firebase Authentication and of
-      // Google sign-in, which come with their probes, each need a dev
-      // dependency, which the tool adds with flutter in the app.
+      // The tests of shared_preferences, of Firebase Authentication, of
+      // Google sign-in and of Firebase Remote Config, which come with their
+      // probes, each need a dev dependency, which the tool adds with flutter
+      // in the app.
       final pubAdd = [
         'flutter pub add',
         if (!withoutExternalSteps) 'dev:firebase_auth_platform_interface',
         if (!withoutExternalSteps) 'dev:google_sign_in_platform_interface',
-        'dev:shared_preferences_platform_interface in ',
+        'dev:shared_preferences_platform_interface',
+        if (!withoutExternalSteps)
+          'dev:firebase_remote_config_platform_interface',
+        'in ',
       ].join(' ');
       final call = calls().single;
       expect(call, startsWith(pubAdd), reason: reason);

@@ -534,6 +534,9 @@ void main() {
     expect(named('purchases_setting').roles, {purchasesRole});
     // And the test of the provider of the purchases role.
     expect(named('revenuecat').roles, isEmpty);
+    expect(named('remote_config_role').roles, {remoteConfigRole});
+    // And the test of the provider of the remote config role.
+    expect(named('firebase_remote_config').roles, isEmpty);
     expect(named('router_walk').roles, {routerRole});
     expect(named('settings_screen_role').roles, {settingsScreenRole});
     // The test of the theme role checks that the root of the app, which the
@@ -2061,11 +2064,12 @@ void main() {
 
   test(
       'the probe of Firebase Cloud Messaging asks the script of CI that '
-      'starts the app for the answer firebase_messaging, a push message, and '
-      'that of RevenueCat for the answer revenuecat, premium access, by the '
-      'names with which the jobs give the answers, and no other probe asks '
-      'for one; the app gives the verdict on both, since what each answer '
-      'sends reaches the app', () {
+      'starts the app for the answer firebase_messaging, a push message, '
+      'that of RevenueCat for the answer revenuecat, premium access, and that '
+      'of Firebase Remote Config for the answer firebase_remote_config, a '
+      'value published in Remote Config, by the names with which the jobs '
+      'give the answers, and no other probe asks for one; the app gives the '
+      'verdict on each, since what each answer sends reaches the app', () {
     expect(
       {
         for (final test in appTests.tests)
@@ -2076,6 +2080,10 @@ void main() {
       {
         'firebase_messaging': ('firebase_messaging', MatrixAnswerVerdict.app),
         'revenuecat': ('revenuecat', MatrixAnswerVerdict.app),
+        'firebase_remote_config': (
+          'firebase_remote_config',
+          MatrixAnswerVerdict.app,
+        ),
       },
     );
   });
@@ -2137,8 +2145,9 @@ void main() {
       'permission of the notifications role and the channel of '
       'local_notifications, the push messages of the role and the address '
       'of Firebase Cloud Messaging, the purchases of the role and those of '
-      'RevenueCat, each a function of a file of its tests that takes the one '
-      'that waits until the screen settles', () async {
+      'RevenueCat, and a fetch of Firebase Remote Config, each a function of '
+      'a file of its tests that takes the one that waits until the screen '
+      'settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -2173,6 +2182,9 @@ void main() {
         'router_walk': 'integration_test/router_walk/walk.dart probeRoutes',
         'localization_role':
             'integration_test/localization_role/probe.dart probeLanguages',
+        'firebase_remote_config':
+            'integration_test/firebase_remote_config/probe.dart '
+                'probeFirebaseRemoteConfig',
       },
     );
     for (final test in appTests.tests) {
@@ -2202,7 +2214,9 @@ void main() {
     // the routes of the app past it. Those of Firebase Authentication, of
     // Google sign-in, of Firebase Cloud Messaging, of RevenueCat, of the
     // notifications role, of local_notifications, of the push role and of
-    // the purchases role only read, so they hold wherever they come.
+    // the purchases role only read, so they hold wherever they come, and
+    // that of Firebase Remote Config activates nothing. It comes before
+    // the probe of the REST role, whose worst case takes longest.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
@@ -2224,6 +2238,7 @@ void main() {
         'router_walk',
         'localization_role',
         'flavors',
+        'firebase_remote_config',
         'rest_role',
       ],
     );
@@ -2275,7 +2290,8 @@ void main() {
         'probe12: router_walk/walk.dart',
         'probe13: localization_role/probe.dart',
         'probe14: flavors/probe.dart',
-        'probe15: rest_role/probe.dart',
+        'probe15: firebase_remote_config/probe.dart',
+        'probe16: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
@@ -2294,7 +2310,8 @@ void main() {
       ('router_walk', 'probe12.probeRoutes'),
       ('localization_role', 'probe13.probeLanguages'),
       ('flavors', 'probe14.probeFlavor'),
-      ('rest_role', 'probe15.probeRest'),
+      ('firebase_remote_config', 'probe15.probeFirebaseRemoteConfig'),
+      ('rest_role', 'probe16.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -5939,8 +5956,9 @@ void main() {
 
     test(
         'applies to the apps with the role, with parameters and without, '
-        'whichever module provides it, or to those of them that it is given; '
-        'no app of the CLI has the role yet', () async {
+        'whichever module provides it, or to those of them that it is given: '
+        'in the CLI, the app of firebase_remote_config and the apps with '
+        'every module', () async {
       final test = await remoteConfigRoleAppTest();
 
       expect(p.basename(test.directory), 'remote_config_role');
@@ -5962,12 +5980,16 @@ void main() {
           for (final app in apps)
             if (test.appliesTo(app)) app.name,
         ],
-        isEmpty,
+        ['firebase_remote_config', ..._everyModule],
       );
-      expect(
-        appTests.tests.map((test) => p.basename(test.directory)),
-        isNot(contains('remote_config_role')),
-      );
+      expect(named('remote_config_role').directory, test.directory);
+      for (final app in apps) {
+        expect(
+          named('remote_config_role').appliesTo(app),
+          test.appliesTo(app),
+          reason: app.name,
+        );
+      }
 
       // As the fixtures take it, only in the apps with every module.
       final everyModule = await remoteConfigRoleAppTest(
@@ -6276,6 +6298,76 @@ void main() {
         .singleWhere((declaration) => declaration.name == test.mocks!.function);
     expect(function.kind, DeclarationKind.function);
     expect(function.type, 'MockFirebaseMessaging');
+    expect(
+      [
+        for (final parameter in function.parameters)
+          if (parameter.kind.name.startsWith('required')) parameter.name,
+      ],
+      isEmpty,
+    );
+  });
+
+  test(
+      'the test of firebase_remote_config applies to the apps with the '
+      'module, whatever else they have, declares the mocks of its platform '
+      'side for the tests of every module of those apps, and has a probe for '
+      'the start check, which asks for a value published in Remote Config', () {
+    final test = named('firebase_remote_config');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      ['firebase_remote_config', ..._everyModule],
+    );
+    // It tests what only this provider of the remote config role does, so
+    // it names no role: the test of the role checks what every provider
+    // keeps to, and runs in every app that this test runs in.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    expect(test.envValues, isNull);
+    for (final app in apps.where(test.appliesTo)) {
+      expect(
+        named('remote_config_role').appliesTo(app),
+        isTrue,
+        reason: app.name,
+      );
+      expect(named('firebase_core').appliesTo(app), isTrue, reason: app.name);
+    }
+    // The mocks answer the messages of the plugin in the codec of its
+    // platform interface, which the app has only as a dependency of the
+    // plugin.
+    expect(
+      test.devDependencies,
+      ['firebase_remote_config_platform_interface'],
+    );
+    expect(test.mocks!.path, 'test/firebase_remote_config_mocks.dart');
+    expect(test.mocks!.function, 'mockFirebaseRemoteConfig');
+    expect(
+      test.startProbe!.path,
+      'integration_test/firebase_remote_config/probe.dart',
+    );
+    expect(test.startProbe!.function, 'probeFirebaseRemoteConfig');
+    expect(test.startProbe!.answer, 'firebase_remote_config');
+    expect(test.startProbe!.verdict, MatrixAnswerVerdict.app);
+    for (final path in [test.mocks!.path, test.startProbe!.path]) {
+      expect(
+        File(p.joinAll([test.directory, ...path.split('/')])).existsSync(),
+        isTrue,
+        reason: path,
+      );
+    }
+    final mocks = File(
+      p.joinAll([test.directory, ...test.mocks!.path.split('/')]),
+    ).readAsStringSync();
+    final (:index, :errors) = DartFileIndexer.parse(test.mocks!.path, mocks);
+    expect(errors, isEmpty);
+    final function = index.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'MockFirebaseRemoteConfig');
     expect(
       [
         for (final parameter in function.parameters)

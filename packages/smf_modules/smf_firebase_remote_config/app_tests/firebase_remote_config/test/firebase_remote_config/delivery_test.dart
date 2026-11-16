@@ -216,7 +216,8 @@ void main() {
 
       final printed = await checking(tester, () async {
         verdict = await check();
-        requested = request().existsSync() ? request().readAsStringSync() : null;
+        requested =
+            request().existsSync() ? request().readAsStringSync() : null;
         reported = report().readAsStringSync();
       });
 
