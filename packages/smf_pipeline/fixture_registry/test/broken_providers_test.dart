@@ -318,6 +318,7 @@ const _warningApps = <String, List<String>>{
   ],
   'fake_gate_stays_closed': ['router.no_start'],
   'broken_onboarding_ignores_conditions': ['router.no_start'],
+  'broken_settings_shows_hidden': ['router.no_start'],
 };
 
 void main() {
