@@ -2403,14 +2403,14 @@ List<BrokenProvider> brokenProviders() => const [
         roleOptions: {'analytics-collection': 'off'},
         failures: [
           MatrixExpectedFailure(
-            'test/first_start_test.dart',
+            'test/analytics_collection/first_start_test.dart',
             'at its first start, the app collects analytics exactly when it '
                 'was generated to collect from its first start',
             'An app that collects nothing before its code chose collects '
                 'nothing at its first start.',
           ),
           MatrixExpectedFailure(
-            'test/next_start_test.dart',
+            'test/analytics_collection/next_start_test.dart',
             'a collection that the code turned off stays off at the next '
                 'start',
             'A collection that the code turned off stays off at the next '
