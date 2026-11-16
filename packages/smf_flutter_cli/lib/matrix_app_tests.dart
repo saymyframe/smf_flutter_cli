@@ -322,12 +322,13 @@ Future<MatrixAppTests> smfAppTests() async {
       // module has its title in, which the matrix writes from the
       // localization role of the app, English alone for an app without the
       // role. Below the title it shows the entries of the app in one
-      // group, or, in an app without settings, a note for its developer
-      // with the path of the file of the screen, which a tap copies. And
-      // it has a back button only on top of another screen, where the
-      // button leads back. For these, the matrix writes how many entries
-      // the screen has and whether it is a destination of the main
-      // navigation, where code cannot push it (see _settingsOfAppOf).
+      // group, also on iOS, where an entry may not show, or, while it has
+      // none to show, a note for its developer with the path of the file
+      // of the screen, which a tap copies. And it has a back button only on
+      // top of another screen, where the button leads back. For these, the
+      // matrix writes how many entries the screen shows and whether it is a
+      // destination of the main navigation, where code cannot push it (see
+      // _settingsOfAppOf).
       MatrixAppTest(
         '$settings/settings',
         appliesTo: _has(SettingsModule.id),
@@ -584,7 +585,8 @@ Future<MatrixAppTests> smfAppTests() async {
       // whichever module provides it: the route that the provider names
       // shows the screen, and the screen shows every entry that the
       // modules of the app give the role once, one below the other in the
-      // order of the role.
+      // order of the role, also on iOS, where it shows no entry whose
+      // function says that it does not show there.
       MatrixAppTest(
         '$cli/settings_screen_role',
         appliesTo: (app) => app.hook!.presentRoles.contains(settingsScreenRole),
