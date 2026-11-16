@@ -59,31 +59,44 @@
 # probe, smf_start_request_<name> in the temporary directory of the app,
 # copies it into a file that only the user of the script may read, and
 # runs the command, with bash, in the directory of the app, with the path
-# of that file in SMF_START_REQUEST. Then it waits for the verdict of the
-# app, smf_start_report_<name> there: `passed`, or `failed: ` and the
-# problem. When no verdict comes in 150 s, it runs the command again, three
-# times in all, since what the command sent may not have reached the app,
-# as a push message that the server took now and then never reaches the
-# emulator. So an answer is a command that may run more than once for one
-# request. An app that gives its verdict without a request, as
-# when it has nothing to ask for, gets no command. The app writes each file
-# next to its place and renames it, so that it is there only whole. The
-# answers run one after another, in their order, but for those that the
-# app does not ask for: integration_test/start_answers, which the matrix
-# tool writes next to the start check, lists the answers that the probes of
-# the app ask for, one on each line. The script skips the others with a
-# notice, so a job of CI gives every app of a covering of the providers of
-# a role every answer it has, whether the provider of the probe that asks
-# for one is in the app or not. Without that file, it runs no answer and
-# fails before it builds the app. The script fails when the
-# app writes neither file in 150 s after its start check passed, when the
-# command fails or takes more than 300 s, when the app gives no verdict in
-# 150 s after each of the three commands, when the app stops before it, and
-# when the verdict is not `passed`. It prints no request and removes its copy, but the log of
-# the app that it prints shows what the app printed itself, such as the
-# address for push messages that a debug app prints. Answers need a debug
-# app, whose files the script reads; without them, it is done once the
-# start check passed. tools/start_app_test.dart tests this protocol.
+# of that file in SMF_START_REQUEST. What gives the verdict on the answer
+# depends on the answer:
+# - The app, for an answer that sends the app something, such as that push
+#   message. The script waits for the verdict of the app,
+#   smf_start_report_<name> there: `passed`, or `failed: ` and the problem.
+#   When no verdict comes in 150 s, it runs the command again, three times
+#   in all, since what the command sent may not have reached the app, as a
+#   push message that the server took now and then never reaches the
+#   emulator. So such an answer is a command that may run more than once
+#   for one request.
+# - The exit code of the command, for an answer that asks a server whether
+#   what the app sent has come, such as an event of a crash reporter: the
+#   server sees what arrived, and the app does not. Exit 0 passes, and any
+#   other code fails. The script runs the command once, since the app
+#   cannot send again and the command waits for the server itself.
+# An app that gives its verdict without a request, as when it has nothing
+# to ask for, gets no command, whatever gives the verdict on the answer.
+# The app writes each file next to its place and renames it, so that it is
+# there only whole. The answers run one after another, in their order, but
+# for those that the app does not ask for: integration_test/start_answers,
+# which the matrix tool writes next to the start check, lists the answers
+# that the probes of the app ask for, one on each line: the name of each,
+# with exit-code after it when the exit code of the answer is its verdict.
+# The script fails before it builds the app on a line of another form, and
+# skips the answers that the file does not list with a notice, so a job of
+# CI gives every app of a covering of the providers of a role every answer
+# it has, whether the provider of the probe that asks for one is in the app
+# or not. Without that file, it runs no answer and fails before it builds
+# the app. The script fails when the app writes neither file in 150 s
+# after its start check passed, when the command fails or takes more than
+# 300 s, when the app gives no verdict in 150 s after each of the three
+# commands of an answer whose verdict is the app's, when the app stops
+# before it, and when the verdict is not `passed`. It prints no request and
+# removes its copy, but the log of the app that it prints shows what the
+# app printed itself, such as the address for push messages that a debug
+# app prints. Answers need a debug app, whose files the script reads;
+# without them, it is done once the start check passed.
+# tools/start_app_test.dart tests this protocol.
 set -euo pipefail
 # shellcheck source=build_apk.sh
 source "$(dirname "${BASH_SOURCE[0]}")/build_apk.sh"
@@ -104,9 +117,12 @@ if [ $# -gt 0 ] && [[ "$1" =~ ^(debug|release)$ ]]; then
   mode="$1"
   shift
 fi
-# The answers, by the name of each, and their commands.
+# The answers, by the name of each, their commands, and what gives the
+# verdict on each: `app`, or `exit-code` when the exit code of its command
+# is the verdict.
 answers=()
 commands=()
+verdicts=()
 for argument in "$@"; do
   if [[ ! "$argument" =~ ^[a-z0-9_]+= ]] || [ -z "${argument#*=}" ] ||
     [[ " ${answers[*]-} " == *" ${argument%%=*} "* ]]; then
@@ -172,7 +188,23 @@ if [ ${#answers[@]} -gt 0 ]; then
     echo "::error::$PWD has no $answers_file, which lists the answers that the probes of the app ask for: add the start check with the --add-app-tests of packages/smf_flutter_cli/tool/matrix.dart."
     exit 1
   fi
-  asked=" $(tr '\n' ' ' < "$answers_file") "
+  # The names of the answers that the file lists, and of those of them
+  # whose exit code is their verdict, each between spaces.
+  asked=' '
+  by_exit_code=' '
+  answer_line='^[a-z0-9_]+( exit-code)?$'
+  while IFS= read -r entry || [ -n "$entry" ]; do
+    if [ -z "$entry" ]; then
+      continue
+    elif [[ ! "$entry" =~ $answer_line ]]; then
+      echo "::error::The line \"$entry\" of $answers_file names no answer as the script takes it: each line is the name of an answer that the app asks for, with exit-code after it when the exit code of the answer is its verdict. Add the start check with the --add-app-tests of packages/smf_flutter_cli/tool/matrix.dart."
+      exit 1
+    fi
+    asked+="${entry%% *} "
+    if [ "$entry" != "${entry%% *}" ]; then
+      by_exit_code+="${entry%% *} "
+    fi
+  done < "$answers_file"
   given=("${answers[@]}")
   given_commands=("${commands[@]}")
   answers=()
@@ -181,6 +213,11 @@ if [ ${#answers[@]} -gt 0 ]; then
     if [[ "$asked" == *" ${given[$index]} "* ]]; then
       answers+=("${given[$index]}")
       commands+=("${given_commands[$index]}")
+      if [[ "$by_exit_code" == *" ${given[$index]} "* ]]; then
+        verdicts+=(exit-code)
+      else
+        verdicts+=(app)
+      fi
     else
       echo "::notice::The app asks for no answer ${given[$index]}: no probe of it lists it in $answers_file, so the script skips it."
     fi
@@ -307,7 +344,7 @@ wait_for_result() {
 answer_all() {
   local index
   for ((index = 0; index < ${#answers[@]}; index++)); do
-    answer "${answers[$index]}" "${commands[$index]}"
+    answer "${answers[$index]}" "${commands[$index]}" "${verdicts[$index]}"
   done
 }
 
@@ -324,10 +361,35 @@ asked_or_reported() {
   fi
 }
 
+# Runs the command $2 of the answer $1 once, for at most 300 s, with the
+# request $3 of the app in a copy that only the user of the script may
+# read, which it removes. Fails when the command fails, once it printed the
+# log of the app, with $4 after the exit code in the error.
+run_answer() {
+  local name="$1" command="$2" request="$3" why="$4" began=$SECONDS code=0
+  # mktemp makes a file that only the user of the script may read.
+  copy="$(mktemp "${TMPDIR:-/tmp}/smf_start_request_$name.XXXXXX")"
+  printf '%s\n' "$request" > "$copy"
+  within 300 env SMF_START_REQUEST="$copy" bash -c "$command" < /dev/null || code=$?
+  rm -f "$copy"
+  copy=
+  if [ "$code" -ne 0 ]; then
+    show_log
+    if [ "$code" -eq 142 ]; then
+      echo "::error::The answer $name did not finish in 300 s."
+    else
+      echo "::error::The answer $name failed with the exit code $code$why."
+    fi
+    exit 1
+  fi
+  echo "The answer $name took $((SECONDS - began)) s."
+}
+
 # Runs the answer $1, the command $2, for the request of the app, and fails
-# unless the verdict of the app on it is `passed` (see the top).
+# unless the verdict on it is `passed`: the verdict of the app with $3 app,
+# and the exit code of the command with $3 exit-code (see the top).
 answer() {
-  local name="$1" command="$2" began code=0
+  local name="$1" command="$2" verdict="$3" began code=0
   allow 150 "that the app has to ask for the answer $name"
   poll asked_or_reported "$name" || code=$?
   if [ "$code" -eq 1 ]; then
@@ -340,25 +402,16 @@ answer() {
   if [ -z "$reported" ]; then
     echo "The app asked for the answer $name $((SECONDS - passed)) s after its start check passed."
     local request="$line" attempt
+    if [ "$verdict" = exit-code ]; then
+      run_answer "$name" "$command" "$request" \
+        ': the server did not get what the app sent, as its output above tells'
+      echo "The answer $name passed $((SECONDS - passed)) s after the start check of the app passed: the server got what the app sent."
+      return
+    fi
     for attempt in 1 2 3; do
-      # mktemp makes a file that only the user of the script may read.
-      copy="$(mktemp "${TMPDIR:-/tmp}/smf_start_request_$name.XXXXXX")"
-      printf '%s\n' "$request" > "$copy"
       began=$SECONDS
+      run_answer "$name" "$command" "$request" ''
       code=0
-      within 300 env SMF_START_REQUEST="$copy" bash -c "$command" < /dev/null || code=$?
-      rm -f "$copy"
-      copy=
-      if [ "$code" -ne 0 ]; then
-        show_log
-        if [ "$code" -eq 142 ]; then
-          echo "::error::The answer $name did not finish in 300 s."
-        else
-          echo "::error::The answer $name failed with the exit code $code."
-        fi
-        exit 1
-      fi
-      echo "The answer $name took $((SECONDS - began)) s."
       allow 150 "that the app has to give its verdict on the answer $name"
       poll got "${platform}_file" "smf_start_report_$name" || code=$?
       if [ "$code" -eq 0 ]; then
