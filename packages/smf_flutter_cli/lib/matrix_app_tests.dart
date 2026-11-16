@@ -105,11 +105,22 @@ Future<MatrixAppTests> smfAppTests() async {
           'mockFirebaseCrashlytics',
         ),
       ),
-      // The analytics service of the module reaches Firebase Analytics. The
-      // test leaves out the other analytics services that the app may have.
+      // The analytics service of the module reaches Firebase Analytics, and
+      // creating it sends nothing, so the setting of collection that Firebase
+      // Analytics keeps holds. The test leaves out the other analytics
+      // services that the app may have. It also reads the native projects:
+      // they turn the collection of Firebase Analytics off by default exactly
+      // when the analytics role chose that the app collects nothing before
+      // its code chose (see _collectedFromFirstStartOf).
       MatrixAppTest(
         '$analytics/firebase_analytics',
         appliesTo: _has(FirebaseAnalyticsModule.id),
+        devDependencies: const ['xml'],
+        values: (app) => {
+          'collected_from_first_start': '${_collectedFromFirstStartOf(app)}',
+          'android_manifest': AppEntryRole.androidManifestFile,
+          'info_plist': AppEntryRole.infoPlistFile,
+        },
         mocks: const MatrixMocks(
           'test/firebase_analytics_mocks.dart',
           'mockFirebaseAnalytics',
@@ -3202,6 +3213,14 @@ String _textsByLanguageOf(MatrixApp app, TextsData texts) {
 /// screen of its app entry, when no route of its modules can start it.
 String _startScreenOf(MatrixApp app) =>
     routerRole.startIn(routerRole.hookInput(app.hook!))?.fullName ?? '/';
+
+/// Whether [app], an app with the analytics role, collects analytics from
+/// its first start, as the role chose (`--analytics-collection`): from the
+/// choice of the role, which an app that got no value of the option has too,
+/// not from the options that the matrix gives `smf create`.
+bool _collectedFromFirstStartOf(MatrixApp app) =>
+    analyticsRole.collectionIn(analyticsRole.hookInput(app.hook!)) ==
+    AnalyticsCollection.on;
 
 /// Whether an app of the matrix has the module [id].
 bool Function(MatrixApp app) _has(ModuleId id) =>

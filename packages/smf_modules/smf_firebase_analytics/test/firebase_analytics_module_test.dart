@@ -183,13 +183,18 @@ final class _OtherAnalyticsModule extends SmfModule {
 }
 
 /// What the contract harness finds for the app of [modules] of [registry],
-/// which has no errors and is rendered.
+/// generated with [roleOptions], which has no errors and is rendered.
 Future<ContractResult> _resultOf(
   List<ModuleId> modules, {
   List<SmfModule> registry = _modules,
+  Map<String, String?> roleOptions = const {},
 }) async {
   final result = await ContractHarness(ModuleRegistry(registry)).check(
-    ContractCase(modules.join(', '), requested: modules),
+    ContractCase(
+      modules.join(', '),
+      requested: modules,
+      roleOptions: roleOptions,
+    ),
   );
   if (result.errors.isNotEmpty || result.app == null) {
     throw StateError(
@@ -239,20 +244,53 @@ final Set<ContributionOrigin> _analytics = {
   const ModuleOrigin(FirebaseAnalyticsModule.id),
 };
 
-/// The section of the module in the README of [readmeOf], without its
-/// heading.
-String _sectionOf({required RenderedApp readmeOf}) {
+/// The section of the module in the README of [readmeOf], or the section
+/// under [heading], without its heading.
+String _sectionOf({
+  required RenderedApp readmeOf,
+  String heading = readmeHeading,
+}) {
   final section = RegExp(
-    '\n## $readmeHeading\n\n([\\s\\S]*?)(?=\n## |\$)',
+    '\n## ${RegExp.escape(heading)}\n\n([\\s\\S]*?)(?=\n## |\$)',
   ).firstMatch(readmeOf.files[AppEntryRole.readmeFile]!.text);
-  expect(section, isNotNull, reason: 'The README has no section of the module');
+  expect(section, isNotNull, reason: 'The README has no section $heading');
   return section![1]!;
+}
+
+/// The values of the meta-data [name] of the application in the manifest of
+/// Android of [app], each as its value and its resource.
+List<(String?, String?)> _metaDataOf(RenderedApp app, String name) {
+  final application = XmlDocument.parse(
+    app.files[AppEntryRole.androidManifestFile]!.text,
+  ).rootElement.getElement('application')!;
+  return [
+    for (final element in application.findElements('meta-data'))
+      if (element.getAttribute('android:name') == name)
+        (
+          element.getAttribute('android:value'),
+          element.getAttribute('android:resource'),
+        ),
+  ];
+}
+
+/// The values of the key [name] of `Info.plist` of [app], each as the name
+/// of the element of its value.
+List<String> _plistValuesOf(RenderedApp app, String name) {
+  final entries = XmlDocument.parse(
+    app.files[AppEntryRole.infoPlistFile]!.text,
+  ).rootElement.getElement('dict')!.childElements.toList();
+  return [
+    for (final (index, element) in entries.indexed)
+      if (element.name.local == 'key' && element.innerText == name)
+        entries[index + 1].name.local,
+  ];
 }
 
 /// Checks that [app] is [without] but for the files of the analytics, the
 /// dependency on firebase_analytics, the section of the analytics in the
-/// guide for coding agents, the section of the module in the README, the
-/// step by hand of the module, which opens the README and adds the note of
+/// guide for coding agents, the sections of the module and of the analytics
+/// role in the README, the step by hand of the module, which opens the
+/// README and adds the note of
 /// the app entry on the steps by hand to the guide, and the files that the
 /// modules [changedBy] generate; its `bootstrap()` included, since the service
 /// starts without waiting. With [screenReportingOff], the manifest of Android
@@ -303,11 +341,14 @@ void _expectTheAppWithout(
   );
   // The README is that of the app without the analytics, opened by the
   // section of the steps by hand, which lists the step of the module alone,
-  // with the section of the module.
-  final readme = app.files[AppEntryRole.readmeFile]!.text.replaceFirst(
-    '\n## $readmeHeading\n\n${_sectionOf(readmeOf: app)}',
-    '',
-  );
+  // with the section of the module and that of the analytics role.
+  var readme = app.files[AppEntryRole.readmeFile]!.text;
+  for (final heading in const [readmeHeading, AnalyticsRole.readmeHeading]) {
+    readme = readme.replaceFirst(
+      '\n## $heading\n\n${_sectionOf(readmeOf: app, heading: heading)}',
+      '',
+    );
+  }
   final setup = RegExp(
     '## ${AppEntryRole.setupHeading}\n[\\s\\S]*?\n(?=## )',
   ).firstMatch(readme)!;
@@ -618,7 +659,7 @@ void main() {
 
     test(
         'builds the apps of the analytics with and without a DI container and '
-        'a router', () {
+        'a router, and one that collects nothing before its code chose', () {
       expect(results.map((result) => result.contractCase.name), [
         'flutter_core with router',
         'flutter_core',
@@ -628,9 +669,15 @@ void main() {
         'firebase_analytics with router',
         'firebase_analytics',
         'get_it',
+        // The app of the provider that collects nothing before its code
+        // chose, with every role that its role uses.
+        equals(
+          'analytics by firebase_analytics with di, router '
+          '--analytics-collection=off',
+        ),
       ]);
       // firebase_core comes with the module, as the module depends on it.
-      for (final result in results.skip(3).take(4)) {
+      for (final result in [...results.skip(3).take(4), results.last]) {
         expect(
           result.resolution!.modules.map((module) => module.id),
           contains(FirebaseCoreModule.id),
@@ -1178,6 +1225,186 @@ void main() {
         ],
         ['/inbox', '/search'],
       );
+    });
+  });
+
+  group('an app that collects nothing before its code chose', () {
+    const modules = [
+      FirebaseAnalyticsModule.id,
+      GetItModule.id,
+      GoRouterModule.id,
+    ];
+    late ContractResult result;
+    late RenderedApp off;
+    late RenderedApp on;
+
+    setUpAll(() async {
+      result = await _resultOf(
+        modules,
+        roleOptions: const {'analytics-collection': 'off'},
+      );
+      off = result.app!;
+      on = (await _resultOf(modules)).app!;
+    });
+
+    test(
+        'turns the collection of Firebase Analytics off by default in the '
+        'native projects, since Firebase Analytics starts before any Dart '
+        'code runs', () {
+      expect(
+        analyticsRole.collectionIn(analyticsRole.hookInput(result.hook!)),
+        AnalyticsCollection.off,
+      );
+      expect(
+        FirebaseAnalyticsModule.androidCollectionKey,
+        'firebase_analytics_collection_enabled',
+      );
+      expect(
+        FirebaseAnalyticsModule.iosCollectionKey,
+        'FIREBASE_ANALYTICS_COLLECTION_ENABLED',
+      );
+      expect(
+        _metaDataOf(off, FirebaseAnalyticsModule.androidCollectionKey),
+        [('false', null)],
+      );
+      expect(
+        _plistValuesOf(off, FirebaseAnalyticsModule.iosCollectionKey),
+        ['false'],
+      );
+    });
+
+    test(
+        'has neither line of the native projects in an app that collects '
+        'from its first start', () async {
+      final results =
+          await ContractHarness(ModuleRegistry(_modules)).checkAll();
+      final ofModule = [
+        for (final result in results)
+          if (result.resolution!.modules
+              .any((module) => module.id == FirebaseAnalyticsModule.id))
+            result,
+      ];
+
+      expect(ofModule, hasLength(5));
+      for (final result in ofModule) {
+        final app = result.app!;
+        final collection =
+            analyticsRole.collectionIn(analyticsRole.hookInput(result.hook!));
+        final off = collection == AnalyticsCollection.off;
+        expect(
+          _metaDataOf(app, FirebaseAnalyticsModule.androidCollectionKey),
+          off ? [('false', null)] : isEmpty,
+          reason: '${result.contractCase}',
+        );
+        expect(
+          _plistValuesOf(app, FirebaseAnalyticsModule.iosCollectionKey),
+          off ? ['false'] : isEmpty,
+          reason: '${result.contractCase}',
+        );
+      }
+    });
+
+    test(
+        'is the app that collects from its first start but for those lines, '
+        'the constant of the role, the line that bootstrap() of a debug build '
+        'prints, and the section of the role in the README', () {
+      expect(off.files.keys.toSet(), on.files.keys.toSet());
+      for (final MapEntry(key: path, value: file) in on.files.entries) {
+        final text = off.files[path]!.text;
+        switch (path) {
+          case AppEntryRole.androidManifestFile:
+            final lines = text.split('\n');
+            final at = lines.indexWhere(
+              (line) => line.contains(
+                'android:name='
+                '"${FirebaseAnalyticsModule.androidCollectionKey}"',
+              ),
+            );
+            expect(at, isNot(-1), reason: '$path has no line of the module.');
+            expect(
+              (lines..removeAt(at)).join('\n'),
+              file.text,
+              reason: path,
+            );
+          case AppEntryRole.infoPlistFile:
+            final lines = text.split('\n');
+            final at = lines.indexWhere(
+              (line) => line.contains(
+                '<key>${FirebaseAnalyticsModule.iosCollectionKey}</key>',
+              ),
+            );
+            expect(at, isNot(-1), reason: '$path has no key of the module.');
+            expect(
+              (lines..removeRange(at, at + 2)).join('\n'),
+              file.text,
+              reason: path,
+            );
+          case AnalyticsRole.file:
+            const declaration = 'const bool analyticsCollectedFromFirstStart';
+            expect(text, contains('$declaration = false;'));
+            expect(
+              text.replaceFirst(
+                '$declaration = false;',
+                '$declaration = true;',
+              ),
+              file.text,
+            );
+          case AppEntryRole.bootstrapFile:
+            expect(
+              file.text,
+              isNot(contains('analyticsCollectedFromFirstStart')),
+            );
+            expect(
+              text,
+              contains('if (kDebugMode && !analyticsCollectedFromFirstStart)'),
+            );
+          case AppEntryRole.readmeFile:
+            expect(
+              _sectionOf(readmeOf: off, heading: AnalyticsRole.readmeHeading),
+              startsWith(
+                'This app was generated with `--analytics-collection=off`',
+              ),
+            );
+            expect(
+              text.replaceFirst(
+                _sectionOf(readmeOf: off, heading: AnalyticsRole.readmeHeading),
+                '',
+              ),
+              file.text.replaceFirst(
+                _sectionOf(readmeOf: on, heading: AnalyticsRole.readmeHeading),
+                '',
+              ),
+            );
+          default:
+            expect(off.files[path]!.bytes, file.bytes, reason: path);
+        }
+      }
+    });
+
+    test(
+        'tells in its section of the README the native lines, that Firebase '
+        'keeps the setting, and that the declaration of the advertising ID '
+        'of Play Console applies', () {
+      for (final app in [on, off]) {
+        expect(
+          _sectionOf(readmeOf: app),
+          allOf([
+            contains('Firebase Analytics keeps what '
+                '`setAnalyticsCollectionEnabled()` chose on the device, '
+                'across starts.'),
+            contains('in an app generated with `--analytics-collection=off`'),
+            contains('`firebase_analytics_collection_enabled` is `false` in '
+                '`${AppEntryRole.androidManifestFile}`'),
+            contains('`FIREBASE_ANALYTICS_COLLECTION_ENABLED` is `false` in '
+                '`${AppEntryRole.infoPlistFile}`'),
+            contains('together with `analyticsCollectedFromFirstStart`, as '
+                'the section ${AnalyticsRole.readmeHeading} tells'),
+            contains('no `first_open` event'),
+            contains('`com.google.android.gms.permission.AD_ID`'),
+            contains('the declaration of the advertising ID in Play Console'),
+          ]),
+        );
+      }
     });
   });
 
