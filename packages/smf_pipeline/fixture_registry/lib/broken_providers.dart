@@ -2386,6 +2386,39 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.analyticsCollectingAtEachStart,
+        role: analyticsRole,
+        bug: 'Its start sets its platform side up with collection on, as a '
+            'provider does that starts its SDK with collection on at each '
+            'start: an app that collects nothing before its code chose '
+            'collects at its first start, and a collection that the code '
+            'turned off is on again at the next start.',
+        // The tests of the analytics role and of the crash reporting role
+        // that the app of several providers runs apply to the app too, and
+        // use the files of the service log of the fixtures and of the
+        // fixture crash reporting.
+        app: [FakeServiceLogModule.id, FakeCrashModule.id],
+        // The app collects nothing before its code chose, so its first start
+        // shows the bug too.
+        roleOptions: {'analytics-collection': 'off'},
+        failures: [
+          MatrixExpectedFailure(
+            'test/first_start_test.dart',
+            'at its first start, the app collects analytics exactly when it '
+                'was generated to collect from its first start',
+            'An app that collects nothing before its code chose collects '
+                'nothing at its first start.',
+          ),
+          MatrixExpectedFailure(
+            'test/next_start_test.dart',
+            'a collection that the code turned off stays off at the next '
+                'start',
+            'A collection that the code turned off stays off at the next '
+                'start.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.crashReportingTakingFlutterErrors,
         role: crashReportingRole,
         bug: 'Its start sets the handler of the errors of Flutter to a report '

@@ -684,6 +684,34 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture analytics whose start sets its platform side up with
+  /// collection on, as a provider does that starts its SDK with collection
+  /// on at each start, rather than leave it to the setting that the SDK
+  /// keeps and to `analyticsCollectedFromFirstStart` of the role: an app
+  /// that collects nothing before its code chose collects at its first
+  /// start, and a collection that the code turned off is on again at the
+  /// next start.
+  static const analyticsCollectingAtEachStart = BrokenModule._(
+    FakeAnalyticsModule(),
+    ModuleId('broken_analytics_collects_at_each_start'),
+    'Analytics that turns collection on at each start (fixture)',
+    'lib/core/fixture_analytics/fixture_analytics.dart',
+    [
+      (
+        "    {'collectByDefault': analyticsCollectedFromFirstStart},\n",
+        "    {'collectByDefault': true},\n",
+      ),
+      (
+        '  return const FixtureAnalytics();\n',
+        '  await fixtureAnalyticsChannel.invokeMethod<void>(\n'
+            "    'setAnalyticsCollectionEnabled',\n"
+            "    {'enabled': true},\n"
+            '  );\n'
+            '  return const FixtureAnalytics();\n',
+      ),
+    ],
+  );
+
   /// The fixture crash reporting whose start sets the handler of the errors
   /// of Flutter to a report of its own, as the guide of a crash reporting
   /// SDK may tell an app to do, rather than leaving the handlers to the
