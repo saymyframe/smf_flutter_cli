@@ -56,7 +56,7 @@ void main() {
       final activated = valuesOf(appRemoteConfig.value);
       service.backend = {
         for (final parameter in appParameters)
-          parameter.name: ?invalidTextOf(parameter),
+          if (invalidTextOf(parameter) case final text?) parameter.name: text,
       };
       await comeBack(tester);
       final invalid = valuesOf(appRemoteConfig.value);
