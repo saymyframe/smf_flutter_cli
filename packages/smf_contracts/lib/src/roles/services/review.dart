@@ -138,9 +138,10 @@ const reviewRole = ReviewRole._();
 /// - `review.implementation_factories`: the function of the implementation
 ///   is in its file and takes no arguments;
 /// - `review.requests`: no file of a module, and none of the template of
-///   another role, calls `appReview.requestIfDue()`, or has one of the keys
-///   of the role as a string. So no module asks for a review in a flow of
-///   its own or puts something of its own around the request, and none
+///   another role, calls `appReview.requestIfDue()` or tears it off, as the
+///   callback of a button does, or has one of the keys of the role as a
+///   string. So no module asks for a review in a flow of its own or from a
+///   button, or puts something of its own around the request, and none
 ///   reads or writes what the role keeps. The code of the app asks at a
 ///   natural break of its own.
 ///
@@ -317,10 +318,10 @@ final class ReviewRole extends Role<RoleImplementation> {
         ),
         StructuralRule(
           id: 'review.requests',
-          description: 'No module calls appReview.requestIfDue() or has a key '
-              'of the role as a string: the code of the app asks for a review '
-              'at a natural break of its own, and the role keeps its state to '
-              'itself.',
+          description: 'No module calls or tears off '
+              'appReview.requestIfDue(), or has a key of the role as a string: '
+              'the code of the app asks for a review at a natural break of its '
+              'own, and the role keeps its state to itself.',
           check: _checkReviewRequests,
         ),
       ];
@@ -360,8 +361,8 @@ List<SmfIssue> _checkReviewStart(
 
 /// The problems of the files of modules, and of the templates of other
 /// roles, in [input] that ask for a review or touch what the role keeps:
-/// a Dart file that calls `appReview.requestIfDue()`, or that has a key of
-/// the role as a string ([ReviewRole.keys]).
+/// a Dart file that calls `appReview.requestIfDue()` or tears it off, or
+/// that has a key of the role as a string ([ReviewRole.keys]).
 ///
 /// The code of the app asks at a natural break of its own, which no module
 /// knows, and nothing in the app may depend on what the role keeps. A file
@@ -375,21 +376,34 @@ List<SmfIssue> _checkReviewRequests(
   for (final MapEntry(key: path, value: index) in input.files.entries) {
     final owner = input.owners[path];
     if (!_usesController(owner, reviewRole)) continue;
+    final String use;
     if (invokesOn(
       index,
       'appReview',
       'requestIfDue',
       ReviewRole.controllerFile,
     )) {
-      issues.add(
-        SmfIssue(
-          '$path calls appReview.requestIfDue(), which no module calls.',
-          hint: hint,
-          origin: owner,
-          path: path,
-        ),
-      );
+      use = 'calls appReview.requestIfDue()';
+    } else if (readsOn(
+      index,
+      'appReview',
+      'requestIfDue',
+      ReviewRole.controllerFile,
+    )) {
+      // A tear-off, such as the callback of a button, asks when it is
+      // called.
+      use = 'tears off appReview.requestIfDue';
+    } else {
+      continue;
     }
+    issues.add(
+      SmfIssue(
+        '$path $use, which no module calls.',
+        hint: hint,
+        origin: owner,
+        path: path,
+      ),
+    );
   }
   for (final MapEntry(key: path, value: text) in input.texts.entries) {
     final owner = input.owners[path];

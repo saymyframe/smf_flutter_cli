@@ -2230,6 +2230,87 @@ void main() {
     });
 
     test(
+        'review.requests: a file of a module, or of the template of another '
+        'role, that tears off appReview.requestIfDue, as the callback of a '
+        'button, is reported, and the code of the app is not', () {
+      // The index of a file that imports the file of appReview, without a
+      // prefix or with [prefix], and reads requestIfDue of [target], as
+      // `onPressed: appReview.requestIfDue` does.
+      DartFileIndex tearingOff(
+        String path, {
+        String target = 'appReview',
+        String? prefix,
+      }) =>
+          DartFileIndex(
+            path: path,
+            imports: [
+              IndexedImport(
+                'package:my_app/core/review/app_review.dart',
+                prefix: prefix,
+              ),
+            ],
+            memberAccesses: [IndexedMemberAccess(target, 'requestIfDue')],
+          );
+      final issues = _structureIssues({
+        tearingOff(screen): ofFeature,
+        tearingOff(
+          'lib/features/notes/notes_done.dart',
+          target: 'review.appReview',
+          prefix: 'review',
+        ): ofFeature,
+        tearingOff('lib/core/updates/updates.dart'):
+            RoleTemplateOrigin(_otherRole),
+        // A file that both calls it and tears it off is reported once.
+        DartFileIndex(
+          path: providerFile,
+          imports: const [
+            IndexedImport('package:my_app/core/review/app_review.dart'),
+          ],
+          invocations: const [
+            IndexedInvocation('requestIfDue', target: 'appReview'),
+          ],
+          memberAccesses: const [
+            IndexedMemberAccess('appReview', 'requestIfDue'),
+          ],
+        ): ofProvider,
+        // The template of the role itself, the code of the app, another
+        // object with a member of that name, and a prefix of no import of
+        // the file of appReview.
+        tearingOff('lib/core/review/more.dart'): _template,
+        tearingOff('lib/mine.dart'): null,
+        tearingOff('lib/features/notes/notes_list.dart', target: 'other'):
+            ofFeature,
+        tearingOff(
+          'lib/features/notes/notes_other.dart',
+          target: 'other.appReview',
+          prefix: 'review',
+        ): ofFeature,
+      });
+
+      expect(
+        [for (final issue in issues) (issue.path, issue.origin, issue.hint)],
+        [
+          (screen, ofFeature, requestsHint),
+          ('lib/features/notes/notes_done.dart', ofFeature, requestsHint),
+          (
+            'lib/core/updates/updates.dart',
+            RoleTemplateOrigin(_otherRole),
+            requestsHint,
+          ),
+          (providerFile, ofProvider, requestsHint),
+        ],
+      );
+      expect(
+        issues.first.message,
+        '$screen tears off appReview.requestIfDue, which no module calls.',
+      );
+      expect(
+        issues.last.message,
+        '$providerFile calls appReview.requestIfDue(), which no module calls.',
+      );
+    });
+
+    test(
         'review.requests: a Dart file of a module, or of the template of '
         'another role, with a key of the role as a string is reported, and '
         'the files of the template of the role are not', () {

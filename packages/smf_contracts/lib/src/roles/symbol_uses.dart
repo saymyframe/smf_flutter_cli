@@ -42,15 +42,41 @@ bool invokesOn(
   String method,
   String libraryPath,
 ) {
-  final targets = {
-    for (final IndexedImport(:uri, :prefix) in file.imports)
-      if (_pathOf(uri, file.path) == libraryPath)
-        prefix == null ? object : '$prefix.$object',
-  };
+  final targets = _targetsOf(file, object, libraryPath);
   return file.invocations.any(
     (call) => call.name == method && targets.contains(call.target),
   );
 }
+
+/// Whether [file] reads [member] of [object], a top-level name of the
+/// library at [libraryPath], a path relative to the project root, without
+/// invoking it, as the tear-off in `onPressed: appReview.requestIfDue` does:
+/// on the name as it is if [file] imports the library without a prefix,
+/// and after the prefix of an import of the library otherwise, as in
+/// `review.appReview.requestIfDue`. [invokesOn] sees a call.
+///
+/// As there, the object under another name is not seen.
+bool readsOn(
+  DartFileIndex file,
+  String object,
+  String member,
+  String libraryPath,
+) {
+  final targets = _targetsOf(file, object, libraryPath);
+  return file.memberAccesses.any(
+    (access) => access.name == member && targets.contains(access.target),
+  );
+}
+
+/// How the code of [file] writes [object], a top-level name of the library
+/// at [libraryPath]: as it is for an import of the library without a
+/// prefix, and after the prefix of each import of the library with one.
+Set<String> _targetsOf(DartFileIndex file, String object, String libraryPath) =>
+    {
+      for (final IndexedImport(:uri, :prefix) in file.imports)
+        if (_pathOf(uri, file.path) == libraryPath)
+          prefix == null ? object : '$prefix.$object',
+    };
 
 /// Whether [file] invokes [name] of the library at [libraryPath], a path
 /// relative to the project root, through a prefix of its own: one that an
