@@ -14,14 +14,22 @@ import 'package:smf_settings/src/agents.dart';
 /// import of its file with a prefix of its own, `entry0` for the first
 /// file. The title and the group are in a list, which scrolls.
 ///
+/// An entry with a function that says whether it shows
+/// ([SettingsEntry.showIf]) is in the group only while the function
+/// returns `true`. The screen asks the function each time it builds,
+/// through an import of its file with a prefix of its own, and the group
+/// draws its lines only between the entries that show.
+///
 /// In an app whose modules have no setting, the screen has a note for the
 /// developer of the app in place of the group: that the app has no
 /// settings yet, and the path of the file of the screen, where a setting
-/// goes, which a tap copies. The provider knows whether the app has
-/// entries when it renders them, so an app gets the code of its own screen
-/// only. The note is in English in every app. An app with the localization
-/// role never has it, because that role gives every settings screen the
-/// setting of the language.
+/// goes, which a tap copies. So has it, while none of them shows, in an
+/// app whose entries all have such a function. The provider knows when it
+/// renders the entries whether the screen may be without one, so an app
+/// gets the code of its own screen only. The note is in English in every
+/// app. An app with the localization role never has it, because that role
+/// gives every settings screen the setting of the language, which always
+/// shows.
 ///
 /// The title of the screen is a text of the module, in English and in
 /// Ukrainian, which the module gives the localization role, a role that it
@@ -128,46 +136,77 @@ final class SettingsModule extends SmfModule {
 }
 
 /// Renders the entries of the settings screen into the brick of the module,
-/// and tells the brick whether the app has any.
+/// and tells the brick whether the app has any, whether some show only at
+/// times, and whether the screen may have none to show.
 final class _SettingsProvider extends RoleProvider<SettingsData> {
   const _SettingsProvider();
 
   @override
   Role<SettingsData> get role => settingsScreenRole;
 
-  /// Two variables of the brick of the screen:
-  /// - `entries`, the widgets of the entries as the items of a constant
-  ///   list, one on a line, in the order of the role, with the imports of
-  ///   their files, each with a prefix of its own: `entry0` for the first
-  ///   file, `entry1` for the next. Without entries, the variable has no
-  ///   code, and its line of the template goes away.
+  /// Five variables of the brick of the screen:
   /// - `with_entries`, whether the app has an entry. The template has the
-  ///   group of the entries in an app with one, and the note of a screen
-  ///   without settings in an app with none, so no app gets the code of
-  ///   the other screen.
+  ///   group of the entries in an app with one.
+  /// - `with_conditions`, whether an entry has a function that says whether
+  ///   the screen shows it ([SettingsEntry.showIf]). Such an entry is
+  ///   `if (entry0.settingShows()) const entry0.Setting(),`, so the screen
+  ///   asks the function each time it builds, and the group of the entries
+  ///   is no constant. Otherwise the group is a constant, with the widgets
+  ///   as its items.
+  /// - `with_note`, whether the screen may have no entry to show: in an app
+  ///   without entries, and in one whose entries all have a function. Only
+  ///   then has the template the note of a screen without settings, which
+  ///   the screen shows while no entry shows, so no app gets the code of a
+  ///   screen that it never shows.
+  /// - `entries`, the entries as the items of the list of the group, one on
+  ///   a line, in the order of the role, in an app with an entry that
+  ///   always shows, with the imports of the files of their widgets and of
+  ///   their functions, each file with a prefix of its own: `entry0` for
+  ///   the first file, `entry1` for the next. Elsewhere the variable has no
+  ///   code, and its line of the template goes away.
+  /// - `shown_entries`, the same items in an app whose entries all have a
+  ///   function, where the screen lists the entries that show before it
+  ///   decides between the group and the note. Elsewhere it has no code.
   @override
   RoleOutput render(RoleHookInput<SettingsData> input) {
-    // The import of each file of an entry, with its prefix, by the path of
-    // the file.
+    // The import of each file of an entry, of its widget or of its
+    // function, with its prefix, by the path of the file.
     final files = <String, ImportRef>{};
+    String? prefixOf(ImportRef import) => files
+        .putIfAbsent(
+          import.uri,
+          () => import.withPrefix('entry${files.length}'),
+        )
+        .prefix;
+    final entries = settingsScreenRole.entriesIn(input);
+    final withConditions = entries.any((entry) => entry.showIf != null);
+    final withNote = entries.every((entry) => entry.showIf != null);
     final items = <String>[];
-    for (final entry in settingsScreenRole.entriesIn(input)) {
-      final widget = entry.widget;
-      // The template of the role rejects an entry whose widget is not in a
-      // file of the app, so each has an import.
-      final import = widget.import!;
-      final prefix = files
-          .putIfAbsent(
-            import.uri,
-            () => import.withPrefix('entry${files.length}'),
-          )
-          .prefix;
-      items.add('                ${widget.codeWith(prefix)}(),');
+    for (final entry in entries) {
+      // The template of the role rejects an entry whose widget or whose
+      // function is not in a file of the app, so each has an import. The
+      // file of the function comes first, as the code names it first.
+      final condition = switch (entry.showIf) {
+        final showIf? => 'if (${showIf.codeWith(prefixOf(showIf.import))}()) ',
+        null => '',
+      };
+      final widget = entry.widget.codeWith(prefixOf(entry.widget.import!));
+      // The list of the group, or the one before it.
+      final indent = withNote ? '      ' : '                ';
+      items.add(
+        withConditions
+            ? '$indent${condition}const $widget(),'
+            : '$indent$widget(),',
+      );
     }
+    final code = Fragment(items.join('\n'), imports: [...files.values]);
     return RoleOutput(
       vars: {
-        'with_entries': items.isNotEmpty,
-        'entries': Fragment(items.join('\n'), imports: [...files.values]),
+        'with_entries': entries.isNotEmpty,
+        'with_conditions': withConditions,
+        'with_note': withNote,
+        'entries': withNote ? const Fragment('') : code,
+        'shown_entries': withNote ? code : const Fragment(''),
       },
     );
   }

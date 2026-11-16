@@ -172,9 +172,10 @@ List<ModuleId> everyFixture({
 /// preferences role, for the test of that role that the CLI keeps; the
 /// settings module of the CLI, for the app test that it keeps for its
 /// screen and for the tests of the settings screen role that the CLI keeps,
-/// with the two fixtures that have a setting, a feature and a module
+/// with the three fixtures that have a setting, a feature and two modules
 /// without screens, so that those tests check a screen with entries on a
-/// provider that must work; material_theme, a provider of the theme role,
+/// provider that must work, among them an entry that the screen leaves out
+/// on iOS; material_theme, a provider of the theme role,
 /// for the tests of that role that the CLI keeps: the theme mode, which
 /// shared_preferences remembers, and its entry, which the settings screen
 /// shows below those of the two fixtures; native_splash, a provider of the
@@ -257,6 +258,7 @@ List<SmfModule> severalProvidersModules() => const [
       FakeSlowStartModule(),
       FakeSecondModule(),
       FakeScreenLogModule(),
+      FakeHidingSettingModule(),
       SettingsModule(),
       MaterialThemeModule(),
       NativeSplashModule(),

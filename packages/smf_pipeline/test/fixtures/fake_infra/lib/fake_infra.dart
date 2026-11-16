@@ -9,6 +9,7 @@ import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_env_bundle.dart';
 import 'package:fake_infra/bundles/fake_env_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
+import 'package:fake_infra/bundles/fake_hiding_setting_bundle.dart';
 import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
 import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
@@ -498,6 +499,50 @@ final class FakeScreenLogModule extends SmfModule {
                 'core/fixture_screen_log/fixture_screen_log_setting.dart',
               ),
             ),
+          ),
+        ),
+      ];
+}
+
+/// A module whose only setting the settings screen shows on every platform
+/// but iOS. It uses the settings screen role and has nothing else: in an app
+/// with a settings screen, it generates the widget of the setting and the
+/// function that says whether the screen shows it, and gives the role its
+/// entry with that function ([SettingsEntry.showIf]). So a test that has
+/// the app run on iOS sees the screen leave the entry out, and the line
+/// next to it.
+final class FakeHidingSettingModule extends SmfModule {
+  /// Creates the module.
+  const FakeHidingSettingModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_hiding_setting');
+
+  static const _file = ImportRef.app(
+    'core/fixture_hiding_setting/fixture_hiding_setting.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A setting that the settings screen leaves out on iOS '
+            '(fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {settingsScreenRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        // Only an app with a settings screen gets the widget of the setting
+        // and its function, and only there does the entry apply.
+        BrickContribution(
+          fakeHidingSettingBundle,
+          when: const {settingsScreenRole},
+        ),
+        settingsScreenRole.data(
+          const SettingsEntry(
+            widget: TypeRef('FixtureHidingSetting', import: _file),
+            showIf: FunctionRef('fixtureHidingSettingShows', import: _file),
           ),
         ),
       ];

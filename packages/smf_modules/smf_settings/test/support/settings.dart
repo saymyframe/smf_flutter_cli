@@ -36,13 +36,45 @@ String _widgetsFile(List<String> widgets) => [
     ].join('\n');
 
 /// The entries of the settings screen for the classes [widgets] of the
-/// file at [path] below `lib/`.
-List<Contribution> _entries(String path, List<String> widgets) => [
+/// file at [path] below `lib/`, each of [hiding] with its function
+/// ([shownIfOf]) in the file at [functionsPath] below `lib/`.
+List<Contribution> _entries(
+  String path,
+  List<String> widgets, {
+  Set<String> hiding = const {},
+  String? functionsPath,
+}) =>
+    [
       for (final widget in widgets)
         settingsScreenRole.data(
-          SettingsEntry(widget: TypeRef(widget, import: ImportRef.app(path))),
+          SettingsEntry(
+            widget: TypeRef(widget, import: ImportRef.app(path)),
+            showIf: hiding.contains(widget)
+                ? FunctionRef(
+                    shownIfOf(widget),
+                    import: ImportRef.app(functionsPath ?? path),
+                  )
+                : null,
+          ),
         ),
     ];
+
+/// The name of the function that says whether the screen shows the setting
+/// whose widget is the class [widget], such as `themeSettingShows`.
+String shownIfOf(String widget) =>
+    '${widget[0].toLowerCase()}${widget.substring(1)}Shows';
+
+/// The functions that say whether the screen shows the settings whose
+/// widgets are the classes [widgets]: each on every platform but iOS.
+String _shownIfFunctions(Iterable<String> widgets) => [
+      for (final widget in widgets) ...[
+        '',
+        '/// Whether the settings screen shows $widget: on every platform but',
+        '/// iOS.',
+        'bool ${shownIfOf(widget)}() =>',
+        '    defaultTargetPlatform != TargetPlatform.iOS;',
+      ],
+    ].join('\n');
 
 /// A feature for the tests with one route, `/<name>`, which can start the
 /// app and is a destination of the main navigation labelled with [name] in
@@ -138,9 +170,19 @@ final class SettingsFeature extends SmfModule {
 /// A module without screens for the tests, such as one that sets up a
 /// library, with a setting for each of [settings], the classes of its
 /// widgets, which it gives the settings screen role when the app has one.
+///
+/// The screen shows the settings of [hiding] only at times: each has a
+/// function that says whether it shows ([shownIfOf]), in the file of the
+/// widgets, or with [functionsApart] in a file of its own, [functionsFile],
+/// which every app with the module gets.
 final class SettingsInfrastructure extends SmfModule {
   /// Creates the module [name] with [settings].
-  const SettingsInfrastructure(this.name, {required this.settings});
+  const SettingsInfrastructure(
+    this.name, {
+    required this.settings,
+    this.hiding = const {},
+    this.functionsApart = false,
+  });
 
   /// The id of the module.
   final String name;
@@ -148,11 +190,22 @@ final class SettingsInfrastructure extends SmfModule {
   /// The classes of the widgets of its settings, in order.
   final List<String> settings;
 
+  /// The classes of the widgets of the settings that the screen shows only
+  /// at times.
+  final Set<String> hiding;
+
+  /// Whether the functions of [hiding] are in a file of their own.
+  final bool functionsApart;
+
   /// The id of the module.
   ModuleId get id => ModuleId(name);
 
   /// The path below `lib/` of the file of the widgets of [settings].
   String get settingsFile => 'core/$name/${name}_settings.dart';
+
+  /// The path below `lib/` of the file of the functions of [hiding].
+  String get functionsFile =>
+      functionsApart ? 'core/$name/${name}_shown.dart' : settingsFile;
 
   @override
   ModuleDescriptor get descriptor => ModuleDescriptor(
@@ -166,11 +219,32 @@ final class SettingsInfrastructure extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(
           _bundle('${name}_settings', {
-            'lib/$settingsFile': _widgetsFile(settings),
+            'lib/$settingsFile': [
+              if (!functionsApart && hiding.isNotEmpty)
+                "import 'package:flutter/foundation.dart';\n",
+              _widgetsFile(settings),
+              if (!functionsApart && hiding.isNotEmpty)
+                '${_shownIfFunctions(hiding)}\n',
+            ].join(),
           }),
           when: const {settingsScreenRole},
         ),
-        ..._entries(settingsFile, settings),
+        if (functionsApart)
+          BrickContribution(
+            _bundle('${name}_shown', {
+              'lib/$functionsFile': [
+                "import 'package:flutter/foundation.dart';",
+                _shownIfFunctions(hiding),
+                '',
+              ].join('\n'),
+            }),
+          ),
+        ..._entries(
+          settingsFile,
+          settings,
+          hiding: hiding,
+          functionsPath: functionsFile,
+        ),
       ];
 }
 
