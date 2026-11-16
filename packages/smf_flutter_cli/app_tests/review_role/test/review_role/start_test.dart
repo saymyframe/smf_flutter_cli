@@ -3,9 +3,10 @@
 // for no review on its own. The app asks only where its code calls
 // appReview.requestIfDue(), at a natural break, since the App Store asks
 // apps not to request a review when the user launches them. A first launch
-// saves one launch and the time of the first launch, and a later launch on
-// which a review is due counts itself and keeps the first launch, and asks
-// for nothing either once its screen is shown.
+// saves one launch and the time of the first launch, and asks for nothing
+// once its first screen is shown. The next launch on which a review is due
+// counts itself, keeps the first launch and asks for nothing either. Such a
+// launch through main(), with its first screen, is due_launch_test.dart.
 //
 // It knows only the role. The app starts once, with main() of
 // lib/main.dart, as on a device, with the mocks of the platform side of

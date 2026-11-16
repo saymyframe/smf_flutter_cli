@@ -1665,8 +1665,9 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
 ///   which `appReview` reads from `.env`, and none without one; opening a
 ///   page gives the service exactly that page;
 /// - a launch of the app counts itself, and asks for no review on its own,
-///   also on a launch on which a review is due: the app asks only where its
-///   code calls `appReview.requestIfDue()`;
+///   also a launch through `main()` on which a review is due, once its first
+///   screen is shown: the app asks only where its code calls
+///   `appReview.requestIfDue()`;
 /// - `appReview.requestIfDue()` over the service of the provider, on a
 ///   launch on which a review is due, asks the store at once, and the app
 ///   saves the request once the store took it;
