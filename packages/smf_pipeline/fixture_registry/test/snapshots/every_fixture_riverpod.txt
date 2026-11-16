@@ -7108,15 +7108,21 @@ final class AppRemoteConfigController extends ChangeNotifier
 
   /// Follows the backend with the service of [run], once it opened: listens
   /// to the values that the service tells of, if it tells of any, and
-  /// fetches.
+  /// fetches. It runs in a turn of the event loop of its own, where no call
+  /// awaits it, so an error of the service that it meets is printed as any
+  /// other, and the fetch still comes.
   void _follow(_Run run) {
     if (!identical(run, _run) || !run.opened) return;
     final service = run.service;
-    if (service.liveUpdates) {
-      run.updates = service.updates.listen(
-        (_) => _activateLater(run),
-        onError: (Object error) => _report(error),
-      );
+    try {
+      if (service.liveUpdates) {
+        run.updates = service.updates.listen(
+          (_) => _activateLater(run),
+          onError: (Object error) => _report(error),
+        );
+      }
+    } on Object catch (error) {
+      _report(error);
     }
     _fetchLater(run);
   }
