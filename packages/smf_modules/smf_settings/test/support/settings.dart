@@ -220,6 +220,8 @@ final class SettingsInfrastructure extends SmfModule {
         BrickContribution(
           _bundle('${name}_settings', {
             'lib/$settingsFile': [
+              if (!functionsApart && hiding.isNotEmpty)
+                "import 'package:flutter/foundation.dart';\n",
               _widgetsFile(settings),
               if (!functionsApart && hiding.isNotEmpty)
                 '${_shownIfFunctions(hiding)}\n',

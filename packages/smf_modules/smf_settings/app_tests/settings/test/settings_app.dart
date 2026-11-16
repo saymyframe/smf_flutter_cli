@@ -79,6 +79,18 @@ Future<void> goToSettings(WidgetTester tester) async {
   );
 }
 
+/// Has the app run on [platform], as the platform that the app runs on, or
+/// on the platform of the test again for `null`, and builds every widget of
+/// the app again, as after a hot reload: the settings screen asks the
+/// function of each entry that has one whether the entry shows when it
+/// builds. A test that calls it calls it with `null` before it ends:
+/// flutter_test checks that the test put the platform back.
+Future<void> usePlatform(WidgetTester tester, TargetPlatform? platform) async {
+  debugDefaultTargetPlatformOverride = platform;
+  tester.binding.buildOwner!.reassemble(tester.binding.rootElement!);
+  await tester.pumpAndSettle();
+}
+
 /// The title of the settings screen, [title], where the screen shows it.
 Finder titleOfSettings(String title) => find.descendant(
       of: find.byType(SettingsScreen),
