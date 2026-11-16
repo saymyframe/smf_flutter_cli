@@ -44,10 +44,9 @@ final class AppReviewController {
   /// an ID of its own, gives it the preferences with [restore], and starts
   /// it with a service of its own.
   AppReviewController({
-    DateTime Function() now = DateTime.now,
-    String? Function() appStoreId = _appStoreIdOfEnv,
-  })  : _now = now,
-        _appStoreId = appStoreId;
+    this._now = DateTime.now,
+    this._appStoreId = _appStoreIdOfEnv,
+  });
 
   /// The keys under which the preferences keep what the controller
   /// remembers: the launches of the app, the time of its first launch, and
