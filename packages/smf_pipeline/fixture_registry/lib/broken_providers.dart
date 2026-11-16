@@ -1989,6 +1989,36 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.reviewAskingFirst,
+        role: reviewRole,
+        bug: 'Its service asks the user "Do you like the app?" before the '
+            'review dialog, and asks the store only after a yes: the question '
+            'that the stores forbid, after which a request waits for the '
+            'user.',
+        // The fixture preferences and the fixture values of .env, which the
+        // role requires.
+        app: [FakePreferencesModule.id, FakeEnvModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/review_role/nothing_around_test.dart',
+            'the provider asks the store for its dialog and shows nothing of '
+                'its own around it',
+            'The provider asks the store for its dialog and shows nothing of '
+                'its own around it, as the stores ask: the app showed '
+                'something of its own around the review dialog.',
+          ),
+          MatrixExpectedFailure(
+            'test/review_role/request_test.dart',
+            'requestIfDue() on a launch on which a review is due asks the '
+                'store at once through the provider of the app, and the app '
+                'saves the request once the store took it',
+            'The provider asks the store for its dialog at once, and the '
+                'request completes once the store took it: the app then saves '
+                'the time and the version of the request.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenEnvModule(),
         role: envRole,
         bug: 'Its AppEnv returns the value of a key as the command that built '
