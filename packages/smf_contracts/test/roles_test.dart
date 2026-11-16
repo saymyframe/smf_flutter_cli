@@ -21,6 +21,7 @@ const List<Role> _roles = [
   pushRole,
   purchasesRole,
   restRole,
+  reviewRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -65,6 +66,7 @@ void main() {
       'push messages role',
       'purchases role',
       'REST API role',
+      'store reviews role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -167,6 +169,16 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'env'},
       'uses': {'auth'},
+    });
+    // The app counts its launches and remembers its last request for a
+    // review in the preferences, and the App Store ID is a value of the
+    // app. The guards of the routes keep the request out of their flows,
+    // and the template gives the settings screen an entry that opens the
+    // page of the app in its store, with texts in the language of the app.
+    expect(shape(reviewRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'preferences', 'env'},
+      'uses': {'router', 'settings_screen', 'localization'},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -320,6 +332,7 @@ void main() {
           'push',
           'purchases',
           'rest',
+          'review',
           'settings_screen',
           'onboarding_screen',
           'theme',
@@ -539,6 +552,12 @@ void main() {
         'env_release_error',
         'env_no_values_message',
         'rest_tokens',
+        'launches_key',
+        'first_launch_key',
+        'asked_at_key',
+        'asked_version_key',
+        'google_play_id',
+        'guard_flows',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
