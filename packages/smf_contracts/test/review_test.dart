@@ -1369,6 +1369,45 @@ void main() {
       );
     });
 
+    test(
+        'asks for nothing on its own: it puts nothing around the root of the '
+        'app or around the screens of its routes, and nothing after the '
+        'start-up but the start of the reviews', () async {
+      // The sockets that the template fills, through its contribute hook and
+      // its render hook, in an app with every role that it uses and in one
+      // without them.
+      final sockets = <SocketRef>{};
+      for (final (present, routes) in [
+        (const <Role>{}, const <RoleData<Object>>[]),
+        (
+          <Role>{routerRole, settingsScreenRole, localizationRole},
+          _guardedRoutes,
+        ),
+      ]) {
+        final rendered = await _rendered(present: present, routes: routes);
+        sockets.addAll([
+          for (final item
+              in rendered.contributions.whereType<SocketContribution>())
+            item.socket,
+          for (final item in [...rendered.elsewhere, ...rendered.notes])
+            item.socket,
+        ]);
+      }
+
+      // A widget around the root, or around the screen of each route, could
+      // ask for a review once a launch shows its first screen, which the App
+      // Store asks apps not to do.
+      expect(sockets, isNot(contains(AppEntryRole.appBuilder)));
+      expect(sockets, isNot(contains(AppEntryRole.rootWrappers)));
+      expect(sockets, {
+        PreferencesRole.restorers,
+        AppEntryRole.bootstrapLate,
+        AppEntryRole.readmeSections,
+        AppEntryRole.agentSections,
+        RouterRole.screenListeners,
+      });
+    });
+
     test('reports the problems of the implementation', () {
       final issues = reviewRole.template.validate(
         inputOf(
